@@ -47,6 +47,7 @@ use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductDiscountApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleCampaignApiController;
 use Modules\Pos\Http\Controllers\Api\PosGiftCardApiController;
+use Modules\Pos\Http\Controllers\Api\PosCouponApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
 use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
@@ -250,6 +251,15 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::patch ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'updateGroup']) ->whereNumber('group')->name('gift-card-groups.update');
     Route::delete('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'destroyGroup'])->whereNumber('group')->name('gift-card-groups.destroy');
     Route::post  ('gift-card-groups/{group}/cards', [PosGiftCardApiController::class, 'addCards'])    ->whereNumber('group')->name('gift-card-groups.cards.store');
+
+    // Coupons — one shared code per coupon, redeemable `quantity` times
+    Route::get   ('coupons',               [PosCouponApiController::class, 'index'])       ->name('coupons.index');
+    Route::get   ('coupons/generate-code', [PosCouponApiController::class, 'generateCode'])->name('coupons.generate-code');
+    Route::get   ('coupons/lookup',        [PosCouponApiController::class, 'lookup'])      ->name('coupons.lookup');
+    Route::post  ('coupons',               [PosCouponApiController::class, 'store'])       ->name('coupons.store');
+    Route::get   ('coupons/{coupon}',      [PosCouponApiController::class, 'show'])        ->whereNumber('coupon')->name('coupons.show');
+    Route::patch ('coupons/{coupon}',      [PosCouponApiController::class, 'update'])      ->whereNumber('coupon')->name('coupons.update');
+    Route::delete('coupons/{coupon}',      [PosCouponApiController::class, 'destroy'])     ->whereNumber('coupon')->name('coupons.destroy');
 
     // Product Categories
     Route::get ('categories',              [PosProductCategoryApiController::class, 'index'])->name('categories.index');

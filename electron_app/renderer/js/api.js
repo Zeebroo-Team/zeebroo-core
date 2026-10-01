@@ -372,6 +372,15 @@ const API = (() => {
     deleteGiftCardGroup:  (id)        => request('DELETE', `/gift-card-groups/${id}`),
     addGiftCardsToGroup:  (id, qty)   => request('POST',   `/gift-card-groups/${id}/cards`, { quantity: qty }),
 
+    // Coupons — one shared code per coupon, usable `quantity` times
+    coupons:              (q, status) => request('GET',    `/coupons?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    coupon:               (id)        => request('GET',    `/coupons/${id}`),
+    couponLookup:         (code)      => request('GET',    `/coupons/lookup?code=${encodeURIComponent(code||'')}`),
+    couponGenerateCode:   ()          => request('GET',    '/coupons/generate-code'),
+    createCoupon:         (body)      => request('POST',   '/coupons', body),
+    updateCoupon:         (id, body)  => request('PATCH',  `/coupons/${id}`, body),
+    deleteCoupon:         (id)        => request('DELETE', `/coupons/${id}`),
+
     // Product Categories
     categories:             (q, status, page) => request('GET',    `/categories?q=${encodeURIComponent(q||'')}&status=${status||''}&page=${page||1}`),
     categoryParentOpts:     (excludeId)       => request('GET',    `/categories/parent-options${excludeId ? '?exclude='+excludeId : ''}`),

@@ -1800,6 +1800,10 @@ async function _salSelectSale(id) {
   if (discount > 0) {
     totalsHTML += `<div class="sal-total-row"><span class="label">Discount</span><span>-${formatMoney(discount, {currency: cur})}</span></div>`;
   }
+  const couponAmt = parseFloat(sale.coupon_discount || 0);
+  if (couponAmt > 0) {
+    totalsHTML += `<div class="sal-total-row"><span class="label">Coupon${sale.coupon?.code ? ' (' + escHtml(sale.coupon.code) + ')' : ''}</span><span>-${formatMoney(couponAmt, {currency: cur})}</span></div>`;
+  }
   const giftAmt = parseFloat(sale.gift_card_amount || 0);
   const paidVia = giftAmt > 0
     ? Math.max(0, parseFloat(sale.total || 0) - giftAmt)
@@ -6137,6 +6141,7 @@ function applyFeatureVisibility() {
   btn('#rb-accounts',       mp('pos_btn_accounts'));
   // Anyone allowed to check out can look up a gift card balance at the till.
   btn('#rb-gift-card-check', mp('pos_btn_checkout'));
+  btn('#rb-coupon-check',    mp('pos_btn_checkout'));
   btn('#rb-pos-settings',   mp('pos_btn_settings'));
   btn('#rb-receipt-editor', mp('pos_btn_receipt_editor'));
   btn('#rb-pos-refresh',    mp('pos_btn_pos_refresh'));
@@ -6165,6 +6170,7 @@ function applyFeatureVisibility() {
   btn('#btn-recall',   mp('pos_cart_recall'));
   btn('#btn-customer', mp('pos_cart_customer'));
   btn('#btn-gift-card', mp('pos_cart_checkout'));
+  btn('#btn-coupon',    mp('pos_cart_checkout'));
   btn('#checkout-btn',        mp('pos_cart_checkout'));
   btn('#pos-to-invoice',      mp('pos_cart_to_invoice'));
   btn('#pos-to-quote',        mp('pos_cart_to_quote'));
@@ -6220,6 +6226,7 @@ function applyFeatureVisibility() {
   // stock_management visibility.
   btn('#rb-inv-sale-campaign', bf('product_management') && mp('inv_btn_sale_campaign'));
   btn('#rb-inv-gift-cards',    bf('point_of_sale') && mp('inv_btn_gift_cards'));
+  btn('#rb-inv-coupons',       bf('point_of_sale') && mp('inv_btn_coupons'));
   // Auto-hide Inventory ribbon groups when all their buttons are hidden.
   // Each group also requires its underlying feature — this pass runs after
   // the earlier bf()-aware grp() calls and would otherwise silently drop
@@ -6230,7 +6237,7 @@ function applyFeatureVisibility() {
     if (invGrps[1]) invGrps[1].style.display = (invEither && (mp('inv_btn_audit')||mp('inv_btn_brands')||mp('inv_btn_discounts'))) ? '' : 'none';
     if (invGrps[2]) invGrps[2].style.display = (bf('stock_management') && (mp('inv_btn_orders')||mp('inv_btn_grn')||mp('inv_btn_cheques'))) ? '' : 'none';
     if (invGrps[3]) invGrps[3].style.display = (invEither && mp('inv_btn_suppliers')) ? '' : 'none';
-    if (invGrps[4]) invGrps[4].style.display = ((invEither && (mp('inv_btn_barcodes')||mp('inv_btn_sale_campaign'))) || (bf('point_of_sale') && mp('inv_btn_gift_cards'))) ? '' : 'none'; }
+    if (invGrps[4]) invGrps[4].style.display = ((invEither && (mp('inv_btn_barcodes')||mp('inv_btn_sale_campaign'))) || (bf('point_of_sale') && (mp('inv_btn_gift_cards')||mp('inv_btn_coupons')))) ? '' : 'none'; }
   // ── Inventory panel: sub-nav tab gating with fallback ──
   // Each view also requires its own feature (product_management and/or
   // stock_management) — permission alone isn't enough, since the Inventory
@@ -18302,6 +18309,333 @@ $('#gc-check-btn')?.addEventListener('click', _gcCheckRun);
 $('#gc-check-code')?.addEventListener('keydown', e => { if (e.key === 'Enter') _gcCheckRun(); });
 // ── End Gift Cards ────────────────────────────────────────────────────────
 
+// ── Coupons ───────────────────────────────────────────────────────────────
+// One coupon = one shared code, usable `quantity` times. Each sale that uses
+// it takes one use; voiding the sale hands the use back.
+const _cp = { list: [], q: '', status: '', selected: null, form: null, type: 'percent', searchTimer: null };
+
+function _cpOffText(c) {
+  return c.discount_type === 'percent' ? `${Number(c.discount_value)}% OFF` : `${formatMoney(c.discount_value)} OFF`;
+}
+
+function _cpVisualHTML(c) {
+  const pct = c.quantity > 0 ? Math.max(0, Math.min(100, (c.remaining / c.quantity) * 100)) : 0;
+  return `
+    <div class="gc-card cp-card gc-card-${escHtml(c.status)}">
+      <div class="gc-card-top">
+        <span class="gc-card-name">${escHtml(c.name)}</span>
+        ${_gcStatusBadge(c)}
+      </div>
+      <div class="gc-card-code">${escHtml(c.code)}</div>
+      <div class="gc-card-bal-label">Discount</div>
+      <div class="gc-card-bal">${escHtml(_cpOffText(c))}</div>
+      <div class="gc-card-bar"><span style="width:${pct.toFixed(1)}%"></span></div>
+      <div class="gc-card-foot">
+        <span>${c.remaining} of ${c.quantity} left · used ${c.used_count}×</span>
+        <span>${escHtml(_gcValidity(c))}</span>
+      </div>
+    </div>`;
+}
+
+function _cpHistoryHTML(c) {
+  const rows = c.redemptions || [];
+  if (!rows.length) return '<div class="cm-dv-no-sales"><i class="fa fa-clock-rotate-left"></i> Not used yet</div>';
+  return `<div class="cm-dv-history-title"><i class="fa fa-clock-rotate-left"></i> Used on ${rows.length} sale${rows.length !== 1 ? 's' : ''} · ${formatMoney(c.total_discount || 0)} given</div>` +
+    rows.map(r => {
+      const when = r.created_at ? new Date(r.created_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+      return `<div class="cm-dv-sale-row">
+        <span class="cm-dv-sale-num">${escHtml(r.sale_number || 'Sale')}${r.reversed ? ' · voided' : ''}<small class="gc-txn-when">${escHtml(when)}${r.user_name ? ' · ' + escHtml(r.user_name) : ''}</small></span>
+        <span class="gc-txn-amt ${r.reversed ? 'pos' : 'neg'}">${r.reversed ? '' : '-'}${formatMoney(r.discount_amount)}</span>
+      </div>`;
+    }).join('');
+}
+
+function openCouponModal() {
+  $('#coupon-modal').style.display = 'flex';
+  _cp.q = ''; _cp.status = ''; _cp.selected = null; _cp.form = null;
+  $('#cp-search').value = '';
+  $$('.cp-ft-btn').forEach(b => b.classList.toggle('active', b.dataset.cpStatus === ''));
+  _cpShowPane('empty');
+  _cpLoad();
+  requestAnimationFrame(() => $('#cp-search').focus());
+}
+
+function _cpClose() {
+  $('#coupon-modal').style.display = 'none';
+}
+
+// Right pane: 'empty' | 'detail' | 'form'
+function _cpShowPane(pane) {
+  $('#cp-detail-empty').style.display = pane === 'empty'  ? 'flex' : 'none';
+  $('#cp-detail-view').style.display  = pane === 'detail' ? 'flex' : 'none';
+  $('#cp-form-view').style.display    = pane === 'form'   ? 'flex' : 'none';
+}
+
+async function _cpLoad() {
+  const list = $('#cp-list');
+  list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i></div>';
+  const res = await API.coupons(_cp.q, _cp.status);
+  if (res.status !== 200) { list.innerHTML = '<div class="cm-list-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load</div>'; return; }
+  _cp.list = res.body?.data || [];
+  _cpRenderList();
+}
+
+function _cpRenderList() {
+  const list = $('#cp-list');
+  $('#cp-count').textContent = `${_cp.list.length} coupon${_cp.list.length !== 1 ? 's' : ''}`;
+  if (!_cp.list.length) {
+    list.innerHTML = `<div class="cm-list-empty"><i class="fa fa-ticket"></i><span>${_cp.q || _cp.status ? 'No results' : 'No coupons yet'}</span></div>`;
+    return;
+  }
+  list.innerHTML = _cp.list.map(c => `
+    <div class="cm-item${_cp.selected?.id === c.id ? ' active' : ''}" data-id="${c.id}">
+      <div class="cm-item-avatar cp-list-avatar"><i class="fa fa-ticket"></i></div>
+      <div class="cm-item-body">
+        <div class="cm-item-name">${escHtml(c.name)}</div>
+        <div class="cm-item-sub"><span class="gc-list-code">${escHtml(c.code)}</span> · ${escHtml(_cpOffText(c))}</div>
+      </div>
+      <span class="gc-count-pill cp-uses-pill">${c.remaining}/${c.quantity}</span>
+      ${_gcStatusBadge(c)}
+    </div>`).join('');
+  list.querySelectorAll('.cm-item').forEach(el => el.addEventListener('click', () => _cpSelect(Number(el.dataset.id))));
+}
+
+async function _cpSelect(id) {
+  const basic = _cp.list.find(c => c.id === id);
+  _cp.selected = basic || { id };
+  _cpRenderList();
+  if (basic) _cpRenderDetail(basic);
+  const res = await API.coupon(id);
+  if (res.status === 200 && _cp.selected?.id === id) _cpRenderDetail(res.body.data);
+}
+
+function _cpRenderDetail(c) {
+  _cp.selected = c;
+  _cpShowPane('detail');
+  $('#cp-dv-visual').innerHTML = _cpVisualHTML(c);
+  const fields = [
+    { label: 'Discount', val: c.discount_type === 'percent' ? `${Number(c.discount_value)}% off the bill` : `${formatMoney(c.discount_value)} off the bill` },
+    { label: 'Uses',     val: `${c.used_count} used · ${c.remaining} left of ${c.quantity}` },
+    { label: 'Valid',    val: _gcValidity(c) },
+    { label: 'Notes',    val: c.notes },
+  ];
+  $('#cp-dv-fields').innerHTML = fields.map(f => `
+    <div class="cm-dv-field">
+      <div class="cm-dv-field-label">${f.label}</div>
+      <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? escHtml(f.val) : '—'}</div>
+    </div>`).join('');
+  $('#cp-dv-history').innerHTML = c.redemptions ? _cpHistoryHTML(c) : '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i></div>';
+}
+
+async function _cpGenerateCode() {
+  const btn = $('#cp-f-generate');
+  btn.disabled = true;
+  const res = await API.couponGenerateCode();
+  btn.disabled = false;
+  if (res.status === 200) $('#cp-f-code').value = res.body.data.code;
+  else toast('Could not generate a code', 'error');
+}
+
+function _cpSetType(type) {
+  _cp.type = type;
+  $$('.cp-type-btn').forEach(b => b.classList.toggle('active', b.dataset.cpType === type));
+  const val = $('#cp-f-value');
+  val.placeholder = type === 'percent' ? '10' : '500';
+  val.max = type === 'percent' ? '100' : '';
+  $('#cp-f-value-hint').textContent = type === 'percent'
+    ? 'Percentage off the bill (after any order discount).'
+    : 'Fixed amount off the bill — never more than the bill itself.';
+}
+
+function _cpToggleNoExpiry() {
+  const none = $('#cp-f-no-expiry').checked;
+  $('#cp-expires-wrap').style.display = none ? 'none' : '';
+  if (none) $('#cp-f-expires').value = '';
+}
+
+function _cpOpenForm(record = null) {
+  _cp.form = { id: record?.id ?? null };
+  $('#cp-form-title').textContent = record ? `Edit Coupon ${record.code}` : 'New Coupon';
+  $('#cp-f-name').value       = record?.name || '';
+  $('#cp-f-code').value       = record?.code || '';
+  $('#cp-f-value').value      = record?.discount_value ?? '';
+  $('#cp-f-qty').value        = record?.quantity ?? 100;
+  $('#cp-f-qty').min          = record ? Math.max(1, record.used_count) : 1;
+  $('#cp-f-qty-hint').textContent = record?.used_count
+    ? `How many times this code can be used in total — already used ${record.used_count}×, so it can't go below that.`
+    : 'How many times this code can be used in total.';
+  $('#cp-f-valid-from').value = record?.valid_from || (record ? '' : new Date().toISOString().slice(0, 10));
+  $('#cp-f-expires').value    = record?.expires_at || '';
+  $('#cp-f-no-expiry').checked = record ? !record.expires_at : false;
+  $('#cp-f-notes').value      = record?.notes || '';
+  $('#cp-f-active').checked   = record ? !!record.is_active : true;
+  _cpSetType(record?.discount_type || 'percent');
+  _cpToggleNoExpiry();
+  _cpShowPane('form');
+  if (!record) _cpGenerateCode();
+  setTimeout(() => $('#cp-f-name').focus(), 80);
+}
+
+function _cpCancelForm() {
+  if (_cp.selected?.code) _cpShowPane('detail');
+  else _cpShowPane('empty');
+}
+
+async function _cpSave() {
+  const editing  = _cp.form?.id != null;
+  const name     = $('#cp-f-name').value.trim();
+  const code     = $('#cp-f-code').value.trim().toUpperCase();
+  const value    = parseFloat($('#cp-f-value').value);
+  const qty      = parseInt($('#cp-f-qty').value, 10);
+  const noExpiry = $('#cp-f-no-expiry').checked;
+  const from     = $('#cp-f-valid-from').value || null;
+  const expires  = noExpiry ? null : ($('#cp-f-expires').value || null);
+
+  if (!name) { toast('Coupon name is required', 'error'); return; }
+  if (!(value > 0)) { toast('Discount must be greater than 0', 'error'); return; }
+  if (_cp.type === 'percent' && value > 100) { toast('A percentage discount can be at most 100%', 'error'); return; }
+  if (!code) { toast('Coupon code is required — type one or click Generate', 'error'); return; }
+  if (!/^[A-Z0-9\- ]{3,40}$/.test(code)) { toast('Code must be 3–40 characters: letters, numbers and dashes only', 'error'); return; }
+  if (!(qty >= 1)) { toast('Number of coupons must be at least 1', 'error'); return; }
+  if (!noExpiry && !expires) { toast('Set a "Valid Until" date, or tick "No expiry date"', 'error'); return; }
+  if (from && expires && expires < from) { toast('"Valid Until" must be on or after "Valid From"', 'error'); return; }
+
+  const body = {
+    name, code, discount_type: _cp.type, discount_value: value, quantity: qty,
+    valid_from: from, expires_at: expires,
+    notes: $('#cp-f-notes').value.trim() || null, is_active: $('#cp-f-active').checked,
+  };
+
+  const btn = $('#cp-form-save');
+  btn.disabled = true;
+  const res = editing ? await API.updateCoupon(_cp.form.id, body) : await API.createCoupon(body);
+  btn.disabled = false;
+
+  if (res.status !== 200 && res.status !== 201) {
+    const errors = res.body?.errors;
+    const first  = errors ? Object.values(errors)[0]?.[0] : null;
+    toast(first || res.body?.message || 'Failed to save', 'error');
+    return;
+  }
+
+  toast(res.body?.message || 'Saved', 'success');
+  const saved = res.body?.data;
+  await _cpLoad();
+  _cpSelect(saved.id);
+}
+
+async function _cpDelete() {
+  const c = _cp.selected;
+  if (!c?.code) return;
+  if (!confirm(`Delete coupon ${c.code}?`)) return;
+  const res = await API.deleteCoupon(c.id);
+  if (res.status !== 200) { toast(res.body?.message || 'Failed to delete', 'error'); return; }
+  toast('Coupon deleted', 'success');
+  _cp.selected = null;
+  _cpShowPane('empty');
+  _cpLoad();
+}
+
+$('#coupon-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _cpClose(); });
+$('#cp-close')?.addEventListener('click', _cpClose);
+$('#cp-new-btn')?.addEventListener('click', () => _cpOpenForm());
+$('#cp-form-cancel')?.addEventListener('click', _cpCancelForm);
+$('#cp-form-save')?.addEventListener('click', _cpSave);
+$('#cp-f-generate')?.addEventListener('click', _cpGenerateCode);
+$('#cp-f-no-expiry')?.addEventListener('change', _cpToggleNoExpiry);
+$('#cp-f-code')?.addEventListener('input', e => { e.target.value = e.target.value.toUpperCase(); });
+$$('.cp-type-btn').forEach(b => b.addEventListener('click', () => _cpSetType(b.dataset.cpType)));
+$('#cp-btn-edit')?.addEventListener('click', () => _cp.selected?.code && _cpOpenForm(_cp.selected));
+$('#cp-btn-delete')?.addEventListener('click', _cpDelete);
+$('#cp-btn-copy')?.addEventListener('click', () => _cp.selected?.code && _gcCopy(_cp.selected.code, 'Code copied'));
+$('#cp-search')?.addEventListener('input', e => {
+  _cp.q = e.target.value.trim();
+  clearTimeout(_cp.searchTimer);
+  _cp.searchTimer = setTimeout(_cpLoad, 300);
+});
+$$('.cp-ft-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.cp-ft-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _cp.status = btn.dataset.cpStatus;
+    _cpLoad();
+  });
+});
+
+// ── Coupon check (POS ribbon + cart header) ──
+function openCouponCheckModal() {
+  $('#cp-check-modal').style.display = 'flex';
+  $('#cp-check-code').value = '';
+  $('#cp-check-result').innerHTML = '';
+  requestAnimationFrame(() => $('#cp-check-code').focus());
+}
+
+async function _cpCheckRun() {
+  const code = $('#cp-check-code').value.trim();
+  const out  = $('#cp-check-result');
+  if (!code) { out.innerHTML = '<div class="gc-check-msg err"><i class="fa fa-circle-exclamation"></i> Enter a coupon code.</div>'; return; }
+  const btn = $('#cp-check-btn');
+  btn.disabled = true;
+  out.innerHTML = '<div class="gc-check-msg"><i class="fa fa-spinner fa-spin"></i> Checking…</div>';
+  const res = await API.couponLookup(code);
+  btn.disabled = false;
+  if (res.status !== 200) {
+    out.innerHTML = `<div class="gc-check-msg err"><i class="fa fa-circle-exclamation"></i> ${escHtml(res.body?.message || 'Coupon not found.')}</div>`;
+    return;
+  }
+  _cpRenderCheckResult(res.body.data);
+}
+
+function _cpRenderCheckResult(c) {
+  const out = $('#cp-check-result');
+  let untilTxt = 'No expiry';
+  if (c.expires_at) {
+    const days = _gcDaysFromToday(c.expires_at);
+    untilTxt = `${c.expires_at} <small>(${days > 0 ? `${days} day${days !== 1 ? 's' : ''} left` : days === 0 ? 'last day today' : `${-days} day${days !== -1 ? 's' : ''} ago`})</small>`;
+  }
+  const cart = activeTab()?.cart || [];
+  const canApply = c.is_redeemable && cart.length > 0;
+  const rows = [
+    ['Coupon',      escHtml(c.name)],
+    ['Code',        `<span class="gc-sub-code">${escHtml(c.code)}</span>`],
+    ['Discount',    escHtml(_cpOffText(c))],
+    ['Uses left',   `${c.remaining} <small>of ${c.quantity}</small>`],
+    ['Valid from',  c.valid_from ? escHtml(c.valid_from) : '—'],
+    ['Valid until', untilTxt],
+  ];
+
+  out.innerHTML = `
+    <div class="gc-verdict ${c.is_redeemable ? 'ok' : 'bad'}">
+      <i class="fa ${c.is_redeemable ? 'fa-circle-check' : 'fa-circle-xmark'}"></i>
+      <div class="gc-verdict-body">
+        <div class="gc-verdict-title">${c.is_redeemable ? 'Valid — can be used' : 'Cannot be used'}</div>
+        <div class="gc-verdict-sub">${c.is_redeemable ? 'Discount on this bill' : escHtml(`This coupon ${_cpBlockedReason(c)}.`)}</div>
+      </div>
+      <div class="gc-verdict-amt">${escHtml(_cpOffText(c))}</div>
+    </div>
+    <div class="gc-check-grid">
+      ${rows.map(([k, v]) => `<div class="gc-check-k">${k}</div><div class="gc-check-v">${v}</div>`).join('')}
+    </div>
+    <details class="gc-check-history cm-dv-history">
+      <summary><i class="fa fa-clock-rotate-left"></i> Usage history (${(c.redemptions || []).length})</summary>
+      ${_cpHistoryHTML(c)}
+    </details>
+    ${canApply ? `<button class="po-btn-primary gc-check-apply" id="cp-check-apply"><i class="fa fa-cash-register"></i> Use for this sale</button>` : ''}`;
+
+  $('#cp-check-apply')?.addEventListener('click', () => {
+    $('#cp-check-modal').style.display = 'none';
+    openCheckout();
+    if ($('#checkout-modal').style.display === 'none') return;
+    _coApplyCoupon(c);
+  });
+}
+
+$('#cp-check-close')?.addEventListener('click', () => { $('#cp-check-modal').style.display = 'none'; });
+$('#cp-check-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
+$('#cp-check-btn')?.addEventListener('click', _cpCheckRun);
+$('#cp-check-code')?.addEventListener('keydown', e => { if (e.key === 'Enter') _cpCheckRun(); });
+// ── End Coupons ───────────────────────────────────────────────────────────
+
 // ── Product Brands ────────────────────────────────────────────────────────
 const _brand = { list: [], q: '', status: '', searchTimer: null, editingId: null };
 
@@ -26400,10 +26734,23 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   } else {
     totRows += `<div class="tr"><span>Subtotal</span><span>${money(sub)}</span></div>`;
   }
-  if (disc > 0) totRows += `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${money(disc.toFixed(2))}</span></div>`;
+  // A POS coupon is folded into discount_amount — split it back out onto its own row.
+  const cpAmt     = Math.min(disc, parseFloat(inv._coupon?.amount || 0));
+  const plainDisc = Math.round((disc - cpAmt) * 100) / 100;
+  if (plainDisc > 0.001) totRows += `<div class="tr"><span>Discount</span><span style="color:#ef4444">−${money(plainDisc.toFixed(2))}</span></div>`;
+  if (cpAmt > 0.001) totRows += `<div class="tr"><span>Coupon${inv._coupon.code ? ' (' + escHtml(inv._coupon.code) + ')' : ''}</span><span style="color:#ef4444">−${money(cpAmt.toFixed(2))}</span></div>`;
   if (tax  > 0) totRows += `<div class="tr"><span>Tax</span><span style="color:#10b981">+${money(tax.toFixed(2))}</span></div>`;
   // kept for backwards compatibility with callers that inject _taxBreakdown
   const discRow = ''; const taxRow = '';
+
+  // Payment breakdown under the total — a POS sale paid partly/fully by gift card.
+  let payRows = '';
+  const gc = inv._giftCard;
+  if (gc && gc.amount > 0.001) {
+    payRows += `<div class="tr"><span>Gift card${gc.code ? ' (' + escHtml(gc.code) + ')' : ''}</span><span style="color:#db2777">−${money(gc.amount.toFixed(2))}</span></div>`;
+    if (gc.balance != null) payRows += `<div class="tr"><span>Gift card balance</span><span>${money(gc.balance.toFixed(2))}</span></div>`;
+    if (gc.paid != null) payRows += `<div class="tr"><span>Paid${gc.method ? ' (' + escHtml(gc.method) + ')' : ''}</span><span>${money(gc.paid.toFixed(2))}</span></div>`;
+  }
 
   // Page geometry (printer/paper/orientation) + header layout, threaded into
   // every sub-template's <style> block via the shared sentinels below.
@@ -26474,6 +26821,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
   <div class="tot"><div class="ti">
     ${totRows}
     <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    ${payRows}
   </div></div>
 </div></div></body></html>`;
   }
@@ -26523,6 +26871,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     <div class="tc">
       ${totRows}
       <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    ${payRows}
     </div>
   </div>
 </div></div></body></html>`;
@@ -26579,6 +26928,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${totRows}
     <div class="rule2"></div>
     <div class="gr"><span>Total</span><span>${money(tot)}</span></div>
+    ${payRows}
   </div>
 </div>
 <div class="ft">Invoice ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
@@ -26634,6 +26984,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
   <div class="tc">
     ${totRows}
     <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    ${payRows}
   </div>
 </div>
 <div class="ft"><span>${invNum} · ${biz}</span><span>${issDate}</span></div>
@@ -26699,6 +27050,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     <div>
       ${totRows}
       <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    ${payRows}
     </div>
   </div>
   <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
@@ -26756,6 +27108,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
   <div>
     ${totRows}
     <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    ${payRows}
   </div>
 </div>
 <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
@@ -28188,7 +28541,8 @@ function buildReceiptHTML(sale, overrides = {}) {
   const discount = parseFloat(sale.discount_amount || 0);
   const change   = parseFloat(sale.change_amount || 0);
 
-  const afterDiscount = parseFloat(sale.subtotal) - discount;
+  const couponAmt = parseFloat(sale.coupon_discount || 0);
+  const afterDiscount = parseFloat(sale.subtotal) - discount - couponAmt;
   const rcptTaxes = (Array.isArray(sale._taxBreakdown) && sale._taxBreakdown.length)
     ? sale._taxBreakdown
     : _coGetTaxBreakdown(afterDiscount);
@@ -28196,6 +28550,10 @@ function buildReceiptHTML(sale, overrides = {}) {
   let totalsHTML = `<div class="rcpt-total-row"><span>${lbl.subtotal}</span><span>${formatMoney(sale.subtotal)}</span></div>`;
   if (discount > 0) {
     totalsHTML += `<div class="rcpt-total-row"><span>${lbl.discount}${sale.discount_percent ? ' (' + sale.discount_percent + '%)' : ''}</span><span>-${formatMoney(discount)}</span></div>`;
+  }
+  if (couponAmt > 0) {
+    const cpCode = sale.coupon?.code ? ` (${escHtml(sale.coupon.code)})` : '';
+    totalsHTML += `<div class="rcpt-total-row"><span>Coupon${cpCode}</span><span>-${formatMoney(couponAmt)}</span></div>`;
   }
   rcptTaxes.forEach(t => {
     const lx = escHtml(t.name) + (t.type === 'flat' ? '' : ' ' + t.value + '%');
@@ -28285,10 +28643,13 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
       s + parseFloat(i.discount_amount || 0) * parseFloat(i.quantity), 0
     ) * 100
   ) / 100;
-  const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal) * 100) / 100;
+  // The coupon is part of the invoice's discount so its total matches the sale;
+  // the print template shows it on its own "Coupon (CODE)" row via inv._coupon.
+  const couponAmt     = parseFloat(sale.coupon_discount || 0);
+  const totalDiscount = Math.round(((parseFloat(sale.discount_amount) || 0) + itemDiscountsTotal + couponAmt) * 100) / 100;
 
   // Compute tax amount for invoice using the same multi-rule breakdown
-  const _invAfterDisc    = parseFloat(sale.subtotal || 0) - (parseFloat(sale.discount_amount) || 0);
+  const _invAfterDisc    = parseFloat(sale.subtotal || 0) - (parseFloat(sale.discount_amount) || 0) - couponAmt;
   const _invTaxBreakdown = (Array.isArray(sale._taxBreakdown) && sale._taxBreakdown.length)
     ? sale._taxBreakdown
     : _coGetTaxBreakdown(_invAfterDisc);
@@ -28333,6 +28694,18 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
       }
       // Stamp tax breakdown for per-rule rendering in the invoice template
       if (_invTaxBreakdown.length > 0) inv._taxBreakdown = _invTaxBreakdown;
+      if (couponAmt > 0) inv._coupon = { code: sale.coupon?.code || '', amount: couponAmt };
+      const giftAmt = parseFloat(sale.gift_card_amount || 0);
+      if (giftAmt > 0) {
+        inv._giftCard = {
+          code:    sale.gift_card?.code || '',
+          amount:  giftAmt,
+          balance: sale.gift_card ? parseFloat(sale.gift_card.balance) : null,
+          // What the payment method covered after the gift card (none on credit).
+          paid:    sale.payment_method === 'credit' ? null : Math.max(0, parseFloat(sale.total || 0) - giftAmt),
+          method:  sale.payment_method_label || sale.payment_method || '',
+        };
+      }
       showInvoicePreviewModal(inv);
     }
   } else {
@@ -28379,7 +28752,9 @@ function _buildEscposReceiptData(sale) {
     subtotal:      parseFloat(sale?.subtotal     || 0),
     discount:      parseFloat(sale?.discount_amount || 0),
     discountPct:   sale?.discount_percent || '',
-    taxes:         (sale?._taxBreakdown || []).map(t => ({ name: t.name, amount: parseFloat(t.amount) })),
+    couponDiscount: parseFloat(sale?.coupon_discount || 0),
+    couponCode:     sale?.coupon?.code || '',
+    taxes:        (sale?._taxBreakdown || []).map(t => ({ name: t.name, amount: parseFloat(t.amount) })),
     total:         parseFloat(sale?.total        || 0),
     paid:          parseFloat(sale?.gift_card_amount || 0) > 0
       ? Math.max(0, parseFloat(sale?.total || 0) - parseFloat(sale.gift_card_amount))
@@ -29665,6 +30040,21 @@ let _coSubtotal = 0; // base subtotal before order-level discount
 let _coAmount   = ''; // numpad string
 let _coDiscType = 'pct'; // 'pct' | 'flat'
 let _coGift     = null;  // applied gift card { code, name, balance } — amount is derived from the total
+let _coCoupon   = null;  // applied coupon { code, name, discount_type, discount_value, remaining }
+
+// Coupon discount on the bill after the order discount — mirrors Coupon::discountFor() on the server.
+function _coCouponDiscount(afterDisc = _coGetAfterDiscount()) {
+  if (!_coCoupon) return 0;
+  const v = Number(_coCoupon.discount_value) || 0;
+  const d = _coCoupon.discount_type === 'percent' ? afterDisc * Math.min(100, Math.max(0, v)) / 100 : v;
+  return Math.round(Math.min(afterDisc, Math.max(0, d)) * 100) / 100;
+}
+
+// Bill after the order discount AND the coupon — the base taxes are worked out on.
+function _coGetAfterCoupon() {
+  const afterDisc = _coGetAfterDiscount();
+  return Math.max(0, Math.round((afterDisc - _coCouponDiscount(afterDisc)) * 100) / 100);
+}
 
 // Portion of the total covered by the applied gift card (never more than its balance).
 function _coGiftApplied(total = _coGetTotal()) {
@@ -29806,10 +30196,10 @@ function _coGetTaxBreakdown(afterDisc) {
 }
 
 function _coGetTotal() {
-  const afterDisc = _coGetAfterDiscount();
-  const taxes     = _coGetTaxBreakdown(afterDisc);
-  const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
-  return Math.round((afterDisc + taxTotal) * 100) / 100;
+  const afterCoupon = _coGetAfterCoupon();
+  const taxes       = _coGetTaxBreakdown(afterCoupon);
+  const taxTotal    = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
+  return Math.round((afterCoupon + taxTotal) * 100) / 100;
 }
 
 function _coGetMethod() {
@@ -29818,11 +30208,25 @@ function _coGetMethod() {
 
 function _coRefresh() {
   const afterDisc = _coGetAfterDiscount();
-  const taxes     = _coGetTaxBreakdown(afterDisc);
+  const couponAmt = _coCouponDiscount(afterDisc);
+  const afterCp   = Math.max(0, Math.round((afterDisc - couponAmt) * 100) / 100);
+  const taxes     = _coGetTaxBreakdown(afterCp);
   const taxTotal  = Math.round(taxes.reduce((s, t) => s + t.amount, 0) * 100) / 100;
-  const total     = Math.round((afterDisc + taxTotal) * 100) / 100;
-  const saved     = Math.round((_coSubtotal - afterDisc) * 100) / 100;
+  const total     = Math.round((afterCp + taxTotal) * 100) / 100;
+  const saved     = Math.round((_coSubtotal - afterCp) * 100) / 100;
   const giftAmt   = _coGiftApplied(total);
+
+  const cpApplied = $('#co-cp-applied');
+  if (cpApplied) {
+    cpApplied.style.display = _coCoupon ? 'flex' : 'none';
+    $('#co-cp-toggle').style.display = _coCoupon || $('#co-cp-entry').style.display !== 'none' ? 'none' : '';
+    if (_coCoupon) {
+      const off = _coCoupon.discount_type === 'percent' ? `${Number(_coCoupon.discount_value)}% off` : `${formatMoney(_coCoupon.discount_value)} off`;
+      $('#co-cp-applied-code').textContent = _coCoupon.code;
+      $('#co-cp-applied-sub').textContent  = `${_coCoupon.name} · ${off}`;
+      $('#co-cp-applied-amt').textContent  = '-' + formatMoney(couponAmt);
+    }
+  }
   const due       = Math.max(0, Math.round((total - giftAmt) * 100) / 100);
   const amount    = parseFloat(_coAmount) || 0;
   const change    = Math.round((amount - due) * 100) / 100;
@@ -29900,6 +30304,8 @@ function openCheckout() {
   if (discEl) { discEl.value = '0'; discEl.max = '100'; discEl.step = '1'; }
   _coGift = null;
   _coGcShowEntry(false);
+  _coCoupon = null;
+  _coCpShowEntry(false);
   _coAmount = _coGetTotal().toFixed(2);
 
   // Reset payment method to cash
@@ -30018,6 +30424,67 @@ $('#co-gc-code')?.addEventListener('keydown', e => {
 $('#co-gc-remove')?.addEventListener('click', () => {
   _coGift = null;
   _coGcShowEntry(false);
+  _coAmount = _coGetDue().toFixed(2);
+  _coRefresh();
+});
+
+// ── Checkout coupon ──
+function _coCpShowEntry(show) {
+  const entry = $('#co-cp-entry');
+  if (!entry) return;
+  entry.style.display = show ? 'flex' : 'none';
+  $('#co-cp-toggle').style.display = show || _coCoupon ? 'none' : '';
+  if (show) {
+    $('#co-cp-code').value = '';
+    setTimeout(() => $('#co-cp-code')?.focus(), 30);
+  }
+}
+
+// Reason text for a coupon the server says can't be used right now.
+function _cpBlockedReason(c) {
+  return {
+    expired:   `expired on ${c.expires_at}`,
+    scheduled: `is not valid until ${c.valid_from}`,
+    used:      'has been fully used — no uses left',
+    disabled:  'is disabled',
+  }[c.status] || 'cannot be used';
+}
+
+function _coApplyCoupon(c) {
+  _coCoupon = { code: c.code, name: c.name, discount_type: c.discount_type, discount_value: Number(c.discount_value), remaining: c.remaining };
+  _coCpShowEntry(false);
+  _coAmount = _coGetDue().toFixed(2);
+  _coRefresh();
+}
+
+async function _coCpApply() {
+  const code    = $('#co-cp-code').value.trim();
+  const alertEl = $('#checkout-alert');
+  if (!code) { $('#co-cp-code').focus(); return; }
+  const btn = $('#co-cp-apply');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+  const res = await API.couponLookup(code);
+  btn.disabled = false;
+  btn.textContent = 'Apply';
+  if (res.status !== 200) { showAlert(alertEl, res.body?.message || 'Coupon not found.'); return; }
+  const c = res.body.data;
+  if (!c.is_redeemable) { showAlert(alertEl, `Coupon ${c.code} ${_cpBlockedReason(c)}.`); return; }
+  alertEl.style.display = 'none';
+  _coApplyCoupon(c);
+  toast(`Coupon applied — ${formatMoney(_coCouponDiscount())} off`, 'success');
+}
+
+$('#co-cp-toggle')?.addEventListener('click', () => _coCpShowEntry(true));
+$('#co-cp-cancel')?.addEventListener('click', () => _coCpShowEntry(false));
+$('#co-cp-apply')?.addEventListener('click', _coCpApply);
+$('#co-cp-code')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); _coCpApply(); }
+  if (e.key === 'Escape') _coCpShowEntry(false);
+});
+$('#co-cp-remove')?.addEventListener('click', () => {
+  _coCoupon = null;
+  _coCpShowEntry(false);
   _coAmount = _coGetDue().toFixed(2);
   _coRefresh();
 });
@@ -30313,6 +30780,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
     credit_due_date:  method === 'credit' ? ($('#co-credit-due-date')?.value || undefined) : undefined,
     gift_card_code:   _coGift && giftAmt > 0 ? _coGift.code : undefined,
     gift_card_amount: _coGift && giftAmt > 0 ? giftAmt : undefined,
+    coupon_code:      _coCoupon ? _coCoupon.code : undefined,
     items: [
       ...productItems.map(i => ({
         product_id:             i.id,
@@ -30350,7 +30818,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   const postCustomerId = tab?._customer?.id ?? null;
   // Snapshot tax breakdown before clearing the cart (per-item taxes live in cart items)
-  const _taxSnap = _coGetTaxBreakdown(_coGetAfterDiscount());
+  const _taxSnap = _coGetTaxBreakdown(_coGetAfterCoupon());
   $('#checkout-modal').style.display = 'none';
   if (tab) { tab.cart = []; tab._customer = null; }
   renderCart(); renderPosTabBar(); renderCartCustomer();
@@ -30806,6 +31274,9 @@ $('#rb-inv-sale-campaign')?.addEventListener('click', () => openSaleCampaignModa
 $('#rb-inv-gift-cards')?.addEventListener('click', () => openGiftCardModal());
 $('#rb-gift-card-check')?.addEventListener('click', () => openGiftCardCheckModal());
 $('#btn-gift-card')?.addEventListener('click', () => openGiftCardCheckModal());
+$('#rb-inv-coupons')?.addEventListener('click', () => openCouponModal());
+$('#rb-coupon-check')?.addEventListener('click', () => openCouponCheckModal());
+$('#btn-coupon')?.addEventListener('click', () => openCouponCheckModal());
 // ── Restaurant ribbon buttons ──────────────────────────────────────────────
 // Restaurant ribbon
 $('#rb-rst-pos')?.addEventListener('click',              () => { activateTab('rst-pos'); });
@@ -43740,6 +44211,7 @@ async function submitDsCreate() {
       { key: 'inv_btn_barcodes',    label: 'Barcode Sheets',   desc: 'Ribbon Print: Barcode sheets button' },
       { key: 'inv_btn_sale_campaign', label: 'Sale Campaign', desc: 'Ribbon Print: Sale Campaign button' },
       { key: 'inv_btn_gift_cards',    label: 'Gift Cards',    desc: 'Ribbon Print: Gift Cards management button' },
+      { key: 'inv_btn_coupons',       label: 'Coupons',       desc: 'Ribbon Print: Coupons management button' },
     ]},
     { key: 'inv_panel', label: 'Inventory · Panel', icon: 'fa-layer-group', color: '#a78bfa', items: [
       { key: 'inv_tab_products',   label: 'Tab: Products',        desc: 'Inventory panel: Products sub-nav tab' },

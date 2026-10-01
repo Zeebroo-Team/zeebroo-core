@@ -28,6 +28,7 @@
     { key: 'stock-transfers', icon: 'fa-right-left', title: 'Stock Transfer', desc: 'Move stock between branches.', accent: '#7c3aed' },
     // Lives in its own dialog (js/giftcards.js) — this tile hands off to it.
     { key: 'giftcards', icon: 'fa-gift', title: 'Gift Cards', desc: 'Create gift cards, track balances, and usage.', accent: '#db2777', modal: 'openGiftCardsModal' },
+    { key: 'coupons', icon: 'fa-ticket', title: 'Coupons', desc: 'Create discount coupons with one shared code.', accent: '#0d9488', modal: 'openCouponsModal' },
   ];
 
   // ── Small shared helpers (same as js/sales.js) ──────────────────────────

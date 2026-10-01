@@ -451,6 +451,9 @@ function _escposBuffer(receipt, paperWidth) {
     const dl = 'Discount' + (receipt.discountPct ? ' (' + receipt.discountPct + '%)' : '') + ':';
     rowLR(dl, '-' + money(receipt.discount));
   }
+  if (parseFloat(receipt.couponDiscount) > 0.005) {
+    rowLR('Coupon' + (receipt.couponCode ? ' ' + receipt.couponCode : '') + ':', '-' + money(receipt.couponDiscount));
+  }
   for (const tax of (receipt.taxes || [])) {
     rowLR(String(tax.name) + ':', '+' + money(tax.amount));
   }

@@ -681,7 +681,7 @@ html, body {
 /* The payment column doesn't scroll as a whole — only #tender-section (the
    numpad area) does, so the note field and Complete Sale button stay visible
    without the user having to scroll past the numpad to reach them. */
-.checkout-col-payment { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 14px; overflow: hidden; }
+.checkout-col-payment { width: 380px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
 
 .checkout-section-title {
   display: flex;
@@ -822,20 +822,26 @@ html, body {
 .change-value { color: var(--success); }
 .change-value.negative { color: var(--danger); }
 
-/* Numpad — grid rows use minmax(0, 1fr) and the grid itself is flex:1, so the
-   rows share whatever height is left in #tender-section and shrink together
-   instead of overflowing it. */
+/* Numpad — 4 columns (Exact / Clear in the right column) so it needs no
+   separate actions row. The grid is flex:1 so rows share whatever height is
+   left in #tender-section; each row keeps a 34px floor so keys never collapse. */
 .numpad {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  grid-template-rows: repeat(4, minmax(0, 1fr));
-  gap: clamp(4px, 1vh, 10px);
-  margin-bottom: clamp(6px, 1.4vh, 14px);
-  flex: 1;
-  min-height: 0;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, minmax(34px, 1fr));
+  gap: clamp(4px, .8vh, 8px);
+  flex: 1 0 auto;
 }
+.numpad .numpad-zero { grid-column: span 2; }
+.numpad .numpad-exact { grid-row: span 2; }
+.numpad button.numpad-action { font-size: 13px; font-weight: 700; }
+.numpad button.numpad-exact { color: var(--accent); }
+.numpad button.numpad-clear { color: var(--danger); border-color: #fbcaca; }
+.numpad button.numpad-clear:hover { background: #fdecec; border-color: var(--danger); }
 .numpad button {
-  min-height: 0;
+  min-height: 34px;
+  padding: 0;
+  line-height: 1;
   font-size: clamp(14px, 2.6vh, 22px);
   font-weight: 700;
   border: 1px solid var(--border);
@@ -847,12 +853,11 @@ html, body {
 .numpad button:hover { background: #f8f9fb; border-color: var(--accent); }
 .numpad button.numpad-back { color: var(--danger); }
 
-.numpad-actions { display: flex; gap: 10px; margin-bottom: clamp(6px, 1.4vh, 14px); flex-shrink: 0; }
-.numpad-actions .ghost-btn { flex: 1; display: flex; align-items: center; justify-content: center; }
 .ghost-btn.danger { color: var(--danger); border-color: #fbcaca; }
 .ghost-btn.danger:hover { background: #fdecec; }
 
-.note-field { flex-shrink: 0; padding-top: 4px; }
+.note-field { flex-shrink: 0; }
+.note-field textarea { resize: none; }
 
 .checkout-complete-btn {
   width: 100%;
@@ -1218,7 +1223,7 @@ html, body {
 .cart-gift-btn i { color: #db2777 !important; margin: 0 !important; }
 .cart-gift-btn:hover { border-color: #db2777; background: #fdf2f8; }
 
-.co-gc { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; flex-shrink: 0; }
+.co-gc { display: flex; flex-direction: column; gap: 6px; margin: 0; flex-shrink: 0; }
 .co-gc [hidden] { display: none !important; }
 .co-gc-toggle {
   width: 100%; padding: 8px 10px; border-radius: 9px; border: 1.5px dashed var(--border);
@@ -1278,3 +1283,12 @@ html, body {
 .gc-hist-row .neg { color: var(--danger); font-weight: 700; white-space: nowrap; }
 .gc-hist-row .pos { color: var(--success); font-weight: 700; white-space: nowrap; }
 .gc-use-btn { width: 100%; margin-top: 12px; justify-content: center; }
+
+/* ── Coupons (same building blocks as gift cards, teal accent) ─────────── */
+.cart-coupon-btn i { color: #0d9488 !important; }
+.cart-coupon-btn:hover { border-color: #0d9488; background: #f0fdfa; }
+.co-cp .co-gc-toggle:hover { border-color: #0d9488; color: #0d9488; background: #f0fdfa; }
+.co-cp .co-gc-input:focus { border-color: #0d9488; }
+.co-cp .co-gc-apply { background: #0d9488; }
+.co-cp .co-gc-applied { border-color: rgba(13,148,136,.45); background: #f0fdfa; }
+.co-cp .co-gc-icon, .co-cp .co-gc-amt { color: #0d9488; }
