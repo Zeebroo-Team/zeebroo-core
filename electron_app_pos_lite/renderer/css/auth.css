@@ -152,15 +152,37 @@ input:focus, select:focus { border-color: var(--accent); }
 
 .error-box {
   display: none;
+  align-items: flex-start;
+  gap: 9px;
   background: var(--danger-bg);
-  color: var(--danger);
+  color: #991b1b;
+  border: 1px solid #f5b5b5;
+  border-left: 4px solid var(--danger);
   border-radius: 8px;
-  padding: 9px 11px;
-  font-size: 12.5px;
-  margin-bottom: 4px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  margin-bottom: 14px;
 }
 
-.error-box.show { display: block; }
+.error-box.show { display: flex; animation: error-shake 0.35s ease; }
+.error-box i { color: var(--danger); font-size: 15px; margin-top: 1px; flex-shrink: 0; }
+.error-box .error-text { flex: 1; }
+.error-box a { color: var(--accent); font-weight: 700; cursor: pointer; text-decoration: underline; white-space: nowrap; }
+
+@keyframes error-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  50% { transform: translateX(4px); }
+  75% { transform: translateX(-2px); }
+}
+
+input.invalid, select.invalid {
+  border-color: var(--danger);
+  background: #fffafa;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
 
 .switch-line {
   text-align: center;

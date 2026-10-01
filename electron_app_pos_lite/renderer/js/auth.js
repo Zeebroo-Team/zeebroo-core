@@ -23,8 +23,8 @@ function showTab(which) {
   signupWizard.classList.toggle('active', !isLogin);
   lineLogin.style.display = isLogin ? '' : 'none';
   lineSignup.style.display = isLogin ? 'none' : '';
-  loginError.classList.remove('show');
-  signupError.classList.remove('show');
+  setError(loginError, '');
+  setError(signupError, '');
   if (!isLogin && !wasSignupActive) _obSetStep(1); // fresh entry into sign-up: start the wizard over
 }
 
@@ -39,18 +39,107 @@ document.getElementById('go-cashier').addEventListener('click', () => {
 });
 document.getElementById('go-owner').addEventListener('click', () => showTab('login'));
 
-function setError(box, message) {
-  box.textContent = message;
-  box.classList.toggle('show', !!message);
+// Inputs per form, keyed by the API's validation-error field names, so a
+// server error can highlight the field it's about.
+const FIELD_INPUTS = {
+  login: { email: 'login-email', password: 'login-password' },
+  cashier: { slug: 'cashier-business', username: 'cashier-username', password: 'cashier-password' },
+  signup: { name: 'su-name', business_name: 'su-business', business_category: 'su-category', email: 'su-email', password: 'su-password' },
+};
+
+function clearFieldErrors() {
+  document.querySelectorAll('.card .invalid').forEach((el) => el.classList.remove('invalid'));
 }
 
-function firstValidationError(body) {
-  if (!body) return t('Something went wrong. Please try again.');
-  if (body.errors) {
-    const firstKey = Object.keys(body.errors)[0];
-    if (firstKey) return t(body.errors[firstKey][0]);
+function markField(inputId) {
+  const input = inputId && document.getElementById(inputId);
+  if (!input) return;
+  input.classList.add('invalid');
+  input.focus();
+}
+
+document.querySelectorAll('.card input, .card select').forEach((el) => {
+  const clear = () => el.classList.remove('invalid');
+  el.addEventListener('input', clear);
+  el.addEventListener('change', clear);
+});
+
+// message: string (empty hides the box). opts.field: input id to highlight.
+// opts.action: { label, onClick } — an inline link such as "Log in instead".
+function setError(box, message, opts = {}) {
+  if (!message) {
+    box.classList.remove('show');
+    box.innerHTML = '';
+    clearFieldErrors();
+    return;
   }
-  return t(body.message) || t('Something went wrong. Please try again.');
+  box.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i><div class="error-text"></div>';
+  box.querySelector('.error-text').textContent = message;
+  if (opts.action) {
+    const link = document.createElement('a');
+    link.textContent = opts.action.label;
+    link.addEventListener('click', opts.action.onClick);
+    box.querySelector('.error-text').append(' ', link);
+  }
+  box.classList.remove('show');
+  void box.offsetWidth; // restart the shake animation on repeated errors
+  box.classList.add('show');
+  markField(opts.field);
+  box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// Turns raw Laravel/API messages into plain-language ones.
+function friendlyMessage(field, raw) {
+  const msg = String(raw || '');
+  if (/already been taken/i.test(msg) && field === 'email') {
+    return t('An account with this email already exists. Log in instead, or use a different email.');
+  }
+  if (/credentials (are incorrect|do not match)/i.test(msg)) return t('Incorrect email or password. Please check and try again.');
+  if (/invalid username or password/i.test(msg)) return t('Incorrect username or password. Please check and try again.');
+  if (/business not found/i.test(msg)) return t("We couldn't find a business with that name. Check the spelling and try again.");
+  if (/must be a valid email/i.test(msg)) return t('Please enter a valid email address.');
+  const min = msg.match(/password.*at least (\d+) characters/i);
+  if (min) return t('Password must be at least {n} characters.').replace('{n}', min[1]);
+  if (/password.*confirmation does not match/i.test(msg)) return t('Passwords do not match.');
+  if (/field is required/i.test(msg)) return t('Please fill in all required fields.');
+  return t(msg);
+}
+
+// Reads an API response into { message, field (API key), raw }.
+function describeApiError(res) {
+  const body = res?.body;
+  const status = res?.status;
+  if (status === 0) return { message: t("Can't reach the server. Check your internet connection and try again.") };
+  if (status === 429) return { message: t('Too many attempts. Please wait a minute and try again.') };
+  if (status >= 500) return { message: t('The server ran into a problem. Please try again in a moment.') };
+  if (body && typeof body === 'object') {
+    const firstKey = body.errors ? Object.keys(body.errors)[0] : null;
+    if (firstKey) {
+      const raw = [].concat(body.errors[firstKey])[0];
+      return { message: friendlyMessage(firstKey, raw), field: firstKey, raw };
+    }
+    if (body.message) return { message: friendlyMessage(null, body.message), raw: body.message };
+  }
+  return { message: t('Something went wrong. Please try again.') };
+}
+
+// Shows an API error in `box`, highlighting the matching field of `form`.
+function showApiError(box, res, form) {
+  const err = describeApiError(res);
+  const opts = { field: FIELD_INPUTS[form]?.[err.field] };
+  if (form === 'login' && !err.field && res?.status === 401) opts.field = 'login-password';
+  if (form === 'signup' && err.field === 'email' && /already been taken/i.test(err.raw || '')) {
+    opts.action = {
+      label: t('Log in instead'),
+      onClick: () => {
+        document.getElementById('login-email').value = document.getElementById('su-email').value.trim();
+        showTab('login');
+        document.getElementById('login-password').focus();
+      },
+    };
+  }
+  setError(box, err.message, opts);
+  return err;
 }
 
 function setBusy(button, busy, label) {
@@ -91,7 +180,7 @@ loginForm.addEventListener('submit', async (e) => {
   try {
     const res = await API.login(email, password);
     if (res.status !== 200) {
-      setError(loginError, firstValidationError(res.body));
+      showApiError(loginError, res, 'login');
       return;
     }
     await finishAuth(res.body.access_token, res.body.user);
@@ -135,7 +224,7 @@ cashierForm.addEventListener('submit', async (e) => {
 
   const slug = laravelSlug(businessName);
   if (!slug) {
-    setError(loginError, t('Enter your business name.'));
+    setError(loginError, t('Enter your business name.'), { field: 'cashier-business' });
     return;
   }
 
@@ -144,7 +233,9 @@ cashierForm.addEventListener('submit', async (e) => {
     const res = await API.cashierLogin(slug, username, password);
     const d = res.body?.data;
     if (res.status !== 200 || !d?.token) {
-      setError(loginError, firstValidationError(res.body));
+      const err = showApiError(loginError, res, 'cashier');
+      if (!err.field && /business not found/i.test(err.raw || '')) markField('cashier-business');
+      else if (!err.field && res.status === 401) markField('cashier-password');
       return;
     }
     try { localStorage.setItem(CASHIER_BUSINESS_KEY, businessName); } catch (_) {}
@@ -303,8 +394,12 @@ signupForm.addEventListener('submit', (e) => {
   setError(signupError, '');
   const password = document.getElementById('su-password').value;
   const password2 = document.getElementById('su-password2').value;
+  if (password.length < 8) {
+    setError(signupError, t('Password must be at least {n} characters.').replace('{n}', '8'), { field: 'su-password' });
+    return;
+  }
   if (password !== password2) {
-    setError(signupError, t('Passwords do not match.'));
+    setError(signupError, t('Passwords do not match.'), { field: 'su-password2' });
     return;
   }
   _obSetStep(2);
@@ -373,8 +468,13 @@ async function doCreateAccountOrPay() {
     });
     if (res.status !== 201) {
       setBusy(submitBtn, false, wasFree ? t('Create Account') : t('Pay & Create Account'));
-      setError(signupError, firstValidationError(res.body));
-      if (res.body?.errors?.email || res.body?.errors?.password) _obSetStep(1);
+      // Jump back to the step that owns the bad field BEFORE showing the error —
+      // _obSetStep() clears the error box, which used to hide "email taken".
+      const step1Fields = ['name', 'business_name', 'business_category', 'email', 'password'];
+      const errKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
+      if (step1Fields.includes(errKey)) _obSetStep(1);
+      else if (errKey === 'package_id') _obSetStep(2);
+      showApiError(signupError, res, 'signup');
       return;
     }
 
@@ -403,7 +503,8 @@ async function _obStartPaymentCheckout() {
 
   const checkoutUrl = res.body?.data?.checkout_url;
   if (res.status !== 200 || !checkoutUrl) {
-    setError(signupError, res.body?.message || t('Could not start Stripe checkout. Please try again.'));
+    if (res.status === 0) showApiError(signupError, res, 'signup');
+    else setError(signupError, t('Could not start the payment. Please try again.'));
     return;
   }
 
