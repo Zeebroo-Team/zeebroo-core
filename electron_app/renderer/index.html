@@ -9001,7 +9001,12 @@
             </div>
 
             <div class="inv-tab-pane" id="pm-pane-task">
-              <div class="finance-toolbar" style="gap:8px;padding:0 0 10px">
+              <div class="finance-toolbar" style="gap:8px;padding:0 0 10px;flex-wrap:wrap">
+                <div class="pm-subtabs" id="pm-task-subtabs">
+                  <button class="pm-subtab active" data-pmtaskview="milestones"><i class="fa fa-layer-group"></i> By Milestone</button>
+                  <button class="pm-subtab" data-pmtaskview="timeline"><i class="fa fa-timeline"></i> Timeline</button>
+                </div>
+                <button class="svc-form-btn" id="pm-timeline-full-btn" title="Open the full timeline in a larger view" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-up-right-and-down-left-from-center"></i> View Timeline</button>
                 <div class="svc-chip-bar" id="pm-task-filter-chips">
                   <button class="svc-chip active" data-pmtaskfilter="">All</button>
                   <button class="svc-chip" data-pmtaskfilter="todo">To Do</button>
@@ -9009,24 +9014,12 @@
                   <button class="svc-chip" data-pmtaskfilter="review">Review</button>
                   <button class="svc-chip" data-pmtaskfilter="done">Done</button>
                 </div>
-                <button class="svc-form-btn svc-form-btn--primary" id="pm-tasks-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+                <button class="svc-form-btn" id="pm-milestone-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-flag"></i> New Milestone</button>
+                <button class="svc-form-btn svc-form-btn--primary" id="pm-tasks-new-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
               </div>
-              <table class="crm-table" id="pm-tasks-table">
-                <thead>
-                  <tr>
-                    <th style="width:28px"></th>
-                    <th>Task</th>
-                    <th>Priority</th>
-                    <th>Assigned</th>
-                    <th>Due</th>
-                    <th>Status</th>
-                    <th style="width:40px"></th>
-                  </tr>
-                </thead>
-                <tbody id="pm-tasks-body">
-                  <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
-                </tbody>
-              </table>
+              <!-- Both views are rendered from pm.milestones + pm.tasks by loadPmTasks() -->
+              <div id="pm-task-groups"></div>
+              <div id="pm-task-timeline" class="pm-tl" style="display:none"></div>
             </div>
 
             <div class="inv-tab-pane" id="pm-pane-mytask">

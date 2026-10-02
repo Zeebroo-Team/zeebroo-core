@@ -146,19 +146,24 @@
                                 <span style="width:7px;height:7px;border-radius:50%;background:{{ $priorityColor[$t->priority] ?? '#6b7280' }};display:inline-block;flex-shrink:0;"></span>
                                 {{ ucfirst($t->priority) }}
                             </span>
-                            @if($t->assignedTo)
+                            @foreach($t->assignees as $u)
                                 <span style="display:inline-flex;align-items:center;gap:3px;">
                                     <span style="width:18px;height:18px;border-radius:50%;background:var(--primary);color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;">
-                                        {{ strtoupper(substr($t->assignedTo->name, 0, 1)) }}
+                                        {{ strtoupper(substr($u->name, 0, 1)) }}
                                     </span>
-                                    {{ $t->assignedTo->name }}
+                                    {{ $u->name }}
                                 </span>
-                            @endif
+                            @endforeach
                             @if($t->due_date)
                                 <span style="{{ $overdue ? 'color:#dc2626;font-weight:700;' : '' }}">
                                     <i class="fa fa-calendar" style="font-size:10px;"></i>
                                     {{ $t->due_date->format('d M') }}
                                     @if($overdue) <span style="font-size:9px;">(overdue)</span>@endif
+                                </span>
+                            @endif
+                            @if($t->milestone)
+                                <span style="display:inline-flex;align-items:center;gap:3px;" title="Milestone">
+                                    <i class="fa fa-flag" style="font-size:10px;"></i> {{ $t->milestone->name }}
                                 </span>
                             @endif
                         </div>

@@ -2,17 +2,21 @@
 
 namespace Modules\ProjectManage\Services;
 
+use App\Models\User;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Modules\Account\Models\Property;
 use Modules\Account\Models\Rental;
 use Modules\Business\Models\Branch;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Department;
 use Modules\HRManagement\Models\Employee;
 use Modules\Modification\Models\Modification;
 use Modules\ProjectManage\Models\Project;
+use Modules\ProjectManage\Models\Task;
 
 class ProjectService
 {
@@ -23,7 +27,7 @@ class ProjectService
     {
         $query = Project::query()
             ->where('business_id', $business->id)
-            ->withCount('tasks')
+            ->withCount(['tasks', 'members'])
             ->with(['customer', 'branch', 'department', 'property', 'employee', 'modification', 'rental', 'imageFile']);
 
         if (filled($filters['status'] ?? '')) {
@@ -110,6 +114,108 @@ class ProjectService
         ];
     }
 
+    /**
+     * Users who can be added to a project team: the business owner plus active members.
+     *
+     * @return Collection<int, array{id:int,name:string,email:?string,role:string}>
+     */
+    public function businessUsers(Business $business): Collection
+    {
+        $users = BusinessMember::query()
+            ->where('business_id', $business->id)
+            ->where('status', 'active')
+            ->with('user')
+            ->get()
+            ->filter(fn (BusinessMember $m) => $m->user)
+            ->map(fn (BusinessMember $m) => [
+                'id'    => (int) $m->user->id,
+                'name'  => $m->user->name,
+                'email' => $m->user->email,
+                'role'  => (string) $m->role,
+            ]);
+
+        if ($business->user) {
+            $users->prepend([
+                'id'    => (int) $business->user->id,
+                'name'  => $business->user->name,
+                'email' => $business->user->email,
+                'role'  => 'owner',
+            ]);
+        }
+
+        return $users->unique('id')->sortBy('name', SORT_NATURAL | SORT_FLAG_CASE)->values();
+    }
+
+    /**
+     * The project team, each with their task counts in this project.
+     *
+     * @return Collection<int, array{id:int,name:string,email:?string,role:string,open_tasks:int,total_tasks:int,added_at:?string}>
+     */
+    public function membersForProject(Project $project): Collection
+    {
+        $roles = $this->businessUsers($project->business)->pluck('role', 'id');
+
+        $counts = DB::table('pm_task_assignees as a')
+            ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
+            ->where('t.project_id', $project->id)
+            ->selectRaw('a.user_id, count(*) as total, sum(case when t.status = ? then 0 else 1 end) as open', [Task::STATUS_DONE])
+            ->groupBy('a.user_id')
+            ->get()
+            ->keyBy('user_id');
+
+        return $project->members()
+            ->orderBy('name')
+            ->get()
+            ->map(fn (User $u) => [
+                'id'          => (int) $u->id,
+                'name'        => $u->name,
+                'email'       => $u->email,
+                'role'        => $roles[$u->id] ?? 'former',
+                'open_tasks'  => (int) ($counts[$u->id]->open ?? 0),
+                'total_tasks' => (int) ($counts[$u->id]->total ?? 0),
+                'added_at'    => $u->pivot->created_at?->toDateTimeString(),
+            ]);
+    }
+
+    /**
+     * Adds business users to the project team; ids outside the business are rejected.
+     *
+     * @param int[] $userIds
+     */
+    public function addMembers(Project $project, array $userIds, ?int $addedBy): void
+    {
+        $allowed = $this->businessUsers($project->business)->pluck('id')->all();
+        $invalid = array_diff(array_map('intval', $userIds), $allowed);
+
+        if ($invalid) {
+            throw ValidationException::withMessages(['user_ids' => 'Only users of this business can be added to the project.']);
+        }
+
+        $project->members()->syncWithoutDetaching(
+            collect($userIds)->mapWithKeys(fn ($id) => [(int) $id => ['added_by' => $addedBy]])->all()
+        );
+    }
+
+    /** Removes a user from the team and from every task of theirs in this project. Returns how many tasks they were removed from. */
+    public function removeMember(Project $project, int $userId): int
+    {
+        return DB::transaction(function () use ($project, $userId) {
+            $tasks = Task::query()
+                ->where('project_id', $project->id)
+                ->whereHas('assignees', fn ($q) => $q->where('users.id', $userId))
+                ->with('assignees')
+                ->get();
+
+            foreach ($tasks as $task) {
+                $task->syncAssignees($task->assignees->pluck('id')->reject(fn ($id) => (int) $id === $userId)->all());
+            }
+
+            $project->members()->detach($userId);
+
+            return $tasks->count();
+        });
+    }
+
     public function businessHasProjects(Business $business): bool
     {
         return Project::query()->where('business_id', $business->id)->exists();
@@ -117,7 +223,7 @@ class ProjectService
 
     public function create(Business $business, array $data, int $userId): Project
     {
-        return Project::create(array_merge([
+        $project = Project::create(array_merge([
             'business_id' => $business->id,
             'name'        => $data['name'],
             'description' => filled($data['description'] ?? '') ? $data['description'] : null,
@@ -130,6 +236,13 @@ class ProjectService
             'client_name' => filled($data['client_name'] ?? '') ? $data['client_name'] : null,
             'created_by'  => $userId,
         ], $this->assignmentAttributes($data)));
+
+        // The creator starts on the project team.
+        if ($userId > 0) {
+            $project->members()->attach($userId, ['added_by' => $userId]);
+        }
+
+        return $project;
     }
 
     public function update(Project $project, array $data): Project

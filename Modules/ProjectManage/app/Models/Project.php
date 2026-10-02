@@ -4,6 +4,7 @@ namespace Modules\ProjectManage\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Modules\Business\Models\Branch;
@@ -130,6 +131,19 @@ class Project extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'created_by');
+    }
+
+    /** Users on the project team — the only users its tasks can be assigned to. */
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\User::class, 'pm_project_members')
+            ->withPivot('added_by')
+            ->withTimestamps();
+    }
+
+    public function hasMember(int $userId): bool
+    {
+        return $this->members()->where('users.id', $userId)->exists();
     }
 
     public function assignedUsers(): HasManyThrough

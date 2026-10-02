@@ -4,6 +4,7 @@ namespace Modules\ProjectManage\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Task extends Model
@@ -69,9 +70,31 @@ class Task extends Model
         return $this->belongsTo(Milestone::class);
     }
 
+    /** First assignee only — kept in sync by syncAssignees() for older readers of assigned_to. */
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'assigned_to');
+    }
+
+    /** Everyone assigned to the task (all project members). */
+    public function assignees(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\User::class, 'pm_task_assignees')
+            ->withTimestamps()
+            ->orderBy('pm_task_assignees.id');
+    }
+
+    /**
+     * Replaces the assignees and mirrors the first one into assigned_to.
+     *
+     * @param int[] $userIds
+     */
+    public function syncAssignees(array $userIds): void
+    {
+        $userIds = array_values(array_unique(array_map('intval', $userIds)));
+
+        $this->assignees()->sync($userIds);
+        $this->update(['assigned_to' => $userIds[0] ?? null]);
     }
 
     public function comments(): HasMany

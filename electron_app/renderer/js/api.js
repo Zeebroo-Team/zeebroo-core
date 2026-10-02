@@ -627,6 +627,9 @@ const API = (() => {
     pmProjectCreate:       (body)      => request('POST',   '/pm/projects', body),
     pmProjectUpdate:       (id, body)  => request('PATCH',  `/pm/projects/${id}`, body),
     pmProjectDelete:       (id)        => request('DELETE', `/pm/projects/${id}`),
+    pmMembers:             (pid)       => request('GET',    `/pm/projects/${pid}/members`),
+    pmMemberAdd:           (pid, ids)  => request('POST',   `/pm/projects/${pid}/members`, { user_ids: ids }),
+    pmMemberRemove:        (pid, uid)  => request('DELETE', `/pm/projects/${pid}/members/${uid}`),
     pmBoard:               (id)        => request('GET',    `/pm/projects/${id}/board`),
     pmStatuses:            (pid)       => request('GET',    `/pm/projects/${pid}/statuses`),
     pmStatusCreate:        (pid, body) => request('POST',   `/pm/projects/${pid}/statuses`, body),
@@ -643,7 +646,12 @@ const API = (() => {
     pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
     pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),
     pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
+    pmMilestoneUpdate:     (id, body)  => request('PATCH',  `/pm/milestones/${id}`, body),
+    pmMilestoneReorder:    (pid, ids)  => request('POST',   `/pm/projects/${pid}/milestones/reorder`, { ids }),
     pmMilestoneComplete:   (id)        => request('POST',   `/pm/milestones/${id}/complete`, {}),
+    pmMilestoneReopen:     (id)        => request('POST',   `/pm/milestones/${id}/reopen`, {}),
+    pmTaskMilestone:       (id, mid)   => request('PATCH',  `/pm/tasks/${id}/milestone`, { milestone_id: mid }),
+    pmTaskAssign:          (id, ids)   => request('PATCH',  `/pm/tasks/${id}/assignees`, { assignee_ids: ids }),
     pmMilestoneDelete:     (id)        => request('DELETE', `/pm/milestones/${id}`),
 
     // Brand Management

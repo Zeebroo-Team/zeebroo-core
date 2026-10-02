@@ -120,13 +120,20 @@
                             </div>
                             <div class="pcat-form-grid pcat-form-grid--2" style="margin-bottom:10px;">
                                 <div class="pcat-field">
-                                    <label>Assigned to</label>
-                                    <select name="assigned_to">
-                                        <option value="">Unassigned</option>
-                                        @foreach($assignableUsers as $u)
-                                            <option value="{{ $u->id }}" @selected(old('assigned_to',(string)$task->assigned_to)===(string)$u->id)>{{ $u->name }}</option>
-                                        @endforeach
-                                    </select>
+                                    <label>Assigned to <span style="font-weight:400;color:var(--muted);">(project team)</span></label>
+                                    {{-- Empty value so unticking everyone clears the assignees --}}
+                                    <input type="hidden" name="assignee_ids" value="">
+                                    @php($checkedIds = array_map('strval', (array) old('assignee_ids', $task->assignees->pluck('id')->all())))
+                                    <div style="max-height:120px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px 8px;">
+                                        @forelse($assignableUsers as $u)
+                                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 0;cursor:pointer;">
+                                                <input type="checkbox" name="assignee_ids[]" value="{{ $u->id }}" @checked(in_array((string) $u->id, $checkedIds, true))>
+                                                {{ $u->name }}
+                                            </label>
+                                        @empty
+                                            <div style="font-size:11px;color:var(--muted);padding:3px 0;">No team members — add them on the project's Assignment tab.</div>
+                                        @endforelse
+                                    </div>
                                 </div>
                                 <div class="pcat-field">
                                     <label>Milestone</label>
@@ -261,7 +268,7 @@
         <aside class="pm-sidebar">
             <div class="pm-sidebar__row">
                 <span class="pm-sidebar__label">Assigned to</span>
-                <span style="font-weight:600;color:var(--text);">{{ $task->assignedTo?->name ?? 'Unassigned' }}</span>
+                <span style="font-weight:600;color:var(--text);">{{ $task->assignees->pluck('name')->implode(', ') ?: 'Unassigned' }}</span>
             </div>
             <div class="pm-sidebar__row">
                 <span class="pm-sidebar__label">Project</span>

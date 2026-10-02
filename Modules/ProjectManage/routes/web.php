@@ -20,8 +20,13 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::put('/pm/projects/{project}',     [ProjectController::class, 'update']) ->name('pm.projects.update');
     Route::delete('/pm/projects/{project}',  [ProjectController::class, 'destroy'])->name('pm.projects.destroy');
 
+    // Project members (team)
+    Route::post('/pm/projects/{project}/members',          [ProjectController::class, 'addMembers'])  ->name('pm.projects.members.store');
+    Route::delete('/pm/projects/{project}/members/{user}', [ProjectController::class, 'removeMember'])->whereNumber('user')->name('pm.projects.members.destroy');
+
     // Milestones
-    Route::post('/pm/projects/{project}/milestones',                           [MilestoneController::class, 'store'])   ->name('pm.projects.milestones.store');
+    Route::post('/pm/projects/{project}/milestones',                          [MilestoneController::class, 'store'])   ->name('pm.projects.milestones.store');
+    Route::post('/pm/projects/{project}/milestones/reorder',                   [MilestoneController::class, 'reorder']) ->name('pm.projects.milestones.reorder');
     Route::put('/pm/projects/{project}/milestones/{milestone}',                [MilestoneController::class, 'update'])  ->name('pm.projects.milestones.update');
     Route::post('/pm/projects/{project}/milestones/{milestone}/complete',      [MilestoneController::class, 'complete'])->name('pm.projects.milestones.complete');
     Route::post('/pm/projects/{project}/milestones/{milestone}/reopen',        [MilestoneController::class, 'reopen'])  ->name('pm.projects.milestones.reopen');
@@ -42,6 +47,8 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/pm/tasks/{task}',             [TaskController::class, 'show'])    ->name('pm.tasks.show');
     Route::put('/pm/tasks/{task}',             [TaskController::class, 'update'])  ->name('pm.tasks.update');
     Route::patch('/pm/tasks/{task}/status',    [TaskController::class, 'status'])  ->name('pm.tasks.status');
+    Route::patch('/pm/tasks/{task}/milestone', [TaskController::class, 'milestone'])->name('pm.tasks.milestone');
+    Route::patch('/pm/tasks/{task}/assignees', [TaskController::class, 'assignees'])->name('pm.tasks.assignees');
     Route::post('/pm/tasks/{task}/complete',   [TaskController::class, 'complete'])->name('pm.tasks.complete');
     Route::post('/pm/tasks/{task}/reopen',     [TaskController::class, 'reopen'])  ->name('pm.tasks.reopen');
     Route::post('/pm/tasks/{task}/comments',   [TaskController::class, 'comment']) ->name('pm.tasks.comment');
