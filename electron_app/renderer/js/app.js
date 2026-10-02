@@ -49438,41 +49438,209 @@ async function submitDsCreate() {
   $('#pm-detail-back-btn')?.addEventListener('click', () => closeProjectDetail());
 
   // ── Board ───────────────────────────────────────────────────────────────────
-  async function loadPmBoard(projectId = pm.detailProjectId) {
+  const PM_BUILTIN_STATUSES = [
+    { status: 'todo',        label: 'To Do',       is_custom: false },
+    { status: 'in_progress', label: 'In Progress', is_custom: false },
+    { status: 'review',      label: 'Review',      is_custom: false },
+    { status: 'done',        label: 'Done',        is_custom: false },
+  ];
+  pm.boardColumns = PM_BUILTIN_STATUSES;
+
+  function _pmColDot(col) {
+    return col.is_custom
+      ? `<span class="pm-col-dot" style="background:${esc(col.color || '#0ea5e9')}"></span>`
+      : `<span class="pm-col-dot pm-col-dot--${col.status.replace(/_/g, '-')}"></span>`;
+  }
+
+  // silent: re-render in place without the "Loading…" flash (used after a drag-and-drop
+  // move, where the card has already been moved optimistically).
+  async function loadPmBoard(projectId = pm.detailProjectId, { silent = false } = {}) {
     if (!projectId) return;
-    ['todo','in_progress','review','done'].forEach(s => {
-      const col = $(`#pm-col-${s}`);
-      if (col) col.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px">Loading…</div>';
-    });
+    const wrap = $('#pm-board-columns');
+    if (!wrap) return;
+    if (!silent) wrap.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px">Loading…</div>';
     try {
       const res = await API.pmBoard(projectId);
       if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
-      res.body.columns.forEach(col => {
-        const colEl  = $(`#pm-col-${col.status}`);
-        const cntEl  = $(`#pm-col-count-${col.status}`);
-        if (!colEl) return;
-        if (cntEl) cntEl.textContent = col.tasks.length;
-        colEl.innerHTML = '';
+      const columns = res.body.columns || [];
+      pm.boardColumns = columns.map(({ tasks, ...meta }) => meta);
+      wrap.innerHTML = '';
+      columns.forEach(col => {
+        const colEl = document.createElement('div');
+        colEl.className = 'pm-kanban-col';
+        colEl.dataset.col = col.status;
+        _pmBindColumnDrop(colEl);
+        colEl.innerHTML = `
+          <div class="pm-kanban-col-head">
+            ${_pmColDot(col)}${esc(col.label)}
+            <span class="pm-col-count">${col.tasks.length}</span>
+            ${col.status !== 'done' ? `<span class="pm-col-sort" title="Sort number">#${col.sort_order}</span>` : ''}
+            ${col.is_custom ? `<button class="pm-col-del pm-col-edit" title="Edit status"><i class="fa fa-pen"></i></button><button class="pm-col-del" data-del title="Delete status"><i class="fa fa-xmark"></i></button>` : ''}
+          </div>
+          <div class="pm-kanban-cards"></div>`;
+        const cardsEl = colEl.querySelector('.pm-kanban-cards');
         if (!col.tasks.length) {
-          colEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>';
-          return;
+          cardsEl.innerHTML = '<div class="pm-kanban-empty" style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>';
+        } else {
+          col.tasks.forEach(t => cardsEl.appendChild(_pmTaskCard(t)));
         }
-        col.tasks.forEach(t => colEl.appendChild(_pmTaskCard(t)));
+        colEl.querySelector('.pm-col-edit')?.addEventListener('click', () => openPmStatusModal(projectId, col));
+        colEl.querySelector('[data-del]')?.addEventListener('click', async () => {
+          const msg = col.tasks.length
+            ? `Delete status "${col.label}"? Its ${col.tasks.length} task(s) will be moved to To Do.`
+            : `Delete status "${col.label}"?`;
+          if (!confirm(msg)) return;
+          try {
+            const r = await API.pmStatusDelete(col.id);
+            if (r.status >= 400) throw new Error(r.body?.message || 'Delete failed');
+            toast('Status deleted', 'success');
+            loadPmBoard();
+          } catch (e) { toast('Delete failed: ' + e, 'error'); }
+        });
+        wrap.appendChild(colEl);
       });
     } catch (e) {
+      wrap.innerHTML = '';
       toast('Failed to load board: ' + e, 'error');
     }
   }
 
+  // Add (existing = null) or edit a custom status. Sort number places it among the
+  // built-ins (To Do = 1, In Progress = 2, Review = 3); Done is always last.
+  function openPmStatusModal(projectId = pm.detailProjectId, existing = null) {
+    if (!projectId) return;
+    const isEdit = !!existing;
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal" style="max-width:420px">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-table-columns" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">${isEdit ? 'Edit Status' : 'Add Status'}</span>
+          <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-ns-alert"></div>
+          <div><div class="pm-field-label">Status Name *</div><input id="pm-ns-label" class="pm-field-input" maxlength="60" placeholder="e.g. Testing, Blocked" value="${isEdit ? esc(existing.label) : ''}"></div>
+          <div class="pm-field-row">
+            <div><div class="pm-field-label">Color</div><input id="pm-ns-color" type="color" class="pm-field-input" value="${esc(existing?.color || '#0ea5e9')}" style="height:36px;padding:2px 6px"></div>
+            <div><div class="pm-field-label">Sort Number</div><input id="pm-ns-sort" type="number" min="0" max="98" class="pm-field-input" placeholder="Auto" value="${isEdit ? esc(existing.sort_order) : ''}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">To Do = 1, In Progress = 2, Review = 3, Done is always last.${isEdit ? '' : ' Leave blank to add after the last status.'}</div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" data-close>Cancel</button>
+          <button class="pm-btn-primary" id="pm-ns-save"><i class="fa fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Add Status'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    const save = async () => {
+      const label   = $('#pm-ns-label')?.value.trim();
+      const alertEl = $('#pm-ns-alert');
+      if (!label) { alertEl.textContent = 'Status name is required.'; alertEl.style.display = 'block'; return; }
+      const sortRaw = $('#pm-ns-sort')?.value.trim();
+      if (sortRaw !== '' && (!/^\d+$/.test(sortRaw) || +sortRaw > 98)) {
+        alertEl.textContent = 'Sort number must be between 0 and 98.'; alertEl.style.display = 'block'; return;
+      }
+      $('#pm-ns-save').disabled = true;
+      const body = { label, color: $('#pm-ns-color')?.value || null, sort_order: sortRaw === '' ? null : +sortRaw };
+      try {
+        const res = isEdit
+          ? await API.pmStatusUpdate(existing.id, body)
+          : await API.pmStatusCreate(projectId, body);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
+        overlay.remove();
+        toast(isEdit ? 'Status updated' : 'Status added', 'success');
+        loadPmBoard(projectId);
+      } catch (e) {
+        alertEl.textContent = String(e);
+        alertEl.style.display = 'block';
+        $('#pm-ns-save').disabled = false;
+      }
+    };
+    $('#pm-ns-save').addEventListener('click', save);
+    $('#pm-ns-label').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+    $('#pm-ns-label').focus();
+  }
+
+  // ── Board drag-and-drop ─────────────────────────────────────────────────────
+  let _pmDragCard = null;
+
+  function _pmAdjustColCount(colEl, delta) {
+    const countEl = colEl?.querySelector('.pm-col-count');
+    if (countEl) countEl.textContent = Math.max(0, (parseInt(countEl.textContent) || 0) + delta);
+  }
+
+  function _pmBindColumnDrop(colEl) {
+    colEl.addEventListener('dragover', e => {
+      if (!_pmDragCard) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      colEl.classList.add('pm-kanban-col--dragover');
+    });
+    colEl.addEventListener('dragleave', e => {
+      // Only clear when leaving the column itself, not one of its children
+      if (!colEl.contains(e.relatedTarget)) colEl.classList.remove('pm-kanban-col--dragover');
+    });
+    colEl.addEventListener('drop', async e => {
+      e.preventDefault();
+      colEl.classList.remove('pm-kanban-col--dragover');
+      const card = _pmDragCard;
+      _pmDragCard = null;
+      if (!card) return;
+      const toStatus   = colEl.dataset.col;
+      const fromStatus = card.dataset.status;
+      if (!toStatus || toStatus === fromStatus) return;
+
+      // Move the card immediately; revert only if the server rejects the change.
+      const fromCol   = card.closest('.pm-kanban-col');
+      const fromCards = fromCol?.querySelector('.pm-kanban-cards');
+      const toCards   = colEl.querySelector('.pm-kanban-cards');
+      toCards.querySelector('.pm-kanban-empty')?.remove();
+      toCards.appendChild(card);
+      card.dataset.status = toStatus;
+      _pmAdjustColCount(fromCol, -1);
+      _pmAdjustColCount(colEl, 1);
+
+      try {
+        const res = await API.pmTaskStatus(card.dataset.tid, toStatus);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Move failed');
+        // Resync in the background (move menus, empty placeholders, overdue flags)
+        loadPmBoard(pm.detailProjectId, { silent: true });
+      } catch (err) {
+        fromCards?.appendChild(card);
+        card.dataset.status = fromStatus;
+        _pmAdjustColCount(colEl, -1);
+        _pmAdjustColCount(fromCol, 1);
+        toast('Move failed: ' + (err.message || err), 'error');
+      }
+    });
+  }
+
   function _pmTaskCard(t) {
-    const statuses = ['todo','in_progress','review','done'];
-    const labels   = {'todo':'To Do','in_progress':'In Progress','review':'Review','done':'Done'};
     const overdue  = t.is_overdue;
     const card = document.createElement('div');
     card.className = 'pm-task-card';
     card.dataset.tid = t.id;
-    const moveOpts = statuses.filter(s => s !== t.status)
-      .map(s => `<option value="${s}">${labels[s]}</option>`).join('');
+    card.dataset.status = t.status;
+    card.draggable = true;
+    card.addEventListener('dragstart', e => {
+      // Don't hijack interactions with the Move… select / delete button
+      if (e.target.closest?.('select, button')) { e.preventDefault(); return; }
+      _pmDragCard = card;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(t.id));
+      requestAnimationFrame(() => card.classList.add('pm-task-card--dragging'));
+    });
+    card.addEventListener('dragend', () => {
+      _pmDragCard = null;
+      card.classList.remove('pm-task-card--dragging');
+      document.querySelectorAll('.pm-kanban-col--dragover').forEach(el => el.classList.remove('pm-kanban-col--dragover'));
+    });
+    const moveOpts = pm.boardColumns.filter(c => c.status !== t.status)
+      .map(c => `<option value="${esc(c.status)}">${esc(c.label)}</option>`).join('');
     card.innerHTML = `
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
@@ -49491,7 +49659,8 @@ async function submitDsCreate() {
       const newStatus = this.value;
       if (!newStatus) return;
       try {
-        await API.pmTaskStatus(t.id, newStatus);
+        const res = await API.pmTaskStatus(t.id, newStatus);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Move failed');
         loadPmBoard();
       } catch (e) { toast('Move failed: ' + e, 'error'); }
     });
@@ -49846,10 +50015,7 @@ async function submitDsCreate() {
             <div>
               <div class="pm-field-label">Status</div>
               <select id="pm-nt-status" class="pm-field-select">
-                <option value="todo">To Do</option>
-                <option value="in_progress">In Progress</option>
-                <option value="review">Review</option>
-                <option value="done">Done</option>
+                ${PM_BUILTIN_STATUSES.map(s => `<option value="${s.status}">${s.label}</option>`).join('')}
               </select>
             </div>
             <div>
@@ -49877,6 +50043,22 @@ async function submitDsCreate() {
     $('#pm-nt-close').addEventListener('click',  () => overlay.remove());
     $('#pm-nt-cancel').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    // Status options depend on the selected project's custom statuses.
+    const syncStatusOpts = async () => {
+      const pid = $('#pm-nt-project')?.value;
+      if (!pid) return;
+      try {
+        const res = await API.pmStatuses(pid);
+        const list = res.status === 200 ? (res.body?.data || []) : PM_BUILTIN_STATUSES;
+        const sel = $('#pm-nt-status');
+        if (!sel || $('#pm-nt-project')?.value !== pid) return;
+        sel.innerHTML = list.map(s => `<option value="${esc(s.status)}">${esc(s.label)}</option>`).join('');
+      } catch (_) { /* keep built-in options */ }
+    };
+    $('#pm-nt-project').addEventListener('change', syncStatusOpts);
+    syncStatusOpts();
+
     $('#pm-nt-save').addEventListener('click', async () => {
       const title     = $('#pm-nt-title')?.value.trim();
       const projectId = $('#pm-nt-project')?.value;
@@ -49993,6 +50175,7 @@ async function submitDsCreate() {
 
   // ── Board new task button ───────────────────────────────────────────────────
   $('#pm-board-new-task-btn')?.addEventListener('click', () => openNewTaskModal(pm.detailProjectId));
+  $('#pm-board-add-status-btn')?.addEventListener('click', () => openPmStatusModal());
 
   // ── Tasks new button ────────────────────────────────────────────────────────
   $('#pm-tasks-new-btn')?.addEventListener('click', () => openNewTaskModal(pm.detailProjectId));

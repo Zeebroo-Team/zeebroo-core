@@ -15,6 +15,26 @@ class Task extends Model
     const STATUS_REVIEW      = 'review';
     const STATUS_DONE        = 'done';
 
+    const BUILTIN_STATUSES = [
+        self::STATUS_TODO        => 'To Do',
+        self::STATUS_IN_PROGRESS => 'In Progress',
+        self::STATUS_REVIEW      => 'Review',
+        self::STATUS_DONE        => 'Done',
+    ];
+
+    /**
+     * Fixed board positions of the built-in statuses. Custom statuses take a sort
+     * number between them (ties sort after the built-in); Done always stays last.
+     */
+    const BUILTIN_SORT = [
+        self::STATUS_TODO        => 1,
+        self::STATUS_IN_PROGRESS => 2,
+        self::STATUS_REVIEW      => 3,
+        self::STATUS_DONE        => 99,
+    ];
+
+    const CUSTOM_SORT_MAX = 98;
+
     const PRIORITY_LOW    = 'low';
     const PRIORITY_NORMAL = 'normal';
     const PRIORITY_HIGH   = 'high';

@@ -16,6 +16,12 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     // Board
     Route::get('pm/projects/{id}/board',     [$c, 'board'])         ->where('id', '[0-9]+')->name('pm.projects.board');
 
+    // Task statuses (board columns — built-in + custom per project)
+    Route::get   ('pm/projects/{id}/statuses', [$c, 'statusIndex'])  ->where('id', '[0-9]+')->name('pm.projects.statuses.index');
+    Route::post  ('pm/projects/{id}/statuses', [$c, 'statusStore'])  ->where('id', '[0-9]+')->name('pm.projects.statuses.store');
+    Route::patch ('pm/statuses/{id}',          [$c, 'statusUpdate']) ->where('id', '[0-9]+')->name('pm.statuses.update');
+    Route::delete('pm/statuses/{id}',          [$c, 'statusDestroy'])->where('id', '[0-9]+')->name('pm.statuses.destroy');
+
     // Tasks (project-scoped)
     Route::get ('pm/projects/{id}/tasks',    [$c, 'taskIndex'])     ->where('id', '[0-9]+')->name('pm.projects.tasks.index');
     Route::post('pm/projects/{id}/tasks',    [$c, 'taskStore'])     ->where('id', '[0-9]+')->name('pm.projects.tasks.store');

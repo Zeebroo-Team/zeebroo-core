@@ -3,6 +3,7 @@
 namespace Modules\ProjectManage\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -34,13 +35,8 @@ class TaskController extends Controller
         $tasks        = $this->taskService->listForProject($project, $filters);
         $milestones   = $this->milestoneService->listForProject($project);
 
-        $statusTabs = [
-            ''                      => 'All',
-            Task::STATUS_TODO        => 'To Do',
-            Task::STATUS_IN_PROGRESS => 'In Progress',
-            Task::STATUS_REVIEW      => 'Review',
-            Task::STATUS_DONE        => 'Done',
-        ];
+        $statusTabs = ['' => 'All'] + collect($this->taskService->statusesForProject($project))
+            ->pluck('label', 'status')->all();
 
         return view('projectmanage::tasks.index', [
             'business'        => $business,
@@ -107,6 +103,7 @@ class TaskController extends Controller
             'business'        => $business,
             'task'            => $task,
             'milestones'      => $milestones,
+            'statuses'        => $this->taskService->statusesForProject($task->project),
             'assignableUsers' => $this->assignableUsers($business),
         ]);
     }
@@ -141,18 +138,25 @@ class TaskController extends Controller
         return redirect()->route('pm.tasks.show', $task)->with('status', 'Task updated.');
     }
 
-    public function status(Request $request, Task $task): RedirectResponse
+    public function status(Request $request, Task $task): RedirectResponse|JsonResponse
     {
         $business = $this->requireTask($request, $task);
         if ($business instanceof RedirectResponse) {
-            return $business;
+            return $request->expectsJson()
+                ? response()->json(['message' => 'You cannot update this task.'], 403)
+                : $business;
         }
 
         $data = $request->validate([
-            'status' => ['required', Rule::in([Task::STATUS_TODO, Task::STATUS_IN_PROGRESS, Task::STATUS_REVIEW, Task::STATUS_DONE])],
+            'status' => ['required', Rule::in($this->taskService->statusKeysForProject($task->project))],
         ]);
 
-        $this->taskService->moveStatus($task, $data['status']);
+        $task = $this->taskService->moveStatus($task, $data['status']);
+
+        // Board drag-and-drop posts via fetch and expects JSON; the Move menu is a plain form.
+        if ($request->expectsJson()) {
+            return response()->json(['data' => ['id' => $task->id, 'status' => $task->status]]);
+        }
 
         return redirect()->back()->with('status', 'Task status updated.');
     }
@@ -233,7 +237,7 @@ class TaskController extends Controller
         return $request->validate([
             'title'           => ['required', 'string', 'max:200'],
             'description'     => ['nullable', 'string', 'max:10000'],
-            'status'          => ['nullable', Rule::in([Task::STATUS_TODO, Task::STATUS_IN_PROGRESS, Task::STATUS_REVIEW, Task::STATUS_DONE])],
+            'status'          => ['nullable', Rule::in($this->taskService->statusKeysForProject($project))],
             'priority'        => ['nullable', Rule::in([Task::PRIORITY_LOW, Task::PRIORITY_NORMAL, Task::PRIORITY_HIGH])],
             'assigned_to'     => ['nullable', 'integer', 'exists:users,id'],
             'due_date'        => ['nullable', 'date'],

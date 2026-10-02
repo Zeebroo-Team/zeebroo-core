@@ -8994,25 +8994,10 @@
             <div class="inv-tab-pane" id="pm-pane-board">
               <div class="finance-toolbar" style="gap:8px;padding:0 0 10px">
                 <button class="svc-form-btn svc-form-btn--primary" id="pm-board-new-task-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+                <button class="svc-form-btn" id="pm-board-add-status-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-table-columns"></i> Add Status</button>
               </div>
-              <div id="pm-board-columns" class="pm-kanban-wrap">
-                <div class="pm-kanban-col" data-col="todo">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--todo"></span>To Do <span class="pm-col-count" id="pm-col-count-todo">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-todo"></div>
-                </div>
-                <div class="pm-kanban-col" data-col="in_progress">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--in-progress"></span>In Progress <span class="pm-col-count" id="pm-col-count-in_progress">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-in_progress"></div>
-                </div>
-                <div class="pm-kanban-col" data-col="review">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--review"></span>Review <span class="pm-col-count" id="pm-col-count-review">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-review"></div>
-                </div>
-                <div class="pm-kanban-col" data-col="done">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--done"></span>Done <span class="pm-col-count" id="pm-col-count-done">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-done"></div>
-                </div>
-              </div>
+              <!-- Columns are rendered from the API (built-in + custom statuses) by loadPmBoard() -->
+              <div id="pm-board-columns" class="pm-kanban-wrap"></div>
             </div>
 
             <div class="inv-tab-pane" id="pm-pane-task">

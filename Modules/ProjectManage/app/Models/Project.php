@@ -122,6 +122,11 @@ class Project extends Model
         return $this->hasMany(Task::class);
     }
 
+    public function customStatuses(): HasMany
+    {
+        return $this->hasMany(TaskStatus::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'created_by');

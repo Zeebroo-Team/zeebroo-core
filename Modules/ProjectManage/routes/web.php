@@ -6,6 +6,7 @@ use Modules\ProjectManage\Http\Controllers\MyTasksController;
 use Modules\ProjectManage\Http\Controllers\OverviewController;
 use Modules\ProjectManage\Http\Controllers\ProjectController;
 use Modules\ProjectManage\Http\Controllers\TaskController;
+use Modules\ProjectManage\Http\Controllers\TaskStatusController;
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
@@ -31,6 +32,11 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/pm/projects/{project}/board',    [TaskController::class, 'board']) ->name('pm.projects.tasks.board');
     Route::get('/pm/projects/{project}/my-tasks', [TaskController::class, 'mine'])  ->name('pm.projects.tasks.mine');
     Route::post('/pm/projects/{project}/tasks',   [TaskController::class, 'store']) ->name('pm.projects.tasks.store');
+
+    // Task statuses (custom board columns)
+    Route::post('/pm/projects/{project}/statuses', [TaskStatusController::class, 'store'])  ->name('pm.projects.statuses.store');
+    Route::put('/pm/statuses/{taskStatus}',        [TaskStatusController::class, 'update']) ->name('pm.statuses.update');
+    Route::delete('/pm/statuses/{taskStatus}',     [TaskStatusController::class, 'destroy'])->name('pm.statuses.destroy');
 
     // Tasks (task-scoped)
     Route::get('/pm/tasks/{task}',             [TaskController::class, 'show'])    ->name('pm.tasks.show');
