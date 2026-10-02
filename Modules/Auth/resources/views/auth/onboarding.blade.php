@@ -198,9 +198,10 @@ $obSteps = [
 
                     <div class="ob-fields-row">
                         <div class="ob-field">
-                            <label for="obBranchPhone">{{ __('Phone') }} <span class="ob-optional">{{ __('(optional)') }}</span></label>
+                            <label for="obBranchPhone">{{ __('Phone') }} <span class="ob-req" aria-hidden="true">*</span></label>
                             <input id="obBranchPhone" name="branch_phone" type="tel" class="ob-input"
                                 value="{{ old('branch_phone') }}" placeholder="{{ __('+1 555 000 0000') }}" maxlength="40">
+                            <div class="ob-field-error" id="obErrBranchPhone"></div>
                         </div>
                         <div class="ob-field">
                             <label for="obBranchEmail">{{ __('Email') }} <span class="ob-optional">{{ __('(optional)') }}</span></label>
@@ -735,6 +736,13 @@ $obSteps = [
             if (!branchEl.value.trim()) {
                 showError(branchEl, errBranch, '{{ __("Location name is required.") }}');
                 branchEl.focus(); return false;
+            }
+            var phoneEl  = document.getElementById('obBranchPhone');
+            var errPhone = document.getElementById('obErrBranchPhone');
+            clearError(phoneEl, errPhone);
+            if (!phoneEl.value.trim()) {
+                showError(phoneEl, errPhone, '{{ __("Phone number is required.") }}');
+                phoneEl.focus(); return false;
             }
         }
         if (n === 5) {
