@@ -126,6 +126,46 @@ class ProjectManageApiController extends Controller
         return response()->json(['message' => 'Project deleted.']);
     }
 
+    // ── Project members (team) ───────────────────────────────────────────────
+
+    /** The project team plus the business users that can still be added. */
+    public function memberIndex(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        return response()->json($this->membersPayload($project));
+    }
+
+    public function memberStore(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $userIds = $request->validate([
+            'user_ids'   => 'required|array|min:1|max:200',
+            'user_ids.*' => 'integer',
+        ])['user_ids'];
+
+        try {
+            $this->projects->addMembers($project, $userIds, $request->user()?->id);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['message' => collect($e->errors())->flatten()->first()], 422);
+        }
+
+        return response()->json($this->membersPayload($project), 201);
+    }
+
+    public function memberDestroy(Request $request, int $projectId, int $userId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $unassigned = $this->projects->removeMember($project, $userId);
+
+        return response()->json(['unassigned_tasks' => $unassigned] + $this->membersPayload($project));
+    }
+
     // ── Board ────────────────────────────────────────────────────────────────
 
     public function board(Request $request, int $id): JsonResponse
@@ -204,20 +244,35 @@ class ProjectManageApiController extends Controller
         $business = $this->businessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'title'            => 'required|string|max:200',
             'description'      => 'nullable|string|max:5000',
             'status'           => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
             'priority'         => 'nullable|in:low,normal,high',
-            'milestone_id'     => 'nullable|integer',
-            'assigned_to'      => 'nullable|integer|exists:users,id',
+            'milestone_id'     => $this->milestoneIdRule($project),
             'due_date'         => 'nullable|date',
             'estimated_hours'  => 'nullable|numeric|min:0',
-        ]);
+        ], TaskService::assigneeRules($project)), TaskService::assigneeMessages());
 
         $task = $this->tasks->create($project, $validated);
 
         return response()->json(['data' => $this->fmtTask($task)], 201);
+    }
+
+    /** Replaces the task's assignees with assignee_ids (all must be project members; [] = unassigned). */
+    public function taskAssign(Request $request, int $id): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        $validated = $request->validate(
+            TaskService::assigneeRules($task->project),
+            TaskService::assigneeMessages(),
+        );
+
+        $task = $this->tasks->assign($task, TaskService::assigneeIdsFrom($validated) ?? []);
+
+        return response()->json(['data' => $this->fmtTask($task)]);
     }
 
     public function taskStatus(Request $request, int $id): JsonResponse
@@ -229,6 +284,20 @@ class ProjectManageApiController extends Controller
             'status' => ['required', Rule::in($this->tasks->statusKeysForProject($task->project))],
         ])['status'];
         $task   = $this->tasks->moveStatus($task, $status);
+
+        return response()->json(['data' => $this->fmtTask($task)]);
+    }
+
+    public function taskMilestone(Request $request, int $id): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        $milestoneId = $request->validate([
+            'milestone_id' => $this->milestoneIdRule($task->project),
+        ])['milestone_id'] ?? null;
+
+        $task = $this->tasks->moveMilestone($task, $milestoneId !== null ? (int) $milestoneId : null);
 
         return response()->json(['data' => $this->fmtTask($task)]);
     }
@@ -326,15 +395,37 @@ class ProjectManageApiController extends Controller
         $business = $this->businessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
-        $validated = $request->validate([
-            'name'        => 'required|string|max:150',
-            'description' => 'nullable|string|max:2000',
-            'due_date'    => 'nullable|date',
-        ]);
+        $validated = $request->validate(MilestoneService::rules());
 
         $milestone = $this->milestones->create($project, $validated);
 
         return response()->json(['data' => $this->fmtMilestone($milestone)], 201);
+    }
+
+    public function milestoneUpdate(Request $request, int $id): JsonResponse
+    {
+        $business  = $this->businessOrAbort($request);
+        $milestone = $this->resolveMilestone($business, $id);
+
+        $validated = $request->validate(MilestoneService::rules(partial: true));
+        $milestone = $this->milestones->update($milestone, $validated);
+
+        return response()->json(['data' => $this->fmtMilestone($milestone)]);
+    }
+
+    public function milestoneReorder(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $ids = $request->validate([
+            'ids'   => 'required|array|max:500',
+            'ids.*' => 'integer',
+        ])['ids'];
+
+        $this->milestones->reorder($project, $ids);
+
+        return response()->json(['data' => $this->milestones->listForProject($project)->map(fn ($m) => $this->fmtMilestone($m))]);
     }
 
     public function milestoneComplete(Request $request, int $id): JsonResponse
@@ -342,6 +433,15 @@ class ProjectManageApiController extends Controller
         $business  = $this->businessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
         $milestone = $this->milestones->complete($milestone);
+
+        return response()->json(['data' => $this->fmtMilestone($milestone)]);
+    }
+
+    public function milestoneReopen(Request $request, int $id): JsonResponse
+    {
+        $business  = $this->businessOrAbort($request);
+        $milestone = $this->resolveMilestone($business, $id);
+        $milestone = $this->milestones->reopen($milestone);
 
         return response()->json(['data' => $this->fmtMilestone($milestone)]);
     }
@@ -364,6 +464,12 @@ class ProjectManageApiController extends Controller
         return $task;
     }
 
+    /** milestone_id must be null or a milestone of the given project. */
+    private function milestoneIdRule(Project $project): array
+    {
+        return ['nullable', 'integer', Rule::exists('pm_milestones', 'id')->where(fn ($q) => $q->where('project_id', $project->id))];
+    }
+
     private function resolveStatus(\Modules\Business\Models\Business $business, int $id): TaskStatus
     {
         $status = TaskStatus::with('project')->findOrFail($id);
@@ -376,6 +482,20 @@ class ProjectManageApiController extends Controller
         $milestone = Milestone::with('project')->findOrFail($id);
         abort_unless((int) $milestone->project->business_id === (int) $business->id, 404);
         return $milestone;
+    }
+
+    /** @return array{data: \Illuminate\Support\Collection, available: \Illuminate\Support\Collection} */
+    private function membersPayload(Project $project): array
+    {
+        $members   = $this->projects->membersForProject($project);
+        $memberIds = $members->pluck('id')->all();
+
+        return [
+            'data'      => $members,
+            'available' => $this->projects->businessUsers($project->business)
+                ->reject(fn (array $u) => in_array($u['id'], $memberIds, true))
+                ->values(),
+        ];
     }
 
     private function fmtProject(Project $p): array
@@ -406,6 +526,7 @@ class ProjectManageApiController extends Controller
             'budget'      => $p->budget ? (float) $p->budget : null,
             'task_stats'  => $stats,
             'tasks_count' => $stats['total'],
+            'members_count' => (int) ($p->members_count ?? $p->members()->count()),
             'created_at'  => $p->created_at?->toDateTimeString(),
 
             'project_type'          => $p->project_type,
@@ -432,8 +553,11 @@ class ProjectManageApiController extends Controller
             'description'      => $t->description,
             'status'           => $t->status,
             'priority'         => $t->priority,
+            'assignees'        => $t->assignees->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name])->values(),
+            'assignee_ids'     => $t->assignees->pluck('id')->map(fn ($id) => (int) $id)->values(),
+            // Legacy single-assignee fields (older desktop builds): first assignee id, all names.
             'assigned_to'      => $t->assigned_to,
-            'assigned_name'    => $t->assignedTo?->name,
+            'assigned_name'    => $t->assignees->pluck('name')->implode(', ') ?: null,
             'due_date'         => $t->due_date?->toDateString(),
             'estimated_hours'  => $t->estimated_hours ? (float) $t->estimated_hours : null,
             'logged_minutes'   => $t->totalLoggedMinutes(),
@@ -450,10 +574,13 @@ class ProjectManageApiController extends Controller
             'project_id'   => $m->project_id,
             'name'         => $m->name,
             'description'  => $m->description,
+            'start_date'   => $m->start_date?->toDateString(),
             'due_date'     => $m->due_date?->toDateString(),
+            'sort_order'   => (int) $m->sort_order,
             'status'       => $m->status,
             'completed_at' => $m->completed_at?->toDateTimeString(),
-            'tasks_count'  => $m->tasks()->count(),
+            'tasks_count'  => $m->tasks_count ?? $m->tasks()->count(),
+            'done_count'   => $m->done_tasks_count ?? $m->tasks()->where('status', Task::STATUS_DONE)->count(),
         ];
     }
 }

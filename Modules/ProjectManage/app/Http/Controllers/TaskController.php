@@ -30,22 +30,31 @@ class TaskController extends Controller
             return $business;
         }
 
-        $statusFilter = $request->query('status', '');
-        $filters      = filled($statusFilter) ? ['status' => $statusFilter] : [];
-        $tasks        = $this->taskService->listForProject($project, $filters);
-        $milestones   = $this->milestoneService->listForProject($project);
+        $statuses   = collect($this->taskService->statusesForProject($project));
+        $statusTabs = ['' => 'All'] + $statuses->pluck('label', 'status')->all();
 
-        $statusTabs = ['' => 'All'] + collect($this->taskService->statusesForProject($project))
-            ->pluck('label', 'status')->all();
+        // All tasks are loaded so milestone progress counts every task; the status
+        // filter only hides rows on the page.
+        $statusFilter = (string) $request->query('status', '');
+        if (!array_key_exists($statusFilter, $statusTabs)) {
+            $statusFilter = '';
+        }
+        $activeView = $request->query('view') === 'timeline' ? 'timeline' : 'milestones';
+
+        $tasks      = $this->taskService->listForProject($project);
+        $milestones = $this->milestoneService->listForProject($project);
 
         return view('projectmanage::tasks.index', [
             'business'        => $business,
             'project'         => $project,
             'tasks'           => $tasks,
             'milestones'      => $milestones,
+            'groups'          => $this->milestoneService->groupTasks($milestones, $tasks),
+            'activeView'      => $activeView,
             'statusFilter'    => $statusFilter,
             'statusTabs'      => $statusTabs,
-            'assignableUsers' => $this->assignableUsers($business),
+            'statusColors'    => $statuses->pluck('color', 'status')->filter()->all(),
+            'assignableUsers' => $project->members()->orderBy('name')->get(),
         ]);
     }
 
@@ -96,7 +105,7 @@ class TaskController extends Controller
             return $business;
         }
 
-        $task->load(['project', 'milestone', 'assignedTo', 'comments.user', 'timeLogs.user']);
+        $task->load(['project', 'milestone', 'assignees', 'comments.user', 'timeLogs.user']);
         $milestones = $this->milestoneService->listForProject($task->project);
 
         return view('projectmanage::tasks.show', [
@@ -104,7 +113,7 @@ class TaskController extends Controller
             'task'            => $task,
             'milestones'      => $milestones,
             'statuses'        => $this->taskService->statusesForProject($task->project),
-            'assignableUsers' => $this->assignableUsers($business),
+            'assignableUsers' => $task->project->members()->orderBy('name')->get(),
         ]);
     }
 
@@ -122,7 +131,8 @@ class TaskController extends Controller
             return redirect()->route('pm.projects.tasks.board', $project)->with('status', 'Task added.');
         }
 
-        return redirect()->route('pm.projects.tasks.index', $project)->with('status', 'Task added.');
+        // Back to the Tasks page as it was (view, filter, open timeline modal).
+        return redirect()->back(fallback: route('pm.projects.tasks.index', $project))->with('status', 'Task added.');
     }
 
     public function update(Request $request, Task $task): RedirectResponse
@@ -159,6 +169,56 @@ class TaskController extends Controller
         }
 
         return redirect()->back()->with('status', 'Task status updated.');
+    }
+
+    /** Moves a task to another milestone of its project (empty = no milestone). Used by the Tasks page drag-and-drop / select. */
+    public function milestone(Request $request, Task $task): RedirectResponse|JsonResponse
+    {
+        $business = $this->requireTask($request, $task);
+        if ($business instanceof RedirectResponse) {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'You cannot update this task.'], 403)
+                : $business;
+        }
+
+        $milestoneId = $request->validate([
+            'milestone_id' => ['nullable', 'integer', Rule::exists('pm_milestones', 'id')->where(fn ($q) => $q->where('project_id', $task->project_id))],
+        ])['milestone_id'] ?? null;
+
+        $task = $this->taskService->moveMilestone($task, $milestoneId !== null ? (int) $milestoneId : null);
+
+        if ($request->expectsJson()) {
+            return response()->json(['data' => [
+                'id'             => $task->id,
+                'milestone_id'   => $task->milestone_id,
+                'milestone_name' => $task->milestone?->name,
+            ]]);
+        }
+
+        return redirect()->back()->with('status', 'Task milestone updated.');
+    }
+
+    /** Replaces the task's assignees with assignee_ids (project members only; [] = unassigned). Used by the Tasks page assign dialog. */
+    public function assignees(Request $request, Task $task): RedirectResponse|JsonResponse
+    {
+        $business = $this->requireTask($request, $task);
+        if ($business instanceof RedirectResponse) {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'You cannot update this task.'], 403)
+                : $business;
+        }
+
+        $validated = $request->validate(TaskService::assigneeRules($task->project), TaskService::assigneeMessages());
+        $task      = $this->taskService->assign($task, TaskService::assigneeIdsFrom($validated) ?? []);
+
+        if ($request->expectsJson()) {
+            return response()->json(['data' => [
+                'id'        => $task->id,
+                'assignees' => $task->assignees->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name])->values(),
+            ]]);
+        }
+
+        return redirect()->back()->with('status', 'Task assignees updated.');
     }
 
     public function complete(Request $request, Task $task): RedirectResponse
@@ -229,20 +289,24 @@ class TaskController extends Controller
         $project = $task->project;
         $this->taskService->delete($task);
 
+        // From the Tasks page go back to it as it was; from the task page itself (now gone) go to the list.
+        if ($request->boolean('_back')) {
+            return redirect()->back(fallback: route('pm.projects.tasks.index', $project))->with('status', 'Task deleted.');
+        }
+
         return redirect()->route('pm.projects.tasks.index', $project)->with('status', 'Task deleted.');
     }
 
     private function validatedTaskData(Request $request, Project $project): array
     {
-        return $request->validate([
+        return $request->validate(array_merge([
             'title'           => ['required', 'string', 'max:200'],
             'description'     => ['nullable', 'string', 'max:10000'],
             'status'          => ['nullable', Rule::in($this->taskService->statusKeysForProject($project))],
             'priority'        => ['nullable', Rule::in([Task::PRIORITY_LOW, Task::PRIORITY_NORMAL, Task::PRIORITY_HIGH])],
-            'assigned_to'     => ['nullable', 'integer', 'exists:users,id'],
             'due_date'        => ['nullable', 'date'],
             'estimated_hours' => ['nullable', 'numeric', 'min:0', 'max:99999'],
             'milestone_id'    => ['nullable', 'integer', Rule::exists('pm_milestones', 'id')->where(fn ($q) => $q->where('project_id', $project->id))],
-        ]);
+        ], TaskService::assigneeRules($project)), TaskService::assigneeMessages());
     }
 }

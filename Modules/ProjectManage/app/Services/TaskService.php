@@ -5,6 +5,7 @@ namespace Modules\ProjectManage\Services;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Modules\Business\Models\Business;
 use Modules\ProjectManage\Models\Task;
 use Modules\ProjectManage\Models\TaskComment;
@@ -18,7 +19,7 @@ class TaskService
     {
         $query = Task::query()
             ->where('project_id', $project->id)
-            ->with(['assignedTo', 'milestone'])
+            ->with(['assignees', 'milestone'])
             ->orderBy('sort_order')
             ->orderByDesc('id');
 
@@ -31,7 +32,7 @@ class TaskService
         }
 
         if (filled($filters['assigned_to'] ?? '')) {
-            $query->where('assigned_to', (int) $filters['assigned_to']);
+            $query->whereHas('assignees', fn ($q) => $q->where('users.id', (int) $filters['assigned_to']));
         }
 
         if (filled($filters['priority'] ?? '')) {
@@ -45,13 +46,13 @@ class TaskService
     {
         $query = Task::query()
             ->whereHas('project', fn ($q) => $q->where('business_id', $business->id))
-            ->with(['assignedTo', 'project', 'milestone']);
+            ->with(['assignees', 'project', 'milestone']);
 
         match ($filter) {
             'overdue' => $query->whereNotIn('status', [Task::STATUS_DONE])
                                ->whereNotNull('due_date')
                                ->whereDate('due_date', '<', now()->toDateString()),
-            'mine'    => $query->where('assigned_to', auth()->id())
+            'mine'    => $query->whereHas('assignees', fn ($q) => $q->where('users.id', auth()->id()))
                                ->whereNotIn('status', [Task::STATUS_DONE]),
             'done'    => $query->where('status', Task::STATUS_DONE),
             'open'    => $query->whereNotIn('status', [Task::STATUS_DONE]),
@@ -112,6 +113,58 @@ class TaskService
         ];
     }
 
+    /**
+     * Assignee validation (shared by web + API): every id in assignee_ids — or the legacy
+     * single assigned_to — must be a member of the project team.
+     */
+    public static function assigneeRules(Project $project): array
+    {
+        $member = Rule::exists('pm_project_members', 'user_id')->where(fn ($q) => $q->where('project_id', $project->id));
+
+        return [
+            'assignee_ids'   => ['nullable', 'array', 'max:100'],
+            'assignee_ids.*' => ['integer', 'distinct', $member],
+            'assigned_to'    => ['nullable', 'integer', $member],
+        ];
+    }
+
+    public static function assigneeMessages(): array
+    {
+        $msg = 'Tasks can only be assigned to members of this project.';
+
+        return ['assignee_ids.*.exists' => $msg, 'assigned_to.exists' => $msg];
+    }
+
+    /**
+     * Assignee ids from validated data: assignee_ids wins; a legacy assigned_to is a one-person list.
+     * Returns null when neither key was sent (leave assignees unchanged).
+     *
+     * @return int[]|null
+     */
+    public static function assigneeIdsFrom(array $data): ?array
+    {
+        if (array_key_exists('assignee_ids', $data)) {
+            return array_map('intval', $data['assignee_ids'] ?? []);
+        }
+        if (array_key_exists('assigned_to', $data)) {
+            return filled($data['assigned_to']) ? [(int) $data['assigned_to']] : [];
+        }
+
+        return null;
+    }
+
+    /**
+     * Replaces the task's assignees (empty = unassigned). Membership is validated by assigneeRules().
+     *
+     * @param int[] $userIds
+     */
+    public function assign(Task $task, array $userIds): Task
+    {
+        $task->syncAssignees($userIds);
+
+        return $task->fresh(['assignees', 'milestone', 'project']);
+    }
+
     /** @return string[] */
     public function statusKeysForProject(Project $project): array
     {
@@ -127,7 +180,7 @@ class TaskService
     {
         $tasks = Task::query()
             ->where('project_id', $project->id)
-            ->with(['assignedTo', 'milestone'])
+            ->with(['assignees', 'milestone'])
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
@@ -197,34 +250,45 @@ class TaskService
 
     public function create(Project $project, array $data): Task
     {
-        return Task::create([
-            'project_id'      => $project->id,
-            'milestone_id'    => filled($data['milestone_id'] ?? '') ? (int) $data['milestone_id'] : null,
-            'title'           => $data['title'],
-            'description'     => filled($data['description'] ?? '') ? $data['description'] : null,
-            'status'          => $data['status'] ?? Task::STATUS_TODO,
-            'priority'        => $data['priority'] ?? Task::PRIORITY_NORMAL,
-            'assigned_to'     => filled($data['assigned_to'] ?? '') ? (int) $data['assigned_to'] : null,
-            'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
-            'sort_order'      => (int) ($data['sort_order'] ?? 0),
-            'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
-        ]);
+        return DB::transaction(function () use ($project, $data) {
+            $task = Task::create([
+                'project_id'      => $project->id,
+                'milestone_id'    => filled($data['milestone_id'] ?? '') ? (int) $data['milestone_id'] : null,
+                'title'           => $data['title'],
+                'description'     => filled($data['description'] ?? '') ? $data['description'] : null,
+                'status'          => $data['status'] ?? Task::STATUS_TODO,
+                'priority'        => $data['priority'] ?? Task::PRIORITY_NORMAL,
+                'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
+                'sort_order'      => (int) ($data['sort_order'] ?? 0),
+                'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
+            ]);
+
+            $task->syncAssignees(self::assigneeIdsFrom($data) ?? []);
+
+            return $task->fresh(['assignees', 'milestone', 'project']);
+        });
     }
 
     public function update(Task $task, array $data): Task
     {
-        $task->update([
-            'milestone_id'    => filled($data['milestone_id'] ?? '') ? (int) $data['milestone_id'] : null,
-            'title'           => $data['title'],
-            'description'     => filled($data['description'] ?? '') ? $data['description'] : null,
-            'status'          => $data['status'] ?? $task->status,
-            'priority'        => $data['priority'] ?? $task->priority,
-            'assigned_to'     => filled($data['assigned_to'] ?? '') ? (int) $data['assigned_to'] : null,
-            'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
-            'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
-        ]);
+        return DB::transaction(function () use ($task, $data) {
+            $task->update([
+                'milestone_id'    => filled($data['milestone_id'] ?? '') ? (int) $data['milestone_id'] : null,
+                'title'           => $data['title'],
+                'description'     => filled($data['description'] ?? '') ? $data['description'] : null,
+                'status'          => $data['status'] ?? $task->status,
+                'priority'        => $data['priority'] ?? $task->priority,
+                'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
+                'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
+            ]);
 
-        return $task->fresh();
+            $ids = self::assigneeIdsFrom($data);
+            if ($ids !== null) {
+                $task->syncAssignees($ids);
+            }
+
+            return $task->fresh();
+        });
     }
 
     public function moveStatus(Task $task, string $status): Task
@@ -240,6 +304,14 @@ class TaskService
         $task->update($updates);
 
         return $task;
+    }
+
+    /** Moves a task to another milestone of the same project (null = no milestone). */
+    public function moveMilestone(Task $task, ?int $milestoneId): Task
+    {
+        $task->update(['milestone_id' => $milestoneId]);
+
+        return $task->fresh(['assignees', 'milestone', 'project']);
     }
 
     public function complete(Task $task): Task
