@@ -7018,20 +7018,20 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 
 /* Header */
 .co-header {
-  display: flex; align-items: center; gap: 14px;
-  padding: 14px 20px; flex-shrink: 0;
+  display: flex; align-items: center; gap: 12px;
+  padding: 7px 16px; flex-shrink: 0;
   border-bottom: 1px solid var(--border); border-top: 3px solid #d4a04a;
   background: var(--surface);
 }
-.co-header-left { display: flex; align-items: center; gap: 14px; flex: 1; min-width: 0; }
+.co-header-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .co-header-icon {
-  width: 42px; height: 42px; border-radius: 12px; flex-shrink: 0;
+  width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
   background: linear-gradient(135deg, rgba(212,160,74,.22), rgba(212,160,74,.08));
   border: 1.5px solid rgba(212,160,74,.4); color: #d4a04a;
-  display: flex; align-items: center; justify-content: center; font-size: 17px;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
 }
-.co-header-title { font-size: 17px; font-weight: 800; color: var(--text); letter-spacing: -.01em; }
-.co-header-sub   { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.co-header-title { font-size: 15px; font-weight: 800; color: var(--text); letter-spacing: -.01em; line-height: 1.2; }
+.co-header-sub   { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 .co-close {
   width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
   background: var(--surface2); color: var(--text-muted); cursor: pointer;
@@ -7265,22 +7265,24 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .co-mid-ftr strong { font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
 
 /* ── Col 3: Payment ── */
+/* Fixed-height column (no scrolling): the numpad flexes to absorb the leftover height */
 .co-right {
-  width: 310px; flex-shrink: 0;
-  padding: 16px 15px 14px; display: flex; flex-direction: column; gap: 12px;
-  overflow-y: auto; background: var(--surface);
+  width: 400px; flex-shrink: 0;
+  padding: 14px 16px 14px; display: flex; flex-direction: column; gap: 10px;
+  overflow: hidden; background: var(--surface);
 }
+.co-right > * { flex-shrink: 0; }
 
 /* Payment method cards */
 .co-pay-methods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
 .co-pay-method {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 6px; padding: 13px 4px; border-radius: 11px;
+  display: flex; flex-direction: row; align-items: center; justify-content: center;
+  gap: 8px; padding: 11px 4px; border-radius: 11px;
   border: 2px solid var(--border); background: var(--surface2);
-  color: var(--text-muted); cursor: pointer; font-size: 11px; font-weight: 700;
+  color: var(--text-muted); cursor: pointer; font-size: 13px; font-weight: 700;
   transition: all .14s; line-height: 1.2; letter-spacing: .02em;
 }
-.co-pay-method i { font-size: 20px; }
+.co-pay-method i { font-size: 18px; }
 .co-pay-method:hover { border-color: rgba(212,160,74,.6); color: var(--text); background: var(--surface); }
 .co-pay-method.active {
   border-color: #d4a04a; background: rgba(212,160,74,.12);
@@ -7290,7 +7292,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 /* Amount input */
 .co-amount-input {
   width: 100%; box-sizing: border-box;
-  padding: 11px 14px; font-size: 32px; font-weight: 800; text-align: right;
+  padding: 8px 14px; font-size: 30px; font-weight: 800; text-align: right;
   border: 2px solid var(--border); border-radius: 10px;
   background: var(--surface2); color: var(--text); outline: none;
   font-family: inherit; font-variant-numeric: tabular-nums; cursor: text;
@@ -7320,9 +7322,13 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .co-change-neg { color: #dc2626; }
 
 /* Numpad */
-.co-numpad { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; }
+.co-right > #co-numpad-section { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.co-numpad {
+  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+  flex: 1; min-height: 0; max-height: 330px; grid-auto-rows: minmax(30px, 1fr);
+}
 .co-key {
-  padding: 12px 6px; font-size: 17px; font-weight: 700; text-align: center;
+  padding: 4px 6px; font-size: 18px; min-height: 0; font-weight: 700; text-align: center;
   border-radius: 9px; border: 1.5px solid var(--border);
   background: var(--surface2); color: var(--text);
   cursor: pointer; transition: background .08s, transform .08s, border-color .08s; line-height: 1;
@@ -7331,16 +7337,16 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .co-key:hover  { background: var(--surface); border-color: rgba(212,160,74,.5); }
 .co-key:active { transform: scale(.92); background: rgba(212,160,74,.2); border-color: #d4a04a; }
 .co-key[data-key="back"] { color: var(--text-muted); font-size: 15px; }
-.co-key[data-key="exact"] { grid-column: span 2; font-size: 11.5px; font-weight: 700; background: var(--surface); letter-spacing: .02em; }
+.co-key[data-key="exact"] { grid-column: span 2; font-size: 13px; font-weight: 700; background: var(--surface); letter-spacing: .02em; }
 .co-key[data-key="clear"] {
-  font-size: 11.5px; font-weight: 700; color: #dc2626;
+  font-size: 13px; font-weight: 700; color: #dc2626;
   border-color: rgba(220,38,38,.25); background: rgba(220,38,38,.04);
 }
 .co-key[data-key="clear"]:hover { background: rgba(220,38,38,.14); }
 
 /* Notes */
 .co-notes textarea {
-  width: 100%; box-sizing: border-box; resize: none; height: 48px;
+  width: 100%; box-sizing: border-box; resize: none; height: 40px; display: block;
   padding: 9px 12px; font-size: 12.5px; font-family: inherit;
   border: 1.5px solid var(--border); border-radius: 9px;
   background: var(--surface2); color: var(--text); outline: none;
@@ -7358,11 +7364,11 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 /* Checkout top-of-modal alert bar */
 .co-alert-bar {
   width: 100%;
-  padding: 10px 18px;
+  padding: 5px 16px;
   background: #fef3c7;
   color: #92400e;
-  border-bottom: 1.5px solid #fcd34d;
-  font-size: 13px;
+  border-bottom: 1px solid #fcd34d;
+  font-size: 12px;
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -7375,7 +7381,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   content: '\f071'; /* fa-triangle-exclamation */
   font-family: 'Font Awesome 6 Free';
   font-weight: 900;
-  font-size: 13px;
+  font-size: 12px;
   flex-shrink: 0;
   color: #d97706;
 }
