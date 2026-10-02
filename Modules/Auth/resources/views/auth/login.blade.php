@@ -44,9 +44,11 @@
             <a href="{{ route('register') }}" class="auth-alt-pill" title="{{ __('Create a new workspace account') }}">
                 <i class="fa fa-user-plus" aria-hidden="true"></i><span>{{ __('Create account') }}</span>
             </a>
+            {{-- HR portal link hidden for now
             <a href="{{ route('hr.portal.login') }}" class="auth-alt-pill auth-alt-pill--hr" title="{{ __('Employee HR portal sign-in') }}">
                 <i class="fa fa-users-gear" aria-hidden="true"></i><span>{{ __('HR portal') }}</span>
             </a>
+            --}}
         </div>
     </div>
 @endsection
