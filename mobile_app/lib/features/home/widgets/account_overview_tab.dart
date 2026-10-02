@@ -28,8 +28,6 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
   @override
   bool get wantKeepAlive => true;
 
-  bool _loading = true;
-  bool _loaded = false;
   String? _error;
   List<Map<String, dynamic>> _accounts = [];
   List<Map<String, dynamic>> _recentTxns = [];
@@ -45,7 +43,6 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
 
   Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
-      _loading = true;
       _error = null;
     });
     try {
@@ -74,8 +71,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
-      _loaded = true;
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() {});
     }
   }
 
@@ -211,7 +207,6 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final firstLoad = _loading && !_loaded;
     return RefreshIndicator(
       onRefresh: () {
         widget.onPullRefresh?.call();
@@ -220,12 +215,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
         children: [
-          if (firstLoad)
-            const SizedBox(
-              height: 52,
-              child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4))),
-            )
-          else if (_error != null)
+          if (_error != null)
             _ErrorCard(message: _error!, onRetry: _load)
           else
             _buildBalanceRow(),
@@ -235,7 +225,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
             const SizedBox(height: 14),
             widget.belowBalance!,
           ],
-          if (!firstLoad && _error == null) ...[
+          if (_error == null) ...[
             const SizedBox(height: 26),
             _buildRecentTransactions(),
           ],

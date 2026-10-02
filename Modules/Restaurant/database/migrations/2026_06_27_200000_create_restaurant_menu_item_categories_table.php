@@ -18,7 +18,7 @@ return new class extends Migration
             $table->foreignId('menu_item_id')->constrained('restaurant_menu_items')->cascadeOnDelete();
             $table->foreignId('menu_category_id')->constrained('restaurant_menu_categories')->cascadeOnDelete();
             $table->unsignedTinyInteger('sort_order')->default(0);
-            $table->unique(['menu_item_id', 'menu_category_id']);
+            $table->unique(['menu_item_id', 'menu_category_id'], 'restaurant_menu_item_category_unique');
         });
 
         // Migrate existing single-category assignments into the pivot

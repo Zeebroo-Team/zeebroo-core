@@ -51,7 +51,8 @@ class ApiEndpoints {
   // Catalog — product list + full CRUD (Inventory > Products tab)
   static const String products = '/v1/pos/online/products';
   static String product(int id) => '/v1/pos/online/products/$id';
-  static String productBySku(String sku) => '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';
+  static String productBySku(String sku) =>
+      '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';
   static String productStockLayerBarcode(int productId, int layerId) =>
       '/v1/pos/online/products/$productId/stock-layers/$layerId/barcode';
 
@@ -76,6 +77,8 @@ class ApiEndpoints {
 
   // Suppliers — dropdown source for Purchase Orders / Goods Receive
   static const String suppliers = '/v1/pos/suppliers';
+  static String supplier(int id) => '/v1/pos/suppliers/$id';
+  static const String supplierCategories = '/v1/pos/supplier-categories';
 
   // Purchase Orders (Inventory > Purchase Orders tab)
   static const String purchaseOrders = '/v1/pos/purchase-orders';
@@ -88,8 +91,7 @@ class ApiEndpoints {
       '/v1/pos/purchase-orders/$id/cancel';
   static String purchaseOrderGrnForm(int id) =>
       '/v1/pos/purchase-orders/$id/grn-form';
-  static String purchaseOrderGrns(int id) =>
-      '/v1/pos/purchase-orders/$id/grns';
+  static String purchaseOrderGrns(int id) => '/v1/pos/purchase-orders/$id/grns';
 
   // Goods Receive Notes (Inventory > Goods Receive tab)
   static const String grns = '/v1/pos/grns';

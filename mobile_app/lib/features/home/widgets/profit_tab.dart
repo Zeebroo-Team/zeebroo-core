@@ -29,7 +29,6 @@ class _ProfitTabState extends State<ProfitTab>
   @override
   bool get wantKeepAlive => true;
 
-  bool _loading = true;
   String? _error;
   Map<String, dynamic>? _data;
   int _period = 30;
@@ -42,7 +41,6 @@ class _ProfitTabState extends State<ProfitTab>
 
   Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
-      _loading = true;
       _error = null;
     });
     try {
@@ -52,7 +50,7 @@ class _ProfitTabState extends State<ProfitTab>
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() {});
     }
   }
 
@@ -66,12 +64,7 @@ class _ProfitTabState extends State<ProfitTab>
         children: [
           _buildPeriodSelector(),
           const SizedBox(height: 18),
-          if (_loading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 60),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_error != null)
+          if (_error != null)
             _ErrorCard(message: _error!, onRetry: _load)
           else
             ..._buildContent(),

@@ -30,8 +30,6 @@ class _ExpensesTabState extends State<ExpensesTab>
   @override
   bool get wantKeepAlive => true;
 
-  bool _loading = true;
-  bool _loaded = false;
   String? _error;
   Map<String, dynamic>? _data;
   List<Map<String, dynamic>> _loans = [];
@@ -63,7 +61,6 @@ class _ExpensesTabState extends State<ExpensesTab>
 
   Future<void> _load({bool forceRefresh = false}) async {
     setState(() {
-      _loading = true;
       _error = null;
     });
     try {
@@ -81,8 +78,7 @@ class _ExpensesTabState extends State<ExpensesTab>
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
-      _loaded = true;
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() {});
     }
   }
 
@@ -113,18 +109,12 @@ class _ExpensesTabState extends State<ExpensesTab>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final firstLoad = _loading && !_loaded;
     return RefreshIndicator(
       onRefresh: () => _reloadAll(force: true),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
-          if (firstLoad)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 60),
-              child: Center(child: CircularProgressIndicator()),
-            )
-          else if (_error != null)
+          if (_error != null)
             _ErrorCard(message: _error!, onRetry: _reloadAll)
           else
             ..._buildContent(),
@@ -138,7 +128,9 @@ class _ExpensesTabState extends State<ExpensesTab>
       return _ChartMessageCard(message: _breakdownError!, onRetry: () => _loadBreakdown(force: true));
     }
     final breakdown = _breakdown;
-    if (breakdown == null) return const _ChartLoadingCard();
+    if (breakdown == null) {
+      return const ExpenseBreakdownChart(slices: []);
+    }
 
     final items = ((breakdown['items'] as List?) ?? []).whereType<Map>();
     final range = breakdown['range_label'] as String?;
@@ -353,22 +345,6 @@ class _PeriodChips extends StatelessWidget {
           ),
         ),
     ],
-  );
-}
-
-class _ChartLoadingCard extends StatelessWidget {
-  const _ChartLoadingCard();
-
-  @override
-  Widget build(BuildContext context) => Container(
-    height: 180,
-    decoration: BoxDecoration(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
-    ),
-    alignment: Alignment.center,
-    child: const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.4)),
   );
 }
 

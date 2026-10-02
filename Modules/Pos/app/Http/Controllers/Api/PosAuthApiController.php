@@ -133,6 +133,10 @@ class PosAuthApiController extends Controller
                 'name'  => $user->name,
                 'email' => $user->email,
             ],
+            'business' => [
+                'id'   => (int) $business->id,
+                'name' => $business->name,
+            ],
             'payment' => [
                 'required' => $requiresPayment,
                 'id'       => $requiresPayment ? $payment->id : null,

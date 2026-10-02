@@ -49,10 +49,17 @@ class FinanceCard extends StatelessWidget {
 /// aware padding, rounded white sheet, drag handle and title. [child] is the
 /// sheet's own `Form` (or, for the pay sheets, a plain `Column`).
 class FormSheetShell extends StatelessWidget {
-  const FormSheetShell({super.key, required this.title, required this.child, this.loading = false});
+  const FormSheetShell({
+    super.key,
+    required this.title,
+    required this.child,
+    this.loading = false,
+    this.showBackButton = false,
+  });
   final String title;
   final Widget child;
   final bool loading;
+  final bool showBackButton;
 
   @override
   Widget build(BuildContext context) => Padding(
@@ -80,7 +87,27 @@ class FormSheetShell extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Text(title, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+                    Row(
+                      children: [
+                        if (showBackButton) ...[
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            tooltip: 'Back',
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 18),
                     child,
                   ],

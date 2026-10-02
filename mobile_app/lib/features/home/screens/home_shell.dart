@@ -34,6 +34,7 @@ const _kMaxBottomFeatures = 3;
 class _HomeShellState extends State<HomeShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   int _tabIndex = 0;
+  int _homeTapSignal = 0;
   List<FeatureEntry> _enabledFeatures = [];
   int _unreadNotifications = 0;
 
@@ -78,6 +79,13 @@ class _HomeShellState extends State<HomeShell> {
 
   List<FeatureEntry> get _bottomFeatures =>
       _enabledFeatures.take(_kMaxBottomFeatures).toList();
+
+  void _selectBottomTab(int index) {
+    setState(() {
+      _tabIndex = index;
+      if (index == 0) _homeTapSignal++;
+    });
+  }
 
   static String _greeting() {
     final hour = DateTime.now().hour;
@@ -152,7 +160,7 @@ class _HomeShellState extends State<HomeShell> {
       body: IndexedStack(
         index: safeIndex,
         children: [
-          const HomeContent(),
+          HomeContent(homeTapSignal: _homeTapSignal),
           for (final f in bottomFeatures)
             f.key == 'bill_management' ? const FinanceBody() : FeaturePlaceholderBody(feature: f),
         ],
@@ -160,7 +168,7 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: GlassBottomNav(
         tabs: tabs,
         currentIndex: safeIndex,
-        onTap: (i) => setState(() => _tabIndex = i),
+        onTap: _selectBottomTab,
         onPosTap: () => Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const PosScreen()),
         ),

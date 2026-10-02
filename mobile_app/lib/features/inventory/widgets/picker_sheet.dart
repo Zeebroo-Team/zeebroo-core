@@ -18,6 +18,8 @@ class PickerSheet extends StatefulWidget {
     this.multi = false,
     this.initialSelectedIds = const [],
     this.searchable = true,
+    this.onAdd,
+    this.addLabel = 'Add',
   });
 
   final String title;
@@ -28,6 +30,8 @@ class PickerSheet extends StatefulWidget {
   final bool multi;
   final List<Object?> initialSelectedIds;
   final bool searchable;
+  final Future<Map<String, dynamic>?> Function()? onAdd;
+  final String addLabel;
 
   @override
   State<PickerSheet> createState() => _PickerSheetState();
@@ -36,6 +40,7 @@ class PickerSheet extends StatefulWidget {
 class _PickerSheetState extends State<PickerSheet> {
   final _searchController = TextEditingController();
   bool _loading = true;
+  bool _adding = false;
   String? _error;
   List<Map<String, dynamic>> _items = [];
   late final Set<Object?> _selectedIds = {...widget.initialSelectedIds};
@@ -90,6 +95,24 @@ class _PickerSheetState extends State<PickerSheet> {
     );
   }
 
+  Future<void> _add() async {
+    if (widget.onAdd == null || _adding) return;
+    setState(() => _adding = true);
+    final item = await widget.onAdd!();
+    if (!mounted) return;
+    setState(() => _adding = false);
+    if (item == null) return;
+
+    if (widget.multi) {
+      setState(() {
+        _items.insert(0, item);
+        _selectedIds.add(widget.idOf(item));
+      });
+    } else {
+      Navigator.pop(context, [item]);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Container(
     height: MediaQuery.of(context).size.height * 0.75,
@@ -124,6 +147,18 @@ class _PickerSheetState extends State<PickerSheet> {
                     ),
                   ),
                 ),
+                if (widget.onAdd != null)
+                  TextButton.icon(
+                    onPressed: _adding ? null : _add,
+                    icon: _adding
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.add_rounded, size: 18),
+                    label: Text(widget.addLabel),
+                  ),
                 if (widget.multi)
                   TextButton(onPressed: _confirm, child: const Text('Done')),
               ],
@@ -218,9 +253,7 @@ class _PickerSheetState extends State<PickerSheet> {
               : null,
           trailing: widget.multi
               ? Icon(
-                  selected
-                      ? Icons.check_circle_rounded
-                      : Icons.circle_outlined,
+                  selected ? Icons.check_circle_rounded : Icons.circle_outlined,
                   color: selected ? AppColors.primary : AppColors.border,
                 )
               : (selected
@@ -240,5 +273,8 @@ class _PickerSheetState extends State<PickerSheet> {
 /// by the Inventory tabs returns.
 List<Map<String, dynamic>> parseListData(dynamic body) {
   final list = (body is Map ? body['data'] : body) as List? ?? [];
-  return list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  return list
+      .whereType<Map>()
+      .map((e) => Map<String, dynamic>.from(e))
+      .toList();
 }

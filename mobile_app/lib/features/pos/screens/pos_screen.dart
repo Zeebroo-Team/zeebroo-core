@@ -505,7 +505,6 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
             onSubmitted: _onSearchSubmitted,
             onScan: _openScanner,
           ),
-          SizedBox(height: 2, child: _loadingProducts ? const LinearProgressIndicator(minHeight: 2) : null),
           if (_productError != null && _products.isNotEmpty)
             Container(
               width: double.infinity,
@@ -534,7 +533,7 @@ class _PosScreenState extends State<PosScreen> with SingleTickerProviderStateMix
 
   Widget _buildGrid() {
     if (_loadingProducts && _products.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const SizedBox.expand();
     }
     if (_productError != null && _products.isEmpty) {
       return Center(

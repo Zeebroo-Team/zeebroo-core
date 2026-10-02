@@ -11,6 +11,7 @@ import '../widgets/products_tab.dart';
 import '../widgets/purchase_orders_tab.dart';
 import '../widgets/stock_audits_tab.dart';
 import '../widgets/stock_transfers_tab.dart';
+import '../widgets/suppliers_tab.dart';
 
 // Overview is index 0; all other tabs are shifted by 1.
 const _kTabLabels = [
@@ -24,20 +25,47 @@ const _kTabLabels = [
   'Categories',
   'Discounts',
   'Brands',
+  'Suppliers',
   'Barcodes',
 ];
 
 const _kOverviewItems = [
-  _OverviewItem('Products',        Icons.inventory_2_rounded,        Color(0xFF6366F1), 1),
-  _OverviewItem('Purchase Orders', Icons.shopping_cart_rounded,       Color(0xFF0EA5E9), 2),
-  _OverviewItem('Goods Receive',   Icons.local_shipping_rounded,      Color(0xFF10B981), 3),
-  _OverviewItem('Cheques',         Icons.receipt_rounded,             Color(0xFFF59E0B), 4),
-  _OverviewItem('Stock Audit',     Icons.fact_check_rounded,          Color(0xFFEF4444), 5),
-  _OverviewItem('Stock Transfer',  Icons.swap_horiz_rounded,          Color(0xFF8B5CF6), 6),
-  _OverviewItem('Categories',      Icons.category_rounded,            Color(0xFF06B6D4), 7),
-  _OverviewItem('Discounts',       Icons.local_offer_rounded,         Color(0xFFEC4899), 8),
-  _OverviewItem('Brands',          Icons.verified_rounded,            Color(0xFF84CC16), 9),
-  _OverviewItem('Barcodes',        Icons.qr_code_scanner_rounded,     Color(0xFF64748B), 10),
+  _OverviewItem('Products', Icons.inventory_2_rounded, Color(0xFF6366F1), 1),
+  _OverviewItem(
+    'Purchase Orders',
+    Icons.shopping_cart_rounded,
+    Color(0xFF0EA5E9),
+    2,
+  ),
+  _OverviewItem(
+    'Goods Receive',
+    Icons.local_shipping_rounded,
+    Color(0xFF10B981),
+    3,
+  ),
+  _OverviewItem('Cheques', Icons.receipt_rounded, Color(0xFFF59E0B), 4),
+  _OverviewItem('Stock Audit', Icons.fact_check_rounded, Color(0xFFEF4444), 5),
+  _OverviewItem(
+    'Stock Transfer',
+    Icons.swap_horiz_rounded,
+    Color(0xFF8B5CF6),
+    6,
+  ),
+  _OverviewItem('Categories', Icons.category_rounded, Color(0xFF06B6D4), 7),
+  _OverviewItem('Discounts', Icons.local_offer_rounded, Color(0xFFEC4899), 8),
+  _OverviewItem('Brands', Icons.verified_rounded, Color(0xFF84CC16), 9),
+  _OverviewItem(
+    'Suppliers',
+    Icons.local_shipping_outlined,
+    Color(0xFF14B8A6),
+    10,
+  ),
+  _OverviewItem(
+    'Barcodes',
+    Icons.qr_code_scanner_rounded,
+    Color(0xFF64748B),
+    11,
+  ),
 ];
 
 class _OverviewItem {
@@ -48,10 +76,10 @@ class _OverviewItem {
   final int tabIndex;
 }
 
-/// Inventory — full CRUD across the same 10 areas as the Electron desktop
+/// Inventory — full CRUD across the same areas as the Electron desktop
 /// app's "Inventory" ribbon tab (`inv-subnav`): Products, Purchase Orders,
 /// Goods Receive, Cheques, Stock Audit, Stock Transfer, Categories,
-/// Discounts, Brands, Barcodes. There's no backend "inventory" feature key
+/// Discounts, Brands, Suppliers, Barcodes. There's no backend "inventory" feature key
 /// — this is an always-available menu entry (not gated by the business's
 /// enabled plan features), reached from the side drawer.
 class InventoryScreen extends StatefulWidget {
@@ -61,11 +89,12 @@ class InventoryScreen extends StatefulWidget {
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(length: _kTabLabels.length, vsync: this)
-    ..addListener(() {
-      if (mounted) setState(() {});
-    });
+class _InventoryScreenState extends State<InventoryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController =
+      TabController(length: _kTabLabels.length, vsync: this)..addListener(() {
+        if (mounted) setState(() {});
+      });
 
   void _goToTab(int index) => _tabController.animateTo(index);
 
@@ -86,7 +115,10 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
         decoration: BoxDecoration(
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? AppColors.primary : Colors.transparent, width: 1),
+          border: Border.all(
+            color: selected ? AppColors.primary : Colors.transparent,
+            width: 1,
+          ),
         ),
         child: Text(
           label,
@@ -151,6 +183,7 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
               const CategoriesTab(),
               const DiscountsTab(),
               const BrandsTab(),
+              const SuppliersTab(),
               const BarcodesTab(),
             ],
           ),
@@ -236,11 +269,18 @@ class _OverviewBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: controller, curve: const Interval(0, 0.5, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: controller,
+        curve: const Interval(0, 0.5, curve: Curves.easeOut),
+      ),
     );
-    final slide = Tween<Offset>(begin: const Offset(0, -0.2), end: Offset.zero).animate(
-      CurvedAnimation(parent: controller, curve: const Interval(0, 0.5, curve: Curves.easeOut)),
-    );
+    final slide = Tween<Offset>(begin: const Offset(0, -0.2), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: controller,
+            curve: const Interval(0, 0.5, curve: Curves.easeOut),
+          ),
+        );
     return FadeTransition(
       opacity: fade,
       child: SlideTransition(
@@ -257,7 +297,7 @@ class _OverviewBanner extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.35),
+                color: const Color(0xFF6366F1).withValues(alpha: 0.35),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -269,10 +309,14 @@ class _OverviewBanner extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.inventory_2_rounded, color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.inventory_2_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 16),
               const Expanded(
@@ -281,7 +325,11 @@ class _OverviewBanner extends StatelessWidget {
                   children: [
                     Text(
                       'Inventory',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                     SizedBox(height: 2),
                     Text(
@@ -324,8 +372,10 @@ class _OverviewCardState extends State<_OverviewCard>
     upperBound: 1,
   );
 
-  late final Animation<double> _scale = Tween<double>(begin: 1.0, end: 0.93)
-      .animate(CurvedAnimation(parent: _pressCtrl, curve: Curves.easeInOut));
+  late final Animation<double> _scale = Tween<double>(
+    begin: 1.0,
+    end: 0.93,
+  ).animate(CurvedAnimation(parent: _pressCtrl, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -364,12 +414,12 @@ class _OverviewCardState extends State<_OverviewCard>
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.18),
+                  color: color.withValues(alpha: 0.18),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -383,14 +433,14 @@ class _OverviewCardState extends State<_OverviewCard>
                   height: 56,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [color, color.withOpacity(0.75)],
+                      colors: [color, color.withValues(alpha: 0.75)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: color.withOpacity(0.4),
+                        color: color.withValues(alpha: 0.4),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),

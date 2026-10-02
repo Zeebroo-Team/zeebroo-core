@@ -5,6 +5,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date.dart';
 import 'picker_sheet.dart';
+import 'supplier_form_sheet.dart';
 
 class _Line {
   _Line({required this.product})
@@ -57,16 +58,23 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
         title: 'Supplier',
         idOf: (item) => item['id'],
         labelOf: (item) => (item['name'] as String?) ?? '',
+        addLabel: 'Add supplier',
+        onAdd: () async {
+          final supplier = await showSupplierFormSheet(context);
+          return supplier?['is_active'] == true ? supplier : null;
+        },
         fetch: (q) async {
           final res = await ApiClient.instance.get(
             ApiEndpoints.suppliers,
-            params: {if (q.isNotEmpty) 'q': q},
+            params: {'active': '1', if (q.isNotEmpty) 'q': q},
           );
           return parseListData(res.data);
         },
       ),
     );
-    if (picked != null && picked.isNotEmpty) setState(() => _supplier = picked.first);
+    if (picked != null && picked.isNotEmpty) {
+      setState(() => _supplier = picked.first);
+    }
   }
 
   Future<void> _addLine() async {
@@ -118,9 +126,11 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
     });
     final data = {
       if (_supplier != null) 'supplier_id': _supplier!['id'],
-      if (_referenceCtrl.text.trim().isNotEmpty) 'reference': _referenceCtrl.text.trim(),
+      if (_referenceCtrl.text.trim().isNotEmpty)
+        'reference': _referenceCtrl.text.trim(),
       'purchase_date': toApiDate(_purchaseDate),
-      if (_expectedDate != null) 'expected_delivery_date': toApiDate(_expectedDate!),
+      if (_expectedDate != null)
+        'expected_delivery_date': toApiDate(_expectedDate!),
       'status': _status,
       if (_notesCtrl.text.trim().isNotEmpty) 'notes': _notesCtrl.text.trim(),
       'items': [
@@ -146,8 +156,13 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
     child: Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.92,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -160,30 +175,46 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
                 child: Container(
                   width: 40,
                   height: 4,
-                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               const Text(
                 'New purchase order',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
               ),
               const SizedBox(height: 18),
               InkWell(
                 onTap: _pickSupplier,
                 borderRadius: BorderRadius.circular(12),
                 child: InputDecorator(
-                  decoration: const InputDecoration(labelText: 'Supplier (optional)'),
+                  decoration: const InputDecoration(
+                    labelText: 'Supplier (optional)',
+                  ),
                   child: Text(
                     (_supplier?['name'] as String?) ?? 'Tap to select',
-                    style: TextStyle(fontSize: 14, color: _supplier == null ? AppColors.textHint : AppColors.textDark),
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: _supplier == null
+                          ? AppColors.textHint
+                          : AppColors.textDark,
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
               TextFormField(
                 controller: _referenceCtrl,
-                decoration: const InputDecoration(labelText: 'Reference (optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Reference (optional)',
+                ),
               ),
               const SizedBox(height: 14),
               Row(
@@ -191,13 +222,20 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
                   Expanded(
                     child: InkWell(
                       onTap: () async {
-                        final d = await pickDate(context, initial: _purchaseDate);
+                        final d = await pickDate(
+                          context,
+                          initial: _purchaseDate,
+                        );
                         if (d != null) setState(() => _purchaseDate = d);
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: InputDecorator(
-                        decoration: const InputDecoration(labelText: 'Purchase date'),
-                        child: Text(formatDate(_purchaseDate.toIso8601String())),
+                        decoration: const InputDecoration(
+                          labelText: 'Purchase date',
+                        ),
+                        child: Text(
+                          formatDate(_purchaseDate.toIso8601String()),
+                        ),
                       ),
                     ),
                   ),
@@ -205,15 +243,26 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
                   Expanded(
                     child: InkWell(
                       onTap: () async {
-                        final d = await pickDate(context, initial: _expectedDate);
+                        final d = await pickDate(
+                          context,
+                          initial: _expectedDate,
+                        );
                         if (d != null) setState(() => _expectedDate = d);
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: InputDecorator(
-                        decoration: const InputDecoration(labelText: 'Expected delivery'),
+                        decoration: const InputDecoration(
+                          labelText: 'Expected delivery',
+                        ),
                         child: Text(
-                          _expectedDate == null ? 'None' : formatDate(_expectedDate!.toIso8601String()),
-                          style: TextStyle(color: _expectedDate == null ? AppColors.textHint : AppColors.textDark),
+                          _expectedDate == null
+                              ? 'None'
+                              : formatDate(_expectedDate!.toIso8601String()),
+                          style: TextStyle(
+                            color: _expectedDate == null
+                                ? AppColors.textHint
+                                : AppColors.textDark,
+                          ),
                         ),
                       ),
                     ),
@@ -234,13 +283,21 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
               TextFormField(
                 controller: _notesCtrl,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                ),
               ),
               const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Items', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                  const Text(
+                    'Items',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
                   TextButton.icon(
                     onPressed: _addLine,
                     icon: const Icon(Icons.add, size: 16),
@@ -251,27 +308,53 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
               for (var i = 0; i < _lines.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 10),
-                  child: _LineRow(line: _lines[i], onRemove: () => _removeLine(i), onChanged: () => setState(() {})),
+                  child: _LineRow(
+                    line: _lines[i],
+                    onRemove: () => _removeLine(i),
+                    onChanged: () => setState(() {}),
+                  ),
                 ),
               if (_lines.isNotEmpty) ...[
                 const Divider(height: 20),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Total', style: TextStyle(fontWeight: FontWeight.w700)),
-                    Text(_total.toStringAsFixed(2), style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                    const Text(
+                      'Total',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    Text(
+                      _total.toStringAsFixed(2),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                      ),
+                    ),
                   ],
                 ),
               ],
               if (_error != null) ...[
                 const SizedBox(height: 12),
-                Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 12.5)),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: AppColors.error,
+                    fontSize: 12.5,
+                  ),
+                ),
               ],
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _saving ? null : _submit,
                 child: _saving
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Create purchase order'),
               ),
             ],
@@ -283,7 +366,11 @@ class _PurchaseOrderFormSheetState extends State<PurchaseOrderFormSheet> {
 }
 
 class _LineRow extends StatelessWidget {
-  const _LineRow({required this.line, required this.onRemove, required this.onChanged});
+  const _LineRow({
+    required this.line,
+    required this.onRemove,
+    required this.onChanged,
+  });
   final _Line line;
   final VoidCallback onRemove;
   final VoidCallback onChanged;
@@ -291,7 +378,10 @@ class _LineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.all(10),
-    decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+    decoration: BoxDecoration(
+      border: Border.all(color: AppColors.border),
+      borderRadius: BorderRadius.circular(10),
+    ),
     child: Row(
       children: [
         Expanded(

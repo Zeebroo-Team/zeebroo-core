@@ -422,6 +422,7 @@ class AddBillSheetState extends State<AddBillSheet> {
   Widget build(BuildContext context) => FormSheetShell(
     title: 'Add bill',
     loading: _loadingOptions,
+    showBackButton: true,
     child: Form(
       key: _formKey,
       child: Column(

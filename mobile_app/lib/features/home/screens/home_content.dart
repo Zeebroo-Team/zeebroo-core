@@ -18,7 +18,11 @@ const _kTrack = Color(0xFFF3F4F6);
 /// actions. The shell owns the header (greeting/avatar) and bottom navigation
 /// chrome.
 class HomeContent extends StatefulWidget {
-  const HomeContent({super.key});
+  const HomeContent({super.key, this.homeTapSignal = 0});
+
+  /// Changes whenever the bottom Home button is tapped. This lets the Home
+  /// page return to Overview even when it is already the selected main tab.
+  final int homeTapSignal;
 
   @override
   State<HomeContent> createState() => _HomeContentState();
@@ -34,6 +38,18 @@ class _HomeContentState extends State<HomeContent> with SingleTickerProviderStat
   late final TabController _tabController = TabController(length: _tabs.length, vsync: this);
   final _todayKey = GlobalKey<TodaySalesOverviewState>();
   final _expensesRefresh = ValueNotifier<int>(0);
+
+  @override
+  void didUpdateWidget(covariant HomeContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.homeTapSignal != oldWidget.homeTapSignal) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _tabController.index != 0) {
+          _tabController.index = 0;
+        }
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -122,7 +138,7 @@ class _PillTabBar extends StatelessWidget {
           return AnimatedBuilder(
             animation: controller.animation!,
             builder: (context, _) {
-              final position = controller.animation!.value;
+              final position = controller.index.toDouble();
               return Stack(
                 children: [
                   Positioned(
@@ -145,7 +161,6 @@ class _PillTabBar extends StatelessWidget {
                           child: _PillLabel(
                             label: tabs[i].label,
                             icon: tabs[i].icon,
-                            selectedness: (1 - (position - i).abs()).clamp(0.0, 1.0),
                             selected: controller.index == i,
                             onTap: () => controller.animateTo(i),
                           ),
@@ -166,7 +181,6 @@ class _PillLabel extends StatelessWidget {
   const _PillLabel({
     required this.label,
     required this.icon,
-    required this.selectedness,
     required this.selected,
     required this.onTap,
   });
@@ -175,13 +189,12 @@ class _PillLabel extends StatelessWidget {
   final IconData icon;
 
   /// 0 (fully inactive) → 1 (fully active), interpolated while the thumb slides.
-  final double selectedness;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = Color.lerp(AppColors.textMuted, AppColors.primaryDk, selectedness)!;
+    final color = selected ? AppColors.primaryDk : AppColors.textMuted;
     return Semantics(
       button: true,
       selected: selected,
@@ -201,7 +214,7 @@ class _PillLabel extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12.5, fontWeight: selectedness > 0.5 ? FontWeight.w700 : FontWeight.w600, color: color),
+                  style: TextStyle(fontSize: 12.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w600, color: color),
                 ),
               ),
             ],

@@ -5,7 +5,6 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
 
-const _kSkeleton = Color(0xFFF3F4F6);
 const _kWeekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const _kMonths = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -21,8 +20,6 @@ class TodaySalesOverview extends StatefulWidget {
 }
 
 class TodaySalesOverviewState extends State<TodaySalesOverview> {
-  bool _loading = true;
-  bool _hasData = false;
   String? _error;
   Map<String, dynamic> _sales = const {};
 
@@ -34,7 +31,6 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
 
   Future<void> reload({bool force = false}) async {
     setState(() {
-      _loading = true;
       _error = null;
     });
     try {
@@ -43,15 +39,17 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
       final data = raw is Map ? raw['data'] : null;
       final sales = data is Map ? data['sales'] : null;
       _sales = sales is Map ? Map<String, dynamic>.from(sales) : const {};
-      _hasData = true;
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() {});
     }
   }
 
-  static double _toDouble(dynamic v) => v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0;
+  static double _toDouble(dynamic v) {
+    final value = v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0;
+    return value.isFinite ? value : 0;
+  }
 
   double _methodTotal(String method) {
     final by = _sales['by_method'];
@@ -66,8 +64,7 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_hasData) return _error != null ? _buildError() : const _Skeleton();
-    return _buildBody();
+    return _error != null ? _buildError() : _buildBody();
   }
 
   Widget _buildError() => Row(
@@ -95,11 +92,6 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
             const Expanded(
               child: Text("Today's sales", style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.textMuted)),
             ),
-            if (_loading)
-              const Padding(
-                padding: EdgeInsets.only(right: 8),
-                child: SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 1.8)),
-              ),
             Text(_dateLabel(), style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
           ],
         ),
@@ -224,28 +216,6 @@ class _LegendDot extends StatelessWidget {
       Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
       const SizedBox(width: 5),
       Text(text, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
-    ],
-  );
-}
-
-class _Skeleton extends StatelessWidget {
-  const _Skeleton();
-
-  Widget _bar(double? width, double height) => Container(
-    width: width,
-    height: height,
-    decoration: BoxDecoration(color: _kSkeleton, borderRadius: BorderRadius.circular(height / 2.5)),
-  );
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      _bar(90, 12),
-      const SizedBox(height: 8),
-      _bar(150, 24),
-      const SizedBox(height: 12),
-      _bar(null, 5),
     ],
   );
 }

@@ -130,12 +130,16 @@ class PosSupplierApiController extends Controller
         $this->abortUnlessPerm($request, $business, 'inv_suppliers');
 
         $validated = $request->validate([
-            'name'                  => ['required', 'string', 'max:255'],
+            'name'                  => [
+                'required', 'string', 'max:255',
+                Rule::unique('suppliers', 'name')->where('business_id', $business->id),
+            ],
             'contact_name'          => ['nullable', 'string', 'max:255'],
             'email'                 => ['nullable', 'email', 'max:255'],
             'phone'                 => ['nullable', 'string', 'max:50'],
             'address'               => ['nullable', 'string', 'max:500'],
             'notes'                 => ['nullable', 'string', 'max:1000'],
+            'is_active'             => ['sometimes', 'boolean'],
             'supplier_category_id'  => [
                 'nullable', 'integer',
                 Rule::exists('supplier_categories', 'id')->where('business_id', $business->id),
@@ -144,7 +148,7 @@ class PosSupplierApiController extends Controller
 
         $supplier = Supplier::create(array_merge($validated, [
             'business_id' => $business->id,
-            'is_active'   => true,
+            'is_active'   => $validated['is_active'] ?? true,
         ]));
 
         $supplier->loadCount('purchases');
@@ -160,7 +164,12 @@ class PosSupplierApiController extends Controller
         $this->abortUnlessPerm($request, $business, 'inv_suppliers');
 
         $validated = $request->validate([
-            'name'                  => ['sometimes', 'required', 'string', 'max:255'],
+            'name'                  => [
+                'sometimes', 'required', 'string', 'max:255',
+                Rule::unique('suppliers', 'name')
+                    ->where('business_id', $business->id)
+                    ->ignore($supplier->id),
+            ],
             'contact_name'          => ['nullable', 'string', 'max:255'],
             'email'                 => ['nullable', 'email', 'max:255'],
             'phone'                 => ['nullable', 'string', 'max:50'],
@@ -186,9 +195,18 @@ class PosSupplierApiController extends Controller
         if ((int) $supplier->business_id !== (int) $business->id) abort(403);
         $this->abortUnlessPerm($request, $business, 'inv_suppliers');
 
-        $supplier->update(['is_active' => false]);
+        if ($supplier->purchases()->exists()) {
+            return response()->json([
+                'message' => 'Cannot delete a supplier linked to purchases.',
+                'errors'  => [
+                    'supplier' => ['Cannot delete a supplier linked to purchases.'],
+                ],
+            ], 422);
+        }
 
-        return response()->json(['message' => 'Supplier deactivated.']);
+        $supplier->delete();
+
+        return response()->json(['message' => 'Supplier deleted.']);
     }
 
     public function import(Request $request): JsonResponse

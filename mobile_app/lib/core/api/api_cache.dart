@@ -64,11 +64,15 @@ class CachingInterceptor extends Interceptor {
 
   static String _key(RequestOptions options) {
     final params = options.queryParameters;
-    if (params.isEmpty) return options.path;
-    final sorted = (params.entries.toList()
-          ..sort((a, b) => a.key.compareTo(b.key)))
-        .map((e) => '${e.key}=${e.value}')
-        .join('&');
-    return '${options.path}?$sorted';
+    final sorted = params.isEmpty
+        ? ''
+        : (params.entries.toList()
+              ..sort((a, b) => a.key.compareTo(b.key)))
+            .map((e) => '${e.key}=${e.value}')
+            .join('&');
+    final businessId = options.headers['X-Business-Id'] ?? '';
+    final branchId = options.headers['X-Branch-Id'] ?? '';
+    return 'business=$businessId|branch=$branchId|${options.path}'
+        '${sorted.isEmpty ? '' : '?$sorted'}';
   }
 }
