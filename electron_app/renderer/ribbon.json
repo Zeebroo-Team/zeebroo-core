@@ -107,7 +107,9 @@
           "label": "Customers",
           "items": [
             { "type": "lg", "id": "rb-customers",         "icon": "fa-users",              "label": "Customers" },
-            { "type": "lg", "id": "rb-accounts",          "icon": "fa-building-columns",   "label": "Accounts" }
+            { "type": "lg", "id": "rb-accounts",          "icon": "fa-building-columns",   "label": "Accounts" },
+            { "type": "lg", "id": "rb-gift-card-check",   "icon": "fa-gift",               "label": "Gift Card\nBalance" },
+            { "type": "lg", "id": "rb-coupon-check",      "icon": "fa-ticket",             "label": "Check\nCoupon" }
           ]
         },
         {
@@ -214,7 +216,9 @@
           "label": "Print",
           "items": [
             { "type": "lg", "id": "rb-inv-barcodes",      "icon": "fa-barcode",            "label": "Print\nBarcodes" },
-            { "type": "lg", "id": "rb-inv-sale-campaign", "icon": "fa-bullhorn",           "label": "Sale\nCampaign" }
+            { "type": "lg", "id": "rb-inv-sale-campaign", "icon": "fa-bullhorn",           "label": "Sale\nCampaign" },
+            { "type": "lg", "id": "rb-inv-gift-cards",    "icon": "fa-gift",               "label": "Gift\nCards" },
+            { "type": "lg", "id": "rb-inv-coupons",       "icon": "fa-ticket",             "label": "Coupons" }
           ]
         }
       ]

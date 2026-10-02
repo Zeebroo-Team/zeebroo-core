@@ -205,6 +205,7 @@ class PosSettingsApiController extends Controller
             // Purchasing workflow
             'purchase_order_enabled'     => ['nullable', 'boolean'],
             'purchasing_mode'            => ['nullable', 'in:po_only,direct_only,both'],
+            'grn_payment_source'         => ['nullable', 'string', 'in:account,expense'],
             // Rentals
             'rental_enabled'             => ['nullable', 'boolean'],
             // Customers

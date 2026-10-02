@@ -287,12 +287,15 @@ components:
         status_label:           { type: string }
         supplier_id:            { type: integer }
         supplier_name:          { type: string }
+        branch_id:              { type: integer, nullable: true }
+        branch_name:            { type: string, nullable: true }
         purchase_date:          { type: string, format: date }
         expected_delivery_date: { type: string, format: date, nullable: true }
         subtotal:               { $ref: '#/components/schemas/MoneyAmount' }
         total:                  { $ref: '#/components/schemas/MoneyAmount' }
         items_count:            { type: integer }
         notes:                  { type: string, nullable: true }
+        created_at:             { type: string, format: date-time, nullable: true }
 
     GrnListItem:
       type: object
@@ -1784,6 +1787,7 @@ paths:
               required: [supplier_id, purchase_date, items]
               properties:
                 supplier_id:            { type: integer }
+                branch_id:              { type: integer, nullable: true }
                 reference:              { type: string }
                 purchase_date:          { type: string, format: date }
                 expected_delivery_date: { type: string, format: date }

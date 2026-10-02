@@ -1411,6 +1411,13 @@
                                 <i class="fa fa-sitemap" style="margin-right:6px;"></i>Business Map
                             </a>
                         </div>
+                        @if(Route::has('payment.billing.index'))
+                        <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
+                            <a href="{{ route('payment.billing.index') }}" class="dropdown-action-btn">
+                                <i class="fa fa-credit-card" style="margin-right:6px;"></i>Billing &amp; Payments
+                            </a>
+                        </div>
+                        @endif
                         <div class="menu-row" style="display:block;padding-top:2px;padding-bottom:2px;">
                             <button type="button" id="openFeaturesModalBtn" style="width:100%;display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:color-mix(in srgb,var(--primary) 8%,transparent);color:var(--text);cursor:pointer;font-size:13px;font-weight:600;text-align:left;">
                                 <i class="fa fa-sliders" style="color:var(--primary);width:14px;text-align:center;"></i>
@@ -1801,6 +1808,56 @@
             }
         })();
         </script>
+        @endif
+        @if(! empty($subscriptionDue))
+            @php
+                $__subDueAt = \Illuminate\Support\Carbon::parse($subscriptionDue['due_at']);
+                $__subHoursLeft = max(1, (int) ceil(now()->diffInMinutes($__subDueAt) / 60));
+                $__subLeftText = $__subHoursLeft < 24
+                    ? $__subHoursLeft . ' ' . \Illuminate\Support\Str::plural('hour', $__subHoursLeft)
+                    : ($__subDaysLeft = (int) ceil($__subHoursLeft / 24)) . ' ' . \Illuminate\Support\Str::plural('day', $__subDaysLeft);
+                $__subReason = [
+                    'failed' => 'Your last subscription payment failed.',
+                    'canceled' => 'Your subscription checkout was canceled before it completed.',
+                ][$subscriptionDue['payment_status']] ?? 'Your subscription payment is pending.';
+            @endphp
+            <style>
+                .sub-due-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 24px 0;padding:12px 16px;border-radius:14px;background:color-mix(in srgb,#f59e0b 12%,var(--card));border:1px solid color-mix(in srgb,#f59e0b 45%,var(--border));color:var(--text);font-size:13.5px;}
+                .sub-due-bar__icon{width:30px;height:30px;border-radius:999px;background:#f59e0b;color:#fff;display:grid;place-items:center;flex-shrink:0;}
+                .sub-due-bar__text{flex:1;min-width:220px;line-height:1.45;}
+                .sub-due-bar__text b{color:#b45309;}
+                html[data-theme="night"] .sub-due-bar__text b,html[data-theme="night_blue"] .sub-due-bar__text b,html[data-theme="ocean"] .sub-due-bar__text b{color:#fbbf24;}
+                .sub-due-bar__pay{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:9px;border:0;background:#f59e0b;color:#fff;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+                .sub-due-bar__pay:hover{background:#d97706;}
+                .sub-due-bar__close{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;padding:4px 6px;}
+            </style>
+            <div class="sub-due-bar" id="subDueBar" data-payment-id="{{ $subscriptionDue['payment_id'] }}" role="status">
+                <span class="sub-due-bar__icon"><i class="fa fa-clock" aria-hidden="true"></i></span>
+                <div class="sub-due-bar__text">
+                    {{ $__subReason }}
+                    Please pay <b>{{ strtoupper($subscriptionDue['currency'] ?? '') }} {{ number_format((float) $subscriptionDue['amount'], 2) }}</b>
+                    within <b>{{ $__subLeftText }}</b> (by {{ $__subDueAt->format('d M Y, g:i A') }}) to avoid your workspace being locked.
+                    @unless($subscriptionDue['can_pay']) Contact your business owner to settle this payment. @endunless
+                </div>
+                @if($subscriptionDue['can_pay'])
+                    <form method="post" action="{{ route('payment.checkout.resume', ['payment' => $subscriptionDue['payment_id']]) }}" style="margin:0;">
+                        @csrf
+                        <button type="submit" class="sub-due-bar__pay"><i class="fa fa-credit-card" aria-hidden="true"></i> Pay now</button>
+                    </form>
+                @endif
+                <button type="button" class="sub-due-bar__close" id="subDueBarClose" aria-label="Dismiss"><i class="fa fa-xmark" aria-hidden="true"></i></button>
+            </div>
+            <script>
+            (function () {
+                var bar = document.getElementById('subDueBar');
+                var key = 'subDueDismissed:' + bar.dataset.paymentId;
+                try { if (sessionStorage.getItem(key)) bar.remove(); } catch (e) {}
+                document.getElementById('subDueBarClose')?.addEventListener('click', function () {
+                    bar.remove();
+                    try { sessionStorage.setItem(key, '1'); } catch (e) {}
+                });
+            })();
+            </script>
         @endif
         <div class="content-inner{{ $chatWorkspace ? ' content-inner--chat-workspace' : '' }}">
             @yield('content')

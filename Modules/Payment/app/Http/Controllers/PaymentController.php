@@ -32,20 +32,20 @@ class PaymentController extends Controller
     {
         $sessionId = (string) $request->query('session_id');
         if ($sessionId === '') {
-            return redirect()->route('dashboard')->withErrors(['payment' => 'Missing Stripe session reference.']);
+            return redirect()->route('business.platform-choice')->withErrors(['payment' => 'Missing Stripe session reference.']);
         }
 
         $payment = $this->settleFromSessionId($sessionId);
 
         if (! $payment) {
-            return redirect()->route('dashboard')->withErrors(['payment' => 'We could not confirm your payment. Please contact support.']);
+            return redirect()->route('business.platform-choice')->withErrors(['payment' => 'We could not confirm your payment. Please contact support.']);
         }
 
         if ($payment->isSucceeded()) {
             return redirect()->route('business.platform-choice')->with('status', 'Payment successful — your monthly subscription is now active.');
         }
 
-        return redirect()->route('dashboard')->withErrors(['payment' => 'Payment was not completed.']);
+        return redirect()->route('business.platform-choice')->withErrors(['payment' => 'Payment was not completed.']);
     }
 
     /**
@@ -56,7 +56,7 @@ class PaymentController extends Controller
         $payment = Payment::find($request->query('payment'));
         $this->markCanceledIfPending($payment);
 
-        return redirect()->route('dashboard')->withErrors(['payment' => 'Payment was canceled. Your business setup is saved — complete payment to activate your subscription.']);
+        return redirect()->route('business.platform-choice')->withErrors(['payment' => 'Payment was canceled']);
     }
 
     /**
@@ -160,7 +160,7 @@ class PaymentController extends Controller
 
         $package = $payment->package;
         if (! $package) {
-            return redirect()->route('dashboard')->withErrors(['payment' => 'This package is no longer available.']);
+            return redirect()->back()->withErrors(['payment' => 'This package is no longer available.']);
         }
 
         try {
@@ -175,7 +175,7 @@ class PaymentController extends Controller
         } catch (\Throwable $e) {
             Log::error('Stripe checkout session creation failed', ['error' => $e->getMessage()]);
 
-            return redirect()->route('dashboard')->withErrors(['payment' => 'Could not start Stripe checkout. Please try again later.']);
+            return redirect()->back()->withErrors(['payment' => 'Could not start Stripe checkout. Please try again later.']);
         }
 
         $payment->update([

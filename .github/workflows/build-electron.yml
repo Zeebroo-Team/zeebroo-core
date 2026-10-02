@@ -1,13 +1,25 @@
 name: Build Electron App
 
+# Two desktop apps ship from this workflow, each released by its own tag prefix:
+#   vX.Y.Z       → Zeebroo POS       (electron_app/)
+#   lite-vX.Y.Z  → Zeebroo POS Lite  (electron_app_pos_lite/)
 on:
-  # Fires when you push a vX.Y.Z tag — the release job creates the GitHub Release automatically
+  # Fires when you push a release tag — the matching release job creates the GitHub Release automatically
   push:
     tags:
       - 'v*.*.*'
+      - 'lite-v*.*.*'
   # Manual run from the Actions tab (e.g. for testing the pipeline)
   workflow_dispatch:
     inputs:
+      app:
+        description: 'Which app to build'
+        type: choice
+        options:
+          - main
+          - lite
+          - both
+        default: main
       draft_release:
         description: 'Create as draft release'
         type: boolean
@@ -26,11 +38,12 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────────────────
-  #  Build — three platforms in parallel
+  #  Zeebroo POS — build, three platforms in parallel
   # ──────────────────────────────────────────────────────────
   build:
     name: Build — ${{ matrix.name }}
     runs-on: ${{ matrix.runner }}
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.app != 'lite')
     strategy:
       fail-fast: false
       matrix:
@@ -148,7 +161,7 @@ jobs:
             electron_app/dist/latest*.yaml
 
   # ──────────────────────────────────────────────────────────
-  #  Release — runs after all three builds succeed
+  #  Zeebroo POS — release, runs after all three builds succeed
   # ──────────────────────────────────────────────────────────
   release:
     name: Create GitHub Release
@@ -160,6 +173,7 @@ jobs:
       - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: zeebroo-pos-*
           path: release-assets
           merge-multiple: true
 
@@ -182,3 +196,177 @@ jobs:
             release-assets/*.rpm
             release-assets/latest*.yml
             release-assets/latest*.yaml
+
+  # ──────────────────────────────────────────────────────────
+  #  Zeebroo POS Lite — build, three platforms in parallel
+  # ──────────────────────────────────────────────────────────
+  build-lite:
+    name: Build Lite — ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    if: startsWith(github.ref, 'refs/tags/lite-v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.app != 'main')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (Intel + Apple Silicon)
+            runner: macos-latest
+            platform_flag: --mac
+            artifact_name: zeebroo-lite-mac
+
+          - name: Windows (x64)
+            runner: windows-latest
+            platform_flag: --win
+            artifact_name: zeebroo-lite-win
+
+          - name: Linux (x64)
+            runner: ubuntu-latest
+            platform_flag: --linux
+            artifact_name: zeebroo-lite-linux
+
+    defaults:
+      run:
+        working-directory: electron_app_pos_lite
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The in-app updater compares package.json's version with the release
+      # published in the admin panel — a lite-v1.2.0 tag must ship v1.2.0.
+      - name: Check tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/lite-v')
+        shell: bash
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#lite-v}"
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match electron_app_pos_lite/package.json version ${PKG_VERSION}"
+            exit 1
+          fi
+
+      # No lock file is committed for Lite (see its .gitignore), so cache on package.json
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: electron_app_pos_lite/package.json
+
+      - name: Install Linux build deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y dpkg fakeroot rpm
+
+      - name: Install Node dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Import macOS certificate
+        if: runner.os == 'macOS' && env.MAC_CERTIFICATE != ''
+        env:
+          MAC_CERTIFICATE: ${{ secrets.MAC_CERTIFICATE }}
+          MAC_CERTIFICATE_PASSWORD: ${{ secrets.MAC_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$MAC_CERTIFICATE" | base64 --decode > /tmp/certificate.p12
+          security create-keychain -p "" build.keychain
+          security import /tmp/certificate.p12 -k build.keychain \
+            -P "$MAC_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s build.keychain login.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-keychain-settings -t 3600 -l build.keychain
+          rm /tmp/certificate.p12
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: npm run build -- ${{ matrix.platform_flag }}
+        env:
+          API_BASE_URL: ${{ env.API_BASE_URL }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Import Windows certificate
+        if: runner.os == 'Windows' && env.WIN_CERTIFICATE != ''
+        env:
+          WIN_CERTIFICATE: ${{ secrets.WIN_CERTIFICATE }}
+          WIN_CERTIFICATE_PASSWORD: ${{ secrets.WIN_CERTIFICATE_PASSWORD }}
+        shell: pwsh
+        run: |
+          $bytes = [Convert]::FromBase64String($env:WIN_CERTIFICATE)
+          [IO.File]::WriteAllBytes("$env:TEMP\certificate.p12", $bytes)
+          echo "WIN_CSC_LINK=$env:TEMP\certificate.p12" >> $env:GITHUB_ENV
+          echo "WIN_CSC_KEY_PASSWORD=$env:WIN_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: npm run build -- ${{ matrix.platform_flag }}
+        env:
+          API_BASE_URL: ${{ env.API_BASE_URL }}
+
+      - name: Build (Linux)
+        if: runner.os == 'Linux'
+        run: npm run build -- ${{ matrix.platform_flag }}
+        env:
+          API_BASE_URL: ${{ env.API_BASE_URL }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            electron_app_pos_lite/dist/*.zip
+            electron_app_pos_lite/dist/*.exe
+            electron_app_pos_lite/dist/*.AppImage
+            electron_app_pos_lite/dist/*.deb
+
+  # ──────────────────────────────────────────────────────────
+  #  Zeebroo POS Lite — release, runs after all three builds succeed
+  # ──────────────────────────────────────────────────────────
+  release-lite:
+    name: Create GitHub Release (Lite)
+    needs: build-lite
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/lite-v')
+
+    steps:
+      - name: Download all Lite build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: zeebroo-lite-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: List release files
+        run: find release-assets -type f | sort
+
+      - name: Publish GitHub Release
+        id: gh_release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Zeebroo POS Lite ${{ github.ref_name }}
+          draft: ${{ github.event.inputs.draft_release == 'true' || false }}
+          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
+          # Keep the main Zeebroo POS release as the repo's "Latest" release
+          make_latest: false
+          generate_release_notes: true
+          files: |
+            release-assets/*.zip
+            release-assets/*.exe
+            release-assets/*.AppImage
+            release-assets/*.deb
+
+      # Download links to paste into Admin → Release Management → Zeebroo POS Lite
+      - name: Write download links to job summary
+        env:
+          ASSETS: ${{ steps.gh_release.outputs.assets }}
+        run: |
+          {
+            echo "## Zeebroo POS Lite ${GITHUB_REF_NAME#lite-}"
+            echo "Add these in **Admin → Release Management → Zeebroo POS Lite → New Release** (version \`${GITHUB_REF_NAME#lite-v}\`):"
+            echo
+            echo "$ASSETS" | jq -r '.[] | "- `\(.name)`: \(.browser_download_url)"'
+          } >> "$GITHUB_STEP_SUMMARY"

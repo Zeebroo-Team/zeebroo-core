@@ -186,7 +186,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items']);
+        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items', 'giftCard', 'coupon']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -211,6 +211,21 @@ class PosOnlineApiService
             'discount_amount' => round((float) $sale->discount_amount, 2),
             'total' => round((float) $sale->total, 2),
             'amount_paid' => round((float) $sale->amount_paid, 2),
+            'gift_card_amount' => round((float) $sale->gift_card_amount, 2),
+            'gift_card' => $sale->giftCard ? [
+                'id' => (int) $sale->giftCard->id,
+                'code' => $sale->giftCard->code,
+                'name' => $sale->giftCard->name,
+                'balance' => round((float) $sale->giftCard->balance, 2),
+            ] : null,
+            'coupon_discount' => round((float) $sale->coupon_discount, 2),
+            'coupon' => $sale->coupon ? [
+                'id' => (int) $sale->coupon->id,
+                'code' => $sale->coupon->code,
+                'name' => $sale->coupon->name,
+                'discount_type' => $sale->coupon->discount_type,
+                'discount_value' => round((float) $sale->coupon->discount_value, 2),
+            ] : null,
             'amount_tendered' => $sale->amount_tendered !== null ? round((float) $sale->amount_tendered, 2) : null,
             'change_amount' => $sale->change_amount !== null ? round((float) $sale->change_amount, 2) : null,
             'notes' => $sale->notes,
@@ -267,5 +282,68 @@ class PosOnlineApiService
             'sold_at' => $sale->sold_at?->toIso8601String(),
             'customer_name' => $sale->customer?->name,
         ])->values()->all();
+    }
+
+    /**
+     * Read-only list of processed sale returns (Sales Management → Returns tab).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function formatSaleReturnList(Collection $returns): array
+    {
+        return $returns->map(fn (\Modules\Pos\Models\SaleReturn $ret) => [
+            'id' => (int) $ret->id,
+            'return_number' => $ret->return_number,
+            'sale_id' => $ret->pos_sale_id !== null ? (int) $ret->pos_sale_id : null,
+            'sale_number' => $ret->sale?->sale_number,
+            'customer_name' => $ret->sale?->customer?->name,
+            'refund_method' => $ret->refund_method,
+            'refund_method_label' => $ret->refundMethodLabel(),
+            'refund_reason' => $ret->refund_reason,
+            'refund_reason_label' => $ret->reasonLabel(),
+            'total' => round((float) $ret->total, 2),
+            'items_count' => (int) ($ret->items_count ?? $ret->items()->count()),
+            'notes' => $ret->notes,
+            'returned_at' => $ret->returned_at?->toIso8601String(),
+            'cashier' => $ret->user ? [
+                'id' => (int) $ret->user->id,
+                'name' => $ret->user->name,
+            ] : null,
+        ])->values()->all();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function formatSaleReturn(\Modules\Pos\Models\SaleReturn $ret): array
+    {
+        $ret->loadMissing(['sale.customer', 'user', 'items']);
+
+        return [
+            'id' => (int) $ret->id,
+            'return_number' => $ret->return_number,
+            'sale_id' => $ret->pos_sale_id !== null ? (int) $ret->pos_sale_id : null,
+            'sale_number' => $ret->sale?->sale_number,
+            'customer_name' => $ret->sale?->customer?->name,
+            'refund_method' => $ret->refund_method,
+            'refund_method_label' => $ret->refundMethodLabel(),
+            'refund_reason' => $ret->refund_reason,
+            'refund_reason_label' => $ret->reasonLabel(),
+            'total' => round((float) $ret->total, 2),
+            'notes' => $ret->notes,
+            'returned_at' => $ret->returned_at?->toIso8601String(),
+            'cashier' => $ret->user ? [
+                'id' => (int) $ret->user->id,
+                'name' => $ret->user->name,
+            ] : null,
+            'items' => $ret->items->map(fn (\Modules\Pos\Models\SaleReturnItem $item) => [
+                'id' => (int) $item->id,
+                'product_name' => $item->product_name,
+                'sku' => $item->sku,
+                'quantity' => round((float) $item->quantity, 3),
+                'unit_sell_price' => round((float) $item->unit_sell_price, 2),
+                'line_total' => round((float) $item->line_total, 2),
+            ])->values()->all(),
+        ];
     }
 }

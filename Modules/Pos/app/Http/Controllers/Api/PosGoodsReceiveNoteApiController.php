@@ -73,6 +73,7 @@ class PosGoodsReceiveNoteApiController extends Controller
                     'po_number'     => $purchase->po_number,
                     'supplier_name' => $purchase->supplier?->name,
                     'status'        => $purchase->status,
+                    'branch_id'     => $purchase->branch_id,
                 ],
                 'items' => $purchase->items->map(fn ($item) => [
                     'id'                  => $item->id,
@@ -106,6 +107,7 @@ class PosGoodsReceiveNoteApiController extends Controller
             'cheque_due_date'    => ['nullable', 'date'],
             'payment_option'     => ['nullable', 'string', Rule::in(['full', 'partial'])],
             'pay_amount'         => ['nullable', 'numeric', 'min:0.01'],
+            'payment_source'     => ['nullable', 'string', Rule::in(['account', 'expense'])],
             'deduct_account_id'  => ['nullable', 'integer'],
             'payment_terms_days'          => ['nullable', 'integer', 'min:1', 'max:3650'],
             'expense_lines'              => ['nullable', 'array', 'max:20'],
@@ -160,6 +162,7 @@ class PosGoodsReceiveNoteApiController extends Controller
             'cheque_due_date'    => ['nullable', 'date'],
             'payment_option'     => ['nullable', 'string', Rule::in(['full', 'partial'])],
             'pay_amount'         => ['nullable', 'numeric', 'min:0.01'],
+            'payment_source'     => ['nullable', 'string', Rule::in(['account', 'expense'])],
             'deduct_account_id'  => ['nullable', 'integer'],
             'payment_terms_days'         => ['nullable', 'integer', 'min:1', 'max:3650'],
             'expense_lines'              => ['nullable', 'array', 'max:20'],
@@ -204,9 +207,22 @@ class PosGoodsReceiveNoteApiController extends Controller
             return response()->json(['message' => 'This GRN is already fully paid.'], 422);
         }
 
+        // No per-transaction override — default to the business's Settings >
+        // Accounts "Default Pay From" choice when the caller doesn't send one.
+        // Cheques always need a real account, regardless of that default.
+        $defaultSource = $request->input('payment_method') === 'cheque'
+            ? 'account'
+            : $this->settlement->defaultPaymentSource($business);
+        $request->merge([
+            'payment_source' => in_array($request->input('payment_source'), ['account', 'expense'], true)
+                ? $request->input('payment_source')
+                : $defaultSource,
+        ]);
+
         $validated = $request->validate([
             'payment_method'     => ['required', 'string', Rule::in(['cash', 'credit', 'cheque'])],
-            'deduct_account_id'  => ['required', 'integer'],
+            'payment_source'     => ['required', 'string', Rule::in(['account', 'expense'])],
+            'deduct_account_id'  => ['nullable', 'integer', 'required_if:payment_source,account'],
             'payment_option'     => ['required', 'string', Rule::in(['full', 'partial'])],
             'pay_amount'         => ['nullable', 'numeric', 'min:0.01'],
             'payment_reference'  => ['nullable', 'string', 'max:120'],
@@ -218,16 +234,33 @@ class PosGoodsReceiveNoteApiController extends Controller
             : null;
 
         try {
-            $this->settlement->settle(
-                $grn,
-                $business,
-                $request->user() ?? abort(401),
-                (int) $validated['deduct_account_id'],
-                $payAmount,
-                $validated['payment_method'],
-                $validated['payment_reference'] ?? null,
-                $validated['cheque_due_date'] ?? null,
-            );
+            if ($validated['payment_source'] === 'expense') {
+                if ($validated['payment_method'] === 'cheque') {
+                    throw ValidationException::withMessages([
+                        'payment_source' => 'Cheque payments must be paid from an account.',
+                    ]);
+                }
+
+                $this->settlement->settleAsExpense(
+                    $grn,
+                    $business,
+                    $request->user() ?? abort(401),
+                    $payAmount,
+                    $validated['payment_method'],
+                    $validated['payment_reference'] ?? null,
+                );
+            } else {
+                $this->settlement->settle(
+                    $grn,
+                    $business,
+                    $request->user() ?? abort(401),
+                    (int) $validated['deduct_account_id'],
+                    $payAmount,
+                    $validated['payment_method'],
+                    $validated['payment_reference'] ?? null,
+                    $validated['cheque_due_date'] ?? null,
+                );
+            }
         } catch (ValidationException $e) {
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }
@@ -339,10 +372,11 @@ class PosGoodsReceiveNoteApiController extends Controller
                 'line_total'         => round((float) $item->line_total, 2),
             ])->values()->all(),
             'payments' => ($g->relationLoaded('ledgerTransactions') ? $g->ledgerTransactions : collect())->map(fn ($t) => [
-                'id'      => $t->id,
-                'amount'  => round((float) $t->amount, 2),
-                'account' => $t->deductAccount?->deductOptionLabel(),
-                'date'    => $t->created_at?->format('Y-m-d'),
+                'id'         => $t->id,
+                'amount'     => round((float) $t->amount, 2),
+                'account'    => $t->deductAccount?->deductOptionLabel(),
+                'is_expense' => (bool) ($t->meta['is_expense'] ?? false),
+                'date'       => $t->created_at?->format('Y-m-d'),
             ])->values()->all(),
         ]);
     }

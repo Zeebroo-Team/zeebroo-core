@@ -19,6 +19,8 @@ const TILES = [
     title: 'Barcodes',
     desc: 'Generate and print barcode labels for products.',
     accent: '#d97706',
+    active: true,
+    modal: 'openBarcodesModal', // opens as an in-page dialog (js/barcodes.js) instead of a full-page navigation
   },
   {
     key: 'stock',
@@ -26,6 +28,8 @@ const TILES = [
     title: 'Stock',
     desc: 'Track stock levels, batches, and adjustments.',
     accent: '#0284c7',
+    active: true,
+    modal: 'openStockModal', // opens as an in-page dialog (js/stock.js) instead of a full-page navigation
   },
   {
     key: 'reports',
@@ -33,6 +37,8 @@ const TILES = [
     title: 'Reports & Summaries',
     desc: 'Daily summaries, profit, and sales reports.',
     accent: '#7c3aed',
+    active: true,
+    modal: 'openReportsModal', // opens as an in-page dialog (js/reports.js) instead of a full-page navigation
   },
   {
     key: 'cashiers',
@@ -44,13 +50,13 @@ const TILES = [
     href: 'cashiers.html',
   },
   {
-    key: 'customers',
-    icon: 'fa-users',
-    title: 'Customers',
-    desc: 'Manage customer profiles and purchase history.',
+    key: 'contacts',
+    icon: 'fa-address-book',
+    title: 'Contacts',
+    desc: 'Manage your customers and suppliers.',
     accent: '#ea580c',
     active: true,
-    href: 'customers.html',
+    href: 'contacts.html',
   },
   {
     key: 'sales',
@@ -58,6 +64,8 @@ const TILES = [
     title: 'Sales Management',
     desc: 'View, manage, and track past sales and returns.',
     accent: '#0d9488',
+    active: true,
+    modal: 'openSalesModal', // opens as an in-page dialog (js/sales.js) instead of a full-page navigation
   },
   {
     key: 'pos',
@@ -113,8 +121,9 @@ grid.querySelectorAll('.tile').forEach((el) => {
   const tile = TILES.find((x) => x.key === el.dataset.key);
 
   el.addEventListener('click', () => {
-    if (tile.active) window.location.href = tile.href;
-    else showToast(t('{title} is coming soon.', { title: t(tile.title) }));
+    if (!tile.active) { showToast(t('{title} is coming soon.', { title: t(tile.title) })); return; }
+    if (tile.modal) window[tile.modal]();
+    else window.location.href = tile.href;
   });
 
   // feed the cursor position to the CSS spotlight

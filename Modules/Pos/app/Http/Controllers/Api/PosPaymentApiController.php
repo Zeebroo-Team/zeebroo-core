@@ -9,10 +9,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Validation\ValidationException;
-use Modules\Business\Models\Business;
+use Modules\Payment\Exceptions\SubscriptionActionException;
 use Modules\Payment\Models\Payment;
-use Modules\Payment\Services\PaymentProvisioningService;
 use Modules\Payment\Services\StripeSubscriptionService;
+use Modules\Payment\Services\SubscriptionCancellationService;
+use Modules\Payment\Services\SubscriptionSummaryService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
 class PosPaymentApiController extends Controller
@@ -21,7 +22,8 @@ class PosPaymentApiController extends Controller
 
     public function __construct(
         private readonly StripeSubscriptionService $stripe,
-        private readonly PaymentProvisioningService $provisioning,
+        private readonly SubscriptionSummaryService $summary,
+        private readonly SubscriptionCancellationService $cancellation,
     ) {}
 
     /**
@@ -32,72 +34,14 @@ class PosPaymentApiController extends Controller
     public function history(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->backfillMissingPayment($business);
 
-        $payments = $business->payments()->with('package')->limit(50)->get();
-        $this->backfillMissingDueDate($payments);
-
-        $activeSubscription = $payments->first(
-            fn (Payment $p) => $p->payment_type === Payment::TYPE_SUBSCRIPTION
-                && $p->isSucceeded()
-                && $p->stripe_subscription_status === 'active'
-        );
-        if ($activeSubscription) {
-            $this->syncPeriodFromStripe($activeSubscription);
-        }
-
-        $overdue = $business->overdueSubscriptionPayment();
-        $requester = $request->user();
+        // PosCashier tokens are not App\Models\User — a cashier can see the
+        // lock/due state but never pay, so summarize as an anonymous requester.
+        $user = $request->user();
 
         return response()->json([
-            'data' => [
-                'subscription_status' => $activeSubscription?->stripe_subscription_status
-                    ?? $business->getSetting('business.subscription_status'),
-                'next_renewal_at' => $activeSubscription?->current_period_end?->toIso8601String(),
-                'cancel_at_period_end' => (bool) $activeSubscription?->cancel_at_period_end,
-                'access_until' => $activeSubscription?->cancel_at_period_end
-                    ? $activeSubscription->current_period_end?->toIso8601String()
-                    : null,
-                'can_manage_subscription' => $activeSubscription !== null
-                    && $requester instanceof User
-                    && (int) $activeSubscription->user_id === (int) $requester->id,
-                'subscription_ended' => $business->subscriptionHasEnded(),
-                'overdue' => $overdue ? [
-                    'payment_id' => $overdue->id,
-                    'due_at' => $overdue->due_at?->toIso8601String(),
-                    'can_pay' => $requester instanceof User && (int) $overdue->user_id === (int) $requester->id,
-                ] : null,
-                'items' => $payments->map(fn (Payment $p) => $this->formatPayment($p))->all(),
-            ],
+            'data' => $this->summary->summarize($business, $user instanceof User ? $user : null),
         ]);
-    }
-
-    /**
-     * Rows created before period tracking (or before the webhook arrived) have
-     * no renewal date — pull it from Stripe once so the billing screen and the
-     * cancel flow have a real "access until" date.
-     */
-    private function syncPeriodFromStripe(Payment $payment): void
-    {
-        if ($payment->current_period_end !== null || ! $payment->stripe_subscription_id) {
-            return;
-        }
-
-        try {
-            $sub = $this->stripe->retrieveSubscription($payment->stripe_subscription_id);
-        } catch (\Throwable $e) {
-            report($e);
-
-            return;
-        }
-
-        $end = $sub->current_period_end ?? ($sub->items->data[0]->current_period_end ?? null);
-
-        Payment::query()->where('stripe_subscription_id', $payment->stripe_subscription_id)->update([
-            'current_period_end' => $end !== null ? \Illuminate\Support\Carbon::createFromTimestamp($end) : null,
-            'cancel_at_period_end' => (bool) ($sub->cancel_at_period_end ?? false) || ($sub->cancel_at ?? null) !== null,
-        ]);
-        $payment->refresh();
     }
 
     /**
@@ -119,38 +63,11 @@ class PosPaymentApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
-        $payment = $business->payments()
-            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
-            ->where('payment_status', Payment::STATUS_SUCCEEDED)
-            ->where('stripe_subscription_status', 'active')
-            ->whereNotNull('stripe_subscription_id')
-            ->latest('paid_at')
-            ->first();
-
-        if (! $payment) {
-            return response()->json(['message' => 'There is no active subscription to change.'], 422);
-        }
-
-        abort_unless((int) $payment->user_id === (int) $request->user()->id, 403);
-
-        if ($payment->cancel_at_period_end === $cancel) {
-            return response()->json(['message' => $cancel
-                ? 'This subscription is already set to cancel.'
-                : 'This subscription is not scheduled to cancel.'], 422);
-        }
-
         try {
-            $this->stripe->setCancelAtPeriodEnd($payment->stripe_subscription_id, $cancel);
-        } catch (\Throwable $e) {
-            report($e);
-
-            return response()->json(['message' => 'Could not update your subscription. Please try again later.'], 502);
+            $payment = $this->cancellation->change($business, $request->user(), $cancel);
+        } catch (SubscriptionActionException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->status);
         }
-
-        // Every billing row of this Stripe subscription shares the flag.
-        Payment::query()
-            ->where('stripe_subscription_id', $payment->stripe_subscription_id)
-            ->update(['cancel_at_period_end' => $cancel]);
 
         return response()->json([
             'data' => [
@@ -168,7 +85,7 @@ class PosPaymentApiController extends Controller
         $business = $this->businessOrAbort($request);
         abort_unless((int) $payment->business_id === (int) $business->id, 403);
 
-        return response()->json(['data' => $this->formatPayment($payment->load('package'))]);
+        return response()->json(['data' => $this->summary->formatPayment($payment->load('package'))]);
     }
 
     /**
@@ -186,72 +103,6 @@ class PosPaymentApiController extends Controller
         ]);
 
         return $pdf->download("receipt-{$payment->id}.pdf");
-    }
-
-    /**
-     * Businesses created before the Payment module shipped (or otherwise
-     * missing their initial billing record) never got a Payment row, so they
-     * show as neither paid nor due. Back-fill it here, on first read, using
-     * the same provisioning logic that runs at signup — this only ever
-     * creates the missing row once, since it's guarded on having none at all.
-     */
-    private function backfillMissingPayment(Business $business): void
-    {
-        if ($business->payments()->exists()) {
-            return;
-        }
-
-        $package = $business->package;
-        $owner = $business->user;
-        if (! $package || ! $owner) {
-            return;
-        }
-
-        $this->provisioning->createInitialPayment($business, $package, $owner);
-    }
-
-    /**
-     * Payments left pending/failed/canceled from before `due_at` tracking
-     * existed have no deadline at all, so they could never lock or show a
-     * real countdown. Give them a fresh grace period from now — we don't know
-     * their true original due date, but "never enforceable" is worse than a
-     * slightly generous one.
-     *
-     * @param \Illuminate\Support\Collection<int, Payment> $payments
-     */
-    private function backfillMissingDueDate($payments): void
-    {
-        $actionable = [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED];
-
-        foreach ($payments as $payment) {
-            if ($payment->payment_type === Payment::TYPE_SUBSCRIPTION
-                && in_array($payment->payment_status, $actionable, true)
-                && $payment->due_at === null
-            ) {
-                $payment->update(['due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS)]);
-            }
-        }
-    }
-
-    /** @return array<string, mixed> */
-    private function formatPayment(Payment $payment): array
-    {
-        return [
-            'id' => $payment->id,
-            'plan' => $payment->package?->name,
-            'payment_type' => $payment->payment_type,
-            'payment_status' => $payment->payment_status,
-            'billing_cycle' => $payment->billing_cycle,
-            'gateway' => $payment->gateway,
-            'amount' => (float) $payment->amount,
-            'currency' => $payment->currency,
-            'paid_at' => $payment->paid_at?->toIso8601String(),
-            'current_period_end' => $payment->current_period_end?->toIso8601String(),
-            'failure_reason' => $payment->failure_reason,
-            'due_at' => $payment->due_at?->toIso8601String(),
-            'is_overdue' => $payment->isOverdue(),
-            'created_at' => $payment->created_at?->toIso8601String(),
-        ];
     }
 
     /**

@@ -16,7 +16,13 @@ function esc(s) {
   return (s ?? '').toString().replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-function money(n) { return `$${(Number(n) || 0).toFixed(2)}`; }
+let posSettings = {};
+
+function money(n) {
+  const amount = (Number(n) || 0).toFixed(2);
+  const currency = (posSettings.currency || 'LKR').toUpperCase();
+  return posSettings.currency_position === 'before' ? `${currency} ${amount}` : `${amount} ${currency}`;
+}
 
 function firstErrorMessage(res, fallback) {
   const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
@@ -1934,6 +1940,770 @@ $('#prod-delete-btn')?.addEventListener('click', async () => {
   loadProducts();
 });
 
+// ══════════════════════════════════════════════════════════════════════════
+// CSV PRODUCT IMPORT
+// ══════════════════════════════════════════════════════════════════════════
+const _CSV_SAMPLE = [
+  'name,sku,price,wholesale_price,stock,category,brand,description',
+  'Apple iPhone 15,IPH15-128,999.99,850.00,50,Electronics,Apple,Apple flagship smartphone',
+  'Samsung Galaxy S24,SAM-S24-256,849.99,720.00,30,Electronics,Samsung,Samsung flagship phone',
+  'Wireless Headphones,WH-BT-001,149.99,,100,Electronics,,Bluetooth over-ear headphones',
+  'Coffee Beans 500g,CB-ARABICA-500,12.50,10.00,200,Food & Beverages,Lavazza,Premium arabica coffee beans',
+  'Office Chair,CHAIR-ERG-01,299.00,,15,Furniture,,Ergonomic adjustable office chair',
+].join('\n');
+
+// Column name aliases → canonical key
+const _CSV_COL_MAP = {
+  'name': 'name', 'product': 'name', 'product name': 'name', 'item': 'name', 'item name': 'name',
+  'sku': 'sku', 'code': 'sku', 'barcode': 'sku', 'product code': 'sku',
+  'price': 'unit_price', 'unit_price': 'unit_price', 'sell_price': 'unit_price',
+  'selling_price': 'unit_price', 'unit price': 'unit_price', 'sell price': 'unit_price',
+  'stock': 'stock_quantity', 'stock_quantity': 'stock_quantity', 'quantity': 'stock_quantity',
+  'qty': 'stock_quantity', 'opening stock': 'stock_quantity', 'opening_stock': 'stock_quantity',
+  'wholesale_price': 'wholesale_price', 'wholesale price': 'wholesale_price', 'trade price': 'wholesale_price',
+  'category': 'category', 'categories': 'category', 'product category': 'category',
+  'brand': 'brand', 'brand name': 'brand',
+  'description': 'description', 'desc': 'description', 'notes': 'description',
+};
+
+function _csvParseLine(line) {
+  const cells = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === ',' && !inQ) { cells.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cells.push(cur);
+  return cells;
+}
+
+let _csvParsedRows = [];
+let _csvValidRows  = [];
+
+function _csvParseFile(text) {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter((l) => l.trim());
+  if (lines.length < 2) return { rows: [], error: t('File must have a header row and at least one data row.') };
+
+  const headers = _csvParseLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const colMap  = {};
+  headers.forEach((h, i) => { if (_CSV_COL_MAP[h]) colMap[_CSV_COL_MAP[h]] = i; });
+
+  if (colMap['name'] === undefined) {
+    return { rows: [], error: t('Missing required column: "name" (or "product", "item").') };
+  }
+  if (colMap['unit_price'] === undefined) {
+    return { rows: [], error: t('Missing required column: "price" (or "unit_price", "sell_price").') };
+  }
+
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const row   = {};
+    Object.entries(colMap).forEach(([key, ci]) => { row[key] = (cells[ci] || '').trim(); });
+    row._rowNum = i + 1;
+
+    row._errors = [];
+    if (!row.name) row._errors.push(t('Name is required'));
+    const p = parseFloat(row.unit_price);
+    if (isNaN(p) || p < 0) row._errors.push(t('Invalid price'));
+    else row.unit_price = p;
+    if (row.stock_quantity !== undefined && row.stock_quantity !== '') {
+      const s = parseFloat(row.stock_quantity);
+      row.stock_quantity = isNaN(s) ? 0 : Math.max(0, s);
+    } else { row.stock_quantity = 0; }
+    if (row.wholesale_price !== undefined && row.wholesale_price !== '') {
+      const wp = parseFloat(row.wholesale_price);
+      row.wholesale_price = isNaN(wp) ? null : Math.max(0, wp);
+    } else { row.wholesale_price = null; }
+
+    rows.push(row);
+  }
+  return { rows, error: null };
+}
+
+function _csvSetStep(n) {
+  [1, 2, 3].forEach((i) => {
+    const body = $(`#csv-step-${i}`);
+    const ind  = $(`#csv-step-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind) { ind.classList.toggle('active', i === n); ind.classList.toggle('done', i < n); }
+  });
+  $('#csv-download-sample').style.display = n === 1 ? '' : 'none';
+  $('#csv-back-btn').style.display        = n === 2 ? '' : 'none';
+  $('#csv-import-btn').style.display      = n === 2 ? '' : 'none';
+  $('#csv-done-btn').style.display        = n === 3 ? '' : 'none';
+  $('#csv-import-more-btn').style.display = n === 3 ? '' : 'none';
+}
+
+function _csvShowPreview(rows) {
+  const valid = rows.filter((r) => !r._errors.length);
+  const bad   = rows.filter((r) => r._errors.length);
+  _csvValidRows = valid;
+
+  $('#csv-preview-summary').innerHTML = `
+    <b>${t('{n} rows found', { n: rows.length })}</b>
+    <span class="csv-preview-badge ok"><i class="fa-solid fa-circle-check"></i> ${t('{n} valid', { n: valid.length })}</span>
+    ${bad.length ? `<span class="csv-preview-badge error"><i class="fa-solid fa-triangle-exclamation"></i> ${t('{n} with errors', { n: bad.length })}</span>` : ''}
+    ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa-solid fa-eye"></i> ${t('Showing first 100 rows')}</span>` : ''}`;
+
+  const display = rows.slice(0, 100);
+  $('#csv-preview-thead').innerHTML = `<tr>
+    <th>#</th><th>${t('Name')}</th><th>${t('SKU')}</th><th>${t('Price')}</th><th>${t('Wholesale')}</th><th>${t('Stock')}</th>
+    <th>${t('Category')}</th><th>${t('Brand')}</th><th>${t('Status')}</th>
+  </tr>`;
+  $('#csv-preview-tbody').innerHTML = display.map((r) => {
+    const isErr = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa-solid fa-circle-check"></i> ${t('OK')}</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${esc(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${esc(r.sku || '—')}</td>
+      <td>${r.unit_price !== undefined && !isNaN(r.unit_price) ? parseFloat(r.unit_price).toFixed(2) : '—'}</td>
+      <td style="color:#d97706">${r.wholesale_price != null ? parseFloat(r.wholesale_price).toFixed(2) : '—'}</td>
+      <td>${r.stock_quantity || 0}</td>
+      <td>${esc(r.category || '—')}</td>
+      <td>${esc(r.brand || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#csv-import-count').textContent = valid.length;
+  $('#csv-import-btn').disabled = valid.length === 0;
+  _csvSetStep(2);
+}
+
+function _csvReset() {
+  _csvParsedRows = [];
+  _csvValidRows  = [];
+  $('#csv-file-input').value = '';
+  _csvSetStep(1);
+}
+
+function _csvOpenModal() { _csvReset(); openModal('csv-import-modal'); }
+function _csvCloseModal() { closeModal('csv-import-modal'); _csvReset(); }
+
+function _csvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { showToast(t('Please select a .csv file'), 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _csvParseFile(e.target.result);
+    if (error) { showToast(error, 'error'); return; }
+    if (rows.length > 500) showToast(t('CSV has {n} rows. Only the first 500 will be imported.', { n: rows.length }), 'error');
+    _csvParsedRows = rows.slice(0, 500);
+    _csvShowPreview(_csvParsedRows);
+  };
+  reader.readAsText(file);
+}
+
+const _csvDz = $('#csv-dropzone');
+if (_csvDz) {
+  _csvDz.addEventListener('dragover',  (e) => { e.preventDefault(); _csvDz.classList.add('drag-over'); });
+  _csvDz.addEventListener('dragleave', () => _csvDz.classList.remove('drag-over'));
+  _csvDz.addEventListener('drop', (e) => {
+    e.preventDefault(); _csvDz.classList.remove('drag-over');
+    _csvHandleFile(e.dataTransfer.files[0]);
+  });
+}
+$('#csv-file-input')?.addEventListener('change', (e) => _csvHandleFile(e.target.files[0]));
+$('#csv-download-sample')?.addEventListener('click', () => {
+  const blob = new Blob([_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'products-sample.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+$('#csv-back-btn')?.addEventListener('click', _csvReset);
+$('#csv-done-btn')?.addEventListener('click', _csvCloseModal);
+$('#csv-import-more-btn')?.addEventListener('click', _csvReset);
+$('#inv-import-csv-btn')?.addEventListener('click', _csvOpenModal);
+
+$('#csv-import-btn')?.addEventListener('click', async () => {
+  if (!_csvValidRows.length) return;
+  const btn = $('#csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Importing…')}`;
+
+  const payload = _csvValidRows.map((r) => ({
+    name:             r.name,
+    sku:              r.sku || undefined,
+    unit_price:       parseFloat(r.unit_price),
+    wholesale_price:  r.wholesale_price != null ? r.wholesale_price : undefined,
+    stock_quantity:   parseFloat(r.stock_quantity) || 0,
+    category:         r.category || undefined,
+    brand:            r.brand || undefined,
+    description:      r.description || undefined,
+  }));
+
+  const res = await API.importProducts(payload);
+  btn.disabled = false;
+  btn.innerHTML = `<i class="fa-solid fa-file-import"></i> ${t('Import')} <span id="csv-import-count">${_csvValidRows.length}</span> ${t('Products')}`;
+
+  if (res.status !== 200) { showToast(t(res.body?.message || 'Import failed'), 'error'); return; }
+
+  const { imported, skipped, errors } = res.body;
+  $('#csv-result-summary').innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa-solid fa-circle-check"></i> ${t('Products imported')}</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
+      <div class="csv-result-stat-label"><i class="fa-solid fa-triangle-exclamation"></i> ${t('Rows skipped')}</div>
+    </div>`;
+
+  const errWrap = $('#csv-result-errors');
+  if (errors && errors.length) {
+    errWrap.style.display = '';
+    $('#csv-result-errors-list').innerHTML = errors.map((e) =>
+      `<div class="csv-result-error-row"><b>${t('Row {n}', { n: e.row })}${e.name ? ' — ' + esc(e.name) : ''}:</b><span>${esc(e.message)}</span></div>`
+    ).join('');
+  } else {
+    errWrap.style.display = 'none';
+  }
+
+  _csvSetStep(3);
+  if (imported > 0) loadProducts();
+});
+// ── End CSV Product Import ─────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════
+// CSV CATEGORY IMPORT
+// ══════════════════════════════════════════════════════════════════════════
+const _CAT_CSV_SAMPLE = `name,description,parent_name\nElectronics,Electronic products,\nMobiles,Mobile phones,Electronics\nLaptops,Laptop computers,Electronics\nClothing,Clothing and apparel,\nFootwear,Shoes and sandals,Clothing\n`;
+
+let _catCsvRows = [], _catCsvValid = [];
+
+function _catCsvSetStep(n) {
+  [1, 2, 3].forEach((i) => {
+    const body = $(`#cat-csv-step-${i}`);
+    const ind  = $(`#cat-csv-ind-${i}`);
+    if (body) body.style.display = i === n ? 'flex' : 'none';
+    if (ind) { ind.classList.toggle('active', i === n); ind.classList.toggle('done', i < n); }
+  });
+  $('#cat-csv-download-sample').style.display = n === 1 ? '' : 'none';
+  $('#cat-csv-back-btn').style.display        = n === 2 ? '' : 'none';
+  $('#cat-csv-import-btn').style.display      = n === 2 ? '' : 'none';
+  $('#cat-csv-done-btn').style.display        = n === 3 ? '' : 'none';
+  $('#cat-csv-more-btn').style.display        = n === 3 ? '' : 'none';
+}
+
+function _catCsvParseFile(text) {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim());
+  if (!lines.length) return { rows: [], error: t('File is empty') };
+  const headers = _csvParseLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const nameIdx = headers.indexOf('name');
+  if (nameIdx === -1) return { rows: [], error: t('CSV must have a "name" column header') };
+  const descIdx   = headers.indexOf('description');
+  const parentIdx = headers.indexOf('parent_name');
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _csvParseLine(lines[i]);
+    const name  = (cells[nameIdx] || '').trim();
+    const row   = {
+      _rowNum:     i + 1,
+      _errors:     [],
+      name,
+      description: descIdx   >= 0 ? (cells[descIdx]   || '').trim() || null : null,
+      parent_name: parentIdx >= 0 ? (cells[parentIdx] || '').trim() || null : null,
+    };
+    if (!name) row._errors.push(t('Name is required'));
+    rows.push(row);
+  }
+  return { rows, error: null };
+}
+
+function _catCsvShowPreview(rows) {
+  const valid = rows.filter((r) => !r._errors.length);
+  const bad   = rows.filter((r) => r._errors.length);
+  _catCsvValid = valid;
+
+  $('#cat-csv-preview-summary').innerHTML =
+    `<b>${t('{n} rows found', { n: rows.length })}</b>
+     <span class="csv-preview-badge ok"><i class="fa-solid fa-circle-check"></i> ${t('{n} valid', { n: valid.length })}</span>
+     ${bad.length ? `<span class="csv-preview-badge error"><i class="fa-solid fa-triangle-exclamation"></i> ${t('{n} with errors', { n: bad.length })}</span>` : ''}`;
+
+  $('#cat-csv-preview-thead').innerHTML = `<tr><th>#</th><th>${t('Name')}</th><th>${t('Description')}</th><th>${t('Parent')}</th><th>${t('Status')}</th></tr>`;
+  $('#cat-csv-preview-tbody').innerHTML = rows.slice(0, 100).map((r) => {
+    const isErr  = r._errors.length > 0;
+    const status = isErr
+      ? `<span class="csv-row-error-msg"><i class="fa-solid fa-triangle-exclamation"></i> ${esc(r._errors.join('; '))}</span>`
+      : `<span style="color:#10b981;font-size:11px"><i class="fa-solid fa-circle-check"></i> ${t('OK')}</span>`;
+    return `<tr class="${isErr ? 'csv-row-error' : ''}">
+      <td style="color:var(--text-muted)">${r._rowNum}</td>
+      <td><strong>${esc(r.name || '—')}</strong></td>
+      <td style="color:var(--text-muted)">${esc(r.description || '—')}</td>
+      <td>${esc(r.parent_name || '—')}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join('');
+
+  $('#cat-csv-import-count').textContent = valid.length;
+  $('#cat-csv-import-btn').disabled      = valid.length === 0;
+  _catCsvSetStep(2);
+}
+
+function _catCsvReset() {
+  _catCsvRows = []; _catCsvValid = [];
+  $('#cat-csv-file-input').value = '';
+  _catCsvSetStep(1);
+}
+
+function _catCsvOpen() { _catCsvReset(); openModal('cat-csv-import-modal'); }
+function _catCsvClose() { closeModal('cat-csv-import-modal'); _catCsvReset(); }
+
+function _catCsvHandleFile(file) {
+  if (!file || !file.name.match(/\.csv$/i)) { showToast(t('Please select a .csv file'), 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { rows, error } = _catCsvParseFile(e.target.result);
+    if (error) { showToast(error, 'error'); return; }
+    _catCsvRows = rows.slice(0, 500);
+    _catCsvShowPreview(_catCsvRows);
+  };
+  reader.readAsText(file);
+}
+
+const _catCsvDz = $('#cat-csv-dropzone');
+if (_catCsvDz) {
+  _catCsvDz.addEventListener('dragover',  (e) => { e.preventDefault(); _catCsvDz.classList.add('drag-over'); });
+  _catCsvDz.addEventListener('dragleave', () => _catCsvDz.classList.remove('drag-over'));
+  _catCsvDz.addEventListener('drop', (e) => { e.preventDefault(); _catCsvDz.classList.remove('drag-over'); _catCsvHandleFile(e.dataTransfer.files[0]); });
+}
+$('#cat-csv-file-input')?.addEventListener('change', (e) => _catCsvHandleFile(e.target.files[0]));
+$('#cat-csv-back-btn')?.addEventListener('click', _catCsvReset);
+$('#cat-csv-done-btn')?.addEventListener('click', _catCsvClose);
+$('#cat-csv-more-btn')?.addEventListener('click', _catCsvReset);
+$('#cat-import-csv-btn')?.addEventListener('click', _catCsvOpen);
+$('#cat-csv-download-sample')?.addEventListener('click', () => {
+  const blob = new Blob([_CAT_CSV_SAMPLE], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = 'categories-sample.csv'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+$('#cat-csv-import-btn')?.addEventListener('click', async () => {
+  if (!_catCsvValid.length) return;
+  const btn = $('#cat-csv-import-btn');
+  btn.disabled = true;
+  btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Importing…')}`;
+
+  // First pass: create parent-less categories; second pass: create children.
+  // Build a name→id map from the existing (unpaginated) category list.
+  const existRes = await API.categoryParentOpts();
+  const nameToId = {};
+  (existRes.body?.data || []).forEach((c) => { nameToId[c.name || (c.label || '').trim()] = c.id; });
+
+  let imported = 0, failed = 0;
+  const errors = [];
+
+  const sorted = [..._catCsvValid].sort((a, b) => (a.parent_name ? 1 : 0) - (b.parent_name ? 1 : 0));
+
+  for (const row of sorted) {
+    const body = { name: row.name, description: row.description || null, is_active: true };
+    if (row.parent_name) {
+      const pid = nameToId[row.parent_name];
+      if (pid) body.parent_id = pid;
+      else { errors.push({ name: row.name, message: t('Parent "{name}" not found', { name: row.parent_name }) }); failed++; continue; }
+    }
+    const res = await API.createProductCategory(body);
+    if (res.status === 200 || res.status === 201) {
+      imported++;
+      nameToId[row.name] = res.body?.data?.id || res.body?.id;
+    } else {
+      failed++;
+      const msg = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || `Error ${res.status}`);
+      errors.push({ name: row.name, message: msg });
+    }
+  }
+
+  btn.disabled = false;
+  btn.innerHTML = `<i class="fa-solid fa-file-import"></i> ${t('Import')} <span id="cat-csv-import-count">${_catCsvValid.length}</span> ${t('Categories')}`;
+
+  $('#cat-csv-result-summary').innerHTML = `
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num green">${imported}</div>
+      <div class="csv-result-stat-label"><i class="fa-solid fa-circle-check"></i> ${t('Categories imported')}</div>
+    </div>
+    <div class="csv-result-stat">
+      <div class="csv-result-stat-num ${failed > 0 ? 'red' : ''}">${failed}</div>
+      <div class="csv-result-stat-label"><i class="fa-solid fa-triangle-exclamation"></i> ${t('Rows failed')}</div>
+    </div>`;
+
+  const errWrap = $('#cat-csv-result-errors');
+  if (errors.length) {
+    errWrap.style.display = '';
+    $('#cat-csv-result-errors-list').innerHTML = errors.map((e) =>
+      `<div class="csv-result-error-row"><b>${esc(e.name)}:</b><span>${esc(e.message)}</span></div>`
+    ).join('');
+  } else { errWrap.style.display = 'none'; }
+
+  _catCsvSetStep(3);
+  if (imported > 0) { await Promise.all([loadCategories(), loadAllCategories()]); }
+});
+// ── End CSV Category Import ────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════
+// SQL DUMP PRODUCT IMPORT — heuristic MySQL backup parser
+// ══════════════════════════════════════════════════════════════════════════
+(function () {
+  const _dim = {
+    step: 1,
+    fileText: '',
+    tables: {},
+    chosenTable: null,
+    columnMap: {},
+    mapped: [],
+    imported: 0,
+    failed: 0,
+  };
+
+  const PROD_FIELDS = [
+    { value: '',                label: t('— Skip —') },
+    { value: 'name',            label: t('Product Name *') },
+    { value: 'sku',             label: t('SKU / Barcode') },
+    { value: 'unit_price',      label: t('Selling Price') },
+    { value: 'cost_price',      label: t('Cost Price') },
+    { value: 'wholesale_price', label: t('Wholesale Price') },
+    { value: 'stock_quantity',  label: t('Stock Qty') },
+    { value: 'description',     label: t('Description') },
+    { value: 'model_no',        label: t('Model No.') },
+    { value: 'size',            label: t('Size') },
+  ];
+
+  const COL_HINTS = [
+    [/^(product_?)?name$/i,               'name'],
+    [/^(product_?)?title$/i,              'name'],
+    [/^(item_?)?name$/i,                  'name'],
+    [/^(product_?)?sku$/i,                'sku'],
+    [/^barcode$/i,                         'sku'],
+    [/^code$/i,                            'sku'],
+    [/^(selling_?|unit_?|sale_?)?price$/i, 'unit_price'],
+    [/^retail_price$/i,                    'unit_price'],
+    [/^(cost_?|purchase_?)?price$/i,       'cost_price'],
+    [/^wholesale_price$/i,                 'wholesale_price'],
+    [/^(stock_?|qty|quantity|on_hand)$/i,  'stock_quantity'],
+    [/^(description|details|about)$/i,     'description'],
+    [/^model(_no)?$/i,                     'model_no'],
+    [/^size$/i,                            'size'],
+  ];
+
+  function suggestField(col) {
+    for (const [re, field] of COL_HINTS) if (re.test(col)) return field;
+    return '';
+  }
+
+  function parseDump(sql) {
+    const tables = {};
+
+    const createRe = /CREATE TABLE\s+`?(\w+)`?\s*\(([\s\S]*?)\)\s*(?:ENGINE|;)/gi;
+    let m;
+    while ((m = createRe.exec(sql)) !== null) {
+      const tName = m[1];
+      const colDefs = m[2];
+      const cols = [];
+      const colRe = /^\s*`?(\w+)`?\s+(?:int|varchar|text|decimal|float|double|tinyint|bigint|mediumint|smallint|char|longtext|datetime|date|timestamp|json|enum)/gim;
+      let cm;
+      while ((cm = colRe.exec(colDefs)) !== null) cols.push(cm[1]);
+      if (cols.length) tables[tName] = { columns: cols, rows: [] };
+    }
+
+    const insertRe = /INSERT INTO\s+`?(\w+)`?\s*(?:\(([^)]+)\))?\s*VALUES\s*([\s\S]*?);/gi;
+    while ((m = insertRe.exec(sql)) !== null) {
+      const tName = m[1];
+      const colList = m[2] ? m[2].split(',').map((c) => c.trim().replace(/`/g, '')) : null;
+      const valueBlock = m[3];
+
+      if (!tables[tName]) tables[tName] = { columns: colList || [], rows: [] };
+      if (colList && !tables[tName].columns.length) tables[tName].columns = colList;
+
+      const rowRe = /\(([^)]*(?:'[^']*'[^)]*)*)\)/g;
+      let rm;
+      while ((rm = rowRe.exec(valueBlock)) !== null) {
+        const raw = rm[1];
+        const vals = splitSqlValues(raw);
+        tables[tName].rows.push(vals);
+      }
+    }
+
+    return tables;
+  }
+
+  function splitSqlValues(str) {
+    const vals = [];
+    let cur = '', inStr = false, esc2 = false;
+    for (let i = 0; i < str.length; i++) {
+      const c = str[i];
+      if (esc2) { cur += c; esc2 = false; continue; }
+      if (c === '\\') { esc2 = true; continue; }
+      if (c === "'" && !inStr) { inStr = true; continue; }
+      if (c === "'" && inStr)  { inStr = false; continue; }
+      if (c === ',' && !inStr) { vals.push(cur.trim()); cur = ''; continue; }
+      cur += c;
+    }
+    vals.push(cur.trim());
+    return vals.map((v) => v === 'NULL' ? '' : v);
+  }
+
+  function tableScore(name, { columns }) {
+    let s = 0;
+    if (/product|item|goods|inventory|stock|merchandise/i.test(name)) s += 10;
+    for (const c of columns) {
+      if (/^(product_?)?name$/i.test(c)) s += 5;
+      if (/price|cost/i.test(c)) s += 3;
+      if (/sku|barcode/i.test(c)) s += 3;
+      if (/stock|qty|quantity/i.test(c)) s += 2;
+    }
+    return s;
+  }
+
+  const ov  = () => document.getElementById('dump-import-modal');
+  const D   = (id) => document.getElementById(id);
+  const log = (msg) => {
+    const el = D('dim-analyse-log');
+    if (el) { el.innerHTML += `<div>• ${esc(msg)}</div>`; el.scrollTop = el.scrollHeight; }
+  };
+  function tick(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+  function dimSetStep(n) {
+    _dim.step = n;
+    for (let i = 1; i <= 5; i++) {
+      const s = D(`dim-st-${i}`);
+      if (!s) continue;
+      s.className = i < n ? 'dim-step done' : i === n ? 'dim-step active' : 'dim-step';
+      const p = D(`dim-panel-${i}`);
+      if (p) p.style.display = i === n ? '' : 'none';
+    }
+    D('dim-btn-back').style.display   = n > 1 && n < 5 ? '' : 'none';
+    D('dim-btn-next').style.display   = (n === 1 || n === 3) ? '' : 'none';
+    D('dim-btn-import').style.display = n === 4 ? '' : 'none';
+    D('dim-btn-done').style.display   = n === 5 && (_dim.imported + _dim.failed) >= _dim.mapped.length ? '' : 'none';
+    D('dim-btn-next').disabled        = n === 1 && !_dim.fileText;
+  }
+
+  function dimOpen() {
+    Object.assign(_dim, { step: 1, fileText: '', tables: {}, chosenTable: null, columnMap: {}, mapped: [], imported: 0, failed: 0 });
+    D('dim-file-name').style.display = 'none';
+    D('dim-alert-1').style.display   = 'none';
+    D('dim-analyse-log').innerHTML   = '';
+    D('dim-analyse-fill').style.width = '0%';
+    dimSetStep(1);
+    openModal('dump-import-modal');
+  }
+  function dimClose() { closeModal('dump-import-modal'); }
+
+  function onFileChosen(file) {
+    if (!file) return;
+    D('dim-file-name').textContent = `${file.name}  (${(file.size / 1024).toFixed(1)} KB)`;
+    D('dim-file-name').style.display = '';
+    D('dim-alert-1').style.display = 'none';
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      _dim.fileText = e.target.result;
+      D('dim-btn-next').disabled = false;
+    };
+    reader.readAsText(file);
+  }
+
+  async function dimAnalyse() {
+    dimSetStep(2);
+    D('dim-analyse-fill').style.width = '0%';
+    D('dim-analyse-log').innerHTML = '';
+
+    await tick(80);
+    log(t('Reading MySQL dump…'));
+    D('dim-analyse-fill').style.width = '20%';
+    await tick(200);
+
+    _dim.tables = parseDump(_dim.fileText);
+    const tNames = Object.keys(_dim.tables);
+    log(t('Found {n} table(s): {list}', { n: tNames.length, list: tNames.slice(0, 6).join(', ') + (tNames.length > 6 ? '…' : '') }));
+    D('dim-analyse-fill').style.width = '55%';
+    await tick(300);
+
+    let best = null, bestScore = -1;
+    for (const [name, tbl] of Object.entries(_dim.tables)) {
+      const sc = tableScore(name, tbl);
+      if (sc > bestScore) { best = name; bestScore = sc; }
+    }
+    _dim.chosenTable = best;
+    if (best) {
+      log(t('Selected table: "{name}" ({n} rows)', { name: best, n: _dim.tables[best].rows.length }));
+    } else {
+      log(t('No obvious product table found — picking largest table.'));
+      _dim.chosenTable = tNames.sort((a, b) => _dim.tables[b].rows.length - _dim.tables[a].rows.length)[0];
+    }
+    D('dim-analyse-fill').style.width = '80%';
+    await tick(300);
+
+    const cols = _dim.tables[_dim.chosenTable]?.columns || [];
+    _dim.columnMap = {};
+    for (const c of cols) {
+      const sf = suggestField(c);
+      if (sf) _dim.columnMap[c] = sf;
+    }
+    log(t('Column auto-map: {list}', { list: Object.entries(_dim.columnMap).map(([k, v]) => `${k}→${v}`).join(', ') || t('none detected') }));
+    D('dim-analyse-fill').style.width = '100%';
+    D('dim-analyse-title').textContent = t('Analysis complete!');
+    await tick(400);
+
+    buildMapGrid();
+    dimSetStep(3);
+  }
+
+  function buildMapGrid() {
+    const tbl = _dim.tables[_dim.chosenTable];
+    if (!tbl) return;
+    D('dim-rows-count').textContent  = tbl.rows.length;
+    D('dim-table-name').textContent  = _dim.chosenTable;
+    const cols = tbl.columns;
+    const grid = D('dim-map-grid');
+    grid.innerHTML = cols.map((col) => {
+      const suggested = _dim.columnMap[col] || '';
+      const opts = PROD_FIELDS.map((f) =>
+        `<option value="${f.value}" ${f.value === suggested ? 'selected' : ''}>${esc(f.label)}</option>`
+      ).join('');
+      return `<div class="dim-map-col-name" title="${esc(col)}">${esc(col)}</div>
+        <div class="dim-map-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+        <select class="dim-map-select ${suggested ? 'mapped' : ''}" data-col="${esc(col)}">${opts}</select>`;
+    }).join('');
+    grid.querySelectorAll('select').forEach((sel) => {
+      sel.addEventListener('change', () => {
+        sel.classList.toggle('mapped', !!sel.value);
+        _dim.columnMap[sel.dataset.col] = sel.value;
+      });
+    });
+  }
+
+  function buildPreview() {
+    const tbl = _dim.tables[_dim.chosenTable];
+    if (!tbl) return false;
+    const nameCol = Object.entries(_dim.columnMap).find(([, v]) => v === 'name')?.[0];
+    if (!nameCol) {
+      D('dim-alert-3').textContent = t('Please map at least the "Product Name" column before continuing.');
+      D('dim-alert-3').style.display = '';
+      return false;
+    }
+    D('dim-alert-3').style.display = 'none';
+
+    const colIdx = {};
+    tbl.columns.forEach((c, i) => { colIdx[c] = i; });
+    _dim.mapped = tbl.rows.map((row) => {
+      const prod = { name: '', sku: null, unit_price: null, cost_price: null, wholesale_price: null, stock_quantity: 0, description: null, model_no: null, size: null };
+      for (const [col, field] of Object.entries(_dim.columnMap)) {
+        if (!field) continue;
+        const val = row[colIdx[col]] ?? '';
+        if (field === 'unit_price' || field === 'cost_price' || field === 'wholesale_price') {
+          prod[field] = parseFloat(val) || null;
+        } else if (field === 'stock_quantity') {
+          prod[field] = parseInt(val) || 0;
+        } else {
+          prod[field] = val || null;
+        }
+      }
+      return prod;
+    }).filter((p) => p.name);
+
+    const preview = _dim.mapped.slice(0, 10);
+    const shownFields = ['name', 'sku', 'unit_price', 'cost_price', 'stock_quantity', 'description'];
+    const labels = { name: t('Name'), sku: t('SKU'), unit_price: t('Price'), cost_price: t('Cost'), stock_quantity: t('Stock'), description: t('Description') };
+
+    D('dim-preview-count').textContent = preview.length;
+    D('dim-total-count').textContent   = _dim.mapped.length;
+    D('dim-preview-thead').innerHTML   = `<tr>${shownFields.map((f) => `<th>${esc(labels[f])}</th>`).join('')}</tr>`;
+    D('dim-preview-tbody').innerHTML   = preview.map((p) =>
+      `<tr>${shownFields.map((f) => `<td title="${esc(String(p[f] ?? ''))}">${esc(String(p[f] ?? '—').slice(0, 40))}</td>`).join('')}</tr>`
+    ).join('');
+    return true;
+  }
+
+  async function dimImport() {
+    dimSetStep(5);
+    _dim.imported = 0; _dim.failed = 0;
+    const total = _dim.mapped.length;
+    const results = [];
+    D('dim-import-fill').style.width = '0%';
+    D('dim-import-results').style.display = 'none';
+    D('dim-btn-done').style.display = 'none';
+
+    for (let i = 0; i < total; i++) {
+      const prod = _dim.mapped[i];
+      D('dim-import-status').textContent  = t('Importing: {name}', { name: prod.name });
+      D('dim-import-counter').textContent = `${i + 1} / ${total}`;
+      D('dim-import-fill').style.width    = `${Math.round((i + 1) / total * 100)}%`;
+
+      const body = { ...prod, is_active: true };
+      if (body.stock_quantity > 0) {
+        body.opening_batches = [{ quantity: body.stock_quantity, cost_price: body.cost_price, selling_price: body.unit_price }];
+      }
+      const res = await API.createProduct(body);
+      if (res.status === 200 || res.status === 201) {
+        _dim.imported++;
+        results.push(`<span style="color:#10b981">✓</span> ${esc(prod.name)}`);
+      } else {
+        _dim.failed++;
+        const err = res.body?.errors ? Object.values(res.body.errors).flat()[0] : (res.body?.message || `Error ${res.status}`);
+        results.push(`<span style="color:#ef4444">✗</span> ${esc(prod.name)} — ${esc(err)}`);
+      }
+      await tick(30);
+    }
+
+    D('dim-import-icon').innerHTML   = `<i class="fa-solid fa-circle-check" style="color:#10b981"></i>`;
+    D('dim-import-status').textContent  = t('Done! {imported} imported, {failed} failed.', { imported: _dim.imported, failed: _dim.failed });
+    D('dim-import-counter').textContent = '';
+    D('dim-import-results').innerHTML   = results.join('<br>');
+    D('dim-import-results').style.display = '';
+    D('dim-btn-done').style.display = '';
+
+    loadProducts();
+  }
+
+  D('inv-dump-import-btn')?.addEventListener('click', dimOpen);
+  D('dim-close')?.addEventListener('click', dimClose);
+
+  D('dim-file-input')?.addEventListener('change', (e) => onFileChosen(e.target.files[0]));
+
+  const dz = D('dim-dropzone');
+  if (dz) {
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault(); dz.classList.remove('drag-over');
+      onFileChosen(e.dataTransfer.files[0]);
+    });
+    dz.addEventListener('click', (e) => { if (!e.target.closest('label')) D('dim-file-input').click(); });
+  }
+
+  D('dim-btn-next')?.addEventListener('click', async () => {
+    if (_dim.step === 1) {
+      if (!_dim.fileText) { D('dim-alert-1').textContent = t('Please choose a file first.'); D('dim-alert-1').style.display = ''; return; }
+      await dimAnalyse();
+    } else if (_dim.step === 3) {
+      D('dim-map-grid')?.querySelectorAll('select').forEach((s) => { _dim.columnMap[s.dataset.col] = s.value; });
+      if (buildPreview()) dimSetStep(4);
+    }
+  });
+
+  D('dim-btn-import')?.addEventListener('click', async () => {
+    D('dim-map-grid')?.querySelectorAll('select').forEach((s) => { _dim.columnMap[s.dataset.col] = s.value; });
+    await dimImport();
+  });
+
+  D('dim-btn-back')?.addEventListener('click', () => {
+    if (_dim.step === 4) { buildMapGrid(); dimSetStep(3); }
+    else dimSetStep(1);
+  });
+
+  D('dim-btn-done')?.addEventListener('click', dimClose);
+})();
+// ── End SQL Dump Product Import ──────────────────────────────────────────
+
 // ── Utils ───────────────────────────────────────────────────────────────
 function debounce(fn, wait = 300) {
   let t;
@@ -1942,6 +2712,8 @@ function debounce(fn, wait = 300) {
 
 // ── Init ────────────────────────────────────────────────────────────────
 (async () => {
+  const settingsRes = await API.settingsGet();
+  if (settingsRes.status === 200) posSettings = settingsRes.body?.data || {};
   await Promise.all([loadCategories(), loadAllCategories(), loadBrands(), loadUnits()]);
   loadProducts();
 })();

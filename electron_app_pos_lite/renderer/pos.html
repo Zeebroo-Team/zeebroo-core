@@ -14,7 +14,12 @@
         <button class="icon-btn" id="back-btn"><i class="fa-solid fa-arrow-left"></i> Dashboard</button>
         <div class="brand"><i class="fa-solid fa-cash-register"></i> POS</div>
       </div>
-      <div class="user-menu" id="user-menu"></div>
+      <div class="right">
+        <button type="button" class="topbar-add-product-btn" id="add-product-btn" title="Add Product"><i class="fa-solid fa-plus"></i> Add Product</button>
+        <button type="button" class="topbar-eod-btn" id="end-of-day-btn" title="End of Day"><i class="fa-solid fa-cash-register"></i> End of Day</button>
+        <button type="button" class="topbar-return-btn" id="return-refund-btn" title="Return &amp; Refund (F9)"><i class="fa-solid fa-rotate-left"></i> Return</button>
+        <div class="user-menu" id="user-menu"></div>
+      </div>
     </div>
 
     <div class="body">
@@ -22,6 +27,18 @@
         <div class="search-row">
           <i class="fa-solid fa-magnifying-glass"></i>
           <input id="search-input" type="text" placeholder="Search products by name or SKU…" />
+        </div>
+        <div class="mode-tabs" id="mode-tabs">
+          <button class="mode-tab active" data-mode="products"><i class="fa-solid fa-box"></i> Products</button>
+          <button class="mode-tab" data-mode="rental"><i class="fa-solid fa-box-open"></i> Rental</button>
+          <button class="mode-tab" data-mode="dynamic"><i class="fa-solid fa-chart-line"></i> Dynamic</button>
+        </div>
+        <div class="chip-scroll-wrap">
+          <button type="button" class="chip-arrow chip-arrow-left" id="chip-arrow-left" aria-label="Scroll categories left"><i class="fa-solid fa-chevron-left"></i></button>
+          <div class="chip-row" id="chip-row">
+            <button class="chip active" data-category="">All</button>
+          </div>
+          <button type="button" class="chip-arrow chip-arrow-right" id="chip-arrow-right" aria-label="Scroll categories right"><i class="fa-solid fa-chevron-right"></i></button>
         </div>
         <div class="product-grid" id="product-grid">
           <div class="loading-state">Loading products…</div>
@@ -31,21 +48,32 @@
       <div class="cart-pane">
         <div class="cart-header">
           <span><i class="fa-solid fa-cart-shopping"></i>Cart</span>
-          <a id="clear-cart">Clear</a>
+          <button type="button" class="cart-gift-btn" id="gift-check-btn" title="Check gift card balance"><i class="fa-solid fa-gift"></i> Gift Card</button>
+          <button type="button" class="cart-gift-btn cart-coupon-btn" id="coupon-check-btn" title="Check coupon"><i class="fa-solid fa-ticket"></i> Coupon</button>
+        </div>
+        <div class="cart-customer-box checkout-customer-box" id="cart-customer-box">
+          <div id="cart-customer-empty">
+            <button type="button" class="ghost-btn" id="cart-customer-select-btn"><i class="fa-solid fa-user-plus"></i> Select customer</button>
+          </div>
+          <div class="checkout-customer-chip" id="cart-customer-chip" hidden>
+            <i class="fa-solid fa-user"></i>
+            <span id="cart-customer-chip-label"></span>
+            <button type="button" id="cart-customer-change-btn" title="Change customer"><i class="fa-solid fa-pen"></i></button>
+            <button type="button" id="cart-customer-remove-btn" title="Remove customer">&times;</button>
+          </div>
         </div>
         <div class="cart-items" id="cart-items">
           <div class="cart-empty">Cart is empty. Click a product to add it.</div>
         </div>
+
         <div class="cart-footer">
           <div class="summary-row"><span>Items</span><span id="sum-items">0</span></div>
           <div class="summary-row total"><span>Total</span><span id="sum-total">$0.00</span></div>
 
-          <div class="payment-methods">
-            <button class="pm-btn active" data-method="cash"><i class="fa-solid fa-money-bill"></i> Cash</button>
-            <button class="pm-btn" data-method="card"><i class="fa-solid fa-credit-card"></i> Card</button>
+          <div class="cart-actions">
+            <button type="button" class="clear-btn" id="clear-cart"><i class="fa-solid fa-trash"></i> Clear</button>
+            <button type="button" class="checkout-btn" id="checkout-btn" disabled><i class="fa-solid fa-arrow-right"></i> Checkout</button>
           </div>
-
-          <button class="checkout-btn" id="checkout-btn" disabled>Complete Sale</button>
         </div>
       </div>
     </div>
@@ -53,10 +81,495 @@
 
   <div class="toast" id="toast"></div>
 
+  <!-- Rental details modal: asks for a return date, previews days/total rent -->
+  <div class="modal-backdrop" id="rental-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Rental details</h2>
+        <button type="button" class="modal-close" data-close="rental-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="rental-subtitle"></p>
+        <div class="field">
+          <label for="rental-date-input">Return date</label>
+          <input type="date" id="rental-date-input" />
+        </div>
+        <div class="picker-hint">
+          <span id="rental-days-label">1 day</span>
+          <span id="rental-total-label">$0.00</span>
+        </div>
+        <div class="error-box" id="rental-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="rental-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="rental-confirm-btn">Add to cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dynamic pricing modal: asks for a custom price (or amount, when qty-linked) -->
+  <div class="modal-backdrop" id="dynamic-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Enter amount</h2>
+        <button type="button" class="modal-close" data-close="dynamic-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="dynamic-subtitle"></p>
+        <div class="field">
+          <label id="dynamic-input-label" for="dynamic-amount-input">Price</label>
+          <input type="number" min="0.01" step="0.01" inputmode="decimal" id="dynamic-amount-input" placeholder="0.00" />
+        </div>
+        <p class="picker-note" id="dynamic-hint"></p>
+        <div class="error-box" id="dynamic-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="dynamic-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="dynamic-confirm-btn">Add to cart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Product modal: quick-add a new product without leaving the register -->
+  <div class="modal-backdrop" id="add-product-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Add Product</h2>
+        <button type="button" class="modal-close" data-close="add-product-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label for="ap-name">Name *</label>
+          <input type="text" id="ap-name" maxlength="255" placeholder="Product name" autocomplete="off" />
+        </div>
+        <div class="field">
+          <label for="ap-sku">SKU</label>
+          <div class="input-with-btn">
+            <input type="text" id="ap-sku" maxlength="120" placeholder="Optional — auto-generated if left blank" autocomplete="off" />
+            <button type="button" class="ghost-btn" id="ap-sku-gen" title="Generate SKU"><i class="fa-solid fa-shuffle"></i></button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="ap-stock">Opening Stock</label>
+          <input type="number" id="ap-stock" min="0" step="0.001" inputmode="decimal" placeholder="0" />
+        </div>
+        <div class="field">
+          <label for="ap-cost">Cost Price</label>
+          <input type="number" id="ap-cost" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+        </div>
+        <div class="field">
+          <label for="ap-price">Selling Price *</label>
+          <input type="number" id="ap-price" min="0" step="0.01" inputmode="decimal" placeholder="0.00" />
+        </div>
+        <div class="error-box" id="ap-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="add-product-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="ap-save-btn"><i class="fa-solid fa-check"></i> Save Product</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Customer picker modal: search/select/quick-add a customer for the sale -->
+  <div class="modal-backdrop" id="customer-picker-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2>Select customer</h2>
+        <button type="button" class="modal-close" data-close="customer-picker-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="customer-field" id="customer-field">
+          <div id="customer-chip" class="customer-chip" hidden>
+            <span id="customer-chip-label"></span>
+            <button type="button" id="customer-clear" aria-label="Remove customer">&times;</button>
+          </div>
+
+          <div id="customer-search-wrap" class="customer-search-wrap">
+            <div class="customer-search-input-wrap">
+              <i class="fa-solid fa-magnifying-glass"></i>
+              <input type="text" id="customer-search-input" placeholder="Search customer by name or phone…" autocomplete="off" spellcheck="false" />
+            </div>
+            <div id="customer-dropdown" class="customer-dropdown" hidden></div>
+          </div>
+
+          <div id="customer-quickadd" class="customer-quickadd" hidden>
+            <div class="customer-quickadd-title">New customer</div>
+            <div class="field"><label for="qa-name">Name *</label><input type="text" id="qa-name" maxlength="120" placeholder="Full name" autocomplete="off" /></div>
+            <div class="field"><label for="qa-phone">Phone</label><input type="text" id="qa-phone" maxlength="40" placeholder="Phone number" autocomplete="off" /></div>
+            <div class="customer-quickadd-actions">
+              <button type="button" class="ghost-btn" id="qa-cancel">Cancel</button>
+              <button type="button" class="ghost-btn primary" id="qa-save">Save &amp; select</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn primary" data-close="customer-picker-modal">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Checkout modal: full order review + payment, opened from the cart's Checkout button -->
+  <div class="modal-backdrop" id="checkout-modal">
+    <div class="modal modal-checkout">
+      <div class="modal-head checkout-modal-head">
+        <div>
+          <h2><i class="fa-solid fa-cash-register"></i> Checkout</h2>
+          <p class="modal-subtitle">Review your order and complete payment</p>
+        </div>
+        <button type="button" class="modal-close" data-close="checkout-modal">&times;</button>
+      </div>
+
+      <div class="checkout-body">
+        <div class="checkout-col checkout-col-summary">
+          <div class="checkout-section-title"><i class="fa-solid fa-receipt"></i> Summary</div>
+          <div class="summary-row"><span>Subtotal</span><span id="co-subtotal">0.00</span></div>
+          <div class="summary-row" id="co-item-discount-row" style="display:none">
+            <span>Item discounts</span><span class="save-value" id="co-item-discount">−0.00</span>
+          </div>
+          <div class="summary-row discount-row" id="discount-row" style="display:none">
+            <span>Discount</span>
+            <div class="discount-input-wrap">
+              <div class="discount-type-toggle" id="discount-type-toggle">
+                <button type="button" class="discount-type-btn active" data-type="percent">%</button>
+                <button type="button" class="discount-type-btn" data-type="flat" id="discount-type-flat-btn">$</button>
+              </div>
+              <input type="number" id="discount-input" min="0" max="100" step="0.01" value="0" />
+            </div>
+          </div>
+          <div class="summary-row" id="co-save-row" style="display:none">
+            <span>You save</span><span class="save-value" id="co-save">−0.00</span>
+          </div>
+          <div class="grand-total-box">
+            <div class="grand-total-label">Grand Total</div>
+            <div class="grand-total-value"><span id="co-grand-total">0.00</span></div>
+          </div>
+
+          <div class="checkout-section-title"><i class="fa-solid fa-user"></i> Customer</div>
+          <div class="checkout-customer-box" id="checkout-customer-box">
+            <div id="checkout-customer-empty">
+              <button type="button" class="ghost-btn" id="checkout-customer-select-btn"><i class="fa-solid fa-user-plus"></i> Select customer</button>
+            </div>
+            <div class="checkout-customer-chip" id="checkout-customer-chip" hidden>
+              <i class="fa-solid fa-user"></i>
+              <span id="checkout-customer-chip-label"></span>
+              <button type="button" id="checkout-customer-change-btn" title="Change customer"><i class="fa-solid fa-pen"></i></button>
+              <button type="button" id="checkout-customer-remove-btn" title="Remove customer">&times;</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="checkout-col checkout-col-items">
+          <div class="checkout-section-title">
+            <span><i class="fa-solid fa-basket-shopping"></i> Order Items</span>
+            <span class="item-count-badge" id="co-item-count">0</span>
+          </div>
+          <div class="order-items-wrap">
+            <table class="order-items-table">
+              <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Disc</th><th>Total</th></tr></thead>
+              <tbody id="order-items-body"></tbody>
+            </table>
+          </div>
+          <div class="order-items-foot">
+            <span>Subtotal</span>
+            <span id="co-subtotal-foot">0.00</span>
+          </div>
+        </div>
+
+        <div class="checkout-col checkout-col-payment">
+          <div class="payment-methods" id="checkout-payment-methods">
+            <button type="button" class="pm-btn active" data-method="cash"><i class="fa-solid fa-money-bill"></i> Cash</button>
+            <button type="button" class="pm-btn" data-method="card"><i class="fa-solid fa-credit-card"></i> Card</button>
+            <button type="button" class="pm-btn" data-method="credit"><i class="fa-solid fa-file-invoice-dollar"></i> Credit</button>
+          </div>
+
+          <!-- Coupon: a % or flat discount on the bill, applied before any gift card -->
+          <div class="co-gc co-cp" id="co-cp">
+            <button type="button" class="co-gc-toggle" id="co-cp-toggle"><i class="fa-solid fa-ticket"></i> Apply coupon</button>
+            <div class="co-gc-entry" id="co-cp-entry" hidden>
+              <input type="text" id="co-cp-code" class="co-gc-input" placeholder="Coupon code" autocomplete="off" />
+              <button type="button" class="co-gc-apply" id="co-cp-apply">Apply</button>
+              <button type="button" class="co-gc-x" id="co-cp-cancel" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="co-gc-applied" id="co-cp-applied" hidden>
+              <i class="fa-solid fa-ticket co-gc-icon"></i>
+              <div class="co-gc-info">
+                <div class="co-gc-code" id="co-cp-applied-code"></div>
+                <div class="co-gc-sub" id="co-cp-applied-sub"></div>
+              </div>
+              <strong class="co-gc-amt" id="co-cp-applied-amt"></strong>
+              <button type="button" class="co-gc-x" id="co-cp-remove" title="Remove coupon"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <!-- Gift card: covers part (or all) of the total; the payment method pays the rest -->
+          <div class="co-gc" id="co-gc">
+            <button type="button" class="co-gc-toggle" id="co-gc-toggle"><i class="fa-solid fa-gift"></i> Pay with gift card</button>
+            <div class="co-gc-entry" id="co-gc-entry" hidden>
+              <input type="text" id="co-gc-code" class="co-gc-input" placeholder="Gift card code" autocomplete="off" />
+              <button type="button" class="co-gc-apply" id="co-gc-apply">Apply</button>
+              <button type="button" class="co-gc-x" id="co-gc-cancel" title="Cancel"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="co-gc-applied" id="co-gc-applied" hidden>
+              <i class="fa-solid fa-gift co-gc-icon"></i>
+              <div class="co-gc-info">
+                <div class="co-gc-code" id="co-gc-applied-code"></div>
+                <div class="co-gc-sub" id="co-gc-applied-sub"></div>
+              </div>
+              <strong class="co-gc-amt" id="co-gc-applied-amt"></strong>
+              <button type="button" class="co-gc-x" id="co-gc-remove" title="Remove gift card"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <div id="tender-section">
+            <label class="tender-label" for="amount-received-input">Amount Received</label>
+            <input type="text" inputmode="decimal" id="amount-received-input" class="amount-received-input" value="0.00" />
+
+            <div class="due-change-row">
+              <div class="due-box"><span>Amount due</span><strong id="co-amount-due">0.00</strong></div>
+              <div class="due-box"><span>Change</span><strong id="co-change" class="change-value">0.00</strong></div>
+            </div>
+
+            <!-- 4-column pad: Exact / Clear live in the right column so there's no separate actions row -->
+            <div class="numpad" id="numpad">
+              <button type="button" data-key="7">7</button><button type="button" data-key="8">8</button><button type="button" data-key="9">9</button><button type="button" class="numpad-back" data-key="back"><i class="fa-solid fa-delete-left"></i></button>
+              <button type="button" data-key="4">4</button><button type="button" data-key="5">5</button><button type="button" data-key="6">6</button><button type="button" class="numpad-action numpad-clear" id="clear-amount-btn">Clear</button>
+              <button type="button" data-key="1">1</button><button type="button" data-key="2">2</button><button type="button" data-key="3">3</button><button type="button" class="numpad-action numpad-exact" id="exact-amount-btn">Exact</button>
+              <button type="button" data-key=".">.</button><button type="button" class="numpad-zero" data-key="0">0</button>
+            </div>
+          </div>
+
+          <div class="field note-field">
+            <label for="checkout-note-input">Note</label>
+            <textarea id="checkout-note-input" rows="1" placeholder="Add a note…"></textarea>
+          </div>
+
+          <button type="button" class="checkout-complete-btn" id="checkout-complete-btn">
+            <i class="fa-solid fa-circle-check"></i> Complete Sale
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sale-completed receipt/invoice modal: preview + print/download -->
+  <div class="modal-backdrop" id="receipt-modal">
+    <div class="modal modal-receipt">
+      <div class="modal-head">
+        <h2>Sale Completed <span id="receipt-sale-number" class="receipt-sale-number"></span></h2>
+        <button type="button" class="modal-close" data-close="receipt-modal">&times;</button>
+      </div>
+      <div class="modal-body receipt-modal-body">
+        <div id="receipt-preview"></div>
+      </div>
+      <div class="modal-foot receipt-modal-foot">
+        <button type="button" class="ghost-btn" id="receipt-print-btn"><i class="fa-solid fa-print"></i> Print</button>
+        <button type="button" class="ghost-btn" id="receipt-download-btn"><i class="fa-solid fa-download"></i> Download PDF</button>
+        <button type="button" class="ghost-btn primary" id="receipt-new-sale-btn" data-close="receipt-modal">New Sale</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Return & Refund modal: find a past sale and refund selected items -->
+  <div class="modal-backdrop" id="refund-modal">
+    <div class="modal modal-refund">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-rotate-left"></i> Return &amp; Refund</h2>
+        <button type="button" class="modal-close" data-close="refund-modal">&times;</button>
+      </div>
+
+      <div class="rfnd-search-row">
+        <i class="fa-solid fa-magnifying-glass"></i>
+        <input type="text" id="rfnd-search" placeholder="Search by sale number, customer name…" autocomplete="off" />
+      </div>
+
+      <div class="rfnd-body">
+        <div class="rfnd-list-pane">
+          <div class="rfnd-pane-title">Recent Sales</div>
+          <div id="rfnd-sale-list" class="rfnd-sale-list">
+            <div class="rfnd-placeholder"><i class="fa-solid fa-spinner fa-spin"></i></div>
+          </div>
+        </div>
+
+        <div class="rfnd-detail-pane">
+          <div class="rfnd-detail-empty" id="rfnd-detail-empty">
+            <i class="fa-solid fa-receipt"></i>
+            <span>Select a sale to process a return</span>
+          </div>
+
+          <div id="rfnd-detail-view" class="rfnd-detail-view">
+            <div class="rfnd-sale-summary" id="rfnd-sale-summary"></div>
+
+            <div class="rfnd-section-label">Items to Return</div>
+            <div class="rfnd-select-all-row">
+              <label class="rfnd-check-label"><input type="checkbox" id="rfnd-select-all" /> Select all returnable</label>
+            </div>
+            <div id="rfnd-items-list" class="rfnd-items-list"></div>
+
+            <div class="rfnd-section-label" style="margin-top:12px">Refund Method</div>
+            <div class="rfnd-method-row" id="rfnd-method-row">
+              <label class="rfnd-method-opt">
+                <input type="radio" name="rfnd-method" value="cash" checked />
+                <span><i class="fa-solid fa-money-bill-wave"></i> Cash</span>
+              </label>
+              <label class="rfnd-method-opt">
+                <input type="radio" name="rfnd-method" value="card" />
+                <span><i class="fa-solid fa-credit-card"></i> Card</span>
+              </label>
+              <label class="rfnd-method-opt">
+                <input type="radio" name="rfnd-method" value="credit" />
+                <span><i class="fa-solid fa-building-columns"></i> Account</span>
+              </label>
+            </div>
+            <div id="rfnd-account-row" class="rfnd-account-row" hidden>
+              <label class="field-label">Deposit Account</label>
+              <select id="rfnd-account-select" class="rfnd-select"></select>
+            </div>
+
+            <div class="rfnd-reason-row">
+              <label class="field-label">Reason <span class="field-label-optional">(optional)</span></label>
+              <select id="rfnd-reason" class="rfnd-select">
+                <option value="">— Select a reason —</option>
+              </select>
+            </div>
+
+            <div class="rfnd-footer">
+              <div class="rfnd-total-row"><span>Refund Total</span><strong id="rfnd-total-display">0.00</strong></div>
+              <div id="rfnd-alert" class="error-box"></div>
+              <button type="button" class="checkout-complete-btn" id="rfnd-submit" disabled>
+                <i class="fa-solid fa-rotate-left"></i> Process Return
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Open Shift modal: prompts for the day's opening cash float -->
+  <!-- Gift card balance check: opened from the cart header's Gift Card button -->
+  <div class="modal-backdrop" id="gift-check-modal">
+    <div class="modal modal-gift-check">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-gift"></i> Check Gift Card</h2>
+        <button type="button" class="modal-close" data-close="gift-check-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="gc-check-row">
+          <input type="text" id="gift-check-code" class="co-gc-input" placeholder="Enter or scan the gift card code" autocomplete="off" />
+          <button type="button" class="ghost-btn primary" id="gift-check-run"><i class="fa-solid fa-magnifying-glass"></i> Check</button>
+        </div>
+        <div id="gift-check-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coupon check: opened from the cart header's Coupon button -->
+  <div class="modal-backdrop" id="coupon-check-modal">
+    <div class="modal modal-gift-check">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-ticket"></i> Check Coupon</h2>
+        <button type="button" class="modal-close" data-close="coupon-check-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="gc-check-row">
+          <input type="text" id="coupon-check-code" class="co-gc-input" placeholder="Enter or scan the coupon code" autocomplete="off" />
+          <button type="button" class="ghost-btn primary" id="coupon-check-run"><i class="fa-solid fa-magnifying-glass"></i> Check</button>
+        </div>
+        <div id="coupon-check-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="shift-open-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-cash-register"></i> Open Shift</h2>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle">Enter the cash you're starting the day with. This becomes today's opening float.</p>
+        <div class="field">
+          <label for="shift-open-amount">Opening cash</label>
+          <input type="number" min="0" step="0.01" inputmode="decimal" id="shift-open-amount" placeholder="0.00" />
+        </div>
+        <div class="error-box" id="shift-open-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" id="shift-open-skip-btn">Skip for now</button>
+        <button type="button" class="ghost-btn primary" id="shift-open-confirm-btn"><i class="fa-solid fa-check"></i> Start Shift</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- End of Day modal: today's sales summary + cash drawer status -->
+  <div class="modal-backdrop" id="eod-modal">
+    <div class="modal modal-eod">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-cash-register"></i> End of Day Settlement</h2>
+        <button type="button" class="modal-close" data-close="eod-modal">&times;</button>
+      </div>
+      <div class="modal-body eod-modal-body" id="eod-modal-body">
+        <div class="eod-loading"><i class="fa-solid fa-spinner fa-spin"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Withdraw Cash modal: amount + note, opened from the End of Day modal -->
+  <div class="modal-backdrop" id="cash-withdraw-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw Cash</h2>
+        <button type="button" class="modal-close" data-close="cash-withdraw-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="cash-withdraw-balance-hint"></p>
+        <div class="field">
+          <label for="cash-withdraw-amount">Amount</label>
+          <div class="input-with-btn">
+            <input type="number" min="0.01" step="0.01" inputmode="decimal" id="cash-withdraw-amount" placeholder="0.00" />
+            <button type="button" class="ghost-btn" id="cash-withdraw-all-btn">All</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="cash-withdraw-note">Note <span class="field-label-optional">(optional)</span></label>
+          <input type="text" maxlength="255" id="cash-withdraw-note" placeholder="e.g. Bank deposit" />
+        </div>
+        <div class="error-box" id="cash-withdraw-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="cash-withdraw-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="cash-withdraw-confirm-btn"><i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password confirm modal: gates sensitive actions (cash withdrawal) behind the account password -->
+  <div class="modal-backdrop" id="password-confirm-modal">
+    <div class="modal modal-sm">
+      <div class="modal-head">
+        <h2><i class="fa-solid fa-lock"></i> Confirm Password</h2>
+        <button type="button" class="modal-close" data-close="password-confirm-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-subtitle" id="password-confirm-subtitle">Enter your account password to continue.</p>
+        <div class="field">
+          <label for="password-confirm-input">Password</label>
+          <input type="password" id="password-confirm-input" placeholder="Password" autocomplete="current-password" />
+        </div>
+        <div class="error-box" id="password-confirm-error"></div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="ghost-btn" data-close="password-confirm-modal">Cancel</button>
+        <button type="button" class="ghost-btn primary" id="password-confirm-btn"><i class="fa-solid fa-check"></i> Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <script src="js/lang/si.js"></script>
   <script src="js/i18n.js"></script>
   <script src="js/navbar.js"></script>
   <script src="js/api.js"></script>
   <script src="js/pos.js"></script>
+  <script src="js/role-guard.js"></script>
 </body>
 </html>

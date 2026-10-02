@@ -926,6 +926,12 @@
             <button class="ribbon-btn-lg" id="rb-accounts">
               <i class="fa fa-wallet"></i>Accounts
             </button>
+            <button class="ribbon-btn-lg" id="rb-gift-card-check">
+              <i class="fa fa-gift"></i>Gift Card<br>Balance
+            </button>
+            <button class="ribbon-btn-lg" id="rb-coupon-check">
+              <i class="fa fa-ticket"></i>Check<br>Coupon
+            </button>
           </div>
           <div class="ribbon-group-label">Customers</div>
         </div>
@@ -1103,6 +1109,12 @@
             </button>
             <button class="ribbon-btn-lg" id="rb-inv-sale-campaign">
               <i class="fa fa-bullhorn"></i>Sale<br>Campaign
+            </button>
+            <button class="ribbon-btn-lg" id="rb-inv-gift-cards">
+              <i class="fa fa-gift"></i>Gift<br>Cards
+            </button>
+            <button class="ribbon-btn-lg" id="rb-inv-coupons">
+              <i class="fa fa-ticket"></i>Coupons
             </button>
           </div>
           <div class="ribbon-group-label">Print</div>
@@ -2436,6 +2448,8 @@
               <span class="park-badge" id="park-badge" style="display:none"></span>
             </button>
             <button class="cart-hdr-btn" id="btn-recall" title="Recall held sale (F7)"><i class="fa fa-rotate-left"></i></button>
+            <button class="cart-hdr-btn" id="btn-gift-card" title="Check gift card balance"><i class="fa fa-gift"></i></button>
+            <button class="cart-hdr-btn" id="btn-coupon" title="Check coupon"><i class="fa fa-ticket"></i></button>
             <button class="cart-hdr-btn" id="btn-customer" title="Assign customer (F10)"><i class="fa fa-user"></i></button>
           </div>
           <div id="cart-customer-bar" style="display:none"></div>
@@ -4316,6 +4330,262 @@
         </div>
       </div>
 
+      <!-- ── Gift Card Modal (Customer-modal style, same shell as Sale Campaigns) ── -->
+      <div id="gift-card-modal" class="modal-overlay" style="display:none">
+        <div class="cm-shell">
+          <div class="cm-header">
+            <i class="fa fa-gift" style="color:var(--accent)"></i>
+            <span>Gift Cards</span>
+            <button class="cm-new-btn" id="gc-new-btn"><i class="fa fa-plus"></i> New Gift Card</button>
+            <button class="psm-close" id="gc-close"><i class="fa fa-xmark"></i></button>
+          </div>
+
+          <div class="cm-body">
+            <!-- Left: search + filter + list -->
+            <div class="cm-list-pane">
+              <div class="cm-search-wrap">
+                <i class="fa fa-magnifying-glass cm-search-icon"></i>
+                <input type="text" id="gc-search" class="cm-search-input" placeholder="Search by name or code…">
+              </div>
+              <div class="sc-filter-tabs gc-filter-tabs">
+                <button class="gc-ft-btn sc-ft-btn active" data-gc-status="">All</button>
+                <button class="gc-ft-btn sc-ft-btn" data-gc-status="active">Active</button>
+                <button class="gc-ft-btn sc-ft-btn" data-gc-status="used">Used</button>
+                <button class="gc-ft-btn sc-ft-btn" data-gc-status="expired">Expired</button>
+                <button class="gc-ft-btn sc-ft-btn" data-gc-status="disabled">Disabled</button>
+              </div>
+              <div id="gc-list" class="cm-list">
+                <div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+              </div>
+              <div class="cm-pagination"><span id="gc-count">—</span></div>
+            </div>
+
+            <!-- Right: detail / form -->
+            <div class="cm-detail-pane" id="gc-detail-pane">
+              <div class="cm-detail-empty" id="gc-detail-empty">
+                <i class="fa fa-gift"></i>
+                <span>Select a gift card to view its balance and history, or create a new one</span>
+              </div>
+
+              <!-- Group view: one gift card type and all cards generated for it -->
+              <div id="gc-group-view" style="display:none">
+                <div class="gc-visual" id="gc-gv-summary"></div>
+                <div class="gc-gv-cards-head">
+                  <span><i class="fa fa-layer-group"></i> Cards in this group</span>
+                  <div class="gc-gv-add">
+                    <input type="number" id="gc-gv-add-qty" class="cm-input" value="1" min="1" max="500" onwheel="this.blur()">
+                    <button class="po-btn-ghost" id="gc-gv-add-btn"><i class="fa fa-plus"></i> Generate more</button>
+                  </div>
+                </div>
+                <div class="gc-gv-cards" id="gc-gv-cards"></div>
+                <div class="cm-dv-actions">
+                  <button class="cm-btn-edit"   id="gc-gv-copy"><i class="fa fa-copy"></i> Copy All Codes</button>
+                  <button class="cm-btn-edit"   id="gc-gv-edit"><i class="fa fa-pen"></i> Edit Group</button>
+                  <button class="cm-btn-delete" id="gc-gv-delete"><i class="fa fa-trash"></i> Delete Group</button>
+                </div>
+              </div>
+
+              <!-- Detail view (single card) -->
+              <div id="gc-detail-view" style="display:none">
+                <button class="gc-back-link" id="gc-dv-back"><i class="fa fa-arrow-left"></i> <span id="gc-dv-back-label">Back to group</span></button>
+                <div class="gc-visual" id="gc-dv-visual"></div>
+                <div class="cm-dv-fields" id="gc-dv-fields"></div>
+                <div class="cm-dv-tab-panels">
+                  <div class="cm-dv-tab-panel cm-dv-history" id="gc-dv-history" style="display:block"></div>
+                </div>
+                <div class="cm-dv-actions">
+                  <button class="cm-btn-edit"   id="gc-btn-copy"><i class="fa fa-copy"></i> Copy Code</button>
+                  <button class="cm-btn-edit"   id="gc-btn-edit"><i class="fa fa-pen"></i> Edit</button>
+                  <button class="cm-btn-delete" id="gc-btn-delete"><i class="fa fa-trash"></i> Delete</button>
+                </div>
+              </div>
+
+              <!-- Create / Edit form -->
+              <div id="gc-form-view" style="display:none">
+                <div class="cm-form-title" id="gc-form-title">New Gift Card</div>
+                <div class="cm-form-body">
+                  <div id="gc-f-name-wrap" class="gc-f-block">
+                    <label class="cm-label">Gift Card Name <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="gc-f-name" class="cm-input" placeholder="e.g. Birthday Gift Card" maxlength="191">
+                  </div>
+
+                  <div id="gc-f-value-wrap" class="gc-f-block">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                      <div>
+                        <label class="cm-label">Value per Card <span style="color:#ef4444">*</span></label>
+                        <input type="number" id="gc-f-value" class="cm-input" placeholder="5000" min="0.01" step="0.01" onwheel="this.blur()">
+                      </div>
+                      <div id="gc-f-qty-wrap">
+                        <label class="cm-label">How many cards? <span style="color:#ef4444">*</span></label>
+                        <input type="number" id="gc-f-qty" class="cm-input" value="1" min="1" max="500" step="1" onwheel="this.blur()">
+                      </div>
+                    </div>
+                    <div class="gc-hint" id="gc-f-value-hint" style="display:none"></div>
+                    <div class="gc-hint" id="gc-f-qty-hint" style="display:none"></div>
+                  </div>
+
+                  <div id="gc-f-code-wrap" class="gc-f-block">
+                    <label class="cm-label">Gift Card Code <span style="color:#ef4444">*</span></label>
+                    <div style="display:flex;gap:8px;align-items:stretch">
+                      <input type="text" id="gc-f-code" class="cm-input gc-code-input" style="flex:1" placeholder="Auto-generated — or type your own" maxlength="40" autocomplete="off">
+                      <button type="button" id="gc-f-generate" class="po-btn-ghost" style="white-space:nowrap" title="Generate a new unique code"><i class="fa fa-wand-magic-sparkles"></i> Generate</button>
+                    </div>
+                    <div class="gc-hint">Every gift card has its own unique code. Letters, numbers and dashes only.</div>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" id="gc-f-no-expiry" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    <label for="gc-f-no-expiry" class="cm-label" style="margin:0;cursor:pointer">No expiry date</label>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div>
+                      <label class="cm-label">Valid From</label>
+                      <input type="date" id="gc-f-valid-from" class="cm-input">
+                    </div>
+                    <div id="gc-expires-wrap">
+                      <label class="cm-label">Valid Until</label>
+                      <input type="date" id="gc-f-expires" class="cm-input">
+                    </div>
+                  </div>
+
+                  <label class="cm-label">Notes</label>
+                  <textarea id="gc-f-notes" class="cm-input cm-textarea" placeholder="Who is this gift card for? (optional)" rows="2"></textarea>
+
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" id="gc-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    <label for="gc-f-active" class="cm-label" style="margin:0;cursor:pointer">Active</label>
+                  </div>
+                </div>
+                <div class="cm-form-actions">
+                  <button class="psm-btn-cancel" id="gc-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+                  <button class="qap-btn-save"   id="gc-form-save"><i class="fa fa-check"></i> Save Gift Card</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Coupon Modal (same shell as Gift Cards) ── -->
+      <div id="coupon-modal" class="modal-overlay" style="display:none">
+        <div class="cm-shell">
+          <div class="cm-header">
+            <i class="fa fa-ticket" style="color:var(--accent)"></i>
+            <span>Coupons</span>
+            <button class="cm-new-btn" id="cp-new-btn"><i class="fa fa-plus"></i> New Coupon</button>
+            <button class="psm-close" id="cp-close"><i class="fa fa-xmark"></i></button>
+          </div>
+
+          <div class="cm-body">
+            <!-- Left: search + filter + list -->
+            <div class="cm-list-pane">
+              <div class="cm-search-wrap">
+                <i class="fa fa-magnifying-glass cm-search-icon"></i>
+                <input type="text" id="cp-search" class="cm-search-input" placeholder="Search by name or code…">
+              </div>
+              <div class="sc-filter-tabs gc-filter-tabs">
+                <button class="cp-ft-btn sc-ft-btn active" data-cp-status="">All</button>
+                <button class="cp-ft-btn sc-ft-btn" data-cp-status="active">Active</button>
+                <button class="cp-ft-btn sc-ft-btn" data-cp-status="used">Used up</button>
+                <button class="cp-ft-btn sc-ft-btn" data-cp-status="expired">Expired</button>
+                <button class="cp-ft-btn sc-ft-btn" data-cp-status="disabled">Disabled</button>
+              </div>
+              <div id="cp-list" class="cm-list">
+                <div class="cm-list-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+              </div>
+              <div class="cm-pagination"><span id="cp-count">—</span></div>
+            </div>
+
+            <!-- Right: detail / form -->
+            <div class="cm-detail-pane" id="cp-detail-pane">
+              <div class="cm-detail-empty" id="cp-detail-empty">
+                <i class="fa fa-ticket"></i>
+                <span>Select a coupon to see its uses, or create a new one</span>
+              </div>
+
+              <!-- Detail view -->
+              <div id="cp-detail-view" style="display:none">
+                <div class="gc-visual" id="cp-dv-visual"></div>
+                <div class="cm-dv-fields" id="cp-dv-fields"></div>
+                <div class="cm-dv-tab-panels">
+                  <div class="cm-dv-tab-panel cm-dv-history" id="cp-dv-history" style="display:block"></div>
+                </div>
+                <div class="cm-dv-actions">
+                  <button class="cm-btn-edit"   id="cp-btn-copy"><i class="fa fa-copy"></i> Copy Code</button>
+                  <button class="cm-btn-edit"   id="cp-btn-edit"><i class="fa fa-pen"></i> Edit</button>
+                  <button class="cm-btn-delete" id="cp-btn-delete"><i class="fa fa-trash"></i> Delete</button>
+                </div>
+              </div>
+
+              <!-- Create / Edit form -->
+              <div id="cp-form-view" style="display:none">
+                <div class="cm-form-title" id="cp-form-title">New Coupon</div>
+                <div class="cm-form-body">
+                  <div class="gc-f-block">
+                    <label class="cm-label">Coupon Name <span style="color:#ef4444">*</span></label>
+                    <input type="text" id="cp-f-name" class="cm-input" placeholder="e.g. Avurudu 10% OFF" maxlength="191">
+                  </div>
+
+                  <div class="gc-f-block">
+                    <label class="cm-label">Discount <span style="color:#ef4444">*</span></label>
+                    <div style="display:flex;gap:8px;align-items:stretch">
+                      <div class="cp-type-toggle">
+                        <button type="button" class="cp-type-btn active" data-cp-type="percent">%</button>
+                        <button type="button" class="cp-type-btn" data-cp-type="flat">Flat</button>
+                      </div>
+                      <input type="number" id="cp-f-value" class="cm-input" style="flex:1" placeholder="10" min="0.01" step="0.01" onwheel="this.blur()">
+                    </div>
+                    <div class="gc-hint" id="cp-f-value-hint">Percentage off the bill (after any order discount).</div>
+                  </div>
+
+                  <div class="gc-f-block">
+                    <label class="cm-label">Coupon Code <span style="color:#ef4444">*</span></label>
+                    <div style="display:flex;gap:8px;align-items:stretch">
+                      <input type="text" id="cp-f-code" class="cm-input gc-code-input" style="flex:1" placeholder="Auto-generated — or type your own" maxlength="40" autocomplete="off">
+                      <button type="button" id="cp-f-generate" class="po-btn-ghost" style="white-space:nowrap" title="Generate a new unique code"><i class="fa fa-wand-magic-sparkles"></i> Generate</button>
+                    </div>
+                    <div class="gc-hint">One code for this coupon — every customer uses the same code. Letters, numbers and dashes only.</div>
+                  </div>
+
+                  <div class="gc-f-block">
+                    <label class="cm-label">Number of Coupons <span style="color:#ef4444">*</span></label>
+                    <input type="number" id="cp-f-qty" class="cm-input" value="100" min="1" max="100000" step="1" onwheel="this.blur()">
+                    <div class="gc-hint" id="cp-f-qty-hint">How many times this code can be used in total.</div>
+                  </div>
+
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" id="cp-f-no-expiry" style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    <label for="cp-f-no-expiry" class="cm-label" style="margin:0;cursor:pointer">No expiry date</label>
+                  </div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div>
+                      <label class="cm-label">Valid From</label>
+                      <input type="date" id="cp-f-valid-from" class="cm-input">
+                    </div>
+                    <div id="cp-expires-wrap">
+                      <label class="cm-label">Valid Until</label>
+                      <input type="date" id="cp-f-expires" class="cm-input">
+                    </div>
+                  </div>
+
+                  <label class="cm-label">Notes</label>
+                  <textarea id="cp-f-notes" class="cm-input cm-textarea" placeholder="Where is this coupon promoted? (optional)" rows="2"></textarea>
+
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <input type="checkbox" id="cp-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+                    <label for="cp-f-active" class="cm-label" style="margin:0;cursor:pointer">Active</label>
+                  </div>
+                </div>
+                <div class="cm-form-actions">
+                  <button class="psm-btn-cancel" id="cp-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+                  <button class="qap-btn-save"   id="cp-form-save"><i class="fa fa-check"></i> Save Coupon</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- ── Brand Create / Edit Modal ─────────────────────────────── -->
       <div id="brand-modal" class="modal-overlay" style="display:none">
         <div class="po-aim-shell" style="width:min(460px,96vw)">
@@ -4522,7 +4792,7 @@
               </div>
             </div>
             <div id="grn-payment-fields" style="">
-              <div class="po-field">
+              <div class="po-field" id="grn-f-account-wrap">
                 <label class="po-field-label">Account <span class="po-required">*</span></label>
                 <select id="grn-f-account" class="po-field-input"></select>
               </div>
@@ -4606,7 +4876,7 @@
               <button class="grn-method-btn" data-method="credit"><i class="fa fa-clock"></i> Credit</button>
             </div>
           </div>
-          <div class="po-field">
+          <div class="po-field" id="grn-pay-account-wrap">
             <label class="po-field-label">Account <span class="po-required">*</span></label>
             <select id="grn-pay-account" class="po-field-input"></select>
           </div>
@@ -4717,7 +4987,7 @@
               </div>
             </div>
             <div id="grn-direct-payment-fields">
-              <div class="po-field">
+              <div class="po-field" id="grn-direct-account-wrap">
                 <label class="po-field-label">Account <span class="po-required">*</span></label>
                 <select id="grn-direct-account" class="po-field-input"></select>
               </div>
@@ -12614,6 +12884,48 @@
   </div>
 </div>
 
+<!-- ── Gift Card Balance Check Modal (POS) ──────────────────────── -->
+<div id="gc-check-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(480px,96vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-gift" style="color:var(--accent)"></i>
+      <span>Check Gift Card Balance</span>
+      <button class="psm-close" id="gc-check-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="gap:12px">
+      <div class="po-field">
+        <label class="po-field-label">Gift Card Code</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="gc-check-code" class="po-field-input gc-code-input" style="flex:1" placeholder="Enter or scan the gift card code" autocomplete="off">
+          <button class="po-btn-primary" id="gc-check-btn"><i class="fa fa-magnifying-glass"></i> Check</button>
+        </div>
+      </div>
+      <div id="gc-check-result"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Coupon Check Modal (POS) ─────────────────────────────────── -->
+<div id="cp-check-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(480px,96vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-ticket" style="color:var(--accent)"></i>
+      <span>Check Coupon</span>
+      <button class="psm-close" id="cp-check-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body" style="gap:12px">
+      <div class="po-field">
+        <label class="po-field-label">Coupon Code</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="cp-check-code" class="po-field-input gc-code-input" style="flex:1" placeholder="Enter or scan the coupon code" autocomplete="off">
+          <button class="po-btn-primary" id="cp-check-btn"><i class="fa fa-magnifying-glass"></i> Check</button>
+        </div>
+      </div>
+      <div id="cp-check-result"></div>
+    </div>
+  </div>
+</div>
+
 <div id="checkout-modal" style="display:none">
   <div class="co-modal">
 
@@ -12731,6 +13043,44 @@
             <i class="fa fa-file-invoice-dollar"></i>
             <span>Credit</span>
           </button>
+        </div>
+
+        <!-- Coupon (a discount on the bill — applied before any gift card) -->
+        <div class="co-gc co-cp" id="co-cp">
+          <button type="button" class="co-gc-toggle" id="co-cp-toggle"><i class="fa fa-ticket"></i> Apply coupon</button>
+          <div class="co-gc-entry" id="co-cp-entry" style="display:none">
+            <input type="text" id="co-cp-code" class="co-gc-input" placeholder="Coupon code" autocomplete="off">
+            <button type="button" class="co-gc-apply" id="co-cp-apply">Apply</button>
+            <button type="button" class="co-gc-x" id="co-cp-cancel" title="Cancel"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="co-gc-applied" id="co-cp-applied" style="display:none">
+            <i class="fa fa-ticket co-gc-icon"></i>
+            <div class="co-gc-info">
+              <div class="co-gc-code" id="co-cp-applied-code">—</div>
+              <div class="co-gc-sub" id="co-cp-applied-sub">—</div>
+            </div>
+            <strong class="co-gc-amt" id="co-cp-applied-amt">0.00</strong>
+            <button type="button" class="co-gc-x" id="co-cp-remove" title="Remove coupon"><i class="fa fa-xmark"></i></button>
+          </div>
+        </div>
+
+        <!-- Gift card (applied on top of any payment method; the method pays the rest) -->
+        <div class="co-gc" id="co-gc">
+          <button type="button" class="co-gc-toggle" id="co-gc-toggle"><i class="fa fa-gift"></i> Pay with gift card</button>
+          <div class="co-gc-entry" id="co-gc-entry" style="display:none">
+            <input type="text" id="co-gc-code" class="co-gc-input" placeholder="Gift card code" autocomplete="off">
+            <button type="button" class="co-gc-apply" id="co-gc-apply">Apply</button>
+            <button type="button" class="co-gc-x" id="co-gc-cancel" title="Cancel"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="co-gc-applied" id="co-gc-applied" style="display:none">
+            <i class="fa fa-gift co-gc-icon"></i>
+            <div class="co-gc-info">
+              <div class="co-gc-code" id="co-gc-applied-code">—</div>
+              <div class="co-gc-sub" id="co-gc-applied-sub">—</div>
+            </div>
+            <strong class="co-gc-amt" id="co-gc-applied-amt">0.00</strong>
+            <button type="button" class="co-gc-x" id="co-gc-remove" title="Remove gift card"><i class="fa fa-xmark"></i></button>
+          </div>
         </div>
 
         <!-- Credit fields -->
@@ -13857,6 +14207,18 @@
                 <span class="psm-toggle-desc">Track cash in-hand instead of depositing to a bank account. Requires entering opening float when opening POS each day.</span>
               </div>
               <label class="psm-switch"><input type="checkbox" id="psm-dont-settle"><span class="psm-switch-track"></span></label>
+            </div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-truck-ramp-box"></i> Purchase payments</div>
+            <div class="psm-field-row">
+              <label class="psm-field-label" for="psm-grn-payment-source">Default Pay From</label>
+              <select id="psm-grn-payment-source" class="psm-select">
+                <option value="account">Bank / Cash Account</option>
+                <option value="expense">Business Expense (no account)</option>
+              </select>
+              <span class="psm-hint">How cash Goods Receive payments are settled by default — deducted from a real account, or logged as a plain business expense.</span>
             </div>
           </div>
 
@@ -16828,48 +17190,56 @@
 
 <!-- My Profile Modal -->
 <div id="my-profile-modal-overlay" class="modal-overlay" style="display:none">
-  <div class="po-aim-shell" style="width:min(440px,94vw)">
+  <div class="po-aim-shell" style="width:min(860px,94vw)">
     <div class="po-aim-header">
       <i class="fa fa-circle-user" style="color:var(--accent)"></i>
       <span>My Profile</span>
       <button class="psm-close" id="my-profile-modal-close"><i class="fa fa-xmark"></i></button>
     </div>
-    <div class="po-aim-body" style="max-height:70vh;overflow-y:auto">
+    <div class="po-aim-body" style="max-height:75vh;overflow-y:auto">
       <div id="mp-alert" class="qap-alert" style="display:none;margin-bottom:14px"></div>
 
-      <div style="display:flex;flex-direction:column;align-items:center;gap:0;padding:2px 0 18px">
-        <div class="tpm-avatar" id="mp-avatar" style="width:56px;height:56px;font-size:22px">S</div>
-      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:28px;align-items:start">
+        <!-- Profile details -->
+        <div>
+          <div style="display:flex;align-items:center;margin-bottom:10px">
+            <span class="tpm-section-label" style="padding:0">Profile Details</span>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;padding:6px 0 18px">
+            <div class="tpm-avatar" id="mp-avatar" style="width:64px;height:64px;font-size:26px">S</div>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Full Name <span class="po-required">*</span></label>
+            <input type="text" id="mp-f-name" class="po-field-input" placeholder="Your name" maxlength="255">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Email <span class="po-required">*</span></label>
+            <input type="email" id="mp-f-email" class="po-field-input" placeholder="you@example.com" maxlength="255">
+          </div>
+        </div>
 
-      <div class="po-field">
-        <label class="po-field-label">Full Name <span class="po-required">*</span></label>
-        <input type="text" id="mp-f-name" class="po-field-input" placeholder="Your name" maxlength="255">
-      </div>
-      <div class="po-field">
-        <label class="po-field-label">Email <span class="po-required">*</span></label>
-        <input type="email" id="mp-f-email" class="po-field-input" placeholder="you@example.com" maxlength="255">
-      </div>
-
-      <div style="border-top:1px solid var(--border);margin:16px 0 14px"></div>
-
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
-        <span class="tpm-section-label" style="padding:0">Change Password</span>
-      </div>
-      <div id="mp-pwd-alert" class="qap-alert" style="display:none;margin-bottom:14px"></div>
-      <div class="po-field">
-        <label class="po-field-label">Current Password</label>
-        <input type="password" id="mp-f-current-password" class="po-field-input" placeholder="Current password" autocomplete="current-password">
-      </div>
-      <div class="po-field">
-        <label class="po-field-label">New Password</label>
-        <input type="password" id="mp-f-new-password" class="po-field-input" placeholder="At least 8 characters" autocomplete="new-password">
-      </div>
-      <div class="po-field">
-        <label class="po-field-label">Confirm New Password</label>
-        <input type="password" id="mp-f-confirm-password" class="po-field-input" placeholder="Repeat new password" autocomplete="new-password">
-      </div>
-      <div style="display:flex;justify-content:flex-end">
-        <button class="po-btn-outline" id="mp-save-password"><i class="fa fa-key"></i> Update Password</button>
+        <!-- Change password -->
+        <div style="border-left:1px solid var(--border);padding-left:28px">
+          <div style="display:flex;align-items:center;margin-bottom:10px">
+            <span class="tpm-section-label" style="padding:0">Change Password</span>
+          </div>
+          <div id="mp-pwd-alert" class="qap-alert" style="display:none;margin-bottom:14px"></div>
+          <div class="po-field">
+            <label class="po-field-label">Current Password</label>
+            <input type="password" id="mp-f-current-password" class="po-field-input" placeholder="Current password" autocomplete="current-password">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">New Password</label>
+            <input type="password" id="mp-f-new-password" class="po-field-input" placeholder="At least 8 characters" autocomplete="new-password">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Confirm New Password</label>
+            <input type="password" id="mp-f-confirm-password" class="po-field-input" placeholder="Repeat new password" autocomplete="new-password">
+          </div>
+          <div style="display:flex;justify-content:flex-end">
+            <button class="po-btn-outline" id="mp-save-password"><i class="fa fa-key"></i> Update Password</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="po-aim-footer">

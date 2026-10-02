@@ -358,6 +358,29 @@ const API = (() => {
     updateSaleCampaign:  (id, body)  => request('PATCH',  `/sale-campaigns/${id}`, body),
     deleteSaleCampaign:  (id)        => request('DELETE', `/sale-campaigns/${id}`),
 
+    // Gift Cards
+    giftCards:            (q, status) => request('GET',    `/gift-cards?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    giftCard:             (id)        => request('GET',    `/gift-cards/${id}`),
+    giftCardLookup:       (code)      => request('GET',    `/gift-cards/lookup?code=${encodeURIComponent(code||'')}`),
+    giftCardGenerateCode: ()          => request('GET',    '/gift-cards/generate-code'),
+    createGiftCard:       (body)      => request('POST',   '/gift-cards', body),
+    updateGiftCard:       (id, body)  => request('PATCH',  `/gift-cards/${id}`, body),
+    deleteGiftCard:       (id)        => request('DELETE', `/gift-cards/${id}`),
+    giftCardGroups:       (q, status) => request('GET',    `/gift-card-groups?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    giftCardGroup:        (id)        => request('GET',    `/gift-card-groups/${id}`),
+    updateGiftCardGroup:  (id, body)  => request('PATCH',  `/gift-card-groups/${id}`, body),
+    deleteGiftCardGroup:  (id)        => request('DELETE', `/gift-card-groups/${id}`),
+    addGiftCardsToGroup:  (id, qty)   => request('POST',   `/gift-card-groups/${id}/cards`, { quantity: qty }),
+
+    // Coupons — one shared code per coupon, usable `quantity` times
+    coupons:              (q, status) => request('GET',    `/coupons?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    coupon:               (id)        => request('GET',    `/coupons/${id}`),
+    couponLookup:         (code)      => request('GET',    `/coupons/lookup?code=${encodeURIComponent(code||'')}`),
+    couponGenerateCode:   ()          => request('GET',    '/coupons/generate-code'),
+    createCoupon:         (body)      => request('POST',   '/coupons', body),
+    updateCoupon:         (id, body)  => request('PATCH',  `/coupons/${id}`, body),
+    deleteCoupon:         (id)        => request('DELETE', `/coupons/${id}`),
+
     // Product Categories
     categories:             (q, status, page) => request('GET',    `/categories?q=${encodeURIComponent(q||'')}&status=${status||''}&page=${page||1}`),
     categoryParentOpts:     (excludeId)       => request('GET',    `/categories/parent-options${excludeId ? '?exclude='+excludeId : ''}`),

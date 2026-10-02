@@ -513,11 +513,37 @@ class GoodsReceiveNoteService
     }
 
     /**
-     * @param  array{payment_method: string, payment_reference?: ?string, deduct_account_id?: int|string|null, payment_option?: string, pay_amount?: float|string|null}  $data
+     * @param  array{payment_method: string, payment_reference?: ?string, deduct_account_id?: int|string|null, payment_source?: ?string, payment_option?: string, pay_amount?: float|string|null}  $data
      */
     private function maybeSettlePayment(GoodsReceiveNote $grn, Business $business, User $user, array $data): void
     {
         if (!$this->paymentSettlement->requiresImmediatePayment($grn)) {
+            return;
+        }
+
+        $payAmount = null;
+        if (($data['payment_option'] ?? 'full') === 'partial') {
+            $payAmount = round((float) ($data['pay_amount'] ?? 0), 2);
+        }
+
+        $paymentMethod = $data['payment_method'] ?? $grn->payment_method;
+
+        // "Record as expense" skips the account entirely — for setups (e.g.
+        // pos-lite) that don't manage bank/cash accounts. Not available for
+        // cheque, which is always drawn from a real account. There's no
+        // per-transaction override for this: it's the business's Settings >
+        // Accounts "Default Pay From" choice.
+        $paymentSource = $data['payment_source'] ?? $this->paymentSettlement->defaultPaymentSource($business);
+        if ($paymentSource === 'expense' && $paymentMethod !== Purchase::PAYMENT_CHEQUE) {
+            $this->paymentSettlement->settleAsExpense(
+                $grn,
+                $business,
+                $user,
+                $payAmount,
+                $paymentMethod,
+                $this->normalizePaymentReference($data),
+            );
+
             return;
         }
 
@@ -528,18 +554,13 @@ class GoodsReceiveNoteService
             ]);
         }
 
-        $payAmount = null;
-        if (($data['payment_option'] ?? 'full') === 'partial') {
-            $payAmount = round((float) ($data['pay_amount'] ?? 0), 2);
-        }
-
         $this->paymentSettlement->settle(
             $grn,
             $business,
             $user,
             $accountId,
             $payAmount,
-            $data['payment_method'] ?? $grn->payment_method,
+            $paymentMethod,
             $this->normalizePaymentReference($data),
             $this->normalizeChequeDueDate($data),
         );

@@ -62,6 +62,22 @@ function attachMacShortcuts(win) {
   });
 }
 
+// ── Cashier sessions: POS only ──────────────────────────────────────────
+// A cashier (signed in via /cashier/login) may only use the POS screen; the
+// dashboard stays reachable as the home screen with every other tile locked
+// (renderer/js/role-guard.js). This blocks navigating to any other screen
+// even if the renderer-side lock is bypassed.
+const CASHIER_PAGES = ['dashboard.html', 'pos.html'];
+
+function attachCashierGuard(win) {
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!config.is_cashier) return;
+    let page = '';
+    try { page = path.basename(new URL(url).pathname).toLowerCase(); } catch (_) {}
+    if (!CASHIER_PAGES.includes(page)) event.preventDefault();
+  });
+}
+
 // ── Windows ─────────────────────────────────────────────────────────────
 function createAuthWindow() {
   if (mainWindow) { mainWindow.close(); mainWindow = null; }
@@ -107,6 +123,7 @@ function createMainWindow() {
   });
 
   attachMacShortcuts(mainWindow);
+  attachCashierGuard(mainWindow);
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'dashboard.html'));
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -183,14 +200,85 @@ app.on('window-all-closed', () => {
 });
 
 // ── Config IPC ──────────────────────────────────────────────────────────
-ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL }));
+ipcMain.handle('config-get', () => ({ ...config, api_base_url: API_BASE_URL, app_version: app.getVersion() }));
 ipcMain.handle('open-external', (_e, url) => shell.openExternal(url));
 
 ipcMain.handle('config-set', (_e, patch) => {
   config = { ...config, ...patch };
   saveConfig(config);
-  return { ...config, api_base_url: API_BASE_URL };
+  return { ...config, api_base_url: API_BASE_URL, app_version: app.getVersion() };
 });
+
+// ── App updates ─────────────────────────────────────────────────────────
+// Releases are managed in the admin panel (Release Management → Zeebroo POS
+// Lite tab) and served by Modules/AppConnection/routes/api.php. ?app=lite keeps
+// this client from picking up the full desktop app's releases.
+ipcMain.handle('check-for-update', () => new Promise((resolve) => {
+  const url = new URL(new URL(API_BASE_URL).origin + '/api/releases/latest?app=lite');
+  const lib = url.protocol === 'https:' ? https : http;
+  const req = lib.get(url.toString(), { headers: { Accept: 'application/json' }, timeout: 15000 }, (res) => {
+    let d = '';
+    res.on('data', (c) => { d += c; });
+    res.on('end', () => {
+      try { resolve({ status: res.statusCode, body: JSON.parse(d) }); }
+      catch (_) { resolve({ status: res.statusCode, body: null }); }
+    });
+  });
+  req.on('timeout', () => req.destroy(new Error('timeout')));
+  req.on('error', () => resolve({ status: 0, body: null }));
+}));
+
+// Downloads the installer into the user's Downloads folder, following
+// redirects (SourceForge/GitHub links redirect) and reporting % progress.
+ipcMain.handle('download-update', (e, { url, filename }) => new Promise((resolve) => {
+  const dest = path.join(app.getPath('downloads'), path.basename(String(filename || 'ZeebrooPOSLite-update')));
+  const fail = (file, error) => {
+    if (file) file.close(() => fs.unlink(dest, () => {}));
+    resolve({ error });
+  };
+
+  function fetchUrl(currentUrl, redirectsLeft) {
+    let parsed;
+    try { parsed = new URL(currentUrl); } catch (_) { return fail(null, 'Invalid download URL'); }
+    if (!['http:', 'https:'].includes(parsed.protocol)) return fail(null, 'Invalid download URL');
+    const lib = parsed.protocol === 'https:' ? https : http;
+
+    const req = lib.get(parsed.toString(), (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        res.resume();
+        if (redirectsLeft <= 0) return fail(null, 'Too many redirects');
+        return fetchUrl(new URL(res.headers.location, currentUrl).toString(), redirectsLeft - 1);
+      }
+      if (res.statusCode >= 400) {
+        res.resume();
+        return fail(null, `Server responded with ${res.statusCode}`);
+      }
+
+      const file = fs.createWriteStream(dest);
+      const total = parseInt(res.headers['content-length'] || '0', 10);
+      let received = 0;
+      let lastPct = -1;
+      res.on('data', (chunk) => {
+        received += chunk.length;
+        if (total > 0) {
+          const pct = Math.round((received / total) * 100);
+          if (pct !== lastPct && !e.sender.isDestroyed()) { lastPct = pct; e.sender.send('download-progress', pct); }
+        }
+      });
+      res.on('error', (err) => fail(file, err.message));
+      file.on('error', (err) => fail(file, err.message));
+      file.on('finish', () => resolve({ path: dest }));
+      res.pipe(file);
+    });
+    req.on('error', (err) => fail(null, err.message));
+  }
+
+  fetchUrl(url, 5);
+}));
+
+ipcMain.handle('open-path', (_e, filePath) => shell.openPath(filePath));
+ipcMain.handle('show-in-folder', (_e, filePath) => shell.showItemInFolder(filePath));
+ipcMain.handle('app-quit', () => app.quit());
 
 // Called by the auth renderer once login/register + business resolution succeed.
 ipcMain.handle('auth-success', () => {
@@ -200,7 +288,7 @@ ipcMain.handle('auth-success', () => {
 
 // Called by the main renderer's Logout button.
 ipcMain.handle('logout', () => {
-  config = { ...config, token: null, business_id: null, branch_id: null, user: null };
+  config = { ...config, token: null, business_id: null, branch_id: null, user: null, is_cashier: false };
   saveConfig(config);
   createAuthWindow();
   return true;
@@ -210,6 +298,16 @@ ipcMain.handle('logout', () => {
 ipcMain.handle('app-restart', () => {
   app.relaunch();
   app.exit(0);
+});
+
+// Toggles OS-level fullscreen for the main window (F11 shortcut) — with no
+// application menu (see attachMacShortcuts above), Electron has no built-in
+// accelerator for this, so the renderer asks the main process to do it.
+ipcMain.handle('toggle-fullscreen', () => {
+  if (!mainWindow) return false;
+  const next = !mainWindow.isFullScreen();
+  mainWindow.setFullScreen(next);
+  return next;
 });
 
 // ── API proxy (runs in the main process so the renderer never needs Node
@@ -346,6 +444,59 @@ function apiDownloadFile(path_, token, businessId, branchId) {
     req.end();
   });
 }
+
+// Opens a native window loaded with the given HTML and triggers the OS print
+// dialog on it — used for receipt/invoice printing. window.open() from the
+// renderer is denied by default (no setWindowOpenHandler is registered, and
+// Electron 14+ denies popups by default), so printing has to go through a
+// real BrowserWindow created here rather than a popup document.write().
+ipcMain.handle('print-html', (_e, { html }) => {
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 480,
+      height: 720,
+      title: 'Print',
+      show: false,
+      webPreferences: { sandbox: true },
+    });
+    win.once('ready-to-show', () => {
+      win.show();
+      win.webContents.print({ printBackground: true }, () => {
+        try { win.close(); } catch (_) {}
+      });
+      resolve(true);
+    });
+    win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+  });
+});
+
+// Renders the given HTML to a PDF (via Electron's printToPDF) and lets the
+// user save it — same save-dialog + fs.writeFileSync shape as api-download-file
+// below, just generating the PDF locally instead of fetching one from the API.
+ipcMain.handle('save-html-as-pdf', async (_e, { html, suggestedFilename }) => {
+  let win;
+  try {
+    win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
+    await win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    const buffer = await win.webContents.printToPDF({ printBackground: true });
+    win.destroy();
+    win = null;
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: suggestedFilename || 'document.pdf',
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) {
+      return { status: 0, canceled: true };
+    }
+
+    fs.writeFileSync(filePath, buffer);
+    return { status: 200, savedPath: filePath };
+  } catch (err) {
+    if (win) { try { win.destroy(); } catch (_) {} }
+    return { status: 0, message: err.message };
+  }
+});
 
 ipcMain.handle('api-download-file', async (_e, { path: p, suggestedFilename }) => {
   try {

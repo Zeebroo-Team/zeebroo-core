@@ -5,6 +5,7 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosNotificationService;
@@ -44,7 +45,7 @@ class PosPurchaseOrderApiController extends Controller
         $business = $this->businessOrAbort($request);
         abort_unless((int) $purchase->business_id === (int) $business->id, 404);
 
-        $purchase->load(['supplier', 'items.product']);
+        $purchase->load(['supplier', 'branch', 'items.product']);
 
         return response()->json([
             'data' => $this->formatDetail($purchase),
@@ -58,6 +59,7 @@ class PosPurchaseOrderApiController extends Controller
 
         $validated = $request->validate([
             'supplier_id'            => ['nullable', 'integer', 'min:1'],
+            'branch_id'              => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'reference'              => ['nullable', 'string', 'max:100'],
             'purchase_date'          => ['required', 'date'],
             'expected_delivery_date' => ['nullable', 'date'],
@@ -75,7 +77,7 @@ class PosPurchaseOrderApiController extends Controller
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }
 
-        $purchase->load(['supplier', 'items.product']);
+        $purchase->load(['supplier', 'branch', 'items.product']);
 
         return response()->json([
             'message' => 'Purchase order '.$purchase->po_number.' created.',
@@ -95,7 +97,7 @@ class PosPurchaseOrderApiController extends Controller
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }
 
-        $purchase->load(['supplier', 'items.product']);
+        $purchase->load(['supplier', 'branch', 'items.product']);
 
         return response()->json([
             'message' => 'Purchase order '.$purchase->po_number.' placed.',
@@ -115,7 +117,7 @@ class PosPurchaseOrderApiController extends Controller
             return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
         }
 
-        $purchase->refresh()->load(['supplier', 'items.product']);
+        $purchase->refresh()->load(['supplier', 'branch', 'items.product']);
 
         if ($purchase->isReceived()) {
             $this->notifications->notifyPurchaseOrderReceived($purchase);
@@ -156,12 +158,15 @@ class PosPurchaseOrderApiController extends Controller
             'status_label'           => $purchase->statusLabel(),
             'supplier_id'            => $purchase->supplier_id,
             'supplier_name'          => $purchase->supplier?->name,
+            'branch_id'              => $purchase->branch_id,
+            'branch_name'            => $purchase->branch?->name,
             'purchase_date'          => $purchase->purchase_date?->format('Y-m-d'),
             'expected_delivery_date' => $purchase->expected_delivery_date?->format('Y-m-d'),
             'subtotal'               => (float) $purchase->subtotal,
             'total'                  => (float) $purchase->total,
             'items_count'            => $purchase->items_count ?? $purchase->items->count(),
             'notes'                  => $purchase->notes,
+            'created_at'             => $purchase->created_at?->toIso8601String(),
         ];
     }
 

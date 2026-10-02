@@ -1654,27 +1654,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         @keyframes acnBubblePop{from{opacity:0;transform:scale(.88) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
         @keyframes acnGuideFadeOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(18px)}}
     </style>
+    @if($pendingPayment)
+        @include('partials.payment-attention-bar', [
+            'title' => 'Your subscription payment needs attention.',
+            'message' => 'Complete payment to activate your monthly subscription.',
+            'payment' => $pendingPayment,
+        ])
+    @endif
     <div class="account-notice-shell">
         <div class="account-notice-blob account-notice-blob--a" aria-hidden="true"></div>
         <div class="account-notice-blob account-notice-blob--b" aria-hidden="true"></div>
         <div class="account-notice-card">
-            @if($pendingPayment)
-                <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;text-align:left;">
-                    <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;">
-                        <div style="width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;">!</div>
-                        <div style="flex:1;min-width:0;">
-                            <div style="color:#991b1b;font-weight:700;">Your subscription payment needs attention</div>
-                            <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Complete payment to activate your monthly subscription.</div>
-                            <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
-                                @csrf
-                                <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
-            @endif
             <div class="account-notice-icon"><i class="fa fa-building-columns" aria-hidden="true"></i></div>
             <h2 class="account-notice-title">No bank account yet</h2>
             <p class="account-notice-sub">
@@ -1718,23 +1708,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
     </script>
 @else
     @if($errors->has('payment') || $pendingPayment)
-        <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;">
-            <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;">
-                <div style="width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;">!</div>
-                <div style="flex:1;min-width:0;">
-                    <div style="color:#991b1b;font-weight:700;">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
-                    @if($pendingPayment)
-                        <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Your business setup is saved — complete payment to activate your monthly subscription.</div>
-                        <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}" style="margin-top:10px;">
-                            @csrf
-                            <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                            </button>
-                        </form>
-                    @endif
-                </div>
-            </div>
-        </div>
+        @include('partials.payment-attention-bar', [
+            'title' => $errors->first('payment') ?: 'Your subscription payment needs attention.',
+            'message' => $pendingPayment ? 'Your business setup is saved — complete payment to activate your monthly subscription.' : null,
+            'payment' => $pendingPayment,
+        ])
     @endif
     @if(session('status'))
         <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;">

@@ -1,17 +1,95 @@
 {
   "name": "zeebroo-pos-lite",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Zeebroo POS Lite — simple Electron POS client (login/sign up → main POS window)",
   "author": {
     "name": "Zeebroo",
     "email": "support@zeebroo.com"
   },
+  "homepage": "https://zeebroo.com",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "dev": "electron ."
+    "dev": "electron .",
+    "prebuild": "node scripts/setApiUrl.js",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^40.10.6"
+    "electron": "^40.10.6",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.zeebroo.pos-lite",
+    "productName": "Zeebroo POS Lite",
+    "copyright": "Copyright © 2025 Zeebroo",
+    "afterPack": "./scripts/afterPack.js",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build-assets"
+    },
+    "files": [
+      "main.js",
+      "config.js",
+      "preload.js",
+      "renderer/**/*",
+      "!**/*.map",
+      "!**/*.d.ts"
+    ],
+    "protocols": [
+      {
+        "name": "Zeebroo POS Lite",
+        "schemes": ["zeebroopos"]
+      }
+    ],
+    "mac": {
+      "icon": "build-assets/icon.icns",
+      "category": "public.app-category.business",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build-assets/entitlements.mac.plist",
+      "entitlementsInherit": "build-assets/entitlements.mac.plist",
+      "artifactName": "ZeebrooPOSLite-${version}-${arch}.${ext}",
+      "target": [
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "build-assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "ZeebrooPOSLite-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "icon": "build-assets/icon.png",
+      "category": "Office",
+      "maintainer": "Zeebroo <support@zeebroo.com>",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        },
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "ZeebrooPOSLite-${version}-${arch}.${ext}"
+    }
   }
 }

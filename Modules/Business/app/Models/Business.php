@@ -168,13 +168,49 @@ class Business extends Model
      */
     public function overdueSubscriptionPayment(): ?Payment
     {
-        return $this->payments()
+        $overdue = $this->payments()
             ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
             ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
             ->whereNotNull('due_at')
             ->where('due_at', '<', now())
             ->latest('due_at')
             ->first();
+
+        return $overdue && ! $this->subscriptionSettledSince($overdue) ? $overdue : null;
+    }
+
+    /**
+     * The unpaid subscription payment still inside its grace period
+     * (Payment::GRACE_PERIOD_DAYS) — used to warn the business before
+     * overdueSubscriptionPayment() starts locking access. Null when nothing
+     * is due.
+     */
+    public function dueSubscriptionPayment(): ?Payment
+    {
+        $due = $this->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
+            ->whereNotNull('due_at')
+            ->where('due_at', '>=', now())
+            ->reorder('due_at')
+            ->first();
+
+        return $due && ! $this->subscriptionSettledSince($due) ? $due : null;
+    }
+
+    /**
+     * A later subscription payment already succeeded — e.g. an abandoned
+     * checkout or a failed renewal charge was followed by a successful one —
+     * so the business has since paid and this stale row should no longer
+     * warn or gate access.
+     */
+    private function subscriptionSettledSince(Payment $payment): bool
+    {
+        return $this->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->where('payment_status', Payment::STATUS_SUCCEEDED)
+            ->where('created_at', '>', $payment->created_at)
+            ->exists();
     }
 
     /**
@@ -312,6 +348,11 @@ class Business extends Model
     public function sales(): HasMany
     {
         return $this->hasMany(\Modules\Pos\Models\Sale::class);
+    }
+
+    public function saleReturns(): HasMany
+    {
+        return $this->hasMany(\Modules\Pos\Models\SaleReturn::class);
     }
 
     public function goodsReceiveNotes(): HasMany

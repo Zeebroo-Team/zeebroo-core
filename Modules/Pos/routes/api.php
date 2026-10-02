@@ -32,6 +32,7 @@ use Modules\Pos\Http\Controllers\Api\PosInvoiceApiController;
 use Modules\Pos\Http\Controllers\Api\PosSalesOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosFeatureReviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosSettingsApiController;
+use Modules\Pos\Http\Controllers\Api\PosInvoiceSetupApiController;
 use Modules\Pos\Http\Controllers\Api\PosMediaApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Http\Controllers\Api\PosCustomerCategoryApiController;
@@ -45,6 +46,8 @@ use Modules\Pos\Http\Controllers\Api\PosProductCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductDiscountApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleCampaignApiController;
+use Modules\Pos\Http\Controllers\Api\PosGiftCardApiController;
+use Modules\Pos\Http\Controllers\Api\PosCouponApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
 use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
@@ -135,6 +138,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::put('online/settings', [PosSettingsApiController::class, 'update'])->name('online.settings.update');
     Route::patch('online/settings', [PosSettingsApiController::class, 'update']);
     Route::post('online/settings/logo', [PosSettingsApiController::class, 'updateLogo'])->name('online.settings.logo.update');
+    Route::get('online/invoice-setup', [PosInvoiceSetupApiController::class, 'show'])->name('online.invoice-setup.show');
+    Route::put('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update'])->name('online.invoice-setup.update');
+    Route::patch('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update']);
 
     // Invoices
     Route::get   ('invoices',                          [PosInvoiceApiController::class, 'index']          )->name('invoices.index');
@@ -202,6 +208,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get  ('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');
     Route::post ('sales/{sale}/void',      [PosSaleApiController::class, 'void']            )->name('sales.void');
     Route::post ('sales/{sale}/return',    [PosSaleReturnApiController::class, 'store']     )->name('sales.return');
+    Route::get  ('sale-returns',           [PosSaleReturnApiController::class, 'index']     )->name('sale-returns.index');
+    Route::get  ('sale-returns/{saleReturn}', [PosSaleReturnApiController::class, 'show']   )->name('sale-returns.show');
     Route::get('online/return-reasons', [PosReturnReasonsApiController::class, 'index'])->name('online.return-reasons');
 
     // Product Units
@@ -229,6 +237,29 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('sale-campaigns',            [PosSaleCampaignApiController::class, 'store'])  ->name('sale-campaigns.store');
     Route::patch ('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'update']) ->name('sale-campaigns.update');
     Route::delete('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'destroy'])->name('sale-campaigns.destroy');
+
+    // Gift Cards
+    Route::get   ('gift-cards',                [PosGiftCardApiController::class, 'index'])       ->name('gift-cards.index');
+    Route::get   ('gift-cards/generate-code',  [PosGiftCardApiController::class, 'generateCode'])->name('gift-cards.generate-code');
+    Route::get   ('gift-cards/lookup',         [PosGiftCardApiController::class, 'lookup'])      ->name('gift-cards.lookup');
+    Route::post  ('gift-cards',                [PosGiftCardApiController::class, 'store'])       ->name('gift-cards.store');
+    Route::get   ('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'show'])        ->whereNumber('giftCard')->name('gift-cards.show');
+    Route::patch ('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'update'])      ->whereNumber('giftCard')->name('gift-cards.update');
+    Route::delete('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'destroy'])     ->whereNumber('giftCard')->name('gift-cards.destroy');
+    Route::get   ('gift-card-groups',               [PosGiftCardApiController::class, 'groups'])      ->name('gift-card-groups.index');
+    Route::get   ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'showGroup'])   ->whereNumber('group')->name('gift-card-groups.show');
+    Route::patch ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'updateGroup']) ->whereNumber('group')->name('gift-card-groups.update');
+    Route::delete('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'destroyGroup'])->whereNumber('group')->name('gift-card-groups.destroy');
+    Route::post  ('gift-card-groups/{group}/cards', [PosGiftCardApiController::class, 'addCards'])    ->whereNumber('group')->name('gift-card-groups.cards.store');
+
+    // Coupons — one shared code per coupon, redeemable `quantity` times
+    Route::get   ('coupons',               [PosCouponApiController::class, 'index'])       ->name('coupons.index');
+    Route::get   ('coupons/generate-code', [PosCouponApiController::class, 'generateCode'])->name('coupons.generate-code');
+    Route::get   ('coupons/lookup',        [PosCouponApiController::class, 'lookup'])      ->name('coupons.lookup');
+    Route::post  ('coupons',               [PosCouponApiController::class, 'store'])       ->name('coupons.store');
+    Route::get   ('coupons/{coupon}',      [PosCouponApiController::class, 'show'])        ->whereNumber('coupon')->name('coupons.show');
+    Route::patch ('coupons/{coupon}',      [PosCouponApiController::class, 'update'])      ->whereNumber('coupon')->name('coupons.update');
+    Route::delete('coupons/{coupon}',      [PosCouponApiController::class, 'destroy'])     ->whereNumber('coupon')->name('coupons.destroy');
 
     // Product Categories
     Route::get ('categories',              [PosProductCategoryApiController::class, 'index'])->name('categories.index');

@@ -4,14 +4,26 @@
 // Talks to the same Laravel POS API the full desktop app uses:
 // Modules/Pos/routes/api.php, prefix /api/v1/pos.
 const API = (() => {
-  function request(method, path, body = null) {
-    return window.electronAPI.apiRequest(method, path, body);
+  // A 402 from EnsureSubscriptionSettled (Modules/Pos) means the business is
+  // locked out — navbar.js listens for these events and shows the lock screen.
+  async function request(method, path, body = null) {
+    const res = await window.electronAPI.apiRequest(method, path, body);
+    if (res?.status === 402 && res.body?.code === 'subscription_payment_overdue') {
+      window.dispatchEvent(new CustomEvent('api-payment-overdue', { detail: res.body }));
+    }
+    if (res?.status === 402 && res.body?.code === 'subscription_ended') {
+      window.dispatchEvent(new CustomEvent('api-subscription-ended'));
+    }
+    return res;
   }
 
   return {
     // Auth
     login: (email, password) =>
       request('POST', '/auth/token', { email, password, device_name: 'pos-lite' }),
+    // Cashier account (Modules/Pos PosCashierApiController@login) — POS-only session
+    cashierLogin: (slug, username, password) =>
+      request('POST', '/cashier/login', { slug, username, password }),
     register: (payload) =>
       request('POST', '/auth/register', { ...payload, platform: 'pos_lite', password_confirmation: payload.password, device_name: 'pos-lite' }),
     businessCategories: () => request('GET', '/auth/business-categories'),
@@ -22,6 +34,11 @@ const API = (() => {
     startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
     paymentStatus: (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
 
+    // My Profile modal (PosAuthApiController me / updateProfile / updatePassword)
+    me: () => request('GET', '/auth/me'),
+    updateProfile: (payload) => request('PUT', '/auth/profile', payload),
+    updatePassword: (payload) => request('PUT', '/auth/password', payload),
+
     // Billing & Payments modal (subscription status + invoice history)
     paymentHistory: () => request('GET', '/auth/payment/history'),
     paymentDetail: (paymentId) => request('GET', `/auth/payment/${paymentId}`),
@@ -29,7 +46,15 @@ const API = (() => {
     resumeBillingSubscription: () => request('POST', '/auth/payment/subscription/resume'),
 
     // Catalog / sales
-    products: (q) => request('GET', '/online/products' + (q ? `?q=${encodeURIComponent(q)}` : '')),
+    products: (q, opts = {}) => {
+      const qs = new URLSearchParams();
+      if (q) qs.set('q', q);
+      if (opts.filter) qs.set('filter', opts.filter); // 'rental' | 'dynamic' — POS mode tabs
+      if (opts.categoryId) qs.set('category', opts.categoryId);
+      const suffix = qs.toString();
+      return request('GET', '/online/products' + (suffix ? `?${suffix}` : ''));
+    },
+    posCategories: () => request('GET', '/online/categories'),
     checkout: (payload) => request('POST', '/online/checkout', payload),
 
     // Products & Categories management
@@ -43,6 +68,7 @@ const API = (() => {
     },
     product: (id) => request('GET', `/online/products/${id}`),
     createProduct: (payload) => request('POST', '/online/products', payload),
+    importProducts: (rows) => request('POST', '/online/products/import', { rows }),
     updateProduct: (id, payload) => request('PATCH', `/online/products/${id}`, payload),
     deleteProduct: (id) => request('DELETE', `/online/products/${id}`),
     productSearch: (q, perPage) => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
@@ -79,7 +105,12 @@ const API = (() => {
 
     // Business settings (delivery partners etc.) + file manager (product images)
     settingsGet: () => request('GET', '/online/settings'),
+    settingsUpdate: (payload) => request('PATCH', '/online/settings', payload),
     fileManagerBrowse: (folderId, imagesOnly) => request('GET', `/online/file-manager?folder=${folderId || ''}&images_only=${imagesOnly ? 1 : 0}`),
+
+    // Invoice Setup (template, paper, margins, arrangement — no letterhead)
+    invoiceSetupGet: () => request('GET', '/online/invoice-setup'),
+    invoiceSetupUpdate: (payload) => request('PATCH', '/online/invoice-setup', payload),
 
     // Customers
     customers: (params = {}) => {
@@ -91,14 +122,199 @@ const API = (() => {
     },
     customer: (id) => request('GET', `/customers/${id}`),
     createCustomer: (payload) => request('POST', '/customers', payload),
+    updateCustomer: (id, payload) => request('PATCH', `/customers/${id}`, payload),
     deleteCustomer: (id) => request('DELETE', `/customers/${id}`),
     customerCategories: () => request('GET', '/customer-categories'),
     createCustomerCategory: (payload) => request('POST', '/customer-categories', payload),
+    importCustomers: (rows) => request('POST', '/customers/import', { rows }),
+
+    // Suppliers — full CRUD (Contacts hub). `API.suppliers()` further below stays
+    // as the lightweight active-only picker used by Stock forms.
+    supplierList: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.categoryId) qs.set('category_id', params.categoryId);
+      if (params.active !== undefined && params.active !== '') qs.set('active', params.active);
+      const suffix = qs.toString();
+      return request('GET', '/suppliers' + (suffix ? `?${suffix}` : ''));
+    },
+    supplier: (id) => request('GET', `/suppliers/${id}`),
+    createSupplier: (payload) => request('POST', '/suppliers', payload),
+    updateSupplier: (id, payload) => request('PATCH', `/suppliers/${id}`, payload),
+    deactivateSupplier: (id) => request('DELETE', `/suppliers/${id}`),
+    supplierCategories: () => request('GET', '/supplier-categories'),
+    createSupplierCategory: (payload) => request('POST', '/supplier-categories', payload),
+    importSuppliers: (rows) => request('POST', '/suppliers/import', { rows }),
 
     // Cashiers
     cashiers: () => request('GET', '/cashiers'),
     createCashier: (payload) => request('POST', '/cashiers', payload),
     updateCashier: (id, payload) => request('PATCH', `/cashiers/${id}`, payload),
     deleteCashier: (id) => request('DELETE', `/cashiers/${id}`),
+
+    // Sales Management — Transactions
+    sales: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.channel) qs.set('channel', params.channel);
+      if (params.limit) qs.set('limit', params.limit);
+      const suffix = qs.toString();
+      return request('GET', '/sales' + (suffix ? `?${suffix}` : ''));
+    },
+    sale: (id) => request('GET', `/sales/${id}`),
+    voidSale: (id) => request('POST', `/sales/${id}/void`),
+    processReturn: (id, payload) => request('POST', `/sales/${id}/return`, payload),
+    returnReasons: () => request('GET', '/online/return-reasons'),
+
+    // Sales Management — Returns (read-only list of processed sale returns)
+    saleReturns: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.page) qs.set('page', params.page);
+      const suffix = qs.toString();
+      return request('GET', '/sale-returns' + (suffix ? `?${suffix}` : ''));
+    },
+    saleReturn: (id) => request('GET', `/sale-returns/${id}`),
+
+    // Sales Management — History (paginated, with summary + filters)
+    salesHistory: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.status) qs.set('status', params.status);
+      if (params.channel) qs.set('channel', params.channel);
+      if (params.dateFrom) qs.set('date_from', params.dateFrom);
+      if (params.dateTo) qs.set('date_to', params.dateTo);
+      qs.set('page', params.page || 1);
+      return request('GET', '/sales/history?' + qs.toString());
+    },
+
+    // Sales Management — Quotations
+    quotations: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('status', params.status || 'all');
+      return request('GET', '/quotations?' + qs.toString());
+    },
+    quotation: (id) => request('GET', `/quotations/${id}`),
+    createQuotation: (payload) => request('POST', '/quotations', payload),
+    markQuotationSent: (id) => request('POST', `/quotations/${id}/mark-sent`),
+    markQuotationAccepted: (id) => request('POST', `/quotations/${id}/accept`),
+    markQuotationRejected: (id) => request('POST', `/quotations/${id}/reject`),
+
+    // Sales Management — Recurring Sales (customer subscriptions)
+    subscriptions: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('status', params.status || 'all');
+      qs.set('page', params.page || 1);
+      return request('GET', '/subscriptions?' + qs.toString());
+    },
+    subscription: (id) => request('GET', `/subscriptions/${id}`),
+    cancelSubscription: (id) => request('POST', `/subscriptions/${id}/cancel`),
+    pauseSubscription: (id) => request('POST', `/subscriptions/${id}/pause`),
+    resumeSubscription: (id) => request('POST', `/subscriptions/${id}/resume`),
+    renewSubscription: (id) => request('POST', `/subscriptions/${id}/renew`),
+
+    // Sales Management — Rentals (product rentals)
+    productRentals: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('status', params.status || 'all');
+      qs.set('page', params.page || 1);
+      return request('GET', '/product-rentals?' + qs.toString());
+    },
+    productRental: (id) => request('GET', `/product-rentals/${id}`),
+    returnProductRental: (id) => request('POST', `/product-rentals/${id}/return`),
+
+    // Stock — Purchase Orders
+    purchaseOrders: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.status) qs.set('status', params.status);
+      const suffix = qs.toString();
+      return request('GET', '/purchase-orders' + (suffix ? `?${suffix}` : ''));
+    },
+    purchaseOrder: (id) => request('GET', `/purchase-orders/${id}`),
+    createPurchaseOrder: (payload) => request('POST', '/purchase-orders', payload),
+    placePurchaseOrder: (id) => request('POST', `/purchase-orders/${id}/place`),
+    cancelPurchaseOrder: (id) => request('POST', `/purchase-orders/${id}/cancel`),
+
+    // Stock — Goods Receive (GRNs)
+    grns: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.payment) qs.set('payment', params.payment);
+      const suffix = qs.toString();
+      return request('GET', '/grns' + (suffix ? `?${suffix}` : ''));
+    },
+    grn: (id) => request('GET', `/grns/${id}`),
+    grnFormForPurchase: (purchaseId) => request('GET', `/purchase-orders/${purchaseId}/grn-form`),
+    createGrnForPurchase: (purchaseId, payload) => request('POST', `/purchase-orders/${purchaseId}/grns`, payload),
+    createGrnDirect: (payload) => request('POST', '/grns', payload),
+    payGrn: (id, payload) => request('POST', `/grns/${id}/pay`, payload),
+    approveGrn: (id) => request('POST', `/grns/${id}/approve`),
+    rejectGrn: (id) => request('POST', `/grns/${id}/reject`),
+
+    // Stock — Cheques
+    cheques: (filter) => request('GET', '/cheques' + (filter && filter !== 'all' ? `?filter=${filter}` : '')),
+    clearCheque: (id, payload = {}) => request('POST', `/cheques/${id}/clear`, payload),
+
+    // Stock — Stock Transfers
+    stockTransfers: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('page', params.page || 1);
+      return request('GET', '/stock-transfers?' + qs.toString());
+    },
+    stockTransfer: (id) => request('GET', `/stock-transfers/${id}`),
+    createStockTransfer: (payload) => request('POST', '/stock-transfers', payload),
+    receiveStockTransfer: (id) => request('POST', `/stock-transfers/${id}/receive`),
+    cancelStockTransfer: (id) => request('POST', `/stock-transfers/${id}/cancel`),
+
+    // Gift Cards — a group ("Birthday Gift Card") holds many cards, each with its own code
+    giftCardGroups: (q, status) => request('GET', `/gift-card-groups?q=${encodeURIComponent(q || '')}&status=${status || ''}`),
+    giftCardGroup: (id) => request('GET', `/gift-card-groups/${id}`),
+    updateGiftCardGroup: (id, payload) => request('PATCH', `/gift-card-groups/${id}`, payload),
+    deleteGiftCardGroup: (id) => request('DELETE', `/gift-card-groups/${id}`),
+    addGiftCardsToGroup: (id, quantity) => request('POST', `/gift-card-groups/${id}/cards`, { quantity }),
+    createGiftCards: (payload) => request('POST', '/gift-cards', payload), // payload.quantity = how many cards
+    giftCard: (id) => request('GET', `/gift-cards/${id}`),
+    updateGiftCard: (id, payload) => request('PATCH', `/gift-cards/${id}`, payload),
+    deleteGiftCard: (id) => request('DELETE', `/gift-cards/${id}`),
+    giftCardLookup: (code) => request('GET', `/gift-cards/lookup?code=${encodeURIComponent(code || '')}`),
+    giftCardGenerateCode: () => request('GET', '/gift-cards/generate-code'),
+
+    // Coupons — one shared code per coupon, usable `quantity` times
+    coupons: (q, status) => request('GET', `/coupons?q=${encodeURIComponent(q || '')}&status=${status || ''}`),
+    coupon: (id) => request('GET', `/coupons/${id}`),
+    createCoupon: (payload) => request('POST', '/coupons', payload),
+    updateCoupon: (id, payload) => request('PATCH', `/coupons/${id}`, payload),
+    deleteCoupon: (id) => request('DELETE', `/coupons/${id}`),
+    couponLookup: (code) => request('GET', `/coupons/lookup?code=${encodeURIComponent(code || '')}`),
+    couponGenerateCode: () => request('GET', '/coupons/generate-code'),
+
+    // Reports & Summaries
+    todaySummary: () => request('GET', '/today-summary'),
+    profitReport: (period) => request('GET', `/profit-report?period=${period || 30}`),
+
+    // Cash Drawer — Open Shift (opening float) & End of Day (withdrawals)
+    cashDrawer: () => request('GET', '/cash-drawer'),
+    cashDrawerOpen: (openingFloat) => request('POST', '/cash-drawer/open', { opening_float: openingFloat }),
+    cashDrawerWithdraw: (amount, note) => request('POST', '/cash-drawer/withdraw', { amount, note }),
+    verifyPassword: (password) => request('POST', '/verify-password', { password }),
+
+    // Stock — shared lookups (suppliers, finance accounts, branches)
+    suppliers: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      qs.set('active', '1');
+      return request('GET', '/suppliers?' + qs.toString());
+    },
+    accounts: () => request('GET', '/accounts'),
+    branches: () => request('GET', '/branches'),
+    branchAdd: (payload) => request('POST', '/branches', payload),
+    branchUpdate: (id, payload) => request('PUT', `/branches/${id}`, payload),
+    branchRemove: (id) => request('DELETE', `/branches/${id}`),
+    branchesOnline: () => request('GET', '/online/branches'),
   };
 })();

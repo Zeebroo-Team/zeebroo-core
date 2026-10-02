@@ -73,19 +73,21 @@ class BusinessController extends Controller
             $business->forceFill(['platform_choice_shown_at' => now()])->save();
         }
 
-        $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::query()
-            ->where('channel', 'stable')
-            ->where('is_latest', true)
-            ->first()
-            ?? \Modules\AppConnection\Models\AppRelease::query()
-                ->where('channel', 'stable')
-                ->orderByDesc('id')
-                ->first();
+        $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::latestStable();
+        $latestLiteRelease = \Modules\AppConnection\Models\AppRelease::latestStable(\Modules\AppConnection\Models\AppRelease::APP_LITE);
+
+        $pendingPayment = $business->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
+            ->latest()
+            ->first();
 
         return view('business::platform-choice', [
             'latestDesktopRelease' => $latestDesktopRelease,
+            'latestLiteRelease' => $latestLiteRelease,
             'currentPackage' => $business->package,
             'detectedOs' => $this->detectOsFromUserAgent($request->userAgent() ?? ''),
+            'pendingPayment' => $pendingPayment,
         ]);
     }
 
@@ -599,7 +601,7 @@ class BusinessController extends Controller
         } catch (\Throwable $e) {
             report($e);
 
-            return redirect()->route('dashboard')
+            return redirect()->route('business.platform-choice')
                 ->withErrors(['payment' => 'Your business profile was saved, but we could not start Stripe checkout. Please try again.']);
         }
 

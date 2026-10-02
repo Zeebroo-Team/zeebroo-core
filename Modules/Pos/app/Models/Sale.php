@@ -41,12 +41,16 @@ class Sale extends Model
         'channel',
         'credit_account_id',
         'pos_customer_id',
+        'pos_gift_card_id',
+        'pos_coupon_id',
         'credit_due_date',
         'subtotal',
         'discount_percent',
         'discount_amount',
+        'coupon_discount',
         'total',
         'amount_paid',
+        'gift_card_amount',
         'amount_tendered',
         'change_amount',
         'notes',
@@ -63,6 +67,8 @@ class Sale extends Model
             'discount_amount' => 'decimal:2',
             'total' => 'decimal:2',
             'amount_paid' => 'decimal:2',
+            'gift_card_amount' => 'decimal:2',
+            'coupon_discount' => 'decimal:2',
             'amount_tendered' => 'decimal:2',
             'change_amount' => 'decimal:2',
             'credit_due_date' => 'date',
@@ -95,6 +101,22 @@ class Sale extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'pos_customer_id');
+    }
+
+    public function giftCard(): BelongsTo
+    {
+        return $this->belongsTo(GiftCard::class, 'pos_gift_card_id');
+    }
+
+    public function coupon(): BelongsTo
+    {
+        return $this->belongsTo(Coupon::class, 'pos_coupon_id');
+    }
+
+    /** Amount paid through payment_method itself — i.e. the total less any gift card portion. */
+    public function netPaymentAmount(): float
+    {
+        return round(max(0, (float) $this->total - (float) $this->gift_card_amount), 2);
     }
 
     public function items(): HasMany

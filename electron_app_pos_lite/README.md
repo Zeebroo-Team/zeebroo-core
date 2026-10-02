@@ -5,7 +5,7 @@ the full desktop app (`Modules/Pos/routes/api.php`, prefix `/api/v1/pos`) —
 no separate backend was added for this lite version because every endpoint
 it needs (`auth/token`, `auth/register`, `auth/business-categories`,
 `businesses`, `online/products`, `online/checkout`, `customers`,
-`customer-categories`) already exists.
+`customer-categories`, `suppliers`, `supplier-categories`) already exists.
 
 ## Flow
 
@@ -15,19 +15,24 @@ it needs (`auth/token`, `auth/register`, `auth/business-categories`,
 2. **Dashboard** (`renderer/dashboard.html`) opens — an animated landing
    screen: a greeting banner with a live clock, then a tile grid for the main
    modules (Products & Categories, Barcodes, Stock, Reports & Summaries,
-   Cashiers, Customers, Sales Management, POS). Tiles marked "Open" are wired
+   Cashiers, Contacts, Sales Management, POS). Tiles marked "Open" are wired
    up; the rest are flagged "Coming soon" (they show a toast when tapped) —
    say which one to build next and it'll get wired to the existing Laravel
    endpoints the same way the others were. The layout switches to a compact
    mode on short windows so every module stays visible at the 960x600 minimum.
 3. **POS** (`renderer/pos.html`) — search/browse products, build a cart,
    pick Cash/Card, and complete a sale.
-4. **Customers** (`renderer/customers.html`) — search by name/phone/email,
-   filter by category or type, add a customer (modal form), view a
-   customer's profile + recent sales (modal), or delete one.
+4. **Contacts** (`renderer/contacts.html`) — a Customers/Suppliers hub with
+   two sub-nav cards, mirroring the Products & Categories layout. Each side
+   supports full CRUD: search by name/phone/email, filter by category (or
+   type/status), add or edit via a modal form, view a profile (recent sales
+   for customers, recent purchase orders for suppliers), and remove one
+   (customers are deleted outright; suppliers are deactivated/reactivated,
+   matching the web admin's behaviour since purchase history references
+   them).
 
 Every screen's top bar has the same profile dropdown (avatar, name, email,
-business, Language, Reload page, Restart app, Log out). "Dashboard" goes back to the
+business, My Profile, Language, Reload page, Restart app, Log out). "Dashboard" goes back to the
 tile grid from any module screen; Log out returns to the auth window.
 
 ## Languages (English / Sinhala)
@@ -81,7 +86,7 @@ renderer/
   auth.html/css/js       Login + Sign Up
   dashboard.html/css/js  Tile-grid landing screen (active + "coming soon" modules)
   pos.html/css/js        Product grid, cart, checkout
-  customers.html/css/js  Customer list, search/filter, add/view/delete
+  contacts.html/css/js   Customers + Suppliers hub, full CRUD for both
   css/navbar.css, js/navbar.js  Profile dropdown + language window used by every top bar
   js/i18n.js, js/lang/si.js     Translation engine and the Sinhala dictionary
   fonts/                        Bundled Noto Sans Sinhala (+ OFL licence)
