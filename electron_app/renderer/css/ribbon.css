@@ -18604,6 +18604,23 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .pm-col-dot--review      { background: #a855f7; }
 .pm-col-dot--done        { background: #22c55e; }
 
+.pm-col-del {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+}
+.pm-col-del:hover { color: #dc2626; }
+.pm-col-edit:hover { color: var(--accent); }
+.pm-col-sort {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
 .pm-kanban-cards {
   flex: 1;
   overflow-y: auto;
@@ -18626,6 +18643,10 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   gap: 6px;
 }
 .pm-task-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,.1); border-color: var(--accent); }
+.pm-task-card[draggable="true"] { cursor: grab; }
+.pm-task-card[draggable="true"]:active { cursor: grabbing; }
+.pm-task-card--dragging { opacity: .4; }
+.pm-kanban-col--dragover { border-color: var(--accent); border-style: dashed; background: color-mix(in srgb, var(--accent) 6%, var(--surface2)); }
 
 .pm-task-card-title { font-size: 12px; font-weight: 600; line-height: 1.35; }
 .pm-task-card-meta  { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }

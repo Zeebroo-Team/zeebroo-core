@@ -10,6 +10,7 @@ use Illuminate\Validation\Rule;
 use Modules\ProjectManage\Models\Milestone;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
+use Modules\ProjectManage\Models\TaskStatus;
 use Modules\ProjectManage\Services\MilestoneService;
 use Modules\ProjectManage\Services\ProjectService;
 use Modules\ProjectManage\Services\TaskService;
@@ -31,8 +32,13 @@ class ProjectManageApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
 
-        $filter   = $request->query('filter', 'all');
-        $list     = $this->projects->listForBusiness($business, $filter);
+        // Legacy desktop clients send ?filter=<status|all>; map it onto the service's filters array.
+        $status = (string) $request->query('status', $request->query('filter', 'all'));
+        $list   = $this->projects->listForBusiness($business, [
+            'status'       => $status === 'all' ? '' : $status,
+            'project_type' => (string) $request->query('project_type', ''),
+            'search'       => (string) $request->query('search', ''),
+        ]);
 
         return response()->json(['data' => $list->map(fn ($p) => $this->fmtProject($p))]);
     }
@@ -127,21 +133,57 @@ class ProjectManageApiController extends Controller
         $business = $this->businessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
-        $board = $this->tasks->boardForProject($project);
-
-        $labels = ['todo' => 'To Do', 'in_progress' => 'In Progress', 'review' => 'Review', 'done' => 'Done'];
-        $columns = collect($board)->map(function ($tasks, $status) use ($labels) {
-            return [
-                'status' => $status,
-                'label'  => $labels[$status] ?? $status,
-                'tasks'  => $tasks->map(fn ($t) => $this->fmtTask($t))->values(),
-            ];
-        })->values();
+        $columns = array_map(
+            fn (array $col) => ['tasks' => $col['tasks']->map(fn ($t) => $this->fmtTask($t))->values()] + $col,
+            $this->tasks->boardForProject($project),
+        );
 
         return response()->json([
             'project' => $this->fmtProject($project),
             'columns' => $columns,
         ]);
+    }
+
+    // ── Task statuses (board columns) ────────────────────────────────────────
+
+    public function statusIndex(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        return response()->json(['data' => $this->tasks->statusesForProject($project)]);
+    }
+
+    public function statusStore(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $validated = $request->validate(TaskService::statusRules());
+        $status    = $this->tasks->createStatus($project, $validated);
+
+        return response()->json(['data' => $this->tasks->fmtStatus($status)], 201);
+    }
+
+    public function statusUpdate(Request $request, int $id): JsonResponse
+    {
+        $business  = $this->businessOrAbort($request);
+        $status    = $this->resolveStatus($business, $id);
+        $validated = $request->validate(TaskService::statusRules(partial: true));
+
+        $status = $this->tasks->updateStatus($status, $validated);
+
+        return response()->json(['data' => $this->tasks->fmtStatus($status)]);
+    }
+
+    public function statusDestroy(Request $request, int $id): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $status   = $this->resolveStatus($business, $id);
+
+        $this->tasks->deleteStatus($status);
+
+        return response()->json(['message' => 'Status deleted. Its tasks were moved to To Do.']);
     }
 
     // ── Tasks ────────────────────────────────────────────────────────────────
@@ -165,7 +207,7 @@ class ProjectManageApiController extends Controller
         $validated = $request->validate([
             'title'            => 'required|string|max:200',
             'description'      => 'nullable|string|max:5000',
-            'status'           => 'nullable|in:todo,in_progress,review,done',
+            'status'           => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
             'priority'         => 'nullable|in:low,normal,high',
             'milestone_id'     => 'nullable|integer',
             'assigned_to'      => 'nullable|integer|exists:users,id',
@@ -183,7 +225,9 @@ class ProjectManageApiController extends Controller
         $business = $this->businessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
-        $status = $request->validate(['status' => 'required|in:todo,in_progress,review,done'])['status'];
+        $status = $request->validate([
+            'status' => ['required', Rule::in($this->tasks->statusKeysForProject($task->project))],
+        ])['status'];
         $task   = $this->tasks->moveStatus($task, $status);
 
         return response()->json(['data' => $this->fmtTask($task)]);
@@ -318,6 +362,13 @@ class ProjectManageApiController extends Controller
         $task = Task::with('project')->findOrFail($id);
         abort_unless((int) $task->project->business_id === (int) $business->id, 404);
         return $task;
+    }
+
+    private function resolveStatus(\Modules\Business\Models\Business $business, int $id): TaskStatus
+    {
+        $status = TaskStatus::with('project')->findOrFail($id);
+        abort_unless((int) $status->project->business_id === (int) $business->id, 404);
+        return $status;
     }
 
     private function resolveMilestone(\Modules\Business\Models\Business $business, int $id): Milestone

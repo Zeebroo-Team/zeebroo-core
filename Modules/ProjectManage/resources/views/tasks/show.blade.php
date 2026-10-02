@@ -104,10 +104,9 @@
                                 <div class="pcat-field">
                                     <label>Status</label>
                                     <select name="status">
-                                        <option value="todo"        @selected(old('status',$task->status)==='todo')>To Do</option>
-                                        <option value="in_progress" @selected(old('status',$task->status)==='in_progress')>In Progress</option>
-                                        <option value="review"      @selected(old('status',$task->status)==='review')>Review</option>
-                                        <option value="done"        @selected(old('status',$task->status)==='done')>Done</option>
+                                        @foreach($statuses as $s)
+                                            <option value="{{ $s['status'] }}" @selected(old('status',$task->status)===$s['status'])>{{ $s['label'] }}</option>
+                                        @endforeach
                                     </select>
                                 </div>
                                 <div class="pcat-field">

@@ -3,9 +3,12 @@
 namespace Modules\ProjectManage\Services;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Modules\Business\Models\Business;
 use Modules\ProjectManage\Models\Task;
 use Modules\ProjectManage\Models\TaskComment;
+use Modules\ProjectManage\Models\TaskStatus;
 use Modules\ProjectManage\Models\TimeLog;
 use Modules\ProjectManage\Models\Project;
 
@@ -59,9 +62,66 @@ class TaskService
     }
 
     /**
-     * Returns tasks grouped by status column with sort_order.
+     * All board statuses for a project in column order (by sort number; on a tie
+     * the built-in status comes first). "done" always sorts last.
      *
-     * @return array<string, Collection>
+     * @return array<int, array{id:?int,status:string,label:string,color:?string,sort_order:int,is_custom:bool}>
+     */
+    public function statusesForProject(Project $project): array
+    {
+        $builtin = collect(Task::BUILTIN_STATUSES)->map(fn (string $label, string $key) => [
+            'id'         => null,
+            'status'     => $key,
+            'label'      => $label,
+            'color'      => null,
+            'sort_order' => Task::BUILTIN_SORT[$key],
+            'is_custom'  => false,
+        ])->values();
+
+        $custom = TaskStatus::where('project_id', $project->id)
+            ->orderBy('sort_order')->orderBy('id')
+            ->get()
+            ->map(fn (TaskStatus $s) => $this->fmtStatus($s));
+
+        return $builtin->concat($custom)
+            ->sortBy([['sort_order', 'asc'], ['is_custom', 'asc'], ['id', 'asc']])
+            ->values()
+            ->all();
+    }
+
+    /** @return array{id:int,status:string,label:string,color:?string,sort_order:int,is_custom:bool} */
+    public function fmtStatus(TaskStatus $s): array
+    {
+        return [
+            'id'         => $s->id,
+            'status'     => $s->key,
+            'label'      => $s->label,
+            'color'      => $s->color,
+            'sort_order' => (int) $s->sort_order,
+            'is_custom'  => true,
+        ];
+    }
+
+    /** Validation rules for creating / updating a custom status (shared by web + API). */
+    public static function statusRules(bool $partial = false): array
+    {
+        return [
+            'label'      => [$partial ? 'sometimes' : 'required', 'string', 'max:60'],
+            'color'      => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{3,8}$/'],
+            'sort_order' => ['nullable', 'integer', 'min:0', 'max:' . Task::CUSTOM_SORT_MAX],
+        ];
+    }
+
+    /** @return string[] */
+    public function statusKeysForProject(Project $project): array
+    {
+        return array_column($this->statusesForProject($project), 'status');
+    }
+
+    /**
+     * Returns the project's status columns, each with its tasks (by sort_order).
+     *
+     * @return array<int, array{id:?int,status:string,label:string,color:?string,is_custom:bool,tasks:Collection}>
      */
     public function boardForProject(Project $project): array
     {
@@ -70,22 +130,69 @@ class TaskService
             ->with(['assignedTo', 'milestone'])
             ->orderBy('sort_order')
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->groupBy('status');
 
-        $columns = [
-            Task::STATUS_TODO        => collect(),
-            Task::STATUS_IN_PROGRESS => collect(),
-            Task::STATUS_REVIEW      => collect(),
-            Task::STATUS_DONE        => collect(),
-        ];
+        return array_map(
+            fn (array $col) => $col + ['tasks' => $tasks->get($col['status'], collect())->values()],
+            $this->statusesForProject($project),
+        );
+    }
 
-        foreach ($tasks as $task) {
-            if (isset($columns[$task->status])) {
-                $columns[$task->status]->push($task);
-            }
+    public function createStatus(Project $project, array $data): TaskStatus
+    {
+        $base = Str::limit(Str::slug($data['label'], '_'), 16, '') ?: 'status';
+        $taken = $this->statusKeysForProject($project);
+
+        $key = $base;
+        for ($i = 2; in_array($key, $taken, true); $i++) {
+            $key = $base . '_' . $i;
         }
 
-        return $columns;
+        // Default: right after the last custom status (or after Review), never past Done.
+        $defaultSort = min(
+            Task::CUSTOM_SORT_MAX,
+            max(Task::BUILTIN_SORT[Task::STATUS_REVIEW], (int) TaskStatus::where('project_id', $project->id)->max('sort_order')) + 1,
+        );
+
+        return TaskStatus::create([
+            'project_id' => $project->id,
+            'key'        => $key,
+            'label'      => $data['label'],
+            'color'      => filled($data['color'] ?? '') ? $data['color'] : null,
+            'sort_order' => filled($data['sort_order'] ?? '') ? (int) $data['sort_order'] : $defaultSort,
+        ]);
+    }
+
+    /** Updates label / color / sort number. The status key never changes, so tasks stay attached. */
+    public function updateStatus(TaskStatus $status, array $data): TaskStatus
+    {
+        $updates = [];
+        if (filled($data['label'] ?? '')) {
+            $updates['label'] = $data['label'];
+        }
+        if (array_key_exists('color', $data)) {
+            $updates['color'] = filled($data['color']) ? $data['color'] : null;
+        }
+        if (filled($data['sort_order'] ?? '')) {
+            $updates['sort_order'] = (int) $data['sort_order'];
+        }
+
+        $status->update($updates);
+
+        return $status->fresh();
+    }
+
+    /** Deletes a custom status; its tasks fall back to "todo". */
+    public function deleteStatus(TaskStatus $status): void
+    {
+        DB::transaction(function () use ($status) {
+            Task::where('project_id', $status->project_id)
+                ->where('status', $status->key)
+                ->update(['status' => Task::STATUS_TODO, 'completed_at' => null]);
+
+            $status->delete();
+        });
     }
 
     public function create(Project $project, array $data): Task
