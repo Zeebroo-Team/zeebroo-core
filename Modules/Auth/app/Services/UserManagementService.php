@@ -20,8 +20,14 @@ class UserManagementService
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
         $sort = $filters['sort'] ?? 'newest';
+        $hiddenDomains = config('app.hidden_user_email_domains', []);
 
         return User::query()
+            ->when($hiddenDomains, fn ($q) => $q->where(function ($w) use ($hiddenDomains) {
+                foreach ($hiddenDomains as $domain) {
+                    $w->whereRaw('LOWER(email) NOT LIKE ?', ['%@'.$domain]);
+                }
+            }))
             ->with(['roles', 'businesses.package', 'businesses.featureOverrides', 'businesses.payments' => fn ($q) => $q->latest('created_at')])
             ->withCount(['businesses', 'accounts'])
             ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
