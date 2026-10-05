@@ -650,6 +650,7 @@
                 <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Management</span></a>
                 <a href="{{ route('admin.payments.index') }}" class="{{ request()->routeIs('admin.payments.*') ? 'active' : '' }}"><i class="fa fa-credit-card"></i><span>Payment History</span></a>
                 <a href="{{ route('admin.email-marketing.index') }}" class="{{ request()->routeIs('admin.email-marketing.*') ? 'active' : '' }}"><i class="fa fa-envelope-open-text"></i><span>Email Marketing</span></a>
+                <a href="{{ route('admin.automated-emails.index') }}" class="{{ request()->routeIs('admin.automated-emails.*') ? 'active' : '' }}"><i class="fa fa-envelope-circle-check"></i><span>Automated Emails</span></a>
                 <a href="{{ route('admin.releases.index') }}" class="{{ request()->routeIs('admin.releases.*') ? 'active' : '' }}"><i class="fa fa-rocket"></i><span>Release Management</span></a>
                 <a href="{{ route('admin.packages.index') }}" class="{{ request()->routeIs('admin.packages.*') ? 'active' : '' }}"><i class="fa fa-box-open"></i><span>Package Management</span></a>
                 <a href="{{ route('admin.industries.index') }}" class="{{ request()->routeIs('admin.industries.*') ? 'active' : '' }}"><i class="fa fa-industry"></i><span>Industry Management</span></a>

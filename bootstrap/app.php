@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureAccountIsActive;
 use App\Http\Middleware\EnsureWebSubscriptionSettled;
 use App\Http\Middleware\RedirectHrPortalOnlyUsers;
+use App\Http\Middleware\TrackLastSeen;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -25,6 +26,10 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsureAccountIsActive::class,
             RedirectHrPortalOnlyUsers::class,
             EnsureWebSubscriptionSettled::class,
+            TrackLastSeen::class,
+        ]);
+        $middleware->api(append: [
+            TrackLastSeen::class,
         ]);
         // RFC 8058 one-click unsubscribe: mail clients POST without a CSRF token (the URL is signed instead).
         $middleware->validateCsrfTokens(except: ['marketing/unsubscribe/*']);

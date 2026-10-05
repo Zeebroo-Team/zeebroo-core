@@ -68,6 +68,8 @@ use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
+    Route::post('auth/password/forgot',   [PosAuthApiController::class, 'forgotPassword'])->middleware('throttle:5,1')->name('auth.password.forgot');
+    Route::post('auth/password/reset',    [PosAuthApiController::class, 'resetPassword'])->middleware('throttle:10,1')->name('auth.password.reset');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
     Route::get ('auth/packages',           [PosAuthApiController::class, 'packages'])->name('auth.packages');
     Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');

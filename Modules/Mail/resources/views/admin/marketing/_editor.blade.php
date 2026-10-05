@@ -1,17 +1,19 @@
 {{--
     Rich email body editor shared by the template form and the send page.
     Expects: $body (initial HTML), $placeholders (tag => label).
+    Optional: $extraSample (tag => preview value), $rawSampleTags (tags whose sample is HTML),
+              $testUrl (send-test endpoint), $showUnsubscribe (preview footer link, default true).
     Writes the HTML into <textarea name="body" id="aem-body-input"> on submit.
     The subject input (if any) must have id="aem-subject" so merge tags/preview/test can use it.
 --}}
 @php
     $previewUser = auth()->user();
-    $previewSample = [
+    $previewSample = array_merge([
         'name' => $previewUser->name,
         'first_name' => strtok((string) $previewUser->name, ' ') ?: '',
         'email' => $previewUser->email,
         'app_name' => config('app.name'),
-    ];
+    ], $extraSample ?? []);
 @endphp
 <div class="aem-field" style="margin-bottom:10px;">
     <span class="aem-label">Merge tags <span style="text-transform:none;letter-spacing:0;font-weight:500;">— click to insert; replaced per recipient</span></span>
@@ -94,6 +96,8 @@
     const subject = document.getElementById('aem-subject');
     const form    = input.closest('form');
     const sample  = @json($previewSample);
+    const rawTags = @json(array_values($rawSampleTags ?? []));
+    const tagRe   = new RegExp('(?:\\{\\{|%7B%7B)\\s*(' + Object.keys(sample).join('|') + ')\\s*(?:\\}\\}|%7D%7D)', 'gi');
 
     surface.innerHTML = input.value || '<p><br></p>';
     try { document.execCommand('styleWithCSS', false, true); } catch (e) {}
@@ -202,8 +206,12 @@
     // ── Preview ──
     const modal = document.getElementById('aem-preview-modal');
     function fill(text, asHtml) {
-        return text.replace(/(?:\{\{|%7B%7B)\s*(name|first_name|email|app_name)\s*(?:\}\}|%7D%7D)/gi,
-            (m, k) => asHtml ? esc(sample[k.toLowerCase()] || '') : (sample[k.toLowerCase()] || ''));
+        return text.replace(tagRe, function (m, k) {
+            k = k.toLowerCase();
+            const v = sample[k] == null ? '' : String(sample[k]);
+            if (!asHtml) return v.replace(/<[^>]*>/g, '');
+            return rawTags.includes(k) ? v : esc(v);
+        });
     }
     document.getElementById('aem-preview-btn').addEventListener('click', function () {
         document.getElementById('aem-preview-subject').textContent = subject ? fill(subject.value || '(no subject)', false) : '';
@@ -211,7 +219,8 @@
             '<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f1f5f9;font-family:Segoe UI,Arial,sans-serif;">'
             + '<div style="max-width:600px;margin:0 auto;padding:32px 16px;"><div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px 24px;font-size:14px;line-height:1.6;color:#1e293b;">'
             + fill(html(), true)
-            + '</div><div style="text-align:center;font-size:11.5px;color:#94a3b8;padding:16px 8px 0;">You\'re receiving this email because you have a ' + esc(sample.app_name) + ' account.<br><u>Unsubscribe from marketing emails</u></div></div></body></html>';
+            + '</div><div style="text-align:center;font-size:11.5px;color:#94a3b8;padding:16px 8px 0;">You\'re receiving this email because you have a ' + esc(sample.app_name) + ' account.'
+            + (@json($showUnsubscribe ?? true) ? '<br><u>Unsubscribe from marketing emails</u>' : '') + '</div></div></body></html>';
         modal.classList.add('is-open');
     });
     modal.addEventListener('click', e => { if (e.target === modal || e.target.closest('[data-close-preview]')) modal.classList.remove('is-open'); });
@@ -226,7 +235,7 @@
         testBtn.disabled = true;
         testOut.style.color = ''; testOut.textContent = 'Sending test…';
         try {
-            const res = await fetch(@json(route('admin.email-marketing.send-test')), {
+            const res = await fetch(@json($testUrl ?? route('admin.email-marketing.send-test')), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content },
                 body: JSON.stringify({ subject: subject.value, body: input.value }),

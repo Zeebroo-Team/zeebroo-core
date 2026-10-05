@@ -24,6 +24,10 @@ const API = (() => {
     // Cashier account (Modules/Pos PosCashierApiController@login) — POS-only session
     cashierLogin: (slug, username, password) =>
       request('POST', '/cashier/login', { slug, username, password }),
+    // Forgot password (PosAuthApiController forgotPassword / resetPassword)
+    forgotPassword: (email) => request('POST', '/auth/password/forgot', { email }),
+    resetPassword: (email, otp, password) =>
+      request('POST', '/auth/password/reset', { email, otp, password, password_confirmation: password }),
     register: (payload) =>
       request('POST', '/auth/register', { ...payload, platform: 'pos_lite', password_confirmation: payload.password, device_name: 'pos-lite' }),
     businessCategories: () => request('GET', '/auth/business-categories'),
