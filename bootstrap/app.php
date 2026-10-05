@@ -26,6 +26,9 @@ return Application::configure(basePath: dirname(__DIR__))
             RedirectHrPortalOnlyUsers::class,
             EnsureWebSubscriptionSettled::class,
         ]);
+        // RFC 8058 one-click unsubscribe: mail clients POST without a CSRF token (the URL is signed instead).
+        $middleware->validateCsrfTokens(except: ['marketing/unsubscribe/*']);
+
         $middleware->alias([
             'role' => RoleMiddleware::class,
             'permission' => PermissionMiddleware::class,
