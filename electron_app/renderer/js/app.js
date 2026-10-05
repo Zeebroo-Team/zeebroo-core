@@ -5366,9 +5366,11 @@ function showLogin() {
   $('#app-shell').style.display = 'none';
   $('#signin-card').style.display = '';
   $('#cashier-card').style.display = 'none';
+  $('#forgot-card').style.display = 'none';
   $('#signup-card').style.cssText = 'display:none';
   $('#login-step-1').style.display = '';
   $('#login-step-2').style.display = 'none';
+  $('#login-alert').className = 'alert alert-error';
   $('#login-alert').style.display = 'none';
   $('#login-email').value = '';
   $('#login-password').value = '';
@@ -5716,6 +5718,7 @@ function showSignup() {
   if (body) { body.style.display = 'block'; body.style.padding = '0'; }
   $('#signin-card').style.display = 'none';
   $('#cashier-card').style.display = 'none';
+  $('#forgot-card').style.display = 'none';
   $('#signup-card').style.cssText = 'display:grid; width:100%; height:100%';
   $('#su-email').value    = '';
   $('#su-password').value = '';
@@ -8269,9 +8272,111 @@ $('#login-password').addEventListener('keydown', e => { if (e.key === 'Enter') d
 $('#cashier-login-btn').addEventListener('click', doCashierLogin);
 $('#cashier-password').addEventListener('keydown', e => { if (e.key === 'Enter') doCashierLogin(); });
 
+// Forgot password (PosAuthApiController forgotPassword / resetPassword)
+$('#go-forgot').addEventListener('click', e => { e.preventDefault(); showForgotPassword(); });
+$('#forgot-back').addEventListener('click', e => { e.preventDefault(); showLogin(); });
+$('#forgot-send-btn').addEventListener('click', () => doSendResetCode());
+$('#forgot-email').addEventListener('keydown', e => { if (e.key === 'Enter') doSendResetCode(); });
+$('#forgot-resend').addEventListener('click', e => { e.preventDefault(); doSendResetCode(true); });
+$('#reset-btn').addEventListener('click', doResetPassword);
+$('#reset-password2').addEventListener('keydown', e => { if (e.key === 'Enter') doResetPassword(); });
+$('#reset-otp').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+
+let _resetEmail = '';
+
+function showForgotPassword() {
+  $('#signin-card').style.display = 'none';
+  $('#cashier-card').style.display = 'none';
+  $('#forgot-card').style.display = '';
+  $('#forgot-step-1').style.display = '';
+  $('#forgot-step-2').style.display = 'none';
+  $('#forgot-alert').style.display = 'none';
+  $('#forgot-email').value = $('#login-email').value.trim();
+  $('#forgot-email').focus();
+}
+
+async function doSendResetCode(resend = false) {
+  const email = resend ? _resetEmail : $('#forgot-email').value.trim();
+  const alert = resend ? $('#reset-alert') : $('#forgot-alert');
+  const btn   = $('#forgot-send-btn');
+
+  if (!email) { showAlert(alert, 'Enter your email address'); return; }
+
+  alert.className = 'alert alert-error';
+  alert.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
+
+  const res = await API.forgotPassword(email);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-paper-plane"></i>&nbsp; Send Code';
+
+  if (res.status !== 200) {
+    showAlert(alert, res.status === 429
+      ? 'Too many requests. Please wait a minute and try again.'
+      : (res.body?.message || `Could not send the code (${res.status})`));
+    return;
+  }
+
+  _resetEmail = email;
+  const minutes = res.body?.expires_in_minutes || 10;
+  $('#forgot-sent-msg').textContent =
+    `If an account exists for ${email}, we've sent a 6-digit code to it. It expires in ${minutes} minutes.`;
+  $('#forgot-step-1').style.display = 'none';
+  $('#forgot-step-2').style.display = '';
+  if (resend) {
+    alert.className = 'alert alert-success';
+    showAlert(alert, 'A new code has been sent (if the previous one is older than a minute).');
+  } else {
+    $('#reset-alert').style.display = 'none';
+    $('#reset-otp').value = '';
+    $('#reset-password').value = '';
+    $('#reset-password2').value = '';
+  }
+  $('#reset-otp').focus();
+}
+
+async function doResetPassword() {
+  const otp       = $('#reset-otp').value.trim();
+  const password  = $('#reset-password').value;
+  const password2 = $('#reset-password2').value;
+  const btn       = $('#reset-btn');
+  const alert     = $('#reset-alert');
+  alert.className = 'alert alert-error';
+
+  if (!/^\d{6}$/.test(otp))    { showAlert(alert, 'Enter the 6-digit code from the email'); return; }
+  if (password.length < 8)     { showAlert(alert, 'Password must be at least 8 characters'); return; }
+  if (password !== password2)  { showAlert(alert, 'Passwords do not match'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Resetting…';
+  alert.style.display = 'none';
+
+  const res = await API.resetPassword(_resetEmail, otp, password);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i>&nbsp; Reset Password';
+
+  if (res.status !== 200) {
+    const errors = res.body?.errors;
+    const first  = errors ? [].concat(errors[Object.keys(errors)[0]])[0] : null;
+    showAlert(alert, res.status === 429
+      ? 'Too many attempts. Please wait a minute and try again.'
+      : (first || res.body?.message || `Reset failed (${res.status})`));
+    return;
+  }
+
+  const email = _resetEmail;
+  _resetEmail = '';
+  showLogin();
+  $('#login-email').value = email;
+  $('#login-alert').className = 'alert alert-success';
+  showAlert($('#login-alert'), 'Your password has been reset. Sign in with your new password.');
+  $('#login-password').focus();
+}
 
 function showCashierLogin() {
   $('#signin-card').style.display = 'none';
+  $('#forgot-card').style.display = 'none';
   $('#cashier-card').style.display = '';
   $('#signup-card').style.display  = 'none';
   $('#cashier-alert').style.display = 'none';
@@ -8616,6 +8721,7 @@ async function doLogin() {
   const password = $('#login-password').value;
   const btn      = $('#login-btn');
   const alert    = $('#login-alert');
+  alert.className = 'alert alert-error';
 
   if (!email || !password) { showAlert(alert, 'Enter email and password'); return; }
 

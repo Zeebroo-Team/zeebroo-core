@@ -9,6 +9,9 @@
         </div>
     </header>
     <div class="auth-body">
+        @if(session('status'))
+            <p class="sub" style="color:#16a34a;"><i class="fa fa-circle-check" aria-hidden="true"></i> {{ session('status') }}</p>
+        @endif
         <p class="sub">{{ __('Use your email and password to access your dashboard.') }}</p>
         <form method="post" action="{{ route('login.submit') }}" autocomplete="on">
             @csrf
@@ -22,9 +25,12 @@
                 <input id="password" name="password" type="password" required autocomplete="current-password">
                 <div class="error">@error('password'){{ $message }}@enderror</div>
             </div>
-            <div class="auth-check">
-                <input id="remember" type="checkbox" name="remember" value="1">
-                <label for="remember">{{ __('Remember this device') }}</label>
+            <div class="auth-check" style="justify-content:space-between;">
+                <span style="display:inline-flex;align-items:center;gap:inherit;">
+                    <input id="remember" type="checkbox" name="remember" value="1">
+                    <label for="remember">{{ __('Remember this device') }}</label>
+                </span>
+                <a href="{{ route('password.request') }}" style="font-size:13px;">{{ __('Forgot password?') }}</a>
             </div>
             <button type="submit" class="auth-btn">{{ __('Sign in') }}</button>
         </form>

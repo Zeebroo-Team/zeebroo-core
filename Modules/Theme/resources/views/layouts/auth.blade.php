@@ -139,6 +139,7 @@
         }
         .auth-btn:hover{background:var(--btn-hover);color:var(--btn-hover-text);border-color:var(--btn-hover);}
         .auth-btn:active{background:#eab308;color:var(--btn-hover-text);border-color:#eab308;}
+        .auth-btn:disabled,.auth-btn:disabled:hover{background:var(--btn);color:var(--btn-text);border-color:var(--btn);opacity:.6;cursor:not-allowed;}
         .auth-meta{margin-top:22px;text-align:center;font-size:14px;color:var(--muted);}
         .auth-meta a{color:var(--text);font-weight:700;text-decoration:underline;text-underline-offset:3px;}
         .auth-meta a:hover{color:var(--muted);}
@@ -245,6 +246,27 @@
         </main>
     </div>
     @stack('auth-scripts')
+    <script>
+    /* Forms marked data-submit-once: disable the submit button after the first submit to prevent duplicate requests. */
+    (function () {
+        document.querySelectorAll('form[data-submit-once]').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                form.querySelectorAll('button[type=submit]').forEach(function (btn) {
+                    btn.disabled = true;
+                    if (btn.dataset.loadingText) btn.textContent = btn.dataset.loadingText;
+                });
+            });
+        });
+        /* Re-enable when the page is restored from the back/forward cache. */
+        window.addEventListener('pageshow', function (e) {
+            if (!e.persisted) return;
+            document.querySelectorAll('form[data-submit-once] button[type=submit]').forEach(function (btn) {
+                btn.disabled = false;
+                if (btn.dataset.label) btn.textContent = btn.dataset.label;
+            });
+        });
+    })();
+    </script>
     <!-- ASCII corridor animation concept: https://codepen.io/obsfx/pen/jOWVOYL by Ömercan Balandı (@obsfx) — adapted for SociBiz (canvas→ASCII, light theme). -->
     <script>
     (function () {

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Mail\Http\Controllers\Admin\AdminAutomatedEmailController;
 use Modules\Mail\Http\Controllers\Admin\AdminEmailMarketingController;
 use Modules\Mail\Http\Controllers\InboxController;
 use Modules\Mail\Http\Controllers\MarketingUnsubscribeController;
@@ -25,6 +26,16 @@ Route::middleware(['web', 'auth', 'role:admin'])->prefix('admin/email-marketing'
 
     Route::get('/campaigns/{campaign}', [AdminEmailMarketingController::class, 'showCampaign'])->name('campaigns.show');
     Route::post('/campaigns/{campaign}/retry', [AdminEmailMarketingController::class, 'retryCampaign'])->name('campaigns.retry');
+});
+
+// Admin — automatic platform emails (welcome, password OTP, inactivity, reports, releases).
+Route::middleware(['web', 'auth', 'role:admin'])->prefix('admin/automated-emails')->name('admin.automated-emails.')->group(function (): void {
+    Route::get('/', [AdminAutomatedEmailController::class, 'index'])->name('index');
+    Route::get('/{key}', [AdminAutomatedEmailController::class, 'edit'])->name('edit');
+    Route::put('/{key}', [AdminAutomatedEmailController::class, 'update'])->name('update');
+    Route::post('/{key}/toggle', [AdminAutomatedEmailController::class, 'toggle'])->name('toggle');
+    Route::post('/{key}/reset', [AdminAutomatedEmailController::class, 'reset'])->name('reset');
+    Route::post('/{key}/send-test', [AdminAutomatedEmailController::class, 'sendTest'])->name('send-test');
 });
 
 // Public, signed unsubscribe link included in every marketing email.

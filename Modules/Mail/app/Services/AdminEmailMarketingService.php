@@ -76,7 +76,7 @@ class AdminEmailMarketingService
     }
 
     /** Users hidden from admin listings (e.g. test domains) are never emailed either. */
-    private function visibleUsers(): Builder
+    public function visibleUsers(): Builder
     {
         $hiddenDomains = config('app.hidden_user_email_domains', []);
 

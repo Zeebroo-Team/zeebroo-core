@@ -26,7 +26,12 @@ const API = (() => {
       publicRequest('POST', '/auth/token', { email, password, device_name: deviceName }),
     cashierLogin: (slug, username, password) =>
       publicRequest('POST', '/cashier/login', { slug, username, password }),
-    register:           (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
+    // Forgot password: emails a 6-digit code, then the code + new password resets it
+    forgotPassword: (email) =>
+      publicRequest('POST', '/auth/password/forgot', { email }),
+    resetPassword:  (email, otp, password) =>
+      publicRequest('POST', '/auth/password/reset', { email, otp, password, password_confirmation: password }),
+    register:          (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
       publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, package_id: packageId, email, password, password_confirmation: password, device_name: deviceName }),
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     packages:           () => publicRequest('GET', '/auth/packages'),

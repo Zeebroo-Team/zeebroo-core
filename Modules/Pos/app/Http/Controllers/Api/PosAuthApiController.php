@@ -12,6 +12,8 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Modules\Auth\Services\AuthService;
+use Modules\Auth\Services\PasswordResetService;
+use Modules\Mail\Services\AutomatedEmailService;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
 use Modules\Package\Models\Package;
@@ -238,6 +240,45 @@ class PosAuthApiController extends Controller
 
         return response()->json([
             'message' => 'Password updated.',
+        ]);
+    }
+
+    /** Step 1 of "forgot password": email a 6-digit reset code (same flow as the web /forgot-password page). */
+    public function forgotPassword(Request $request, PasswordResetService $passwords, AutomatedEmailService $automated): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        try {
+            $passwords->sendCode($validated['email']);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'We couldn\'t send the email right now. Please try again in a few minutes.',
+            ], 503);
+        }
+
+        return response()->json([
+            'message' => 'If an account exists for that email, a 6-digit reset code has been sent to it.',
+            'expires_in_minutes' => $automated->otpMinutes(),
+        ]);
+    }
+
+    /** Step 2: verify the code and set the new password. Revokes every existing token and session. */
+    public function resetPassword(Request $request, PasswordResetService $passwords): JsonResponse
+    {
+        $validated = $request->validate([
+            'email'    => ['required', 'email', 'max:255'],
+            'otp'      => ['required', 'string', 'digits:6'],
+            'password' => ['required', 'confirmed', Password::min(8)],
+        ]);
+
+        $passwords->reset($validated['email'], $validated['otp'], $validated['password']);
+
+        return response()->json([
+            'message' => 'Password reset. Sign in with your new password.',
         ]);
     }
 

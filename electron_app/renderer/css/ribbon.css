@@ -4108,6 +4108,15 @@ body.dark .ob-pkg-tag { background: var(--surface); border-color: var(--border);
   margin: 0 0 4px; color: var(--text);
 }
 
+/* Forgot password */
+.form-label-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; }
+.form-label-row label { margin-bottom: 0; }
+.forgot-link { font-size: 12px; font-weight: 600; color: var(--accent); text-decoration: none; }
+.forgot-link:hover { text-decoration: underline; }
+.otp-input { text-align: center; font-size: 20px !important; font-weight: 700; letter-spacing: 8px; }
+.alert-success { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+body.dark .alert-success { background: #0f2e22; color: #6ee7b7; border-color: #14532d; }
+
 /* progress bar kept for JS but not shown */
 .ob-progress { display: none; }
 

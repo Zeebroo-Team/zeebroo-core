@@ -8,9 +8,12 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\AppConnection\Models\AppRelease;
+use Modules\Mail\Services\AutomatedEmailService;
 
 class AppReleaseController extends Controller
 {
+    public function __construct(private readonly AutomatedEmailService $automatedEmails) {}
+
     public function index(Request $request): View
     {
         $app = $request->query('app');
@@ -38,7 +41,7 @@ class AppReleaseController extends Controller
         $release = AppRelease::create($data);
 
         return redirect()->route('admin.releases.index', ['app' => $release->app])
-            ->with('success', AppRelease::APPS[$release->app] . ' v' . $release->version . ' published.');
+            ->with('success', AppRelease::APPS[$release->app] . ' v' . $release->version . ' published.' . $this->announce($request, $release));
     }
 
     public function update(Request $request, AppRelease $release): RedirectResponse
@@ -53,7 +56,21 @@ class AppReleaseController extends Controller
         $release->update($data);
 
         return redirect()->route('admin.releases.index', ['app' => $release->app])
-            ->with('success', AppRelease::APPS[$release->app] . ' v' . $release->version . ' updated.');
+            ->with('success', AppRelease::APPS[$release->app] . ' v' . $release->version . ' updated.' . $this->announce($request, $release));
+    }
+
+    /** Email users about the release when "Email users" was ticked (Automated Emails → New release). */
+    private function announce(Request $request, AppRelease $release): string
+    {
+        if (!$request->boolean('notify_users') || $release->users_notified_at !== null) {
+            return '';
+        }
+
+        $count = $this->automatedEmails->announceRelease($release);
+
+        return $count > 0
+            ? ' Release email queued for ' . number_format($count) . ' ' . ($count === 1 ? 'user' : 'users') . '.'
+            : ' No release email sent (turned off, or this channel isn\'t enabled in Automated Emails).';
     }
 
     private function validateRelease(Request $request, ?AppRelease $release = null): array
