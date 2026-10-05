@@ -270,6 +270,9 @@ class PaymentController extends Controller
             'stripe_payment_intent_id' => $paymentIntentId,
             'stripe_subscription_status' => 'active',
             'paid_at' => now(),
+            // A resumed checkout (canceled/failed first) must not keep its stale failure state.
+            'failure_reason' => null,
+            'due_at' => null,
         ]);
 
         $payment->business?->setSetting('business.subscription_status', 'active');
