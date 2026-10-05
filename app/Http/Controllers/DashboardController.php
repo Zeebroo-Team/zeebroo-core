@@ -12,6 +12,7 @@ use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
 use Modules\Account\Models\Account;
 use Modules\Package\Models\Package;
+use Modules\Payment\Services\AdminPaymentHistoryService;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -121,7 +122,7 @@ class DashboardController extends Controller
             ->exists();
     }
 
-    public function adminPanel(): View
+    public function adminPanel(AdminPaymentHistoryService $paymentHistory): View
     {
         $now = now();
         $startOfMonth = $now->copy()->startOfMonth();
@@ -165,12 +166,16 @@ class DashboardController extends Controller
         // Recent 5 users
         $recentUsers = User::with('roles')->orderByDesc('created_at')->limit(5)->get();
 
+        // Recent 5 payments + succeeded revenue
+        $recentPayments = $paymentHistory->recent(5);
+        $paymentSummary = $paymentHistory->summary();
+
         return view('admin', compact(
             'totalUsers', 'usersThisMonth', 'usersLastMonth',
             'totalBusinesses', 'bizThisMonth', 'bizLastMonth',
             'totalAccounts', 'accountsThisMonth',
             'chartLabels', 'chartUsers', 'chartBiz',
-            'recentUsers',
+            'recentUsers', 'recentPayments', 'paymentSummary',
         ));
     }
 }

@@ -1,8 +1,15 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Payment\Http\Controllers\Admin\AdminPaymentController;
 use Modules\Payment\Http\Controllers\BillingController;
 use Modules\Payment\Http\Controllers\PaymentController;
+
+// Admin — platform-wide payment history and per-payment detail view.
+Route::middleware(['auth', 'role:admin'])->prefix('admin/payments')->name('admin.payments.')->group(function (): void {
+    Route::get('/', [AdminPaymentController::class, 'index'])->name('index');
+    Route::get('/{payment}', [AdminPaymentController::class, 'show'])->whereNumber('payment')->name('show');
+});
 
 Route::middleware(['auth'])->prefix('payment')->name('payment.')->group(function (): void {
     Route::get('/checkout/success', [PaymentController::class, 'success'])->name('checkout.success');
