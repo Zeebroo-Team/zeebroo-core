@@ -1,11 +1,37 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Mail\Http\Controllers\Admin\AdminEmailMarketingController;
 use Modules\Mail\Http\Controllers\InboxController;
+use Modules\Mail\Http\Controllers\MarketingUnsubscribeController;
 use Modules\Mail\Http\Controllers\MailFilterController;
 use Modules\Mail\Http\Controllers\MailScheduledController;
 use Modules\Mail\Http\Controllers\MailSettingsController;
 use Modules\Mail\Http\Controllers\MailTemplateController;
+
+// Admin — platform email marketing: reusable templates + bulk sends to Zeebroo users.
+Route::middleware(['web', 'auth', 'role:admin'])->prefix('admin/email-marketing')->name('admin.email-marketing.')->group(function (): void {
+    Route::get('/', [AdminEmailMarketingController::class, 'index'])->name('index');
+
+    Route::get('/templates/create', [AdminEmailMarketingController::class, 'createTemplate'])->name('templates.create');
+    Route::post('/templates', [AdminEmailMarketingController::class, 'storeTemplate'])->name('templates.store');
+    Route::get('/templates/{template}/edit', [AdminEmailMarketingController::class, 'editTemplate'])->name('templates.edit');
+    Route::put('/templates/{template}', [AdminEmailMarketingController::class, 'updateTemplate'])->name('templates.update');
+    Route::delete('/templates/{template}', [AdminEmailMarketingController::class, 'destroyTemplate'])->name('templates.destroy');
+
+    Route::get('/send', [AdminEmailMarketingController::class, 'compose'])->name('compose');
+    Route::post('/send', [AdminEmailMarketingController::class, 'send'])->name('send');
+    Route::post('/send-test', [AdminEmailMarketingController::class, 'sendTest'])->name('send-test');
+
+    Route::get('/campaigns/{campaign}', [AdminEmailMarketingController::class, 'showCampaign'])->name('campaigns.show');
+    Route::post('/campaigns/{campaign}/retry', [AdminEmailMarketingController::class, 'retryCampaign'])->name('campaigns.retry');
+});
+
+// Public, signed unsubscribe link included in every marketing email.
+Route::middleware(['web', 'signed', 'throttle:30,1'])->group(function (): void {
+    Route::get('/marketing/unsubscribe/{user}', [MarketingUnsubscribeController::class, 'show'])->name('marketing.unsubscribe');
+    Route::post('/marketing/unsubscribe/{user}', [MarketingUnsubscribeController::class, 'store'])->name('marketing.unsubscribe.store');
+});
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/settings/mail', [MailSettingsController::class, 'edit'])->name('mail.settings.edit');
