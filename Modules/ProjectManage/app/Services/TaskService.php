@@ -63,6 +63,40 @@ class TaskService
     }
 
     /**
+     * "My Projects" data for one user: every task assigned to them (all statuses) in the
+     * business's non-archived projects, plus those projects — the ones whose team they are on
+     * or that hold one of their tasks — so the client can build per-project board columns.
+     *
+     * @return array{tasks: Collection, projects: Collection}
+     */
+    public function assignedWorkForUser(Business $business, int $userId): array
+    {
+        $tasks = Task::query()
+            ->whereHas('project', fn ($q) => $q->where('business_id', $business->id)->where('status', '!=', Project::STATUS_ARCHIVED))
+            ->whereHas('assignees', fn ($q) => $q->where('users.id', $userId))
+            ->with(['assignees', 'project', 'milestone'])
+            ->orderByRaw('due_date IS NULL')->orderBy('due_date')->orderByDesc('id')
+            ->get();
+
+        $projectIds = $tasks->pluck('project_id')->unique()->values()->all();
+
+        $projects = Project::query()
+            ->where('business_id', $business->id)
+            ->where('status', '!=', Project::STATUS_ARCHIVED)
+            ->where(fn ($q) => $q->whereHas('members', fn ($m) => $m->where('users.id', $userId))
+                                 ->orWhereIn('id', $projectIds))
+            ->orderBy('name')
+            ->get();
+
+        return ['tasks' => $tasks, 'projects' => $projects];
+    }
+
+    public function isAssignee(Task $task, int $userId): bool
+    {
+        return $task->assignees()->where('users.id', $userId)->exists();
+    }
+
+    /**
      * All board statuses for a project in column order (by sort number; on a tie
      * the built-in status comes first). "done" always sorts last.
      *
@@ -267,6 +301,14 @@ class TaskService
 
             return $task->fresh(['assignees', 'milestone', 'project']);
         });
+    }
+
+    /** My Projects: a task the user adds for themselves — always assigned to them only, no milestone. */
+    public function createForSelf(Project $project, array $data, int $userId): Task
+    {
+        unset($data['milestone_id'], $data['assigned_to']);
+
+        return $this->create($project, ['assignee_ids' => [$userId]] + $data);
     }
 
     public function update(Task $task, array $data): Task

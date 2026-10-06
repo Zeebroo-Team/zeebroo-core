@@ -30,7 +30,7 @@ class ProjectManageApiController extends Controller
 
     public function projectIndex(Request $request): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
 
         // Legacy desktop clients send ?filter=<status|all>; map it onto the service's filters array.
         $status = (string) $request->query('status', $request->query('filter', 'all'));
@@ -45,7 +45,7 @@ class ProjectManageApiController extends Controller
 
     public function projectStore(Request $request): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $validated = $request->validate(array_merge([
             'name'        => 'required|string|max:150',
             'description' => 'nullable|string|max:2000',
@@ -64,7 +64,7 @@ class ProjectManageApiController extends Controller
 
     public function projectUpdate(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
         $validated = $request->validate(array_merge([
@@ -114,7 +114,7 @@ class ProjectManageApiController extends Controller
 
     public function projectDestroy(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
         try {
@@ -131,7 +131,7 @@ class ProjectManageApiController extends Controller
     /** The project team plus the business users that can still be added. */
     public function memberIndex(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         return response()->json($this->membersPayload($project));
@@ -139,7 +139,7 @@ class ProjectManageApiController extends Controller
 
     public function memberStore(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $userIds = $request->validate([
@@ -158,7 +158,7 @@ class ProjectManageApiController extends Controller
 
     public function memberDestroy(Request $request, int $projectId, int $userId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $unassigned = $this->projects->removeMember($project, $userId);
@@ -170,7 +170,7 @@ class ProjectManageApiController extends Controller
 
     public function board(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
         $columns = array_map(
@@ -188,7 +188,7 @@ class ProjectManageApiController extends Controller
 
     public function statusIndex(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         return response()->json(['data' => $this->tasks->statusesForProject($project)]);
@@ -196,7 +196,7 @@ class ProjectManageApiController extends Controller
 
     public function statusStore(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $validated = $request->validate(TaskService::statusRules());
@@ -207,7 +207,7 @@ class ProjectManageApiController extends Controller
 
     public function statusUpdate(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $status    = $this->resolveStatus($business, $id);
         $validated = $request->validate(TaskService::statusRules(partial: true));
 
@@ -218,7 +218,7 @@ class ProjectManageApiController extends Controller
 
     public function statusDestroy(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $status   = $this->resolveStatus($business, $id);
 
         $this->tasks->deleteStatus($status);
@@ -230,7 +230,7 @@ class ProjectManageApiController extends Controller
 
     public function taskIndex(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $filters = $request->only(['status', 'milestone_id', 'assigned_to', 'priority']);
@@ -241,7 +241,7 @@ class ProjectManageApiController extends Controller
 
     public function taskStore(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $validated = $request->validate(array_merge([
@@ -262,7 +262,7 @@ class ProjectManageApiController extends Controller
     /** Replaces the task's assignees with assignee_ids (all must be project members; [] = unassigned). */
     public function taskAssign(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
         $validated = $request->validate(
@@ -277,7 +277,7 @@ class ProjectManageApiController extends Controller
 
     public function taskStatus(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
         $status = $request->validate([
@@ -290,7 +290,7 @@ class ProjectManageApiController extends Controller
 
     public function taskMilestone(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
         $milestoneId = $request->validate([
@@ -304,7 +304,7 @@ class ProjectManageApiController extends Controller
 
     public function taskComplete(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
         $task     = $this->tasks->complete($task);
 
@@ -313,7 +313,7 @@ class ProjectManageApiController extends Controller
 
     public function taskReopen(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
         $task     = $this->tasks->reopen($task);
 
@@ -322,7 +322,7 @@ class ProjectManageApiController extends Controller
 
     public function taskComment(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
         $body    = $request->validate(['body' => 'required|string|max:5000'])['body'];
@@ -340,7 +340,7 @@ class ProjectManageApiController extends Controller
 
     public function taskTime(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
         $validated = $request->validate([
@@ -361,7 +361,7 @@ class ProjectManageApiController extends Controller
 
     public function taskDestroy(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
         $this->tasks->delete($task);
 
@@ -370,7 +370,7 @@ class ProjectManageApiController extends Controller
 
     public function myTasks(Request $request): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $filter = (string) $request->query('filter', 'open');
 
         $tasks = $this->tasks->listForBusiness($business, $filter);
@@ -378,11 +378,75 @@ class ProjectManageApiController extends Controller
         return response()->json(['data' => $tasks->map(fn ($t) => $this->fmtTask($t))]);
     }
 
+    // ── My Projects (assigned access) ────────────────────────────────────────
+    // Gated by projects_assigned instead of projects_access: the user only sees and
+    // moves tasks assigned to them, never the rest of the business's projects.
+
+    /** Tasks assigned to me (all statuses) + the projects they belong to, each with its board statuses. */
+    public function myWork(Request $request): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+        $work     = $this->tasks->assignedWorkForUser($business, $userId);
+
+        return response()->json(['data' => [
+            'tasks'    => $work['tasks']->map(fn ($t) => $this->fmtTask($t))->values(),
+            'projects' => $work['projects']->map(fn ($p) => $this->fmtProject($p) + [
+                'statuses'  => $this->tasks->statusesForProject($p),
+                // Only team members may add tasks for themselves (see myWorkTaskStore).
+                'is_member' => $p->members()->where('users.id', $userId)->exists(),
+            ])->values(),
+        ]]);
+    }
+
+    /** Creates a task assigned to me, in a (non-archived) project whose team I am on. */
+    public function myWorkTaskStore(Request $request): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+
+        $projectId = (int) $request->validate(['project_id' => 'required|integer'])['project_id'];
+        $project   = Project::where('business_id', $business->id)
+            ->where('id', $projectId)
+            ->where('status', '!=', Project::STATUS_ARCHIVED)
+            ->firstOrFail();
+        abort_unless($project->members()->where('users.id', $userId)->exists(), 403, 'You can only add tasks to projects you are a member of.');
+
+        $validated = $request->validate([
+            'title'           => 'required|string|max:200',
+            'description'     => 'nullable|string|max:5000',
+            'status'          => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
+            'priority'        => 'nullable|in:low,normal,high',
+            'due_date'        => 'nullable|date',
+            'estimated_hours' => 'nullable|numeric|min:0',
+        ], ['status.in' => 'This project does not have that status.']);
+
+        $task = $this->tasks->createForSelf($project, $validated, $userId);
+
+        return response()->json(['data' => $this->fmtTask($task)], 201);
+    }
+
+    /** Status change (kanban drag & drop, complete / reopen) for a task assigned to me. */
+    public function myWorkTaskStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only update tasks assigned to you.');
+
+        $status = $request->validate([
+            'status' => ['required', Rule::in($this->tasks->statusKeysForProject($task->project))],
+        ], ['status.in' => 'This project does not have that status.'])['status'];
+
+        $task = $this->tasks->moveStatus($task, $status);
+
+        return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project']))]);
+    }
+
     // ── Milestones ───────────────────────────────────────────────────────────
 
     public function milestoneIndex(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $list = $this->milestones->listForProject($project);
@@ -392,7 +456,7 @@ class ProjectManageApiController extends Controller
 
     public function milestoneStore(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $validated = $request->validate(MilestoneService::rules());
@@ -404,7 +468,7 @@ class ProjectManageApiController extends Controller
 
     public function milestoneUpdate(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
 
         $validated = $request->validate(MilestoneService::rules(partial: true));
@@ -415,7 +479,7 @@ class ProjectManageApiController extends Controller
 
     public function milestoneReorder(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $ids = $request->validate([
@@ -430,7 +494,7 @@ class ProjectManageApiController extends Controller
 
     public function milestoneComplete(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
         $milestone = $this->milestones->complete($milestone);
 
@@ -439,7 +503,7 @@ class ProjectManageApiController extends Controller
 
     public function milestoneReopen(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
         $milestone = $this->milestones->reopen($milestone);
 
@@ -448,7 +512,7 @@ class ProjectManageApiController extends Controller
 
     public function milestoneDestroy(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
         $this->milestones->delete($milestone);
 
@@ -456,6 +520,24 @@ class ProjectManageApiController extends Controller
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /** Business for the Projects-tab endpoints — requires "Manage All Projects" (owners/admins always pass). */
+    private function manageBusinessOrAbort(Request $request): \Modules\Business\Models\Business
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'projects_access');
+
+        return $business;
+    }
+
+    /** Business for the My Projects endpoints — requires "Assigned Project Access". */
+    private function assignedBusinessOrAbort(Request $request): \Modules\Business\Models\Business
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'projects_assigned');
+
+        return $business;
+    }
 
     private function resolveTask(\Modules\Business\Models\Business $business, int $id): Task
     {

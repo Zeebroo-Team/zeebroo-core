@@ -44,6 +44,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     // My Tasks
     Route::get('pm/my-tasks', [$c, 'myTasks'])->name('pm.my-tasks');
 
+    // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
+    Route::get  ('pm/my-work',                  [$c, 'myWork'])          ->name('pm.my-work');
+    Route::post ('pm/my-work/tasks',            [$c, 'myWorkTaskStore']) ->name('pm.my-work.tasks.store');
+    Route::patch('pm/my-work/tasks/{id}/status', [$c, 'myWorkTaskStatus'])->where('id', '[0-9]+')->name('pm.my-work.tasks.status');
+
     // Milestones
     Route::get   ('pm/projects/{id}/milestones',     [$c, 'milestoneIndex'])   ->where('id', '[0-9]+')->name('pm.projects.milestones.index');
     Route::post  ('pm/projects/{id}/milestones',     [$c, 'milestoneStore'])   ->where('id', '[0-9]+')->name('pm.projects.milestones.store');

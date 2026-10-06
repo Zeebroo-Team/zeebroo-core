@@ -114,7 +114,8 @@ class Task extends Model
 
     public function isOverdue(): bool
     {
-        return !$this->isCompleted() && $this->due_date && $this->due_date->isPast();
+        // due_date is a midnight date, so isPast() would flag tasks due *today* — compare to today instead.
+        return !$this->isCompleted() && $this->due_date && $this->due_date->lt(today());
     }
 
     public function totalLoggedMinutes(): int
