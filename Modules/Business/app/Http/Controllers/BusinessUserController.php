@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessMember;
+use Modules\Business\Models\BusinessRole;
 
 class BusinessUserController extends Controller
 {
@@ -29,8 +31,37 @@ class BusinessUserController extends Controller
         return view('business::users.index', [
             'business'    => $business,
             'members'     => $members,
+            'roles'       => $this->roleOptions($business, $members->pluck('role')->all()),
             'permissions' => BusinessMember::availablePermissions(),
         ]);
+    }
+
+    /**
+     * Role options for the member modal: the business's roles plus any role slug
+     * already held by a member (e.g. 'officer', 'reporter') so the select can show it.
+     *
+     * @param  array<int, string>  $extraSlugs
+     * @return array<string, string> slug => name
+     */
+    private function roleOptions(Business $business, array $extraSlugs = []): array
+    {
+        BusinessRole::seedForBusiness($business->id);
+
+        $options = BusinessRole::query()
+            ->where('business_id', $business->id)
+            ->orderBy('is_system', 'desc')
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->pluck('name', 'slug')
+            ->all();
+
+        foreach ($extraSlugs as $slug) {
+            if ($slug !== null && $slug !== '' && ! isset($options[$slug])) {
+                $options[$slug] = ucfirst($slug);
+            }
+        }
+
+        return $options;
     }
 
     public function store(Request $request): RedirectResponse
@@ -43,9 +74,9 @@ class BusinessUserController extends Controller
 
         $validated = $request->validate([
             'email'       => ['required', 'email', 'max:255'],
-            'role'        => ['required', 'in:admin,manager,staff'],
+            'role'        => ['required', Rule::in(array_keys($this->roleOptions($business)))],
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['string', 'in:' . implode(',', array_keys(BusinessMember::availablePermissions()))],
+            'permissions.*' => ['string', Rule::in(BusinessMember::permissionKeys())],
         ]);
 
         $user = User::where('email', $validated['email'])->first();
@@ -87,9 +118,9 @@ class BusinessUserController extends Controller
         abort_unless((int) $member->business_id === (int) $business->id, 404);
 
         $validated = $request->validate([
-            'role'        => ['required', 'in:admin,manager,staff'],
+            'role'        => ['required', Rule::in(array_keys($this->roleOptions($business, [$member->role])))],
             'permissions' => ['nullable', 'array'],
-            'permissions.*' => ['string', 'in:' . implode(',', array_keys(BusinessMember::availablePermissions()))],
+            'permissions.*' => ['string', Rule::in(BusinessMember::permissionKeys())],
         ]);
 
         $permissions = $validated['role'] === 'admin' ? null : ($validated['permissions'] ?? []);

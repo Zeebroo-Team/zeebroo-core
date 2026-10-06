@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\ProjectManage\Http\Controllers\MilestoneController;
+use Modules\ProjectManage\Http\Controllers\MyProjectsController;
 use Modules\ProjectManage\Http\Controllers\MyTasksController;
 use Modules\ProjectManage\Http\Controllers\OverviewController;
 use Modules\ProjectManage\Http\Controllers\ProjectController;
@@ -57,4 +58,10 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
     // My Tasks
     Route::get('/pm/my-tasks', [MyTasksController::class, 'index'])->name('pm.my-tasks');
+
+    // My Projects — only tasks assigned to the signed-in user (web twin of /api/pm/my-work)
+    Route::get('/pm/my-projects',                       [MyProjectsController::class, 'index'])    ->name('pm.my-projects');
+    Route::get('/pm/my-projects/data',                  [MyProjectsController::class, 'data'])     ->name('pm.my-projects.data');
+    Route::post('/pm/my-projects/tasks',                [MyProjectsController::class, 'storeTask'])->name('pm.my-projects.tasks.store');
+    Route::patch('/pm/my-projects/tasks/{task}/status', [MyProjectsController::class, 'status'])   ->name('pm.my-projects.tasks.status');
 });
