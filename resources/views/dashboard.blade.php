@@ -300,6 +300,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 @endif
 
 @if(!$business)
+    @section('hide_email_verify_bar', '1')
     <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
         html.business-wizard-active,html.business-wizard-active body{overflow:hidden;height:100%;}

@@ -7,11 +7,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * An automatic platform email (welcome, password reset OTP, inactivity reminder,
+ * An automatic platform email (email verification OTP, welcome, password reset OTP, inactivity reminder,
  * activity report, new release) with its admin-editable template and settings.
  */
 class AdminAutomatedEmail extends Model
 {
+    public const EMAIL_VERIFICATION = 'email_verification';
+
     public const WELCOME = 'welcome';
 
     public const PASSWORD_RESET = 'password_reset';

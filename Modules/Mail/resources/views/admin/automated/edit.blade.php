@@ -69,6 +69,15 @@
                         @endif
 
                         @switch($key)
+                            @case('email_verification')
+                                <label class="aem-field">
+                                    <span class="aem-label">Code valid for (minutes)</span>
+                                    <input type="number" name="settings[otp_minutes]" class="aem-input" min="5" max="60" required value="{{ old('settings.otp_minutes', $s['otp_minutes'] ?? 15) }}">
+                                    <span class="aem-hint">Between 5 and 60. Shown in the email as &#123;&#123;expiry_minutes&#125;&#125;.</span>
+                                </label>
+                                <p class="aem-hint" style="margin:0;"><i class="fa fa-circle-info"></i> While on, people who sign up see a "Verify your email" banner in the web app, POS desktop and POS Lite until they enter the code. Turning it off hides the banner. Accounts created by admins, employees and Google sign-ins are never asked.</p>
+                                @break
+
                             @case('password_reset')
                                 <label class="aem-field">
                                     <span class="aem-label">Code valid for (minutes)</span>

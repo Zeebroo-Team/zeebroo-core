@@ -662,6 +662,11 @@
           <button class="tpm-item" id="tpm-my-profile">
             <i class="fa fa-circle-user"></i> My Profile
           </button>
+          <!-- Sign-up email status — filled by _renderEmailVerifyMenu() in app.js -->
+          <button class="tpm-item" id="tpm-email-verify" style="display:none">
+            <i class="fa fa-envelope"></i> Email
+            <span class="tpm-ev-pill" id="tpm-ev-pill"></span>
+          </button>
           <button class="tpm-item" id="tpm-settings">
             <i class="fa fa-gear"></i> Settings
           </button>
@@ -1758,6 +1763,14 @@
       <span id="billing-alert-text"></span>
       <button class="po-btn-primary" id="billing-alert-pay-btn"><i class="fa fa-credit-card"></i> Pay Now</button>
       <button class="billing-alert-dismiss" id="billing-alert-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Sign-up email not verified yet (opens #email-verify-modal) -->
+    <div id="email-verify-bar" class="billing-alert-bar email-verify-bar" style="display:none">
+      <i class="fa fa-envelope"></i>
+      <span id="email-verify-bar-text"></span>
+      <button class="po-btn-primary" id="email-verify-bar-btn"><i class="fa fa-envelope-circle-check"></i> Verify Now</button>
+      <button class="billing-alert-dismiss" id="email-verify-bar-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
     </div>
 
     <!-- Subscription overdue — full lockout screen -->
@@ -17155,6 +17168,30 @@
 </div>
 
 <!-- ── About Zeebroo POS Modal ──────────────────────────────────────────── -->
+<!-- Verify email modal (PosAuthApiController verifyEmail / resendEmailVerification) -->
+<div id="email-verify-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(420px,94vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-envelope-circle-check" style="color:var(--accent)"></i>
+      <span>Verify Your Email</span>
+      <button class="psm-close" id="email-verify-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body">
+      <p id="email-verify-msg" style="margin:0 0 12px;font-size:13px;color:var(--text-muted);line-height:1.5"></p>
+      <div id="email-verify-alert" class="alert alert-error" style="display:none"></div>
+      <div class="po-field">
+        <label class="po-field-label">6-digit code</label>
+        <input type="text" id="email-verify-otp" class="po-field-input otp-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+      </div>
+      <p style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Didn't get it? <a href="#" id="email-verify-resend">Send a new code</a></p>
+    </div>
+    <div class="po-aim-footer">
+      <button class="po-btn-ghost" id="email-verify-cancel"><i class="fa fa-xmark"></i> Later</button>
+      <button class="po-btn-primary" id="email-verify-submit"><i class="fa fa-check"></i> Verify Email</button>
+    </div>
+  </div>
+</div>
+
 <div id="about-modal-overlay" class="modal-overlay" style="display:none">
   <div class="po-aim-shell" style="width:min(420px,94vw)">
     <div class="po-aim-header">

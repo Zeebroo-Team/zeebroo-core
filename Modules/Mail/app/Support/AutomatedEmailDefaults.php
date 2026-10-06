@@ -29,6 +29,7 @@ final class AutomatedEmailDefaults
     public static function for(string $key): array
     {
         return match ($key) {
+            AdminAutomatedEmail::EMAIL_VERIFICATION => self::emailVerification(),
             AdminAutomatedEmail::WELCOME => self::welcome(),
             AdminAutomatedEmail::PASSWORD_RESET => self::passwordReset(),
             AdminAutomatedEmail::INACTIVITY => self::inactivity(),
@@ -40,6 +41,26 @@ final class AutomatedEmailDefaults
     private static function button(string $href, string $label): string
     {
         return '<p style="margin:28px 0;"><a href="'.$href.'" style="'.self::BUTTON.'">'.$label.'</a></p>';
+    }
+
+    private static function code(): string
+    {
+        return '<p style="margin:24px 0;text-align:center;"><span style="display:inline-block;padding:14px 28px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-family:Consolas, Menlo, monospace;font-size:30px;font-weight:700;letter-spacing:8px;color:#0f172a;">{{otp_code}}</span></p>';
+    }
+
+    private static function emailVerification(): array
+    {
+        return [
+            'subject' => '{{otp_code}} is your {{app_name}} verification code',
+            'body' => self::BRAND
+                .'<h1 style="'.self::H1.'">Confirm your email address</h1>'
+                .'<p style="'.self::P.'">Hi {{first_name}}, thanks for signing up for {{app_name}}. Enter this code to verify that {{email}} belongs to you:</p>'
+                .self::code()
+                .'<p style="'.self::P.'">This code expires in {{expiry_minutes}} minutes. For your security, never share it with anyone.</p>'
+                .self::HR
+                .'<p style="margin:0 0 16px;font-size:13px;color:#64748b;">Didn\'t create an account? You can safely ignore this email — no account will be activated without this code.</p>'
+                .self::SIGN,
+        ];
     }
 
     private static function welcome(): array
@@ -69,7 +90,7 @@ final class AutomatedEmailDefaults
             'body' => self::BRAND
                 .'<h1 style="'.self::H1.'">Reset your password</h1>'
                 .'<p style="'.self::P.'">Hi {{first_name}}, we received a request to reset the password for your account. Use this code to continue:</p>'
-                .'<p style="margin:24px 0;text-align:center;"><span style="display:inline-block;padding:14px 28px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-family:Consolas, Menlo, monospace;font-size:30px;font-weight:700;letter-spacing:8px;color:#0f172a;">{{otp_code}}</span></p>'
+                .self::code()
                 .'<p style="'.self::P.'">This code expires in {{expiry_minutes}} minutes. For your security, never share it with anyone.</p>'
                 .self::HR
                 .'<p style="margin:0 0 16px;font-size:13px;color:#64748b;">Didn\'t request this? You can safely ignore this email — your password won\'t change.</p>'

@@ -5,6 +5,7 @@ use Modules\AppConnection\Http\Controllers\Admin\AppReleaseController;
 use Modules\Auth\Http\Controllers\AdminLogController;
 use Modules\Auth\Http\Controllers\AdminUserController;
 use Modules\Auth\Http\Controllers\AuthController;
+use Modules\Auth\Http\Controllers\EmailVerificationController;
 use Modules\Auth\Http\Controllers\EmployeeVerifyController;
 use Modules\Auth\Http\Controllers\GoogleAuthController;
 use Modules\Auth\Http\Controllers\PasswordResetController;
@@ -35,6 +36,11 @@ Route::middleware('guest')->group(function (): void {
 
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+    // Sign-up email verification (opened from the "Verify your email" banner)
+    Route::get('/verify-email', [EmailVerificationController::class, 'show'])->name('verification.notice');
+    Route::post('/verify-email', [EmailVerificationController::class, 'verify'])->middleware('throttle:10,1')->name('verification.verify');
+    Route::post('/verify-email/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:5,1')->name('verification.resend');
 });
 
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function (): void {
