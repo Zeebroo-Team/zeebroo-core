@@ -1643,6 +1643,19 @@
           <div class="ribbon-group-label">Tasks</div>
         </div>
 
+        <!-- Assigned Project Access -->
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mp-tasks">
+              <i class="fa fa-list-check"></i>My<br>Tasks
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mp-board">
+              <i class="fa fa-table-columns"></i>Kanban<br>Board
+            </button>
+          </div>
+          <div class="ribbon-group-label">My Projects</div>
+        </div>
+
         <div class="ribbon-group">
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-pm-refresh">
@@ -8920,6 +8933,7 @@
       <div class="fin-subnav">
         <button class="fin-subnav-btn active" data-pmsub="overview"><i class="fa fa-house"></i> Overview</button>
         <button class="fin-subnav-btn"         data-pmsub="projects"><i class="fa fa-folder-open"></i> Projects</button>
+        <button class="fin-subnav-btn"         data-pmsub="mine"><i class="fa fa-user-check"></i> My Projects</button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9108,6 +9122,115 @@
         </div><!-- /pm-detail-view -->
 
       </div><!-- /pm-projects-view -->
+
+      <!-- ── My Projects view (Assigned Project Access) — tasks assigned to me ── -->
+      <div id="pm-mine-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+      <!-- Inner tabs -->
+      <div class="mp-subtabs-bar">
+        <div class="pm-subtabs">
+          <button class="pm-subtab active" data-mpsub="overview"><i class="fa fa-house"></i> Overview</button>
+          <button class="pm-subtab"        data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
+          <button class="pm-subtab"        data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
+        </div>
+        <span style="font-size:11px;color:var(--text-muted)">Tasks assigned to you across every project</span>
+      </div>
+
+      <!-- ── Overview view ── -->
+      <div id="mp-overview-view" style="display:flex;flex-direction:column;flex:1;overflow-y:auto;padding:14px 24px 20px;gap:14px">
+        <div class="mp-hero" id="mp-ov-hero"></div>
+        <div class="pm-stats-row" id="mp-ov-stats"></div>
+
+        <div class="mp-ov-columns">
+          <div class="mp-ov-list mp-ov-list--overdue">
+            <div class="mp-ov-list-head"><i class="fa fa-triangle-exclamation"></i><span>Overdue</span><span class="pm-col-count" id="mp-ov-overdue-count">0</span></div>
+            <div class="mp-ov-list-body" id="mp-ov-overdue"></div>
+          </div>
+          <div class="mp-ov-list mp-ov-list--today">
+            <div class="mp-ov-list-head"><i class="fa fa-calendar-day"></i><span>Due Today</span><span class="pm-col-count" id="mp-ov-today-count">0</span></div>
+            <div class="mp-ov-list-body" id="mp-ov-today"></div>
+          </div>
+          <div class="mp-ov-list mp-ov-list--upcoming">
+            <div class="mp-ov-list-head"><i class="fa fa-calendar-week"></i><span>Upcoming · next 7 days</span><span class="pm-col-count" id="mp-ov-upcoming-count">0</span></div>
+            <div class="mp-ov-list-body" id="mp-ov-upcoming"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pm-ov-section-head">
+            <div class="pm-ov-section-head-left"><i class="fa fa-diagram-project"></i><span>My Projects</span></div>
+            <button class="pm-ov-viewall-btn" id="mp-ov-board-btn">Open board <i class="fa fa-arrow-right"></i></button>
+          </div>
+          <div id="mp-ov-projects" class="pm-projects-grid"></div>
+          <div id="mp-ov-projects-empty" class="mp-ov-projects-empty" style="display:none">
+            <i class="fa fa-folder-open" style="font-size:34px;margin-bottom:10px;display:block"></i>
+            <div style="font-size:13px">You are not on any project team yet.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── My Tasks view (sortable table) ── -->
+      <div id="mp-tasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <div class="finance-search-wrap" style="max-width:240px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mp-task-search" placeholder="Search tasks…" autocomplete="off">
+          </div>
+          <div class="svc-chip-bar" id="mp-task-filter-chips">
+            <button class="svc-chip" data-mptaskfilter="all">All</button>
+            <button class="svc-chip active" data-mptaskfilter="open">Open</button>
+            <button class="svc-chip" data-mptaskfilter="today">Due Today</button>
+            <button class="svc-chip" data-mptaskfilter="overdue">Overdue</button>
+            <button class="svc-chip" data-mptaskfilter="done">Done</button>
+          </div>
+          <select class="mp-filter-select" id="mp-task-project" title="Filter by project"></select>
+          <button class="svc-form-btn svc-form-btn--primary" id="mp-task-add-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;white-space:nowrap">
+            <i class="fa fa-plus"></i> New Task
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 12px 12px">
+          <table class="crm-table mp-sort-table" id="mp-tasks-table">
+            <thead>
+              <tr>
+                <th style="width:28px"></th>
+                <th data-mpsort="title">Task</th>
+                <th data-mpsort="project_name">Project</th>
+                <th data-mpsort="priority">Priority</th>
+                <th data-mpsort="due_date">Due</th>
+                <th data-mpsort="status">Status</th>
+              </tr>
+            </thead>
+            <tbody id="mp-tasks-body">
+              <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Kanban view ── -->
+      <div id="mp-board-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <select class="mp-filter-select" id="mp-board-project" title="Filter by project"></select>
+          <select class="mp-filter-select" id="mp-board-priority" title="Filter by priority">
+            <option value="">All priorities</option>
+            <option value="high">High</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <select class="mp-filter-select" id="mp-board-due" title="Filter by due date">
+            <option value="">Any due date</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due today</option>
+            <option value="week">Due in 7 days</option>
+            <option value="none">No due date</option>
+          </select>
+          <span id="mp-board-hint" style="font-size:11px;color:var(--text-muted);margin-left:auto">Drag a card to another column to change its status.</span>
+        </div>
+        <!-- Columns: built-in statuses + custom statuses of the visible projects (built by renderMpBoard) -->
+        <div id="mp-board-columns" class="pm-kanban-wrap"></div>
+      </div>
+
+      </div><!-- /pm-mine-view -->
 
     </div><!-- /panel-projects -->
 
@@ -10147,6 +10270,60 @@
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crd-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="crd-modal-save"><i class="fa fa-floppy-disk"></i> Save Coordinator</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: New Task (assigned to me) Modal ── -->
+  <div class="modal-overlay" id="mp-task-modal" style="display:none">
+    <div class="po-aim-shell" style="width:520px">
+      <div class="po-aim-header">
+        <i class="fa fa-list-check" style="color:var(--accent)"></i>
+        <span>New Task</span>
+        <button class="psm-close" id="mp-task-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="mp-task-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-user-check" style="margin-right:4px"></i>The task will be assigned to you.</div>
+
+        <div class="po-field">
+          <label class="po-field-label">Project <span class="po-required">*</span></label>
+          <select id="mp-tf-project" class="po-field-input"></select>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Title <span class="po-required">*</span></label>
+          <input type="text" id="mp-tf-title" class="po-field-input" placeholder="What needs to be done?" maxlength="200">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="mp-tf-desc" class="po-field-input" rows="3" maxlength="5000" placeholder="Details (optional)"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">Status</label>
+            <select id="mp-tf-status" class="po-field-input"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Priority</label>
+            <select id="mp-tf-priority" class="po-field-input">
+              <option value="low">Low</option>
+              <option value="normal" selected>Normal</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Due Date</label>
+            <input type="date" id="mp-tf-due" class="po-field-input">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Estimated Hours</label>
+            <input type="number" id="mp-tf-hours" class="po-field-input" min="0" step="0.5" placeholder="Optional">
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-task-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="mp-task-modal-save"><i class="fa fa-floppy-disk"></i> Create Task</button>
       </div>
     </div>
   </div>

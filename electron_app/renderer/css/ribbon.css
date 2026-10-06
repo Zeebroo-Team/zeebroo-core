@@ -18742,6 +18742,129 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .pm-task-card-move { font-size: 10px; padding: 2px 6px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); color: var(--text-muted); cursor: pointer; }
 .pm-task-card-move:hover { border-color: var(--accent); color: var(--accent); }
 
+/* ── My Projects view (Assigned Project Access) ── */
+.mp-subtabs-bar { display: flex; align-items: center; gap: 12px; padding: 12px 16px 0; flex-shrink: 0; flex-wrap: wrap; }
+.pm-stat-tile--overdue { --pm-stat-color: #dc2626; --pm-stat-bg: #fef2f2; }
+@media (prefers-color-scheme: dark) { .pm-stat-tile--overdue { --pm-stat-color: #f87171; --pm-stat-bg: #450a0a; } }
+:root[data-theme="dark"]  .pm-stat-tile--overdue { --pm-stat-color: #f87171; --pm-stat-bg: #450a0a; }
+:root[data-theme="light"] .pm-stat-tile--overdue { --pm-stat-color: #dc2626; --pm-stat-bg: #fef2f2; }
+
+/* My Projects: always white background */
+#pm-mine-view, #mp-overview-view, #mp-tasks-view, #mp-board-view { background: var(--surface); }
+.mp-subtabs-bar { padding: 14px 24px 0; }
+
+/* Greeting line (minimal) */
+.mp-hero { flex-shrink: 0; display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+.mp-hero-text { display: contents; }
+.mp-hero-title { order: 1; font-size: 15px; font-weight: 700; color: var(--text); }
+.mp-hero-date  { order: 2; font-size: 11.5px; color: var(--text-muted); }
+.mp-hero-sub   { order: 3; flex-basis: 100%; font-size: 12px; color: var(--text-muted); }
+.mp-hero-hl          { font-weight: 700; }
+.mp-hero-hl--overdue { color: #dc2626; }
+.mp-hero-hl--today   { color: #d97706; }
+
+/* Stat tiles: small & flat, clickable */
+#mp-ov-stats { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+#mp-ov-stats .pm-stat-tile {
+  gap: 10px;
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+#mp-ov-stats .pm-stat-tile:hover { border-color: var(--pm-stat-color); box-shadow: none; transform: none; }
+#mp-ov-stats .pm-stat-tile-icon { width: 30px; height: 30px; border-radius: 7px; font-size: 12px; }
+#mp-ov-stats .pm-stat-tile-value { font-size: 17px; }
+#mp-ov-stats .pm-stat-tile-label { font-size: 11px; }
+.mp-stat-arrow { margin-left: auto; font-size: 10px; color: var(--text-muted); opacity: 0; transition: opacity .15s; }
+.mp-stat-link:hover .mp-stat-arrow { opacity: 1; color: var(--pm-stat-color); }
+
+/* Overdue / Today / Upcoming lists */
+.mp-ov-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.mp-ov-list {
+  background: var(--surface);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: 260px;
+  overflow: hidden;
+}
+.mp-ov-list--overdue  { --mp-list-color: #dc2626; }
+.mp-ov-list--today    { --mp-list-color: #d97706; }
+.mp-ov-list--upcoming { --mp-list-color: #2563eb; }
+.mp-ov-list-head {
+  display: flex; align-items: center; gap: 7px;
+  padding: 8px 12px; font-size: 12px; font-weight: 600; color: var(--text);
+  border-bottom: 1px solid var(--border-light);
+}
+.mp-ov-list-head > i { font-size: 11px; color: var(--mp-list-color); }
+.mp-ov-list-head .pm-col-count { background: none; padding: 0; font-weight: 600; color: var(--text-muted); }
+.mp-ov-list-body { overflow-y: auto; padding: 4px; }
+.mp-ov-empty { font-size: 11.5px; color: var(--text-muted); padding: 14px 10px; text-align: center; }
+.mp-ov-empty i { display: none; }
+.mp-ov-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; transition: background .12s; }
+.mp-ov-item:hover { background: var(--surface2); }
+.mp-ov-item-body { flex: 1; min-width: 0; }
+.mp-ov-item-title { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-ov-item-meta { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.mp-ov-item .pm-priority, .mp-ov-item .pm-status { font-size: 9px; padding: 1px 5px; }
+
+/* My Projects cards: small & flat */
+#mp-ov-projects { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; }
+.mp-proj-card {
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  padding: 10px 12px;
+  gap: 8px;
+}
+.mp-proj-card:hover { border-color: var(--mp-proj-color); box-shadow: none; transform: none; }
+.mp-proj-head { display: flex; align-items: center; gap: 9px; }
+.mp-proj-avatar {
+  flex-shrink: 0; width: 26px; height: 26px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11.5px; font-weight: 700; color: #fff;
+  background: var(--mp-proj-color);
+}
+.mp-proj-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.mp-proj-title .pm-project-card-name { font-size: 12.5px; font-weight: 600; }
+.mp-proj-title .pm-project-card-meta { gap: 5px; }
+.mp-proj-card .pm-priority, .mp-proj-card .pm-status { font-size: 9px; padding: 1px 5px; }
+.mp-proj-progress-row { display: none; }
+.mp-proj-card .pm-progress-bar-wrap { flex: none; height: 4px; background: var(--border-light); }
+.mp-proj-foot { display: flex; align-items: center; justify-content: space-between; }
+.mp-proj-foot .pm-task-count { font-size: 10.5px; }
+.mp-proj-open { font-size: 10.5px; font-weight: 600; color: var(--text-muted); }
+.mp-proj-card:hover .mp-proj-open { color: var(--accent); }
+.mp-ov-projects-empty {
+  text-align: center; padding: 24px 16px; color: var(--text-muted);
+  border: 1px dashed var(--border); border-radius: 8px;
+}
+
+.mp-check { color: #d1d5db; cursor: pointer; font-size: 14px; flex-shrink: 0; }
+.mp-check:hover { color: #22c55e; }
+.mp-check--done { color: #22c55e; }
+
+.mp-due { color: var(--text-muted); white-space: nowrap; }
+.mp-due--overdue { color: #dc2626; font-weight: 700; }
+.mp-due--today   { color: #d97706; font-weight: 700; }
+
+.mp-filter-select, .mp-status-select {
+  font-size: 12px; padding: 5px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--surface); color: var(--text); cursor: pointer;
+}
+.mp-status-select { font-size: 11px; padding: 3px 6px; }
+
+.mp-sort-table th[data-mpsort] { cursor: pointer; user-select: none; white-space: nowrap; }
+.mp-sort-table th[data-mpsort]:hover { color: var(--accent); }
+.mp-sort-table th[data-mpsort]::after { content: '\2195'; margin-left: 4px; opacity: .35; font-size: 10px; }
+.mp-sort-table th.mp-sort--asc::after  { content: '\25B2'; opacity: 1; color: var(--accent); }
+.mp-sort-table th.mp-sort--desc::after { content: '\25BC'; opacity: 1; color: var(--accent); }
+
+/* Column the dragged card's project doesn't have */
+.pm-kanban-col.mp-col--blocked { opacity: .45; }
+
 /* New project / task modals */
 .pm-modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 3000;

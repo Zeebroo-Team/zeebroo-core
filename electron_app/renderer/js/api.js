@@ -653,6 +653,10 @@ const API = (() => {
     pmTaskTime:            (id, data)  => request('POST',   `/pm/tasks/${id}/time`, data),
     pmTaskDelete:          (id)        => request('DELETE', `/pm/tasks/${id}`),
     pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
+    // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
+    pmMyWork:              ()          => request('GET',    '/pm/my-work'),
+    pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
+    pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),
     pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),
     pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
     pmMilestoneUpdate:     (id, body)  => request('PATCH',  `/pm/milestones/${id}`, body),
