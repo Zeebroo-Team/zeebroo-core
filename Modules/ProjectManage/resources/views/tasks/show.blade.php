@@ -69,7 +69,7 @@
                         <span style="font-size:12px;{{ $overdue ? 'color:#dc2626;font-weight:700;' : 'color:var(--muted);' }}">
                             <i class="fa fa-calendar"></i>
                             Due {{ $task->due_date->format('d M Y') }}
-                            @if($overdue) &mdash; overdue@endif
+                            @if($overdue) &mdash; overdue @endif
                         </span>
                     @endif
                 </div>
