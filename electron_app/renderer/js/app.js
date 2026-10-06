@@ -6141,11 +6141,11 @@ function applyFeatureVisibility() {
   btn('#rb-barcode',        mp('pos_btn_barcode'));
   btn('#rb-add-product',    mp('pos_btn_add_product'));
   btn('#rb-customers',      mp('pos_btn_customers'));
-  btn('#rb-accounts',       mp('pos_btn_accounts'));
+  btn('#rb-accounts',       false); // hidden for now
   // Anyone allowed to check out can look up a gift card balance at the till.
   btn('#rb-gift-card-check', mp('pos_btn_checkout'));
   btn('#rb-coupon-check',    mp('pos_btn_checkout'));
-  btn('#rb-pos-settings',   mp('pos_btn_settings'));
+  btn('#rb-pos-settings',   false); // hidden for now
   btn('#rb-receipt-editor', mp('pos_btn_receipt_editor'));
   btn('#rb-pos-refresh',    mp('pos_btn_pos_refresh'));
   { const el = $('#pos-ribbon-stats'); if (el) el.style.display = mp('pos_btn_ribbon_stats') ? '' : 'none'; }
@@ -10704,6 +10704,12 @@ function showShortcutsModal() {
     ['F11',       'Toggle full screen'],
     ['F12',       'Checkout'],
     ['Ctrl+T',    'New POS session tab'],
+    ['Ctrl+G',    'Gift card balance'],
+    ['Ctrl+K',    'Check coupon'],
+    ['Alt+1',     'POS → Products'],
+    ['Alt+2',     'POS → Services'],
+    ['Alt+3',     'POS → Rental'],
+    ['Alt+4',     'POS → Dynamic'],
     ['Ctrl+Z',    'Undo last cart item'],
     ['Ctrl+F1',   'Collapse / expand ribbon'],
     ['—',         ''],
@@ -10722,23 +10728,47 @@ function showShortcutsModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="width:360px">
+    <div class="modal" style="width:560px;max-width:calc(100vw - 32px)">
       <h3><i class="fa fa-keyboard"></i> Keyboard Shortcuts</h3>
-      <table style="width:100%;border-collapse:collapse;max-height:65vh;display:block;overflow-y:auto">
-        ${shortcuts.map(([k, d]) => k === '—'
-          ? `<tr><td colspan="2" style="padding:4px 6px"><hr style="border:none;border-top:1px solid var(--border);margin:2px 0"></td></tr>`
-          : `<tr style="border-bottom:1px solid var(--border-light)">
-              <td style="padding:6px 6px;white-space:nowrap"><kbd style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;font-family:inherit">${k}</kbd></td>
-              <td style="padding:6px 6px;font-size:12px;color:var(--text)">${d}</td>
-            </tr>`).join('')}
-      </table>
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <i class="fa fa-magnifying-glass" style="color:var(--text-muted);font-size:12px"></i>
+        <input type="text" id="sc-search" placeholder="Search shortcuts…" autocomplete="off"
+          style="flex:1;border:none;outline:none;background:transparent;padding:8px 0;font-size:13px;color:var(--text);font-family:inherit">
+      </div>
+      <div style="max-height:60vh;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+          ${shortcuts.map(([k, d]) => k === '—'
+            ? `<tr class="sc-sep"><td colspan="2" style="padding:4px 6px"><hr style="border:none;border-top:1px solid var(--border);margin:2px 0"></td></tr>`
+            : `<tr class="sc-row" data-search="${escHtml((k + ' ' + d).toLowerCase())}" style="border-bottom:1px solid var(--border-light)">
+                <td style="padding:6px 6px;white-space:nowrap;width:1%"><kbd style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;font-family:inherit">${k}</kbd></td>
+                <td style="padding:6px 6px 6px 14px;font-size:12px;color:var(--text)">${d}</td>
+              </tr>`).join('')}
+          <tr id="sc-empty" style="display:none"><td colspan="2" style="padding:24px;text-align:center;font-size:12px;color:var(--text-muted)">No shortcuts match your search</td></tr>
+        </table>
+      </div>
       <div class="modal-footer">
         <button class="btn-secondary" id="sc-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('#sc-close').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const close = () => overlay.remove();
+  overlay.querySelector('#sc-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const search = overlay.querySelector('#sc-search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    let shown = 0;
+    overlay.querySelectorAll('.sc-row').forEach(r => {
+      const match = !q || r.dataset.search.includes(q);
+      r.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    overlay.querySelectorAll('.sc-sep').forEach(r => { r.style.display = q ? 'none' : ''; });
+    overlay.querySelector('#sc-empty').style.display = shown ? 'none' : '';
+  });
+  search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); e.stopPropagation(); } });
+  search.focus();
 }
 
 // ── Sign out (ribbon View tab button) ─────────────────────────────────────
@@ -29350,6 +29380,28 @@ document.addEventListener('keydown', (e) => {
     const _t = activeTab(); if (_t && _t.cart.length) openCheckout(); e.preventDefault(); return;
   }
   if (mod && e.key === 't') { activateTab('pos'); addPosTab(); e.preventDefault(); return; }
+
+  // ── Gift card / coupon lookup (Ctrl+G, Ctrl+K) — respect ribbon permissions ──
+  const _rbVisible = (sel) => { const b = $(sel); return b && b.style.display !== 'none'; };
+  if (mod && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+    if (_rbVisible('#rb-gift-card-check')) openGiftCardCheckModal();
+    e.preventDefault(); return;
+  }
+  if (mod && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+    if (_rbVisible('#rb-coupon-check')) openCouponCheckModal();
+    e.preventDefault(); return;
+  }
+
+  // ── POS mode tabs (Alt+1…4) ───────────────────────────────────────────────
+  if (e.altKey && !mod && !e.shiftKey) {
+    const posModeMap = { '1': 'products', '2': 'services', '3': 'rentals', '4': 'dynamic' };
+    const mode = posModeMap[e.key];
+    if (mode) {
+      const modeBtn = $(`.pos-mode-btn[data-mode="${mode}"]`);
+      if (modeBtn && modeBtn.style.display !== 'none') { activateTab('pos'); switchPosMode(mode); }
+      e.preventDefault(); return;
+    }
+  }
 
   // ── Inventory subnav shortcuts (Ctrl+1…0, Ctrl+B) ────────────────────────
   if (mod && !e.shiftKey) {
