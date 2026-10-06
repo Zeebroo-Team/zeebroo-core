@@ -910,6 +910,9 @@
                     <a href="{{ route('pm.projects.index') }}" @class(['active' => request()->routeIs('pm.projects.*') || request()->routeIs('pm.tasks.*')])>
                         <i class="fa fa-diagram-project"></i><span>All Projects</span>
                     </a>
+                    <a href="{{ route('pm.my-projects') }}" @class(['active' => request()->routeIs('pm.my-projects')])>
+                        <i class="fa fa-user-check"></i><span>My Projects</span>
+                    </a>
                     <a href="{{ route('pm.my-tasks') }}" @class(['active' => request()->routeIs('pm.my-tasks')])>
                         <i class="fa fa-list-check"></i><span>My Tasks</span>
                     </a>
