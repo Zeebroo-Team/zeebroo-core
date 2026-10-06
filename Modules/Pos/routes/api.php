@@ -320,6 +320,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('purchase-orders/{purchase}/receive', [PosPurchaseOrderApiController::class, 'receive'])->name('purchase-orders.receive');
     Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
 
+    Route::post('expenses/bills/scan', \Modules\Pos\Http\Controllers\Api\PosExpenseBillScanApiController::class)
+        ->middleware('throttle:10,1')->name('expenses.bills.scan');
     Route::post('expenses/bills', [PosExpenseBillApiController::class, 'store'])->name('expenses.bills.store');
     Route::get('expenses/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'index'])->name('expenses.bills.index');
     Route::get('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'show'])->name('expenses.bills.show');

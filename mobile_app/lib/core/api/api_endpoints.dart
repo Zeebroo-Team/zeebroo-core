@@ -58,6 +58,7 @@ class ApiEndpoints {
 
   // Units — dropdown source for the product form
   static const String units = '/v1/pos/units';
+  static String unit(int id) => '/v1/pos/units/$id';
 
   // Categories (Inventory > Categories tab)
   static const String categories = '/v1/pos/categories';
@@ -121,6 +122,7 @@ class ApiEndpoints {
 
   // Bills (Financial > Bills tab)
   static const String financeBills = '/v1/pos/expenses/bills';
+  static const String financeBillScan = '/v1/pos/expenses/bills/scan';
   static String financeBill(int id) => '/v1/pos/expenses/bills/$id';
   static String financeBillPay(int id) => '/v1/pos/expenses/bills/$id/pay';
   static const String financeBillAssignmentTargets =
@@ -155,6 +157,19 @@ class ApiEndpoints {
   // POS — point of sale
   static const String customers = '/v1/pos/customers';
   static String customer(int id) => '/v1/pos/customers/$id';
+  static const String customerCategories = '/v1/pos/customer-categories';
+  static const String couponLookup = '/v1/pos/coupons/lookup';
+  static const String coupons = '/v1/pos/coupons';
+  static const String couponGenerateCode = '/v1/pos/coupons/generate-code';
+  static String coupon(int id) => '/v1/pos/coupons/$id';
+  static const String giftCardLookup = '/v1/pos/gift-cards/lookup';
+  static const String giftCards = '/v1/pos/gift-cards';
+  static const String giftCardGenerateCode = '/v1/pos/gift-cards/generate-code';
+  static const String giftCardGroups = '/v1/pos/gift-card-groups';
+  static String giftCard(int id) => '/v1/pos/gift-cards/$id';
+  static String giftCardGroup(int id) => '/v1/pos/gift-card-groups/$id';
+  static String giftCardGroupCards(int id) =>
+      '/v1/pos/gift-card-groups/$id/cards';
   static const String sales = '/v1/pos/sales';
   static String sale(int id) => '/v1/pos/sales/$id';
   static String saleReceipt(int id) => '/v1/pos/sales/$id/receipt';

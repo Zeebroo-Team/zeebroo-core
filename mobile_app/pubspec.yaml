@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  audioplayers: ^6.8.1
 
   # HTTP
   dio: ^5.7.0
@@ -45,3 +46,4 @@ flutter:
   assets:
     - assets/images/
     - assets/images/signup/
+    - assets/sounds/beep.wav

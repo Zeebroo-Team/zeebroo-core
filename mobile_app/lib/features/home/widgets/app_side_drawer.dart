@@ -8,30 +8,30 @@ import '../../../core/business/business_state.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../business/screens/business_screen.dart';
 import '../../business/screens/select_business_screen.dart';
-import '../../finance/screens/finance_screen.dart';
+import '../../inventory/screens/campaign_overview_screen.dart';
+import '../../inventory/screens/contacts_overview_screen.dart';
 import '../../inventory/screens/inventory_screen.dart';
+import '../../inventory/screens/product_overview_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../profile/screens/profile_screen.dart';
 import '../models/feature_entry.dart';
 import '../screens/feature_placeholder_screen.dart';
 
 /// The app's side bar — an iOS Settings-style grouped list behind frosted
-/// glass, reachable from the menu button in [GlassAppBar]. Lists every
-/// feature enabled on the business's plan plus account-level actions.
+/// glass, reachable from the menu button in [GlassAppBar]. Lists management
+/// shortcuts and account-level actions.
 class AppSideDrawer extends StatelessWidget {
   const AppSideDrawer({
     super.key,
     required this.name,
     required this.email,
     required this.initials,
-    required this.features,
     this.unreadNotifications = 0,
   });
 
   final String name;
   final String email;
   final String initials;
-  final List<FeatureEntry> features;
   final int unreadNotifications;
 
   @override
@@ -79,7 +79,6 @@ class AppSideDrawer extends StatelessWidget {
                       _Row(
                         icon: Icons.inventory_2_outlined,
                         label: 'Inventory',
-                        showDivider: false,
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).push(
@@ -89,33 +88,46 @@ class AppSideDrawer extends StatelessWidget {
                           );
                         },
                       ),
+                      _Row(
+                        icon: Icons.inventory_2_rounded,
+                        label: 'Product',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ProductOverviewScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _Row(
+                        icon: Icons.contacts_outlined,
+                        label: 'Contacts',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ContactsOverviewScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _Row(
+                        icon: Icons.campaign_outlined,
+                        label: 'Campaign',
+                        showDivider: false,
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const CampaignOverviewScreen(),
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  if (features.isNotEmpty) ...[
-                    const _SectionLabel('Features'),
-                    const SizedBox(height: 8),
-                    _GroupedCard(
-                      children: [
-                        for (final f in features.where((f) => f.key != 'event_management'))
-                          _Row(
-                            icon: f.icon,
-                            label: f.label,
-                            onTap: () {
-                              Navigator.of(context).pop();
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => f.key == 'bill_management'
-                                      ? const FinanceScreen()
-                                      : FeaturePlaceholderScreen(feature: f),
-                                ),
-                              );
-                            },
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
                   const _SectionLabel('General'),
                   const SizedBox(height: 8),
                   _GroupedCard(
@@ -123,7 +135,9 @@ class AppSideDrawer extends StatelessWidget {
                       _Row(
                         icon: Icons.notifications_outlined,
                         label: 'Notifications',
-                        badge: unreadNotifications > 0 ? '$unreadNotifications' : null,
+                        badge: unreadNotifications > 0
+                            ? '$unreadNotifications'
+                            : null,
                         onTap: () {
                           Navigator.of(context).pop();
                           Navigator.of(context).push(
@@ -169,7 +183,8 @@ class AppSideDrawer extends StatelessWidget {
                                 feature: FeatureEntry(
                                   key: 'help',
                                   label: 'Help & Support',
-                                  description: "We're here to help — reach out any time.",
+                                  description:
+                                      "We're here to help — reach out any time.",
                                   icon: Icons.help_outline_rounded,
                                   activeIcon: Icons.help_rounded,
                                 ),
@@ -409,14 +424,21 @@ class _Row extends StatelessWidget {
               if (badge != null)
                 Container(
                   margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.error,
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     badge!,
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
               if (color != AppColors.error)

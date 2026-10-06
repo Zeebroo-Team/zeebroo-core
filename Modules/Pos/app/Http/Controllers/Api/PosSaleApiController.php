@@ -37,6 +37,9 @@ class PosSaleApiController extends Controller
             'amount_tendered'        => ['nullable', 'numeric', 'min:0'],
             'discount_percent'       => ['nullable', 'numeric', 'min:0', 'max:100'],
             'discount_flat'          => ['nullable', 'numeric', 'min:0'],
+            'coupon_code'            => ['nullable', 'string', 'max:40'],
+            'gift_card_code'         => ['nullable', 'string', 'max:40'],
+            'gift_card_amount'       => ['nullable', 'required_with:gift_card_code', 'numeric', 'min:0.01'],
             'notes'                  => ['nullable', 'string', 'max:2000'],
             'credit_due_date'        => ['nullable', 'date_format:Y-m-d'],
         ]);
@@ -68,6 +71,9 @@ class PosSaleApiController extends Controller
                 customerId:      isset($data['customer_id']) ? (int) $data['customer_id'] : null,
                 creditDueDate:   $data['credit_due_date'] ?? null,
                 discountFlat:    isset($data['discount_flat']) ? (float) $data['discount_flat'] : null,
+                giftCardCode:    $data['gift_card_code'] ?? null,
+                giftCardAmount:  isset($data['gift_card_amount']) ? (float) $data['gift_card_amount'] : null,
+                couponCode:      $data['coupon_code'] ?? null,
             );
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([

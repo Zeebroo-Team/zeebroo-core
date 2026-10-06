@@ -2,316 +2,530 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/money.dart';
+import '../data/pos_add_sound.dart';
+import '../data/scanner_cart_controller.dart';
+import '../data/scanner_product_repository.dart';
+import '../models/pos_cart_item.dart';
+import '../widgets/live_scanner_camera.dart';
+import '../widgets/scanner_product_search_sheet.dart';
 
-/// What happened to a scanned code — shown as a toast over the camera preview.
-class ScanOutcome {
-  const ScanOutcome.added(this.message) : ok = true;
-  const ScanOutcome.failed(this.message) : ok = false;
+typedef ScannerCameraBuilder =
+    Widget Function(
+      BuildContext context,
+      ValueChanged<String> onCode,
+      bool paused,
+    );
 
-  final bool ok;
-  final String message;
-}
-
-typedef ScanHandler = Future<ScanOutcome> Function(String code);
-
-/// Full-screen barcode scanner for the POS. It keeps scanning after each item so
-/// a cashier can scan several in a row; [onCode] decides what a code means
-/// (look up the SKU, add to the cart) and the result is shown over the preview.
+/// A continuous scanning session with its own cart, returned to the caller.
 class BarcodeScannerScreen extends StatefulWidget {
-  const BarcodeScannerScreen({super.key, required this.onCode});
+  const BarcodeScannerScreen({
+    super.key,
+    this.initialCart = const [],
+    this.repository,
+    this.cameraBuilder,
+    this.onProductAdded,
+  });
 
-  final ScanHandler onCode;
+  final List<PosCartItem> initialCart;
+  final ScannerProductRepository? repository;
+  final ScannerCameraBuilder? cameraBuilder;
+  final VoidCallback? onProductAdded;
 
   @override
   State<BarcodeScannerScreen> createState() => _BarcodeScannerScreenState();
 }
 
 class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
-  static const _sameCodeCooldown = Duration(milliseconds: 1500);
-
-  final _controller = MobileScannerController();
+  static const _panelColor = Color(0xFF1C1D30);
+  late final ScannerCartController _cart = ScannerCartController(
+    repository: widget.repository ?? ScannerProductRepository(),
+    initialCart: widget.initialCart,
+  );
   Timer? _toastTimer;
-
-  bool _busy = false;
-  String? _lastCode;
-  DateTime _lastAt = DateTime.fromMillisecondsSinceEpoch(0);
   ScanOutcome? _outcome;
-  int _added = 0;
+  bool _manualOpen = false;
+  bool _finishing = false;
+  final _cameraKey = GlobalKey<LiveScannerCameraState>();
+  final _addSound = PosAddSound();
+
+  @override
+  void initState() {
+    super.initState();
+    _cart.addListener(_cartChanged);
+  }
+
+  void _cartChanged() {
+    if (mounted) setState(() {});
+  }
 
   @override
   void dispose() {
     _toastTimer?.cancel();
-    _controller.dispose();
+    _cart.removeListener(_cartChanged);
+    _cart.dispose();
+    unawaited(_addSound.dispose());
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
-    for (final barcode in capture.barcodes) {
-      final code = barcode.rawValue?.trim() ?? '';
-      if (code.isNotEmpty) {
-        _handle(code);
-        return;
+  void _showOutcome(ScanOutcome outcome) {
+    if (!mounted || _finishing) return;
+    if (outcome.ok) {
+      HapticFeedback.lightImpact();
+      if (widget.onProductAdded != null) {
+        widget.onProductAdded!();
+      } else {
+        unawaited(_addSound.play());
       }
     }
-  }
-
-  Future<void> _handle(String code) async {
-    if (_busy) return;
-    // The camera keeps seeing the same label; don't add it again until it has
-    // been out of view or a moment has passed.
-    if (code == _lastCode && DateTime.now().difference(_lastAt) < _sameCodeCooldown) return;
-
-    _busy = true;
-    _lastCode = code;
-    final outcome = await widget.onCode(code);
-    if (!mounted) return;
-
-    outcome.ok ? HapticFeedback.mediumImpact() : HapticFeedback.heavyImpact();
     _toastTimer?.cancel();
-    _toastTimer = Timer(const Duration(milliseconds: 2200), () {
+    setState(() => _outcome = outcome);
+    _toastTimer = Timer(const Duration(seconds: 3), () {
       if (mounted) setState(() => _outcome = null);
     });
-    setState(() {
-      _busy = false;
-      _lastAt = DateTime.now();
-      _outcome = outcome;
-      if (outcome.ok) _added++;
-    });
   }
 
-  Future<void> _typeCode() async {
-    final code = await showDialog<String>(
+  Future<void> _scan(String code, {bool manual = false}) async {
+    if (_finishing || (_manualOpen && !manual)) return;
+    final outcome = await _cart.scanCode(code, manual: manual);
+    if (outcome != null) _showOutcome(outcome);
+  }
+
+  Future<void> _manualSearch() async {
+    if (_cart.busy || _manualOpen || _finishing) return;
+    setState(() => _manualOpen = true);
+    final selected = await showModalBottomSheet<Object>(
       context: context,
-      builder: (_) => const _TypeCodeDialog(),
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ScannerProductSearchSheet(repository: _cart.repository),
     );
-    if (code != null && code.trim().isNotEmpty) {
-      _lastCode = null;
-      await _handle(code.trim());
+    if (!mounted) return;
+    if (selected is Map<String, dynamic>) {
+      _showOutcome(_cart.addProduct(selected));
+    } else if (selected is String) {
+      await _scan(selected, manual: true);
     }
+    if (mounted) setState(() => _manualOpen = false);
+  }
+
+  Future<void> _finish() async {
+    if (_cart.busy || _finishing || _manualOpen) return;
+    setState(() => _finishing = true);
+    try {
+      await _cameraKey.currentState?.stopForExit();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'The camera could not stop. Close this browser tab to release it.',
+          ),
+        ),
+      );
+      return;
+    }
+    if (!mounted) return;
+    // Back/close also returns the session so scanned items are not lost.
+    Navigator.of(context).pop(_cart.snapshot());
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: Colors.black,
-    body: Stack(
-      fit: StackFit.expand,
-      children: [
-        MobileScanner(
-          controller: _controller,
-          onDetect: _onDetect,
-          errorBuilder: (context, error) => _CameraProblem(
-            message: error.errorDetails?.message ?? 'The camera could not be started.',
-            onTypeCode: _typeCode,
-          ),
-        ),
-        const IgnorePointer(child: CustomPaint(painter: _FramePainter())),
-        SafeArea(
-          child: Column(
-            children: [
-              _buildTopBar(),
-              const Spacer(),
-              if (_outcome != null) _Toast(outcome: _outcome!),
-              _buildBottomBar(),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _buildTopBar() => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-    child: Row(
-      children: [
-        IconButton(
-          tooltip: 'Close',
-          icon: const Icon(Icons.close_rounded, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        const Expanded(
-          child: Text(
-            'Scan barcode',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-          ),
-        ),
-        ValueListenableBuilder<MobileScannerState>(
-          valueListenable: _controller,
-          builder: (context, state, _) {
-            if (state.torchState == TorchState.unavailable) return const SizedBox(width: 48);
-            final on = state.torchState == TorchState.on;
-            return IconButton(
-              tooltip: on ? 'Torch off' : 'Torch on',
-              icon: Icon(on ? Icons.flash_on_rounded : Icons.flash_off_rounded, color: Colors.white),
-              onPressed: _controller.toggleTorch,
+  Widget build(BuildContext context) => PopScope<List<PosCartItem>>(
+    canPop: false,
+    onPopInvokedWithResult: (didPop, result) {
+      if (!didPop) _finish();
+    },
+    child: Scaffold(
+      backgroundColor: _panelColor,
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            if (constraints.maxWidth > constraints.maxHeight) {
+              return Row(
+                children: [
+                  Expanded(child: _camera()),
+                  SizedBox(
+                    width: constraints.maxWidth * 0.46,
+                    child: _cartPanel(),
+                  ),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                Expanded(child: _camera()),
+                Expanded(child: _cartPanel()),
+              ],
             );
           },
         ),
-        IconButton(
-          tooltip: 'Switch camera',
-          icon: const Icon(Icons.cameraswitch_rounded, color: Colors.white),
-          onPressed: _controller.switchCamera,
-        ),
-      ],
+      ),
     ),
   );
 
-  Widget _buildBottomBar() => Container(
-    margin: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-    padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.65), borderRadius: BorderRadius.circular(16)),
-    child: Row(
-      children: [
-        Expanded(
-          child: Text(
-            _added == 0 ? 'Point the camera at a barcode' : '$_added ${_added == 1 ? 'item' : 'items'} added',
-            style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
+  Widget _camera() => Stack(
+    fit: StackFit.expand,
+    children: [
+      widget.cameraBuilder?.call(context, _scan, _manualOpen || _finishing) ??
+          LiveScannerCamera(
+            key: _cameraKey,
+            onCode: _scan,
+            paused: _manualOpen || _finishing,
+          ),
+      const IgnorePointer(child: CustomPaint(painter: _FramePainter())),
+      Positioned(
+        top: 8,
+        left: 8,
+        right: 8,
+        child: Row(
+          children: [
+            IconButton.filledTonal(
+              tooltip: 'Finish and close scanner',
+              onPressed: _cart.busy || _finishing ? null : _finish,
+              style: IconButton.styleFrom(
+                backgroundColor: Colors.black54,
+                foregroundColor: Colors.white,
+              ),
+              icon: const Icon(Icons.close_rounded),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(32),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.circle,
+                      color: _cart.busy
+                          ? AppColors.warning
+                          : const Color(0xFF5FE198),
+                      size: 9,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _cart.busy
+                            ? 'Looking up product...'
+                            : 'Ready · scan a barcode',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (_outcome != null)
+        Positioned(
+          bottom: 58,
+          left: 12,
+          right: 12,
+          child: Container(
+            key: const ValueKey('scanner-feedback'),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: _outcome!.ok ? AppColors.success : AppColors.error,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              _outcome!.message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
           ),
         ),
-        TextButton.icon(
-          onPressed: _typeCode,
-          icon: const Icon(Icons.keyboard_rounded, size: 18, color: Colors.white),
-          label: const Text('Type code', style: TextStyle(color: Colors.white)),
-        ),
-        const SizedBox(width: 4),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.primary, minimumSize: const Size(72, 40)),
-          child: const Text('Done'),
-        ),
-      ],
-    ),
+    ],
   );
-}
 
-class _Toast extends StatelessWidget {
-  const _Toast({required this.outcome});
-  final ScanOutcome outcome;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16),
-    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-    decoration: BoxDecoration(
-      color: outcome.ok ? AppColors.success : AppColors.error,
-      borderRadius: BorderRadius.circular(12),
-    ),
-    child: Row(
-      children: [
-        Icon(outcome.ok ? Icons.check_circle_rounded : Icons.error_rounded, color: Colors.white, size: 20),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            outcome.message,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-class _CameraProblem extends StatelessWidget {
-  const _CameraProblem({required this.message, required this.onTypeCode});
-  final String message;
-  final VoidCallback onTypeCode;
-
-  @override
-  Widget build(BuildContext context) => Center(
+  Widget _cartPanel() => Material(
+    color: _panelColor,
+    borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+    clipBehavior: Clip.antiAlias,
     child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.videocam_off_rounded, color: Colors.white70, size: 44),
-          const SizedBox(height: 14),
-          const Text(
-            'Camera unavailable',
-            style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+          Center(
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white30,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            '$message\nCheck the camera permission, or type the code instead.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              const Icon(
+                Icons.shopping_cart_outlined,
+                color: AppColors.primary,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Cart (${_cart.count})',
+                      key: const ValueKey('scanner-cart-count'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Text(
+                      'Live scan session',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              SizedBox(
+                width: 140,
+                child: FilledButton.icon(
+                  key: const ValueKey('finish-scanning'),
+                  onPressed: _cart.busy || _finishing ? null : _finish,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryDk,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: AppColors.primaryDk.withValues(
+                      alpha: 0.5,
+                    ),
+                    disabledForegroundColor: Colors.white60,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    minimumSize: const Size(0, 44),
+                  ),
+                  icon: const Icon(Icons.check_rounded, size: 16),
+                  label: Text(
+                    _finishing ? 'Closing camera...' : 'Finish scanning',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 18),
-          FilledButton.icon(
-            onPressed: onTypeCode,
-            icon: const Icon(Icons.keyboard_rounded, size: 18),
-            label: const Text('Type code'),
+          const SizedBox(height: 10),
+          Expanded(
+            child: _cart.items.isEmpty
+                ? const Center(
+                    child: Text(
+                      'Scan a barcode to add your first item',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white60, fontSize: 13),
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: _cart.items.length,
+                    separatorBuilder: (_, index) => const SizedBox(height: 8),
+                    itemBuilder: (context, index) =>
+                        _cartLine(_cart.items[index]),
+                  ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'TOTAL · ${_cart.count} ${_cart.count == 1 ? 'item' : 'items'}',
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                formatMoney(_cart.total),
+                key: const ValueKey('scanner-cart-total'),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              key: const ValueKey('scanner-manual-search'),
+              onPressed: _cart.busy || _finishing ? null : _manualSearch,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF94BFFF),
+                disabledForegroundColor: Colors.white30,
+                side: const BorderSide(color: Colors.white30),
+                minimumSize: const Size(0, 46),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              icon: const Icon(Icons.search_rounded, size: 18),
+              label: const Text(
+                'Search or add product manually',
+                style: TextStyle(fontSize: 12.5),
+              ),
+            ),
           ),
         ],
       ),
     ),
   );
-}
 
-class _TypeCodeDialog extends StatefulWidget {
-  const _TypeCodeDialog();
-
-  @override
-  State<_TypeCodeDialog> createState() => _TypeCodeDialogState();
-}
-
-class _TypeCodeDialogState extends State<_TypeCodeDialog> {
-  final _ctrl = TextEditingController();
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: const Text('Enter barcode / SKU'),
-    content: TextField(
-      controller: _ctrl,
-      autofocus: true,
-      textInputAction: TextInputAction.done,
-      decoration: const InputDecoration(hintText: 'e.g. TEST-003252'),
-      onSubmitted: (v) => Navigator.of(context).pop(v),
+  Widget _cartLine(PosCartItem item) => Container(
+    key: ValueKey('scanner-cart-item-${item.id}'),
+    padding: const EdgeInsets.fromLTRB(12, 10, 4, 6),
+    decoration: BoxDecoration(
+      color: const Color(0xFF303146),
+      borderRadius: BorderRadius.circular(16),
     ),
-    actions: [
-      TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
-      FilledButton(onPressed: () => Navigator.of(context).pop(_ctrl.text), child: const Text('Add')),
-    ],
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          item.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '${item.qty} × ${formatMoney(item.effectivePrice)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white60, fontSize: 11),
+                  ),
+                  Text(
+                    formatMoney(item.lineTotal),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _quantityButton(
+              Icons.remove,
+              'Decrease ${item.name}',
+              'scanner-minus-${item.id}',
+              () => _cart.setQuantity(item.id, item.qty - 1),
+            ),
+            Text(
+              '${item.qty}',
+              key: ValueKey('scanner-quantity-${item.id}'),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
+            _quantityButton(
+              Icons.add,
+              'Increase ${item.name}',
+              'scanner-plus-${item.id}',
+              () => _cart.setQuantity(item.id, item.qty + 1),
+            ),
+            _quantityButton(
+              Icons.close,
+              'Remove ${item.name}',
+              'scanner-remove-${item.id}',
+              () => _cart.remove(item.id),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+
+  Widget _quantityButton(
+    IconData icon,
+    String tooltip,
+    String key,
+    VoidCallback onTap,
+  ) => IconButton(
+    key: ValueKey(key),
+    tooltip: tooltip,
+    onPressed: _cart.busy || _finishing ? null : onTap,
+    constraints: const BoxConstraints(minWidth: 36, minHeight: 40),
+    padding: const EdgeInsets.all(8),
+    iconSize: 18,
+    color: Colors.white70,
+    disabledColor: Colors.white30,
+    icon: Icon(icon),
   );
 }
 
-/// Dims the preview around a rounded "aim here" window.
 class _FramePainter extends CustomPainter {
   const _FramePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final width = size.width * 0.78;
-    final window = RRect.fromRectAndRadius(
-      Rect.fromCenter(center: Offset(size.width / 2, size.height * 0.42), width: width, height: width * 0.55),
+    final width = size.width * 0.76;
+    final frame = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(size.width / 2, size.height * 0.5),
+        width: width,
+        height: (width * 0.5).clamp(50, size.height * 0.42),
+      ),
       const Radius.circular(18),
     );
-
-    final dim = Path.combine(
-      PathOperation.difference,
-      Path()..addRect(Offset.zero & size),
-      Path()..addRRect(window),
-    );
-    canvas.drawPath(dim, Paint()..color = Colors.black.withValues(alpha: 0.45));
     canvas.drawRRect(
-      window,
+      frame,
       Paint()
+        ..color = Colors.white70
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5
-        ..color = Colors.white.withValues(alpha: 0.9),
+        ..strokeWidth = 2,
+    );
+    canvas.drawLine(
+      Offset(frame.left + 8, frame.center.dy),
+      Offset(frame.right - 8, frame.center.dy),
+      Paint()
+        ..color = const Color(0xFFFF6175)
+        ..strokeWidth = 2,
     );
   }
 
   @override
-  bool shouldRepaint(_FramePainter old) => false;
+  bool shouldRepaint(_FramePainter oldDelegate) => false;
 }

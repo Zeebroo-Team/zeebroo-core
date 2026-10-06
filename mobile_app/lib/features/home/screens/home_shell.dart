@@ -7,19 +7,18 @@ import '../../../core/auth/auth_state.dart';
 import '../../../core/business/business_state.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../business/screens/select_business_screen.dart';
-import '../../finance/screens/finance_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
+import '../../pos/models/pos_cart_item.dart';
+import '../../pos/screens/barcode_scanner_screen.dart';
 import '../../pos/screens/pos_screen.dart';
-import '../models/feature_entry.dart';
 import '../widgets/app_side_drawer.dart';
 import '../widgets/glass_app_bar.dart';
 import '../widgets/glass_bottom_nav.dart';
-import 'feature_placeholder_screen.dart';
 import 'home_content.dart';
 
-/// The authenticated app shell: frosted top bar, Home content, up to three
-/// plan-enabled features as quick bottom tabs, and a side menu listing every
-/// enabled feature plus account actions. This is what `/home` renders.
+/// The authenticated app shell: frosted top bar, Home content, Home/POS/Scanner
+/// navigation, and a side menu with management shortcuts and account actions.
+/// This is what `/home` renders.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
@@ -27,35 +26,15 @@ class HomeShell extends StatefulWidget {
   State<HomeShell> createState() => _HomeShellState();
 }
 
-/// How many plan features get a permanent slot in the bottom bar, in
-/// addition to Home. The rest are still reachable from the side menu.
-const _kMaxBottomFeatures = 3;
-
 class _HomeShellState extends State<HomeShell> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  int _tabIndex = 0;
   int _homeTapSignal = 0;
-  List<FeatureEntry> _enabledFeatures = [];
   int _unreadNotifications = 0;
 
   @override
   void initState() {
     super.initState();
-    _loadFeatures();
     _loadUnreadCount();
-  }
-
-  Future<void> _loadFeatures() async {
-    try {
-      final res = await ApiClient.instance.get(ApiEndpoints.features);
-      final data = res.data;
-      final keys = (data is Map ? data['data'] : data) as List? ?? [];
-      final enabled = FeatureCatalog.enabledFrom(keys.whereType<String>());
-      if (mounted) setState(() => _enabledFeatures = enabled);
-    } catch (_) {
-      // Bottom bar simply falls back to Home-only; the side menu (and its
-      // own retry-by-reopen) isn't essential to get to today's overview.
-    }
   }
 
   Future<void> _loadUnreadCount() async {
@@ -70,21 +49,24 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   void _openNotifications() async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
     // Refresh count after returning from notifications
     _loadUnreadCount();
   }
 
-  List<FeatureEntry> get _bottomFeatures =>
-      _enabledFeatures.take(_kMaxBottomFeatures).toList();
-
-  void _selectBottomTab(int index) {
-    setState(() {
-      _tabIndex = index;
-      if (index == 0) _homeTapSignal++;
-    });
+  Future<void> _openScanner() async {
+    final cart = await Navigator.of(context).push<List<PosCartItem>>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => const BarcodeScannerScreen(),
+      ),
+    );
+    if (!mounted || cart == null || cart.isEmpty) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => PosScreen(initialCart: cart)));
   }
 
   static String _greeting() {
@@ -112,7 +94,6 @@ class _HomeShellState extends State<HomeShell> {
     final name = (user?['name'] as String?) ?? 'there';
     final email = (user?['email'] as String?) ?? '';
     final firstName = name.split(' ').first;
-    final bottomFeatures = _bottomFeatures;
 
     final business = context.watch<BusinessState>();
     final hasDistinctBranch =
@@ -123,16 +104,13 @@ class _HomeShellState extends State<HomeShell> {
         ? '${business.businessName} › ${business.branchName}'
         : business.businessName;
 
-    final tabs = <NavTabData>[
-      const NavTabData(
+    const tabs = <NavTabData>[
+      NavTabData(
         label: 'Home',
         icon: Icons.home_outlined,
         activeIcon: Icons.home_rounded,
       ),
-      for (final f in bottomFeatures)
-        NavTabData(label: f.label, icon: f.icon, activeIcon: f.activeIcon),
     ];
-    final safeIndex = _tabIndex.clamp(0, tabs.length - 1);
 
     return Scaffold(
       key: _scaffoldKey,
@@ -141,7 +119,6 @@ class _HomeShellState extends State<HomeShell> {
         name: name,
         email: email,
         initials: _initials(name),
-        features: _enabledFeatures,
         unreadNotifications: _unreadNotifications,
       ),
       appBar: GlassAppBar(
@@ -150,28 +127,22 @@ class _HomeShellState extends State<HomeShell> {
         initials: _initials(name),
         onMenuTap: () => _scaffoldKey.currentState?.openDrawer(),
         businessLabel: businessLabel,
-        onBusinessTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const SelectBusinessScreen()),
-        ),
+        onBusinessTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const SelectBusinessScreen())),
         unreadNotifications: _unreadNotifications,
         onNotificationTap: _openNotifications,
       ),
       extendBody: true,
-      body: IndexedStack(
-        index: safeIndex,
-        children: [
-          HomeContent(homeTapSignal: _homeTapSignal),
-          for (final f in bottomFeatures)
-            f.key == 'bill_management' ? const FinanceBody() : FeaturePlaceholderBody(feature: f),
-        ],
-      ),
+      body: HomeContent(homeTapSignal: _homeTapSignal),
       bottomNavigationBar: GlassBottomNav(
         tabs: tabs,
-        currentIndex: safeIndex,
-        onTap: _selectBottomTab,
-        onPosTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const PosScreen()),
-        ),
+        currentIndex: 0,
+        onTap: (_) => setState(() => _homeTapSignal++),
+        onPosTap: () => Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PosScreen())),
+        onScannerTap: _openScanner,
       ),
     );
   }

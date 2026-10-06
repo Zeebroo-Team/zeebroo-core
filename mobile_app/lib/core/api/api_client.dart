@@ -76,10 +76,7 @@ class ApiClient {
   }) => _dio.get(
     path,
     queryParameters: params,
-    options: Options(
-      headers: headers,
-      extra: {'bypass_cache': bypassCache},
-    ),
+    options: Options(headers: headers, extra: {'bypass_cache': bypassCache}),
   );
 
   Future<Response> post(String path, {dynamic data}) =>
@@ -94,10 +91,17 @@ class ApiClient {
   Future<Response> delete(String path, {dynamic data}) =>
       _dio.delete(path, data: data);
 
-  Future<Response> postMultipart(String path, FormData data) => _dio.post(
+  Future<Response> postMultipart(
+    String path,
+    FormData data, {
+    Duration? receiveTimeout,
+  }) => _dio.post(
     path,
     data: data,
-    options: Options(contentType: 'multipart/form-data'),
+    options: Options(
+      contentType: 'multipart/form-data',
+      receiveTimeout: receiveTimeout,
+    ),
   );
 }
 
@@ -106,9 +110,18 @@ class ApiClient {
 /// `token` the auth endpoint returns.
 @visibleForTesting
 String redactSecrets(String line) => line
-    .replaceAllMapped(RegExp(r'(password\w*\s*[:=]\s*)[^,}\n]+', caseSensitive: false), (m) => '${m[1]}***')
-    .replaceAllMapped(RegExp(r'(Bearer\s+)[^\s"]+', caseSensitive: false), (m) => '${m[1]}***')
-    .replaceAllMapped(RegExp(r'("?token"?\s*[:=]\s*"?)[^",}\s]+', caseSensitive: false), (m) => '${m[1]}***');
+    .replaceAllMapped(
+      RegExp(r'(password\w*\s*[:=]\s*)[^,}\n]+', caseSensitive: false),
+      (m) => '${m[1]}***',
+    )
+    .replaceAllMapped(
+      RegExp(r'(Bearer\s+)[^\s"]+', caseSensitive: false),
+      (m) => '${m[1]}***',
+    )
+    .replaceAllMapped(
+      RegExp(r'("?token"?\s*[:=]\s*"?)[^",}\s]+', caseSensitive: false),
+      (m) => '${m[1]}***',
+    );
 
 String apiErrorMessage(Object err) {
   if (err is DioException) {
