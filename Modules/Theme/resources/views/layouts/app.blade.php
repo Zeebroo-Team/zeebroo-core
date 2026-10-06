@@ -648,6 +648,9 @@
                 <div class="menu-section">Administration</div>
                 <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Dashboard</span></a>
                 <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Management</span></a>
+                <a href="{{ route('admin.payments.index') }}" class="{{ request()->routeIs('admin.payments.*') ? 'active' : '' }}"><i class="fa fa-credit-card"></i><span>Payment History</span></a>
+                <a href="{{ route('admin.email-marketing.index') }}" class="{{ request()->routeIs('admin.email-marketing.*') ? 'active' : '' }}"><i class="fa fa-envelope-open-text"></i><span>Email Marketing</span></a>
+                <a href="{{ route('admin.automated-emails.index') }}" class="{{ request()->routeIs('admin.automated-emails.*') ? 'active' : '' }}"><i class="fa fa-envelope-circle-check"></i><span>Automated Emails</span></a>
                 <a href="{{ route('admin.releases.index') }}" class="{{ request()->routeIs('admin.releases.*') ? 'active' : '' }}"><i class="fa fa-rocket"></i><span>Release Management</span></a>
                 <a href="{{ route('admin.packages.index') }}" class="{{ request()->routeIs('admin.packages.*') ? 'active' : '' }}"><i class="fa fa-box-open"></i><span>Package Management</span></a>
                 <a href="{{ route('admin.industries.index') }}" class="{{ request()->routeIs('admin.industries.*') ? 'active' : '' }}"><i class="fa fa-industry"></i><span>Industry Management</span></a>
@@ -906,6 +909,9 @@
                 <div class="submenu" aria-label="Project Management">
                     <a href="{{ route('pm.projects.index') }}" @class(['active' => request()->routeIs('pm.projects.*') || request()->routeIs('pm.tasks.*')])>
                         <i class="fa fa-diagram-project"></i><span>All Projects</span>
+                    </a>
+                    <a href="{{ route('pm.my-projects') }}" @class(['active' => request()->routeIs('pm.my-projects')])>
+                        <i class="fa fa-user-check"></i><span>My Projects</span>
                     </a>
                     <a href="{{ route('pm.my-tasks') }}" @class(['active' => request()->routeIs('pm.my-tasks')])>
                         <i class="fa fa-list-check"></i><span>My Tasks</span>
@@ -1387,6 +1393,22 @@
                             <span><i class="fa fa-box" style="margin-right:6px;"></i>Purchased Package</span>
                             <span class="pkg-badge">{{ $navBusiness?->package?->name ?? 'Free Trial' }}</span>
                         </div>
+                        @php
+                            $__menuUser = auth()->user();
+                            $__menuEmailVerified = $__menuUser?->email_verified_at !== null;
+                            $__menuEmailPending = $__menuUser instanceof \App\Models\User
+                                && app(\Modules\Auth\Services\EmailVerificationService::class)->isPending($__menuUser);
+                        @endphp
+                        @if($__menuEmailVerified || $__menuEmailPending)
+                            <div class="menu-row">
+                                <span><i class="fa fa-envelope" style="margin-right:6px;"></i>Email</span>
+                                @if($__menuEmailVerified)
+                                    <span class="pkg-badge" style="color:#15803d;border-color:color-mix(in srgb,#16a34a 45%,var(--border));background:color-mix(in srgb,#16a34a 10%,var(--card));"><i class="fa fa-circle-check" style="margin-right:4px;"></i>Verified</span>
+                                @else
+                                    <a href="{{ route('verification.notice') }}" class="pkg-badge" style="text-decoration:none;color:#fff;background:#3b82f6;border-color:#3b82f6;font-weight:700;"><i class="fa fa-envelope-circle-check" style="margin-right:4px;"></i>Verify now</a>
+                                @endif
+                            </div>
+                        @endif
                         @if(auth()->check())
                             <div class="menu-row" style="display:block;">
                                 <form method="post" action="{{ route('settings.store') }}" style="margin:0;">
@@ -1857,6 +1879,40 @@
                     try { sessionStorage.setItem(key, '1'); } catch (e) {}
                 });
             })();
+            </script>
+        @endif
+        @php
+            $__evUser = auth()->user();
+            // Only on the dashboard itself, and never over the business onboarding wizard.
+            $__evPending = request()->routeIs('dashboard')
+                && ! $__env->hasSection('hide_email_verify_bar')
+                && $__evUser instanceof \App\Models\User
+                && $__evUser->email_verification_required
+                && $__evUser->email_verified_at === null
+                && app(\Modules\Auth\Services\EmailVerificationService::class)->isPending($__evUser);
+        @endphp
+        @if($__evPending)
+            <style>
+                .ev-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 24px 0;padding:12px 16px;border-radius:14px;background:color-mix(in srgb,#3b82f6 10%,var(--card));border:1px solid color-mix(in srgb,#3b82f6 40%,var(--border));color:var(--text);font-size:13.5px;}
+                .ev-bar__icon{width:30px;height:30px;border-radius:999px;background:#3b82f6;color:#fff;display:grid;place-items:center;flex-shrink:0;}
+                .ev-bar__text{flex:1;min-width:220px;line-height:1.45;}
+                .ev-bar__go{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:9px;background:#3b82f6;color:#fff;font-weight:700;font-size:13px;text-decoration:none;}
+                .ev-bar__go:hover{background:#2563eb;}
+                .ev-bar__close{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;padding:4px 6px;}
+            </style>
+            <div class="ev-bar" id="evBar" role="status">
+                <span class="ev-bar__icon"><i class="fa fa-envelope" aria-hidden="true"></i></span>
+                <div class="ev-bar__text">
+                    Please verify your email address. We sent a 6-digit code to <b>{{ $__evUser->email }}</b>.
+                </div>
+                <a href="{{ route('verification.notice') }}" class="ev-bar__go"><i class="fa fa-envelope-circle-check" aria-hidden="true"></i> Verify now</a>
+                <button type="button" class="ev-bar__close" id="evBarClose" aria-label="Dismiss"><i class="fa fa-xmark" aria-hidden="true"></i></button>
+            </div>
+            <script>
+            // Dismiss hides it for this page view only — verification stays nagging until done.
+            document.getElementById('evBarClose')?.addEventListener('click', function () {
+                document.getElementById('evBar')?.remove();
+            });
             </script>
         @endif
         <div class="content-inner{{ $chatWorkspace ? ' content-inner--chat-workspace' : '' }}">

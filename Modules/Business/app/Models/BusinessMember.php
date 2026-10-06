@@ -379,7 +379,9 @@ class BusinessMember extends Model
                 'icon'  => 'fa-diagram-project',
                 'color' => '#0891b2',
                 'items' => [
-                    ['key' => 'projects_access', 'label' => 'Access Projects', 'desc' => 'View and manage projects and tasks'],
+                    // Key kept as projects_access so existing role/member grants keep working.
+                    ['key' => 'projects_access',   'label' => 'Manage All Projects',     'desc' => 'Projects → Overview & Projects: view, create and manage every project and task in this business'],
+                    ['key' => 'projects_assigned', 'label' => 'Assigned Project Access', 'desc' => 'Projects → My Projects: today/upcoming work, my tasks and a kanban board for tasks assigned to you'],
                 ],
             ],
             [

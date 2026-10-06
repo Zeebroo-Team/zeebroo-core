@@ -298,6 +298,7 @@ const _sbSubItems = {
     { view:'board',          icon:'fa-table-columns',        label:'Board' },
     { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
     { view:'mytasks',        icon:'fa-user-check',           label:'My Tasks' },
+    { view:'mine',           icon:'fa-user-check',           label:'My Projects' },
   ],
 };
 
@@ -355,8 +356,7 @@ function _sbNavSubSwitch(tab, view) {
   else if (tab === 'restaurant') switchRstView(view);
   else if (tab === 'mail')       window.switchMailView?.(view);
   else if (tab === 'crm')        window.switchCrmView?.(view);
-  else if (tab === 'projects')   window.switchPmView?.(view);
-  _sbSubActivate(tab, view);
+  else if (tab === 'projects')   window.switchPmView?.(view);  _sbSubActivate(tab, view);
 }
 
 _buildSidebarSubNavs();
@@ -517,7 +517,8 @@ function activateTab(tabName) {
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('overview'); }
   if (tabName === 'automations'){ loadAutomations(); }
-  if (tabName === 'projects')    { switchPmView('overview'); }
+  // Assigned-only users (no "Manage All Projects") land straight on My Projects.
+  if (tabName === 'projects')    { switchPmView(state._pmCanManage === false ? 'mine' : 'overview'); }
   if (tabName === 'event-mgmt') { switchEvtView('brands'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
@@ -1308,7 +1309,7 @@ function _prentalRenderList() {
     const totalTitle = `${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})} × ${escHtml(String(r.quantity ?? 1))} × ${duration}d`
       + (parseFloat(r.late_fee || r.projected_late_fee || 0) > 0 ? ` + ${formatMoney(parseFloat(r.late_fee || r.projected_late_fee || 0), {currency: cur})} late fee` : '');
     html += `<tr class="subs-row" data-prental-row="${r.id}" style="cursor:pointer">
-      <td class="qt-tbl-customer">${escHtml(r.customer_name || '—')}</td>
+      <td class="qt-tbl-customer"><span class="qt-tbl-cust-wrap">${escHtml(r.customer_name || '—')}${r.customer_id ? `<button class="qt-tbl-cust-btn" data-prental-cust="${r.customer_id}" title="View customer"><i class="fa fa-address-card"></i></button>` : ''}</span></td>
       <td>${escHtml(r.product_name || '—')}</td>
       <td class="qt-tbl-amt">${escHtml(String(r.quantity ?? 1))}</td>
       <td class="qt-tbl-amt">${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})}</td>
@@ -1342,6 +1343,13 @@ function _prentalRenderList() {
     });
   });
 
+  $$('#prental-body [data-prental-cust]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCustomersModal(Number(b.dataset.prentalCust));
+    });
+  });
+
   $$('#prental-body [data-prental-row]').forEach(row => {
     row.addEventListener('click', () => {
       const r = _prental.list.find(x => x.id === Number(row.dataset.prentalRow));
@@ -1361,6 +1369,12 @@ async function _prentalRunAction(act, id, btn) {
   if (res.status === 200) {
     toast(res.body?.message || 'Rental marked returned', 'success');
     await loadRentalsList();
+    // Opened from the Customers modal's Rentals tab — refresh its overdue badge/alert too.
+    if ($('#customers-modal')?.style.display === 'flex' && _cm.selectedId) {
+      _cmLoadList();
+      _cmSelectCustomer(_cm.selectedId);
+      _cmSwitchTab('rentals');
+    }
     return true;
   } else {
     toast(res.body?.message || 'Action failed', 'error');
@@ -5366,9 +5380,11 @@ function showLogin() {
   $('#app-shell').style.display = 'none';
   $('#signin-card').style.display = '';
   $('#cashier-card').style.display = 'none';
+  $('#forgot-card').style.display = 'none';
   $('#signup-card').style.cssText = 'display:none';
   $('#login-step-1').style.display = '';
   $('#login-step-2').style.display = 'none';
+  $('#login-alert').className = 'alert alert-error';
   $('#login-alert').style.display = 'none';
   $('#login-email').value = '';
   $('#login-password').value = '';
@@ -5716,6 +5732,7 @@ function showSignup() {
   if (body) { body.style.display = 'block'; body.style.padding = '0'; }
   $('#signin-card').style.display = 'none';
   $('#cashier-card').style.display = 'none';
+  $('#forgot-card').style.display = 'none';
   $('#signup-card').style.cssText = 'display:grid; width:100%; height:100%';
   $('#su-email').value    = '';
   $('#su-password').value = '';
@@ -5841,7 +5858,9 @@ function applyFeatureVisibility() {
 
   const dev_enabled  = bf('developers');
   const auto_enabled = bf('automation_editor') && mp('automations_access');
-  const pm_enabled   = bf('project_management') && mp('projects_access');
+  const pm_manage    = bf('project_management') && mp('projects_access');    // Projects → Overview / Projects (manage all)
+  const pm_mine      = bf('project_management') && mp('projects_assigned');  // Projects → My Projects (assigned only)
+  const pm_enabled   = pm_manage || pm_mine;                                 // Projects ribbon tab
   const evt_enabled  = bf('event_management') && mp('event_access');
 
   // ── Cashier mode: POS-only ──
@@ -5954,6 +5973,23 @@ function applyFeatureVisibility() {
   if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
   if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
   if (!pm_enabled && _activeTab() === 'projects') activateTab('home');
+
+  // ── Projects: sub-tabs + ribbon groups per permission ──
+  state._pmCanManage = pm_manage;
+  state._pmCanMine   = pm_mine;
+  $$('#panel-projects [data-pmsub]').forEach(b => {
+    b.style.display = (b.dataset.pmsub === 'mine' ? pm_mine : pm_manage) ? '' : 'none';
+  });
+  $$('.sb-sub-item[data-tab="projects"]').forEach(i => {
+    i.style.display = (i.dataset.subView === 'mine' ? pm_mine : pm_manage) ? '' : 'none';
+  });
+  ['#rb-pm-all-projects', '#rb-pm-new-task', '#rb-pm-board', '#rb-pm-tasks'].forEach(sel => grp(sel, pm_manage));
+  grp('#rb-mp-tasks', pm_mine);
+  // Currently on a sub-tab that is no longer allowed → switch to the one that is
+  if (pm_enabled && _activeTab() === 'projects') {
+    const cur = window._pm?.currentView;
+    if (cur === 'mine' ? !pm_mine : !pm_manage) switchPmView(pm_manage ? 'overview' : 'mine');
+  }
 
   // ── Developers (account dropdown entry) ──
   const tpmDev = $('#tpm-developers');
@@ -6138,11 +6174,11 @@ function applyFeatureVisibility() {
   btn('#rb-barcode',        mp('pos_btn_barcode'));
   btn('#rb-add-product',    mp('pos_btn_add_product'));
   btn('#rb-customers',      mp('pos_btn_customers'));
-  btn('#rb-accounts',       mp('pos_btn_accounts'));
+  btn('#rb-accounts',       false); // hidden for now
   // Anyone allowed to check out can look up a gift card balance at the till.
   btn('#rb-gift-card-check', mp('pos_btn_checkout'));
   btn('#rb-coupon-check',    mp('pos_btn_checkout'));
-  btn('#rb-pos-settings',   mp('pos_btn_settings'));
+  btn('#rb-pos-settings',   false); // hidden for now
   btn('#rb-receipt-editor', mp('pos_btn_receipt_editor'));
   btn('#rb-pos-refresh',    mp('pos_btn_pos_refresh'));
   { const el = $('#pos-ribbon-stats'); if (el) el.style.display = mp('pos_btn_ribbon_stats') ? '' : 'none'; }
@@ -6584,6 +6620,8 @@ function showApp() {
   _checkBankOnboarding();
   // Warn if the business's subscription payment is pending/failed
   _checkBillingAlert();
+  // Remind new sign-ups to verify their email
+  _checkEmailVerifyAlert();
   // Load business + branch switchers
   _bizSwInit();
   // Apply feature-based tab and backstage visibility
@@ -8269,9 +8307,111 @@ $('#login-password').addEventListener('keydown', e => { if (e.key === 'Enter') d
 $('#cashier-login-btn').addEventListener('click', doCashierLogin);
 $('#cashier-password').addEventListener('keydown', e => { if (e.key === 'Enter') doCashierLogin(); });
 
+// Forgot password (PosAuthApiController forgotPassword / resetPassword)
+$('#go-forgot').addEventListener('click', e => { e.preventDefault(); showForgotPassword(); });
+$('#forgot-back').addEventListener('click', e => { e.preventDefault(); showLogin(); });
+$('#forgot-send-btn').addEventListener('click', () => doSendResetCode());
+$('#forgot-email').addEventListener('keydown', e => { if (e.key === 'Enter') doSendResetCode(); });
+$('#forgot-resend').addEventListener('click', e => { e.preventDefault(); doSendResetCode(true); });
+$('#reset-btn').addEventListener('click', doResetPassword);
+$('#reset-password2').addEventListener('keydown', e => { if (e.key === 'Enter') doResetPassword(); });
+$('#reset-otp').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+
+let _resetEmail = '';
+
+function showForgotPassword() {
+  $('#signin-card').style.display = 'none';
+  $('#cashier-card').style.display = 'none';
+  $('#forgot-card').style.display = '';
+  $('#forgot-step-1').style.display = '';
+  $('#forgot-step-2').style.display = 'none';
+  $('#forgot-alert').style.display = 'none';
+  $('#forgot-email').value = $('#login-email').value.trim();
+  $('#forgot-email').focus();
+}
+
+async function doSendResetCode(resend = false) {
+  const email = resend ? _resetEmail : $('#forgot-email').value.trim();
+  const alert = resend ? $('#reset-alert') : $('#forgot-alert');
+  const btn   = $('#forgot-send-btn');
+
+  if (!email) { showAlert(alert, 'Enter your email address'); return; }
+
+  alert.className = 'alert alert-error';
+  alert.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
+
+  const res = await API.forgotPassword(email);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-paper-plane"></i>&nbsp; Send Code';
+
+  if (res.status !== 200) {
+    showAlert(alert, res.status === 429
+      ? 'Too many requests. Please wait a minute and try again.'
+      : (res.body?.message || `Could not send the code (${res.status})`));
+    return;
+  }
+
+  _resetEmail = email;
+  const minutes = res.body?.expires_in_minutes || 10;
+  $('#forgot-sent-msg').textContent =
+    `If an account exists for ${email}, we've sent a 6-digit code to it. It expires in ${minutes} minutes.`;
+  $('#forgot-step-1').style.display = 'none';
+  $('#forgot-step-2').style.display = '';
+  if (resend) {
+    alert.className = 'alert alert-success';
+    showAlert(alert, 'A new code has been sent (if the previous one is older than a minute).');
+  } else {
+    $('#reset-alert').style.display = 'none';
+    $('#reset-otp').value = '';
+    $('#reset-password').value = '';
+    $('#reset-password2').value = '';
+  }
+  $('#reset-otp').focus();
+}
+
+async function doResetPassword() {
+  const otp       = $('#reset-otp').value.trim();
+  const password  = $('#reset-password').value;
+  const password2 = $('#reset-password2').value;
+  const btn       = $('#reset-btn');
+  const alert     = $('#reset-alert');
+  alert.className = 'alert alert-error';
+
+  if (!/^\d{6}$/.test(otp))    { showAlert(alert, 'Enter the 6-digit code from the email'); return; }
+  if (password.length < 8)     { showAlert(alert, 'Password must be at least 8 characters'); return; }
+  if (password !== password2)  { showAlert(alert, 'Passwords do not match'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Resetting…';
+  alert.style.display = 'none';
+
+  const res = await API.resetPassword(_resetEmail, otp, password);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i>&nbsp; Reset Password';
+
+  if (res.status !== 200) {
+    const errors = res.body?.errors;
+    const first  = errors ? [].concat(errors[Object.keys(errors)[0]])[0] : null;
+    showAlert(alert, res.status === 429
+      ? 'Too many attempts. Please wait a minute and try again.'
+      : (first || res.body?.message || `Reset failed (${res.status})`));
+    return;
+  }
+
+  const email = _resetEmail;
+  _resetEmail = '';
+  showLogin();
+  $('#login-email').value = email;
+  $('#login-alert').className = 'alert alert-success';
+  showAlert($('#login-alert'), 'Your password has been reset. Sign in with your new password.');
+  $('#login-password').focus();
+}
 
 function showCashierLogin() {
   $('#signin-card').style.display = 'none';
+  $('#forgot-card').style.display = 'none';
   $('#cashier-card').style.display = '';
   $('#signup-card').style.display  = 'none';
   $('#cashier-alert').style.display = 'none';
@@ -8616,6 +8756,7 @@ async function doLogin() {
   const password = $('#login-password').value;
   const btn      = $('#login-btn');
   const alert    = $('#login-alert');
+  alert.className = 'alert alert-error';
 
   if (!email || !password) { showAlert(alert, 'Enter email and password'); return; }
 
@@ -9341,6 +9482,121 @@ $('#billing-alert-pay-btn').addEventListener('click', async () => {
   const checkoutUrl = res.body?.data?.checkout_url;
   if (res.status === 200 && checkoutUrl) window.electronAPI.openExternal(checkoutUrl);
 });
+
+// ── Email not verified banner + verify modal ─────────────────────────────
+// Shown while /auth/me reports email_verification_required (sign-up code not entered yet).
+const _emailVerify = { dismissed: false, email: '', minutes: 15 };
+
+async function _checkEmailVerifyAlert() {
+  const bar = $('#email-verify-bar');
+  if (state.cashierMode) { bar.style.display = 'none'; _renderEmailVerifyMenu(null); return; }
+  const res = await API.me();
+  const user = res.body?.data;
+  if (res.status === 200) _renderEmailVerifyMenu(user);
+  if (user?.email_verification_required) {
+    _emailVerify.email = user.email;
+    _emailVerify.minutes = user.email_verification_minutes || 15;
+  }
+  if (res.status !== 200 || !user?.email_verification_required || _emailVerify.dismissed) {
+    bar.style.display = 'none';
+    return;
+  }
+  $('#email-verify-bar-text').textContent =
+    `Please verify your email address. We sent a 6-digit code to ${user.email}.`;
+  bar.style.display = 'flex';
+}
+
+function _openEmailVerifyModal() {
+  $('#email-verify-msg').textContent =
+    `Enter the 6-digit code we emailed to ${_emailVerify.email}. Codes expire after ${_emailVerify.minutes} minutes.`;
+  $('#email-verify-alert').style.display = 'none';
+  $('#email-verify-otp').value = '';
+  $('#email-verify-modal').style.display = 'flex';
+  $('#email-verify-otp').focus();
+}
+
+function _closeEmailVerifyModal() {
+  $('#email-verify-modal').style.display = 'none';
+}
+
+async function _submitEmailVerify() {
+  const otp   = $('#email-verify-otp').value.trim();
+  const btn   = $('#email-verify-submit');
+  const alert = $('#email-verify-alert');
+  alert.className = 'alert alert-error';
+
+  if (!/^\d{6}$/.test(otp)) { showAlert(alert, 'Enter the 6-digit code from the email'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Verifying…';
+  alert.style.display = 'none';
+
+  const res = await API.verifyEmail(otp);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Verify Email';
+
+  if (res.status !== 200) {
+    const errors = res.body?.errors;
+    const first  = errors ? [].concat(errors[Object.keys(errors)[0]])[0] : null;
+    showAlert(alert, res.status === 429
+      ? 'Too many attempts. Please wait a minute and try again.'
+      : (first || res.body?.message || `Verification failed (${res.status})`));
+    return;
+  }
+
+  _closeEmailVerifyModal();
+  $('#email-verify-bar').style.display = 'none';
+  _renderEmailVerifyMenu(res.body?.user || { email_verified_at: new Date().toISOString() });
+  toast('Your email has been verified', 'success');
+}
+
+// Profile menu "Email" row: Verified pill, or a Verify Now pill (opens the modal) while
+// the sign-up code is pending. Hidden for cashiers and older accounts never asked to verify.
+function _renderEmailVerifyMenu(user) {
+  const item = $('#tpm-email-verify');
+  const pill = $('#tpm-ev-pill');
+  const verified = !!user?.email_verified_at;
+  const pending  = !!user?.email_verification_required;
+  if (!verified && !pending) { item.style.display = 'none'; return; }
+  item.classList.toggle('is-verified', verified);
+  pill.className = 'tpm-ev-pill ' + (verified ? 'is-verified' : 'is-pending');
+  pill.innerHTML = verified
+    ? '<i class="fa fa-circle-check"></i> Verified'
+    : '<i class="fa fa-envelope-circle-check"></i> Verify Now';
+  item.style.display = '';
+}
+
+$('#tpm-email-verify').addEventListener('click', () => {
+  if ($('#tpm-email-verify').classList.contains('is-verified')) return;
+  closeProfileMenu();
+  _openEmailVerifyModal();
+});
+
+async function _resendEmailVerify() {
+  const alert = $('#email-verify-alert');
+  alert.className = 'alert alert-error';
+  const res = await API.resendEmailVerification();
+  if (res.status !== 200) {
+    showAlert(alert, res.body?.message || `Could not send the code (${res.status})`);
+    return;
+  }
+  alert.className = 'alert alert-success';
+  showAlert(alert, res.body?.message || 'A new code has been sent.');
+  $('#email-verify-otp').focus();
+}
+
+$('#email-verify-bar-btn').addEventListener('click', _openEmailVerifyModal);
+$('#email-verify-bar-dismiss').addEventListener('click', () => {
+  _emailVerify.dismissed = true;
+  $('#email-verify-bar').style.display = 'none';
+});
+$('#email-verify-close').addEventListener('click', _closeEmailVerifyModal);
+$('#email-verify-cancel').addEventListener('click', _closeEmailVerifyModal);
+$('#email-verify-modal').addEventListener('click', e => { if (e.target === $('#email-verify-modal')) _closeEmailVerifyModal(); });
+$('#email-verify-submit').addEventListener('click', _submitEmailVerify);
+$('#email-verify-otp').addEventListener('keydown', e => { if (e.key === 'Enter') _submitEmailVerify(); });
+$('#email-verify-otp').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+$('#email-verify-resend').addEventListener('click', e => { e.preventDefault(); _resendEmailVerify(); });
 
 // ── Billing & Payments modal ────────────────────────────────────────────
 const _pm = { items: [], detailId: null, tab: null };
@@ -10481,6 +10737,12 @@ function showShortcutsModal() {
     ['F11',       'Toggle full screen'],
     ['F12',       'Checkout'],
     ['Ctrl+T',    'New POS session tab'],
+    ['Ctrl+G',    'Gift card balance'],
+    ['Ctrl+K',    'Check coupon'],
+    ['Alt+1',     'POS → Products'],
+    ['Alt+2',     'POS → Services'],
+    ['Alt+3',     'POS → Rental'],
+    ['Alt+4',     'POS → Dynamic'],
     ['Ctrl+Z',    'Undo last cart item'],
     ['Ctrl+F1',   'Collapse / expand ribbon'],
     ['—',         ''],
@@ -10499,23 +10761,47 @@ function showShortcutsModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="width:360px">
+    <div class="modal" style="width:560px;max-width:calc(100vw - 32px)">
       <h3><i class="fa fa-keyboard"></i> Keyboard Shortcuts</h3>
-      <table style="width:100%;border-collapse:collapse;max-height:65vh;display:block;overflow-y:auto">
-        ${shortcuts.map(([k, d]) => k === '—'
-          ? `<tr><td colspan="2" style="padding:4px 6px"><hr style="border:none;border-top:1px solid var(--border);margin:2px 0"></td></tr>`
-          : `<tr style="border-bottom:1px solid var(--border-light)">
-              <td style="padding:6px 6px;white-space:nowrap"><kbd style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;font-family:inherit">${k}</kbd></td>
-              <td style="padding:6px 6px;font-size:12px;color:var(--text)">${d}</td>
-            </tr>`).join('')}
-      </table>
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <i class="fa fa-magnifying-glass" style="color:var(--text-muted);font-size:12px"></i>
+        <input type="text" id="sc-search" placeholder="Search shortcuts…" autocomplete="off"
+          style="flex:1;border:none;outline:none;background:transparent;padding:8px 0;font-size:13px;color:var(--text);font-family:inherit">
+      </div>
+      <div style="max-height:60vh;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+          ${shortcuts.map(([k, d]) => k === '—'
+            ? `<tr class="sc-sep"><td colspan="2" style="padding:4px 6px"><hr style="border:none;border-top:1px solid var(--border);margin:2px 0"></td></tr>`
+            : `<tr class="sc-row" data-search="${escHtml((k + ' ' + d).toLowerCase())}" style="border-bottom:1px solid var(--border-light)">
+                <td style="padding:6px 6px;white-space:nowrap;width:1%"><kbd style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;font-family:inherit">${k}</kbd></td>
+                <td style="padding:6px 6px 6px 14px;font-size:12px;color:var(--text)">${d}</td>
+              </tr>`).join('')}
+          <tr id="sc-empty" style="display:none"><td colspan="2" style="padding:24px;text-align:center;font-size:12px;color:var(--text-muted)">No shortcuts match your search</td></tr>
+        </table>
+      </div>
       <div class="modal-footer">
         <button class="btn-secondary" id="sc-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('#sc-close').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const close = () => overlay.remove();
+  overlay.querySelector('#sc-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const search = overlay.querySelector('#sc-search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    let shown = 0;
+    overlay.querySelectorAll('.sc-row').forEach(r => {
+      const match = !q || r.dataset.search.includes(q);
+      r.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    overlay.querySelectorAll('.sc-sep').forEach(r => { r.style.display = q ? 'none' : ''; });
+    overlay.querySelector('#sc-empty').style.display = shown ? 'none' : '';
+  });
+  search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); e.stopPropagation(); } });
+  search.focus();
 }
 
 // ── Sign out (ribbon View tab button) ─────────────────────────────────────
@@ -23618,16 +23904,19 @@ const _cm = {
 
 let _cmReturnToSaleWizard = false;
 
-function openCustomersModal() {
+// Optional customerId pre-selects that customer (also used as a raw click handler, so ignore Events).
+function openCustomersModal(customerId) {
+  const preselectId = typeof customerId === 'number' && customerId > 0 ? customerId : null;
   $('#customers-modal').style.display = 'flex';
   _cmReturnToSaleWizard = false;
   _cm.page = 1; _cm.searchQ = ''; _cm.categoryId = ''; _cm.selectedId = null; _cm.editingId = null;
   $('#cm-search').value = '';
   if ($('#cm-category-filter')) $('#cm-category-filter').value = '';
   _cmShowDetail(false); _cmShowForm(false);
-  _cmLoadList();
+  const listReady = _cmLoadList();
   _loadCustomerConfig().then(_cmRenderCategoryFilterOptions);
-  requestAnimationFrame(() => $('#cm-search').focus());
+  if (preselectId) listReady.then(() => _cmSelectCustomer(preselectId));
+  else requestAnimationFrame(() => $('#cm-search').focus());
 }
 
 function _cmRenderCategoryFilterOptions() {
@@ -23670,10 +23959,13 @@ function _cmRenderList() {
     const sub     = c.phone || c.email || '';
     const wsBadge = c.customer_type === 'wholesale'
       ? `<span class="cart-cust-wholesale" style="font-size:9.5px"><i class="fa fa-boxes-stacked"></i> WS</span>` : '';
+    const overdue = Number(c.overdue_rentals_count) || 0;
+    const rentalBadge = overdue
+      ? `<span class="cm-item-rental-badge" title="${overdue} overdue rental${overdue !== 1 ? 's' : ''}"><i class="fa fa-calendar-xmark"></i> ${overdue}</span>` : '';
     return `<div class="cm-item${c.id === _cm.selectedId ? ' active' : ''}" data-id="${c.id}">
       <div class="cm-item-avatar">${escHtml(initial)}</div>
       <div class="cm-item-body">
-        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}</div>
+        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}${rentalBadge}</div>
         ${sub ? `<div class="cm-item-sub">${escHtml(sub)}</div>` : ''}
       </div>
     </div>`;
@@ -23698,11 +23990,12 @@ function _cmRenderPagination() {
 async function _cmSelectCustomer(id) {
   _cm.selectedId = id;
   _cm.editingId  = null;
-  _cm.tabLoaded  = { subs: false, warranty: false, credit: false };
+  _cm.tabLoaded  = { subs: false, warranty: false, credit: false, rentals: false };
   _cmRenderList();
   _cmShowForm(false);
   _cmShowDetail(true);
   _cmSwitchTab('sales');
+  _cmRenderRentalAlert(0);
   const pane = $('#cm-detail-view');
   if (pane) pane.style.opacity = '.5';
 
@@ -23716,6 +24009,7 @@ async function _cmSelectCustomer(id) {
   $('#cm-dv-avatar').textContent = init;
   $('#cm-dv-name').textContent   = c.name;
   $('#cm-dv-sales-badge').textContent = `${c.sales_count ?? 0} sale${(c.sales_count ?? 0) !== 1 ? 's' : ''}`;
+  _cmRenderRentalAlert(Number(c.overdue_rentals_count) || 0);
 
   const isWholesaleCust = c.customer_type === 'wholesale';
   const typeVal = isWholesaleCust
@@ -23753,6 +24047,19 @@ async function _cmSelectCustomer(id) {
   } else {
     history.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-receipt"></i> No sales yet</div>';
   }
+}
+
+function _cmRenderRentalAlert(overdue) {
+  const el = $('#cm-dv-rental-alert');
+  const count = $('#cm-dv-rentals-count');
+  if (count) { count.textContent = overdue; count.style.display = overdue ? '' : 'none'; }
+  if (!el) return;
+  if (!overdue) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = `<i class="fa fa-triangle-exclamation"></i>
+    <span>This customer has <strong>${overdue} overdue rental${overdue !== 1 ? 's' : ''}</strong> not yet returned.</span>
+    <button type="button" class="cm-dv-rental-alert-btn">View Rentals</button>`;
+  el.style.display = '';
+  el.querySelector('.cm-dv-rental-alert-btn').addEventListener('click', () => _cmSwitchTab('rentals'));
 }
 
 function _cmSwitchTab(tab) {
@@ -23829,6 +24136,37 @@ async function _cmLoadTabData(tab) {
         <span class="cm-dv-sale-amt">${parseFloat(s.due_amount || 0).toFixed(2)}</span>
       </div>`;
     }).join('');
+
+  } else if (tab === 'rentals') {
+    const panel = $('#cm-dv-panel-rentals');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.customerRentals(id);
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    if (!list.length) {
+      panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-calendar-days"></i> No rentals</div>';
+      return;
+    }
+    const order = { overdue: 0, active: 1, returned: 2, cancelled: 3 };
+    list.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    panel.innerHTML = list.map(r => {
+      const meta = r.status === 'overdue'
+        ? `Due ${r.due_at || '—'} · ${r.days_late ?? 0}d late`
+        : (r.returned_at ? `Returned ${r.returned_at}` : `Due ${r.due_at || '—'}`);
+      return `
+      <div class="cm-dv-credit-row cm-dv-rental-row" data-cm-rental="${r.id}" title="View rental">
+        <span class="cm-dv-sale-num">${escHtml(r.product_name || '—')}${Number(r.quantity) > 1 ? ` × ${escHtml(String(r.quantity))}` : ''}</span>
+        <span class="cm-dv-credit-meta">${escHtml(meta)}</span>
+        <span class="cm-dv-rental-badge cm-dv-rental-badge--${escHtml(r.status)}">${escHtml(r.status_label || r.status)}</span>
+        <span class="cm-dv-sale-amt">${parseFloat(r.total_amount || 0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    panel.querySelectorAll('[data-cm-rental]').forEach(row => {
+      row.addEventListener('click', () => {
+        const r = list.find(x => x.id === Number(row.dataset.cmRental));
+        if (r) _prentalOpenDetail(r);
+      });
+    });
   }
 }
 
@@ -29127,6 +29465,28 @@ document.addEventListener('keydown', (e) => {
     const _t = activeTab(); if (_t && _t.cart.length) openCheckout(); e.preventDefault(); return;
   }
   if (mod && e.key === 't') { activateTab('pos'); addPosTab(); e.preventDefault(); return; }
+
+  // ── Gift card / coupon lookup (Ctrl+G, Ctrl+K) — respect ribbon permissions ──
+  const _rbVisible = (sel) => { const b = $(sel); return b && b.style.display !== 'none'; };
+  if (mod && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+    if (_rbVisible('#rb-gift-card-check')) openGiftCardCheckModal();
+    e.preventDefault(); return;
+  }
+  if (mod && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+    if (_rbVisible('#rb-coupon-check')) openCouponCheckModal();
+    e.preventDefault(); return;
+  }
+
+  // ── POS mode tabs (Alt+1…4) ───────────────────────────────────────────────
+  if (e.altKey && !mod && !e.shiftKey) {
+    const posModeMap = { '1': 'products', '2': 'services', '3': 'rentals', '4': 'dynamic' };
+    const mode = posModeMap[e.key];
+    if (mode) {
+      const modeBtn = $(`.pos-mode-btn[data-mode="${mode}"]`);
+      if (modeBtn && modeBtn.style.display !== 'none') { activateTab('pos'); switchPosMode(mode); }
+      e.preventDefault(); return;
+    }
+  }
 
   // ── Inventory subnav shortcuts (Ctrl+1…0, Ctrl+B) ────────────────────────
   if (mod && !e.shiftKey) {
@@ -44304,7 +44664,8 @@ async function submitDsCreate() {
       { key: 'automations_access', label: 'Access Automations', desc: 'View and manage automation workflows' },
     ]},
     { key: 'projects', label: 'Projects', icon: 'fa-diagram-project', color: '#0891b2', items: [
-      { key: 'projects_access', label: 'Access Projects', desc: 'View and manage projects and tasks' },
+      { key: 'projects_access',   label: 'Manage All Projects',     desc: 'Projects → Overview & Projects: view, create and manage every project and task in this business' },
+      { key: 'projects_assigned', label: 'Assigned Project Access', desc: 'Projects → My Projects: today/upcoming work, my tasks and a kanban board for tasks assigned to you' },
     ]},
     { key: 'event', label: 'Event', icon: 'fa-calendar-days', color: '#d946ef', items: [
       { key: 'event_access', label: 'Access Event Management', desc: 'View and manage event bookings and schedules' },
@@ -49161,18 +49522,32 @@ async function submitDsCreate() {
     detailTab:       'dashboard',
     detailLoaded:    { board: false, task: false, mytask: false },
     taskFilter:      '',
+    taskView:        'milestones',   // Task tab sub-view: 'milestones' | 'timeline'
+    milestones:      [],             // open project's milestones (display order)
+    tasks:           [],             // open project's tasks (all statuses; filtered client-side)
+    collapsedMs:     new Set(),      // milestone ids collapsed in the By Milestone view
+    members:         [],             // open project's team — the only users tasks can be assigned to
+    availableUsers:  [],             // business users not yet on the team
     myTaskFilter:    'open',
     myTaskAll:       [],
   };
 
   // ── View switcher ───────────────────────────────────────────────────────────
-  function switchPmView(view) {
+  function switchPmView(view, { load = true } = {}) {
+    // Sub-tabs follow the permissions: Overview / Projects need "Manage All Projects",
+    // My Projects needs "Assigned Project Access".
+    if (view !== 'mine' && state._pmCanManage === false) view = 'mine';
+    if (view === 'mine' && state._pmCanMine === false)   view = 'overview';
     pm.currentView = view;
     $$('#panel-projects [data-pmsub]').forEach(b => b.classList.toggle('active', b.dataset.pmsub === view));
     const el = $('#pm-overview-view'); if (el) el.style.display = view === 'overview' ? 'flex' : 'none';
     const el2 = $('#pm-projects-view'); if (el2) el2.style.display = view === 'projects' ? 'flex' : 'none';
+    const el3 = $('#pm-mine-view'); if (el3) el3.style.display = view === 'mine' ? 'flex' : 'none';
+    _sbSubActivate('projects', view);
+    if (!load) return;
     if (view === 'overview') loadPmOverview();
     if (view === 'projects') loadPmProjectsView();
+    if (view === 'mine')     window.switchMpView?.(window._mp?.view || 'overview', { refresh: true });
   }
   window.switchPmView = switchPmView;
 
@@ -49229,7 +49604,7 @@ async function submitDsCreate() {
     }
     empty.style.display = 'none';
     grid.style.display = '';
-    recent.forEach(p => grid.appendChild(_pmProjectCardEl(p, () => switchPmView('projects'))));
+    recent.forEach(p => grid.appendChild(_pmProjectCardEl(p)));
   }
 
   $('#pm-ov-new-project-btn')?.addEventListener('click', () => openNewProjectModal());
@@ -49306,12 +49681,21 @@ async function submitDsCreate() {
   function openProjectDetail(projectId) {
     const p = pm.projects.find(x => +x.id === +projectId);
     if (!p) return;
-    if (pm.currentView !== 'projects') switchPmView('projects');
+    // Switch tabs without loadPmProjectsView() — it would close this detail page.
+    if (pm.currentView !== 'projects') {
+      switchPmView('projects', { load: false });
+      renderPmProjectsGrid();
+    }
     pm.detailProjectId = +projectId;
     pm.detailProject   = p;
     pm.detailTab        = 'dashboard';
     pm.detailLoaded      = { board: false, task: false, mytask: false };
     pm.myTaskAll        = [];
+    pm.milestones       = [];
+    pm.tasks            = [];
+    pm.collapsedMs      = new Set();
+    pm.members          = [];
+    pm.availableUsers   = [];
     const list   = $('#pm-projects-list');
     const detail = $('#pm-detail-view');
     if (list)   list.style.display   = 'none';
@@ -49320,6 +49704,7 @@ async function submitDsCreate() {
     _pmRenderDashboardPane(p);
     _pmRenderAssignmentPane(p);
     _pmSwitchDetailTab('dashboard');
+    loadPmMembers();
   }
   window.openProjectDetail = openProjectDetail;
 
@@ -49417,7 +49802,131 @@ async function submitDsCreate() {
         <div class="inv-section-title"><i class="fa fa-sitemap"></i> Assignment</div>
         <table class="inv-detail-table">${rows.join('')}</table>
       </div>
+      <div class="inv-section" id="pm-team-section"></div>
     `;
+    _pmRenderTeam();
+  }
+
+  // ── Project team (members) — tasks can only be assigned to team members ─────
+  const PM_ROLE_BADGE = { owner: 'blue', admin: 'blue', manager: 'amber', staff: 'gray', former: 'red' };
+
+  async function loadPmMembers(projectId = pm.detailProjectId) {
+    if (!projectId) return;
+    try {
+      const res = await API.pmMembers(projectId);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load team');
+      if (+projectId !== +pm.detailProjectId) return;   // project changed while loading
+      _pmApplyMembers(res.body);
+    } catch (e) {
+      const sec = $('#pm-team-section');
+      if (sec) sec.innerHTML = `<div class="inv-section-title"><i class="fa fa-users"></i> Project Team</div><div style="padding:12px 16px;color:#dc2626;font-size:12px">${esc(String(e.message || e))}</div>`;
+    }
+  }
+
+  // body = { data: members[], available: users[] } from the members endpoints
+  function _pmApplyMembers(body) {
+    pm.members        = body?.data      || [];
+    pm.availableUsers = body?.available || [];
+    _pmRenderTeam();
+    if (pm.detailLoaded.task) _pmRenderTaskViews();   // refresh assignee dropdowns
+  }
+
+  function _pmRenderTeam() {
+    const sec = $('#pm-team-section');
+    if (!sec) return;
+    const rows = pm.members.map(u => `
+      <tr data-uid="${u.id}">
+        <td style="width:40px"><span style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((u.name || '?').charAt(0).toUpperCase())}</span></td>
+        <td><div style="font-size:12px;font-weight:700">${esc(u.name)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</div></td>
+        <td><span class="inv-badge inv-badge-${PM_ROLE_BADGE[u.role] || 'gray'}">${esc(u.role === 'former' ? 'Left business' : u.role)}</span></td>
+        <td style="font-size:12px">${u.open_tasks} open <span style="color:var(--text-muted)">/ ${u.total_tasks} total</span></td>
+        <td style="width:40px;text-align:right"><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-remove-uid="${u.id}" title="Remove from project"><i class="fa fa-user-minus" style="color:#ef4444"></i></button></td>
+      </tr>`).join('');
+    sec.innerHTML = `
+      <div class="inv-section-title" style="display:flex;align-items:center;gap:8px">
+        <span><i class="fa fa-users"></i> Project Team <span style="color:var(--text-muted);font-weight:600">(${pm.members.length})</span></span>
+        <button class="svc-form-btn svc-form-btn--primary" id="pm-team-add-btn" style="margin-left:auto;padding:4px 12px;font-size:12px"${pm.availableUsers.length ? '' : ' disabled title="All business users are already on this project"'}><i class="fa fa-user-plus"></i> Add Members</button>
+      </div>
+      <div style="padding:6px 16px 0;font-size:11px;color:var(--text-muted)">Only team members can be assigned tasks in this project.</div>
+      ${pm.members.length
+        ? `<table class="crm-table" style="margin:6px 0 4px"><thead><tr><th></th><th>User</th><th>Role</th><th>Tasks</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div style="padding:18px 16px;text-align:center;font-size:12px;color:var(--text-muted)">No team members yet — add users to assign them tasks.</div>`}
+    `;
+    $('#pm-team-add-btn')?.addEventListener('click', openPmAddMembersModal);
+    sec.querySelectorAll('[data-remove-uid]').forEach(btn => btn.addEventListener('click', () => _pmRemoveMember(+btn.dataset.removeUid)));
+  }
+
+  async function _pmRemoveMember(uid) {
+    const u = pm.members.find(x => +x.id === uid);
+    if (!u) return;
+    if (!confirm(`Remove ${u.name} from this project?` + (u.total_tasks ? `\nThey will be taken off their ${u.total_tasks} task(s).` : ''))) return;
+    try {
+      const res = await API.pmMemberRemove(pm.detailProjectId, uid);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Remove failed');
+      toast(res.body?.unassigned_tasks ? `Member removed · taken off ${res.body.unassigned_tasks} task(s)` : 'Member removed', 'success');
+      if (res.body?.unassigned_tasks) {
+        pm.detailLoaded.board = false;
+        pm.detailLoaded.mytask = false;
+        if (pm.detailLoaded.task) loadPmTasks();
+      }
+      _pmApplyMembers(res.body);
+    } catch (e) { toast('Remove failed: ' + (e.message || e), 'error'); }
+  }
+
+  function openPmAddMembersModal() {
+    const projectId = pm.detailProjectId;
+    if (!projectId || !pm.availableUsers.length) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal" style="max-width:460px">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-user-plus" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">Add Team Members</span>
+          <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-am-alert"></div>
+          <input id="pm-am-search" class="pm-field-input" placeholder="Search users…">
+          <div id="pm-am-list" style="max-height:320px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+            ${pm.availableUsers.map(u => `
+              <label data-q="${esc(`${u.name} ${u.email || ''}`.toLowerCase())}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border);cursor:pointer">
+                <input type="checkbox" value="${u.id}">
+                <span style="flex:1;min-width:0"><span style="display:block;font-size:12px;font-weight:700">${esc(u.name)}</span><span style="display:block;font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</span></span>
+                <span class="inv-badge inv-badge-${PM_ROLE_BADGE[u.role] || 'gray'}">${esc(u.role)}</span>
+              </label>`).join('')}
+          </div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" data-close>Cancel</button>
+          <button class="pm-btn-primary" id="pm-am-save"><i class="fa fa-user-plus"></i> Add Selected</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    $('#pm-am-search').addEventListener('input', function () {
+      const q = this.value.trim().toLowerCase();
+      overlay.querySelectorAll('#pm-am-list label').forEach(l => { l.style.display = !q || l.dataset.q.includes(q) ? 'flex' : 'none'; });
+    });
+    $('#pm-am-save').addEventListener('click', async () => {
+      const ids = [...overlay.querySelectorAll('#pm-am-list input:checked')].map(i => +i.value);
+      const alertEl = $('#pm-am-alert');
+      if (!ids.length) { alertEl.textContent = 'Select at least one user.'; alertEl.style.display = 'block'; return; }
+      $('#pm-am-save').disabled = true;
+      try {
+        const res = await API.pmMemberAdd(projectId, ids);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Add failed');
+        overlay.remove();
+        toast(`${ids.length} member${ids.length === 1 ? '' : 's'} added`, 'success');
+        if (+projectId === +pm.detailProjectId) _pmApplyMembers(res.body);
+      } catch (e) {
+        alertEl.textContent = String(e.message || e);
+        alertEl.style.display = 'block';
+        $('#pm-am-save').disabled = false;
+      }
+    });
+    $('#pm-am-search').focus();
   }
 
   function _pmSwitchDetailTab(tab) {
@@ -49438,47 +49947,216 @@ async function submitDsCreate() {
   $('#pm-detail-back-btn')?.addEventListener('click', () => closeProjectDetail());
 
   // ── Board ───────────────────────────────────────────────────────────────────
-  async function loadPmBoard(projectId = pm.detailProjectId) {
+  const PM_BUILTIN_STATUSES = [
+    { status: 'todo',        label: 'To Do',       is_custom: false },
+    { status: 'in_progress', label: 'In Progress', is_custom: false },
+    { status: 'review',      label: 'Review',      is_custom: false },
+    { status: 'done',        label: 'Done',        is_custom: false },
+  ];
+  pm.boardColumns = PM_BUILTIN_STATUSES;
+
+  function _pmColDot(col) {
+    return col.is_custom
+      ? `<span class="pm-col-dot" style="background:${esc(col.color || '#0ea5e9')}"></span>`
+      : `<span class="pm-col-dot pm-col-dot--${col.status.replace(/_/g, '-')}"></span>`;
+  }
+
+  // silent: re-render in place without the "Loading…" flash (used after a drag-and-drop
+  // move, where the card has already been moved optimistically).
+  async function loadPmBoard(projectId = pm.detailProjectId, { silent = false } = {}) {
     if (!projectId) return;
-    ['todo','in_progress','review','done'].forEach(s => {
-      const col = $(`#pm-col-${s}`);
-      if (col) col.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px">Loading…</div>';
-    });
+    const wrap = $('#pm-board-columns');
+    if (!wrap) return;
+    if (!silent) wrap.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px">Loading…</div>';
     try {
       const res = await API.pmBoard(projectId);
       if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
-      res.body.columns.forEach(col => {
-        const colEl  = $(`#pm-col-${col.status}`);
-        const cntEl  = $(`#pm-col-count-${col.status}`);
-        if (!colEl) return;
-        if (cntEl) cntEl.textContent = col.tasks.length;
-        colEl.innerHTML = '';
+      const columns = res.body.columns || [];
+      pm.boardColumns = columns.map(({ tasks, ...meta }) => meta);
+      wrap.innerHTML = '';
+      columns.forEach(col => {
+        const colEl = document.createElement('div');
+        colEl.className = 'pm-kanban-col';
+        colEl.dataset.col = col.status;
+        _pmBindColumnDrop(colEl);
+        colEl.innerHTML = `
+          <div class="pm-kanban-col-head">
+            ${_pmColDot(col)}${esc(col.label)}
+            <span class="pm-col-count">${col.tasks.length}</span>
+            ${col.status !== 'done' ? `<span class="pm-col-sort" title="Sort number">#${col.sort_order}</span>` : ''}
+            ${col.is_custom ? `<button class="pm-col-del pm-col-edit" title="Edit status"><i class="fa fa-pen"></i></button><button class="pm-col-del" data-del title="Delete status"><i class="fa fa-xmark"></i></button>` : ''}
+          </div>
+          <div class="pm-kanban-cards"></div>`;
+        const cardsEl = colEl.querySelector('.pm-kanban-cards');
         if (!col.tasks.length) {
-          colEl.innerHTML = '<div style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>';
-          return;
+          cardsEl.innerHTML = '<div class="pm-kanban-empty" style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>';
+        } else {
+          col.tasks.forEach(t => cardsEl.appendChild(_pmTaskCard(t)));
         }
-        col.tasks.forEach(t => colEl.appendChild(_pmTaskCard(t)));
+        colEl.querySelector('.pm-col-edit')?.addEventListener('click', () => openPmStatusModal(projectId, col));
+        colEl.querySelector('[data-del]')?.addEventListener('click', async () => {
+          const msg = col.tasks.length
+            ? `Delete status "${col.label}"? Its ${col.tasks.length} task(s) will be moved to To Do.`
+            : `Delete status "${col.label}"?`;
+          if (!confirm(msg)) return;
+          try {
+            const r = await API.pmStatusDelete(col.id);
+            if (r.status >= 400) throw new Error(r.body?.message || 'Delete failed');
+            toast('Status deleted', 'success');
+            loadPmBoard();
+          } catch (e) { toast('Delete failed: ' + e, 'error'); }
+        });
+        wrap.appendChild(colEl);
       });
     } catch (e) {
+      wrap.innerHTML = '';
       toast('Failed to load board: ' + e, 'error');
     }
   }
 
+  // Add (existing = null) or edit a custom status. Sort number places it among the
+  // built-ins (To Do = 1, In Progress = 2, Review = 3); Done is always last.
+  function openPmStatusModal(projectId = pm.detailProjectId, existing = null) {
+    if (!projectId) return;
+    const isEdit = !!existing;
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal" style="max-width:420px">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-table-columns" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">${isEdit ? 'Edit Status' : 'Add Status'}</span>
+          <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-ns-alert"></div>
+          <div><div class="pm-field-label">Status Name *</div><input id="pm-ns-label" class="pm-field-input" maxlength="60" placeholder="e.g. Testing, Blocked" value="${isEdit ? esc(existing.label) : ''}"></div>
+          <div class="pm-field-row">
+            <div><div class="pm-field-label">Color</div><input id="pm-ns-color" type="color" class="pm-field-input" value="${esc(existing?.color || '#0ea5e9')}" style="height:36px;padding:2px 6px"></div>
+            <div><div class="pm-field-label">Sort Number</div><input id="pm-ns-sort" type="number" min="0" max="98" class="pm-field-input" placeholder="Auto" value="${isEdit ? esc(existing.sort_order) : ''}"></div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">To Do = 1, In Progress = 2, Review = 3, Done is always last.${isEdit ? '' : ' Leave blank to add after the last status.'}</div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" data-close>Cancel</button>
+          <button class="pm-btn-primary" id="pm-ns-save"><i class="fa fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Add Status'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    const save = async () => {
+      const label   = $('#pm-ns-label')?.value.trim();
+      const alertEl = $('#pm-ns-alert');
+      if (!label) { alertEl.textContent = 'Status name is required.'; alertEl.style.display = 'block'; return; }
+      const sortRaw = $('#pm-ns-sort')?.value.trim();
+      if (sortRaw !== '' && (!/^\d+$/.test(sortRaw) || +sortRaw > 98)) {
+        alertEl.textContent = 'Sort number must be between 0 and 98.'; alertEl.style.display = 'block'; return;
+      }
+      $('#pm-ns-save').disabled = true;
+      const body = { label, color: $('#pm-ns-color')?.value || null, sort_order: sortRaw === '' ? null : +sortRaw };
+      try {
+        const res = isEdit
+          ? await API.pmStatusUpdate(existing.id, body)
+          : await API.pmStatusCreate(projectId, body);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
+        overlay.remove();
+        toast(isEdit ? 'Status updated' : 'Status added', 'success');
+        loadPmBoard(projectId);
+      } catch (e) {
+        alertEl.textContent = String(e);
+        alertEl.style.display = 'block';
+        $('#pm-ns-save').disabled = false;
+      }
+    };
+    $('#pm-ns-save').addEventListener('click', save);
+    $('#pm-ns-label').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+    $('#pm-ns-label').focus();
+  }
+
+  // ── Board drag-and-drop ─────────────────────────────────────────────────────
+  let _pmDragCard = null;
+
+  function _pmAdjustColCount(colEl, delta) {
+    const countEl = colEl?.querySelector('.pm-col-count');
+    if (countEl) countEl.textContent = Math.max(0, (parseInt(countEl.textContent) || 0) + delta);
+  }
+
+  function _pmBindColumnDrop(colEl) {
+    colEl.addEventListener('dragover', e => {
+      if (!_pmDragCard) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      colEl.classList.add('pm-kanban-col--dragover');
+    });
+    colEl.addEventListener('dragleave', e => {
+      // Only clear when leaving the column itself, not one of its children
+      if (!colEl.contains(e.relatedTarget)) colEl.classList.remove('pm-kanban-col--dragover');
+    });
+    colEl.addEventListener('drop', async e => {
+      e.preventDefault();
+      colEl.classList.remove('pm-kanban-col--dragover');
+      const card = _pmDragCard;
+      _pmDragCard = null;
+      if (!card) return;
+      const toStatus   = colEl.dataset.col;
+      const fromStatus = card.dataset.status;
+      if (!toStatus || toStatus === fromStatus) return;
+
+      // Move the card immediately; revert only if the server rejects the change.
+      const fromCol   = card.closest('.pm-kanban-col');
+      const fromCards = fromCol?.querySelector('.pm-kanban-cards');
+      const toCards   = colEl.querySelector('.pm-kanban-cards');
+      toCards.querySelector('.pm-kanban-empty')?.remove();
+      toCards.appendChild(card);
+      card.dataset.status = toStatus;
+      _pmAdjustColCount(fromCol, -1);
+      _pmAdjustColCount(colEl, 1);
+
+      try {
+        const res = await API.pmTaskStatus(card.dataset.tid, toStatus);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Move failed');
+        // Resync in the background (move menus, empty placeholders, overdue flags)
+        loadPmBoard(pm.detailProjectId, { silent: true });
+      } catch (err) {
+        fromCards?.appendChild(card);
+        card.dataset.status = fromStatus;
+        _pmAdjustColCount(colEl, -1);
+        _pmAdjustColCount(fromCol, 1);
+        toast('Move failed: ' + (err.message || err), 'error');
+      }
+    });
+  }
+
   function _pmTaskCard(t) {
-    const statuses = ['todo','in_progress','review','done'];
-    const labels   = {'todo':'To Do','in_progress':'In Progress','review':'Review','done':'Done'};
     const overdue  = t.is_overdue;
     const card = document.createElement('div');
     card.className = 'pm-task-card';
     card.dataset.tid = t.id;
-    const moveOpts = statuses.filter(s => s !== t.status)
-      .map(s => `<option value="${s}">${labels[s]}</option>`).join('');
+    card.dataset.status = t.status;
+    card.draggable = true;
+    card.addEventListener('dragstart', e => {
+      // Don't hijack interactions with the Move… select / delete button
+      if (e.target.closest?.('select, button')) { e.preventDefault(); return; }
+      _pmDragCard = card;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(t.id));
+      requestAnimationFrame(() => card.classList.add('pm-task-card--dragging'));
+    });
+    card.addEventListener('dragend', () => {
+      _pmDragCard = null;
+      card.classList.remove('pm-task-card--dragging');
+      document.querySelectorAll('.pm-kanban-col--dragover').forEach(el => el.classList.remove('pm-kanban-col--dragover'));
+    });
+    const moveOpts = pm.boardColumns.filter(c => c.status !== t.status)
+      .map(c => `<option value="${esc(c.status)}">${esc(c.label)}</option>`).join('');
     card.innerHTML = `
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
         ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${esc(t.assigned_name)}</span>` : ''}
         ${t.due_date ? `<span class="pm-task-card-due${overdue ? ' pm-task-card-due--overdue' : ''}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:2px"></i>' : ''}${esc(t.due_date)}</span>` : ''}
+        ${t.milestone_name ? `<span class="pm-task-card-assign"><i class="fa fa-flag" style="margin-right:2px"></i>${esc(t.milestone_name)}</span>` : ''}
       </div>
       <div class="pm-task-card-actions">
         <select class="pm-task-card-move" data-tid="${t.id}" title="Move to…">
@@ -49491,7 +50169,8 @@ async function submitDsCreate() {
       const newStatus = this.value;
       if (!newStatus) return;
       try {
-        await API.pmTaskStatus(t.id, newStatus);
+        const res = await API.pmTaskStatus(t.id, newStatus);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Move failed');
         loadPmBoard();
       } catch (e) { toast('Move failed: ' + e, 'error'); }
     });
@@ -49503,25 +50182,831 @@ async function submitDsCreate() {
     return card;
   }
 
-  // ── Tasks list (scoped to the open project) ──────────────────────────────────
-  async function loadPmTasks(projectId = pm.detailProjectId) {
-    const tbody = $('#pm-tasks-body');
-    if (!tbody || !projectId) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>';
-    const qs = pm.taskFilter ? `status=${encodeURIComponent(pm.taskFilter)}` : '';
-    try {
-      const res = await API.pmTasks(projectId, qs);
-      if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
-      const tasks = res.body?.data || [];
-      if (!tasks.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">No tasks found.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = tasks.map(t => _pmTaskRow(t, 7)).join('');
-      _bindTaskRowActions(tbody, () => loadPmTasks(projectId));
-    } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="7" style="color:#dc2626;padding:12px">${esc(String(e))}</td></tr>`;
+  // ── Tasks (scoped to the open project), split by milestone ──────────────────
+  // Two sub-views share the same data (pm.milestones + pm.tasks):
+  //   By Milestone — one collapsible task table per milestone (+ "No Milestone")
+  //   Timeline     — milestones on a vertical timeline, each with its tasks
+  // A task changes milestone by drag-and-drop (either view) or the row's milestone select.
+  const PM_NO_MS = '';   // group key for tasks without a milestone
+  const PM_MS_STATE_LABEL = { completed: 'Completed', overdue: 'Overdue', active: 'In Progress', upcoming: 'Upcoming', open: 'No dates' };
+
+  function _pmToday() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  // completed | overdue | active | upcoming | open (no dates)
+  function _pmMsState(m) {
+    if (m.status === 'completed') return 'completed';
+    const today = _pmToday();
+    if (m.due_date && m.due_date < today) return 'overdue';
+    if (m.start_date && m.start_date > today) return 'upcoming';
+    if (m.start_date || m.due_date) return 'active';
+    return 'open';
+  }
+
+  function _pmMsPeriod(m) {
+    if (!m.start_date && !m.due_date) return 'No time period';
+    let txt = `${m.start_date || '…'} → ${m.due_date || '…'}`;
+    if (m.start_date && m.due_date) {
+      const days = Math.round((new Date(m.due_date) - new Date(m.start_date)) / 86400000) + 1;
+      txt += ` · ${days} day${days === 1 ? '' : 's'}`;
     }
+    return txt;
+  }
+
+  // Progress over all of the milestone's tasks (ignores the status filter)
+  function _pmMsProgress(key) {
+    const list = pm.tasks.filter(t => _pmTaskMsKey(t) === String(key));
+    const done = list.filter(t => t.status === 'done').length;
+    return { total: list.length, done, pct: list.length ? Math.round(done / list.length * 100) : 0 };
+  }
+
+  function _pmTaskMsKey(t) {
+    return t.milestone_id && pm.milestones.some(m => +m.id === +t.milestone_id) ? String(t.milestone_id) : PM_NO_MS;
+  }
+
+  // Milestones in display order, then a trailing "No Milestone" bucket; tasks filtered by status chip.
+  function _pmTaskGroups() {
+    const tasks = pm.taskFilter ? pm.tasks.filter(t => t.status === pm.taskFilter) : pm.tasks;
+    const groups = pm.milestones.map(m => ({ ms: m, key: String(m.id), tasks: [] }));
+    groups.push({ ms: null, key: PM_NO_MS, tasks: [] });
+    const byKey = new Map(groups.map(g => [g.key, g]));
+    tasks.forEach(t => byKey.get(_pmTaskMsKey(t)).tasks.push(t));
+    return groups;
+  }
+
+  function _pmMilestoneOptions(selectedId) {
+    return `<option value="">No milestone</option>` + pm.milestones.map(m =>
+      `<option value="${m.id}"${+m.id === +selectedId ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
+  }
+
+  // Avatar chips for a task's assignees (first 3 + "+N"), or an "Assign" prompt.
+  function _pmAssigneeChips(assignees = []) {
+    if (!assignees.length) return '<span class="pm-assignees-empty"><i class="fa fa-user-plus"></i> Assign</span>';
+    const shown = assignees.slice(0, 3).map(u =>
+      `<span class="pm-assignee-chip" title="${esc(u.name)}">${esc((u.name || '?').charAt(0).toUpperCase())}</span>`).join('');
+    const more  = assignees.length > 3 ? `<span class="pm-assignee-chip pm-assignee-chip--more">+${assignees.length - 3}</span>` : '';
+    const label = assignees.length === 1 ? `<span class="pm-assignees-name">${esc(assignees[0].name)}</span>` : '';
+    return shown + more + label;
+  }
+
+  // Checkbox list of the project team (the only users a task can be assigned to).
+  function _pmAssigneeChecks(selectedIds = [], members = pm.members) {
+    if (!members.length) return '<div class="pm-assign-list-empty">No team members — add them on the Assignment tab.</div>';
+    const sel = new Set(selectedIds.map(Number));
+    return members.map(u => `
+      <label class="pm-assign-item">
+        <input type="checkbox" value="${u.id}"${sel.has(+u.id) ? ' checked' : ''}>
+        <span class="pm-assignee-chip">${esc((u.name || '?').charAt(0).toUpperCase())}</span>
+        <span class="pm-assign-item-name">${esc(u.name)}</span>
+      </label>`).join('');
+  }
+
+  function _pmBindAssignSearch(input, list) {
+    input?.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      list.querySelectorAll('.pm-assign-item').forEach(l => {
+        l.style.display = !q || l.textContent.toLowerCase().includes(q) ? '' : 'none';
+      });
+    });
+  }
+
+  function openPmAssignModal(t) {
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal" style="max-width:400px">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-users" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">Assign — ${esc(t.title)}</span>
+          <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          ${pm.members.length > 5 ? '<input id="pm-as-search" class="pm-field-input" placeholder="Search members…">' : ''}
+          <div class="pm-assign-list" id="pm-as-list">${_pmAssigneeChecks(t.assignee_ids || [])}</div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" data-close>Cancel</button>
+          <button class="pm-btn-primary" id="pm-as-save"${pm.members.length ? '' : ' disabled'}><i class="fa fa-floppy-disk"></i> Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    _pmBindAssignSearch($('#pm-as-search'), $('#pm-as-list'));
+    $('#pm-as-search')?.focus();
+    $('#pm-as-save').addEventListener('click', () => {
+      const ids = [...overlay.querySelectorAll('#pm-as-list input:checked')].map(i => +i.value);
+      overlay.remove();
+      _pmAssignTask(t.id, ids);
+    });
+  }
+
+  // Swap a <select>'s native dropdown for a searchable popup. The select stays the source of truth:
+  // picking an option sets its value and fires 'change', so existing listeners keep working.
+  function _pmMakeSelectSearchable(sel) {
+    const open = () => {
+      document.querySelector('.pm-ss-pop')?._close?.();
+      const r   = sel.getBoundingClientRect();
+      const pop = document.createElement('div');
+      pop.className = 'pm-ss-pop';
+      pop.style.left     = `${r.left}px`;
+      pop.style.minWidth = `${Math.max(r.width, 200)}px`;
+      pop.innerHTML = `<input type="text" class="pm-ss-input" placeholder="Search…"><div class="pm-ss-list"></div>`;
+      document.body.appendChild(pop);
+
+      const input = pop.querySelector('.pm-ss-input');
+      const list  = pop.querySelector('.pm-ss-list');
+      let items = [], active = 0;
+      const render = () => {
+        const q = input.value.trim().toLowerCase();
+        items = [...sel.options].filter(o => !o.disabled && o.text.toLowerCase().includes(q));
+        active = Math.max(0, items.findIndex(o => o.value === sel.value));
+        list.innerHTML = items.length
+          ? items.map((o, i) => `<div class="cat-combo-item${i === active ? ' active' : ''}" data-i="${i}">${esc(o.text)}</div>`).join('')
+          : '<div class="cat-combo-empty">No matches</div>';
+      };
+      const highlight = i => {
+        active = (i + items.length) % items.length;
+        list.querySelectorAll('.cat-combo-item').forEach((el, j) => el.classList.toggle('active', j === active));
+        list.children[active]?.scrollIntoView({ block: 'nearest' });
+      };
+      const pick = o => {
+        close();
+        if (!o || o.value === sel.value) return;
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+      const onDocDown = e => { if (!pop.contains(e.target) && e.target !== sel) close(); };
+      const onScroll  = e => { if (!pop.contains(e.target)) close(); };
+      function close() {
+        pop.remove();
+        document.removeEventListener('mousedown', onDocDown, true);
+        window.removeEventListener('scroll', onScroll, true);
+        window.removeEventListener('resize', close);
+      }
+      pop._close = close;
+
+      input.addEventListener('input', render);
+      input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown')      { e.preventDefault(); if (items.length) highlight(active + 1); }
+        else if (e.key === 'ArrowUp')   { e.preventDefault(); if (items.length) highlight(active - 1); }
+        else if (e.key === 'Enter')     { e.preventDefault(); pick(items[active]); }
+        else if (e.key === 'Escape')    { e.preventDefault(); close(); sel.focus(); }
+        else if (e.key === 'Tab')       { close(); }
+      });
+      list.addEventListener('mousedown', e => {
+        const el = e.target.closest('.cat-combo-item');
+        if (!el) return;
+        e.preventDefault();
+        pick(items[+el.dataset.i]);
+      });
+      document.addEventListener('mousedown', onDocDown, true);
+      window.addEventListener('scroll', onScroll, true);
+      window.addEventListener('resize', close);
+      render();
+      // Open upward when there isn't room below.
+      const below = window.innerHeight - r.bottom;
+      if (below < pop.offsetHeight + 8 && r.top > below) pop.style.bottom = `${window.innerHeight - r.top + 2}px`;
+      else pop.style.top = `${r.bottom + 2}px`;
+      list.children[active]?.scrollIntoView({ block: 'nearest' });
+      input.focus();
+    };
+    sel.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (document.querySelector('.pm-ss-pop')) { document.querySelector('.pm-ss-pop')._close(); return; }
+      open();
+    });
+    sel.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); open(); }
+    });
+  }
+
+  async function loadPmTasks(projectId = pm.detailProjectId) {
+    if (!projectId) return;
+    const target = pm.taskView === 'timeline' ? $('#pm-task-timeline') : $('#pm-task-groups');
+    if (target && !pm.tasks.length && !pm.milestones.length) target.innerHTML = '<div class="pm-ms-empty">Loading…</div>';
+    try {
+      const [msRes, tRes] = await Promise.all([API.pmMilestones(projectId), API.pmTasks(projectId, '')]);
+      if (msRes.status >= 400) throw new Error(msRes.body?.message || 'Failed to load milestones');
+      if (tRes.status  >= 400) throw new Error(tRes.body?.message  || 'Failed to load tasks');
+      if (+projectId !== +pm.detailProjectId) return;   // project changed while loading
+      pm.milestones = msRes.body?.data || [];
+      pm.tasks      = tRes.body?.data  || [];
+      _pmRenderTaskViews();
+    } catch (e) {
+      if (target) target.innerHTML = `<div class="pm-ms-empty" style="color:#dc2626">${esc(String(e.message || e))}</div>`;
+    }
+  }
+
+  // Reload after a change that other tabs also show (board cards carry the milestone name).
+  function _pmReloadTasks() {
+    pm.detailLoaded.board  = false;
+    pm.detailLoaded.mytask = false;
+    return loadPmTasks();
+  }
+
+  function _pmRenderTaskViews() {
+    $$('#pm-task-subtabs .pm-subtab').forEach(b => b.classList.toggle('active', b.dataset.pmtaskview === pm.taskView));
+    const groupsEl = $('#pm-task-groups');
+    const tlEl     = $('#pm-task-timeline');
+    if (groupsEl) groupsEl.style.display = pm.taskView === 'milestones' ? '' : 'none';
+    if (tlEl)     tlEl.style.display     = pm.taskView === 'timeline'   ? '' : 'none';
+    if (pm.taskView === 'timeline') _pmRenderTimeline();
+    else                            _pmRenderMilestoneGroups();
+    if ($('#pm-tl-modal-body')) _pmRenderTimelineModal();   // keep the full timeline modal in sync while open
+  }
+
+  // ── Full timeline modal: summary + status filter + milestone jump list + timeline ──
+  const PM_TLM_FILTERS = [['', 'All'], ['todo', 'To Do'], ['in_progress', 'In Progress'], ['review', 'Review'], ['done', 'Done']];
+
+  function openPmTimelineModal() {
+    if (!pm.detailProjectId || $('#pm-tl-modal-body')) return;
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal pm-tl-modal">
+        <div class="pm-modal-hdr pm-tlm-hdr">
+          <span class="pm-tlm-icon"><i class="fa fa-timeline"></i></span>
+          <div class="pm-tlm-titlewrap">
+            <div class="pm-modal-title">Project Timeline${pm.detailProject?.name ? ' — ' + esc(pm.detailProject.name) : ''}</div>
+            <div class="pm-tlm-sub" id="pm-tlm-sub"></div>
+          </div>
+          <button class="svc-form-btn pm-tlm-btn" data-tlm="today" title="Scroll to today"><i class="fa fa-location-crosshairs"></i> Today</button>
+          <button class="svc-form-btn pm-tlm-btn" data-tlm="compact" title="Show / hide tasks under each milestone"><i class="fa fa-compress"></i> <span>Hide Tasks</span></button>
+          <button class="svc-form-btn pm-tlm-btn" data-tlm="newms" title="New milestone"><i class="fa fa-flag"></i> Milestone</button>
+          <button class="svc-form-btn svc-form-btn--primary pm-tlm-btn" data-tlm="newtask" title="New task"><i class="fa fa-plus"></i> Task</button>
+          <button class="pm-modal-close" data-tlm="max" title="Maximize"><i class="fa fa-up-right-and-down-left-from-center"></i></button>
+          <button class="pm-modal-close" data-tlm="close" title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-tlm-bar">
+          <div class="pm-tlm-stats" id="pm-tlm-stats"></div>
+          <div class="svc-chip-bar pm-tlm-filters">
+            ${PM_TLM_FILTERS.map(([v, l]) => `<button class="svc-chip" data-tlm-filter="${v}">${l}</button>`).join('')}
+          </div>
+        </div>
+        <div class="pm-tlm-main">
+          <nav class="pm-tlm-nav" id="pm-tlm-nav"></nav>
+          <div class="pm-tlm-scroll" id="pm-tlm-scroll"><div id="pm-tl-modal-body" class="pm-tl"></div></div>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    const modal  = overlay.querySelector('.pm-tl-modal');
+    const scroll = overlay.querySelector('#pm-tlm-scroll');
+
+    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => {   // only when no other modal (e.g. Edit Milestone) is stacked on top
+      if (e.key === 'Escape' && overlay === [...document.querySelectorAll('.pm-modal-overlay')].pop()) close();
+    };
+    document.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+    const scrollToToday = () => {
+      const el = scroll.querySelector('.pm-tl-today');
+      if (el) scroll.scrollTo({ top: el.offsetTop - scroll.clientHeight / 2, behavior: 'smooth' });
+    };
+    overlay.querySelectorAll('[data-tlm]').forEach(btn => btn.addEventListener('click', () => {
+      const act = btn.dataset.tlm;
+      if (act === 'close')   close();
+      if (act === 'today')   scrollToToday();
+      if (act === 'newms')   openPmMilestoneModal();
+      if (act === 'newtask') openNewTaskModal(pm.detailProjectId);
+      if (act === 'compact') {
+        const on = modal.classList.toggle('pm-tlm--compact');
+        btn.querySelector('i').className = `fa ${on ? 'fa-expand' : 'fa-compress'}`;
+        btn.querySelector('span').textContent = on ? 'Show Tasks' : 'Hide Tasks';
+      }
+      if (act === 'max') {
+        const on = modal.classList.toggle('pm-tlm--max');
+        btn.title = on ? 'Restore size' : 'Maximize';
+        btn.querySelector('i').className = `fa ${on ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'}`;
+      }
+    }));
+
+    // Status filter — shared with the Task tab chips
+    overlay.querySelectorAll('[data-tlm-filter]').forEach(chip => chip.addEventListener('click', () => {
+      pm.taskFilter = chip.dataset.tlmFilter;
+      $$('#pm-task-filter-chips .svc-chip').forEach(c => c.classList.toggle('active', c.dataset.pmtaskfilter === pm.taskFilter));
+      _pmRenderTaskViews();
+    }));
+
+    // Jump list: click to scroll to a milestone; highlight the one in view while scrolling
+    overlay.querySelector('#pm-tlm-nav').addEventListener('click', e => {
+      const item = e.target.closest('[data-nav-mid]');
+      const card = item && scroll.querySelector(`.pm-tl-item[data-mid="${CSS.escape(item.dataset.navMid)}"]`);
+      if (!card) return;
+      scroll.scrollTo({ top: card.offsetTop - 8, behavior: 'smooth' });
+      card.classList.remove('pm-tlm-flash'); void card.offsetWidth; card.classList.add('pm-tlm-flash');
+    });
+    scroll.addEventListener('scroll', _pmTlmSpy, { passive: true });
+
+    _pmRenderTimelineModal();
+    scrollToToday();
+  }
+
+  function _pmRenderTimelineModal() {
+    const body = $('#pm-tl-modal-body');
+    if (!body) return;
+    _pmRenderTimeline(body);
+    document.querySelectorAll('[data-tlm-filter]').forEach(c => c.classList.toggle('active', c.dataset.tlmFilter === (pm.taskFilter || '')));
+
+    // Summary
+    const ms        = pm.milestones;
+    const msDone    = ms.filter(m => m.status === 'completed').length;
+    const tDone     = pm.tasks.filter(t => t.status === 'done').length;
+    const tOverdue  = pm.tasks.filter(t => t.is_overdue && t.status !== 'done').length;
+    const pct       = pm.tasks.length ? Math.round(tDone / pm.tasks.length * 100) : 0;
+    const starts    = ms.map(m => m.start_date || m.due_date).filter(Boolean).sort();
+    const ends      = ms.map(m => m.due_date || m.start_date).filter(Boolean).sort();
+    const sub = $('#pm-tlm-sub');
+    if (sub) sub.innerHTML = starts.length
+      ? `<i class="fa fa-calendar"></i> ${esc(starts[0])} → ${esc(ends[ends.length - 1])} &nbsp;·&nbsp; Today ${esc(_pmToday())}`
+      : `No milestone dates yet &nbsp;·&nbsp; Today ${esc(_pmToday())}`;
+    const stats = $('#pm-tlm-stats');
+    if (stats) stats.innerHTML = `
+      <div class="pm-tlm-stat"><i class="fa fa-flag"></i><b>${msDone}/${ms.length}</b> milestones done</div>
+      <div class="pm-tlm-stat"><i class="fa fa-list-check"></i><b>${tDone}/${pm.tasks.length}</b> tasks done</div>
+      <div class="pm-tlm-stat${tOverdue ? ' pm-tlm-stat--warn' : ''}"><i class="fa fa-triangle-exclamation"></i><b>${tOverdue}</b> overdue</div>
+      <div class="pm-tlm-overall" title="${pct}% of tasks done">
+        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
+        <span>${pct}%</span>
+      </div>`;
+
+    // Jump list
+    const nav = $('#pm-tlm-nav');
+    if (nav) {
+      const items = _pmTaskGroups()
+        .filter(g => g.ms || g.tasks.length || _pmMsProgress(g.key).total)
+        .map(g => {
+          const m = g.ms, state = m ? _pmMsState(m) : 'none', prog = _pmMsProgress(g.key);
+          return `
+            <button class="pm-tlm-nav-item pm-tl-item--${state}" data-nav-mid="${esc(g.key)}">
+              <span class="pm-tlm-nav-dot">${m ? pm.milestones.indexOf(m) + 1 : '<i class="fa fa-inbox"></i>'}</span>
+              <span class="pm-tlm-nav-text">
+                <span class="pm-tlm-nav-name">${esc(m ? m.name : 'No Milestone')}</span>
+                <span class="pm-tlm-nav-meta">${m ? esc(PM_MS_STATE_LABEL[state]) : 'Unscheduled'} · ${prog.done}/${prog.total}</span>
+              </span>
+            </button>`;
+        }).join('');
+      nav.innerHTML = `<div class="pm-tlm-nav-title">Milestones</div>${items || '<div class="pm-tlm-nav-empty">No milestones yet</div>'}`;
+    }
+    _pmTlmSpy();
+  }
+
+  function _pmTlmSpy() {
+    const scroll = $('#pm-tlm-scroll');
+    if (!scroll) return;
+    let current = null;
+    scroll.querySelectorAll('.pm-tl-item[data-mid]').forEach(el => {
+      if (el.offsetTop - scroll.scrollTop <= 60) current = el.dataset.mid;
+    });
+    if (current === null) current = scroll.querySelector('.pm-tl-item[data-mid]')?.dataset.mid ?? null;
+    document.querySelectorAll('.pm-tlm-nav-item').forEach(b => b.classList.toggle('active', b.dataset.navMid === current));
+  }
+
+  const PM_MS_EMPTY_HTML = `
+    <div class="pm-ms-empty">
+      <i class="fa fa-flag" style="font-size:22px;opacity:.4;display:block;margin-bottom:8px"></i>
+      No milestones or tasks yet.<br>Add a milestone to split this project into phases.
+    </div>`;
+
+  // ── By Milestone view ──
+  function _pmRenderMilestoneGroups() {
+    const wrap = $('#pm-task-groups');
+    if (!wrap) return;
+    if (!pm.milestones.length && !pm.tasks.length) { wrap.innerHTML = PM_MS_EMPTY_HTML; return; }
+    wrap.innerHTML = _pmTaskGroups().map(_pmMsGroupHtml).join('');
+    _pmBindTaskViewActions(wrap);
+  }
+
+  function _pmMsActionsHtml(m, idx, { reorder = true } = {}) {
+    const done = m.status === 'completed';
+    return `
+      <div class="pm-ms-actions">
+        ${reorder ? `
+        <button data-ms-act="up" title="Move up"${idx === 0 ? ' disabled' : ''}><i class="fa fa-arrow-up"></i></button>
+        <button data-ms-act="down" title="Move down"${idx === pm.milestones.length - 1 ? ' disabled' : ''}><i class="fa fa-arrow-down"></i></button>` : ''}
+        <button data-ms-act="add" title="Add task to this milestone"><i class="fa fa-plus"></i></button>
+        <button data-ms-act="${done ? 'reopen' : 'complete'}" title="${done ? 'Reopen milestone' : 'Mark milestone complete'}"><i class="fa ${done ? 'fa-rotate-left' : 'fa-check'}"></i></button>
+        <button data-ms-act="edit" title="Edit milestone"><i class="fa fa-pen"></i></button>
+        <button data-ms-act="delete" class="danger" title="Delete milestone"><i class="fa fa-trash"></i></button>
+      </div>`;
+  }
+
+  function _pmMsGroupHtml(g) {
+    const m         = g.ms;
+    const collapsed = pm.collapsedMs.has(g.key);
+    const prog      = _pmMsProgress(g.key);
+    const state     = m ? _pmMsState(m) : 'none';
+    const idx       = m ? pm.milestones.indexOf(m) : -1;
+    const toggle    = `<button class="pm-ms-toggle" data-ms-act="toggle" title="${collapsed ? 'Expand' : 'Collapse'}"><i class="fa fa-chevron-${collapsed ? 'right' : 'down'}"></i></button>`;
+    const head = m ? `
+        <span class="pm-ms-grip" draggable="true" title="Drag to reorder"><i class="fa fa-grip-vertical"></i></span>
+        ${toggle}
+        <span class="pm-ms-num" title="Sort number">${idx + 1}</span>
+        <div class="pm-ms-titlewrap">
+          <div class="pm-ms-name">${esc(m.name)}</div>
+          <div class="pm-ms-period"><i class="fa fa-calendar"></i> ${esc(_pmMsPeriod(m))}</div>
+        </div>
+        <span class="pm-ms-state pm-ms-state--${state}">${PM_MS_STATE_LABEL[state]}</span>
+        <div class="pm-ms-prog" title="${prog.done} of ${prog.total} tasks done">
+          <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${prog.pct}%"></div></div>
+          <span>${prog.done}/${prog.total}</span>
+        </div>
+        ${_pmMsActionsHtml(m, idx)}` : `
+        <span class="pm-ms-grip pm-ms-grip--none"></span>
+        ${toggle}
+        <span class="pm-ms-num pm-ms-num--none"><i class="fa fa-inbox"></i></span>
+        <div class="pm-ms-titlewrap">
+          <div class="pm-ms-name">No Milestone</div>
+          <div class="pm-ms-period">Tasks not assigned to a milestone</div>
+        </div>
+        <div class="pm-ms-prog"><span>${prog.total} task${prog.total === 1 ? '' : 's'}</span></div>
+        <div class="pm-ms-actions"><button data-ms-act="add" title="Add task"><i class="fa fa-plus"></i></button></div>`;
+    const rows = g.tasks.length
+      ? g.tasks.map(_pmMsTaskRow).join('')
+      : `<tr class="pm-ms-droprow"><td colspan="9">${pm.taskFilter ? 'No tasks match this filter.' : 'No tasks — drag a task here or click + to add one.'}</td></tr>`;
+    return `
+      <div class="pm-ms-group pm-ms-group--${state}${collapsed ? ' collapsed' : ''}" data-mid="${esc(g.key)}">
+        <div class="pm-ms-head">${head}</div>
+        <div class="pm-ms-body">
+          <table class="crm-table pm-ms-table">
+            <thead><tr>
+              <th style="width:22px"></th><th style="width:28px"></th><th>Task</th><th>Priority</th>
+              <th>Assigned</th><th>Due</th><th>Status</th><th style="width:150px">Milestone</th><th style="width:40px"></th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function _pmMsTaskRow(t) {
+    const overdue = t.is_overdue;
+    const isDone  = t.status === 'done';
+    return `
+      <tr class="pm-ms-task" data-tid="${t.id}" data-title="${esc(t.title)}" draggable="true">
+        <td class="pm-drag-handle" title="Drag to another milestone"><i class="fa fa-grip-vertical"></i></td>
+        <td><i class="fa ${isDone ? 'fa-circle-check' : 'fa-circle'}" style="color:${isDone ? '#22c55e' : '#d1d5db'};cursor:pointer;font-size:14px" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i></td>
+        <td style="font-size:12px;font-weight:600">${esc(t.title)}</td>
+        <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
+        <td><button type="button" class="pm-assignees-btn" data-assign-tid="${t.id}" title="Assign project members">${_pmAssigneeChips(t.assignees)}</button></td>
+        <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
+        <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span></td>
+        <td><select class="pm-ms-select" data-ms-tid="${t.id}" title="Move to milestone">${_pmMilestoneOptions(t.milestone_id)}</select></td>
+        <td><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
+      </tr>`;
+  }
+
+  // ── Timeline view ──
+  function _pmRenderTimeline(wrap = $('#pm-task-timeline')) {
+    if (!wrap) return;
+    if (!pm.milestones.length && !pm.tasks.length) { wrap.innerHTML = PM_MS_EMPTY_HTML; return; }
+    const today  = _pmToday();
+    const groups = _pmTaskGroups();
+    const anchor = m => m.start_date || m.due_date;   // when a milestone begins on the timeline
+    const todayHtml = `
+      <div class="pm-tl-today">
+        <div class="pm-tl-date"><span>${esc(today)}</span></div>
+        <div class="pm-tl-rail"><span class="pm-tl-today-dot"></span></div>
+        <div class="pm-tl-today-label">Today</div>
+      </div>`;
+    const hasDated = pm.milestones.some(anchor);
+    let todayPlaced = !hasDated;
+    const parts = [];
+    groups.forEach(g => {
+      if (!todayPlaced && (!g.ms || (anchor(g.ms) && anchor(g.ms) > today))) { parts.push(todayHtml); todayPlaced = true; }
+      parts.push(_pmTimelineItemHtml(g));
+    });
+    wrap.innerHTML = parts.join('');
+    _pmBindTaskViewActions(wrap);
+  }
+
+  function _pmTimelineItemHtml(g) {
+    const m     = g.ms;
+    const state = m ? _pmMsState(m) : 'none';
+    const prog  = _pmMsProgress(g.key);
+    const idx   = m ? pm.milestones.indexOf(m) : -1;
+    // Tasks run top-to-bottom by due date (undated last)
+    const tasks = [...g.tasks].sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : (a.due_date || '9999') > (b.due_date || '9999') ? 1 : a.id - b.id);
+    const taskHtml = tasks.length ? tasks.map(t => {
+      const isDone = t.status === 'done';
+      return `
+        <li class="pm-tl-task pm-tl-task--${esc(t.status)}${t.is_overdue ? ' pm-tl-task--overdue' : ''}" data-tid="${t.id}" data-title="${esc(t.title)}" draggable="true">
+          <i class="fa ${isDone ? 'fa-circle-check' : 'fa-circle'} pm-tl-task-dot" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i>
+          <span class="pm-tl-task-title">${esc(t.title)}</span>
+          <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+          ${t.assigned_name ? `<span class="pm-tl-task-meta"><i class="fa fa-user"></i> ${esc(t.assigned_name)}</span>` : ''}
+          <span class="pm-tl-task-meta${t.is_overdue ? ' pm-tl-task-meta--overdue' : ''}">${t.is_overdue ? '<i class="fa fa-triangle-exclamation"></i>' : '<i class="fa fa-calendar"></i>'} ${esc(t.due_date || 'No due date')}</span>
+          <span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span>
+        </li>`;
+    }).join('') : `<li class="pm-tl-task-empty">${pm.taskFilter ? 'No tasks match this filter.' : 'No tasks — drag a task here.'}</li>`;
+
+    const dateCol = m
+      ? `<span>${esc(m.start_date || m.due_date || '—')}</span>${m.start_date && m.due_date ? `<small>to ${esc(m.due_date)}</small>` : (!m.start_date && m.due_date ? '<small>end date</small>' : '')}`
+      : '<span>Unscheduled</span>';
+    const head = m ? `
+        <span class="pm-ms-num">${idx + 1}</span>
+        <div class="pm-ms-titlewrap">
+          <div class="pm-ms-name">${esc(m.name)}</div>
+          <div class="pm-ms-period"><i class="fa fa-calendar"></i> ${esc(_pmMsPeriod(m))}</div>
+        </div>
+        <span class="pm-ms-state pm-ms-state--${state}">${PM_MS_STATE_LABEL[state]}</span>
+        ${_pmMsActionsHtml(m, idx, { reorder: false })}` : `
+        <span class="pm-ms-num pm-ms-num--none"><i class="fa fa-inbox"></i></span>
+        <div class="pm-ms-titlewrap"><div class="pm-ms-name">No Milestone</div><div class="pm-ms-period">Tasks not assigned to a milestone</div></div>
+        <div class="pm-ms-actions"><button data-ms-act="add" title="Add task"><i class="fa fa-plus"></i></button></div>`;
+    return `
+      <div class="pm-tl-item pm-tl-item--${state}" data-mid="${esc(g.key)}">
+        <div class="pm-tl-date">${dateCol}</div>
+        <div class="pm-tl-rail"><span class="pm-tl-node"><i class="fa ${state === 'completed' ? 'fa-check' : m ? 'fa-flag' : 'fa-inbox'}"></i></span></div>
+        <div class="pm-tl-card">
+          <div class="pm-ms-head pm-tl-card-head">${head}</div>
+          ${m ? `<div class="pm-ms-prog pm-tl-prog" title="${prog.done} of ${prog.total} tasks done">
+            <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${prog.pct}%"></div></div>
+            <span>${prog.done}/${prog.total} done</span>
+          </div>` : ''}
+          <ul class="pm-tl-tasks">${taskHtml}</ul>
+        </div>
+      </div>`;
+  }
+
+  // ── Shared wiring for both views ──
+  function _pmBindTaskViewActions(wrap) {
+    _bindTaskRowActions(wrap, _pmReloadTasks);
+    wrap.querySelectorAll('select[data-ms-tid]').forEach(sel =>
+      sel.addEventListener('change', () => _pmMoveTaskToMilestone(+sel.dataset.msTid, sel.value || null)));
+    wrap.querySelectorAll('[data-assign-tid]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = pm.tasks.find(x => +x.id === +btn.dataset.assignTid);
+      if (t) openPmAssignModal(t);
+    }));
+    wrap.querySelectorAll('[data-mid]').forEach(groupEl => {
+      const key = groupEl.dataset.mid;
+      const m   = pm.milestones.find(x => String(x.id) === key) || null;
+      groupEl.querySelectorAll('[data-ms-act]').forEach(btn => btn.addEventListener('click', e => {
+        e.stopPropagation();
+        _pmMilestoneAction(btn.dataset.msAct, m, key);
+      }));
+      _pmBindTaskDropTarget(groupEl, key);
+      if (m && groupEl.classList.contains('pm-ms-group')) _pmBindMilestoneDrag(groupEl, m);
+    });
+    wrap.querySelectorAll('[data-tid][draggable="true"]').forEach(_pmBindTaskDrag);
+  }
+
+  async function _pmMilestoneAction(act, m, key) {
+    if (act === 'toggle') {
+      if (pm.collapsedMs.has(key)) pm.collapsedMs.delete(key); else pm.collapsedMs.add(key);
+      _pmRenderTaskViews();
+      return;
+    }
+    if (act === 'add')  { openNewTaskModal(pm.detailProjectId, m?.id || null); return; }
+    if (!m) return;
+    if (act === 'edit') { openPmMilestoneModal(m); return; }
+    if (act === 'up' || act === 'down') {
+      const ids = pm.milestones.map(x => x.id);
+      const i = ids.indexOf(m.id);
+      const j = act === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= ids.length) return;
+      [ids[i], ids[j]] = [ids[j], ids[i]];
+      _pmSaveMilestoneOrder(ids);
+      return;
+    }
+    try {
+      let res;
+      if (act === 'delete') {
+        const n = _pmMsProgress(m.id).total;
+        if (!confirm(`Delete milestone "${m.name}"?` + (n ? `\nIts ${n} task(s) will be kept under "No Milestone".` : ''))) return;
+        res = await API.pmMilestoneDelete(m.id);
+      } else if (act === 'complete') {
+        res = await API.pmMilestoneComplete(m.id);
+      } else if (act === 'reopen') {
+        res = await API.pmMilestoneReopen(m.id);
+      } else return;
+      if (res.status >= 400) throw new Error(res.body?.message || 'Action failed');
+      toast({ delete: 'Milestone deleted', complete: 'Milestone completed', reopen: 'Milestone reopened' }[act], 'success');
+      _pmReloadTasks();
+    } catch (e) { toast('Action failed: ' + (e.message || e), 'error'); }
+  }
+
+  async function _pmSaveMilestoneOrder(ids) {
+    const prev = pm.milestones;
+    pm.milestones = ids.map(id => prev.find(m => m.id === id)).filter(Boolean);
+    _pmRenderTaskViews();   // optimistic
+    try {
+      const res = await API.pmMilestoneReorder(pm.detailProjectId, ids);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Reorder failed');
+      pm.milestones = res.body?.data || pm.milestones;
+      _pmRenderTaskViews();
+    } catch (e) {
+      pm.milestones = prev;
+      _pmRenderTaskViews();
+      toast('Reorder failed: ' + (e.message || e), 'error');
+    }
+  }
+
+  async function _pmMoveTaskToMilestone(tid, mid) {
+    const t = pm.tasks.find(x => +x.id === +tid);
+    if (!t) return;
+    const to = mid ? +mid : null;
+    if ((t.milestone_id ? +t.milestone_id : null) === to) return;
+    const prev = { milestone_id: t.milestone_id, milestone_name: t.milestone_name };
+    // Move immediately; revert only if the server rejects the change.
+    t.milestone_id   = to;
+    t.milestone_name = to ? (pm.milestones.find(m => +m.id === to)?.name || null) : null;
+    _pmRenderTaskViews();
+    try {
+      const res = await API.pmTaskMilestone(tid, to);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Move failed');
+      Object.assign(t, res.body?.data || {});
+      pm.detailLoaded.board = false;
+      _pmRenderTaskViews();
+    } catch (e) {
+      Object.assign(t, prev);
+      _pmRenderTaskViews();
+      toast('Move failed: ' + (e.message || e), 'error');
+    }
+  }
+
+  async function _pmAssignTask(tid, ids) {
+    const t = pm.tasks.find(x => +x.id === +tid);
+    if (!t) return;
+    const same = ids.length === (t.assignee_ids || []).length && ids.every(id => (t.assignee_ids || []).includes(id));
+    if (same) return;
+    const prev = { assignees: t.assignees, assignee_ids: t.assignee_ids, assigned_to: t.assigned_to, assigned_name: t.assigned_name };
+    // Show the new assignees immediately; revert only if the server rejects the change.
+    t.assignee_ids = ids;
+    t.assignees    = ids.map(id => pm.members.find(u => +u.id === id)).filter(Boolean).map(u => ({ id: u.id, name: u.name }));
+    _pmRenderTaskViews();
+    try {
+      const res = await API.pmTaskAssign(tid, ids);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Assign failed');
+      Object.assign(t, res.body?.data || {});
+      pm.detailLoaded.board  = false;
+      pm.detailLoaded.mytask = false;
+      toast(ids.length ? `Assigned to ${ids.length} member${ids.length === 1 ? '' : 's'}` : 'Task unassigned', 'success');
+      loadPmMembers();   // refresh per-member task counts
+    } catch (e) {
+      Object.assign(t, prev);
+      toast('Assign failed: ' + (e.message || e), 'error');
+    }
+    _pmRenderTaskViews();
+  }
+
+  // ── Drag-and-drop: tasks between milestones, milestones to reorder ──
+  let _pmDragTaskId = null;
+  let _pmDragMsId   = null;
+
+  function _pmClearDropHints() {
+    document.querySelectorAll('.pm-ms-dragover, .pm-ms-drop-before, .pm-ms-drop-after')
+      .forEach(el => el.classList.remove('pm-ms-dragover', 'pm-ms-drop-before', 'pm-ms-drop-after'));
+  }
+
+  function _pmBindTaskDrag(el) {
+    el.addEventListener('dragstart', e => {
+      // Don't hijack interactions with the milestone select / buttons
+      if (e.target.closest?.('select, button')) { e.preventDefault(); return; }
+      e.stopPropagation();
+      _pmDragTaskId = +el.dataset.tid;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(_pmDragTaskId));
+      requestAnimationFrame(() => el.classList.add('pm-dragging'));
+    });
+    el.addEventListener('dragend', () => {
+      _pmDragTaskId = null;
+      el.classList.remove('pm-dragging');
+      _pmClearDropHints();
+    });
+  }
+
+  function _pmBindTaskDropTarget(el, key) {
+    el.addEventListener('dragover', e => {
+      if (_pmDragTaskId == null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      el.classList.add('pm-ms-dragover');
+    });
+    el.addEventListener('dragleave', e => {
+      if (!el.contains(e.relatedTarget)) el.classList.remove('pm-ms-dragover');
+    });
+    el.addEventListener('drop', e => {
+      if (_pmDragTaskId == null) return;
+      e.preventDefault();
+      const tid = _pmDragTaskId;
+      _pmDragTaskId = null;
+      _pmClearDropHints();
+      _pmMoveTaskToMilestone(tid, key || null);
+    });
+  }
+
+  function _pmBindMilestoneDrag(groupEl, m) {
+    const grip = groupEl.querySelector('.pm-ms-grip');
+    grip?.addEventListener('dragstart', e => {
+      _pmDragMsId = m.id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', 'milestone:' + m.id);
+      e.dataTransfer.setDragImage(groupEl.querySelector('.pm-ms-head'), 16, 16);
+      requestAnimationFrame(() => groupEl.classList.add('pm-dragging'));
+    });
+    grip?.addEventListener('dragend', () => {
+      _pmDragMsId = null;
+      groupEl.classList.remove('pm-dragging');
+      _pmClearDropHints();
+    });
+    groupEl.addEventListener('dragover', e => {
+      if (_pmDragMsId == null || _pmDragMsId === m.id) return;
+      e.preventDefault();
+      const r = groupEl.getBoundingClientRect();
+      const before = e.clientY < r.top + r.height / 2;
+      groupEl.classList.toggle('pm-ms-drop-before', before);
+      groupEl.classList.toggle('pm-ms-drop-after', !before);
+    });
+    groupEl.addEventListener('dragleave', e => {
+      if (!groupEl.contains(e.relatedTarget)) groupEl.classList.remove('pm-ms-drop-before', 'pm-ms-drop-after');
+    });
+    groupEl.addEventListener('drop', e => {
+      if (_pmDragMsId == null || _pmDragMsId === m.id) return;
+      e.preventDefault();
+      const before  = groupEl.classList.contains('pm-ms-drop-before');
+      const dragged = _pmDragMsId;
+      _pmDragMsId = null;
+      _pmClearDropHints();
+      const ids = pm.milestones.map(x => x.id).filter(id => id !== dragged);
+      ids.splice(ids.indexOf(m.id) + (before ? 0 : 1), 0, dragged);
+      _pmSaveMilestoneOrder(ids);
+    });
+  }
+
+  // ── Milestone modal (add / edit) ──
+  function openPmMilestoneModal(existing = null, projectId = pm.detailProjectId) {
+    if (!projectId) return;
+    const isEdit = !!existing;
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal" style="max-width:460px">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-flag" style="color:var(--accent)"></i>
+          <span class="pm-modal-title">${isEdit ? 'Edit Milestone' : 'New Milestone'}</span>
+          <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-nm-alert"></div>
+          <div><div class="pm-field-label">Milestone Name *</div><input id="pm-nm-name" class="pm-field-input" maxlength="150" placeholder="e.g. Phase 1 — Design" value="${isEdit ? esc(existing.name) : ''}"></div>
+          <div class="pm-field-row">
+            <div><div class="pm-field-label">Start Date</div><input id="pm-nm-start" type="date" class="pm-field-input" value="${esc(existing?.start_date || '')}"></div>
+            <div><div class="pm-field-label">End Date</div><input id="pm-nm-due" type="date" class="pm-field-input" value="${esc(existing?.due_date || '')}"></div>
+          </div>
+          <div class="pm-field-row">
+            <div><div class="pm-field-label">Sort Number</div><input id="pm-nm-sort" type="number" min="0" max="9999" class="pm-field-input" placeholder="Auto (${pm.milestones.length + 1})" value="${isEdit ? esc(existing.sort_order) : ''}"></div>
+            <div style="font-size:11px;color:var(--text-muted);align-self:end;padding-bottom:8px">Lower numbers come first. You can also drag milestones to reorder.</div>
+          </div>
+          <div><div class="pm-field-label">Description</div><textarea id="pm-nm-desc" class="pm-field-textarea" maxlength="2000" placeholder="Optional…">${isEdit ? esc(existing.description || '') : ''}</textarea></div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" data-close>Cancel</button>
+          <button class="pm-btn-primary" id="pm-nm-save"><i class="fa fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Add Milestone'}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    const save = async () => {
+      const alertEl = $('#pm-nm-alert');
+      const fail = msg => { alertEl.textContent = msg; alertEl.style.display = 'block'; };
+      const name  = $('#pm-nm-name')?.value.trim();
+      const start = $('#pm-nm-start')?.value || null;
+      const due   = $('#pm-nm-due')?.value   || null;
+      const sortRaw = $('#pm-nm-sort')?.value.trim();
+      if (!name) return fail('Milestone name is required.');
+      if (start && due && due < start) return fail('End date must be on or after the start date.');
+      if (sortRaw !== '' && (!/^\d+$/.test(sortRaw) || +sortRaw > 9999)) return fail('Sort number must be between 0 and 9999.');
+      alertEl.style.display = 'none';
+      $('#pm-nm-save').disabled = true;
+      const body = {
+        name,
+        start_date:  start,
+        due_date:    due,
+        sort_order:  sortRaw === '' ? null : +sortRaw,
+        description: $('#pm-nm-desc')?.value.trim() || null,
+      };
+      try {
+        const res = isEdit
+          ? await API.pmMilestoneUpdate(existing.id, body)
+          : await API.pmMilestoneCreate(projectId, body);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
+        overlay.remove();
+        toast(isEdit ? 'Milestone updated' : 'Milestone added', 'success');
+        _pmReloadTasks();
+      } catch (e) {
+        fail(String(e.message || e));
+        $('#pm-nm-save').disabled = false;
+      }
+    };
+    $('#pm-nm-save').addEventListener('click', save);
+    $('#pm-nm-name').addEventListener('keydown', e => { if (e.key === 'Enter') save(); });
+    $('#pm-nm-name').focus();
   }
 
   // ── My Tasks (assigned to me, scoped to the open project) ───────────────────
@@ -49588,8 +51073,8 @@ async function submitDsCreate() {
       btn.addEventListener('click', async function (ev) {
         ev.stopPropagation();
         const tid = +this.dataset.deleteTid;
-        const row = this.closest('tr');
-        const title = row?.querySelector('td:nth-child(2)')?.textContent || 'this task';
+        const row = this.closest('[data-tid]');
+        const title = row?.dataset.title || row?.querySelector('td:nth-child(2)')?.textContent || 'this task';
         if (!confirm('Delete task "' + title + '"?')) return;
         try { await API.pmTaskDelete(tid); reload(); } catch (e) { toast('Delete failed: ' + e, 'error'); }
       });
@@ -49820,7 +51305,7 @@ async function submitDsCreate() {
   }
 
   // ── New Task Modal ──────────────────────────────────────────────────────────
-  function openNewTaskModal(preProjectId = null) {
+  function openNewTaskModal(preProjectId = null, preMilestoneId = null) {
     if (!pm.projects.length) { toast('Create a project first.', 'info'); return; }
     const overlay = document.createElement('div');
     overlay.className = 'pm-modal-overlay';
@@ -49842,14 +51327,19 @@ async function submitDsCreate() {
             <select id="pm-nt-project" class="pm-field-select">${projectOpts}</select>
           </div>
           <div><div class="pm-field-label">Task Title *</div><input id="pm-nt-title" class="pm-field-input" maxlength="200" placeholder="What needs to be done?"></div>
+          <div>
+            <div class="pm-field-label">Milestone</div>
+            <select id="pm-nt-milestone" class="pm-field-select"><option value="">No milestone</option></select>
+          </div>
+          <div>
+            <div class="pm-field-label">Assign To <span style="font-weight:400;color:var(--text-muted)">(project team — pick one or more)</span></div>
+            <div class="pm-assign-list pm-assign-list--compact" id="pm-nt-assignees"><div class="pm-assign-list-empty">Loading…</div></div>
+          </div>
           <div class="pm-field-row">
             <div>
               <div class="pm-field-label">Status</div>
               <select id="pm-nt-status" class="pm-field-select">
-                <option value="todo">To Do</option>
-                <option value="in_progress">In Progress</option>
-                <option value="review">Review</option>
-                <option value="done">Done</option>
+                ${PM_BUILTIN_STATUSES.map(s => `<option value="${s.status}">${s.label}</option>`).join('')}
               </select>
             </div>
             <div>
@@ -49877,6 +51367,55 @@ async function submitDsCreate() {
     $('#pm-nt-close').addEventListener('click',  () => overlay.remove());
     $('#pm-nt-cancel').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+    // Status options depend on the selected project's custom statuses.
+    const syncStatusOpts = async () => {
+      const pid = $('#pm-nt-project')?.value;
+      if (!pid) return;
+      try {
+        const res = await API.pmStatuses(pid);
+        const list = res.status === 200 ? (res.body?.data || []) : PM_BUILTIN_STATUSES;
+        const sel = $('#pm-nt-status');
+        if (!sel || $('#pm-nt-project')?.value !== pid) return;
+        sel.innerHTML = list.map(s => `<option value="${esc(s.status)}">${esc(s.label)}</option>`).join('');
+      } catch (_) { /* keep built-in options */ }
+    };
+    // Milestone options also depend on the selected project.
+    let msPreselect = preMilestoneId;
+    const syncMilestoneOpts = async () => {
+      const pid = $('#pm-nt-project')?.value;
+      const sel = $('#pm-nt-milestone');
+      if (!pid || !sel) return;
+      sel.innerHTML = '<option value="">No milestone</option>';
+      try {
+        const res = await API.pmMilestones(pid);
+        if (res.status !== 200 || $('#pm-nt-project')?.value !== pid) return;
+        sel.innerHTML = '<option value="">No milestone</option>' + (res.body?.data || []).map(m =>
+          `<option value="${m.id}"${+m.id === +msPreselect ? ' selected' : ''}>${esc(m.name)}</option>`).join('');
+      } catch (_) { /* task can still be created without a milestone */ }
+      msPreselect = null;   // only preselect for the project the modal was opened from
+    };
+    // Assignee options are the selected project's team members only.
+    const syncAssigneeOpts = async () => {
+      const pid  = $('#pm-nt-project')?.value;
+      const list = $('#pm-nt-assignees');
+      if (!pid || !list) return;
+      let members = +pid === +pm.detailProjectId && pm.members.length ? pm.members : null;
+      if (!members) {
+        list.innerHTML = '<div class="pm-assign-list-empty">Loading…</div>';
+        try {
+          const res = await API.pmMembers(pid);
+          if ($('#pm-nt-project')?.value !== pid) return;
+          members = res.status === 200 ? (res.body?.data || []) : [];
+        } catch (_) { members = []; /* task can still be created unassigned */ }
+      }
+      list.innerHTML = _pmAssigneeChecks([], members);
+    };
+    $('#pm-nt-project').addEventListener('change', () => { syncStatusOpts(); syncMilestoneOpts(); syncAssigneeOpts(); });
+    syncStatusOpts();
+    syncMilestoneOpts();
+    syncAssigneeOpts();
+
     $('#pm-nt-save').addEventListener('click', async () => {
       const title     = $('#pm-nt-title')?.value.trim();
       const projectId = $('#pm-nt-project')?.value;
@@ -49888,7 +51427,9 @@ async function submitDsCreate() {
       try {
         const res = await API.pmTaskCreate(projectId, {
           title,
-          status:           $('#pm-nt-status')?.value   || 'todo',
+          milestone_id:     $('#pm-nt-milestone')?.value || null,
+          assignee_ids:     [...overlay.querySelectorAll('#pm-nt-assignees input:checked')].map(i => +i.value),
+          status:          $('#pm-nt-status')?.value   || 'todo',
           priority:         $('#pm-nt-priority')?.value || 'normal',
           due_date:         $('#pm-nt-due')?.value   || null,
           estimated_hours:  $('#pm-nt-hours')?.value || null,
@@ -49897,9 +51438,10 @@ async function submitDsCreate() {
         if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
         overlay.remove();
         if (pm.detailProjectId) {
-          if (pm.detailTab === 'board')       loadPmBoard();
-          else if (pm.detailTab === 'task')   loadPmTasks();
+          if (pm.detailTab === 'board')       { pm.detailLoaded.task = false; loadPmBoard(); }
+          else if (pm.detailTab === 'task')   _pmReloadTasks();
           else if (pm.detailTab === 'mytask') loadPmMyTasksForProject();
+          loadPmMembers();
           ensurePmProjects(true).then(() => {
             const fresh = pm.projects.find(x => +x.id === +pm.detailProjectId);
             if (fresh) { pm.detailProject = fresh; _pmRenderDashboardPane(fresh); }
@@ -49920,7 +51462,9 @@ async function submitDsCreate() {
   $('#rb-pm-new-project') ?.addEventListener('click', () => { activateTab('projects'); openNewProjectModal(); });
   $('#rb-pm-new-task')    ?.addEventListener('click', () => { activateTab('projects'); openNewTaskModal(pm.detailProjectId); });
   $('#rb-pm-refresh')     ?.addEventListener('click', () => {
-    if (pm.detailProjectId) {
+    if (pm.currentView === 'mine') {
+      window.switchMpView?.(window._mp?.view || 'overview', { refresh: true });
+    } else if (pm.detailProjectId) {
       ensurePmProjects(true).then(() => {
         const fresh = pm.projects.find(x => +x.id === +pm.detailProjectId);
         if (fresh) {
@@ -49929,6 +51473,7 @@ async function submitDsCreate() {
           _pmRenderDashboardPane(fresh);
           _pmRenderAssignmentPane(fresh);
         }
+        loadPmMembers();
         if (pm.detailTab === 'board')       loadPmBoard();
         else if (pm.detailTab === 'task')   loadPmTasks();
         else if (pm.detailTab === 'mytask') loadPmMyTasksForProject();
@@ -49977,9 +51522,19 @@ async function submitDsCreate() {
       $$('#pm-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
       this.classList.add('active');
       pm.taskFilter = this.dataset.pmtaskfilter;
-      loadPmTasks();
+      _pmRenderTaskViews();   // all tasks are already loaded; filter client-side
     });
   });
+
+  // ── Task sub-views (detail: Task tab → By Milestone / Timeline) ─────────────
+  $$('#pm-task-subtabs [data-pmtaskview]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pm.taskView = btn.dataset.pmtaskview;
+      _pmRenderTaskViews();
+    });
+  });
+  $('#pm-milestone-new-btn')?.addEventListener('click', () => openPmMilestoneModal());
+  $('#pm-timeline-full-btn')?.addEventListener('click', openPmTimelineModal);
 
   // ── My task filter chips (detail: My Task tab) ──────────────────────────────
   $$('#pm-mytask-filter-chips [data-pmmyfilter]').forEach(chip => {
@@ -49993,6 +51548,7 @@ async function submitDsCreate() {
 
   // ── Board new task button ───────────────────────────────────────────────────
   $('#pm-board-new-task-btn')?.addEventListener('click', () => openNewTaskModal(pm.detailProjectId));
+  $('#pm-board-add-status-btn')?.addEventListener('click', () => openPmStatusModal());
 
   // ── Tasks new button ────────────────────────────────────────────────────────
   $('#pm-tasks-new-btn')?.addEventListener('click', () => openNewTaskModal(pm.detailProjectId));
@@ -50018,6 +51574,587 @@ async function submitDsCreate() {
 
   // ── Expose for debug ────────────────────────────────────────────────────────
   window._pm = pm;
+}());
+
+// ── My Projects (Assigned Project Access) ────────────────────────────────────
+// Tasks assigned to the signed-in user across every project they are on. The only
+// write is a status change (kanban drag & drop, status select, complete / reopen),
+// which goes through /pm/my-work and is checked server-side against the assignees.
+(function () {
+  const esc = escHtml;
+  const PRIORITY_RANK = { high: 0, normal: 1, low: 2 };
+  const BUILTIN_COLS  = [
+    { status: 'todo',        label: 'To Do',       sort_order: 1,  is_custom: false },
+    { status: 'in_progress', label: 'In Progress', sort_order: 2,  is_custom: false },
+    { status: 'review',      label: 'Review',      sort_order: 3,  is_custom: false },
+    { status: 'done',        label: 'Done',        sort_order: 99, is_custom: false },
+  ];
+
+  const mp = {
+    view:          'overview',
+    loaded:        false,
+    tasks:         [],
+    projects:      [],      // each carries .statuses (built-in + custom board columns)
+    taskFilter:    'open',
+    taskProject:   '',
+    taskSearch:    '',
+    sortKey:       'due_date',
+    sortDir:       1,
+    boardProject:  '',
+    boardPriority: '',
+    boardDue:      '',
+  };
+
+  // Local YYYY-MM-DD — toISOString() is UTC and would shift "today" near midnight.
+  const _ymd    = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const _today  = () => _ymd(new Date());
+  const _inDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return _ymd(d); };
+
+  const _isDone     = t => t.status === 'done';
+  const _isOverdue  = t => !_isDone(t) && !!t.due_date && t.due_date < _today();
+  const _isDueToday = t => !_isDone(t) && t.due_date === _today();
+  const _isThisWeek = t => !_isDone(t) && !!t.due_date && t.due_date > _today() && t.due_date <= _inDays(7);
+  const _byDue      = (a, b) => (a.due_date || '9999').localeCompare(b.due_date || '9999');
+
+  const _project     = id => mp.projects.find(p => +p.id === +id);
+  const _statusesFor = projectId => _project(projectId)?.statuses || BUILTIN_COLS;
+  const _task        = id => mp.tasks.find(t => +t.id === +id);
+
+  function _statusMeta(t) {
+    return _statusesFor(t.project_id).find(s => s.status === t.status)
+      || { status: t.status, label: t.status.replace(/_/g, ' '), sort_order: 50, is_custom: true, color: null };
+  }
+
+  function _statusBadge(t) {
+    const s = _statusMeta(t);
+    if (!s.is_custom) return `<span class="pm-status pm-status--${esc(t.status)}">${esc(s.label)}</span>`;
+    const c = esc(s.color || '#0ea5e9');
+    return `<span class="pm-status" style="background:color-mix(in srgb, ${c} 15%, transparent);color:${c}">${esc(s.label)}</span>`;
+  }
+
+  function _dueHtml(t) {
+    if (!t.due_date) return '<span style="color:var(--text-muted)">—</span>';
+    if (_isOverdue(t))  return `<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> ${esc(t.due_date)}</span>`;
+    if (_isDueToday(t)) return `<span class="mp-due mp-due--today"><i class="fa fa-calendar-day"></i> Today</span>`;
+    return `<span class="mp-due">${esc(t.due_date)}</span>`;
+  }
+
+  // ── Data ────────────────────────────────────────────────────────────────────
+  // Shares one in-flight request (activateTab + a ribbon button can both ask at once).
+  let _mpLoading = null;
+  function loadMyWork() {
+    return _mpLoading ||= _fetchMyWork().finally(() => { _mpLoading = null; });
+  }
+
+  async function _fetchMyWork() {
+    const res = await API.pmMyWork();
+    if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
+    mp.tasks    = res.body?.data?.tasks    || [];
+    mp.projects = res.body?.data?.projects || [];
+    mp.loaded   = true;
+    _fillProjectSelects();
+  }
+
+  function _fillProjectSelects() {
+    const opts = '<option value="">All projects</option>' +
+      mp.projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    [['#mp-task-project', 'taskProject'], ['#mp-board-project', 'boardProject']].forEach(([sel, key]) => {
+      const el = $(sel);
+      if (!el) return;
+      if (mp[key] && !_project(mp[key])) mp[key] = '';   // project no longer visible
+      el.innerHTML = opts;
+      el.value = mp[key];
+    });
+  }
+
+  // Changes a task's status and patches the local copy with the server's response.
+  async function _setStatus(taskId, status) {
+    const res = await API.pmMyWorkTaskStatus(taskId, status);
+    if (res.status >= 400) throw new Error(res.body?.message || 'Update failed');
+    const i = mp.tasks.findIndex(t => +t.id === +taskId);
+    if (i !== -1 && res.body?.data) mp.tasks[i] = res.body.data;
+  }
+
+  // Complete / reopen check icons ([data-mp-toggle]) inside root.
+  function _bindToggles(root) {
+    root.querySelectorAll('[data-mp-toggle]').forEach(el => el.addEventListener('click', async e => {
+      e.stopPropagation();
+      const t = _task(el.dataset.mpToggle);
+      if (!t) return;
+      const wasDone = _isDone(t);
+      try {
+        await _setStatus(t.id, wasDone ? 'todo' : 'done');
+        toast(wasDone ? 'Task reopened' : 'Task completed', 'success');
+      } catch (err) { toast(String(err.message || err), 'error'); }
+      _renderCurrent();
+    }));
+  }
+
+  // ── View switcher ───────────────────────────────────────────────────────────
+  // Inner tabs of Projects → My Projects (Overview / My Tasks / Kanban Board).
+  async function switchMpView(view, { refresh = false } = {}) {
+    mp.view = view;
+    $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
+    ['overview', 'tasks', 'board'].forEach(v => {
+      const el = $(`#mp-${v}-view`);
+      if (el) el.style.display = v === view ? 'flex' : 'none';
+    });
+    if (refresh || !mp.loaded) {
+      try { await loadMyWork(); }
+      catch (e) { toast('Failed to load your projects: ' + (e.message || e), 'error'); }
+    }
+    _renderCurrent();
+  }
+  window.switchMpView = switchMpView;
+
+  function _renderCurrent() {
+    if (mp.view === 'overview')   renderMpOverview();
+    else if (mp.view === 'tasks') renderMpTasks();
+    else if (mp.view === 'board') renderMpBoard();
+  }
+
+  // ── Overview: stats, overdue / today / upcoming, my projects ───────────────
+  function renderMpOverview() {
+    const open     = mp.tasks.filter(t => !_isDone(t));
+    const overdue  = open.filter(_isOverdue).sort(_byDue);
+    const today    = open.filter(_isDueToday);
+    const upcoming = open.filter(_isThisWeek).sort(_byDue);
+
+    const heroEl = $('#mp-ov-hero');
+    if (heroEl) {
+      const hr = new Date().getHours();
+      const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+      const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+      const parts = [];
+      if (overdue.length) parts.push(`<b class="mp-hero-hl mp-hero-hl--overdue">${overdue.length} overdue</b>`);
+      if (today.length)   parts.push(`<b class="mp-hero-hl mp-hero-hl--today">${today.length} due today</b>`);
+      const summary = !open.length
+        ? 'You\'re all caught up — no open tasks. 🎉'
+        : parts.length
+          ? `You have ${parts.join(' and ')} out of ${open.length} open task${open.length === 1 ? '' : 's'}.`
+          : `You have ${open.length} open task${open.length === 1 ? '' : 's'} and nothing urgent. Nice work!`;
+      heroEl.innerHTML = `
+        <div class="mp-hero-text">
+          <div class="mp-hero-date">${esc(dateStr)}</div>
+          <div class="mp-hero-title">${greet} 👋</div>
+          <div class="mp-hero-sub">${summary}</div>
+        </div>`;
+    }
+
+    const tiles = [
+      { cls: 'total',     icon: 'fa-list-check',           label: 'Open Tasks', value: open.length,                   filter: 'open' },
+      { cls: 'on_hold',   icon: 'fa-calendar-day',         label: 'Due Today',  value: today.length,                  filter: 'today' },
+      { cls: 'overdue',   icon: 'fa-triangle-exclamation', label: 'Overdue',    value: overdue.length,                filter: 'overdue' },
+      { cls: 'active',    icon: 'fa-circle-check',         label: 'Completed',  value: mp.tasks.length - open.length, filter: 'done' },
+    ];
+    const statsEl = $('#mp-ov-stats');
+    if (statsEl) {
+      statsEl.innerHTML = tiles.map(s => `
+        <div class="pm-stat-tile pm-stat-tile--${s.cls} mp-stat-link" data-mp-goto="${s.filter}" title="View ${esc(s.label.toLowerCase())}">
+          <div class="pm-stat-tile-icon"><i class="fa ${s.icon}"></i></div>
+          <div><div class="pm-stat-tile-value">${s.value}</div><div class="pm-stat-tile-label">${s.label}</div></div>
+          <i class="fa fa-chevron-right mp-stat-arrow"></i>
+        </div>`).join('');
+      statsEl.querySelectorAll('[data-mp-goto]').forEach(el => el.addEventListener('click', () => {
+        $(`#mp-task-filter-chips [data-mptaskfilter="${el.dataset.mpGoto}"]`)?.click();
+        switchMpView('tasks');
+      }));
+    }
+
+    const fill = (key, list, emptyMsg) => {
+      const body = $(`#mp-ov-${key}`);
+      const cnt  = $(`#mp-ov-${key}-count`);
+      if (cnt) cnt.textContent = list.length;
+      if (!body) return;
+      body.innerHTML = list.length ? list.map(_ovItem).join('') : `
+        <div class="mp-ov-empty"><i class="fa fa-mug-hot"></i><span>${emptyMsg}</span></div>`;
+      _bindToggles(body);
+    };
+    fill('overdue',  overdue,  'Nothing overdue.');
+    fill('today',    today,    'Nothing due today.');
+    fill('upcoming', upcoming, 'Nothing due in the next 7 days.');
+
+    _renderOverviewProjects();
+  }
+
+  function _ovItem(t) {
+    return `
+      <div class="mp-ov-item" data-tid="${t.id}">
+        <i class="fa fa-circle mp-check" data-mp-toggle="${t.id}" title="Mark as done"></i>
+        <div class="mp-ov-item-body">
+          <div class="mp-ov-item-title">${esc(t.title)}</div>
+          <div class="mp-ov-item-meta">
+            <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+            <span><i class="fa fa-diagram-project"></i> ${esc(t.project_name || '')}</span>
+            ${t.due_date ? `<span>${_dueHtml(t)}</span>` : ''}
+          </div>
+        </div>
+        ${_statusBadge(t)}
+      </div>`;
+  }
+
+  function _renderOverviewProjects() {
+    const grid  = $('#mp-ov-projects');
+    const empty = $('#mp-ov-projects-empty');
+    if (!grid) return;
+    grid.innerHTML = '';
+    if (!mp.projects.length) { grid.style.display = 'none'; if (empty) empty.style.display = 'block'; return; }
+    grid.style.display = '';
+    if (empty) empty.style.display = 'none';
+
+    mp.projects.forEach(p => {
+      const mine  = mp.tasks.filter(t => +t.project_id === +p.id);
+      const done  = mine.filter(_isDone).length;
+      const pct   = mine.length ? Math.round((done / mine.length) * 100) : 0;
+      const color = p.color || 'var(--accent)';
+      const card  = document.createElement('div');
+      card.className = 'pm-project-card mp-proj-card';
+      card.style.setProperty('--mp-proj-color', color);
+      card.title = 'Open this project on the kanban board';
+      card.innerHTML = `
+        <div class="mp-proj-head">
+          <div class="mp-proj-avatar">${esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
+          <div class="mp-proj-title">
+            <span class="pm-project-card-name" title="${esc(p.name)}">${esc(p.name)}</span>
+            <div class="pm-project-card-meta">
+              <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
+              ${p.due_date ? `<span class="pm-task-card-due"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(p.due_date)}</span>` : ''}
+            </div>
+          </div>
+          <span class="pm-status pm-status--${esc(p.status)}">${esc(p.status.replace('_', ' '))}</span>
+        </div>
+        <div class="mp-proj-progress-row">
+          <span>Progress</span><span class="pm-progress-pct">${pct}%</span>
+        </div>
+        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
+        <div class="mp-proj-foot">
+          <span class="pm-task-count"><i class="fa fa-user-check" style="margin-right:5px"></i>${mine.length} my task${mine.length === 1 ? '' : 's'} · ${done} done</span>
+          <span class="mp-proj-open">Open <i class="fa fa-arrow-right"></i></span>
+        </div>`;
+      card.addEventListener('click', () => {
+        mp.boardProject = String(p.id);
+        const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
+        switchMpView('board');
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  // ── My Tasks: filterable, sortable table ────────────────────────────────────
+  function _sortValue(t, key) {
+    if (key === 'priority') return PRIORITY_RANK[t.priority] ?? 9;
+    if (key === 'due_date') return t.due_date || '9999-99-99';   // no date sorts last
+    if (key === 'status')   return _statusMeta(t).sort_order ?? 50;
+    return String(t[key] || '').toLowerCase();
+  }
+
+  function renderMpTasks() {
+    const tbody = $('#mp-tasks-body');
+    if (!tbody) return;
+    const q = mp.taskSearch.trim().toLowerCase();
+    const filterFn = { all: () => true, open: t => !_isDone(t), today: _isDueToday, overdue: _isOverdue, done: _isDone }[mp.taskFilter] || (() => true);
+
+    const list = mp.tasks.filter(t => {
+      if (!filterFn(t)) return false;
+      if (mp.taskProject && +t.project_id !== +mp.taskProject) return false;
+      if (q && !`${t.title} ${t.project_name || ''} ${t.milestone_name || ''}`.toLowerCase().includes(q)) return false;
+      return true;
+    }).sort((a, b) => {
+      const va = _sortValue(a, mp.sortKey), vb = _sortValue(b, mp.sortKey);
+      return (va < vb ? -1 : va > vb ? 1 : 0) * mp.sortDir || _byDue(a, b);
+    });
+
+    $$('#mp-tasks-table th[data-mpsort]').forEach(th => {
+      th.classList.toggle('mp-sort--asc',  th.dataset.mpsort === mp.sortKey && mp.sortDir === 1);
+      th.classList.toggle('mp-sort--desc', th.dataset.mpsort === mp.sortKey && mp.sortDir === -1);
+    });
+
+    if (!list.length) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">${mp.tasks.length ? 'No tasks match your filters.' : 'No tasks are assigned to you yet.'}</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = list.map(t => {
+      const done = _isDone(t);
+      const opts = _statusesFor(t.project_id)
+        .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+      return `
+        <tr data-tid="${t.id}">
+          <td><i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i></td>
+          <td>
+            <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}</div>
+            ${t.milestone_name ? `<div style="font-size:10px;color:var(--text-muted)"><i class="fa fa-flag"></i> ${esc(t.milestone_name)}</div>` : ''}
+          </td>
+          <td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>
+          <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
+          <td style="font-size:11px">${_dueHtml(t)}</td>
+          <td><select class="mp-status-select" data-mp-status="${t.id}">${opts}</select></td>
+        </tr>`;
+    }).join('');
+
+    _bindToggles(tbody);
+    tbody.querySelectorAll('[data-mp-status]').forEach(sel => sel.addEventListener('change', async () => {
+      try {
+        await _setStatus(sel.dataset.mpStatus, sel.value);
+        toast('Status updated', 'success');
+      } catch (err) { toast(String(err.message || err), 'error'); }
+      renderMpTasks();
+    }));
+  }
+
+  // ── Kanban board ────────────────────────────────────────────────────────────
+  // One project selected → exactly its columns. All projects → the built-in columns
+  // plus every custom status (merged by key) of the projects that hold my tasks. A card
+  // can only be dropped on a column that exists in its own project.
+  function _boardColumns() {
+    if (mp.boardProject) return _statusesFor(mp.boardProject);
+    const byKey = new Map(BUILTIN_COLS.map(c => [c.status, c]));
+    const withTasks = new Set(mp.tasks.map(t => +t.project_id));
+    mp.projects.filter(p => withTasks.has(+p.id)).forEach(p => {
+      (p.statuses || []).forEach(s => {
+        if (!s.is_custom) return;
+        // Remember which projects own a custom column — only their cards can move into it.
+        const col = byKey.get(s.status) || { ...s, projectNames: [] };
+        col.projectNames.push(p.name);
+        byKey.set(s.status, col);
+      });
+    });
+    return [...byKey.values()].sort((a, b) => a.sort_order - b.sort_order || (a.is_custom - b.is_custom));
+  }
+
+  function _boardTasks() {
+    return mp.tasks.filter(t => {
+      if (mp.boardProject && +t.project_id !== +mp.boardProject) return false;
+      if (mp.boardPriority && t.priority !== mp.boardPriority) return false;
+      if (mp.boardDue === 'overdue' && !_isOverdue(t))  return false;
+      if (mp.boardDue === 'today'   && !_isDueToday(t)) return false;
+      if (mp.boardDue === 'week'    && !(_isDueToday(t) || _isThisWeek(t))) return false;
+      if (mp.boardDue === 'none'    && t.due_date)      return false;
+      return true;
+    });
+  }
+
+  let _mpDragTask = null;
+
+  function renderMpBoard() {
+    const wrap = $('#mp-board-columns');
+    if (!wrap) return;
+    const tasks = _boardTasks();
+    wrap.innerHTML = '';
+    _boardColumns().forEach(col => {
+      const colTasks = tasks.filter(t => t.status === col.status);
+      const colEl = document.createElement('div');
+      colEl.className = 'pm-kanban-col';
+      colEl.dataset.col = col.status;
+      const dot = col.is_custom
+        ? `<span class="pm-col-dot" style="background:${esc(col.color || '#0ea5e9')}"></span>`
+        : `<span class="pm-col-dot pm-col-dot--${col.status.replace(/_/g, '-')}"></span>`;
+      colEl.innerHTML = `
+        <div class="pm-kanban-col-head"${col.projectNames ? ` title="Only tasks of: ${esc(col.projectNames.join(', '))}"` : ''}>${dot}${esc(col.label)}${col.projectNames ? `<span style="font-size:10px;font-weight:400;color:var(--text-muted);margin-left:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(col.projectNames.join(', '))}</span>` : ''}<span class="pm-col-count">${colTasks.length}</span></div>
+        <div class="pm-kanban-cards">${colTasks.length ? '' : '<div class="pm-kanban-empty" style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>'}</div>`;
+      const cardsEl = colEl.querySelector('.pm-kanban-cards');
+      colTasks.forEach(t => cardsEl.appendChild(_boardCard(t)));
+      _bindBoardDrop(colEl, col);
+      wrap.appendChild(colEl);
+    });
+  }
+
+  function _boardCard(t) {
+    const card = document.createElement('div');
+    card.className = 'pm-task-card';
+    card.dataset.tid = t.id;
+    card.draggable = true;
+    const p = _project(t.project_id);
+    const moveOpts = _statusesFor(t.project_id).filter(s => s.status !== t.status)
+      .map(s => `<option value="${esc(s.status)}">${esc(s.label)}</option>`).join('');
+    card.innerHTML = `
+      <div class="pm-task-card-title">${esc(t.title)}</div>
+      <div class="pm-task-card-meta">
+        <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+        ${t.due_date ? `<span class="pm-task-card-due">${_dueHtml(t)}</span>` : ''}
+      </div>
+      <div class="pm-task-card-meta">
+        ${!mp.boardProject ? `<span class="pm-task-card-assign">${p?.color ? `<span class="pm-col-dot" style="display:inline-block;background:${esc(p.color)};margin-right:3px"></span>` : '<i class="fa fa-diagram-project" style="margin-right:2px"></i>'}${esc(t.project_name || '')}</span>` : ''}
+        ${t.milestone_name ? `<span class="pm-task-card-assign"><i class="fa fa-flag" style="margin-right:2px"></i>${esc(t.milestone_name)}</span>` : ''}
+      </div>
+      <div class="pm-task-card-actions">
+        <select class="pm-task-card-move" title="Move to…"><option value="">Move…</option>${moveOpts}</select>
+      </div>`;
+
+    card.addEventListener('dragstart', e => {
+      if (e.target.closest?.('select, button')) { e.preventDefault(); return; }
+      _mpDragTask = t;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(t.id));
+      // Grey out the columns this task's project doesn't have
+      const allowed = new Set(_statusesFor(t.project_id).map(s => s.status));
+      $$('#mp-board-columns .pm-kanban-col').forEach(c => c.classList.toggle('mp-col--blocked', !allowed.has(c.dataset.col)));
+      requestAnimationFrame(() => card.classList.add('pm-task-card--dragging'));
+    });
+    card.addEventListener('dragend', () => {
+      _mpDragTask = null;
+      card.classList.remove('pm-task-card--dragging');
+      $$('#mp-board-columns .pm-kanban-col').forEach(c => c.classList.remove('mp-col--blocked', 'pm-kanban-col--dragover'));
+    });
+    card.querySelector('select').addEventListener('change', function () {
+      if (this.value) _moveTask(t, this.value);
+    });
+    return card;
+  }
+
+  function _bindBoardDrop(colEl, col) {
+    colEl.addEventListener('dragover', e => {
+      if (!_mpDragTask || colEl.classList.contains('mp-col--blocked')) return;   // no preventDefault → "not allowed" cursor
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      colEl.classList.add('pm-kanban-col--dragover');
+    });
+    colEl.addEventListener('dragleave', e => {
+      if (!colEl.contains(e.relatedTarget)) colEl.classList.remove('pm-kanban-col--dragover');
+    });
+    colEl.addEventListener('drop', e => {
+      e.preventDefault();
+      colEl.classList.remove('pm-kanban-col--dragover');
+      const t = _mpDragTask;
+      _mpDragTask = null;
+      if (t && t.status !== col.status) _moveTask(t, col.status);
+    });
+  }
+
+  // Optimistic move: update locally and re-render, then roll back if the server refuses.
+  async function _moveTask(t, toStatus) {
+    if (!_statusesFor(t.project_id).some(s => s.status === toStatus)) {
+      toast(`"${t.project_name}" has no such status column.`, 'error');
+      return;
+    }
+    const fromStatus = t.status;
+    t.status = toStatus;
+    renderMpBoard();
+    try {
+      await _setStatus(t.id, toStatus);
+    } catch (err) {
+      t.status = fromStatus;
+      toast('Move failed: ' + (err.message || err), 'error');
+    }
+    renderMpBoard();
+  }
+
+  // ── New Task (assigned to me) ───────────────────────────────────────────────
+  // Only projects whose team I am on — the server rejects the rest.
+  const _memberProjects = () => mp.projects.filter(p => p.is_member);
+
+  function _fillTaskStatusSelect(projectId) {
+    const sel = $('#mp-tf-status');
+    if (sel) sel.innerHTML = _statusesFor(projectId).map(s => `<option value="${esc(s.status)}">${esc(s.label)}</option>`).join('');
+  }
+
+  async function openMpTaskModal() {
+    if (!mp.loaded) {
+      try { await loadMyWork(); }
+      catch (e) { toast('Failed to load your projects: ' + (e.message || e), 'error'); return; }
+    }
+    const projects = _memberProjects();
+    if (!projects.length) { toast('You are not on any project team yet — ask a manager to add you.', 'error'); return; }
+
+    const alertEl = $('#mp-task-modal-alert');
+    if (alertEl) { alertEl.textContent = ''; alertEl.style.display = 'none'; }
+
+    const projSel = $('#mp-tf-project');
+    projSel.innerHTML = projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    // Preselect the project the table is filtered to, when I can add tasks there
+    const preset = projects.find(p => +p.id === +mp.taskProject) || projects[0];
+    projSel.value = String(preset.id);
+    _fillTaskStatusSelect(preset.id);
+
+    $('#mp-tf-title').value    = '';
+    $('#mp-tf-desc').value     = '';
+    $('#mp-tf-priority').value = 'normal';
+    $('#mp-tf-due').value      = '';
+    $('#mp-tf-hours').value    = '';
+
+    $('#mp-task-modal').style.display = '';
+    setTimeout(() => $('#mp-tf-title')?.focus(), 80);
+  }
+
+  function _closeMpTaskModal() {
+    const m = $('#mp-task-modal'); if (m) m.style.display = 'none';
+  }
+
+  async function _saveMpTask() {
+    const alertEl = $('#mp-task-modal-alert');
+    const showErr = msg => { if (alertEl) { alertEl.textContent = msg; alertEl.style.display = ''; alertEl.style.color = '#ef4444'; } };
+
+    const hours = $('#mp-tf-hours').value;
+    const body  = {
+      project_id:      +$('#mp-tf-project').value,
+      title:           ($('#mp-tf-title').value || '').trim(),
+      description:     ($('#mp-tf-desc').value  || '').trim() || null,
+      status:          $('#mp-tf-status').value || null,
+      priority:        $('#mp-tf-priority').value,
+      due_date:        $('#mp-tf-due').value || null,
+      estimated_hours: hours !== '' ? +hours : null,
+    };
+    if (!body.project_id) { showErr('Choose a project.');        return; }
+    if (!body.title)      { showErr('Task title is required.');  return; }
+
+    const saveBtn = $('#mp-task-modal-save');
+    if (saveBtn) saveBtn.disabled = true;
+    let res;
+    try { res = await API.pmMyWorkTaskCreate(body); }
+    catch (e) { res = { status: 0, body: { message: e.message || String(e) } }; }
+    if (saveBtn) saveBtn.disabled = false;
+
+    if (res.status === 201 && res.body?.data) {
+      mp.tasks.push(res.body.data);
+      _closeMpTaskModal();
+      toast('Task created', 'success');
+      _renderCurrent();
+    } else {
+      showErr(res.body?.message || 'Create failed.');
+    }
+  }
+
+  $('#mp-task-add-btn')?.addEventListener('click', openMpTaskModal);
+  $('#mp-tf-project')?.addEventListener('change', function () { _fillTaskStatusSelect(this.value); });
+  $('#mp-task-modal-close')?.addEventListener('click',  _closeMpTaskModal);
+  $('#mp-task-modal-cancel')?.addEventListener('click', _closeMpTaskModal);
+  $('#mp-task-modal-save')?.addEventListener('click',   _saveMpTask);
+  $('#mp-task-modal')?.addEventListener('click', e => { if (e.target === $('#mp-task-modal')) _closeMpTaskModal(); });
+  $('#mp-tf-title')?.addEventListener('keydown', e => { if (e.key === 'Enter') _saveMpTask(); });
+
+  // ── Wiring ──────────────────────────────────────────────────────────────────
+  $$('#pm-mine-view [data-mpsub]').forEach(btn => btn.addEventListener('click', () => switchMpView(btn.dataset.mpsub)));
+  $('#mp-ov-board-btn')?.addEventListener('click', () => switchMpView('board'));
+
+  $('#mp-task-search')?.addEventListener('input', function () { mp.taskSearch = this.value; renderMpTasks(); });
+  $('#mp-task-project')?.addEventListener('change', function () { mp.taskProject = this.value; renderMpTasks(); });
+  $$('#mp-task-filter-chips [data-mptaskfilter]').forEach(chip => chip.addEventListener('click', function () {
+    $$('#mp-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
+    this.classList.add('active');
+    mp.taskFilter = this.dataset.mptaskfilter;
+    renderMpTasks();
+  }));
+  $$('#mp-tasks-table th[data-mpsort]').forEach(th => th.addEventListener('click', () => {
+    if (mp.sortKey === th.dataset.mpsort) mp.sortDir *= -1;
+    else { mp.sortKey = th.dataset.mpsort; mp.sortDir = 1; }
+    renderMpTasks();
+  }));
+
+  $('#mp-board-project') ?.addEventListener('change', function () { mp.boardProject  = this.value; renderMpBoard(); });
+  $('#mp-board-priority')?.addEventListener('change', function () { mp.boardPriority = this.value; renderMpBoard(); });
+  $('#mp-board-due')     ?.addEventListener('change', function () { mp.boardDue      = this.value; renderMpBoard(); });
+
+  // Ribbon
+  // Ribbon (Projects page → "My Projects" group)
+  const _mpOpen = view => {
+    mp.view = view;   // switchPmView('mine') opens this inner tab
+    if (_activeTab() !== 'projects') activateTab('projects');
+    if (window._pm?.currentView !== 'mine') switchPmView('mine');
+    else switchMpView(view);
+  };
+  $('#rb-mp-tasks')?.addEventListener('click', () => _mpOpen('tasks'));
+  $('#rb-mp-board')?.addEventListener('click', () => _mpOpen('board'));
+
+  window._mp = mp;
 }());
 
 // ── Event Tab: Brands + Reporters ────────────────────────────────────────

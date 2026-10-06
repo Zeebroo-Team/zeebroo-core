@@ -68,6 +68,8 @@ use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
+    Route::post('auth/password/forgot',   [PosAuthApiController::class, 'forgotPassword'])->middleware('throttle:5,1')->name('auth.password.forgot');
+    Route::post('auth/password/reset',    [PosAuthApiController::class, 'resetPassword'])->middleware('throttle:10,1')->name('auth.password.reset');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
     Route::get ('auth/packages',           [PosAuthApiController::class, 'packages'])->name('auth.packages');
     Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');
@@ -95,6 +97,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/password', [PosAuthApiController::class, 'updatePassword'])->name('auth.password.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    // Sign-up email verification: 6-digit code emailed at registration ("Verify your email" banner)
+    Route::post('auth/email/verify', [PosAuthApiController::class, 'verifyEmail'])->middleware('throttle:10,1')->name('auth.email.verify')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/email/resend', [PosAuthApiController::class, 'resendEmailVerification'])->middleware('throttle:5,1')->name('auth.email.resend')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/payment/checkout-session', [PosPaymentApiController::class, 'checkoutSession'])->name('auth.payment.checkout-session')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/history',          [PosPaymentApiController::class, 'history'])->name('auth.payment.history')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/payment/subscription/cancel', [PosPaymentApiController::class, 'cancelSubscription'])->name('auth.payment.subscription.cancel')->withoutMiddleware(EnsureSubscriptionSettled::class);

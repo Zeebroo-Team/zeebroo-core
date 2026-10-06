@@ -2428,12 +2428,32 @@ async function loadSettings() {
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
   return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal,
-    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal]
+    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal,
+    giftCheckModal, couponCheckModal]
     .some((m) => m.classList.contains('show'));
 }
 
 document.addEventListener('keydown', (e) => {
   if (isAnyPosModalOpen()) return;
+  const mod = e.ctrlKey || e.metaKey;
+
+  // Ctrl+G gift card balance, Ctrl+K coupon check
+  if (mod && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'g') { e.preventDefault(); openGiftCheckModal(); return; }
+    if (k === 'k') { e.preventDefault(); openCouponCheckModal(); return; }
+  }
+
+  // Alt+1…3 switch Products / Rental / Dynamic mode tabs
+  if (e.altKey && !mod && !e.shiftKey) {
+    const mode = { '1': 'products', '2': 'rental', '3': 'dynamic' }[e.key];
+    if (mode) {
+      e.preventDefault();
+      document.querySelector(`.mode-tab[data-mode="${mode}"]`)?.click();
+      return;
+    }
+  }
+
   switch (e.key) {
     case 'F2':
       e.preventDefault();

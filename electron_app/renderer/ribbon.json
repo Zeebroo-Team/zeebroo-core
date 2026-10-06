@@ -547,9 +547,16 @@
           ]
         },
         {
+          "label": "My Projects",
+          "items": [
+            { "type": "lg", "id": "rb-mp-tasks",          "icon": "fa-list-check",         "label": "My\nTasks" },
+            { "type": "lg", "id": "rb-mp-board",          "icon": "fa-table-columns",      "label": "Kanban\nBoard" }
+          ]
+        },
+        {
           "label": "Actions",
           "items": [
-            { "type": "lg", "id": "rb-pm-refresh",        "icon": "fa-rotate",             "label": "Refresh" }
+            { "type": "lg", "id": "rb-pm-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
           ]
         }
       ]

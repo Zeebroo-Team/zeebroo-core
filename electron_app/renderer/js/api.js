@@ -26,11 +26,19 @@ const API = (() => {
       publicRequest('POST', '/auth/token', { email, password, device_name: deviceName }),
     cashierLogin: (slug, username, password) =>
       publicRequest('POST', '/cashier/login', { slug, username, password }),
-    register:           (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
+    // Forgot password: emails a 6-digit code, then the code + new password resets it
+    forgotPassword: (email) =>
+      publicRequest('POST', '/auth/password/forgot', { email }),
+    resetPassword:  (email, otp, password) =>
+      publicRequest('POST', '/auth/password/reset', { email, otp, password, password_confirmation: password }),
+    register:          (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
       publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, package_id: packageId, email, password, password_confirmation: password, device_name: deviceName }),
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     packages:           () => publicRequest('GET', '/auth/packages'),
     me:                 () => request('GET', '/auth/me'),
+    // Sign-up email verification — "Verify your email" banner (PosAuthApiController verifyEmail / resendEmailVerification)
+    verifyEmail:        (otp) => request('POST', '/auth/email/verify', { otp }),
+    resendEmailVerification: () => request('POST', '/auth/email/resend'),
     startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
     paymentStatus:        (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
     paymentHistory:       () => request('GET', '/auth/payment/history'),
@@ -118,6 +126,7 @@ const API = (() => {
     customerSubscriptions:(customerId)=> request('GET',    `/customers/${customerId}/subscriptions`),
     customerWarranties:   (customerId)=> request('GET',    `/customers/${customerId}/warranties`),
     customerCreditSales:  (customerId)=> request('GET',    `/customers/${customerId}/credit-sales`),
+    customerRentals:      (customerId)=> request('GET',    `/product-rentals?customer_id=${encodeURIComponent(customerId)}&status=all&per_page=100`),
     cancelSubscription:   (id)        => request('POST',   `/subscriptions/${id}/cancel`),
     pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),
@@ -627,7 +636,14 @@ const API = (() => {
     pmProjectCreate:       (body)      => request('POST',   '/pm/projects', body),
     pmProjectUpdate:       (id, body)  => request('PATCH',  `/pm/projects/${id}`, body),
     pmProjectDelete:       (id)        => request('DELETE', `/pm/projects/${id}`),
+    pmMembers:             (pid)       => request('GET',    `/pm/projects/${pid}/members`),
+    pmMemberAdd:           (pid, ids)  => request('POST',   `/pm/projects/${pid}/members`, { user_ids: ids }),
+    pmMemberRemove:        (pid, uid)  => request('DELETE', `/pm/projects/${pid}/members/${uid}`),
     pmBoard:               (id)        => request('GET',    `/pm/projects/${id}/board`),
+    pmStatuses:            (pid)       => request('GET',    `/pm/projects/${pid}/statuses`),
+    pmStatusCreate:        (pid, body) => request('POST',   `/pm/projects/${pid}/statuses`, body),
+    pmStatusUpdate:        (id, body)  => request('PATCH',  `/pm/statuses/${id}`, body),
+    pmStatusDelete:        (id)        => request('DELETE', `/pm/statuses/${id}`),
     pmTasks:               (id, qs)    => request('GET',    `/pm/projects/${id}/tasks${qs ? `?${qs}` : ''}`),
     pmTaskCreate:          (id, body)  => request('POST',   `/pm/projects/${id}/tasks`, body),
     pmTaskStatus:          (id, status)=> request('PATCH',  `/pm/tasks/${id}/status`, { status }),
@@ -637,9 +653,18 @@ const API = (() => {
     pmTaskTime:            (id, data)  => request('POST',   `/pm/tasks/${id}/time`, data),
     pmTaskDelete:          (id)        => request('DELETE', `/pm/tasks/${id}`),
     pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
+    // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
+    pmMyWork:              ()          => request('GET',    '/pm/my-work'),
+    pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
+    pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),
     pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),
     pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
+    pmMilestoneUpdate:     (id, body)  => request('PATCH',  `/pm/milestones/${id}`, body),
+    pmMilestoneReorder:    (pid, ids)  => request('POST',   `/pm/projects/${pid}/milestones/reorder`, { ids }),
     pmMilestoneComplete:   (id)        => request('POST',   `/pm/milestones/${id}/complete`, {}),
+    pmMilestoneReopen:     (id)        => request('POST',   `/pm/milestones/${id}/reopen`, {}),
+    pmTaskMilestone:       (id, mid)   => request('PATCH',  `/pm/tasks/${id}/milestone`, { milestone_id: mid }),
+    pmTaskAssign:          (id, ids)   => request('PATCH',  `/pm/tasks/${id}/assignees`, { assignee_ids: ids }),
     pmMilestoneDelete:     (id)        => request('DELETE', `/pm/milestones/${id}`),
 
     // Brand Management

@@ -85,9 +85,11 @@
             <a href="{{ route('login') }}" class="auth-alt-pill" title="{{ __('Sign in with an existing account') }}">
                 <i class="fa fa-right-to-bracket" aria-hidden="true"></i><span>{{ __('Sign in') }}</span>
             </a>
+            {{-- HR portal link hidden for now
             <a href="{{ route('hr.portal.login') }}" class="auth-alt-pill auth-alt-pill--hr" title="{{ __('Employee HR portal sign-in') }}">
                 <i class="fa fa-users-gear" aria-hidden="true"></i><span>{{ __('HR portal') }}</span>
             </a>
+            --}}
         </div>
     </div>
 @endsection

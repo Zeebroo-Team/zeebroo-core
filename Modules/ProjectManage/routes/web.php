@@ -2,10 +2,12 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\ProjectManage\Http\Controllers\MilestoneController;
+use Modules\ProjectManage\Http\Controllers\MyProjectsController;
 use Modules\ProjectManage\Http\Controllers\MyTasksController;
 use Modules\ProjectManage\Http\Controllers\OverviewController;
 use Modules\ProjectManage\Http\Controllers\ProjectController;
 use Modules\ProjectManage\Http\Controllers\TaskController;
+use Modules\ProjectManage\Http\Controllers\TaskStatusController;
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
@@ -19,8 +21,13 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::put('/pm/projects/{project}',     [ProjectController::class, 'update']) ->name('pm.projects.update');
     Route::delete('/pm/projects/{project}',  [ProjectController::class, 'destroy'])->name('pm.projects.destroy');
 
+    // Project members (team)
+    Route::post('/pm/projects/{project}/members',          [ProjectController::class, 'addMembers'])  ->name('pm.projects.members.store');
+    Route::delete('/pm/projects/{project}/members/{user}', [ProjectController::class, 'removeMember'])->whereNumber('user')->name('pm.projects.members.destroy');
+
     // Milestones
-    Route::post('/pm/projects/{project}/milestones',                           [MilestoneController::class, 'store'])   ->name('pm.projects.milestones.store');
+    Route::post('/pm/projects/{project}/milestones',                          [MilestoneController::class, 'store'])   ->name('pm.projects.milestones.store');
+    Route::post('/pm/projects/{project}/milestones/reorder',                   [MilestoneController::class, 'reorder']) ->name('pm.projects.milestones.reorder');
     Route::put('/pm/projects/{project}/milestones/{milestone}',                [MilestoneController::class, 'update'])  ->name('pm.projects.milestones.update');
     Route::post('/pm/projects/{project}/milestones/{milestone}/complete',      [MilestoneController::class, 'complete'])->name('pm.projects.milestones.complete');
     Route::post('/pm/projects/{project}/milestones/{milestone}/reopen',        [MilestoneController::class, 'reopen'])  ->name('pm.projects.milestones.reopen');
@@ -32,10 +39,17 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/pm/projects/{project}/my-tasks', [TaskController::class, 'mine'])  ->name('pm.projects.tasks.mine');
     Route::post('/pm/projects/{project}/tasks',   [TaskController::class, 'store']) ->name('pm.projects.tasks.store');
 
+    // Task statuses (custom board columns)
+    Route::post('/pm/projects/{project}/statuses', [TaskStatusController::class, 'store'])  ->name('pm.projects.statuses.store');
+    Route::put('/pm/statuses/{taskStatus}',        [TaskStatusController::class, 'update']) ->name('pm.statuses.update');
+    Route::delete('/pm/statuses/{taskStatus}',     [TaskStatusController::class, 'destroy'])->name('pm.statuses.destroy');
+
     // Tasks (task-scoped)
     Route::get('/pm/tasks/{task}',             [TaskController::class, 'show'])    ->name('pm.tasks.show');
     Route::put('/pm/tasks/{task}',             [TaskController::class, 'update'])  ->name('pm.tasks.update');
     Route::patch('/pm/tasks/{task}/status',    [TaskController::class, 'status'])  ->name('pm.tasks.status');
+    Route::patch('/pm/tasks/{task}/milestone', [TaskController::class, 'milestone'])->name('pm.tasks.milestone');
+    Route::patch('/pm/tasks/{task}/assignees', [TaskController::class, 'assignees'])->name('pm.tasks.assignees');
     Route::post('/pm/tasks/{task}/complete',   [TaskController::class, 'complete'])->name('pm.tasks.complete');
     Route::post('/pm/tasks/{task}/reopen',     [TaskController::class, 'reopen'])  ->name('pm.tasks.reopen');
     Route::post('/pm/tasks/{task}/comments',   [TaskController::class, 'comment']) ->name('pm.tasks.comment');
@@ -44,4 +58,10 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
 
     // My Tasks
     Route::get('/pm/my-tasks', [MyTasksController::class, 'index'])->name('pm.my-tasks');
+
+    // My Projects — only tasks assigned to the signed-in user (web twin of /api/pm/my-work)
+    Route::get('/pm/my-projects',                       [MyProjectsController::class, 'index'])    ->name('pm.my-projects');
+    Route::get('/pm/my-projects/data',                  [MyProjectsController::class, 'data'])     ->name('pm.my-projects.data');
+    Route::post('/pm/my-projects/tasks',                [MyProjectsController::class, 'storeTask'])->name('pm.my-projects.tasks.store');
+    Route::patch('/pm/my-projects/tasks/{task}/status', [MyProjectsController::class, 'status'])   ->name('pm.my-projects.tasks.status');
 });

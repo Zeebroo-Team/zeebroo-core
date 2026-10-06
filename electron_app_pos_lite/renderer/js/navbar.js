@@ -207,8 +207,14 @@
         [t('F2'), t('Focus product search')],
         [t('F5'), t('Refresh products')],
         [t('F8'), t('Clear cart')],
+        [t('F9'), t('Return / Refund')],
         [t('F10'), t('Select customer')],
         [t('F12'), t('Checkout')],
+        ['Ctrl+G', t('Check gift card balance')],
+        ['Ctrl+K', t('Check coupon')],
+        ['Alt+1', t('Switch to Products')],
+        ['Alt+2', t('Switch to Rental')],
+        ['Alt+3', t('Switch to Dynamic')],
       ],
     },
   ];
@@ -234,20 +240,42 @@
           <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="bm-body">
+          <div class="sck-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="sck-search-input" placeholder="${esc(t('Search shortcuts…'))}" autocomplete="off">
+          </div>
           ${SHORTCUT_GROUPS().map((group) => `
             <div class="sck-group">
               <div class="sm-section-label">${esc(group.title)}</div>
               <div class="sck-list">
                 ${group.rows.map(([key, label]) => `
-                  <div class="sck-row">
+                  <div class="sck-row" data-search="${esc((key + ' ' + label).toLowerCase())}">
                     <span class="sck-label">${esc(label)}</span>
                     <span class="sck-key">${esc(key)}</span>
                   </div>`).join('')}
               </div>
             </div>`).join('')}
+          <div class="sck-empty" hidden>${esc(t('No shortcuts match your search'))}</div>
         </div>
       </div>`;
     document.body.appendChild(el);
+
+    const searchInput = el.querySelector('#sck-search-input');
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      let total = 0;
+      el.querySelectorAll('.sck-group').forEach((group) => {
+        let shown = 0;
+        group.querySelectorAll('.sck-row').forEach((row) => {
+          const match = !q || row.dataset.search.includes(q);
+          row.hidden = !match;
+          if (match) shown++;
+        });
+        group.hidden = shown === 0;
+        total += shown;
+      });
+      el.querySelector('.sck-empty').hidden = total > 0;
+    });
 
     function close() {
       document.removeEventListener('keydown', onKey, true);
@@ -264,7 +292,7 @@
     el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
     document.addEventListener('keydown', onKey, true);
 
-    requestAnimationFrame(() => el.classList.add('open'));
+    requestAnimationFrame(() => { el.classList.add('open'); searchInput.focus(); });
   }
 
   window.openShortcutsWindow = openShortcutsWindow;
@@ -978,6 +1006,191 @@
   }
 
   window.applySubscriptionLock = applySubscriptionLock;
+
+  // ── Email not verified bar + verify window ──────────────────────────────
+  // New sign-ups get a 6-digit code by email (PosAuthApiController verifyEmail /
+  // resendEmailVerification). Until it's entered, /auth/me reports
+  // email_verification_required and this bar sits at the bottom like the
+  // payment-due bar. Dismissible for the rest of this session.
+  const EV_DISMISS_KEY = 'emailVerifyDismissed';
+
+  async function checkEmailVerify() {
+    try {
+      const cfg = await window.electronAPI.getConfig();
+      if (cfg.is_cashier) return;
+      const res = await API.me();
+      if (res.status !== 200) return;
+      const user = res.body?.data;
+      renderEmailVerifyStatus(user);
+      let dismissed = false;
+      try { dismissed = !!sessionStorage.getItem(EV_DISMISS_KEY); } catch (e) {}
+      if (user?.email_verification_required && !dismissed) applyEmailVerifyBar(user);
+      else $('ev-bar')?.remove();
+    } catch (e) {
+      console.error('[email-verify] check failed', e);
+    }
+  }
+
+  // "Email" row in the user menu: a Verified badge, or a Verify Now button while the
+  // sign-up code is pending. Hidden for older accounts that were never asked to verify.
+  function renderEmailVerifyStatus(user) {
+    const row = $('um-ev-row');
+    if (!row) return;
+    const verified = !!user?.email_verified_at;
+    const pending = !!user?.email_verification_required;
+    if (!verified && !pending) { row.style.display = 'none'; return; }
+    row.innerHTML = `
+      <i class="fa-solid fa-envelope"></i>
+      <div><small>${t('Email')}</small><span>${verified ? t('Verified') : t('Not verified')}</span></div>
+      ${verified
+        ? `<span class="um-ev-badge"><i class="fa-solid fa-circle-check"></i> ${t('Verified')}</span>`
+        : `<button class="um-ev-btn" id="um-ev-open" type="button"><i class="fa-solid fa-envelope-circle-check"></i> ${t('Verify Now')}</button>`}`;
+    row.style.display = '';
+    $('um-ev-open')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      $('user-menu')?.classList.remove('open');
+      openEmailVerifyWindow(user);
+    });
+  }
+
+  function applyEmailVerifyBar(user) {
+    const el = $('ev-bar') || document.createElement('div');
+    el.className = 'sdb-bar ev-bar';
+    el.id = 'ev-bar';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `
+      <span class="sdb-icon"><i class="fa-solid fa-envelope"></i></span>
+      <div class="sdb-text">${t('Please verify your email address. We sent a 6-digit code to {email}.', { email: `<b>${esc(user.email)}</b>` })}</div>
+      <button class="sdb-pay" id="ev-open" type="button"><i class="fa-solid fa-envelope-circle-check"></i> ${t('Verify Now')}</button>
+      <button class="sdb-close" id="ev-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>`;
+    if (!el.isConnected) document.body.appendChild(el);
+
+    $('ev-open').addEventListener('click', () => openEmailVerifyWindow(user));
+    $('ev-close').addEventListener('click', () => {
+      el.remove();
+      try { sessionStorage.setItem(EV_DISMISS_KEY, '1'); } catch (e) {}
+    });
+  }
+
+  function openEmailVerifyWindow(user) {
+    if ($('ev-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'ev-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'ev-title');
+    el.innerHTML = `
+      <div class="bm-card" style="width:420px">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-envelope-circle-check"></i></span>
+          <div class="bm-head-text">
+            <h2 id="ev-title">${t('Verify Your Email')}</h2>
+            <p>${t('Enter the 6-digit code we emailed to {email}. Codes expire after {n} minutes.', { email: esc(user.email), n: user.email_verification_minutes || 15 })}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="ev-alert" class="bm-alert" style="display:none"></div>
+        <div id="ev-success" class="pf-success" style="display:none"></div>
+        <div class="sm-body" style="padding:0 22px 4px;display:block">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="ev-otp">${t('6-digit code')}</label>
+            <input type="text" id="ev-otp" class="sm-input ev-otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••">
+          </div>
+          <p class="ev-resend-line">${t("Didn't get it?")} <a id="ev-resend">${t('Send a new code')}</a></p>
+        </div>
+        <div class="sm-foot">
+          <button class="bm-btn bm-btn-outline" id="ev-cancel" type="button">${t('Later')}</button>
+          <button class="bm-btn bm-btn-primary" id="ev-submit" type="button"><i class="fa-solid fa-check"></i> ${t('Verify Email')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    const otpInput = $('ev-otp');
+    const alertBox = $('ev-alert');
+    const successBox = $('ev-success');
+    const submitBtn = $('ev-submit');
+
+    function showMessage(box, message) {
+      alertBox.style.display = 'none';
+      successBox.style.display = 'none';
+      if (!message) return;
+      box.textContent = message;
+      box.style.display = box === successBox ? 'flex' : '';
+    }
+
+    function apiMessage(res, fallback) {
+      if (res?.status === 0) return t("Can't reach the server. Check your internet connection and try again.");
+      const errors = res?.body?.errors;
+      const first = errors ? [].concat(errors[Object.keys(errors)[0]])[0] : null;
+      return t(first || res?.body?.message || fallback);
+    }
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    }
+
+    async function submit() {
+      const otp = otpInput.value.trim();
+      if (!/^\d{6}$/.test(otp)) {
+        showMessage(alertBox, t('Enter the 6-digit code from the email.'));
+        otpInput.focus();
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Verifying…')}`;
+      showMessage(null);
+      const res = await API.verifyEmail(otp);
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Verify Email')}`;
+      if (res.status !== 200) {
+        showMessage(alertBox, res.status === 429 ? t('Too many attempts. Please wait a minute and try again.') : apiMessage(res, 'Something went wrong. Please try again.'));
+        return;
+      }
+      close();
+      renderEmailVerifyStatus(res.body?.user || { email_verified_at: new Date().toISOString() });
+      // Turn the bar into a short confirmation, then let it go.
+      const bar = $('ev-bar');
+      if (bar) {
+        bar.classList.add('ev-bar--done');
+        bar.innerHTML = `<span class="sdb-icon"><i class="fa-solid fa-circle-check"></i></span><div class="sdb-text">${t('Your email has been verified.')}</div>`;
+        setTimeout(() => bar.remove(), 4000);
+      }
+    }
+
+    async function resend() {
+      showMessage(null);
+      const res = await API.resendEmailVerification();
+      if (res.status !== 200) {
+        showMessage(alertBox, apiMessage(res, 'Could not send the code. Please try again.'));
+        return;
+      }
+      showMessage(successBox, t('A new code has been sent to your email.'));
+      otpInput.focus();
+    }
+
+    otpInput.addEventListener('input', () => { otpInput.value = otpInput.value.replace(/\D/g, '').slice(0, 6); });
+    otpInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    submitBtn.addEventListener('click', submit);
+    $('ev-resend').addEventListener('click', resend);
+    $('ev-cancel').addEventListener('click', close);
+    el.querySelector('.bm-close').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+
+    requestAnimationFrame(() => { el.classList.add('open'); otpInput.focus(); });
+  }
+
+  if ($('user-menu')) window.addEventListener('DOMContentLoaded', checkEmailVerify);
 
   // Reactive: any gated call returning 402 locks immediately (see api.js).
   window.addEventListener('api-payment-overdue', (e) => {
@@ -2848,6 +3061,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
         <i class="fa-solid fa-store"></i>
         <div><small>${t('Business')}</small><span id="um-biz-name">—</span></div>
       </div>
+      <div class="um-biz-row um-ev-row" id="um-ev-row" data-owner-only style="display:none"></div>
       <div class="um-sep"></div>
       <button class="um-item" id="um-profile" type="button" role="menuitem" data-owner-only><i class="fa-solid fa-user-pen"></i> ${t('My Profile')}</button>
       <button class="um-item" id="um-language" type="button" role="menuitem">

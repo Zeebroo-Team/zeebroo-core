@@ -300,6 +300,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 @endif
 
 @if(!$business)
+    @section('hide_email_verify_bar', '1')
     <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
         html.business-wizard-active,html.business-wizard-active body{overflow:hidden;height:100%;}
@@ -1233,8 +1234,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                         <div style="display:flex;gap:10px;">
                             <div class="wiz-field" style="flex:1;">
-                                <label for="wiz-branch-phone">Phone <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">(optional)</span></label>
-                                <input id="wiz-branch-phone" type="text" name="branch_phone" value="{{ old('branch_phone') }}" maxlength="40" inputmode="tel" placeholder="+94 …" class="wiz-input">
+                                <label for="wiz-branch-phone">Phone</label>
+                                <input id="wiz-branch-phone" type="text" name="branch_phone" value="{{ old('branch_phone') }}" maxlength="40" inputmode="tel" placeholder="+94 …" required class="wiz-input">
+                                <div class="wiz-field-error" id="wizBranchPhoneErr" style="{{ $errors->has('branch_phone') ? '' : 'display:none;' }}">{{ $errors->first('branch_phone') ?: 'Phone number is required.' }}</div>
                             </div>
                             <div class="wiz-field" style="flex:1;">
                                 <label for="wiz-branch-email">Email <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">(optional)</span></label>
@@ -2713,6 +2715,16 @@ function openWizStorageAgreementModal(type) {
                     branchNameInput.value = bizNameInput.value.trim();
                 }
             }
+            if (target === 6) {
+                const phoneInput = document.getElementById('wiz-branch-phone');
+                const phoneErr = document.getElementById('wizBranchPhoneErr');
+                if (phoneInput && !phoneInput.value.trim()) {
+                    if (phoneErr) phoneErr.style.display = 'block';
+                    phoneInput.focus();
+                    return;
+                }
+                if (phoneErr) phoneErr.style.display = 'none';
+            }
             if (target === 7) {
                 const typeInput = document.getElementById('wizDataStorageType');
                 const agreeInput = document.getElementById('wizDataAgreementAccepted');
@@ -3112,7 +3124,7 @@ function openWizStorageAgreementModal(type) {
 
     @if($errors->has('data_storage_type') || $errors->has('data_agreement_accepted') || $errors->has('vault_server_url') || $errors->has('vault_api_token'))
         setWizStep(6, false);
-    @elseif($errors->has('branch_name') || $errors->has('multi_warehouse_branch'))
+    @elseif($errors->has('branch_name') || $errors->has('branch_phone') || $errors->has('multi_warehouse_branch'))
         setWizStep(5, false);
     @elseif($errors->has('package_id'))
         setWizStep(3, false);

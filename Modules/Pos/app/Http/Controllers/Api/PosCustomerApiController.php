@@ -10,6 +10,7 @@ use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\CustomerCategory;
+use Modules\Pos\Models\ProductRental;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Models\SaleItem;
 use Modules\Pos\Services\PosSettingsService;
@@ -34,7 +35,7 @@ class PosCustomerApiController extends Controller
             }))
             ->when($categoryId !== null && $categoryId !== '', fn ($query) => $query->where('customer_category_id', (int) $categoryId))
             ->when(in_array($customerType, ['retail', 'wholesale'], true), fn ($query) => $query->where('customer_type', $customerType))
-            ->withCount('sales')
+            ->withCount(['sales', 'rentals as overdue_rentals_count' => fn ($r) => $this->scopeOverdueRentals($r)])
             ->with('category:id,name')
             ->orderBy('name')
             ->paginate(50);
@@ -54,7 +55,7 @@ class PosCustomerApiController extends Controller
         $business = $this->businessOrAbort($request);
         if ((int) $customer->business_id !== (int) $business->id) abort(403);
 
-        $customer->loadCount('sales');
+        $customer->loadCount(['sales', 'rentals as overdue_rentals_count' => fn ($r) => $this->scopeOverdueRentals($r)]);
         $customer->load([
             'sales' => fn ($q) => $q->latest('sold_at')->limit(5)->select('id', 'pos_customer_id', 'sale_number', 'total', 'sold_at', 'payment_method'),
             'category:id,name',
@@ -281,6 +282,13 @@ class PosCustomerApiController extends Controller
         ];
     }
 
+    /** Same "overdue" definition as ProductRentalService::list(). */
+    private function scopeOverdueRentals($query): void
+    {
+        $query->whereIn('status', [ProductRental::STATUS_ACTIVE, ProductRental::STATUS_OVERDUE])
+            ->whereDate('due_at', '<', now()->toDateString());
+    }
+
     private function format(Customer $c, bool $full = false): array
     {
         $data = [
@@ -294,6 +302,7 @@ class PosCustomerApiController extends Controller
             'customer_category_id' => $c->customer_category_id,
             'category_name'        => $c->relationLoaded('category') ? $c->category?->name : null,
             'sales_count'          => $c->sales_count ?? 0,
+            'overdue_rentals_count' => (int) ($c->overdue_rentals_count ?? 0),
         ];
 
         if ($full && $c->relationLoaded('sales')) {

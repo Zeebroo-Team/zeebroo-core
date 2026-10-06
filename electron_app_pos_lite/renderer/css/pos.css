@@ -168,6 +168,16 @@ html, body {
 }
 .mode-tab:hover { color: var(--text); }
 .mode-tab.active { color: var(--accent); border-color: var(--accent); background: #eef0ff; }
+.mode-kbd {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--muted);
+  background: #f1f2f5;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 
 /* ── Category chips ──────────────────────────────────────────────────── */
 .chip-scroll-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }

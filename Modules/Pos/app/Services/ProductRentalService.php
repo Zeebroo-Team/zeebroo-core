@@ -45,10 +45,11 @@ class ProductRentalService
     /**
      * @return LengthAwarePaginator<int, ProductRental>
      */
-    public function list(Business $business, ?string $status, ?string $search, int $perPage = 25): LengthAwarePaginator
+    public function list(Business $business, ?string $status, ?string $search, int $perPage = 25, ?int $customerId = null): LengthAwarePaginator
     {
         return ProductRental::query()
             ->where('business_id', $business->id)
+            ->when($customerId, fn ($q) => $q->where('pos_customer_id', $customerId))
             ->with(['customer:id,name,phone,email', 'product:id,name,sku', 'sale:id,sale_number'])
             ->when($status && $status !== 'all', function ($q) use ($status) {
                 if ($status === 'overdue') {

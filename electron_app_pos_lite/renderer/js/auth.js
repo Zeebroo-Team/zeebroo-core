@@ -11,8 +11,11 @@ const loginError = document.getElementById('login-error');
 const signupError = document.getElementById('signup-error');
 
 const cashierForm = document.getElementById('cashier-form');
+const forgotForm = document.getElementById('forgot-form');
+const resetForm = document.getElementById('reset-form');
+const loginSuccess = document.getElementById('login-success');
 
-// 'login' | 'cashier' | 'signup' — the cashier form lives under the Login tab.
+// 'login' | 'cashier' | 'forgot' | 'reset' | 'signup' — all but sign-up live under the Login tab.
 function showTab(which) {
   const isLogin = which !== 'signup';
   const wasSignupActive = tabSignup.classList.contains('active');
@@ -20,11 +23,14 @@ function showTab(which) {
   tabSignup.classList.toggle('active', !isLogin);
   loginForm.classList.toggle('active', which === 'login');
   cashierForm.classList.toggle('active', which === 'cashier');
+  forgotForm.classList.toggle('active', which === 'forgot');
+  resetForm.classList.toggle('active', which === 'reset');
   signupWizard.classList.toggle('active', !isLogin);
   lineLogin.style.display = isLogin ? '' : 'none';
   lineSignup.style.display = isLogin ? 'none' : '';
   setError(loginError, '');
   setError(signupError, '');
+  setSuccess('');
   if (!isLogin && !wasSignupActive) _obSetStep(1); // fresh entry into sign-up: start the wizard over
 }
 
@@ -44,6 +50,8 @@ document.getElementById('go-owner').addEventListener('click', () => showTab('log
 const FIELD_INPUTS = {
   login: { email: 'login-email', password: 'login-password' },
   cashier: { slug: 'cashier-business', username: 'cashier-username', password: 'cashier-password' },
+  forgot: { email: 'forgot-email' },
+  reset: { otp: 'reset-otp', password: 'reset-password' },
   signup: { name: 'su-name', business_name: 'su-business', business_category: 'su-category', email: 'su-email', password: 'su-password' },
 };
 
@@ -86,6 +94,18 @@ function setError(box, message, opts = {}) {
   box.classList.add('show');
   markField(opts.field);
   box.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// Green confirmation above the login forms (empty hides it).
+function setSuccess(message) {
+  if (!message) {
+    loginSuccess.classList.remove('show');
+    loginSuccess.innerHTML = '';
+    return;
+  }
+  loginSuccess.innerHTML = '<i class="fa-solid fa-circle-check"></i><div></div>';
+  loginSuccess.querySelector('div').textContent = message;
+  loginSuccess.classList.add('show');
 }
 
 // Turns raw Laravel/API messages into plain-language ones.
@@ -252,6 +272,116 @@ cashierForm.addEventListener('submit', async (e) => {
     setError(loginError, err.message);
   } finally {
     setBusy(submitBtn, false, t('Cashier Log In'));
+  }
+});
+
+// ── Forgot password: email → 6-digit code + new password ──────────────────
+// PosAuthApiController forgotPassword / resetPassword. The API answers the
+// same way whether or not the email is registered, so we always move on.
+let resetEmail = '';
+
+document.getElementById('go-forgot').addEventListener('click', () => {
+  showTab('forgot');
+  const email = document.getElementById('forgot-email');
+  email.value = document.getElementById('login-email').value.trim();
+  email.focus();
+});
+document.querySelectorAll('.go-login-back').forEach((el) => el.addEventListener('click', () => showTab('login')));
+document.getElementById('reset-otp').addEventListener('input', (e) => {
+  e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6);
+});
+
+async function sendResetCode(email) {
+  const res = await API.forgotPassword(email);
+  if (res.status !== 200) return res;
+  resetEmail = email;
+  document.getElementById('reset-hint').textContent = t(
+    "If an account exists for {email}, we've sent a 6-digit code to it. It expires in {n} minutes.",
+    { email, n: res.body?.expires_in_minutes || 10 },
+  );
+  return res;
+}
+
+forgotForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  setError(loginError, '');
+  const email = document.getElementById('forgot-email').value.trim();
+  const submitBtn = document.getElementById('forgot-submit');
+  if (!email) {
+    setError(loginError, t('Enter your email address.'), { field: 'forgot-email' });
+    return;
+  }
+
+  setBusy(submitBtn, true, t('Sending…'));
+  try {
+    const res = await sendResetCode(email);
+    if (res.status !== 200) {
+      showApiError(loginError, res, 'forgot');
+      return;
+    }
+    showTab('reset');
+    ['reset-otp', 'reset-password', 'reset-password2'].forEach((id) => { document.getElementById(id).value = ''; });
+    document.getElementById('reset-otp').focus();
+  } catch (err) {
+    setError(loginError, err.message);
+  } finally {
+    setBusy(submitBtn, false, t('Send Code'));
+  }
+});
+
+document.getElementById('forgot-resend').addEventListener('click', async () => {
+  if (!resetEmail) { showTab('forgot'); return; }
+  setError(loginError, '');
+  setSuccess('');
+  const res = await sendResetCode(resetEmail);
+  if (res.status !== 200) {
+    showApiError(loginError, res, 'reset');
+    return;
+  }
+  setSuccess(t('A new code has been sent (if the previous one is older than a minute).'));
+  document.getElementById('reset-otp').focus();
+});
+
+resetForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  setError(loginError, '');
+  setSuccess('');
+  const otp = document.getElementById('reset-otp').value.trim();
+  const password = document.getElementById('reset-password').value;
+  const password2 = document.getElementById('reset-password2').value;
+  const submitBtn = document.getElementById('reset-submit');
+
+  if (!/^\d{6}$/.test(otp)) {
+    setError(loginError, t('Enter the 6-digit code from the email.'), { field: 'reset-otp' });
+    return;
+  }
+  if (password.length < 8) {
+    setError(loginError, t('Password must be at least {n} characters.').replace('{n}', '8'), { field: 'reset-password' });
+    return;
+  }
+  if (password !== password2) {
+    setError(loginError, t('Passwords do not match.'), { field: 'reset-password2' });
+    return;
+  }
+
+  setBusy(submitBtn, true, t('Resetting…'));
+  try {
+    const res = await API.resetPassword(resetEmail, otp, password);
+    if (res.status !== 200) {
+      showApiError(loginError, res, 'reset');
+      return;
+    }
+    const email = resetEmail;
+    resetEmail = '';
+    showTab('login');
+    document.getElementById('login-email').value = email;
+    document.getElementById('login-password').value = '';
+    setSuccess(t('Your password has been reset. Log in with your new password.'));
+    document.getElementById('login-password').focus();
+  } catch (err) {
+    setError(loginError, err.message);
+  } finally {
+    setBusy(submitBtn, false, t('Reset Password'));
   }
 });
 
