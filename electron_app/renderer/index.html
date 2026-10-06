@@ -974,13 +974,13 @@
             <button class="ribbon-btn-lg" id="rb-customers">
               <i class="fa fa-users"></i>Customers
             </button>
-            <button class="ribbon-btn-lg" id="rb-accounts">
+            <button class="ribbon-btn-lg" id="rb-accounts" style="display:none">
               <i class="fa fa-wallet"></i>Accounts
             </button>
-            <button class="ribbon-btn-lg" id="rb-gift-card-check">
+            <button class="ribbon-btn-lg" id="rb-gift-card-check" title="Gift Card Balance (Ctrl+G)">
               <i class="fa fa-gift"></i>Gift Card<br>Balance
             </button>
-            <button class="ribbon-btn-lg" id="rb-coupon-check">
+            <button class="ribbon-btn-lg" id="rb-coupon-check" title="Check Coupon (Ctrl+K)">
               <i class="fa fa-ticket"></i>Check<br>Coupon
             </button>
           </div>
@@ -990,7 +990,7 @@
         <!-- Configure group -->
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-pos-settings">
+            <button class="ribbon-btn-lg" id="rb-pos-settings" style="display:none">
               <i class="fa fa-gear"></i>POS<br>Settings
             </button>
             <button class="ribbon-btn-lg" id="rb-receipt-editor">
@@ -2421,10 +2421,10 @@
         <div id="product-grid-area">
           <!-- POS mode switcher: Products | Services -->
           <div id="pos-mode-bar">
-            <button class="pos-mode-btn active" data-mode="products"><i class="fa fa-box"></i> Products</button>
-            <button class="pos-mode-btn" data-mode="services"><i class="fa fa-screwdriver-wrench"></i> Services</button>
-            <button class="pos-mode-btn" data-mode="rentals"><i class="fa fa-calendar-days"></i> Rental</button>
-            <button class="pos-mode-btn" data-mode="dynamic"><i class="fa fa-wand-magic-sparkles"></i> Dynamic</button>
+            <button class="pos-mode-btn active" data-mode="products" title="Products (Alt+1)"><i class="fa fa-box"></i> Products <kbd>Alt+1</kbd></button>
+            <button class="pos-mode-btn" data-mode="services" title="Services (Alt+2)"><i class="fa fa-screwdriver-wrench"></i> Services <kbd>Alt+2</kbd></button>
+            <button class="pos-mode-btn" data-mode="rentals" title="Rental (Alt+3)"><i class="fa fa-calendar-days"></i> Rental <kbd>Alt+3</kbd></button>
+            <button class="pos-mode-btn" data-mode="dynamic" title="Dynamic (Alt+4)"><i class="fa fa-wand-magic-sparkles"></i> Dynamic <kbd>Alt+4</kbd></button>
           </div>
           <div id="product-search-bar">
             <i class="fa fa-magnifying-glass" style="color:var(--text-muted)"></i>
@@ -15227,18 +15227,21 @@
               <span class="cm-dv-sales-badge" id="cm-dv-sales-badge">0 sales</span>
             </div>
           </div>
+          <div class="cm-dv-rental-alert" id="cm-dv-rental-alert" style="display:none"></div>
           <div class="cm-dv-fields" id="cm-dv-fields"></div>
           <div class="cm-dv-tabs" id="cm-dv-tabs">
             <button class="cm-dv-tab active" data-cm-tab="sales"><i class="fa fa-clock-rotate-left"></i> Recent Sales</button>
             <button class="cm-dv-tab" data-cm-tab="subs"><i class="fa fa-rotate"></i> Subscriptions</button>
             <button class="cm-dv-tab" data-cm-tab="warranty"><i class="fa fa-shield-halved"></i> Warranty</button>
             <button class="cm-dv-tab" data-cm-tab="credit"><i class="fa fa-hand-holding-dollar"></i> Credit / Due</button>
+            <button class="cm-dv-tab" data-cm-tab="rentals"><i class="fa fa-calendar-days"></i> Rentals <span class="cm-dv-tab-count" id="cm-dv-rentals-count" style="display:none"></span></button>
           </div>
           <div class="cm-dv-tab-panels" id="cm-dv-tab-panels">
             <div class="cm-dv-tab-panel cm-dv-history" id="cm-dv-history"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-subs" style="display:none"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-warranty" style="display:none"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-credit" style="display:none"></div>
+            <div class="cm-dv-tab-panel" id="cm-dv-panel-rentals" style="display:none"></div>
           </div>
           <div class="cm-dv-actions">
             <button class="cm-btn-edit"   id="cm-btn-edit"><i class="fa fa-pen"></i> Edit</button>

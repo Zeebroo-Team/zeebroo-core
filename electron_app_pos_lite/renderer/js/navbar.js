@@ -207,8 +207,14 @@
         [t('F2'), t('Focus product search')],
         [t('F5'), t('Refresh products')],
         [t('F8'), t('Clear cart')],
+        [t('F9'), t('Return / Refund')],
         [t('F10'), t('Select customer')],
         [t('F12'), t('Checkout')],
+        ['Ctrl+G', t('Check gift card balance')],
+        ['Ctrl+K', t('Check coupon')],
+        ['Alt+1', t('Switch to Products')],
+        ['Alt+2', t('Switch to Rental')],
+        ['Alt+3', t('Switch to Dynamic')],
       ],
     },
   ];
@@ -234,20 +240,42 @@
           <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="bm-body">
+          <div class="sck-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="sck-search-input" placeholder="${esc(t('Search shortcuts…'))}" autocomplete="off">
+          </div>
           ${SHORTCUT_GROUPS().map((group) => `
             <div class="sck-group">
               <div class="sm-section-label">${esc(group.title)}</div>
               <div class="sck-list">
                 ${group.rows.map(([key, label]) => `
-                  <div class="sck-row">
+                  <div class="sck-row" data-search="${esc((key + ' ' + label).toLowerCase())}">
                     <span class="sck-label">${esc(label)}</span>
                     <span class="sck-key">${esc(key)}</span>
                   </div>`).join('')}
               </div>
             </div>`).join('')}
+          <div class="sck-empty" hidden>${esc(t('No shortcuts match your search'))}</div>
         </div>
       </div>`;
     document.body.appendChild(el);
+
+    const searchInput = el.querySelector('#sck-search-input');
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      let total = 0;
+      el.querySelectorAll('.sck-group').forEach((group) => {
+        let shown = 0;
+        group.querySelectorAll('.sck-row').forEach((row) => {
+          const match = !q || row.dataset.search.includes(q);
+          row.hidden = !match;
+          if (match) shown++;
+        });
+        group.hidden = shown === 0;
+        total += shown;
+      });
+      el.querySelector('.sck-empty').hidden = total > 0;
+    });
 
     function close() {
       document.removeEventListener('keydown', onKey, true);
@@ -264,7 +292,7 @@
     el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
     document.addEventListener('keydown', onKey, true);
 
-    requestAnimationFrame(() => el.classList.add('open'));
+    requestAnimationFrame(() => { el.classList.add('open'); searchInput.focus(); });
   }
 
   window.openShortcutsWindow = openShortcutsWindow;

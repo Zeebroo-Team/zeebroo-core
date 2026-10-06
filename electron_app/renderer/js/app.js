@@ -1308,7 +1308,7 @@ function _prentalRenderList() {
     const totalTitle = `${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})} × ${escHtml(String(r.quantity ?? 1))} × ${duration}d`
       + (parseFloat(r.late_fee || r.projected_late_fee || 0) > 0 ? ` + ${formatMoney(parseFloat(r.late_fee || r.projected_late_fee || 0), {currency: cur})} late fee` : '');
     html += `<tr class="subs-row" data-prental-row="${r.id}" style="cursor:pointer">
-      <td class="qt-tbl-customer">${escHtml(r.customer_name || '—')}</td>
+      <td class="qt-tbl-customer"><span class="qt-tbl-cust-wrap">${escHtml(r.customer_name || '—')}${r.customer_id ? `<button class="qt-tbl-cust-btn" data-prental-cust="${r.customer_id}" title="View customer"><i class="fa fa-address-card"></i></button>` : ''}</span></td>
       <td>${escHtml(r.product_name || '—')}</td>
       <td class="qt-tbl-amt">${escHtml(String(r.quantity ?? 1))}</td>
       <td class="qt-tbl-amt">${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})}</td>
@@ -1342,6 +1342,13 @@ function _prentalRenderList() {
     });
   });
 
+  $$('#prental-body [data-prental-cust]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCustomersModal(Number(b.dataset.prentalCust));
+    });
+  });
+
   $$('#prental-body [data-prental-row]').forEach(row => {
     row.addEventListener('click', () => {
       const r = _prental.list.find(x => x.id === Number(row.dataset.prentalRow));
@@ -1361,6 +1368,12 @@ async function _prentalRunAction(act, id, btn) {
   if (res.status === 200) {
     toast(res.body?.message || 'Rental marked returned', 'success');
     await loadRentalsList();
+    // Opened from the Customers modal's Rentals tab — refresh its overdue badge/alert too.
+    if ($('#customers-modal')?.style.display === 'flex' && _cm.selectedId) {
+      _cmLoadList();
+      _cmSelectCustomer(_cm.selectedId);
+      _cmSwitchTab('rentals');
+    }
     return true;
   } else {
     toast(res.body?.message || 'Action failed', 'error');
@@ -6141,11 +6154,11 @@ function applyFeatureVisibility() {
   btn('#rb-barcode',        mp('pos_btn_barcode'));
   btn('#rb-add-product',    mp('pos_btn_add_product'));
   btn('#rb-customers',      mp('pos_btn_customers'));
-  btn('#rb-accounts',       mp('pos_btn_accounts'));
+  btn('#rb-accounts',       false); // hidden for now
   // Anyone allowed to check out can look up a gift card balance at the till.
   btn('#rb-gift-card-check', mp('pos_btn_checkout'));
   btn('#rb-coupon-check',    mp('pos_btn_checkout'));
-  btn('#rb-pos-settings',   mp('pos_btn_settings'));
+  btn('#rb-pos-settings',   false); // hidden for now
   btn('#rb-receipt-editor', mp('pos_btn_receipt_editor'));
   btn('#rb-pos-refresh',    mp('pos_btn_pos_refresh'));
   { const el = $('#pos-ribbon-stats'); if (el) el.style.display = mp('pos_btn_ribbon_stats') ? '' : 'none'; }
@@ -10704,6 +10717,12 @@ function showShortcutsModal() {
     ['F11',       'Toggle full screen'],
     ['F12',       'Checkout'],
     ['Ctrl+T',    'New POS session tab'],
+    ['Ctrl+G',    'Gift card balance'],
+    ['Ctrl+K',    'Check coupon'],
+    ['Alt+1',     'POS → Products'],
+    ['Alt+2',     'POS → Services'],
+    ['Alt+3',     'POS → Rental'],
+    ['Alt+4',     'POS → Dynamic'],
     ['Ctrl+Z',    'Undo last cart item'],
     ['Ctrl+F1',   'Collapse / expand ribbon'],
     ['—',         ''],
@@ -10722,23 +10741,47 @@ function showShortcutsModal() {
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
   overlay.innerHTML = `
-    <div class="modal" style="width:360px">
+    <div class="modal" style="width:560px;max-width:calc(100vw - 32px)">
       <h3><i class="fa fa-keyboard"></i> Keyboard Shortcuts</h3>
-      <table style="width:100%;border-collapse:collapse;max-height:65vh;display:block;overflow-y:auto">
-        ${shortcuts.map(([k, d]) => k === '—'
-          ? `<tr><td colspan="2" style="padding:4px 6px"><hr style="border:none;border-top:1px solid var(--border);margin:2px 0"></td></tr>`
-          : `<tr style="border-bottom:1px solid var(--border-light)">
-              <td style="padding:6px 6px;white-space:nowrap"><kbd style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;font-family:inherit">${k}</kbd></td>
-              <td style="padding:6px 6px;font-size:12px;color:var(--text)">${d}</td>
-            </tr>`).join('')}
-      </table>
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;padding:0 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface)">
+        <i class="fa fa-magnifying-glass" style="color:var(--text-muted);font-size:12px"></i>
+        <input type="text" id="sc-search" placeholder="Search shortcuts…" autocomplete="off"
+          style="flex:1;border:none;outline:none;background:transparent;padding:8px 0;font-size:13px;color:var(--text);font-family:inherit">
+      </div>
+      <div style="max-height:60vh;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse">
+          ${shortcuts.map(([k, d]) => k === '—'
+            ? `<tr class="sc-sep"><td colspan="2" style="padding:4px 6px"><hr style="border:none;border-top:1px solid var(--border);margin:2px 0"></td></tr>`
+            : `<tr class="sc-row" data-search="${escHtml((k + ' ' + d).toLowerCase())}" style="border-bottom:1px solid var(--border-light)">
+                <td style="padding:6px 6px;white-space:nowrap;width:1%"><kbd style="background:var(--surface3);border:1px solid var(--border);border-radius:4px;padding:2px 7px;font-size:11px;font-family:inherit">${k}</kbd></td>
+                <td style="padding:6px 6px 6px 14px;font-size:12px;color:var(--text)">${d}</td>
+              </tr>`).join('')}
+          <tr id="sc-empty" style="display:none"><td colspan="2" style="padding:24px;text-align:center;font-size:12px;color:var(--text-muted)">No shortcuts match your search</td></tr>
+        </table>
+      </div>
       <div class="modal-footer">
         <button class="btn-secondary" id="sc-close">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
-  overlay.querySelector('#sc-close').addEventListener('click', () => overlay.remove());
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+  const close = () => overlay.remove();
+  overlay.querySelector('#sc-close').addEventListener('click', close);
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+
+  const search = overlay.querySelector('#sc-search');
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    let shown = 0;
+    overlay.querySelectorAll('.sc-row').forEach(r => {
+      const match = !q || r.dataset.search.includes(q);
+      r.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    overlay.querySelectorAll('.sc-sep').forEach(r => { r.style.display = q ? 'none' : ''; });
+    overlay.querySelector('#sc-empty').style.display = shown ? 'none' : '';
+  });
+  search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { close(); e.stopPropagation(); } });
+  search.focus();
 }
 
 // ── Sign out (ribbon View tab button) ─────────────────────────────────────
@@ -23841,16 +23884,19 @@ const _cm = {
 
 let _cmReturnToSaleWizard = false;
 
-function openCustomersModal() {
+// Optional customerId pre-selects that customer (also used as a raw click handler, so ignore Events).
+function openCustomersModal(customerId) {
+  const preselectId = typeof customerId === 'number' && customerId > 0 ? customerId : null;
   $('#customers-modal').style.display = 'flex';
   _cmReturnToSaleWizard = false;
   _cm.page = 1; _cm.searchQ = ''; _cm.categoryId = ''; _cm.selectedId = null; _cm.editingId = null;
   $('#cm-search').value = '';
   if ($('#cm-category-filter')) $('#cm-category-filter').value = '';
   _cmShowDetail(false); _cmShowForm(false);
-  _cmLoadList();
+  const listReady = _cmLoadList();
   _loadCustomerConfig().then(_cmRenderCategoryFilterOptions);
-  requestAnimationFrame(() => $('#cm-search').focus());
+  if (preselectId) listReady.then(() => _cmSelectCustomer(preselectId));
+  else requestAnimationFrame(() => $('#cm-search').focus());
 }
 
 function _cmRenderCategoryFilterOptions() {
@@ -23893,10 +23939,13 @@ function _cmRenderList() {
     const sub     = c.phone || c.email || '';
     const wsBadge = c.customer_type === 'wholesale'
       ? `<span class="cart-cust-wholesale" style="font-size:9.5px"><i class="fa fa-boxes-stacked"></i> WS</span>` : '';
+    const overdue = Number(c.overdue_rentals_count) || 0;
+    const rentalBadge = overdue
+      ? `<span class="cm-item-rental-badge" title="${overdue} overdue rental${overdue !== 1 ? 's' : ''}"><i class="fa fa-calendar-xmark"></i> ${overdue}</span>` : '';
     return `<div class="cm-item${c.id === _cm.selectedId ? ' active' : ''}" data-id="${c.id}">
       <div class="cm-item-avatar">${escHtml(initial)}</div>
       <div class="cm-item-body">
-        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}</div>
+        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}${rentalBadge}</div>
         ${sub ? `<div class="cm-item-sub">${escHtml(sub)}</div>` : ''}
       </div>
     </div>`;
@@ -23921,11 +23970,12 @@ function _cmRenderPagination() {
 async function _cmSelectCustomer(id) {
   _cm.selectedId = id;
   _cm.editingId  = null;
-  _cm.tabLoaded  = { subs: false, warranty: false, credit: false };
+  _cm.tabLoaded  = { subs: false, warranty: false, credit: false, rentals: false };
   _cmRenderList();
   _cmShowForm(false);
   _cmShowDetail(true);
   _cmSwitchTab('sales');
+  _cmRenderRentalAlert(0);
   const pane = $('#cm-detail-view');
   if (pane) pane.style.opacity = '.5';
 
@@ -23939,6 +23989,7 @@ async function _cmSelectCustomer(id) {
   $('#cm-dv-avatar').textContent = init;
   $('#cm-dv-name').textContent   = c.name;
   $('#cm-dv-sales-badge').textContent = `${c.sales_count ?? 0} sale${(c.sales_count ?? 0) !== 1 ? 's' : ''}`;
+  _cmRenderRentalAlert(Number(c.overdue_rentals_count) || 0);
 
   const isWholesaleCust = c.customer_type === 'wholesale';
   const typeVal = isWholesaleCust
@@ -23976,6 +24027,19 @@ async function _cmSelectCustomer(id) {
   } else {
     history.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-receipt"></i> No sales yet</div>';
   }
+}
+
+function _cmRenderRentalAlert(overdue) {
+  const el = $('#cm-dv-rental-alert');
+  const count = $('#cm-dv-rentals-count');
+  if (count) { count.textContent = overdue; count.style.display = overdue ? '' : 'none'; }
+  if (!el) return;
+  if (!overdue) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = `<i class="fa fa-triangle-exclamation"></i>
+    <span>This customer has <strong>${overdue} overdue rental${overdue !== 1 ? 's' : ''}</strong> not yet returned.</span>
+    <button type="button" class="cm-dv-rental-alert-btn">View Rentals</button>`;
+  el.style.display = '';
+  el.querySelector('.cm-dv-rental-alert-btn').addEventListener('click', () => _cmSwitchTab('rentals'));
 }
 
 function _cmSwitchTab(tab) {
@@ -24052,6 +24116,37 @@ async function _cmLoadTabData(tab) {
         <span class="cm-dv-sale-amt">${parseFloat(s.due_amount || 0).toFixed(2)}</span>
       </div>`;
     }).join('');
+
+  } else if (tab === 'rentals') {
+    const panel = $('#cm-dv-panel-rentals');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.customerRentals(id);
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    if (!list.length) {
+      panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-calendar-days"></i> No rentals</div>';
+      return;
+    }
+    const order = { overdue: 0, active: 1, returned: 2, cancelled: 3 };
+    list.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    panel.innerHTML = list.map(r => {
+      const meta = r.status === 'overdue'
+        ? `Due ${r.due_at || '—'} · ${r.days_late ?? 0}d late`
+        : (r.returned_at ? `Returned ${r.returned_at}` : `Due ${r.due_at || '—'}`);
+      return `
+      <div class="cm-dv-credit-row cm-dv-rental-row" data-cm-rental="${r.id}" title="View rental">
+        <span class="cm-dv-sale-num">${escHtml(r.product_name || '—')}${Number(r.quantity) > 1 ? ` × ${escHtml(String(r.quantity))}` : ''}</span>
+        <span class="cm-dv-credit-meta">${escHtml(meta)}</span>
+        <span class="cm-dv-rental-badge cm-dv-rental-badge--${escHtml(r.status)}">${escHtml(r.status_label || r.status)}</span>
+        <span class="cm-dv-sale-amt">${parseFloat(r.total_amount || 0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    panel.querySelectorAll('[data-cm-rental]').forEach(row => {
+      row.addEventListener('click', () => {
+        const r = list.find(x => x.id === Number(row.dataset.cmRental));
+        if (r) _prentalOpenDetail(r);
+      });
+    });
   }
 }
 
@@ -29350,6 +29445,28 @@ document.addEventListener('keydown', (e) => {
     const _t = activeTab(); if (_t && _t.cart.length) openCheckout(); e.preventDefault(); return;
   }
   if (mod && e.key === 't') { activateTab('pos'); addPosTab(); e.preventDefault(); return; }
+
+  // ── Gift card / coupon lookup (Ctrl+G, Ctrl+K) — respect ribbon permissions ──
+  const _rbVisible = (sel) => { const b = $(sel); return b && b.style.display !== 'none'; };
+  if (mod && !e.shiftKey && (e.key === 'g' || e.key === 'G')) {
+    if (_rbVisible('#rb-gift-card-check')) openGiftCardCheckModal();
+    e.preventDefault(); return;
+  }
+  if (mod && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+    if (_rbVisible('#rb-coupon-check')) openCouponCheckModal();
+    e.preventDefault(); return;
+  }
+
+  // ── POS mode tabs (Alt+1…4) ───────────────────────────────────────────────
+  if (e.altKey && !mod && !e.shiftKey) {
+    const posModeMap = { '1': 'products', '2': 'services', '3': 'rentals', '4': 'dynamic' };
+    const mode = posModeMap[e.key];
+    if (mode) {
+      const modeBtn = $(`.pos-mode-btn[data-mode="${mode}"]`);
+      if (modeBtn && modeBtn.style.display !== 'none') { activateTab('pos'); switchPosMode(mode); }
+      e.preventDefault(); return;
+    }
+  }
 
   // ── Inventory subnav shortcuts (Ctrl+1…0, Ctrl+B) ────────────────────────
   if (mod && !e.shiftKey) {

@@ -126,6 +126,7 @@ const API = (() => {
     customerSubscriptions:(customerId)=> request('GET',    `/customers/${customerId}/subscriptions`),
     customerWarranties:   (customerId)=> request('GET',    `/customers/${customerId}/warranties`),
     customerCreditSales:  (customerId)=> request('GET',    `/customers/${customerId}/credit-sales`),
+    customerRentals:      (customerId)=> request('GET',    `/product-rentals?customer_id=${encodeURIComponent(customerId)}&status=all&per_page=100`),
     cancelSubscription:   (id)        => request('POST',   `/subscriptions/${id}/cancel`),
     pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),

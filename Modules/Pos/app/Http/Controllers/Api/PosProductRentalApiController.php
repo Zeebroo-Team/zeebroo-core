@@ -30,6 +30,7 @@ class PosProductRentalApiController extends Controller
             $status,
             $search !== '' ? $search : null,
             (int) $request->query('per_page', 25),
+            $request->filled('customer_id') ? (int) $request->query('customer_id') : null,
         );
 
         return response()->json([

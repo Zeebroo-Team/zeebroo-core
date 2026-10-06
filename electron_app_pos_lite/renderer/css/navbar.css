@@ -628,7 +628,31 @@
 .pm-badge.neutral { background: #f1f2f5; color: #6b7280; }
 
 /* ── Keyboard shortcuts modal ─────────────────────────────────────────── */
-.sck-card { width: 460px; }
+.sck-card { width: 600px; max-width: calc(100vw - 32px); }
+.sck-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border, #dcdfea);
+  border-radius: 8px;
+  background: #fff;
+}
+.sck-search i { color: #9aa0ae; font-size: 13px; }
+.sck-search input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 10px 0;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text, #1f2430);
+}
+.sck-search:focus-within { border-color: var(--accent, #4f46e5); }
+.sck-group[hidden], .sck-row[hidden] { display: none; }
+.sck-empty { padding: 24px 0; text-align: center; font-size: 13px; color: #9aa0ae; }
 .sck-group + .sck-group { margin-top: 18px; }
 .sck-list { display: flex; flex-direction: column; gap: 2px; }
 .sck-row {
