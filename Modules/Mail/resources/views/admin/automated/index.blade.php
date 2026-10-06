@@ -28,7 +28,8 @@
                 $s = $email->settings ?? [];
                 $stat = $stats[$key] ?? ['sent' => 0, 'failed' => 0, 'last' => null];
                 $trigger = match ($key) {
-                    'welcome' => 'Right after a new account is created',
+                    'email_verification' => 'Right after sign-up (web, desktop & POS Lite) · code valid '.($s['otp_minutes'] ?? 15).' min',
+                    'welcome' => 'After a new account is created and verified',
                     'password_reset' => 'When a user requests a reset · code valid '.($s['otp_minutes'] ?? 10).' min',
                     'inactivity_reminder' => 'After '.($s['days'] ?? 2).' '.(($s['days'] ?? 2) == 1 ? 'day' : 'days').' without activity · checked daily at '.$hour($s['send_hour'] ?? 9),
                     'activity_report' => match ($s['frequency'] ?? 'weekly') {

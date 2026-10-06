@@ -6587,6 +6587,8 @@ function showApp() {
   _checkBankOnboarding();
   // Warn if the business's subscription payment is pending/failed
   _checkBillingAlert();
+  // Remind new sign-ups to verify their email
+  _checkEmailVerifyAlert();
   // Load business + branch switchers
   _bizSwInit();
   // Apply feature-based tab and backstage visibility
@@ -9447,6 +9449,121 @@ $('#billing-alert-pay-btn').addEventListener('click', async () => {
   const checkoutUrl = res.body?.data?.checkout_url;
   if (res.status === 200 && checkoutUrl) window.electronAPI.openExternal(checkoutUrl);
 });
+
+// ── Email not verified banner + verify modal ─────────────────────────────
+// Shown while /auth/me reports email_verification_required (sign-up code not entered yet).
+const _emailVerify = { dismissed: false, email: '', minutes: 15 };
+
+async function _checkEmailVerifyAlert() {
+  const bar = $('#email-verify-bar');
+  if (state.cashierMode) { bar.style.display = 'none'; _renderEmailVerifyMenu(null); return; }
+  const res = await API.me();
+  const user = res.body?.data;
+  if (res.status === 200) _renderEmailVerifyMenu(user);
+  if (user?.email_verification_required) {
+    _emailVerify.email = user.email;
+    _emailVerify.minutes = user.email_verification_minutes || 15;
+  }
+  if (res.status !== 200 || !user?.email_verification_required || _emailVerify.dismissed) {
+    bar.style.display = 'none';
+    return;
+  }
+  $('#email-verify-bar-text').textContent =
+    `Please verify your email address. We sent a 6-digit code to ${user.email}.`;
+  bar.style.display = 'flex';
+}
+
+function _openEmailVerifyModal() {
+  $('#email-verify-msg').textContent =
+    `Enter the 6-digit code we emailed to ${_emailVerify.email}. Codes expire after ${_emailVerify.minutes} minutes.`;
+  $('#email-verify-alert').style.display = 'none';
+  $('#email-verify-otp').value = '';
+  $('#email-verify-modal').style.display = 'flex';
+  $('#email-verify-otp').focus();
+}
+
+function _closeEmailVerifyModal() {
+  $('#email-verify-modal').style.display = 'none';
+}
+
+async function _submitEmailVerify() {
+  const otp   = $('#email-verify-otp').value.trim();
+  const btn   = $('#email-verify-submit');
+  const alert = $('#email-verify-alert');
+  alert.className = 'alert alert-error';
+
+  if (!/^\d{6}$/.test(otp)) { showAlert(alert, 'Enter the 6-digit code from the email'); return; }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Verifying…';
+  alert.style.display = 'none';
+
+  const res = await API.verifyEmail(otp);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Verify Email';
+
+  if (res.status !== 200) {
+    const errors = res.body?.errors;
+    const first  = errors ? [].concat(errors[Object.keys(errors)[0]])[0] : null;
+    showAlert(alert, res.status === 429
+      ? 'Too many attempts. Please wait a minute and try again.'
+      : (first || res.body?.message || `Verification failed (${res.status})`));
+    return;
+  }
+
+  _closeEmailVerifyModal();
+  $('#email-verify-bar').style.display = 'none';
+  _renderEmailVerifyMenu(res.body?.user || { email_verified_at: new Date().toISOString() });
+  toast('Your email has been verified', 'success');
+}
+
+// Profile menu "Email" row: Verified pill, or a Verify Now pill (opens the modal) while
+// the sign-up code is pending. Hidden for cashiers and older accounts never asked to verify.
+function _renderEmailVerifyMenu(user) {
+  const item = $('#tpm-email-verify');
+  const pill = $('#tpm-ev-pill');
+  const verified = !!user?.email_verified_at;
+  const pending  = !!user?.email_verification_required;
+  if (!verified && !pending) { item.style.display = 'none'; return; }
+  item.classList.toggle('is-verified', verified);
+  pill.className = 'tpm-ev-pill ' + (verified ? 'is-verified' : 'is-pending');
+  pill.innerHTML = verified
+    ? '<i class="fa fa-circle-check"></i> Verified'
+    : '<i class="fa fa-envelope-circle-check"></i> Verify Now';
+  item.style.display = '';
+}
+
+$('#tpm-email-verify').addEventListener('click', () => {
+  if ($('#tpm-email-verify').classList.contains('is-verified')) return;
+  closeProfileMenu();
+  _openEmailVerifyModal();
+});
+
+async function _resendEmailVerify() {
+  const alert = $('#email-verify-alert');
+  alert.className = 'alert alert-error';
+  const res = await API.resendEmailVerification();
+  if (res.status !== 200) {
+    showAlert(alert, res.body?.message || `Could not send the code (${res.status})`);
+    return;
+  }
+  alert.className = 'alert alert-success';
+  showAlert(alert, res.body?.message || 'A new code has been sent.');
+  $('#email-verify-otp').focus();
+}
+
+$('#email-verify-bar-btn').addEventListener('click', _openEmailVerifyModal);
+$('#email-verify-bar-dismiss').addEventListener('click', () => {
+  _emailVerify.dismissed = true;
+  $('#email-verify-bar').style.display = 'none';
+});
+$('#email-verify-close').addEventListener('click', _closeEmailVerifyModal);
+$('#email-verify-cancel').addEventListener('click', _closeEmailVerifyModal);
+$('#email-verify-modal').addEventListener('click', e => { if (e.target === $('#email-verify-modal')) _closeEmailVerifyModal(); });
+$('#email-verify-submit').addEventListener('click', _submitEmailVerify);
+$('#email-verify-otp').addEventListener('keydown', e => { if (e.key === 'Enter') _submitEmailVerify(); });
+$('#email-verify-otp').addEventListener('input', e => { e.target.value = e.target.value.replace(/\D/g, '').slice(0, 6); });
+$('#email-verify-resend').addEventListener('click', e => { e.preventDefault(); _resendEmailVerify(); });
 
 // ── Billing & Payments modal ────────────────────────────────────────────
 const _pm = { items: [], detailId: null, tab: null };

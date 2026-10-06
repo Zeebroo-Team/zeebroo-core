@@ -109,7 +109,7 @@ class AdminAutomatedEmailController extends Controller
     private function settingsRules(string $key): array
     {
         return match ($key) {
-            AdminAutomatedEmail::PASSWORD_RESET => [
+            AdminAutomatedEmail::EMAIL_VERIFICATION, AdminAutomatedEmail::PASSWORD_RESET => [
                 'settings.otp_minutes' => ['required', 'integer', 'min:5', 'max:60'],
             ],
             AdminAutomatedEmail::INACTIVITY => [
@@ -133,7 +133,7 @@ class AdminAutomatedEmailController extends Controller
     private function castSettings(string $key, array $settings): array
     {
         return match ($key) {
-            AdminAutomatedEmail::PASSWORD_RESET => ['otp_minutes' => (int) $settings['otp_minutes']],
+            AdminAutomatedEmail::EMAIL_VERIFICATION, AdminAutomatedEmail::PASSWORD_RESET => ['otp_minutes' => (int) $settings['otp_minutes']],
             AdminAutomatedEmail::INACTIVITY => ['days' => (int) $settings['days'], 'send_hour' => (int) $settings['send_hour']],
             AdminAutomatedEmail::REPORT => [
                 'frequency' => $settings['frequency'],

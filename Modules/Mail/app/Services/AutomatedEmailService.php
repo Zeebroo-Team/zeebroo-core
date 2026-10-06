@@ -19,7 +19,7 @@ use Modules\Mail\Support\HtmlSanitizer;
 use Throwable;
 
 /**
- * Automatic platform emails: welcome, password reset OTP, inactivity reminder,
+ * Automatic platform emails: email verification OTP, welcome, password reset OTP, inactivity reminder,
  * periodic activity report and new release announcement. Each has an admin-editable
  * template + settings stored in admin_automated_emails (defaults live in code).
  */
@@ -51,9 +51,19 @@ class AutomatedEmailService
     public function definitions(): array
     {
         return [
+            AdminAutomatedEmail::EMAIL_VERIFICATION => [
+                'name' => 'Email verification',
+                'description' => 'Emails a 6-digit code to a new user to confirm their address. Until they enter it, the web app, POS desktop and POS Lite show a "Verify your email" banner.',
+                'icon' => 'fa-envelope-circle-check',
+                'required' => false,
+                'marketing' => false,
+                'default_enabled' => true,
+                'settings' => ['otp_minutes' => 15],
+                'tags' => ['otp_code' => 'Verification code', 'expiry_minutes' => 'Minutes until the code expires'],
+            ],
             AdminAutomatedEmail::WELCOME => [
                 'name' => 'Registration successful',
-                'description' => 'Welcome email sent as soon as a new user creates an account (web, Google or desktop app).',
+                'description' => 'Welcome email sent when a new user creates an account (web, Google or desktop app) — after they verify their email when verification is on.',
                 'icon' => 'fa-user-check',
                 'required' => false,
                 'marketing' => false,
@@ -270,6 +280,30 @@ class AutomatedEmailService
         return (int) $this->get(AdminAutomatedEmail::PASSWORD_RESET)->setting('otp_minutes', 10);
     }
 
+    /** New sign-ups must confirm their email while this automation is on. */
+    public function emailVerificationEnabled(): bool
+    {
+        return $this->get(AdminAutomatedEmail::EMAIL_VERIFICATION)->is_enabled;
+    }
+
+    /**
+     * Sent synchronously: the user is waiting on the verify screen for this code.
+     *
+     * @throws Throwable when the mail transport fails
+     */
+    public function sendVerificationCode(User $user, string $otp): void
+    {
+        $this->deliver(AdminAutomatedEmail::EMAIL_VERIFICATION, $user, [
+            'otp_code' => $otp,
+            'expiry_minutes' => (string) $this->verificationMinutes(),
+        ], throw: true);
+    }
+
+    public function verificationMinutes(): int
+    {
+        return (int) $this->get(AdminAutomatedEmail::EMAIL_VERIFICATION)->setting('otp_minutes', 15);
+    }
+
     /** Announce a release to every eligible user (at most once per release). Returns the number queued. */
     public function announceRelease(AppRelease $release): int
     {
@@ -478,6 +512,7 @@ class AutomatedEmailService
         $release = AppRelease::query()->orderByDesc('release_date')->orderByDesc('id')->first();
 
         return match ($key) {
+            AdminAutomatedEmail::EMAIL_VERIFICATION => ['otp_code' => '730584', 'expiry_minutes' => (string) $this->verificationMinutes()],
             AdminAutomatedEmail::WELCOME => ['dashboard_url' => route('dashboard')],
             AdminAutomatedEmail::PASSWORD_RESET => ['otp_code' => '482915', 'expiry_minutes' => (string) $this->otpMinutes()],
             AdminAutomatedEmail::INACTIVITY => [
@@ -514,7 +549,7 @@ class AutomatedEmailService
     {
         return match ($key) {
             AdminAutomatedEmail::WELCOME => ['dashboard_url' => route('dashboard')],
-            AdminAutomatedEmail::PASSWORD_RESET => $context,
+            AdminAutomatedEmail::EMAIL_VERIFICATION, AdminAutomatedEmail::PASSWORD_RESET => $context,
             AdminAutomatedEmail::INACTIVITY => [
                 'days_inactive' => (string) max(1, (int) ($user->last_seen_at ?? $user->created_at)?->diffInDays(now())),
                 'login_url' => route('login'),

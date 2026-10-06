@@ -19,7 +19,7 @@ use Modules\Settings\Concerns\HasSettings;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password', 'google_id'])]
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['password', 'remember_token', 'email_verification_code'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -34,6 +34,8 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
+            'email_verification_required' => 'boolean',
+            'email_verification_sent_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
             'marketing_opt_out_at' => 'datetime',

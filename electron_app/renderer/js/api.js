@@ -36,6 +36,9 @@ const API = (() => {
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     packages:           () => publicRequest('GET', '/auth/packages'),
     me:                 () => request('GET', '/auth/me'),
+    // Sign-up email verification — "Verify your email" banner (PosAuthApiController verifyEmail / resendEmailVerification)
+    verifyEmail:        (otp) => request('POST', '/auth/email/verify', { otp }),
+    resendEmailVerification: () => request('POST', '/auth/email/resend'),
     startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
     paymentStatus:        (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
     paymentHistory:       () => request('GET', '/auth/payment/history'),
