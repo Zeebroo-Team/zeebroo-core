@@ -1308,7 +1308,7 @@ function _prentalRenderList() {
     const totalTitle = `${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})} × ${escHtml(String(r.quantity ?? 1))} × ${duration}d`
       + (parseFloat(r.late_fee || r.projected_late_fee || 0) > 0 ? ` + ${formatMoney(parseFloat(r.late_fee || r.projected_late_fee || 0), {currency: cur})} late fee` : '');
     html += `<tr class="subs-row" data-prental-row="${r.id}" style="cursor:pointer">
-      <td class="qt-tbl-customer">${escHtml(r.customer_name || '—')}</td>
+      <td class="qt-tbl-customer"><span class="qt-tbl-cust-wrap">${escHtml(r.customer_name || '—')}${r.customer_id ? `<button class="qt-tbl-cust-btn" data-prental-cust="${r.customer_id}" title="View customer"><i class="fa fa-address-card"></i></button>` : ''}</span></td>
       <td>${escHtml(r.product_name || '—')}</td>
       <td class="qt-tbl-amt">${escHtml(String(r.quantity ?? 1))}</td>
       <td class="qt-tbl-amt">${formatMoney(parseFloat(r.daily_rate || 0), {currency: cur})}</td>
@@ -1342,6 +1342,13 @@ function _prentalRenderList() {
     });
   });
 
+  $$('#prental-body [data-prental-cust]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openCustomersModal(Number(b.dataset.prentalCust));
+    });
+  });
+
   $$('#prental-body [data-prental-row]').forEach(row => {
     row.addEventListener('click', () => {
       const r = _prental.list.find(x => x.id === Number(row.dataset.prentalRow));
@@ -1361,6 +1368,12 @@ async function _prentalRunAction(act, id, btn) {
   if (res.status === 200) {
     toast(res.body?.message || 'Rental marked returned', 'success');
     await loadRentalsList();
+    // Opened from the Customers modal's Rentals tab — refresh its overdue badge/alert too.
+    if ($('#customers-modal')?.style.display === 'flex' && _cm.selectedId) {
+      _cmLoadList();
+      _cmSelectCustomer(_cm.selectedId);
+      _cmSwitchTab('rentals');
+    }
     return true;
   } else {
     toast(res.body?.message || 'Action failed', 'error');
@@ -23871,16 +23884,19 @@ const _cm = {
 
 let _cmReturnToSaleWizard = false;
 
-function openCustomersModal() {
+// Optional customerId pre-selects that customer (also used as a raw click handler, so ignore Events).
+function openCustomersModal(customerId) {
+  const preselectId = typeof customerId === 'number' && customerId > 0 ? customerId : null;
   $('#customers-modal').style.display = 'flex';
   _cmReturnToSaleWizard = false;
   _cm.page = 1; _cm.searchQ = ''; _cm.categoryId = ''; _cm.selectedId = null; _cm.editingId = null;
   $('#cm-search').value = '';
   if ($('#cm-category-filter')) $('#cm-category-filter').value = '';
   _cmShowDetail(false); _cmShowForm(false);
-  _cmLoadList();
+  const listReady = _cmLoadList();
   _loadCustomerConfig().then(_cmRenderCategoryFilterOptions);
-  requestAnimationFrame(() => $('#cm-search').focus());
+  if (preselectId) listReady.then(() => _cmSelectCustomer(preselectId));
+  else requestAnimationFrame(() => $('#cm-search').focus());
 }
 
 function _cmRenderCategoryFilterOptions() {
@@ -23923,10 +23939,13 @@ function _cmRenderList() {
     const sub     = c.phone || c.email || '';
     const wsBadge = c.customer_type === 'wholesale'
       ? `<span class="cart-cust-wholesale" style="font-size:9.5px"><i class="fa fa-boxes-stacked"></i> WS</span>` : '';
+    const overdue = Number(c.overdue_rentals_count) || 0;
+    const rentalBadge = overdue
+      ? `<span class="cm-item-rental-badge" title="${overdue} overdue rental${overdue !== 1 ? 's' : ''}"><i class="fa fa-calendar-xmark"></i> ${overdue}</span>` : '';
     return `<div class="cm-item${c.id === _cm.selectedId ? ' active' : ''}" data-id="${c.id}">
       <div class="cm-item-avatar">${escHtml(initial)}</div>
       <div class="cm-item-body">
-        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}</div>
+        <div class="cm-item-name" style="display:flex;align-items:center;gap:6px">${escHtml(c.name)}${wsBadge}${rentalBadge}</div>
         ${sub ? `<div class="cm-item-sub">${escHtml(sub)}</div>` : ''}
       </div>
     </div>`;
@@ -23951,11 +23970,12 @@ function _cmRenderPagination() {
 async function _cmSelectCustomer(id) {
   _cm.selectedId = id;
   _cm.editingId  = null;
-  _cm.tabLoaded  = { subs: false, warranty: false, credit: false };
+  _cm.tabLoaded  = { subs: false, warranty: false, credit: false, rentals: false };
   _cmRenderList();
   _cmShowForm(false);
   _cmShowDetail(true);
   _cmSwitchTab('sales');
+  _cmRenderRentalAlert(0);
   const pane = $('#cm-detail-view');
   if (pane) pane.style.opacity = '.5';
 
@@ -23969,6 +23989,7 @@ async function _cmSelectCustomer(id) {
   $('#cm-dv-avatar').textContent = init;
   $('#cm-dv-name').textContent   = c.name;
   $('#cm-dv-sales-badge').textContent = `${c.sales_count ?? 0} sale${(c.sales_count ?? 0) !== 1 ? 's' : ''}`;
+  _cmRenderRentalAlert(Number(c.overdue_rentals_count) || 0);
 
   const isWholesaleCust = c.customer_type === 'wholesale';
   const typeVal = isWholesaleCust
@@ -24006,6 +24027,19 @@ async function _cmSelectCustomer(id) {
   } else {
     history.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-receipt"></i> No sales yet</div>';
   }
+}
+
+function _cmRenderRentalAlert(overdue) {
+  const el = $('#cm-dv-rental-alert');
+  const count = $('#cm-dv-rentals-count');
+  if (count) { count.textContent = overdue; count.style.display = overdue ? '' : 'none'; }
+  if (!el) return;
+  if (!overdue) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = `<i class="fa fa-triangle-exclamation"></i>
+    <span>This customer has <strong>${overdue} overdue rental${overdue !== 1 ? 's' : ''}</strong> not yet returned.</span>
+    <button type="button" class="cm-dv-rental-alert-btn">View Rentals</button>`;
+  el.style.display = '';
+  el.querySelector('.cm-dv-rental-alert-btn').addEventListener('click', () => _cmSwitchTab('rentals'));
 }
 
 function _cmSwitchTab(tab) {
@@ -24082,6 +24116,37 @@ async function _cmLoadTabData(tab) {
         <span class="cm-dv-sale-amt">${parseFloat(s.due_amount || 0).toFixed(2)}</span>
       </div>`;
     }).join('');
+
+  } else if (tab === 'rentals') {
+    const panel = $('#cm-dv-panel-rentals');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.customerRentals(id);
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    if (!list.length) {
+      panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-calendar-days"></i> No rentals</div>';
+      return;
+    }
+    const order = { overdue: 0, active: 1, returned: 2, cancelled: 3 };
+    list.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    panel.innerHTML = list.map(r => {
+      const meta = r.status === 'overdue'
+        ? `Due ${r.due_at || '—'} · ${r.days_late ?? 0}d late`
+        : (r.returned_at ? `Returned ${r.returned_at}` : `Due ${r.due_at || '—'}`);
+      return `
+      <div class="cm-dv-credit-row cm-dv-rental-row" data-cm-rental="${r.id}" title="View rental">
+        <span class="cm-dv-sale-num">${escHtml(r.product_name || '—')}${Number(r.quantity) > 1 ? ` × ${escHtml(String(r.quantity))}` : ''}</span>
+        <span class="cm-dv-credit-meta">${escHtml(meta)}</span>
+        <span class="cm-dv-rental-badge cm-dv-rental-badge--${escHtml(r.status)}">${escHtml(r.status_label || r.status)}</span>
+        <span class="cm-dv-sale-amt">${parseFloat(r.total_amount || 0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+    panel.querySelectorAll('[data-cm-rental]').forEach(row => {
+      row.addEventListener('click', () => {
+        const r = list.find(x => x.id === Number(row.dataset.cmRental));
+        if (r) _prentalOpenDetail(r);
+      });
+    });
   }
 }
 

@@ -6454,6 +6454,36 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-dv-credit-badge--due     { background: rgba(245,158,11,.13); color: #b45309; }
 .cm-dv-credit-badge--paid    { background: rgba(16,185,129,.12); color: #059669; }
 
+/* Rentals tab + overdue-rental warning */
+.cm-dv-rental-row { cursor: pointer; }
+.cm-dv-rental-row:hover .cm-dv-sale-num { color: var(--accent); }
+.cm-dv-rental-badge {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; white-space: nowrap;
+}
+.cm-dv-rental-badge--overdue   { background: rgba(239,68,68,.1);  color: #dc2626; }
+.cm-dv-rental-badge--active    { background: rgba(34,197,94,.12); color: #16a34a; }
+.cm-dv-rental-badge--returned  { background: rgba(59,130,246,.12); color: #2563eb; }
+.cm-dv-rental-badge--cancelled { background: rgba(148,163,184,.18); color: #64748b; }
+.cm-dv-rental-alert {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 20px 10px; padding: 9px 12px; border-radius: 8px;
+  background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25);
+  color: #b91c1c; font-size: 12px;
+}
+.cm-dv-rental-alert > span { flex: 1; }
+.cm-dv-rental-alert-btn {
+  border: 1px solid rgba(239,68,68,.35); background: transparent; color: #b91c1c;
+  font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer;
+}
+.cm-dv-rental-alert-btn:hover { background: rgba(239,68,68,.1); }
+.cm-item-rental-badge {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 10px;
+  background: rgba(239,68,68,.12); color: #dc2626;
+}
+/* Rental detail can be opened from inside the Customers modal — paint above it */
+#prental-detail-modal { z-index: 850; }
+
 .cm-dv-actions {
   display: flex; gap: 8px; padding: 12px 20px;
   border-top: 1px solid var(--border-light); flex-shrink: 0;
@@ -13418,6 +13448,16 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 .qt-tbl-wrap.qt-tbl-no-hover .qt-tbl tbody tr:hover td { background: transparent; }
 .qt-tbl-num { font-size: 12px; font-weight: 700; color: var(--accent); font-family: monospace; }
 .qt-tbl-customer { font-weight: 600; }
+.qt-tbl-cust-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.qt-tbl-cust-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border-radius: 6px;
+  border: 1px solid var(--border); background: var(--surface, #fff);
+  color: var(--primary, #3b82f6); font-size: 11px; cursor: pointer;
+  opacity: 0; transition: opacity .12s, background .12s;
+}
+tr:hover .qt-tbl-cust-btn, .qt-tbl-cust-btn:focus-visible { opacity: 1; }
+.qt-tbl-cust-btn:hover { background: color-mix(in srgb, var(--primary, #3b82f6) 12%, transparent); }
 .qt-tbl-muted { color: var(--text-muted); font-size: 12px; }
 .qt-tbl-amt { font-weight: 700; text-align: right; }
 .qt-tbl-chevron { color: var(--text-muted); font-size: 10px; width: 28px; text-align: right; opacity: 0; transition: opacity .12s; }
