@@ -459,6 +459,7 @@ class TaskService
             'user'       => $name,
             'first_name' => Str::before(trim($name), ' ') ?: $name,
             'initial'    => Str::upper(Str::substr(trim($name), 0, 1)) ?: '?',
+            'avatar_url' => $c->user?->avatarUrl(),
             'is_mine'    => $c->user_id !== null && (int) $c->user_id === (int) auth()->id(),
             'body'       => $c->body,
             'created_at' => $c->created_at?->toDateTimeString(),

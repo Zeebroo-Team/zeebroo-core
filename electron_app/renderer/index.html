@@ -754,7 +754,7 @@
         <div class="sb-nav-item has-sub" data-tab="mail"><i class="fa fa-envelope"></i><span>Mail</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="automations" style="display:none"><i class="fa fa-bolt"></i><span>Automations</span></div>
-        <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Project Management</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="my-projects"><i class="fa fa-user-check"></i><span>My Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
       </nav>
@@ -785,7 +785,7 @@
         <div class="ribbon-tab" data-tab="mail">Mail</div>
         <div class="ribbon-tab" data-tab="crm">CRM</div>
         <div class="ribbon-tab" data-tab="automations" style="display:none">Automations</div>
-        <div class="ribbon-tab" data-tab="projects">Projects</div>
+        <div class="ribbon-tab" data-tab="projects">Project Management</div>
         <div class="ribbon-tab" data-tab="my-projects">My Projects</div>
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
       </div>
@@ -8956,13 +8956,6 @@
     <!-- ── Projects Panel ───────────────────────────────────────────────── -->
     <div class="content-panel" id="panel-projects" style="flex-direction:column">
 
-      <!-- Header bar -->
-      <div class="auto-search-bar">
-        <i class="fa fa-diagram-project" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
-        <span style="font-size:13px;font-weight:700;flex-shrink:0">Projects</span>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;flex-shrink:0">— delivery tracking, tasks &amp; milestones</span>
-      </div>
-
       <!-- Subnav -->
       <div class="fin-subnav">
         <button class="fin-subnav-btn active" data-pmsub="overview"><i class="fa fa-house"></i> Overview</button>
@@ -8974,7 +8967,7 @@
         <div class="pm-welcome-card">
           <div class="pm-welcome-icon"><i class="fa fa-diagram-project"></i></div>
           <div class="pm-welcome-body">
-            <div class="pm-welcome-title">Welcome to Projects</div>
+            <div class="pm-welcome-title">Welcome to Project Management</div>
             <div class="pm-welcome-desc">Plan delivery, track tasks and manage boards for every project — in-house or for a customer. Assign work to a branch, department, employee, property or customer, follow progress on a kanban board, and keep on top of what's due.</div>
             <div class="pm-welcome-actions">
               <button class="svc-form-btn svc-form-btn--primary" id="pm-ov-new-project-btn"><i class="fa fa-plus"></i> New Project</button>
@@ -9160,13 +9153,6 @@
 
     <!-- ── My Projects Panel (Assigned Project Access) — tasks assigned to me ── -->
     <div class="content-panel" id="panel-my-projects" style="flex-direction:column">
-
-      <!-- Header bar -->
-      <div class="auto-search-bar">
-        <i class="fa fa-user-check" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
-        <span style="font-size:13px;font-weight:700;flex-shrink:0">My Projects</span>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;flex-shrink:0">— tasks assigned to you across every project</span>
-      </div>
 
       <div id="pm-mine-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
 
@@ -17690,8 +17676,16 @@
           <div style="display:flex;align-items:center;margin-bottom:10px">
             <span class="tpm-section-label" style="padding:0">Profile Details</span>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:center;padding:6px 0 18px">
-            <div class="tpm-avatar" id="mp-avatar" style="width:64px;height:64px;font-size:26px">S</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 18px">
+            <button type="button" class="mp-avatar-btn" id="mp-avatar-btn" title="Change profile photo">
+              <div class="tpm-avatar" id="mp-avatar" style="width:80px;height:80px;font-size:32px">S</div>
+              <span class="mp-avatar-overlay"><i class="fa fa-camera"></i></span>
+            </button>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="po-btn-outline" id="mp-avatar-change"><i class="fa fa-camera"></i> Change Photo</button>
+              <button type="button" class="po-btn-ghost" id="mp-avatar-remove" style="display:none"><i class="fa fa-trash"></i> Remove</button>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted)">JPG, PNG, WEBP or GIF · max 5 MB</span>
           </div>
           <div class="po-field">
             <label class="po-field-label">Full Name <span class="po-required">*</span></label>

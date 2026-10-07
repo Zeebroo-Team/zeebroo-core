@@ -806,7 +806,7 @@ class ProjectManageApiController extends Controller
             'description'      => $t->description,
             'status'           => $t->status,
             'priority'         => $t->priority,
-            'assignees'        => $t->assignees->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name])->values(),
+            'assignees'        => $t->assignees->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name, 'avatar_url' => $u->avatarUrl()])->values(),
             'assignee_ids'     => $t->assignees->pluck('id')->map(fn ($id) => (int) $id)->values(),
             // Legacy single-assignee fields (older desktop builds): first assignee id, all names.
             'assigned_to'      => $t->assigned_to,

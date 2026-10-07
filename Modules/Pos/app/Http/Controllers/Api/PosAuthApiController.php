@@ -20,6 +20,7 @@ use Modules\Business\Models\BusinessCategory;
 use Modules\Package\Models\Package;
 use Modules\Payment\Models\Payment;
 use Modules\Payment\Services\PaymentProvisioningService;
+use Modules\Pos\Services\PosUserAvatarService;
 
 class PosAuthApiController extends Controller
 {
@@ -206,6 +207,45 @@ class PosAuthApiController extends Controller
         ]);
     }
 
+    /**
+     * Profile photo upload. Accepts `avatar` or the desktop client's multipart `files[]`
+     * (electronAPI.apiUpload always sends that field name) — only the first file is used.
+     */
+    public function uploadAvatar(Request $request, PosUserAvatarService $avatars): JsonResponse
+    {
+        $imageRules = ['file', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'];
+
+        $request->validate([
+            'avatar'  => ['nullable', ...$imageRules],
+            'files'   => ['nullable', 'array', 'max:1'],
+            'files.*' => $imageRules,
+        ]);
+
+        $file = $request->file('avatar') ?? ($request->file('files')[0] ?? null);
+        if ($file === null) {
+            throw ValidationException::withMessages([
+                'avatar' => ['Choose an image to upload.'],
+            ]);
+        }
+
+        $user = $request->user();
+        $avatars->upload($user, $file);
+
+        return response()->json([
+            'data' => $this->userPayload($user),
+        ]);
+    }
+
+    public function deleteAvatar(Request $request, PosUserAvatarService $avatars): JsonResponse
+    {
+        $user = $request->user();
+        $avatars->remove($user);
+
+        return response()->json([
+            'data' => $this->userPayload($user),
+        ]);
+    }
+
     public function updatePassword(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -340,7 +380,8 @@ class PosAuthApiController extends Controller
             'id'                          => (int) $user->id,
             'name'                        => $user->name,
             'email'                       => $user->email,
-            'email_verified'              => ! $pending,
+            'avatar_url'                  => $user instanceof User ? app(PosUserAvatarService::class)->url($user) : null,
+            'email_verified'            => ! $pending,
             // Set only once the sign-up code was actually entered — legacy accounts stay null.
             'email_verified_at'           => $user->email_verified_at?->toIso8601String(),
             'email_verification_required' => $pending,

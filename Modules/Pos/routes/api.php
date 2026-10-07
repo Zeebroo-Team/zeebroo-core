@@ -84,6 +84,11 @@ Route::prefix('v1/pos')->group(function (): void {
         ->where(['business' => '[0-9]+', 'filename' => '[A-Za-z0-9._-]+'])
         ->name('media.business-logo');
 
+    // User profile photos (My Profile modal) — same CORS rationale as business logos.
+    Route::get('media/user-avatars/{user}/{filename}', [PosMediaApiController::class, 'userAvatar'])
+        ->where(['user' => '[0-9]+', 'filename' => '[A-Za-z0-9._-]+'])
+        ->name('media.user-avatar');
+
     // Generic CORS-safe proxy for any other business-scoped file already stored under the
     // `public` disk (e.g. logos picked via the file manager before the dedicated logo upload
     // endpoint existed) — same rationale as media.business-logo above.
@@ -95,6 +100,8 @@ Route::prefix('v1/pos')->group(function (): void {
 Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
     Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post  ('auth/profile/avatar', [PosAuthApiController::class, 'uploadAvatar'])->name('auth.profile.avatar.upload')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::delete('auth/profile/avatar', [PosAuthApiController::class, 'deleteAvatar'])->name('auth.profile.avatar.delete')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/password', [PosAuthApiController::class, 'updatePassword'])->name('auth.password.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke')->withoutMiddleware(EnsureSubscriptionSettled::class);
     // Sign-up email verification: 6-digit code emailed at registration ("Verify your email" banner)

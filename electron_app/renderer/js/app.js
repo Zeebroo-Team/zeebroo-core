@@ -8272,6 +8272,17 @@ async function _checkBillingOnboarding() {
   $('#bwz-overlay').style.display = 'flex';
 }
 
+/** Fills an avatar circle with the user's photo, falling back to their initial (also if the image fails to load). */
+function renderUserAvatar(el, url, name) {
+  const initial = (name || 'A').trim()[0]?.toUpperCase() || 'A';
+  if (!url) { el.textContent = initial; return; }
+  const img = document.createElement('img');
+  img.alt = '';
+  img.src = url;
+  img.onerror = () => { el.textContent = initial; };
+  el.replaceChildren(img);
+}
+
 function updateProfileUI(bizName, email, userName) {
   // Button shows business name as context
   const bizInitial  = (bizName  || 'Z').trim()[0].toUpperCase();
@@ -8279,8 +8290,7 @@ function updateProfileUI(bizName, email, userName) {
   document.getElementById('tb-profile-name').textContent = bizName || 'Account';
   // Dropdown header shows the logged-in user
   const displayName = userName || state._userName || bizName || 'Account';
-  const userInitial = displayName.trim()[0].toUpperCase();
-  document.getElementById('tpm-avatar').textContent = userInitial;
+  renderUserAvatar(document.getElementById('tpm-avatar'), state._userAvatar, displayName);
   document.getElementById('tpm-name').textContent   = displayName;
   document.getElementById('tpm-email').textContent  = email || state._userEmail || '—';
 }
@@ -8455,6 +8465,7 @@ async function doCashierLogin() {
   state._bizName   = bizName;
   state._userName  = d.cashier_name;
   state._userEmail = '';
+  state._userAvatar = null;
   $('#app-title').textContent = bizName ? `Zeebroo POS — ${bizName}` : 'Zeebroo POS';
   updateProfileUI(bizName, '', d.cashier_name);
   $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${escHtml(bizName)}`;
@@ -8674,6 +8685,7 @@ async function doSignupOrPay() {
   const token = res.body?.access_token || res.body?.token;
   state._userName  = res.body?.user?.name  || name || null;
   state._userEmail = res.body?.user?.email || email;
+  state._userAvatar = res.body?.user?.avatar_url || null;
   await window.electronAPI.setConfig({ token });
   state.config = await window.electronAPI.getConfig();
 
@@ -8772,6 +8784,7 @@ async function doLogin() {
   console.log('[login] token extracted:', token ? token.slice(0,20)+'…' : 'NONE');
   state._userName  = res.body?.user?.name  || null;
   state._userEmail = res.body?.user?.email || email;
+  state._userAvatar = res.body?.user?.avatar_url || null;
   await window.electronAPI.setConfig({ token });
   state.config = await window.electronAPI.getConfig();
 
@@ -9977,7 +9990,7 @@ async function openMyProfileModal() {
   const email = state._userEmail || '';
   $('#mp-f-name').value  = name;
   $('#mp-f-email').value = email;
-  $('#mp-avatar').textContent = (name || email || 'A').trim()[0].toUpperCase();
+  _mpRenderAvatar();
 
   $('#my-profile-modal-overlay').style.display = 'flex';
 
@@ -9986,9 +9999,73 @@ async function openMyProfileModal() {
   if (res.status === 200 && res.body?.data) {
     $('#mp-f-name').value  = res.body.data.name  || name;
     $('#mp-f-email').value = res.body.data.email || email;
-    $('#mp-avatar').textContent = (res.body.data.name || res.body.data.email || 'A').trim()[0].toUpperCase();
+    state._userAvatar = res.body.data.avatar_url || null;
+    _mpRenderAvatar();
   }
 }
+
+function _mpRenderAvatar() {
+  renderUserAvatar($('#mp-avatar'), state._userAvatar, state._userName || state._userEmail);
+  $('#mp-avatar-remove').style.display = state._userAvatar ? '' : 'none';
+}
+
+/** Applies a fresh user payload from the avatar endpoints to the modal + top-bar menu. */
+function _mpApplyAvatar(user) {
+  state._userAvatar = user?.avatar_url || null;
+  _mpRenderAvatar();
+  updateProfileUI($('#tb-profile-name').textContent, state._userEmail, state._userName);
+}
+
+function _mpSetAvatarBusy(busy) {
+  ['#mp-avatar-btn', '#mp-avatar-change', '#mp-avatar-remove'].forEach(sel => { $(sel).disabled = busy; });
+  $('#mp-avatar-btn').classList.toggle('is-busy', busy);
+  $('#mp-avatar-btn .mp-avatar-overlay').innerHTML = busy
+    ? '<i class="fa fa-spinner fa-spin"></i>'
+    : '<i class="fa fa-camera"></i>';
+}
+
+async function _mpPickAvatar() {
+  const alertEl = $('#mp-alert');
+  alertEl.style.display = 'none';
+
+  const result = await window.electronAPI.showOpenDialog({
+    title: 'Choose a profile photo',
+    filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif'] }],
+    properties: ['openFile'],
+  });
+  if (result.canceled || !result.filePaths?.length) return;
+
+  _mpSetAvatarBusy(true);
+  const res = await window.electronAPI.apiUpload(API.profileAvatarUploadPath, result.filePaths[0]);
+  _mpSetAvatarBusy(false);
+
+  if (res.status === 200) {
+    _mpApplyAvatar(res.body?.data);
+    toast('Profile photo updated', 'success');
+  } else {
+    const msg = res.status === 413
+      ? 'Image is too large for the server.'
+      : Object.values(res.body?.errors || {}).flat().join(' ') || res.body?.message || 'Failed to upload photo';
+    _mpShowAlert(alertEl, msg);
+  }
+}
+
+$('#mp-avatar-btn').addEventListener('click', _mpPickAvatar);
+$('#mp-avatar-change').addEventListener('click', _mpPickAvatar);
+
+$('#mp-avatar-remove').addEventListener('click', async () => {
+  if (!confirm('Remove your profile photo?')) return;
+  _mpSetAvatarBusy(true);
+  const res = await API.deleteProfileAvatar();
+  _mpSetAvatarBusy(false);
+
+  if (res.status === 200) {
+    _mpApplyAvatar(res.body?.data);
+    toast('Profile photo removed', 'success');
+  } else {
+    _mpShowAlert($('#mp-alert'), res.body?.message || 'Failed to remove photo');
+  }
+});
 
 function _closeMyProfileModal() {
   $('#my-profile-modal-overlay').style.display = 'none';
@@ -25071,6 +25148,7 @@ async function _bizSwInit() {
     if (meRes.status === 200) {
       state._userName  = meRes.body?.data?.name  || null;
       state._userEmail = meRes.body?.data?.email || null;
+      state._userAvatar = meRes.body?.data?.avatar_url || null;
       // Refresh the dropdown header now that we have the real user
       const currentBizName = $('#tb-profile-name').textContent;
       updateProfileUI(currentBizName, state._userEmail, state._userName);
@@ -44671,8 +44749,8 @@ async function submitDsCreate() {
     { key: 'automations', label: 'Automations', icon: 'fa-robot', color: '#f97316', items: [
       { key: 'automations_access', label: 'Access Automations', desc: 'View and manage automation workflows' },
     ]},
-    { key: 'projects', label: 'Projects', icon: 'fa-diagram-project', color: '#0891b2', items: [
-      { key: 'projects_access',   label: 'Manage All Projects',     desc: 'Projects → Overview & Projects: view, create and manage every project and task in this business' },
+    { key: 'projects', label: 'Project Management', icon: 'fa-diagram-project', color: '#0891b2', items: [
+      { key: 'projects_access',   label: 'Manage All Projects',     desc: 'Project Management → Overview & Projects: view, create and manage every project and task in this business' },
       { key: 'projects_assigned', label: 'Assigned Project Access', desc: 'My Projects tab: today/upcoming work, my tasks and a kanban board for tasks assigned to you' },
     ]},
     { key: 'event', label: 'Event', icon: 'fa-calendar-days', color: '#d946ef', items: [
@@ -44694,7 +44772,7 @@ async function submitDsCreate() {
     { key: 'crm',        label: 'CRM',        icon: 'fa-handshake',          groups: ['crm'] },
     { key: 'design',     label: 'Design',     icon: 'fa-palette',            groups: ['design'] },
     { key: 'automations',label: 'Automations',icon: 'fa-robot',              groups: ['automations'] },
-    { key: 'projects',   label: 'Projects',   icon: 'fa-diagram-project',    groups: ['projects'] },
+    { key: 'projects',   label: 'Project Management', icon: 'fa-diagram-project', groups: ['projects'] },
     { key: 'event',      label: 'Event',      icon: 'fa-calendar-days',      groups: ['event'] },
   ];
 
@@ -49720,9 +49798,24 @@ const TeamProfile = (() => {
     return `Last seen ${dt.slice(0, 10)}`;
   }
 
+  /**
+   * Inner HTML of an avatar circle: the profile photo when there is one, else the initial.
+   * A photo that fails to load is swapped for its initial by the error listener below
+   * (inline onerror handlers are blocked by the page CSP).
+   */
+  function avatarInner(name, photo, initial) {
+    const ini = initial || (String(name || '').trim().charAt(0) || '?').toUpperCase();
+    return photo
+      ? `<img class="av-photo" src="${esc(photo)}" alt="" data-av-initial="${esc(ini)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block">`
+      : esc(ini);
+  }
+  document.addEventListener('error', e => {
+    const img = e.target;
+    if (img?.classList?.contains('av-photo')) img.replaceWith(document.createTextNode(img.dataset.avInitial || '?'));
+  }, true);
+
   function _avatar(name, initial, photo) {
-    return `<div class="tp-avatar" style="background:${avatarColor(name)}">${photo
-      ? `<img src="${esc(photo)}" alt="" onerror="this.remove()">` : ''}${photo ? '' : esc(initial || (String(name || '').trim().charAt(0) || '?').toUpperCase())}</div>`;
+    return `<div class="tp-avatar" style="background:${avatarColor(name)};overflow:hidden">${avatarInner(name, photo, initial)}</div>`;
   }
 
   function _render(p, fallbackName, error) {
@@ -49758,7 +49851,7 @@ const TeamProfile = (() => {
 
     body.innerHTML = `
       <div class="tp-head">
-        ${_avatar(p.name, p.initial, e.photo_url)}
+        ${_avatar(p.name, p.initial, p.avatar_url || e.photo_url)}
         <div style="min-width:0">
           <div class="tp-name">${esc(p.name)}${p.is_me ? ` ${muted('(you)')}` : ''}</div>
           ${sub ? `<div class="tp-sub">${sub}</div>` : ''}
@@ -49814,7 +49907,7 @@ const TeamProfile = (() => {
       const msgBtn = $('#team-profile-message');
       if (msgBtn) {
         msgBtn.style.display = profile && !profile.is_me && window.MpInbox ? '' : 'none';
-        msgBtn.onclick = () => { close(); window.MpInbox.compose({ to: [{ id: profile.id, name: profile.name, email: profile.email }] }); };
+        msgBtn.onclick = () => { close(); window.MpInbox.compose({ to: [{ id: profile.id, name: profile.name, email: profile.email, avatar_url: profile.avatar_url }] }); };
       }
     }
   }
@@ -49840,7 +49933,7 @@ const TeamProfile = (() => {
   $('#team-profile-cancel')?.addEventListener('click', close);
   $('#team-profile-modal')?.addEventListener('click', e => { if (e.target === $('#team-profile-modal')) close(); });
 
-  return { open, link, links, avatarColor };
+  return { open, link, links, avatarColor, avatarInner };
 })();
 
 // ── Project Management ─────────────────────────────────────────────────────
@@ -50170,7 +50263,7 @@ const TeamProfile = (() => {
     if (!sec) return;
     const rows = pm.members.map(u => `
       <tr data-uid="${u.id}">
-        <td style="width:40px"><span class="tp-avatar-btn" data-profile-uid="${u.id}" data-profile-name="${esc(u.name)}" title="View profile" style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((u.name || '?').charAt(0).toUpperCase())}</span></td>
+        <td style="width:40px"><span class="tp-avatar-btn" data-profile-uid="${u.id}" data-profile-name="${esc(u.name)}" title="View profile" style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;overflow:hidden">${TeamProfile.avatarInner(u.name, u.avatar_url)}</span></td>
         <td><div style="font-size:12px;font-weight:700">${TeamProfile.link(u.id, u.name)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</div></td>
         <td><span class="inv-badge inv-badge-${PM_ROLE_BADGE[u.role] || 'gray'}">${esc(u.role === 'former' ? 'Left business' : u.role)}</span></td>
         <td style="font-size:12px">${u.open_tasks} open <span style="color:var(--text-muted)">/ ${u.total_tasks} total</span></td>
@@ -50585,7 +50678,7 @@ const TeamProfile = (() => {
   function _pmAssigneeChips(assignees = []) {
     if (!assignees.length) return '<span class="pm-assignees-empty"><i class="fa fa-user-plus"></i> Assign</span>';
     const shown = assignees.slice(0, 3).map(u =>
-      `<span class="pm-assignee-chip" title="${esc(u.name)}">${esc((u.name || '?').charAt(0).toUpperCase())}</span>`).join('');
+      `<span class="pm-assignee-chip" title="${esc(u.name)}" style="overflow:hidden">${TeamProfile.avatarInner(u.name, u.avatar_url)}</span>`).join('');
     const more  = assignees.length > 3 ? `<span class="pm-assignee-chip pm-assignee-chip--more">+${assignees.length - 3}</span>` : '';
     const label = assignees.length === 1 ? `<span class="pm-assignees-name">${esc(assignees[0].name)}</span>` : '';
     return shown + more + label;
@@ -51177,7 +51270,7 @@ const TeamProfile = (() => {
     const prev = { assignees: t.assignees, assignee_ids: t.assignee_ids, assigned_to: t.assigned_to, assigned_name: t.assigned_name };
     // Show the new assignees immediately; revert only if the server rejects the change.
     t.assignee_ids = ids;
-    t.assignees    = ids.map(id => pm.members.find(u => +u.id === id)).filter(Boolean).map(u => ({ id: u.id, name: u.name }));
+    t.assignees    = ids.map(id => pm.members.find(u => +u.id === id)).filter(Boolean).map(u => ({ id: u.id, name: u.name, avatar_url: u.avatar_url }));
     _pmRenderTaskViews();
     try {
       const res = await API.pmTaskAssign(tid, ids);
@@ -53093,8 +53186,8 @@ const TeamProfile = (() => {
   // ── Task comments: threads (comment + one level of replies), avatar = first-name initial ──
   const _initialOf = name => (String(name || '').trim().charAt(0) || '?').toUpperCase();
   // With a user id the avatar opens that person's profile.
-  const _avatarHtml = (name, initial, uid) =>
-    `<div class="mp-cmt-avatar" style="background:${TeamProfile.avatarColor(name)}" title="${esc(uid ? `View ${name || ''}'s profile` : (name || ''))}"${uid ? ` data-profile-uid="${+uid}" data-profile-name="${esc(name || '')}"` : ''}>${esc(initial || _initialOf(name))}</div>`;
+  const _avatarHtml = (name, initial, uid, photo) =>
+    `<div class="mp-cmt-avatar" style="background:${TeamProfile.avatarColor(name)};overflow:hidden" title="${esc(uid ? `View ${name || ''}'s profile` : (name || ''))}"${uid ? ` data-profile-uid="${+uid}" data-profile-name="${esc(name || '')}"` : ''}>${TeamProfile.avatarInner(name, photo, initial || _initialOf(name))}</div>`;
 
   function _commentHtml(c, parent) {
     const replies = c.replies || [];
@@ -53102,7 +53195,7 @@ const TeamProfile = (() => {
     const replyBtn = `<button class="mp-cmt-reply-btn" data-cmt-reply="${parent ? parent.id : c.id}"${parent ? ` data-cmt-mention="${esc(c.first_name || c.user)}"` : ''}><i class="fa fa-reply"></i> Reply</button>`;
     return `
       <div class="mp-cmt${parent ? ' mp-cmt--reply' : ''}">
-        ${_avatarHtml(c.user, c.initial, c.user_id)}
+        ${_avatarHtml(c.user, c.initial, c.user_id, c.avatar_url)}
         <div class="mp-cmt-main">
           <div class="mp-cmt-bubble">
             <div class="mp-cmt-head">
@@ -53120,7 +53213,7 @@ const TeamProfile = (() => {
 
   const _cmtFormHtml = (placeholder, label) => `
     <div class="mp-cmt-form">
-      ${_avatarHtml(state._userName || 'You')}
+      ${_avatarHtml(state._userName || 'You', null, null, state._userAvatar)}
       <textarea rows="2" maxlength="5000" placeholder="${placeholder}"></textarea>
       <button class="po-btn-primary" data-cmt-send style="padding:6px 12px;font-size:11px;white-space:nowrap"><i class="fa fa-paper-plane"></i> ${label}</button>
     </div>`;
@@ -53261,7 +53354,7 @@ const TeamProfile = (() => {
 
     const members = p.members.length ? p.members.map(u => `
       <div class="mp-pd-member">
-        <div class="mp-pd-member-avatar" style="background:${TeamProfile.avatarColor(u.name)}" data-profile-uid="${+u.id}" data-profile-name="${esc(u.name)}" title="View profile">${esc((String(u.name || '').trim().charAt(0) || '?').toUpperCase())}</div>
+        <div class="mp-pd-member-avatar" style="background:${TeamProfile.avatarColor(u.name)};overflow:hidden" data-profile-uid="${+u.id}" data-profile-name="${esc(u.name)}" title="View profile">${TeamProfile.avatarInner(u.name, u.avatar_url)}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${TeamProfile.link(u.id, u.name)}</div>
           <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.email || '')}</div>
@@ -53582,7 +53675,7 @@ const MpInbox = (() => {
   const visible = () => !!$('#mp-inbox-view')?.offsetParent;
   const _date   = dt => dt ? new Date(String(dt).replace(' ', 'T')) : null;
   const avColor = name => (typeof TeamProfile !== 'undefined' ? TeamProfile.avatarColor(name) : 'var(--accent)');
-  const avatar  = (name, initial) => `<span class="mp-ib-av" style="background:${avColor(name)}">${esc(initial || (String(name || '?').trim().charAt(0) || '?').toUpperCase())}</span>`;
+  const avatar  = (name, initial, photo) => `<span class="mp-ib-av" style="background:${avColor(name)};overflow:hidden">${TeamProfile.avatarInner(name, photo, initial)}</span>`;
   const projChip = p => p ? `<span class="mp-ib-proj" style="--pc:${esc(p.color || '#6b7280')}" title="Project: ${esc(p.name)}"><i class="fa fa-diagram-project"></i>${esc(p.name)}</span>` : '';
 
   // Gmail-like short time: today → 12:24 PM, this year → Oct 3, older → 2025-10-03.
@@ -53852,7 +53945,7 @@ const MpInbox = (() => {
           return `
           <div class="mp-ib-msg ${open ? '' : 'is-collapsed'}" data-ib-msg="${m.id}">
             <div class="mp-ib-msg-head" data-ib-toggle>
-              ${avatar(m.sender_name, m.initial)}
+              ${avatar(m.sender_name, m.initial, m.avatar_url)}
               <div class="mp-ib-msg-who">
                 <b>${m.is_mine ? 'You' : TeamProfile.link(m.user_id, m.sender_name)}</b>${m.is_new ? '<span class="mp-ib-msg-new">NEW</span>' : ''}
                 <div class="mp-ib-msg-to">to ${esc(to || 'me')}</div>
@@ -54074,7 +54167,7 @@ const MpInbox = (() => {
   function addRecipient(u) {
     if (!u?.id || cw.to.some(x => +x.id === +u.id)) return;
     const c = ib.book?.contacts.find(x => +x.id === +u.id);
-    cw.to.push({ id: +u.id, name: c?.name || u.name, email: c?.email || u.email, initial: c?.initial });
+    cw.to.push({ id: +u.id, name: c?.name || u.name, email: c?.email || u.email, initial: c?.initial, avatar_url: c?.avatar_url || u.avatar_url });
   }
 
   function renderCompose() {
@@ -54085,7 +54178,7 @@ const MpInbox = (() => {
       const chip = document.createElement('span');
       chip.className = 'mp-ib-chip';
       chip.title = u.email || '';
-      chip.innerHTML = `${avatar(u.name, u.initial)}${esc(u.name)}<button title="Remove" data-ib-unto="${i}"><i class="fa fa-xmark"></i></button>`;
+      chip.innerHTML = `${avatar(u.name, u.initial, u.avatar_url)}${esc(u.name)}<button title="Remove" data-ib-unto="${i}"><i class="fa fa-xmark"></i></button>`;
       chips.insertBefore(chip, input);
     });
     chips.querySelectorAll('[data-ib-unto]').forEach(b => b.addEventListener('click', e => {
@@ -54129,7 +54222,7 @@ const MpInbox = (() => {
     cw.sugIdx = Math.min(cw.sugIdx, Math.max(0, hits.length - 1));
     box.innerHTML = hits.length
       ? hits.map((c, i) => `<div class="mp-ib-sug ${i === cw.sugIdx ? 'is-active' : ''}" data-ib-sug="${c.id}">
-          ${avatar(c.name, c.initial)}
+          ${avatar(c.name, c.initial, c.avatar_url)}
           <div><b>${esc(c.name)}</b><small>${esc([c.email, c.project_ids.map(projName).filter(Boolean).slice(0, 3).join(', ')].filter(Boolean).join(' · '))}</small></div>
         </div>`).join('')
       : `<div class="mp-ib-sug-empty">No teammate matches "${esc(q)}". You can message people who share a project with you.</div>`;

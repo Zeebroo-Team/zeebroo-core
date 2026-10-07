@@ -43,6 +43,16 @@ class User extends Authenticatable
         ];
     }
 
+    /** Profile photo URL (uploaded from the desktop "My Profile" modal), or null. */
+    public function avatarUrl(): ?string
+    {
+        if (! $this->avatar_path) {
+            return null;
+        }
+
+        return route('api.media.user-avatar', ['user' => $this->id, 'filename' => basename($this->avatar_path)]);
+    }
+
     public function businesses(): HasMany
     {
         return $this->hasMany(Business::class);

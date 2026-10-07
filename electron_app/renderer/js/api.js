@@ -47,6 +47,9 @@ const API = (() => {
     paymentDetail:        (paymentId) => request('GET', `/auth/payment/${paymentId}`),
     updateProfile:      (body) => request('PUT', '/auth/profile', body),
     updatePassword:     (body) => request('PUT', '/auth/password', body),
+    // Profile photo — upload goes through electronAPI.apiUpload (multipart "files[]").
+    profileAvatarUploadPath: '/auth/profile/avatar',
+    deleteProfileAvatar: () => request('DELETE', '/auth/profile/avatar'),
 
     // Business selection
     businesses:      ()     => request('GET',  '/businesses'),

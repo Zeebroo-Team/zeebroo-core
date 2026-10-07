@@ -129,18 +129,20 @@ class ProjectService
             ->get()
             ->filter(fn (BusinessMember $m) => $m->user)
             ->map(fn (BusinessMember $m) => [
-                'id'    => (int) $m->user->id,
-                'name'  => $m->user->name,
-                'email' => $m->user->email,
-                'role'  => (string) $m->role,
+                'id'         => (int) $m->user->id,
+                'name'       => $m->user->name,
+                'email'      => $m->user->email,
+                'avatar_url' => $m->user->avatarUrl(),
+                'role'       => (string) $m->role,
             ]);
 
         if ($business->user) {
             $users->prepend([
-                'id'    => (int) $business->user->id,
-                'name'  => $business->user->name,
-                'email' => $business->user->email,
-                'role'  => 'owner',
+                'id'         => (int) $business->user->id,
+                'name'       => $business->user->name,
+                'email'      => $business->user->email,
+                'avatar_url' => $business->user->avatarUrl(),
+                'role'       => 'owner',
             ]);
         }
 
@@ -171,6 +173,7 @@ class ProjectService
                 'id'          => (int) $u->id,
                 'name'        => $u->name,
                 'email'       => $u->email,
+                'avatar_url'  => $u->avatarUrl(),
                 'role'        => $roles[$u->id] ?? 'former',
                 'open_tasks'  => (int) ($counts[$u->id]->open ?? 0),
                 'total_tasks' => (int) ($counts[$u->id]->total ?? 0),
@@ -286,6 +289,7 @@ class ProjectService
             'name'         => $name,
             'initial'      => mb_strtoupper(mb_substr(trim($name), 0, 1)) ?: '?',
             'email'        => $user->email,
+            'avatar_url'   => $user->avatarUrl(),
             'role'         => $role ?? 'former',
             'is_me'        => $isMe,
             'last_seen_at' => $user->last_seen_at?->toDateTimeString(),

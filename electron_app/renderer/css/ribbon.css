@@ -1032,7 +1032,22 @@ body.dark .ribbon-btn-sm:hover { background: rgba(78,142,247,.15); border-color:
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
 }
+.tpm-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* My Profile modal — clickable avatar with camera overlay */
+.mp-avatar-btn { position: relative; padding: 0; border: none; background: none; border-radius: 50%; cursor: pointer; }
+.mp-avatar-btn:disabled { cursor: progress; }
+.mp-avatar-overlay {
+  position: absolute; inset: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, .45); color: #fff; font-size: 20px;
+  opacity: 0; transition: opacity .15s;
+}
+.mp-avatar-btn:hover .mp-avatar-overlay,
+.mp-avatar-btn:focus-visible .mp-avatar-overlay,
+.mp-avatar-btn.is-busy .mp-avatar-overlay { opacity: 1; }
 
 .tpm-info { display: flex; flex-direction: column; overflow: hidden; }
 .tpm-name  { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -19182,9 +19197,9 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* Left: compose + folders + project labels */
 .mp-ib-nav { width: 200px; flex-shrink: 0; display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .mp-ib-compose {
-  display: inline-flex; align-items: center; gap: 10px; align-self: flex-start;
-  padding: 12px 22px; margin-bottom: 10px; border: none; border-radius: 16px; cursor: pointer;
-  font-size: 13px; font-weight: 600; color: var(--text);
+  display: inline-flex; align-items: center; gap: 8px; align-self: flex-start;
+  padding: 8px 16px; margin-bottom: 8px; border: none; border-radius: 12px; cursor: pointer;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
   background: color-mix(in srgb, var(--accent) 22%, var(--surface)); box-shadow: var(--shadow-sm);
   transition: box-shadow .15s, background .15s;
 }
@@ -19264,7 +19279,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .mp-ib-more { padding: 10px; text-align: center; }
 .mp-ib-empty { padding: 50px 20px; text-align: center; color: var(--text-muted); font-size: 12.5px; }
-.mp-ib-empty i { font-size: 38px; opacity: .3; display: block; margin-bottom: 10px; }
+.mp-ib-empty > i { font-size: 38px; opacity: .3; display: block; margin-bottom: 10px; }
 
 /* Reading pane */
 .mp-ib-rd-head { padding: 14px 18px 8px; display: flex; align-items: flex-start; gap: 10px; border-bottom: 1px solid var(--border-light); }
