@@ -141,6 +141,25 @@ class ProjectManageApiController extends Controller
         return response()->json($this->membersPayload($project));
     }
 
+    /**
+     * Team-member profile, for both the Projects tab (Manage All Projects — any business user)
+     * and My Projects (Assigned Project Access — only teammates sharing a project with the caller).
+     */
+    public function memberProfile(Request $request, int $userId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $member   = $this->resolveMember($request, $business);
+        $canManage = $member === null || $member->hasPermission('projects_access');
+        if (! $canManage) {
+            $this->abortUnlessPerm($request, $business, 'projects_assigned');
+        }
+
+        $profile = $this->projects->memberProfile($business, $userId, (int) $request->user()->id, $canManage);
+        abort_unless($profile, 404, 'This person is not on any of your project teams.');
+
+        return response()->json(['data' => $profile]);
+    }
+
     public function memberStore(Request $request, int $projectId): JsonResponse
     {
         $business = $this->manageBusinessOrAbort($request);
@@ -327,19 +346,8 @@ class ProjectManageApiController extends Controller
     public function taskComment(Request $request, int $id): JsonResponse
     {
         $business = $this->manageBusinessOrAbort($request);
-        $task     = $this->resolveTask($business, $id);
 
-        $body    = $request->validate(['body' => 'required|string|max:5000'])['body'];
-        $comment = $this->tasks->addComment($task, $request->user()?->id ?? 0, $body);
-
-        return response()->json([
-            'data' => [
-                'id'         => $comment->id,
-                'user'       => $comment->user?->name ?? 'System',
-                'body'       => $comment->body,
-                'created_at' => $comment->created_at?->toDateTimeString(),
-            ],
-        ], 201);
+        return $this->storeComment($request, $this->resolveTask($business, $id));
     }
 
     public function taskTime(Request $request, int $id): JsonResponse
@@ -463,6 +471,36 @@ class ProjectManageApiController extends Controller
         return response()->json(['data' => $this->fmtTask($task)], 201);
     }
 
+    /**
+     * Full detail of a project I work on (team member or task assignee): the project fields,
+     * its team with their task counts, milestones and my own task counts there.
+     * The budget is shown to project managers only.
+     */
+    public function myWorkProjectShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+        $project  = $this->projects->findForAssignee($business, $id, $userId);
+        abort_unless($project, 404, 'You are not working on this project.');
+
+        $member    = $this->resolveMember($request, $business);
+        $canManage = $member === null || $member->hasPermission('projects_access');
+
+        $data = $this->fmtProject($project);
+        if (! $canManage) {
+            $data['budget'] = null;
+        }
+
+        return response()->json(['data' => $data + [
+            'statuses'        => $this->tasks->statusesForProject($project),
+            'is_member'       => $project->hasMember($userId),
+            'created_by_name' => $project->createdBy?->name,
+            'members'         => $this->projects->membersForProject($project)->values(),
+            'milestones'      => $this->milestones->listForProject($project)->map(fn ($m) => $this->fmtMilestone($m))->values(),
+            'my_stats'        => $this->projects->userTaskStats($project, $userId),
+        ]]);
+    }
+
     /** Full detail of a task assigned to me: the task plus its comments and time logs. */
     public function myWorkTaskShow(Request $request, int $id): JsonResponse
     {
@@ -489,6 +527,16 @@ class ProjectManageApiController extends Controller
         $task = $this->tasks->moveStatus($task, $status);
 
         return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project']))]);
+    }
+
+    /** Comment (or reply, with parent_id) on a task assigned to me. */
+    public function myWorkTaskComment(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only comment on tasks assigned to you.');
+
+        return $this->storeComment($request, $task);
     }
 
     /** Files of a task assigned to me (the detail endpoint also returns them). */
@@ -646,6 +694,18 @@ class ProjectManageApiController extends Controller
         $attachment = TaskAttachment::with('task.project')->findOrFail($id);
         abort_unless((int) $attachment->task->project->business_id === (int) $business->id, 404);
         return $attachment;
+    }
+
+    private function storeComment(Request $request, Task $task): JsonResponse
+    {
+        $data = $request->validate([
+            'body'      => 'required|string|max:5000',
+            'parent_id' => 'nullable|integer',
+        ]);
+
+        $comment = $this->tasks->addComment($task, (int) ($request->user()?->id ?? 0), $data['body'], $data['parent_id'] ?? null);
+
+        return response()->json(['data' => $this->tasks->fmtComment($comment)], 201);
     }
 
     private function storeAttachments(Request $request, Task $task): JsonResponse

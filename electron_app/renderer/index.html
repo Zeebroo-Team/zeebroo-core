@@ -10379,6 +10379,22 @@
     </div>
   </div>
 
+  <!-- ── My Projects: Project Detail Modal (opened from a task or a project card) ── -->
+  <div class="modal-overlay" id="mp-project-modal" style="display:none">
+    <div class="po-aim-shell" style="width:680px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-diagram-project" style="color:var(--accent)"></i>
+        <span id="mp-project-heading">Project Details</span>
+        <button class="psm-close" id="mp-project-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="mp-project-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-project-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-primary" id="mp-project-board"><i class="fa fa-table-columns"></i> Open Board</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Projects: Task Attachments Modal (files per task — upload / download) ── -->
   <div class="modal-overlay" id="task-files-modal" style="display:none">
     <div class="po-aim-shell" style="width:560px;max-height:80vh;display:flex;flex-direction:column">
@@ -10390,6 +10406,21 @@
       <div class="po-aim-body" id="task-files-body" style="display:flex;flex-direction:column;gap:10px;overflow-y:auto"></div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="task-files-cancel"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Team Member Profile Modal (Projects + My Projects) ── -->
+  <div class="modal-overlay" id="team-profile-modal" style="display:none">
+    <div class="po-aim-shell" style="width:520px;max-height:82vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-id-badge" style="color:var(--accent)"></i>
+        <span id="team-profile-heading">Team Member</span>
+        <button class="psm-close" id="team-profile-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="team-profile-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="team-profile-cancel"><i class="fa fa-xmark"></i> Close</button>
       </div>
     </div>
   </div>

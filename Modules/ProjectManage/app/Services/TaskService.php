@@ -101,25 +101,25 @@ class TaskService
     }
 
     /**
-     * Comments (oldest first), time logs and attachments (newest first) of a task, for the task detail view.
+     * Comment threads (oldest first, each with its replies), time logs and attachments
+     * (newest first) of a task, for the task detail view.
      *
      * @return array{comments: Collection, time_logs: Collection, attachments: Collection}
      */
     public function activityForTask(Task $task): array
     {
         $task->loadMissing(['comments.user', 'timeLogs.user', 'attachments.user']);
-        $files = app(TaskAttachmentService::class);
+        $files   = app(TaskAttachmentService::class);
+        $replies = $task->comments->whereNotNull('parent_id')->groupBy('parent_id');
 
         return [
             'attachments' => $task->attachments->map(fn ($a) => $files->fmt($a))->values(),
-            'comments'  => $task->comments->map(fn (TaskComment $c) => [
-                'id'         => $c->id,
-                'user'       => $c->user?->name ?? 'System',
-                'body'       => $c->body,
-                'created_at' => $c->created_at?->toDateTimeString(),
+            'comments'  => $task->comments->whereNull('parent_id')->map(fn (TaskComment $c) => $this->fmtComment($c) + [
+                'replies' => ($replies[$c->id] ?? collect())->map(fn (TaskComment $r) => $this->fmtComment($r))->values(),
             ])->values(),
             'time_logs' => $task->timeLogs->map(fn (TimeLog $l) => [
                 'id'        => $l->id,
+                'user_id'   => $l->user_id,
                 'user'      => $l->user?->name ?? 'System',
                 'minutes'   => (int) $l->minutes,
                 'logged_at' => $l->logged_at?->toDateString(),
@@ -427,13 +427,42 @@ class TaskService
         return $task;
     }
 
-    public function addComment(Task $task, int $userId, string $body): TaskComment
+    /**
+     * Adds a comment, or a reply when $parentId is given. Threads are one level deep:
+     * replying to a reply attaches to that reply's top-level comment.
+     */
+    public function addComment(Task $task, int $userId, string $body, ?int $parentId = null): TaskComment
     {
+        if ($parentId) {
+            $parent = TaskComment::where('task_id', $task->id)->find($parentId);
+            abort_unless($parent, 422, 'The comment you are replying to no longer exists.');
+            $parentId = $parent->parent_id ?: $parent->id;
+        }
+
         return TaskComment::create([
-            'task_id' => $task->id,
-            'user_id' => $userId,
-            'body'    => $body,
-        ]);
+            'task_id'   => $task->id,
+            'user_id'   => $userId,
+            'parent_id' => $parentId,
+            'body'      => $body,
+        ])->load('user');
+    }
+
+    /** API shape of a comment; `initial` is the first letter of the author's first name (avatar). */
+    public function fmtComment(TaskComment $c): array
+    {
+        $name = $c->user?->name ?? 'System';
+
+        return [
+            'id'         => $c->id,
+            'parent_id'  => $c->parent_id,
+            'user_id'    => $c->user_id,
+            'user'       => $name,
+            'first_name' => Str::before(trim($name), ' ') ?: $name,
+            'initial'    => Str::upper(Str::substr(trim($name), 0, 1)) ?: '?',
+            'is_mine'    => $c->user_id !== null && (int) $c->user_id === (int) auth()->id(),
+            'body'       => $c->body,
+            'created_at' => $c->created_at?->toDateTimeString(),
+        ];
     }
 
     public function logTime(Task $task, int $userId, array $data): TimeLog

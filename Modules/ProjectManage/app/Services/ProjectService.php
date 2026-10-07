@@ -179,6 +179,145 @@ class ProjectService
     }
 
     /**
+     * A non-archived project of the business that the user is on the team of or has a task in
+     * (the My Projects scope), loaded for the project-detail view; null when out of scope.
+     */
+    public function findForAssignee(Business $business, int $projectId, int $userId): ?Project
+    {
+        return Project::query()
+            ->where('business_id', $business->id)
+            ->where('id', $projectId)
+            ->where('status', '!=', Project::STATUS_ARCHIVED)
+            ->where(fn ($q) => $q->whereHas('members', fn ($m) => $m->where('users.id', $userId))
+                                 ->orWhereHas('tasks.assignees', fn ($a) => $a->where('users.id', $userId)))
+            ->withCount('members')
+            ->with(['customer', 'branch', 'department', 'property', 'employee', 'modification', 'rental', 'imageFile', 'createdBy'])
+            ->first();
+    }
+
+    /**
+     * The user's own task counts in a project.
+     *
+     * @return array{total:int,open:int,overdue:int,done:int}
+     */
+    public function userTaskStats(Project $project, int $userId): array
+    {
+        $done = Task::STATUS_DONE;
+        $row  = DB::table('pm_task_assignees as a')
+            ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
+            ->where('a.user_id', $userId)
+            ->where('t.project_id', $project->id)
+            ->selectRaw(
+                'count(*) as total,
+                 sum(case when t.status = ? then 0 else 1 end) as open,
+                 sum(case when t.status <> ? and t.due_date is not null and t.due_date < ? then 1 else 0 end) as overdue',
+                [$done, $done, now()->toDateString()]
+            )
+            ->first();
+
+        $total = (int) ($row->total ?? 0);
+        $open  = (int) ($row->open ?? 0);
+
+        return ['total' => $total, 'open' => $open, 'overdue' => (int) ($row->overdue ?? 0), 'done' => $total - $open];
+    }
+
+    /**
+     * Team-member profile card: who they are (business role, HR job title / department / photo)
+     * and the projects they work on with their task counts there.
+     *
+     * Managers ($canManage) see any business user and all their projects; everyone else sees only
+     * teammates who share a (non-archived) project with them, limited to those shared projects.
+     * Returns null when the viewer may not see this user.
+     */
+    public function memberProfile(Business $business, int $userId, int $viewerId, bool $canManage): ?array
+    {
+        $user = User::find($userId);
+        if (! $user) {
+            return null;
+        }
+
+        // Projects of this business where the user is on the team or has a task.
+        $involving = fn (int $uid) => Project::query()
+            ->where('business_id', $business->id)
+            ->where(fn ($q) => $q->whereHas('members', fn ($m) => $m->where('users.id', $uid))
+                                 ->orWhereHas('tasks.assignees', fn ($a) => $a->where('users.id', $uid)));
+
+        $query = $involving($userId);
+        if (! $canManage) {
+            $query->where('status', '!=', Project::STATUS_ARCHIVED)
+                  ->whereIn('id', $involving($viewerId)->where('status', '!=', Project::STATUS_ARCHIVED)->select('id'));
+        }
+        $projects = $query->orderBy('name')->get();
+
+        $role = $this->businessUsers($business)->firstWhere('id', $userId)['role'] ?? null;
+        $isMe = $userId === $viewerId;
+
+        if (! $isMe && ($canManage ? ($role === null && $projects->isEmpty()) : $projects->isEmpty())) {
+            return null;
+        }
+
+        $done   = Task::STATUS_DONE;
+        $counts = DB::table('pm_task_assignees as a')
+            ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
+            ->where('a.user_id', $userId)
+            ->whereIn('t.project_id', $projects->pluck('id'))
+            ->selectRaw(
+                't.project_id, count(*) as total,
+                 sum(case when t.status = ? then 0 else 1 end) as open,
+                 sum(case when t.status <> ? and t.due_date is not null and t.due_date < ? then 1 else 0 end) as overdue',
+                [$done, $done, now()->toDateString()]
+            )
+            ->groupBy('t.project_id')
+            ->get()
+            ->keyBy('project_id');
+
+        $memberOf = DB::table('pm_project_members')->where('user_id', $userId)->pluck('project_id')->map(fn ($id) => (int) $id)->all();
+
+        $employee = Employee::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->with(['jobTitle', 'department'])
+            ->first();
+
+        $name = (string) $user->name;
+
+        return [
+            'id'           => (int) $user->id,
+            'name'         => $name,
+            'initial'      => mb_strtoupper(mb_substr(trim($name), 0, 1)) ?: '?',
+            'email'        => $user->email,
+            'role'         => $role ?? 'former',
+            'is_me'        => $isMe,
+            'last_seen_at' => $user->last_seen_at?->toDateTimeString(),
+            'employee'     => $employee ? [
+                'employee_id'     => $employee->employee_id,
+                'job_title'       => $employee->jobTitle?->name,
+                'department'      => $employee->department?->name,
+                'date_of_joining' => $employee->date_of_joining?->toDateString(),
+                'photo_url'       => $employee->profilePhotoUrl(),
+                // Contact number is shown to project managers only.
+                'phone'           => $canManage ? $employee->phone_number : null,
+            ] : null,
+            'stats'        => [
+                'projects' => $projects->count(),
+                'total'    => (int) $counts->sum('total'),
+                'open'     => (int) $counts->sum('open'),
+                'overdue'  => (int) $counts->sum('overdue'),
+                'done'     => (int) ($counts->sum('total') - $counts->sum('open')),
+            ],
+            'projects'     => $projects->map(fn (Project $p) => [
+                'id'          => (int) $p->id,
+                'name'        => $p->name,
+                'color'       => $p->color,
+                'status'      => $p->status,
+                'is_member'   => in_array((int) $p->id, $memberOf, true),
+                'open_tasks'  => (int) ($counts[$p->id]->open ?? 0),
+                'total_tasks' => (int) ($counts[$p->id]->total ?? 0),
+            ])->values(),
+        ];
+    }
+
+    /**
      * Adds business users to the project team; ids outside the business are rejected.
      *
      * @param int[] $userIds

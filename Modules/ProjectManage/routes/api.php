@@ -18,6 +18,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('pm/projects/{id}/members',          [$c, 'memberStore'])  ->where('id', '[0-9]+')->name('pm.projects.members.store');
     Route::delete('pm/projects/{id}/members/{userId}', [$c, 'memberDestroy'])->where(['id' => '[0-9]+', 'userId' => '[0-9]+'])->name('pm.projects.members.destroy');
 
+    // Team-member profile (Projects + My Projects; scoped to shared projects for assignees)
+    Route::get   ('pm/team-members/{userId}',          [$c, 'memberProfile'])->where('userId', '[0-9]+')->name('pm.team-members.show');
+
     // Board
     Route::get('pm/projects/{id}/board',     [$c, 'board'])         ->where('id', '[0-9]+')->name('pm.projects.board');
 
@@ -52,9 +55,11 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
 
     // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
     Route::get  ('pm/my-work',                  [$c, 'myWork'])          ->name('pm.my-work');
+    Route::get  ('pm/my-work/projects/{id}',    [$c, 'myWorkProjectShow'])->where('id', '[0-9]+')->name('pm.my-work.projects.show');
     Route::post ('pm/my-work/tasks',            [$c, 'myWorkTaskStore']) ->name('pm.my-work.tasks.store');
     Route::get  ('pm/my-work/tasks/{id}',       [$c, 'myWorkTaskShow'])  ->where('id', '[0-9]+')->name('pm.my-work.tasks.show');
     Route::patch('pm/my-work/tasks/{id}/status', [$c, 'myWorkTaskStatus'])->where('id', '[0-9]+')->name('pm.my-work.tasks.status');
+    Route::post ('pm/my-work/tasks/{id}/comments', [$c, 'myWorkTaskComment'])->where('id', '[0-9]+')->name('pm.my-work.tasks.comment');
     Route::get   ('pm/my-work/tasks/{id}/attachments',  [$c, 'myWorkAttachmentIndex'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.attachments.index');
     Route::post  ('pm/my-work/tasks/{id}/attachments',  [$c, 'myWorkAttachmentStore'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.attachments.store');
     Route::get   ('pm/my-work/attachments/{id}/download', [$c, 'myWorkAttachmentDownload'])->where('id', '[0-9]+')->name('pm.my-work.attachments.download');

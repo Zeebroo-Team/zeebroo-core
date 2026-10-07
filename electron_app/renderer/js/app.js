@@ -49610,7 +49610,7 @@ const TaskFiles = (() => {
             <i class="fa ${icon}" style="font-size:20px;color:${color};flex-shrink:0;width:20px;text-align:center"></i>
             <div style="flex:1;min-width:0">
               <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
-              <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${esc(a.uploaded_by || '')} · ${esc(a.created_at || '')}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${TeamProfile.link(a.user_id, a.uploaded_by)} · ${esc(a.created_at || '')}</div>
             </div>
             <button class="pm-task-card-move" data-tf-dl="${a.id}" title="Download"><i class="fa fa-download"></i></button>
             ${canDelete(a) ? `<button class="pm-task-card-move" data-tf-del="${a.id}" title="Delete" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>` : ''}
@@ -49676,6 +49676,156 @@ const TaskFiles = (() => {
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _modalTaskId !== null) closeModal(); });
 
   return { mount, openModal };
+})();
+
+// ── Team-member profile (shared by Projects + My Projects) ──────────────────
+// Any element carrying data-profile-uid (a name, avatar or chip) opens the person's
+// profile card on click. The server scopes what is visible: managers see any business
+// user, assignees only teammates who share a project with them.
+const TeamProfile = (() => {
+  const esc = escHtml;
+  const ROLE_BADGE = { owner: 'blue', admin: 'blue', manager: 'amber', staff: 'gray', former: 'red' };
+  let _uid = null;
+
+  const avatarColor = name => {
+    let h = 0;
+    for (const ch of String(name || '')) h = (h * 31 + ch.codePointAt(0)) % 360;
+    return `hsl(${h}, 55%, 45%)`;
+  };
+
+  /** A clickable name: `TeamProfile.link(u.id, u.name)`; falls back to plain text without an id. */
+  function link(uid, name, cls = '') {
+    if (!uid) return esc(name || '');
+    return `<span class="tp-link ${cls}" data-profile-uid="${+uid}" data-profile-name="${esc(name || '')}" title="View ${esc(name || 'profile')}'s profile">${esc(name || '')}</span>`;
+  }
+
+  /** Comma-separated clickable names of task assignees ([{id, name}]). */
+  const links = (users = []) => users.map(u => link(u.id, u.name)).join(', ');
+
+  function _ago(dt) {
+    if (!dt) return null;
+    const mins = Math.round((Date.now() - new Date(dt.replace(' ', 'T')).getTime()) / 60000);
+    if (!Number.isFinite(mins)) return dt;
+    if (mins < 5)  return 'Active now';
+    if (mins < 60) return `Active ${mins} min ago`;
+    if (mins < 1440) return `Active ${Math.round(mins / 60)} h ago`;
+    if (mins < 43200) return `Active ${Math.round(mins / 1440)} d ago`;
+    return `Last seen ${dt.slice(0, 10)}`;
+  }
+
+  function _avatar(name, initial, photo) {
+    return `<div class="tp-avatar" style="background:${avatarColor(name)}">${photo
+      ? `<img src="${esc(photo)}" alt="" onerror="this.remove()">` : ''}${photo ? '' : esc(initial || (String(name || '').trim().charAt(0) || '?').toUpperCase())}</div>`;
+  }
+
+  function _render(p, fallbackName, error) {
+    const body = $('#team-profile-body');
+    if (!body) return;
+    const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    $('#team-profile-heading').textContent = p?.name || fallbackName || 'Team Member';
+
+    if (error) {
+      body.innerHTML = `
+        <div class="tp-head">${_avatar(fallbackName, null, null)}<div><div class="tp-name">${esc(fallbackName || 'Team member')}</div></div></div>
+        <div style="font-size:12px;color:#ef4444">${esc(error)}</div>`;
+      return;
+    }
+    if (!p) {
+      body.innerHTML = `
+        <div class="tp-head">${_avatar(fallbackName, null, null)}<div><div class="tp-name">${esc(fallbackName || '')}</div></div></div>
+        <div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading profile…</div>`;
+      return;
+    }
+
+    const e    = p.employee || {};
+    const role = p.role === 'former' ? 'Left business' : (p.role || '');
+    const sub  = [e.job_title, e.department].filter(Boolean).map(esc).join(' · ');
+    const seen = _ago(p.last_seen_at);
+    const row  = (icon, label, value) => value ? `
+      <div style="display:flex;gap:8px;font-size:12px;align-items:baseline">
+        <i class="fa ${icon}" style="width:14px;text-align:center;color:var(--text-muted)"></i>
+        <span style="width:96px;color:var(--text-muted)">${label}</span>
+        <span style="flex:1;min-width:0;overflow-wrap:anywhere">${value}</span>
+      </div>` : '';
+    const s = p.stats || {};
+
+    body.innerHTML = `
+      <div class="tp-head">
+        ${_avatar(p.name, p.initial, e.photo_url)}
+        <div style="min-width:0">
+          <div class="tp-name">${esc(p.name)}${p.is_me ? ` ${muted('(you)')}` : ''}</div>
+          ${sub ? `<div class="tp-sub">${sub}</div>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            ${role ? `<span class="inv-badge inv-badge-${ROLE_BADGE[p.role] || 'gray'}" style="text-transform:capitalize">${esc(role)}</span>` : ''}
+            ${seen ? `<span style="font-size:11px;color:var(--text-muted)"><i class="fa fa-circle" style="font-size:7px;vertical-align:middle;color:${seen === 'Active now' ? '#22c55e' : '#9ca3af'}"></i> ${esc(seen)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${row('fa-envelope', 'Email', p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--accent)">${esc(p.email)}</a>` : '')}
+        ${row('fa-phone', 'Phone', e.phone ? esc(e.phone) : '')}
+        ${row('fa-id-card', 'Employee ID', e.employee_id ? esc(e.employee_id) : '')}
+        ${row('fa-calendar-check', 'Joined', e.date_of_joining ? esc(e.date_of_joining) : '')}
+      </div>
+
+      <div class="tp-stats">
+        <div class="tp-stat"><b>${s.projects || 0}</b><span>Projects</span></div>
+        <div class="tp-stat"><b>${s.open || 0}</b><span>Open tasks</span></div>
+        <div class="tp-stat tp-stat--overdue"><b>${s.overdue || 0}</b><span>Overdue</span></div>
+        <div class="tp-stat"><b>${s.done || 0}</b><span>Done</span></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:600"><i class="fa fa-diagram-project" style="margin-right:5px;color:var(--accent)"></i>${p.is_me ? 'Projects' : 'Shared Projects'} (${(p.projects || []).length})</div>
+        ${(p.projects || []).length ? p.projects.map(pr => `
+          <div class="tp-proj">
+            <span class="pm-col-dot" style="background:${esc(pr.color || '#9ca3af')}"></span>
+            <span style="flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(pr.name)}">${esc(pr.name)}</span>
+            ${pr.is_member ? '' : `<span style="font-size:10px;color:var(--text-muted)">not on team</span>`}
+            <span style="font-size:11px;white-space:nowrap">${pr.open_tasks} open ${muted(`/ ${pr.total_tasks} total`)}</span>
+          </div>`).join('')
+          : `<div style="font-size:11px">${muted('No projects in common yet.')}</div>`}
+      </div>`;
+  }
+
+  async function open(uid, fallbackName) {
+    uid = +uid;
+    if (!uid) return;
+    _uid = uid;
+    _render(null, fallbackName);
+    $('#team-profile-modal').style.display = '';
+    let profile = null, error = null;
+    try {
+      const res = await API.pmTeamMemberProfile(uid);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load profile');
+      profile = res.body?.data;
+    } catch (e) { error = String(e.message || e); }
+    if (_uid === uid) _render(profile, fallbackName, error);
+  }
+
+  function close() {
+    _uid = null;
+    const m = $('#team-profile-modal'); if (m) m.style.display = 'none';
+  }
+
+  // Capture phase so a click on a name inside a clickable card / row opens the profile only.
+  document.addEventListener('click', e => {
+    const el = e.target.closest?.('[data-profile-uid]');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    open(el.dataset.profileUid, el.dataset.profileName);
+  }, true);
+  // Esc closes the profile first, not the task detail underneath it.
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _uid !== null) { e.stopImmediatePropagation(); close(); }
+  }, true);
+  $('#team-profile-close')?.addEventListener('click',  close);
+  $('#team-profile-cancel')?.addEventListener('click', close);
+  $('#team-profile-modal')?.addEventListener('click', e => { if (e.target === $('#team-profile-modal')) close(); });
+
+  return { open, link, links, avatarColor };
 })();
 
 // ── Project Management ─────────────────────────────────────────────────────
@@ -50005,8 +50155,8 @@ const TaskFiles = (() => {
     if (!sec) return;
     const rows = pm.members.map(u => `
       <tr data-uid="${u.id}">
-        <td style="width:40px"><span style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((u.name || '?').charAt(0).toUpperCase())}</span></td>
-        <td><div style="font-size:12px;font-weight:700">${esc(u.name)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</div></td>
+        <td style="width:40px"><span class="tp-avatar-btn" data-profile-uid="${u.id}" data-profile-name="${esc(u.name)}" title="View profile" style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((u.name || '?').charAt(0).toUpperCase())}</span></td>
+        <td><div style="font-size:12px;font-weight:700">${TeamProfile.link(u.id, u.name)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</div></td>
         <td><span class="inv-badge inv-badge-${PM_ROLE_BADGE[u.role] || 'gray'}">${esc(u.role === 'former' ? 'Left business' : u.role)}</span></td>
         <td style="font-size:12px">${u.open_tasks} open <span style="color:var(--text-muted)">/ ${u.total_tasks} total</span></td>
         <td style="width:40px;text-align:right"><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-remove-uid="${u.id}" title="Remove from project"><i class="fa fa-user-minus" style="color:#ef4444"></i></button></td>
@@ -50323,7 +50473,7 @@ const TaskFiles = (() => {
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
-        ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${esc(t.assigned_name)}</span>` : ''}
+        ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name)}</span>` : ''}
         ${t.due_date ? `<span class="pm-task-card-due${overdue ? ' pm-task-card-due--overdue' : ''}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:2px"></i>' : ''}${esc(t.due_date)}</span>` : ''}
         ${t.milestone_name ? `<span class="pm-task-card-assign"><i class="fa fa-flag" style="margin-right:2px"></i>${esc(t.milestone_name)}</span>` : ''}
       </div>
@@ -50872,7 +51022,7 @@ const TaskFiles = (() => {
           <i class="fa ${isDone ? 'fa-circle-check' : 'fa-circle'} pm-tl-task-dot" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i>
           <span class="pm-tl-task-title">${esc(t.title)}</span>
           <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
-          ${t.assigned_name ? `<span class="pm-tl-task-meta"><i class="fa fa-user"></i> ${esc(t.assigned_name)}</span>` : ''}
+          ${t.assigned_name ? `<span class="pm-tl-task-meta"><i class="fa fa-user"></i> ${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name)}</span>` : ''}
           <span class="pm-tl-task-meta${t.is_overdue ? ' pm-tl-task-meta--overdue' : ''}">${t.is_overdue ? '<i class="fa fa-triangle-exclamation"></i>' : '<i class="fa fa-calendar"></i>'} ${esc(t.due_date || 'No due date')}</span>
           <span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span>
         </li>`;
@@ -51225,7 +51375,7 @@ const TaskFiles = (() => {
         <td style="font-size:12px;font-weight:600">${esc(t.title)}</td>
         ${projectCol}
         <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
-        <td style="font-size:11px;color:var(--text-muted)">${esc(t.assigned_name || '—')}</td>
+        <td style="font-size:11px;color:var(--text-muted)">${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name || '—')}</td>
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
         <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g,' '))}</span></td>
         <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
@@ -52066,16 +52216,23 @@ const TaskFiles = (() => {
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
         <div class="mp-proj-foot">
           <span class="pm-task-count"><i class="fa fa-user-check" style="margin-right:5px"></i>${mine.length} my task${mine.length === 1 ? '' : 's'} · ${done} done</span>
+          <button class="mp-proj-info" title="Project details and team members"><i class="fa fa-circle-info"></i> Details</button>
           <span class="mp-proj-open">Open <i class="fa fa-arrow-right"></i></span>
         </div>`;
-      card.addEventListener('click', () => {
-        mp.boardProject = String(p.id);
-        const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
-        _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
-        switchMpView('board');
+      card.querySelector('.mp-proj-info').addEventListener('click', e => {
+        e.stopPropagation();
+        openMpProjectDetail(p.id);
       });
+      card.addEventListener('click', () => _openMpBoardFor(p.id));
       grid.appendChild(card);
     });
+  }
+
+  function _openMpBoardFor(projectId) {
+    mp.boardProject = String(projectId);
+    const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
+    _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+    switchMpView('board');
   }
 
   // ── My Tasks: filterable, sortable table ────────────────────────────────────
@@ -52312,7 +52469,7 @@ const TaskFiles = (() => {
     const opts  = _statusesFor(t.project_id)
       .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
     const assignees = (t.assignees || []).length
-      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${esc(a.name)}</span>`).join(' ')
+      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${TeamProfile.link(a.id, a.name)}</span>`).join(' ')
       : muted('Unassigned');
     const est    = t.estimated_hours != null ? `${t.estimated_hours} h` : '—';
     const logged = _fmtMinutes(t.logged_minutes);
@@ -52330,25 +52487,16 @@ const TaskFiles = (() => {
     } else if (extra.error) {
       activity = `<div style="font-size:11px;color:#ef4444">${esc(extra.error)}</div>`;
     } else {
-      const comments = extra.comments || [];
       const logs     = extra.time_logs || [];
       activity =
-        section('fa-comments', `Comments (${comments.length})`, comments.length
-          ? comments.map(c => `
-              <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px">
-                <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;margin-bottom:4px">
-                  <b>${esc(c.user)}</b>${muted(esc(c.created_at || ''))}
-                </div>
-                <div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(c.body)}</div>
-              </div>`).join('')
-          : `<div style="font-size:11px">${muted('No comments yet.')}</div>`) +
+        `<div id="mp-detail-comments"></div>` +
         section('fa-stopwatch', `Time Logs (${logs.length})`, logs.length
           ? `<table style="width:100%;border-collapse:collapse;font-size:11px">
                <thead><tr style="text-align:left;color:var(--text-muted)"><th style="padding:4px">Date</th><th style="padding:4px">User</th><th style="padding:4px">Time</th><th style="padding:4px">Note</th></tr></thead>
                <tbody>${logs.map(l => `
                  <tr style="border-top:1px solid var(--border)">
                    <td style="padding:4px;white-space:nowrap">${esc(l.logged_at || '—')}</td>
-                   <td style="padding:4px">${esc(l.user)}</td>
+                   <td style="padding:4px">${TeamProfile.link(l.user_id, l.user)}</td>
                    <td style="padding:4px;white-space:nowrap">${_fmtMinutes(l.minutes)}</td>
                    <td style="padding:4px">${esc(l.note || '')}</td>
                  </tr>`).join('')}</tbody>
@@ -52367,7 +52515,10 @@ const TaskFiles = (() => {
             ${t.is_overdue ? '<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
           </div>
         </div>
-        <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+          <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
+          <button class="po-btn-ghost" id="mp-detail-view-project" style="padding:5px 10px;font-size:11px;white-space:nowrap" title="Project details and team members"><i class="fa fa-diagram-project"></i> View Project Details</button>
+        </div>
       </div>
 
       ${section('fa-align-left', 'Description', t.description
@@ -52409,6 +52560,11 @@ const TaskFiles = (() => {
       filesEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
     }
 
+    const commentsEl = $('#mp-detail-comments');
+    if (commentsEl) _mountMpComments(commentsEl, t, extra);
+
+    $('#mp-detail-view-project')?.addEventListener('click', () => openMpProjectDetail(t.project_id));
+
     $('#mp-detail-status')?.addEventListener('change', async function () {
       try {
         await _setStatus(t.id, this.value);
@@ -52418,6 +52574,108 @@ const TaskFiles = (() => {
       const fresh = _task(t.id);
       if (fresh && _mpDetailId === t.id) _renderMpDetail(fresh, extra);
     });
+  }
+
+  // ── Task comments: threads (comment + one level of replies), avatar = first-name initial ──
+  const _initialOf = name => (String(name || '').trim().charAt(0) || '?').toUpperCase();
+  // With a user id the avatar opens that person's profile.
+  const _avatarHtml = (name, initial, uid) =>
+    `<div class="mp-cmt-avatar" style="background:${TeamProfile.avatarColor(name)}" title="${esc(uid ? `View ${name || ''}'s profile` : (name || ''))}"${uid ? ` data-profile-uid="${+uid}" data-profile-name="${esc(name || '')}"` : ''}>${esc(initial || _initialOf(name))}</div>`;
+
+  function _commentHtml(c, parent) {
+    const replies = c.replies || [];
+    // Replying to a reply goes into the same thread, addressed to its author.
+    const replyBtn = `<button class="mp-cmt-reply-btn" data-cmt-reply="${parent ? parent.id : c.id}"${parent ? ` data-cmt-mention="${esc(c.first_name || c.user)}"` : ''}><i class="fa fa-reply"></i> Reply</button>`;
+    return `
+      <div class="mp-cmt${parent ? ' mp-cmt--reply' : ''}">
+        ${_avatarHtml(c.user, c.initial, c.user_id)}
+        <div class="mp-cmt-main">
+          <div class="mp-cmt-bubble">
+            <div class="mp-cmt-head">
+              <b>${TeamProfile.link(c.user_id, c.user)}${c.is_mine ? ' <span style="font-weight:400;color:var(--text-muted)">(you)</span>' : ''}</b>
+              <span style="color:var(--text-muted)">${esc(c.created_at || '')}</span>
+            </div>
+            <div class="mp-cmt-body">${esc(c.body)}</div>
+          </div>
+          <div class="mp-cmt-actions">${replyBtn}</div>
+          ${!parent && replies.length ? `<div class="mp-cmt-replies">${replies.map(r => _commentHtml(r, c)).join('')}</div>` : ''}
+          ${!parent ? `<div data-cmt-reply-slot="${c.id}"></div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  const _cmtFormHtml = (placeholder, label) => `
+    <div class="mp-cmt-form">
+      ${_avatarHtml(state._userName || 'You')}
+      <textarea rows="2" maxlength="5000" placeholder="${placeholder}"></textarea>
+      <button class="po-btn-primary" data-cmt-send style="padding:6px 12px;font-size:11px;white-space:nowrap"><i class="fa fa-paper-plane"></i> ${label}</button>
+    </div>`;
+
+  /** Comment list + composer inside the task detail. Posts update extra.comments in place. */
+  function _mountMpComments(el, t, extra) {
+    const comments = extra.comments || (extra.comments = []);
+
+    async function send(form, parentId) {
+      const ta  = form.querySelector('textarea');
+      const btn = form.querySelector('[data-cmt-send]');
+      const body = ta.value.trim();
+      if (!body) { ta.focus(); return; }
+      btn.disabled = true;
+      try {
+        const res = await API.pmMyWorkTaskComment(t.id, body, parentId);
+        if (res.status >= 400) {
+          throw new Error(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to post comment'));
+        }
+        const c = res.body?.data;
+        const thread = c?.parent_id ? comments.find(x => +x.id === +c.parent_id) : null;
+        if (thread) (thread.replies ||= []).push(c);
+        else comments.push({ ...c, replies: [] });
+        render();
+      } catch (e) {
+        toast(String(e.message || e), 'error');
+        btn.disabled = false;
+      }
+    }
+
+    function bindForm(form, parentId) {
+      const ta = form.querySelector('textarea');
+      form.querySelector('[data-cmt-send]').addEventListener('click', () => send(form, parentId));
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(form, parentId); }
+        // Esc closes an open reply box instead of the whole task detail.
+        if (e.key === 'Escape' && parentId) { e.stopPropagation(); form.remove(); }
+      });
+    }
+
+    function render() {
+      const total = comments.reduce((n, c) => n + 1 + (c.replies || []).length, 0);
+      el.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:12px;font-weight:600"><i class="fa fa-comments" style="margin-right:5px;color:var(--accent)"></i>Comments (${total})</div>
+          ${comments.length
+            ? comments.map(c => _commentHtml(c, null)).join('')
+            : `<div style="font-size:11px;color:var(--text-muted)">No comments yet. Start the conversation below.</div>`}
+          <div data-cmt-main>${_cmtFormHtml('Write a comment… (Ctrl+Enter to send)', 'Comment')}</div>
+        </div>`;
+
+      bindForm(el.querySelector('[data-cmt-main] .mp-cmt-form'), null);
+
+      el.querySelectorAll('[data-cmt-reply]').forEach(btn => btn.addEventListener('click', () => {
+        const slot = el.querySelector(`[data-cmt-reply-slot="${btn.dataset.cmtReply}"]`);
+        if (!slot) return;
+        el.querySelectorAll('[data-cmt-reply-slot]').forEach(s => { if (s !== slot) s.innerHTML = ''; });
+        if (!slot.firstElementChild) {
+          slot.innerHTML = _cmtFormHtml('Write a reply… (Ctrl+Enter to send, Esc to cancel)', 'Reply');
+          bindForm(slot.firstElementChild, +btn.dataset.cmtReply);
+        }
+        const ta = slot.querySelector('textarea');
+        if (btn.dataset.cmtMention && !ta.value) ta.value = `@${btn.dataset.cmtMention} `;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }));
+    }
+
+    render();
   }
 
   async function openMpTaskDetail(taskId) {
@@ -52451,6 +52709,142 @@ const TaskFiles = (() => {
   $('#mp-detail-cancel')?.addEventListener('click', _closeMpTaskDetail);
   $('#mp-detail-modal')?.addEventListener('click', e => { if (e.target === $('#mp-detail-modal')) _closeMpTaskDetail(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _mpDetailId !== null) _closeMpTaskDetail(); });
+
+  // ── Project detail (from a task's "View Project" button or a project card) ──
+  // Project fields, progress, the team (names open their profiles), milestones and my own counts.
+  const _MP_ROLE_BADGE = { owner: 'blue', admin: 'blue', manager: 'amber', staff: 'gray', former: 'red' };
+  const _MP_ASSIGN_LABEL = {
+    branch: 'Branch', department: 'Department', property: 'Property', employee: 'Employee',
+    modification: 'Modification', rental: 'Rental', other: 'Other',
+  };
+  let _mpProjectId = null;
+
+  function _renderMpProject(p, error) {
+    const body = $('#mp-project-body');
+    if (!body) return;
+    const muted   = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    const section = (icon, title, inner) => `
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:600"><i class="fa ${icon}" style="margin-right:5px;color:var(--accent)"></i>${title}</div>
+        ${inner}
+      </div>`;
+    const color = p?.color || 'var(--accent)';
+
+    $('#mp-project-heading').textContent = p?.name || 'Project Details';
+    if (error) { body.innerHTML = `<div style="font-size:12px;color:#ef4444">${esc(error)}</div>`; return; }
+    if (!p.members) {
+      body.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading project details…</div>`;
+      return;
+    }
+
+    const ts  = p.task_stats || {};
+    const pct = ts.total ? Math.round((ts.done || 0) / ts.total * 100) : 0;
+    const my  = p.my_stats || {};
+    const assignTo = p.assignment_type && p.assignment_type !== 'none'
+      ? `${esc(_MP_ASSIGN_LABEL[p.assignment_type] || p.assignment_type)}${p.assignment_name ? `: ${esc(p.assignment_name)}` : ''}`
+      : '';
+    const money = v => Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const members = p.members.length ? p.members.map(u => `
+      <div class="mp-pd-member">
+        <div class="mp-pd-member-avatar" style="background:${TeamProfile.avatarColor(u.name)}" data-profile-uid="${+u.id}" data-profile-name="${esc(u.name)}" title="View profile">${esc((String(u.name || '').trim().charAt(0) || '?').toUpperCase())}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${TeamProfile.link(u.id, u.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.email || '')}</div>
+        </div>
+        <span class="inv-badge inv-badge-${_MP_ROLE_BADGE[u.role] || 'gray'}" style="text-transform:capitalize">${esc(u.role === 'former' ? 'Left business' : u.role)}</span>
+        <span style="font-size:11px;white-space:nowrap">${u.open_tasks} open ${muted(`/ ${u.total_tasks}`)}</span>
+      </div>`).join('')
+      : `<div style="font-size:11px">${muted('No team members yet.')}</div>`;
+
+    const milestones = (p.milestones || []).length ? p.milestones.map(m => `
+      <div class="mp-pd-ms">
+        <i class="fa ${m.status === 'completed' ? 'fa-circle-check' : 'fa-flag'}" style="color:${m.status === 'completed' ? '#16a34a' : 'var(--text-muted)'}"></i>
+        <span style="flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.name)}">${esc(m.name)}</span>
+        ${m.due_date ? `<span style="font-size:11px;color:var(--text-muted);white-space:nowrap"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(m.due_date)}</span>` : ''}
+        <span style="font-size:11px;white-space:nowrap">${m.done_count}/${m.tasks_count} done</span>
+      </div>`).join('')
+      : `<div style="font-size:11px">${muted('No milestones.')}</div>`;
+
+    body.innerHTML = `
+      <div class="mp-pd-head">
+        <div class="mp-pd-avatar" style="background:${esc(color)}">${p.image_url
+          ? `<img src="${esc(p.image_url)}" alt="" onerror="this.remove()">`
+          : esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:16px;font-weight:700;overflow-wrap:anywhere">${esc(p.name)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            <span class="pm-status pm-status--${esc(p.status)}">${esc(String(p.status || '').replace(/_/g, ' '))}</span>
+            <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
+            ${p.is_member ? '' : `<span style="font-size:10px;color:var(--text-muted)">You are not on the team (assigned task only)</span>`}
+          </div>
+        </div>
+      </div>
+
+      ${section('fa-align-left', 'Description', p.description
+        ? `<div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--border);border-radius:6px;padding:8px 10px">${esc(p.description)}</div>`
+        : `<div style="font-size:11px">${muted('No description.')}</div>`)}
+
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 18px">
+        ${_detailRow('fa-play', 'Start Date', p.start_date ? esc(p.start_date) : muted('—'))}
+        ${_detailRow('fa-flag-checkered', 'Due Date', p.due_date ? esc(p.due_date) : muted('—'))}
+        ${_detailRow('fa-building', 'Project Type', p.project_type === 'customer' ? 'Customer project' : 'In-house')}
+        ${_detailRow('fa-handshake', 'Customer / Client', esc(p.customer_name || p.client_name || '') || muted('—'))}
+        ${assignTo ? _detailRow('fa-sitemap', 'Assigned To', assignTo) : ''}
+        ${p.budget != null ? _detailRow('fa-wallet', 'Budget', esc(money(p.budget))) : ''}
+        ${_detailRow('fa-user-pen', 'Created By', p.created_by_name ? esc(p.created_by_name) : muted('—'))}
+        ${_detailRow('fa-calendar-plus', 'Created', p.created_at ? esc(p.created_at) : muted('—'))}
+      </div>
+
+      ${section('fa-chart-line', 'Progress', `
+        <div class="mp-proj-progress-row"><span>${ts.done || 0} of ${ts.total || 0} tasks done</span><span class="pm-progress-pct">${pct}%</span></div>
+        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
+        <div class="tp-stats" style="margin-top:4px">
+          <div class="tp-stat"><b>${ts.total || 0}</b><span>All tasks</span></div>
+          <div class="tp-stat"><b>${p.members.length}</b><span>Team</span></div>
+          <div class="tp-stat"><b>${my.open || 0}</b><span>My open</span></div>
+          <div class="tp-stat tp-stat--overdue"><b>${my.overdue || 0}</b><span>My overdue</span></div>
+        </div>`)}
+
+      ${section('fa-users', `Team Members (${p.members.length})`, `<div style="display:flex;flex-direction:column;gap:6px">${members}</div>`)}
+
+      ${section('fa-flag', `Milestones (${(p.milestones || []).length})`, `<div style="display:flex;flex-direction:column;gap:6px">${milestones}</div>`)}`;
+  }
+
+  async function openMpProjectDetail(projectId) {
+    const pid = +projectId;
+    if (!pid) return;
+    _mpProjectId = pid;
+    // Cached card data first (no team yet → spinner), then the full detail.
+    _renderMpProject({ ..._project(pid), members: null });
+    $('#mp-project-modal').style.display = '';
+    let p = null, error = null;
+    try {
+      const res = await API.pmMyWorkProjectShow(pid);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load project details');
+      p = res.body?.data;
+    } catch (e) { error = String(e.message || e); }
+    if (_mpProjectId === pid) _renderMpProject(p || _project(pid), error || (p ? null : 'Project not found.'));
+  }
+
+  function _closeMpProjectDetail() {
+    _mpProjectId = null;
+    const m = $('#mp-project-modal'); if (m) m.style.display = 'none';
+  }
+
+  $('#mp-project-close')?.addEventListener('click',  _closeMpProjectDetail);
+  $('#mp-project-cancel')?.addEventListener('click', _closeMpProjectDetail);
+  $('#mp-project-modal')?.addEventListener('click', e => { if (e.target === $('#mp-project-modal')) _closeMpProjectDetail(); });
+  $('#mp-project-board')?.addEventListener('click', () => {
+    const pid = _mpProjectId;
+    _closeMpProjectDetail();
+    _closeMpTaskDetail();
+    if (pid) _openMpBoardFor(pid);
+  });
+  // Esc closes the project detail first, not the task detail underneath it.
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _mpProjectId !== null) { e.stopImmediatePropagation(); _closeMpProjectDetail(); }
+  }, true);
 
   // ── New Task (assigned to me) ───────────────────────────────────────────────
   // Only projects whose team I am on — the server rejects the rest.
