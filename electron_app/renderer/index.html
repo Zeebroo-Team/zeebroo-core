@@ -755,6 +755,7 @@
         <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="automations" style="display:none"><i class="fa fa-bolt"></i><span>Automations</span></div>
         <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="my-projects"><i class="fa fa-user-check"></i><span>My Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
       </nav>
       <div id="sidebar-bottom">
@@ -785,6 +786,7 @@
         <div class="ribbon-tab" data-tab="crm">CRM</div>
         <div class="ribbon-tab" data-tab="automations" style="display:none">Automations</div>
         <div class="ribbon-tab" data-tab="projects">Projects</div>
+        <div class="ribbon-tab" data-tab="my-projects">My Projects</div>
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
       </div>
       <div class="rb-notif-wrap" id="rb-notif-wrap">
@@ -1643,9 +1645,25 @@
           <div class="ribbon-group-label">Tasks</div>
         </div>
 
-        <!-- Assigned Project Access -->
         <div class="ribbon-group">
           <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-pm-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /projects page -->
+
+      <!-- ── My Projects page (Assigned Project Access) ── -->
+      <div class="ribbon-page" data-page="my-projects">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mp-overview">
+              <i class="fa fa-house"></i>Overview
+            </button>
             <button class="ribbon-btn-lg" id="rb-mp-tasks">
               <i class="fa fa-list-check"></i>My<br>Tasks
             </button>
@@ -1658,14 +1676,23 @@
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-pm-refresh">
+            <button class="ribbon-btn-lg primary" id="rb-mp-new-task">
+              <i class="fa fa-plus"></i>New<br>Task
+            </button>
+          </div>
+          <div class="ribbon-group-label">Tasks</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mp-refresh">
               <i class="fa fa-rotate"></i>Refresh
             </button>
           </div>
           <div class="ribbon-group-label">Actions</div>
         </div>
 
-      </div><!-- /projects page -->
+      </div><!-- /my-projects page -->
 
       <!-- ── Brand Management page ── -->
       <div class="ribbon-page" data-page="event-mgmt">
@@ -8933,7 +8960,6 @@
       <div class="fin-subnav">
         <button class="fin-subnav-btn active" data-pmsub="overview"><i class="fa fa-house"></i> Overview</button>
         <button class="fin-subnav-btn"         data-pmsub="projects"><i class="fa fa-folder-open"></i> Projects</button>
-        <button class="fin-subnav-btn"         data-pmsub="mine"><i class="fa fa-user-check"></i> My Projects</button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9123,8 +9149,19 @@
 
       </div><!-- /pm-projects-view -->
 
-      <!-- ── My Projects view (Assigned Project Access) — tasks assigned to me ── -->
-      <div id="pm-mine-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+    </div><!-- /panel-projects -->
+
+    <!-- ── My Projects Panel (Assigned Project Access) — tasks assigned to me ── -->
+    <div class="content-panel" id="panel-my-projects" style="flex-direction:column">
+
+      <!-- Header bar -->
+      <div class="auto-search-bar">
+        <i class="fa fa-user-check" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
+        <span style="font-size:13px;font-weight:700;flex-shrink:0">My Projects</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;flex-shrink:0">— tasks assigned to you across every project</span>
+      </div>
+
+      <div id="pm-mine-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
 
       <!-- Inner tabs -->
       <div class="mp-subtabs-bar">
@@ -9133,7 +9170,6 @@
           <button class="pm-subtab"        data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
           <button class="pm-subtab"        data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
         </div>
-        <span style="font-size:11px;color:var(--text-muted)">Tasks assigned to you across every project</span>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9232,7 +9268,7 @@
 
       </div><!-- /pm-mine-view -->
 
-    </div><!-- /panel-projects -->
+    </div><!-- /panel-my-projects -->
 
     <!-- ── Event Panel (Brands + Reporters) ─────────────────────────── -->
     <div class="content-panel" id="panel-event-mgmt" style="flex-direction:column">

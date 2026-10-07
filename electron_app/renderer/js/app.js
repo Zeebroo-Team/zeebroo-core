@@ -298,7 +298,11 @@ const _sbSubItems = {
     { view:'board',          icon:'fa-table-columns',        label:'Board' },
     { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
     { view:'mytasks',        icon:'fa-user-check',           label:'My Tasks' },
-    { view:'mine',           icon:'fa-user-check',           label:'My Projects' },
+  ],
+  'my-projects': [
+    { view:'overview',       icon:'fa-house',                label:'Overview' },
+    { view:'tasks',          icon:'fa-list-check',           label:'My Tasks' },
+    { view:'board',          icon:'fa-table-columns',        label:'Kanban Board' },
   ],
 };
 
@@ -356,7 +360,9 @@ function _sbNavSubSwitch(tab, view) {
   else if (tab === 'restaurant') switchRstView(view);
   else if (tab === 'mail')       window.switchMailView?.(view);
   else if (tab === 'crm')        window.switchCrmView?.(view);
-  else if (tab === 'projects')   window.switchPmView?.(view);  _sbSubActivate(tab, view);
+  else if (tab === 'projects')   window.switchPmView?.(view);
+  else if (tab === 'my-projects') window.switchMpView?.(view);
+  _sbSubActivate(tab, view);
 }
 
 _buildSidebarSubNavs();
@@ -496,7 +502,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'event-mgmt': 'panel-event-mgmt' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'my-projects': 'panel-my-projects', 'event-mgmt': 'panel-event-mgmt' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -517,8 +523,8 @@ function activateTab(tabName) {
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('overview'); }
   if (tabName === 'automations'){ loadAutomations(); }
-  // Assigned-only users (no "Manage All Projects") land straight on My Projects.
-  if (tabName === 'projects')    { switchPmView(state._pmCanManage === false ? 'mine' : 'overview'); }
+  if (tabName === 'projects')    { switchPmView('overview'); }
+  if (tabName === 'my-projects') { window.switchMpView?.(window._mp?.view || 'overview', { refresh: true }); }
   if (tabName === 'event-mgmt') { switchEvtView('brands'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
@@ -5858,9 +5864,8 @@ function applyFeatureVisibility() {
 
   const dev_enabled  = bf('developers');
   const auto_enabled = bf('automation_editor') && mp('automations_access');
-  const pm_manage    = bf('project_management') && mp('projects_access');    // Projects → Overview / Projects (manage all)
-  const pm_mine      = bf('project_management') && mp('projects_assigned');  // Projects → My Projects (assigned only)
-  const pm_enabled   = pm_manage || pm_mine;                                 // Projects ribbon tab
+  const pm_manage    = bf('project_management') && mp('projects_access');    // Projects tab (manage all)
+  const pm_mine      = bf('project_management') && mp('projects_assigned');  // My Projects tab (assigned only)
   const evt_enabled  = bf('event_management') && mp('event_access');
 
   // ── Cashier mode: POS-only ──
@@ -5898,7 +5903,8 @@ function applyFeatureVisibility() {
     mail:       mail_any,
     crm:        crm_any,
     automations:  auto_enabled,
-    projects:     pm_enabled,
+    projects:     pm_manage,
+    'my-projects': pm_mine,
     'event-mgmt': evt_enabled,
     users:        isAdminOrOwner,
   };
@@ -5972,24 +5978,8 @@ function applyFeatureVisibility() {
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
   if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
   if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
-  if (!pm_enabled && _activeTab() === 'projects') activateTab('home');
-
-  // ── Projects: sub-tabs + ribbon groups per permission ──
-  state._pmCanManage = pm_manage;
-  state._pmCanMine   = pm_mine;
-  $$('#panel-projects [data-pmsub]').forEach(b => {
-    b.style.display = (b.dataset.pmsub === 'mine' ? pm_mine : pm_manage) ? '' : 'none';
-  });
-  $$('.sb-sub-item[data-tab="projects"]').forEach(i => {
-    i.style.display = (i.dataset.subView === 'mine' ? pm_mine : pm_manage) ? '' : 'none';
-  });
-  ['#rb-pm-all-projects', '#rb-pm-new-task', '#rb-pm-board', '#rb-pm-tasks'].forEach(sel => grp(sel, pm_manage));
-  grp('#rb-mp-tasks', pm_mine);
-  // Currently on a sub-tab that is no longer allowed → switch to the one that is
-  if (pm_enabled && _activeTab() === 'projects') {
-    const cur = window._pm?.currentView;
-    if (cur === 'mine' ? !pm_mine : !pm_manage) switchPmView(pm_manage ? 'overview' : 'mine');
-  }
+  if (!pm_manage && _activeTab() === 'projects') activateTab(pm_mine ? 'my-projects' : 'home');
+  if (!pm_mine && _activeTab() === 'my-projects') activateTab('home');
 
   // ── Developers (account dropdown entry) ──
   const tpmDev = $('#tpm-developers');
@@ -8913,6 +8903,8 @@ const _notifIconMap = {
   payment_succeeded:              { icon: 'fa-circle-check',          cls: 'success' },
   payment_failed:                 { icon: 'fa-triangle-exclamation',  cls: 'danger'  },
   subscription_renewal_upcoming:  { icon: 'fa-calendar-days',         cls: 'warning' },
+  project_member_added:           { icon: 'fa-user-plus',             cls: 'info'    },
+  task_assigned:                  { icon: 'fa-list-check',            cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -9052,6 +9044,15 @@ function _notifNavigate(n) {
       if (typeof _salSwitchView === 'function') _salSwitchView('transactions');
       if (payload.sale_id && typeof _salSelectSale === 'function') _salSelectSale(payload.sale_id);
       break;
+    case 'project_member_added':
+    case 'task_assigned': {
+      // Addressed to the current user — open their own work in My Projects.
+      const view = n.type === 'task_assigned' ? 'tasks' : 'overview';
+      if (window._mp) window._mp.view = view;
+      if (_activeTab() !== 'my-projects') activateTab('my-projects');
+      else window.switchMpView?.(view, { refresh: true });
+      break;
+    }
     default:
       break;
   }
@@ -44665,7 +44666,7 @@ async function submitDsCreate() {
     ]},
     { key: 'projects', label: 'Projects', icon: 'fa-diagram-project', color: '#0891b2', items: [
       { key: 'projects_access',   label: 'Manage All Projects',     desc: 'Projects → Overview & Projects: view, create and manage every project and task in this business' },
-      { key: 'projects_assigned', label: 'Assigned Project Access', desc: 'Projects → My Projects: today/upcoming work, my tasks and a kanban board for tasks assigned to you' },
+      { key: 'projects_assigned', label: 'Assigned Project Access', desc: 'My Projects tab: today/upcoming work, my tasks and a kanban board for tasks assigned to you' },
     ]},
     { key: 'event', label: 'Event', icon: 'fa-calendar-days', color: '#d946ef', items: [
       { key: 'event_access', label: 'Access Event Management', desc: 'View and manage event bookings and schedules' },
@@ -49534,20 +49535,16 @@ async function submitDsCreate() {
 
   // ── View switcher ───────────────────────────────────────────────────────────
   function switchPmView(view, { load = true } = {}) {
-    // Sub-tabs follow the permissions: Overview / Projects need "Manage All Projects",
-    // My Projects needs "Assigned Project Access".
-    if (view !== 'mine' && state._pmCanManage === false) view = 'mine';
-    if (view === 'mine' && state._pmCanMine === false)   view = 'overview';
+    // My Projects is its own ribbon tab now — keep old 'mine' callers working.
+    if (view === 'mine') { activateTab('my-projects'); return; }
     pm.currentView = view;
     $$('#panel-projects [data-pmsub]').forEach(b => b.classList.toggle('active', b.dataset.pmsub === view));
     const el = $('#pm-overview-view'); if (el) el.style.display = view === 'overview' ? 'flex' : 'none';
     const el2 = $('#pm-projects-view'); if (el2) el2.style.display = view === 'projects' ? 'flex' : 'none';
-    const el3 = $('#pm-mine-view'); if (el3) el3.style.display = view === 'mine' ? 'flex' : 'none';
     _sbSubActivate('projects', view);
     if (!load) return;
     if (view === 'overview') loadPmOverview();
     if (view === 'projects') loadPmProjectsView();
-    if (view === 'mine')     window.switchMpView?.(window._mp?.view || 'overview', { refresh: true });
   }
   window.switchPmView = switchPmView;
 
@@ -51462,9 +51459,7 @@ async function submitDsCreate() {
   $('#rb-pm-new-project') ?.addEventListener('click', () => { activateTab('projects'); openNewProjectModal(); });
   $('#rb-pm-new-task')    ?.addEventListener('click', () => { activateTab('projects'); openNewTaskModal(pm.detailProjectId); });
   $('#rb-pm-refresh')     ?.addEventListener('click', () => {
-    if (pm.currentView === 'mine') {
-      window.switchMpView?.(window._mp?.view || 'overview', { refresh: true });
-    } else if (pm.detailProjectId) {
+    if (pm.detailProjectId) {
       ensurePmProjects(true).then(() => {
         const fresh = pm.projects.find(x => +x.id === +pm.detailProjectId);
         if (fresh) {
@@ -51691,10 +51686,11 @@ async function submitDsCreate() {
   }
 
   // ── View switcher ───────────────────────────────────────────────────────────
-  // Inner tabs of Projects → My Projects (Overview / My Tasks / Kanban Board).
+  // Inner tabs of the My Projects tab (Overview / My Tasks / Kanban Board).
   async function switchMpView(view, { refresh = false } = {}) {
     mp.view = view;
     $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
+    _sbSubActivate('my-projects', view);
     ['overview', 'tasks', 'board'].forEach(v => {
       const el = $(`#mp-${v}-view`);
       if (el) el.style.display = v === view ? 'flex' : 'none';
@@ -52143,16 +52139,20 @@ async function submitDsCreate() {
   $('#mp-board-priority')?.addEventListener('change', function () { mp.boardPriority = this.value; renderMpBoard(); });
   $('#mp-board-due')     ?.addEventListener('change', function () { mp.boardDue      = this.value; renderMpBoard(); });
 
-  // Ribbon
-  // Ribbon (Projects page → "My Projects" group)
+  // Ribbon (My Projects page)
   const _mpOpen = view => {
-    mp.view = view;   // switchPmView('mine') opens this inner tab
-    if (_activeTab() !== 'projects') activateTab('projects');
-    if (window._pm?.currentView !== 'mine') switchPmView('mine');
+    mp.view = view;   // activateTab('my-projects') opens this inner tab
+    if (_activeTab() !== 'my-projects') activateTab('my-projects');
     else switchMpView(view);
   };
-  $('#rb-mp-tasks')?.addEventListener('click', () => _mpOpen('tasks'));
-  $('#rb-mp-board')?.addEventListener('click', () => _mpOpen('board'));
+  $('#rb-mp-overview')?.addEventListener('click', () => _mpOpen('overview'));
+  $('#rb-mp-tasks')   ?.addEventListener('click', () => _mpOpen('tasks'));
+  $('#rb-mp-board')   ?.addEventListener('click', () => _mpOpen('board'));
+  $('#rb-mp-new-task')?.addEventListener('click', () => {
+    if (_activeTab() !== 'my-projects') activateTab('my-projects');
+    openMpTaskModal();
+  });
+  $('#rb-mp-refresh') ?.addEventListener('click', () => switchMpView(mp.view || 'overview', { refresh: true }));
 
   window._mp = mp;
 }());

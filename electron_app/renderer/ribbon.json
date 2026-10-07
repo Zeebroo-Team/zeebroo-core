@@ -16,6 +16,7 @@
     { "id": "crm",         "label": "CRM",             "icon": "fa-handshake",          "hasSub": true  },
     { "id": "automations", "label": "Automations",     "icon": "fa-bolt",               "hasSub": false },
     { "id": "projects",    "label": "Projects",        "icon": "fa-diagram-project",    "hasSub": true  },
+    { "id": "my-projects", "label": "My Projects",     "icon": "fa-user-check",         "hasSub": true  },
     { "id": "event-mgmt",  "label": "Event",           "icon": "fa-tag",                "hasSub": false }
   ],
 
@@ -547,16 +548,35 @@
           ]
         },
         {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-pm-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "my-projects",
+      "groups": [
+        {
           "label": "My Projects",
           "items": [
+            { "type": "lg", "id": "rb-mp-overview",       "icon": "fa-house",              "label": "Overview" },
             { "type": "lg", "id": "rb-mp-tasks",          "icon": "fa-list-check",         "label": "My\nTasks" },
             { "type": "lg", "id": "rb-mp-board",          "icon": "fa-table-columns",      "label": "Kanban\nBoard" }
           ]
         },
         {
+          "label": "Tasks",
+          "items": [
+            { "type": "lg", "id": "rb-mp-new-task",       "icon": "fa-plus",               "label": "New\nTask",       "primary": true }
+          ]
+        },
+        {
           "label": "Actions",
           "items": [
-            { "type": "lg", "id": "rb-pm-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+            { "type": "lg", "id": "rb-mp-refresh",        "icon": "fa-rotate",             "label": "Refresh" }
           ]
         }
       ]

@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Modules\Business\Models\Business;
+use Modules\Pos\Services\PosNotificationService;
 use Modules\ProjectManage\Models\Task;
 use Modules\ProjectManage\Models\TaskComment;
 use Modules\ProjectManage\Models\TaskStatus;
@@ -194,9 +195,27 @@ class TaskService
      */
     public function assign(Task $task, array $userIds): Task
     {
-        $task->syncAssignees($userIds);
+        $added = $task->syncAssignees($userIds);
+        $this->notifyAssigned($task, $added);
 
         return $task->fresh(['assignees', 'milestone', 'project']);
+    }
+
+    /** @param int[] $userIds newly added assignees */
+    private function notifyAssigned(Task $task, array $userIds): void
+    {
+        if ($userIds === []) {
+            return;
+        }
+
+        // A failed notification must never block the assignment itself.
+        DB::afterCommit(function () use ($task, $userIds) {
+            try {
+                app(PosNotificationService::class)->notifyTaskAssigned($task->fresh('project.business'), $userIds, auth()->id());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
     }
 
     /** @return string[] */
@@ -297,7 +316,7 @@ class TaskService
                 'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
             ]);
 
-            $task->syncAssignees(self::assigneeIdsFrom($data) ?? []);
+            $this->notifyAssigned($task, $task->syncAssignees(self::assigneeIdsFrom($data) ?? []));
 
             return $task->fresh(['assignees', 'milestone', 'project']);
         });
@@ -326,7 +345,7 @@ class TaskService
 
             $ids = self::assigneeIdsFrom($data);
             if ($ids !== null) {
-                $task->syncAssignees($ids);
+                $this->notifyAssigned($task, $task->syncAssignees($ids));
             }
 
             return $task->fresh();
