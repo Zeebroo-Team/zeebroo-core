@@ -671,6 +671,17 @@ const API = (() => {
     pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
     pmMyWorkTaskComment:   (id, body, parentId = null) => request('POST', `/pm/my-work/tasks/${id}/comments`, { body, parent_id: parentId }),
     pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),
+    // My Projects → Inbox (team messages). Attachments upload per file via electronAPI.apiUpload
+    // after the message is sent; downloads go through electronAPI.downloadFile.
+    pmInbox:               (params = {}) => request('GET', `/pm/inbox?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    pmInboxCounts:         ()          => request('GET',    '/pm/inbox/counts'),
+    pmInboxContacts:       ()          => request('GET',    '/pm/inbox/contacts'),
+    pmInboxThread:         (id)        => request('GET',    `/pm/inbox/threads/${id}`),
+    pmInboxSend:           (data)      => request('POST',   '/pm/inbox/threads', data),
+    pmInboxReply:          (id, body)  => request('POST',   `/pm/inbox/threads/${id}/reply`, { body }),
+    pmInboxAction:         (ids, action) => request('POST', '/pm/inbox/threads/actions', { ids, action }),
+    pmInboxAttachmentUploadPath:   (messageId) => `/pm/inbox/messages/${messageId}/attachments`,
+    pmInboxAttachmentDownloadPath: (id)        => `/pm/inbox/attachments/${id}/download`,
     pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),
     pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
     pmMilestoneUpdate:     (id, body)  => request('PATCH',  `/pm/milestones/${id}`, body),

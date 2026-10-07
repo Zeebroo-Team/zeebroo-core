@@ -15,6 +15,8 @@ use Modules\Payment\Models\Payment;
 use Modules\Pos\Models\PosNotification;
 use Modules\Pos\Models\Sale;
 use Modules\Product\Models\Product;
+use Modules\ProjectManage\Models\InboxMessage;
+use Modules\ProjectManage\Models\InboxThread;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
 use Modules\Purchase\Models\ChequePayment;
@@ -287,6 +289,31 @@ class PosNotificationService
                     'project_name' => $project->name,
                     'due_date' => $task->due_date?->toDateString(),
                 ],
+            );
+        }
+    }
+
+    /**
+     * Tells each recipient about a new My Projects inbox message. One row per thread,
+     * re-surfaced (unread) on every new message instead of stacking duplicates.
+     *
+     * @param int[] $userIds
+     */
+    public function notifyInboxMessage(InboxThread $thread, InboxMessage $message, array $userIds, ?int $actorId = null): void
+    {
+        $sender  = $actorId ? (User::find($actorId)?->name ?? 'A teammate') : 'A teammate';
+        $snippet = mb_strimwidth(preg_replace('/\s+/', ' ', trim($message->body)), 0, 120, '…');
+
+        foreach ($this->recipients($userIds, $actorId) as $userId) {
+            $this->createForUser(
+                business: $thread->business,
+                userId: $userId,
+                type: PosNotification::TYPE_INBOX_MESSAGE,
+                referenceType: 'inbox_thread',
+                referenceId: (int) $thread->id,
+                title: "New message from {$sender}",
+                message: "{$thread->subject} — {$snippet}",
+                payload: ['thread_id' => $thread->id, 'message_id' => $message->id, 'subject' => $thread->subject],
             );
         }
     }
