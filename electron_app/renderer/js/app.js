@@ -51592,10 +51592,12 @@ async function submitDsCreate() {
     projects:      [],      // each carries .statuses (built-in + custom board columns)
     taskFilter:    'open',
     taskProject:   '',
+    taskMilestone: '',      // '' = all, MP_NO_MS = tasks without a milestone, else a milestone id
     taskSearch:    '',
     sortKey:       'due_date',
     sortDir:       1,
     boardProject:  '',
+    boardMilestone:'',
     boardPriority: '',
     boardDue:      '',
   };
@@ -51660,6 +51662,39 @@ async function submitDsCreate() {
       el.innerHTML = opts;
       el.value = mp[key];
     });
+    _fillMilestoneSelect('#mp-task-milestone', 'taskProject', 'taskMilestone');
+    _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+  }
+
+  // Milestone filter: built from the milestones of my tasks, limited to the selected project.
+  // With "All projects" the milestones are grouped by project (names often repeat, e.g. "Phase 1").
+  const MP_NO_MS = '__none';
+  function _fillMilestoneSelect(sel, projKey, msKey) {
+    const el = $(sel);
+    if (!el) return;
+    const byProject = new Map();   // project_id → { name, ms: Map(id → name) }
+    let hasNone = false;
+    mp.tasks.forEach(t => {
+      if (mp[projKey] && +t.project_id !== +mp[projKey]) return;
+      if (!t.milestone_id) { hasNone = true; return; }
+      if (!byProject.has(+t.project_id)) byProject.set(+t.project_id, { name: t.project_name || '', ms: new Map() });
+      byProject.get(+t.project_id).ms.set(String(t.milestone_id), t.milestone_name || ('Milestone #' + t.milestone_id));
+    });
+    const msOpts = ms => [...ms].map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('');
+    const groups = [...byProject.values()];
+    el.innerHTML = '<option value="">All milestones</option>' +
+      (mp[projKey] || groups.length < 2
+        ? groups.map(g => msOpts(g.ms)).join('')
+        : groups.map(g => `<optgroup label="${esc(g.name)}">${msOpts(g.ms)}</optgroup>`).join('')) +
+      (hasNone ? `<option value="${MP_NO_MS}">No milestone</option>` : '');
+    if (mp[msKey] && !el.querySelector(`option[value="${mp[msKey]}"]`)) mp[msKey] = '';   // not in this project
+    el.value = mp[msKey];
+  }
+
+  function _matchesMilestone(t, msFilter) {
+    if (!msFilter) return true;
+    if (msFilter === MP_NO_MS) return !t.milestone_id;
+    return String(t.milestone_id) === msFilter;
   }
 
   // Changes a task's status and patches the local copy with the server's response.
@@ -51683,6 +51718,17 @@ async function submitDsCreate() {
       } catch (err) { toast(String(err.message || err), 'error'); }
       _renderCurrent();
     }));
+  }
+
+  // Rows / items carrying [data-tid] inside root open the task detail modal.
+  function _bindDetailOpen(root) {
+    root.querySelectorAll('[data-tid]').forEach(el => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', e => {
+        if (e.target.closest('select, button, input, [data-mp-toggle]')) return;
+        openMpTaskDetail(el.dataset.tid);
+      });
+    });
   }
 
   // ── View switcher ───────────────────────────────────────────────────────────
@@ -51765,6 +51811,7 @@ async function submitDsCreate() {
       body.innerHTML = list.length ? list.map(_ovItem).join('') : `
         <div class="mp-ov-empty"><i class="fa fa-mug-hot"></i><span>${emptyMsg}</span></div>`;
       _bindToggles(body);
+      _bindDetailOpen(body);
     };
     fill('overdue',  overdue,  'Nothing overdue.');
     fill('today',    today,    'Nothing due today.');
@@ -51830,6 +51877,7 @@ async function submitDsCreate() {
       card.addEventListener('click', () => {
         mp.boardProject = String(p.id);
         const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
+        _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
         switchMpView('board');
       });
       grid.appendChild(card);
@@ -51853,6 +51901,7 @@ async function submitDsCreate() {
     const list = mp.tasks.filter(t => {
       if (!filterFn(t)) return false;
       if (mp.taskProject && +t.project_id !== +mp.taskProject) return false;
+      if (!_matchesMilestone(t, mp.taskMilestone)) return false;
       if (q && !`${t.title} ${t.project_name || ''} ${t.milestone_name || ''}`.toLowerCase().includes(q)) return false;
       return true;
     }).sort((a, b) => {
@@ -51888,6 +51937,7 @@ async function submitDsCreate() {
     }).join('');
 
     _bindToggles(tbody);
+    _bindDetailOpen(tbody);
     tbody.querySelectorAll('[data-mp-status]').forEach(sel => sel.addEventListener('change', async () => {
       try {
         await _setStatus(sel.dataset.mpStatus, sel.value);
@@ -51920,6 +51970,7 @@ async function submitDsCreate() {
   function _boardTasks() {
     return mp.tasks.filter(t => {
       if (mp.boardProject && +t.project_id !== +mp.boardProject) return false;
+      if (!_matchesMilestone(t, mp.boardMilestone)) return false;
       if (mp.boardPriority && t.priority !== mp.boardPriority) return false;
       if (mp.boardDue === 'overdue' && !_isOverdue(t))  return false;
       if (mp.boardDue === 'today'   && !_isDueToday(t)) return false;
@@ -51994,6 +52045,12 @@ async function submitDsCreate() {
     card.querySelector('select').addEventListener('change', function () {
       if (this.value) _moveTask(t, this.value);
     });
+    card.title = 'Click to view task details';
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', e => {
+      if (e.target.closest('select, button, [data-mp-toggle]')) return;
+      openMpTaskDetail(t.id);
+    });
     return card;
   }
 
@@ -52033,6 +52090,150 @@ async function submitDsCreate() {
     }
     renderMpBoard();
   }
+
+  // ── Task detail modal ───────────────────────────────────────────────────────
+  // Renders the cached task at once, then fetches comments + time logs from the server.
+  let _mpDetailId = null;
+
+  const _fmtMinutes = m => {
+    m = +m || 0;
+    const h = Math.floor(m / 60), r = m % 60;
+    return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`;
+  };
+
+  function _detailRow(icon, label, value) {
+    return `
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)"><i class="fa ${icon}" style="margin-right:4px"></i>${label}</div>
+        <div style="font-size:12px;overflow-wrap:anywhere">${value}</div>
+      </div>`;
+  }
+
+  function _renderMpDetail(t, extra) {
+    const body = $('#mp-detail-body');
+    if (!body) return;
+    const p     = _project(t.project_id);
+    const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    const opts  = _statusesFor(t.project_id)
+      .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+    const assignees = (t.assignees || []).length
+      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${esc(a.name)}</span>`).join(' ')
+      : muted('Unassigned');
+    const est    = t.estimated_hours != null ? `${t.estimated_hours} h` : '—';
+    const logged = _fmtMinutes(t.logged_minutes);
+    const pct    = t.estimated_hours ? Math.min(100, Math.round((t.logged_minutes || 0) / (t.estimated_hours * 60) * 100)) : null;
+
+    const section = (icon, title, inner) => `
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:600"><i class="fa ${icon}" style="margin-right:5px;color:var(--accent)"></i>${title}</div>
+        ${inner}
+      </div>`;
+
+    let activity;
+    if (!extra) {
+      activity = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading comments and time logs…</div>`;
+    } else if (extra.error) {
+      activity = `<div style="font-size:11px;color:#ef4444">${esc(extra.error)}</div>`;
+    } else {
+      const comments = extra.comments || [];
+      const logs     = extra.time_logs || [];
+      activity =
+        section('fa-comments', `Comments (${comments.length})`, comments.length
+          ? comments.map(c => `
+              <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+                <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;margin-bottom:4px">
+                  <b>${esc(c.user)}</b>${muted(esc(c.created_at || ''))}
+                </div>
+                <div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(c.body)}</div>
+              </div>`).join('')
+          : `<div style="font-size:11px">${muted('No comments yet.')}</div>`) +
+        section('fa-stopwatch', `Time Logs (${logs.length})`, logs.length
+          ? `<table style="width:100%;border-collapse:collapse;font-size:11px">
+               <thead><tr style="text-align:left;color:var(--text-muted)"><th style="padding:4px">Date</th><th style="padding:4px">User</th><th style="padding:4px">Time</th><th style="padding:4px">Note</th></tr></thead>
+               <tbody>${logs.map(l => `
+                 <tr style="border-top:1px solid var(--border)">
+                   <td style="padding:4px;white-space:nowrap">${esc(l.logged_at || '—')}</td>
+                   <td style="padding:4px">${esc(l.user)}</td>
+                   <td style="padding:4px;white-space:nowrap">${_fmtMinutes(l.minutes)}</td>
+                   <td style="padding:4px">${esc(l.note || '')}</td>
+                 </tr>`).join('')}</tbody>
+             </table>`
+          : `<div style="font-size:11px">${muted('No time logged yet.')}</div>`);
+    }
+
+    $('#mp-detail-heading').textContent = t.title || 'Task Details';
+    body.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:16px;font-weight:700;overflow-wrap:anywhere${_isDone(t) ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            ${_statusBadge(t)}
+            <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+            ${t.is_overdue ? '<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
+          </div>
+        </div>
+        <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
+      </div>
+
+      ${section('fa-align-left', 'Description', t.description
+        ? `<div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-secondary, transparent);border:1px solid var(--border);border-radius:6px;padding:8px 10px">${esc(t.description)}</div>`
+        : `<div style="font-size:11px">${muted('No description.')}</div>`)}
+
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 18px">
+        ${_detailRow('fa-diagram-project', 'Project', `${p?.color ? `<span class="pm-col-dot" style="display:inline-block;background:${esc(p.color)};margin-right:4px"></span>` : ''}${esc(t.project_name || '—')}`)}
+        ${_detailRow('fa-flag', 'Milestone / Phase', t.milestone_name ? esc(t.milestone_name) : muted('—'))}
+        ${_detailRow('fa-calendar', 'Due Date', _dueHtml(t))}
+        ${_detailRow('fa-users', 'Assignees', assignees)}
+        ${_detailRow('fa-hourglass-half', 'Estimated', esc(est))}
+        ${_detailRow('fa-clock', 'Logged', `${esc(logged)}${pct != null ? ` ${muted(`(${pct}% of estimate)`)}` : ''}`)}
+        ${_detailRow('fa-calendar-plus', 'Created', t.created_at ? esc(t.created_at) : muted('—'))}
+        ${_detailRow('fa-circle-check', 'Completed', t.completed_at ? esc(t.completed_at) : muted('—'))}
+      </div>
+
+      ${activity}`;
+
+    $('#mp-detail-status')?.addEventListener('change', async function () {
+      try {
+        await _setStatus(t.id, this.value);
+        toast('Status updated', 'success');
+      } catch (err) { toast(String(err.message || err), 'error'); }
+      _renderCurrent();
+      const fresh = _task(t.id);
+      if (fresh && _mpDetailId === t.id) _renderMpDetail(fresh, extra);
+    });
+  }
+
+  async function openMpTaskDetail(taskId) {
+    const t = _task(taskId);
+    if (!t) return;
+    _mpDetailId = t.id;
+    _renderMpDetail(t, null);
+    $('#mp-detail-modal').style.display = '';
+
+    let extra;
+    try {
+      const res = await API.pmMyWorkTaskShow(t.id);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load task details');
+      const d = res.body?.data || {};
+      // Refresh the cached copy with the server's latest values
+      const i = mp.tasks.findIndex(x => +x.id === +t.id);
+      if (i !== -1) { const { comments, time_logs, ...task } = d; mp.tasks[i] = { ...mp.tasks[i], ...task }; }
+      extra = { comments: d.comments || [], time_logs: d.time_logs || [] };
+    } catch (e) {
+      extra = { error: String(e.message || e) };
+    }
+    if (_mpDetailId === t.id && $('#mp-detail-modal').style.display !== 'none') _renderMpDetail(_task(t.id) || t, extra);
+  }
+
+  function _closeMpTaskDetail() {
+    _mpDetailId = null;
+    const m = $('#mp-detail-modal'); if (m) m.style.display = 'none';
+  }
+
+  $('#mp-detail-close')?.addEventListener('click',  _closeMpTaskDetail);
+  $('#mp-detail-cancel')?.addEventListener('click', _closeMpTaskDetail);
+  $('#mp-detail-modal')?.addEventListener('click', e => { if (e.target === $('#mp-detail-modal')) _closeMpTaskDetail(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _mpDetailId !== null) _closeMpTaskDetail(); });
 
   // ── New Task (assigned to me) ───────────────────────────────────────────────
   // Only projects whose team I am on — the server rejects the rest.
@@ -52122,7 +52323,12 @@ async function submitDsCreate() {
   $('#mp-ov-board-btn')?.addEventListener('click', () => switchMpView('board'));
 
   $('#mp-task-search')?.addEventListener('input', function () { mp.taskSearch = this.value; renderMpTasks(); });
-  $('#mp-task-project')?.addEventListener('change', function () { mp.taskProject = this.value; renderMpTasks(); });
+  $('#mp-task-project')?.addEventListener('change', function () {
+    mp.taskProject = this.value;
+    _fillMilestoneSelect('#mp-task-milestone', 'taskProject', 'taskMilestone');
+    renderMpTasks();
+  });
+  $('#mp-task-milestone')?.addEventListener('change', function () { mp.taskMilestone = this.value; renderMpTasks(); });
   $$('#mp-task-filter-chips [data-mptaskfilter]').forEach(chip => chip.addEventListener('click', function () {
     $$('#mp-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
     this.classList.add('active');
@@ -52135,7 +52341,12 @@ async function submitDsCreate() {
     renderMpTasks();
   }));
 
-  $('#mp-board-project') ?.addEventListener('change', function () { mp.boardProject  = this.value; renderMpBoard(); });
+  $('#mp-board-project') ?.addEventListener('change', function () {
+    mp.boardProject = this.value;
+    _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+    renderMpBoard();
+  });
+  $('#mp-board-milestone')?.addEventListener('change', function () { mp.boardMilestone = this.value; renderMpBoard(); });
   $('#mp-board-priority')?.addEventListener('change', function () { mp.boardPriority = this.value; renderMpBoard(); });
   $('#mp-board-due')     ?.addEventListener('change', function () { mp.boardDue      = this.value; renderMpBoard(); });
 

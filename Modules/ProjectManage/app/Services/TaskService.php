@@ -98,6 +98,32 @@ class TaskService
     }
 
     /**
+     * Comments (oldest first) and time logs (newest first) of a task, for the task detail view.
+     *
+     * @return array{comments: Collection, time_logs: Collection}
+     */
+    public function activityForTask(Task $task): array
+    {
+        $task->loadMissing(['comments.user', 'timeLogs.user']);
+
+        return [
+            'comments'  => $task->comments->map(fn (TaskComment $c) => [
+                'id'         => $c->id,
+                'user'       => $c->user?->name ?? 'System',
+                'body'       => $c->body,
+                'created_at' => $c->created_at?->toDateTimeString(),
+            ])->values(),
+            'time_logs' => $task->timeLogs->map(fn (TimeLog $l) => [
+                'id'        => $l->id,
+                'user'      => $l->user?->name ?? 'System',
+                'minutes'   => (int) $l->minutes,
+                'logged_at' => $l->logged_at?->toDateString(),
+                'note'      => $l->note,
+            ])->values(),
+        ];
+    }
+
+    /**
      * All board statuses for a project in column order (by sort number; on a tie
      * the built-in status comes first). "done" always sorts last.
      *

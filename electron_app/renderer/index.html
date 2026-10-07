@@ -9164,12 +9164,10 @@
       <div id="pm-mine-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
 
       <!-- Inner tabs -->
-      <div class="mp-subtabs-bar">
-        <div class="pm-subtabs">
-          <button class="pm-subtab active" data-mpsub="overview"><i class="fa fa-house"></i> Overview</button>
-          <button class="pm-subtab"        data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
-          <button class="pm-subtab"        data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
-        </div>
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-mpsub="overview"><i class="fa fa-house"></i> Overview</button>
+        <button class="fin-subnav-btn"         data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
+        <button class="fin-subnav-btn"         data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9220,6 +9218,7 @@
             <button class="svc-chip" data-mptaskfilter="done">Done</button>
           </div>
           <select class="mp-filter-select" id="mp-task-project" title="Filter by project"></select>
+          <select class="mp-filter-select" id="mp-task-milestone" title="Filter by milestone"></select>
           <button class="svc-form-btn svc-form-btn--primary" id="mp-task-add-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;white-space:nowrap">
             <i class="fa fa-plus"></i> New Task
           </button>
@@ -9247,6 +9246,7 @@
       <div id="mp-board-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
         <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
           <select class="mp-filter-select" id="mp-board-project" title="Filter by project"></select>
+          <select class="mp-filter-select" id="mp-board-milestone" title="Filter by milestone"></select>
           <select class="mp-filter-select" id="mp-board-priority" title="Filter by priority">
             <option value="">All priorities</option>
             <option value="high">High</option>
@@ -10312,7 +10312,7 @@
 
   <!-- ── My Projects: New Task (assigned to me) Modal ── -->
   <div class="modal-overlay" id="mp-task-modal" style="display:none">
-    <div class="po-aim-shell" style="width:520px">
+    <div class="po-aim-shell" style="width:min(820px,94vw)">
       <div class="po-aim-header">
         <i class="fa fa-list-check" style="color:var(--accent)"></i>
         <span>New Task</span>
@@ -10332,7 +10332,7 @@
         </div>
         <div class="po-field">
           <label class="po-field-label">Description</label>
-          <textarea id="mp-tf-desc" class="po-field-input" rows="3" maxlength="5000" placeholder="Details (optional)"></textarea>
+          <textarea id="mp-tf-desc" class="po-field-input" rows="5" maxlength="5000" placeholder="Details (optional)"></textarea>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="po-field">
@@ -10360,6 +10360,21 @@
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="mp-task-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="mp-task-modal-save"><i class="fa fa-floppy-disk"></i> Create Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Task Detail Modal ── -->
+  <div class="modal-overlay" id="mp-detail-modal" style="display:none">
+    <div class="po-aim-shell" style="width:640px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-clipboard-list" style="color:var(--accent)"></i>
+        <span id="mp-detail-heading">Task Details</span>
+        <button class="psm-close" id="mp-detail-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="mp-detail-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-detail-cancel"><i class="fa fa-xmark"></i> Close</button>
       </div>
     </div>
   </div>

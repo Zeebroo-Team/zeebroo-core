@@ -655,6 +655,7 @@ const API = (() => {
     pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
     // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
     pmMyWork:              ()          => request('GET',    '/pm/my-work'),
+    pmMyWorkTaskShow:      (id)        => request('GET',    `/pm/my-work/tasks/${id}`),
     pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
     pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),
     pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),

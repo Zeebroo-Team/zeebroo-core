@@ -426,6 +426,18 @@ class ProjectManageApiController extends Controller
         return response()->json(['data' => $this->fmtTask($task)], 201);
     }
 
+    /** Full detail of a task assigned to me: the task plus its comments and time logs. */
+    public function myWorkTaskShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only view tasks assigned to you.');
+
+        $task->loadMissing(['assignees', 'milestone']);
+
+        return response()->json(['data' => $this->fmtTask($task) + $this->tasks->activityForTask($task)]);
+    }
+
     /** Status change (kanban drag & drop, complete / reopen) for a task assigned to me. */
     public function myWorkTaskStatus(Request $request, int $id): JsonResponse
     {
