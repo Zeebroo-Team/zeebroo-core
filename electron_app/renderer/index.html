@@ -1673,6 +1673,10 @@
             <button class="ribbon-btn-lg" id="rb-mp-calendar">
               <i class="fa fa-calendar-days"></i>Calendar
             </button>
+            <button class="ribbon-btn-lg" id="rb-mp-inbox" style="position:relative">
+              <i class="fa fa-inbox"></i>Inbox
+              <span class="mp-ib-badge mp-ib-badge--ribbon" data-ib-unread style="display:none"></span>
+            </button>
           </div>
           <div class="ribbon-group-label">My Projects</div>
         </div>
@@ -9172,6 +9176,7 @@
         <button class="fin-subnav-btn"         data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
         <button class="fin-subnav-btn"         data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
         <button class="fin-subnav-btn"         data-mpsub="calendar"><i class="fa fa-calendar-days"></i> Calendar</button>
+        <button class="fin-subnav-btn"         data-mpsub="inbox"><i class="fa fa-inbox"></i> Inbox <span class="mp-ib-badge" data-ib-unread style="display:none"></span></button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9325,6 +9330,49 @@
         <div class="mp-cal-hint" id="mp-cal-hint">
           <i class="fa fa-lightbulb"></i> Click a day to see its tasks · double-click a day to add a task on it · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>T</kbd> today · <kbd>M</kbd> <kbd>W</kbd> <kbd>A</kbd> switch view
           <span id="mp-cal-nodue" style="margin-left:auto"></span>
+        </div>
+      </div>
+
+      <!-- ── Inbox view (Gmail-style messages between project team members) ── -->
+      <div id="mp-inbox-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="mp-ib">
+          <aside class="mp-ib-nav">
+            <button class="mp-ib-compose" id="mp-ib-compose" title="Compose (C)"><i class="fa fa-pen"></i> Compose</button>
+            <div class="mp-ib-folders" id="mp-ib-folders">
+              <button class="mp-ib-folder active" data-ib-folder="inbox"><i class="fa fa-inbox"></i><span>Inbox</span><b data-ib-count="inbox"></b></button>
+              <button class="mp-ib-folder" data-ib-folder="unread"><i class="fa fa-envelope"></i><span>Unread</span></button>
+              <button class="mp-ib-folder" data-ib-folder="starred"><i class="fa fa-star"></i><span>Starred</span><b data-ib-count="starred"></b></button>
+              <button class="mp-ib-folder" data-ib-folder="sent"><i class="fa fa-paper-plane"></i><span>Sent</span></button>
+              <button class="mp-ib-folder" data-ib-folder="archive"><i class="fa fa-box-archive"></i><span>Archive</span></button>
+              <button class="mp-ib-folder" data-ib-folder="trash"><i class="fa fa-trash-can"></i><span>Trash</span></button>
+            </div>
+            <div class="mp-ib-nav-label">Projects</div>
+            <div class="mp-ib-projects" id="mp-ib-projects"></div>
+          </aside>
+
+          <section class="mp-ib-main">
+            <div class="mp-ib-toolbar">
+              <label class="mp-ib-check" title="Select all"><input type="checkbox" id="mp-ib-selall"></label>
+              <button class="mp-ib-tool" id="mp-ib-refresh" title="Refresh"><i class="fa fa-rotate-right"></i></button>
+              <div class="mp-ib-bulk" id="mp-ib-bulk"></div>
+              <div class="finance-search-wrap mp-ib-search">
+                <i class="fa fa-magnifying-glass"></i>
+                <input type="text" id="mp-ib-search" placeholder="Search mail — subject, text, people, files  ( / )" autocomplete="off">
+              </div>
+              <div class="mp-ib-pager">
+                <span id="mp-ib-range"></span>
+                <button class="mp-ib-tool" id="mp-ib-prev" title="Newer"><i class="fa fa-chevron-left"></i></button>
+                <button class="mp-ib-tool" id="mp-ib-next" title="Older"><i class="fa fa-chevron-right"></i></button>
+              </div>
+            </div>
+            <div class="mp-ib-split">
+              <div class="mp-ib-list" id="mp-ib-list"></div>
+              <div class="mp-ib-reader" id="mp-ib-reader"></div>
+            </div>
+            <div class="mp-cal-hint">
+              <i class="fa fa-lightbulb"></i> <kbd>C</kbd> compose · <kbd>J</kbd> <kbd>K</kbd> next / previous · <kbd>R</kbd> reply · <kbd>E</kbd> archive · <kbd>#</kbd> trash · <kbd>S</kbd> star · <kbd>Shift</kbd>+<kbd>U</kbd> mark unread · <kbd>/</kbd> search · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> send
+            </div>
+          </section>
         </div>
       </div>
 
@@ -10426,6 +10474,42 @@
     </div>
   </div>
 
+  <!-- ── My Projects: Inbox compose window (docked bottom-right, like Gmail) ── -->
+  <div class="mp-ib-compose-win" id="mp-ib-compose-win" style="display:none">
+    <div class="mp-ib-cw-head" id="mp-ib-cw-head">
+      <span id="mp-ib-cw-title">New Message</span>
+      <button class="mp-ib-cw-btn" id="mp-ib-cw-min" title="Minimize"><i class="fa fa-minus"></i></button>
+      <button class="mp-ib-cw-btn" id="mp-ib-cw-max" title="Full screen"><i class="fa fa-up-right-and-down-left-from-center"></i></button>
+      <button class="mp-ib-cw-btn" id="mp-ib-cw-close" title="Save & close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="mp-ib-cw-body">
+      <div class="mp-ib-cw-row mp-ib-cw-to">
+        <span class="mp-ib-cw-label">To</span>
+        <div class="mp-ib-chips" id="mp-ib-cw-chips">
+          <input type="text" id="mp-ib-cw-to" placeholder="Type a teammate's name…" autocomplete="off">
+        </div>
+        <div class="mp-ib-suggest" id="mp-ib-cw-suggest" style="display:none"></div>
+      </div>
+      <div class="mp-ib-cw-row">
+        <span class="mp-ib-cw-label">Project</span>
+        <select id="mp-ib-cw-project" class="mp-ib-cw-select" title="Tag the conversation with a project (optional)"></select>
+        <button class="mp-ib-cw-link" id="mp-ib-cw-team" style="display:none" title="Add everyone on this project's team"><i class="fa fa-users"></i> Add whole team</button>
+      </div>
+      <div class="mp-ib-cw-row">
+        <input type="text" id="mp-ib-cw-subject" class="mp-ib-cw-subject" placeholder="Subject" maxlength="200">
+      </div>
+      <textarea id="mp-ib-cw-text" class="mp-ib-cw-text" placeholder="Write your message…" maxlength="20000"></textarea>
+      <div class="mp-ib-cw-files" id="mp-ib-cw-files"></div>
+      <div class="mp-ib-cw-alert" id="mp-ib-cw-alert" style="display:none"></div>
+    </div>
+    <div class="mp-ib-cw-foot">
+      <button class="mp-ib-send" id="mp-ib-cw-send" title="Send (Ctrl+Enter)"><i class="fa fa-paper-plane"></i> Send</button>
+      <button class="mp-ib-tool" id="mp-ib-cw-attach" title="Attach files"><i class="fa fa-paperclip"></i></button>
+      <span style="flex:1"></span>
+      <button class="mp-ib-tool" id="mp-ib-cw-discard" title="Discard draft"><i class="fa fa-trash-can"></i></button>
+    </div>
+  </div>
+
   <!-- ── My Projects: Task Detail Modal ── -->
   <div class="modal-overlay" id="mp-detail-modal" style="display:none">
     <div class="po-aim-shell" style="width:640px;max-height:88vh;display:flex;flex-direction:column">
@@ -10483,6 +10567,7 @@
       <div class="po-aim-body" id="team-profile-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="team-profile-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-primary" id="team-profile-message" style="display:none"><i class="fa fa-envelope"></i> Send message</button>
       </div>
     </div>
   </div>

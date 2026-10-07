@@ -43,6 +43,8 @@ class PosNotification extends Model
 
     public const TYPE_TASK_ASSIGNED = 'task_assigned';
 
+    public const TYPE_INBOX_MESSAGE = 'inbox_message';
+
     protected $table = 'pos_notifications';
 
     protected $fillable = [

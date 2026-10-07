@@ -304,6 +304,7 @@ const _sbSubItems = {
     { view:'tasks',          icon:'fa-list-check',           label:'My Tasks' },
     { view:'board',          icon:'fa-table-columns',        label:'Kanban Board' },
     { view:'calendar',       icon:'fa-calendar-days',        label:'Calendar' },
+    { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
   ],
 };
 
@@ -8906,6 +8907,7 @@ const _notifIconMap = {
   subscription_renewal_upcoming:  { icon: 'fa-calendar-days',         cls: 'warning' },
   project_member_added:           { icon: 'fa-user-plus',             cls: 'info'    },
   task_assigned:                  { icon: 'fa-list-check',            cls: 'info'    },
+  inbox_message:                  { icon: 'fa-envelope',              cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -9054,6 +9056,10 @@ function _notifNavigate(n) {
       else window.switchMpView?.(view, { refresh: true });
       break;
     }
+    case 'inbox_message':
+      // A teammate wrote in a My Projects inbox thread — open it.
+      window.MpInbox?.openThreadFromOutside(payload.thread_id);
+      break;
     default:
       break;
   }
@@ -49676,7 +49682,7 @@ const TaskFiles = (() => {
   $('#task-files-modal')?.addEventListener('click', e => { if (e.target === $('#task-files-modal')) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _modalTaskId !== null) closeModal(); });
 
-  return { mount, openModal };
+  return { mount, openModal, fmtSize, iconFor, EXTS };
 })();
 
 // ── Team-member profile (shared by Projects + My Projects) ──────────────────
@@ -49795,6 +49801,7 @@ const TeamProfile = (() => {
     if (!uid) return;
     _uid = uid;
     _render(null, fallbackName);
+    const msgBtn = $('#team-profile-message'); if (msgBtn) msgBtn.style.display = 'none';
     $('#team-profile-modal').style.display = '';
     let profile = null, error = null;
     try {
@@ -49802,7 +49809,14 @@ const TeamProfile = (() => {
       if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load profile');
       profile = res.body?.data;
     } catch (e) { error = String(e.message || e); }
-    if (_uid === uid) _render(profile, fallbackName, error);
+    if (_uid === uid) {
+      _render(profile, fallbackName, error);
+      const msgBtn = $('#team-profile-message');
+      if (msgBtn) {
+        msgBtn.style.display = profile && !profile.is_me && window.MpInbox ? '' : 'none';
+        msgBtn.onclick = () => { close(); window.MpInbox.compose({ to: [{ id: profile.id, name: profile.name, email: profile.email }] }); };
+      }
+    }
   }
 
   function close() {
@@ -52091,10 +52105,12 @@ const TeamProfile = (() => {
     mp.view = view;
     $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
     _sbSubActivate('my-projects', view);
-    ['overview', 'tasks', 'board', 'calendar'].forEach(v => {
+    ['overview', 'tasks', 'board', 'calendar', 'inbox'].forEach(v => {
       const el = $(`#mp-${v}-view`);
       if (el) el.style.display = v === view ? 'flex' : 'none';
     });
+    window.MpInbox?.refreshCounts();
+    if (view === 'inbox') { window.MpInbox?.show({ refresh }); return; }   // the inbox loads its own data
     if (refresh || !mp.loaded) {
       try { await loadMyWork(); }
       catch (e) { toast('Failed to load your projects: ' + (e.message || e), 'error'); }
@@ -52108,6 +52124,7 @@ const TeamProfile = (() => {
     else if (mp.view === 'tasks') renderMpTasks();
     else if (mp.view === 'board') renderMpBoard();
     else if (mp.view === 'calendar') renderMpCalendar();
+    else if (mp.view === 'inbox') window.MpInbox?.show();
   }
 
   // ── Overview: stats, overdue / today / upcoming, my projects ───────────────
@@ -53511,6 +53528,7 @@ const TeamProfile = (() => {
   $('#rb-mp-tasks')   ?.addEventListener('click', () => _mpOpen('tasks'));
   $('#rb-mp-board')   ?.addEventListener('click', () => _mpOpen('board'));
   $('#rb-mp-calendar')?.addEventListener('click', () => _mpOpen('calendar'));
+  $('#rb-mp-inbox')   ?.addEventListener('click', () => _mpOpen('inbox'));
   $('#rb-mp-new-task')?.addEventListener('click', () => {
     if (_activeTab() !== 'my-projects') activateTab('my-projects');
     openMpTaskModal();
@@ -53519,6 +53537,787 @@ const TeamProfile = (() => {
 
   window._mp = mp;
 }());
+
+// ── My Projects → Inbox ─────────────────────────────────────────────────────
+// Gmail-style messages between project team members: folders (Inbox / Unread / Starred /
+// Sent / Archive / Trash), project labels, a list + reading pane, threaded replies with
+// attachments and a docked compose window. Who you can write to is decided by the server
+// (teammates who share a project with you; managers — anyone in the business).
+const MpInbox = (() => {
+  const esc = escHtml;
+  const POLL_MS = 45000;
+
+  const ib = {
+    folder:   'inbox',
+    project:  '',          // project-label filter
+    search:   '',
+    page:     1,
+    hasMore:  false,
+    threads:  [],
+    counts:   { inbox: 0, starred: 0 },
+    selected: new Set(),
+    openId:   null,        // thread shown in the reading pane
+    thread:   null,        // its detail (messages)
+    pendingOpen: null,     // thread to open once the view is on screen (notification click)
+    book:     null,        // { contacts, projects } — who I can write to
+    bookAt:   0,
+    loaded:   false,
+    reply:    null,        // { text, files[] } while the reply box is open
+  };
+
+  const FOLDER_LABEL = { inbox: 'Inbox', unread: 'Unread', starred: 'Starred', sent: 'Sent', archive: 'Archive', trash: 'Trash' };
+  const FOLDER_EMPTY = {
+    inbox:   ['fa-inbox', 'Your inbox is empty. Messages from your teammates show up here.'],
+    unread:  ['fa-envelope-open', 'No unread messages — you\'re all caught up.'],
+    starred: ['fa-star', 'No starred conversations. Star one to find it quickly later.'],
+    sent:    ['fa-paper-plane', 'You haven\'t sent any messages yet.'],
+    archive: ['fa-box-archive', 'Nothing archived.'],
+    trash:   ['fa-trash-can', 'Trash is empty.'],
+  };
+
+  const errMsg = (res, fallback) => res?.body?.errors
+    ? Object.values(res.body.errors).flat().join(' ')
+    : (res?.body?.message || fallback);
+
+  const visible = () => !!$('#mp-inbox-view')?.offsetParent;
+  const _date   = dt => dt ? new Date(String(dt).replace(' ', 'T')) : null;
+  const avColor = name => (typeof TeamProfile !== 'undefined' ? TeamProfile.avatarColor(name) : 'var(--accent)');
+  const avatar  = (name, initial) => `<span class="mp-ib-av" style="background:${avColor(name)}">${esc(initial || (String(name || '?').trim().charAt(0) || '?').toUpperCase())}</span>`;
+  const projChip = p => p ? `<span class="mp-ib-proj" style="--pc:${esc(p.color || '#6b7280')}" title="Project: ${esc(p.name)}"><i class="fa fa-diagram-project"></i>${esc(p.name)}</span>` : '';
+
+  // Gmail-like short time: today → 12:24 PM, this year → Oct 3, older → 2025-10-03.
+  function shortTime(dt) {
+    const d = _date(dt);
+    if (!d || isNaN(d)) return '';
+    const now = new Date();
+    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString();
+  }
+  function longTime(dt) {
+    const d = _date(dt);
+    if (!d || isNaN(d)) return '';
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    const ago  = mins < 1 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 1440 ? `${Math.round(mins / 60)} h ago` : mins < 10080 ? `${Math.round(mins / 1440)} d ago` : '';
+    return d.toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + (ago ? ` (${ago})` : '');
+  }
+
+  const names = (people, max = 3) => {
+    const list = people.map(p => p.is_me ? 'me' : String(p.name || '').split(' ')[0]);
+    return list.length > max ? `${list.slice(0, max).join(', ')} +${list.length - max}` : list.join(', ');
+  };
+
+  function fileChip(f, { removable = false, idx = null, download = false } = {}) {
+    const [icon, color] = TaskFiles.iconFor(f.name);
+    return `<span class="mp-ib-att" ${download ? `data-ib-download="${f.id}"` : ''} title="${esc(f.name)}${download ? ' — click to download' : ''}">
+      <i class="fa ${icon}" style="color:${color}"></i><span>${esc(f.name)}</span>
+      ${f.size_bytes != null ? `<small>${TaskFiles.fmtSize(f.size_bytes)}</small>` : ''}
+      ${removable ? `<i class="fa fa-xmark" data-ib-unfile="${idx}" style="cursor:pointer" title="Remove"></i>` : ''}
+    </span>`;
+  }
+
+  // ── Data ────────────────────────────────────────────────────────────────────
+  async function loadBook(force = false) {
+    if (!force && ib.book && Date.now() - ib.bookAt < 5 * 60000) return ib.book;
+    const res = await API.pmInboxContacts();
+    if (res.status >= 400) throw new Error(errMsg(res, 'Failed to load your teammates'));
+    ib.book   = res.body?.data || { contacts: [], projects: [] };
+    ib.bookAt = Date.now();
+    return ib.book;
+  }
+
+  let _listReq = 0;
+  async function loadList({ silent = false } = {}) {
+    const req = ++_listReq;
+    if (!silent) $('#mp-ib-list').innerHTML = `<div class="mp-ib-empty"><i class="fa fa-spinner fa-spin"></i>Loading…</div>`;
+    const res = await API.pmInbox({ folder: ib.folder, search: ib.search, project_id: ib.project, page: ib.page });
+    if (req !== _listReq) return;   // a newer request superseded this one
+    if (res.status >= 400) {
+      $('#mp-ib-list').innerHTML = `<div class="mp-ib-empty"><i class="fa fa-triangle-exclamation"></i>${esc(errMsg(res, 'Failed to load messages'))}</div>`;
+      return;
+    }
+    ib.threads = res.body?.data || [];
+    ib.hasMore = !!res.body?.has_more;
+    ib.loaded  = true;
+    const ids = new Set(ib.threads.map(t => +t.id));
+    ib.selected.forEach(id => { if (!ids.has(id)) ib.selected.delete(id); });
+    setCounts(res.body?.counts);
+    renderList();
+    renderToolbar();
+  }
+
+  async function refreshCounts() {
+    try {
+      const res = await API.pmInboxCounts();
+      if (res.status < 400) setCounts(res.body?.data);
+    } catch (_) { /* badge only */ }
+  }
+
+  function setCounts(c) {
+    if (!c) return;
+    ib.counts = c;
+    $$('[data-ib-count]').forEach(el => { const n = +c[el.dataset.ibCount] || 0; el.textContent = n ? n : ''; });
+    $$('[data-ib-unread]').forEach(el => {
+      const n = +c.inbox || 0;
+      el.textContent = n > 99 ? '99+' : n;
+      el.style.display = n ? '' : 'none';
+    });
+  }
+
+  // ── Left nav ────────────────────────────────────────────────────────────────
+  function renderNav() {
+    $$('#mp-ib-folders [data-ib-folder]').forEach(b => b.classList.toggle('active', b.dataset.ibFolder === ib.folder && !ib.project));
+    const wrap = $('#mp-ib-projects');
+    const projects = ib.book?.projects || [];
+    wrap.innerHTML = projects.length
+      ? projects.map(p => `<button class="mp-ib-folder ${String(ib.project) === String(p.id) ? 'active' : ''}" data-ib-project="${p.id}" title="${esc(p.name)}">
+          <i class="fa fa-circle" style="color:${esc(p.color || '#9ca3af')}"></i><span>${esc(p.name)}</span></button>`).join('')
+      : `<div style="padding:2px 12px;font-size:11px;color:var(--text-muted)">No projects yet</div>`;
+    wrap.querySelectorAll('[data-ib-project]').forEach(b => b.addEventListener('click', () => {
+      // A project label shows that project's conversations across every folder but Trash.
+      ib.project = String(ib.project) === b.dataset.ibProject ? '' : b.dataset.ibProject;
+      if (ib.project && ib.folder === 'trash') ib.folder = 'inbox';
+      ib.page = 1;
+      renderNav();
+      loadList();
+    }));
+  }
+
+  // ── Toolbar ─────────────────────────────────────────────────────────────────
+  function renderToolbar() {
+    const n = ib.selected.size;
+    const all = $('#mp-ib-selall');
+    all.checked = n > 0 && n === ib.threads.length;
+    all.indeterminate = n > 0 && n < ib.threads.length;
+
+    const btn = (action, icon, title) => `<button class="mp-ib-tool" data-ib-bulk="${action}" title="${title}"><i class="fa ${icon}"></i></button>`;
+    let html = '';
+    if (n) {
+      if (ib.folder === 'trash') {
+        html += btn('restore', 'fa-rotate-left', 'Move back to inbox') + btn('delete', 'fa-ban', 'Delete forever');
+      } else {
+        html += ib.folder === 'archive' ? btn('unarchive', 'fa-inbox', 'Move to inbox') : btn('archive', 'fa-box-archive', 'Archive (E)');
+        html += btn('trash', 'fa-trash-can', 'Delete (#)');
+      }
+      const anyUnread = ib.threads.some(t => ib.selected.has(+t.id) && t.is_unread);
+      html += anyUnread ? btn('read', 'fa-envelope-open', 'Mark as read') : btn('unread', 'fa-envelope', 'Mark as unread');
+      const allStarred = ib.threads.filter(t => ib.selected.has(+t.id)).every(t => t.is_starred);
+      html += allStarred ? btn('unstar', 'fa-star-half-stroke', 'Remove star') : btn('star', 'fa-star', 'Star');
+      html += `<span style="font-size:11px;color:var(--text-muted);margin-left:6px">${n} selected</span>`;
+    } else if (ib.folder === 'trash' && ib.threads.length) {
+      html += `<span style="font-size:11px;color:var(--text-muted)">Conversations in Trash stay until you delete them forever.</span>`;
+    }
+    const bulk = $('#mp-ib-bulk');
+    bulk.innerHTML = html;
+    bulk.querySelectorAll('[data-ib-bulk]').forEach(b => b.addEventListener('click', () => doAction([...ib.selected], b.dataset.ibBulk)));
+
+    const from = ib.threads.length ? (ib.page - 1) * 50 + 1 : 0;
+    const to   = (ib.page - 1) * 50 + ib.threads.length;
+    $('#mp-ib-range').textContent = ib.threads.length ? `${from}–${to}` : '';
+    $('#mp-ib-prev').disabled = ib.page <= 1;
+    $('#mp-ib-next').disabled = !ib.hasMore;
+  }
+
+  // ── Thread list ─────────────────────────────────────────────────────────────
+  function renderList() {
+    const list = $('#mp-ib-list');
+    if (!ib.threads.length) {
+      const [icon, text] = ib.search
+        ? ['fa-magnifying-glass', `No conversations match "${esc(ib.search)}".`]
+        : FOLDER_EMPTY[ib.folder] || FOLDER_EMPTY.inbox;
+      list.innerHTML = `<div class="mp-ib-empty"><i class="fa ${icon}"></i>${text}
+        ${ib.folder === 'inbox' && !ib.search ? `<div style="margin-top:12px"><button class="mp-ib-send" data-ib-empty-compose><i class="fa fa-pen"></i> Write to your team</button></div>` : ''}</div>`;
+      list.querySelector('[data-ib-empty-compose]')?.addEventListener('click', () => compose());
+      return;
+    }
+
+    list.innerHTML = ib.threads.map(t => {
+      const others = t.participants.filter(p => !p.is_me);
+      // Sent: who it went to. Elsewhere: the latest sender first, then everyone else.
+      const lastFrom = t.last_message?.sender_id;
+      const people = [...t.participants].sort((a, b) => (b.id === lastFrom) - (a.id === lastFrom) || a.is_me - b.is_me);
+      const who = ib.folder === 'sent' ? `To: ${esc(names(others.length ? others : t.participants))}` : esc(names(people));
+      const id = +t.id;
+      return `
+        <div class="mp-ib-row ${t.is_unread ? 'is-unread' : ''} ${ib.selected.has(id) ? 'is-selected' : ''} ${ib.openId === id ? 'is-open' : ''}" data-ib-thread="${id}">
+          <label class="mp-ib-row-check" title="Select"><input type="checkbox" data-ib-select="${id}" ${ib.selected.has(id) ? 'checked' : ''}></label>
+          <span class="mp-ib-row-star ${t.is_starred ? 'is-on' : ''}" data-ib-star="${id}" title="${t.is_starred ? 'Starred' : 'Not starred'}"><i class="fa${t.is_starred ? '' : '-regular'} fa-star"></i></span>
+          <div class="mp-ib-row-from">${who}${t.message_count > 1 ? `<small>${t.message_count}</small>` : ''}</div>
+          <div class="mp-ib-row-time" title="${esc(longTime(t.last_message_at))}">${esc(shortTime(t.last_message_at))}</div>
+          <div class="mp-ib-row-line">
+            <span class="mp-ib-row-subj">${esc(t.subject)}</span>
+            <span class="mp-ib-row-snip">— ${t.last_message?.is_mine ? 'You: ' : ''}${esc(t.last_message?.snippet || '')}</span>
+            <span class="mp-ib-row-meta">
+              ${t.attachments_count ? `<i class="fa fa-paperclip" title="${t.attachments_count} attachment${t.attachments_count === 1 ? '' : 's'}"></i>` : ''}
+              ${ib.project ? '' : projChip(t.project)}
+              ${(ib.folder === 'starred' || ib.project) && t.is_archived ? '<i class="fa fa-box-archive" title="Archived"></i>' : ''}
+            </span>
+          </div>
+        </div>`;
+    }).join('') + (ib.hasMore ? `<div class="mp-ib-more"><button class="mp-ib-tool" data-ib-older>Older conversations <i class="fa fa-chevron-right"></i></button></div>` : '');
+
+    list.querySelectorAll('[data-ib-thread]').forEach(row => row.addEventListener('click', e => {
+      if (e.target.closest('[data-ib-select], [data-ib-star], .mp-ib-row-check, .tp-link')) return;
+      openThread(+row.dataset.ibThread);
+    }));
+    list.querySelectorAll('[data-ib-select]').forEach(cb => cb.addEventListener('change', () => {
+      const id = +cb.dataset.ibSelect;
+      cb.checked ? ib.selected.add(id) : ib.selected.delete(id);
+      cb.closest('.mp-ib-row').classList.toggle('is-selected', cb.checked);
+      renderToolbar();
+    }));
+    list.querySelectorAll('[data-ib-star]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = ib.threads.find(x => +x.id === +el.dataset.ibStar);
+      if (t) doAction([+t.id], t.is_starred ? 'unstar' : 'star');
+    }));
+    list.querySelector('[data-ib-older]')?.addEventListener('click', () => goPage(1));
+  }
+
+  function goPage(delta) {
+    if ((delta < 0 && ib.page <= 1) || (delta > 0 && !ib.hasMore)) return;
+    ib.page += delta;
+    ib.selected.clear();
+    loadList();
+    $('#mp-ib-list').scrollTop = 0;
+  }
+
+  // ── Reading pane ────────────────────────────────────────────────────────────
+  async function openThread(id) {
+    ib.openId = id;
+    ib.reply  = null;
+    $$('#mp-ib-list [data-ib-thread]').forEach(r => r.classList.toggle('is-open', +r.dataset.ibThread === id));
+    const reader = $('#mp-ib-reader');
+    reader.innerHTML = `<div class="mp-ib-empty"><i class="fa fa-spinner fa-spin"></i>Opening…</div>`;
+
+    const res = await API.pmInboxThread(id);
+    if (ib.openId !== id) return;
+    if (res.status >= 400) {
+      ib.thread = null;
+      reader.innerHTML = `<div class="mp-ib-empty"><i class="fa fa-triangle-exclamation"></i>${esc(errMsg(res, 'Could not open this conversation'))}</div>`;
+      return;
+    }
+    ib.thread = res.body?.data;
+
+    // Opening marks it read — reflect that locally without reloading the list.
+    const row = ib.threads.find(t => +t.id === id);
+    if (row?.is_unread) {
+      row.is_unread = false; row.unread_count = 0;
+      $(`#mp-ib-list [data-ib-thread="${id}"]`)?.classList.remove('is-unread');
+      refreshCounts();
+    }
+    renderReader();
+  }
+
+  function closeReader() {
+    ib.openId = null; ib.thread = null; ib.reply = null;
+    $$('#mp-ib-list .mp-ib-row.is-open').forEach(r => r.classList.remove('is-open'));
+    renderReader();
+  }
+
+  function renderReader() {
+    const reader = $('#mp-ib-reader');
+    const t = ib.thread;
+    if (!t) {
+      const n = +ib.counts.inbox || 0;
+      reader.innerHTML = `<div class="mp-ib-empty" style="margin:auto"><i class="fa fa-envelope-open-text"></i>
+        ${n ? `You have <b>${n}</b> unread conversation${n === 1 ? '' : 's'}.` : 'Select a conversation to read it.'}
+        <div style="margin-top:12px"><button class="mp-ib-send" data-ib-reader-compose><i class="fa fa-pen"></i> Compose</button></div></div>`;
+      reader.querySelector('[data-ib-reader-compose]')?.addEventListener('click', () => compose());
+      return;
+    }
+
+    const others = t.participants.filter(p => !p.is_me);
+    const lastIdx = t.messages.length - 1;
+    const act = (action, icon, title) => `<button class="mp-ib-tool" data-ib-act="${action}" title="${title}"><i class="fa ${icon}"></i></button>`;
+
+    reader.innerHTML = `
+      <div class="mp-ib-rd-head">
+        <div class="mp-ib-rd-subject">${esc(t.subject)} ${projChip(t.project)}</div>
+        <div class="mp-ib-rd-actions">
+          ${t.is_trashed
+            ? act('restore', 'fa-rotate-left', 'Move back to inbox') + act('delete', 'fa-ban', 'Delete forever')
+            : (t.is_archived ? act('unarchive', 'fa-inbox', 'Move to inbox') : act('archive', 'fa-box-archive', 'Archive (E)')) + act('trash', 'fa-trash-can', 'Delete (#)')}
+          ${act('unread', 'fa-envelope', 'Mark as unread (Shift+U)')}
+          <button class="mp-ib-tool ${t.is_starred ? 'is-on' : ''}" data-ib-act="${t.is_starred ? 'unstar' : 'star'}" title="${t.is_starred ? 'Remove star' : 'Star'} (S)"><i class="fa${t.is_starred ? '' : '-regular'} fa-star"></i></button>
+          ${act('close', 'fa-xmark', 'Close (Esc)')}
+        </div>
+      </div>
+      <div class="mp-ib-rd-people"><i class="fa fa-users" style="margin-right:5px"></i>${t.participants.map(p => p.is_me ? 'You' : TeamProfile.link(p.id, p.name)).join(', ')}</div>
+      <div class="mp-ib-rd-msgs">
+        ${t.messages.map((m, i) => {
+          // Like Gmail: older messages fold up, the last and anything new stay open.
+          const open = i === lastIdx || m.is_new;
+          const to = t.participants.filter(p => p.id !== m.user_id).map(p => p.is_me ? 'me' : p.name).join(', ');
+          return `
+          <div class="mp-ib-msg ${open ? '' : 'is-collapsed'}" data-ib-msg="${m.id}">
+            <div class="mp-ib-msg-head" data-ib-toggle>
+              ${avatar(m.sender_name, m.initial)}
+              <div class="mp-ib-msg-who">
+                <b>${m.is_mine ? 'You' : TeamProfile.link(m.user_id, m.sender_name)}</b>${m.is_new ? '<span class="mp-ib-msg-new">NEW</span>' : ''}
+                <div class="mp-ib-msg-to">to ${esc(to || 'me')}</div>
+                <div class="mp-ib-msg-snip">${esc(String(m.body).replace(/\s+/g, ' ').slice(0, 160))}</div>
+              </div>
+              <span class="mp-ib-msg-time">${m.attachments.length ? '<i class="fa fa-paperclip" style="margin-right:6px"></i>' : ''}${esc(longTime(m.created_at))}</span>
+            </div>
+            <div class="mp-ib-msg-body">${esc(m.body)}</div>
+            ${m.attachments.length ? `<div class="mp-ib-atts">${m.attachments.map(a => fileChip(a, { download: true })).join('')}</div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+      <div id="mp-ib-reply-slot"></div>`;
+
+    reader.querySelectorAll('[data-ib-act]').forEach(b => b.addEventListener('click', () => {
+      const a = b.dataset.ibAct;
+      if (a === 'close') closeReader();
+      else doAction([+t.id], a);
+    }));
+    reader.querySelectorAll('[data-ib-toggle]').forEach(h => h.addEventListener('click', e => {
+      if (e.target.closest('.tp-link')) return;
+      h.closest('.mp-ib-msg').classList.toggle('is-collapsed');
+    }));
+    bindDownloads(reader);
+    renderReplyBox(others);
+    reader.scrollTop = reader.scrollHeight;
+  }
+
+  function bindDownloads(root) {
+    root.querySelectorAll('[data-ib-download]').forEach(el => el.addEventListener('click', async e => {
+      e.stopPropagation();
+      const att = ib.thread?.messages.flatMap(m => m.attachments).find(a => +a.id === +el.dataset.ibDownload);
+      if (!att) return;
+      const res = await window.electronAPI.downloadFile(API.pmInboxAttachmentDownloadPath(att.id), att.name);
+      if (res?.canceled) return;
+      if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+      toast(`Saved ${att.name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+    }));
+  }
+
+  // ── Reply ───────────────────────────────────────────────────────────────────
+  function renderReplyBox(others = []) {
+    const slot = $('#mp-ib-reply-slot');
+    if (!slot || !ib.thread) return;
+    const toNames = others.length ? others.map(p => p.name).join(', ') : 'yourself';
+
+    if (!ib.reply) {
+      slot.innerHTML = `<div class="mp-ib-reply-start">
+        <button data-ib-reply-open><i class="fa fa-reply${others.length > 1 ? '-all' : ''}"></i> ${others.length > 1 ? 'Reply all' : 'Reply'}</button></div>`;
+      slot.querySelector('[data-ib-reply-open]').addEventListener('click', () => openReply());
+      return;
+    }
+
+    slot.innerHTML = `
+      <div class="mp-ib-reply">
+        <div class="mp-ib-reply-to"><i class="fa fa-reply${others.length > 1 ? '-all' : ''}"></i> ${esc(toNames)}</div>
+        <textarea id="mp-ib-reply-text" placeholder="Write your reply…" maxlength="20000">${esc(ib.reply.text)}</textarea>
+        <div class="mp-ib-reply-files">${ib.reply.files.map((f, i) => fileChip(f, { removable: true, idx: i })).join('')}</div>
+        <div class="mp-ib-reply-foot">
+          <button class="mp-ib-send" id="mp-ib-reply-send" title="Send (Ctrl+Enter)"><i class="fa fa-paper-plane"></i> Send</button>
+          <button class="mp-ib-tool" id="mp-ib-reply-attach" title="Attach files"><i class="fa fa-paperclip"></i></button>
+          <span style="flex:1"></span>
+          <button class="mp-ib-tool" id="mp-ib-reply-discard" title="Discard"><i class="fa fa-trash-can"></i></button>
+        </div>
+      </div>`;
+
+    const ta = $('#mp-ib-reply-text');
+    ta.addEventListener('input', () => { ib.reply.text = ta.value; });
+    ta.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendReply(); } });
+    $('#mp-ib-reply-send').addEventListener('click', sendReply);
+    $('#mp-ib-reply-discard').addEventListener('click', () => { ib.reply = null; renderReplyBox(others); });
+    $('#mp-ib-reply-attach').addEventListener('click', async () => {
+      ib.reply.files.push(...await pickFiles());
+      renderReplyBox(others);
+      $('#mp-ib-reply-text')?.focus();
+    });
+    slot.querySelectorAll('[data-ib-unfile]').forEach(x => x.addEventListener('click', () => {
+      ib.reply.files.splice(+x.dataset.ibUnfile, 1);
+      renderReplyBox(others);
+    }));
+  }
+
+  function openReply() {
+    if (!ib.thread) return;
+    ib.reply ||= { text: '', files: [] };
+    renderReplyBox(ib.thread.participants.filter(p => !p.is_me));
+    const ta = $('#mp-ib-reply-text');
+    ta?.focus();
+    ta?.scrollIntoView({ block: 'nearest' });
+  }
+
+  async function sendReply() {
+    const t = ib.thread;
+    if (!t || !ib.reply) return;
+    const body = ib.reply.text.trim();
+    if (!body) { toast('Write a reply first', 'error'); $('#mp-ib-reply-text')?.focus(); return; }
+    const btn = $('#mp-ib-reply-send');
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending';
+
+    const res = await API.pmInboxReply(t.id, body);
+    if (res.status >= 400) {
+      toast(errMsg(res, 'Reply failed'), 'error');
+      btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Send';
+      return;
+    }
+    await uploadFiles(res.body.data.id, ib.reply.files);
+    ib.reply = null;
+    toast('Reply sent', 'success');
+    if (ib.openId === +t.id) await openThread(+t.id);
+    loadList({ silent: true });
+  }
+
+  // ── Files ───────────────────────────────────────────────────────────────────
+  async function pickFiles() {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Attach files',
+      filters: [{ name: 'Documents & Images', extensions: TaskFiles.EXTS }, { name: 'All Files', extensions: ['*'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) return [];
+    return result.filePaths.map(path => ({ path, name: path.split(/[\\/]/).pop() }));
+  }
+
+  /** Uploads picked files to a sent message, one request per file (like task attachments). */
+  async function uploadFiles(messageId, files) {
+    for (const f of files) {
+      const res = await window.electronAPI.apiUpload(API.pmInboxAttachmentUploadPath(messageId), f.path);
+      if (res.status < 200 || res.status >= 300) {
+        toast(`${f.name}: ${res.status === 413 ? 'File is too large for the server.' : errMsg(res, 'Upload failed')}`, 'error');
+      }
+    }
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────────────────
+  const ACTION_TOAST = {
+    archive: 'Conversation archived', unarchive: 'Moved to inbox', trash: 'Moved to Trash',
+    restore: 'Moved back to inbox', delete: 'Deleted forever', read: 'Marked as read', unread: 'Marked as unread',
+  };
+  const UNDO = { archive: 'unarchive', unarchive: 'archive', trash: 'restore', restore: 'trash' };
+
+  async function doAction(ids, action, { undoable = true } = {}) {
+    ids = ids.map(Number).filter(Boolean);
+    if (!ids.length) return;
+    if (action === 'delete') {
+      const ok = await appConfirm({
+        title: 'Delete forever?', danger: true, icon: 'fa-ban', confirmText: '<i class="fa fa-ban"></i> Delete forever',
+        message: `${ids.length === 1 ? 'This conversation' : `${ids.length} conversations`} will be removed from your mailbox permanently. Other participants keep their copy.`,
+      });
+      if (!ok) return;
+    }
+    const res = await API.pmInboxAction(ids, action);
+    if (res.status >= 400) { toast(errMsg(res, 'Action failed'), 'error'); return; }
+    setCounts(res.body?.data?.counts);
+
+    const many = ids.length > 1 ? ` (${ids.length})` : '';
+    if (ACTION_TOAST[action]) {
+      const undo = undoable && UNDO[action];
+      toast(ACTION_TOAST[action] + many + (undo ? ' — click to undo' : ''), 'info', undo ? () => doAction(ids, undo, { undoable: false }) : null);
+    }
+
+    // Moves out of the current folder close the reading pane; flag changes update it in place.
+    const moves = ['archive', 'unarchive', 'trash', 'restore', 'delete'].includes(action);
+    if (ib.openId && ids.includes(ib.openId)) {
+      if (moves || action === 'unread') closeReader();
+      else if (ib.thread && (action === 'star' || action === 'unstar')) { ib.thread.is_starred = action === 'star'; renderReader(); }
+    }
+    ib.selected.clear();
+    await loadList({ silent: true });
+  }
+
+  // ── Compose ─────────────────────────────────────────────────────────────────
+  const cw = { to: [], files: [], sending: false, sugIdx: 0 };
+  const cwEl = () => $('#mp-ib-compose-win');
+  const cwDirty = () => cw.to.length || cw.files.length || $('#mp-ib-cw-subject').value.trim() || $('#mp-ib-cw-text').value.trim();
+
+  /**
+   * Opens the compose window. opts: { to: [{id, name, email}], subject, body, projectId }.
+   * Closing keeps the draft (like Gmail); Discard throws it away.
+   */
+  async function compose(opts = {}) {
+    try { await loadBook(); }
+    catch (e) { toast(String(e.message || e), 'error'); return; }
+
+    const prefilled = opts.to?.length || opts.subject || opts.projectId;
+    if (prefilled) {
+      if (cwDirty()) {
+        const ok = await appConfirm({ title: 'Replace your draft?', message: 'You have an unsent message. Discard it and start a new one?', confirmText: 'Discard draft', danger: true, icon: 'fa-pen' });
+        if (!ok) return;
+      }
+      resetCompose();
+    }
+
+    const sel = $('#mp-ib-cw-project');
+    const keep = opts.projectId ?? sel.value;
+    sel.innerHTML = `<option value="">No project</option>` + (ib.book.projects || []).map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+    sel.value = keep && sel.querySelector(`option[value="${keep}"]`) ? String(keep) : '';
+
+    (opts.to || []).forEach(u => addRecipient(u));
+    if (opts.subject) $('#mp-ib-cw-subject').value = opts.subject;
+    if (opts.body)    $('#mp-ib-cw-text').value = opts.body;
+
+    const win = cwEl();
+    win.style.display = '';
+    win.classList.remove('is-min');
+    renderCompose();
+    (cw.to.length ? (opts.subject ? $('#mp-ib-cw-text') : $('#mp-ib-cw-subject')) : $('#mp-ib-cw-to')).focus();
+  }
+
+  function resetCompose() {
+    cw.to = []; cw.files = []; cw.sending = false;
+    $('#mp-ib-cw-subject').value = '';
+    $('#mp-ib-cw-text').value = '';
+    $('#mp-ib-cw-to').value = '';
+    $('#mp-ib-cw-project').value = '';
+    $('#mp-ib-cw-alert').style.display = 'none';
+    cwEl().classList.remove('is-max');
+  }
+
+  function addRecipient(u) {
+    if (!u?.id || cw.to.some(x => +x.id === +u.id)) return;
+    const c = ib.book?.contacts.find(x => +x.id === +u.id);
+    cw.to.push({ id: +u.id, name: c?.name || u.name, email: c?.email || u.email, initial: c?.initial });
+  }
+
+  function renderCompose() {
+    const chips = $('#mp-ib-cw-chips');
+    chips.querySelectorAll('.mp-ib-chip').forEach(c => c.remove());
+    const input = $('#mp-ib-cw-to');
+    cw.to.forEach((u, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'mp-ib-chip';
+      chip.title = u.email || '';
+      chip.innerHTML = `${avatar(u.name, u.initial)}${esc(u.name)}<button title="Remove" data-ib-unto="${i}"><i class="fa fa-xmark"></i></button>`;
+      chips.insertBefore(chip, input);
+    });
+    chips.querySelectorAll('[data-ib-unto]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      cw.to.splice(+b.dataset.ibUnto, 1);
+      renderCompose();
+      input.focus();
+    }));
+    input.placeholder = cw.to.length ? '' : 'Type a teammate\'s name…';
+
+    const subj = $('#mp-ib-cw-subject').value.trim();
+    $('#mp-ib-cw-title').textContent = subj || 'New Message';
+
+    // "Add whole team" when the tagged project has teammates not yet on the To line.
+    const proj = (ib.book?.projects || []).find(p => String(p.id) === $('#mp-ib-cw-project').value);
+    const missing = proj ? proj.member_ids.filter(id => !cw.to.some(u => u.id === +id)) : [];
+    const teamBtn = $('#mp-ib-cw-team');
+    teamBtn.style.display = missing.length ? '' : 'none';
+    teamBtn.innerHTML = `<i class="fa fa-users"></i> Add whole team (${missing.length})`;
+
+    $('#mp-ib-cw-files').innerHTML = cw.files.map((f, i) => fileChip(f, { removable: true, idx: i })).join('');
+    $('#mp-ib-cw-files').querySelectorAll('[data-ib-unfile]').forEach(x => x.addEventListener('click', () => {
+      cw.files.splice(+x.dataset.ibUnfile, 1);
+      renderCompose();
+    }));
+
+    const send = $('#mp-ib-cw-send');
+    send.disabled = cw.sending;
+    send.innerHTML = cw.sending ? '<i class="fa fa-spinner fa-spin"></i> Sending' : '<i class="fa fa-paper-plane"></i> Send';
+  }
+
+  function renderSuggest() {
+    const box = $('#mp-ib-cw-suggest');
+    const q = $('#mp-ib-cw-to').value.trim().toLowerCase();
+    if (!q || !ib.book) { box.style.display = 'none'; return; }
+    const projName = id => ib.book.projects.find(p => +p.id === +id)?.name;
+    const hits = ib.book.contacts
+      .filter(c => !cw.to.some(u => u.id === +c.id))
+      .filter(c => c.name.toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q))
+      .slice(0, 8);
+    cw.sugIdx = Math.min(cw.sugIdx, Math.max(0, hits.length - 1));
+    box.innerHTML = hits.length
+      ? hits.map((c, i) => `<div class="mp-ib-sug ${i === cw.sugIdx ? 'is-active' : ''}" data-ib-sug="${c.id}">
+          ${avatar(c.name, c.initial)}
+          <div><b>${esc(c.name)}</b><small>${esc([c.email, c.project_ids.map(projName).filter(Boolean).slice(0, 3).join(', ')].filter(Boolean).join(' · '))}</small></div>
+        </div>`).join('')
+      : `<div class="mp-ib-sug-empty">No teammate matches "${esc(q)}". You can message people who share a project with you.</div>`;
+    box.style.display = '';
+    box._hits = hits;
+    box.querySelectorAll('[data-ib-sug]').forEach(el => el.addEventListener('mousedown', e => {
+      e.preventDefault();   // keep focus in the input
+      pickSuggestion(hits.find(c => +c.id === +el.dataset.ibSug));
+    }));
+  }
+
+  function pickSuggestion(c) {
+    if (!c) return;
+    addRecipient(c);
+    $('#mp-ib-cw-to').value = '';
+    cw.sugIdx = 0;
+    $('#mp-ib-cw-suggest').style.display = 'none';
+    renderCompose();
+    $('#mp-ib-cw-to').focus();
+  }
+
+  async function sendCompose() {
+    if (cw.sending) return;
+    const alert = $('#mp-ib-cw-alert');
+    const showErr = msg => { alert.textContent = msg; alert.style.display = ''; };
+    alert.style.display = 'none';
+
+    const pending = $('#mp-ib-cw-to').value.trim();
+    if (pending) {
+      const hit = $('#mp-ib-cw-suggest')._hits?.[cw.sugIdx];
+      if (hit) pickSuggestion(hit);
+      else return showErr(`"${pending}" is not one of your teammates.`);
+    }
+    if (!cw.to.length) return showErr('Add at least one recipient.');
+    const body = $('#mp-ib-cw-text').value.trim();
+    if (!body) { $('#mp-ib-cw-text').focus(); return showErr('Write a message before sending.'); }
+    const subject = $('#mp-ib-cw-subject').value.trim() || '(no subject)';
+
+    cw.sending = true; renderCompose();
+    const res = await API.pmInboxSend({ to: cw.to.map(u => u.id), subject, body, project_id: $('#mp-ib-cw-project').value || null });
+    if (res.status >= 400) {
+      cw.sending = false; renderCompose();
+      return showErr(errMsg(res, 'Sending failed'));
+    }
+    const thread = res.body.data;
+    await uploadFiles(thread.messages[0].id, cw.files);
+
+    resetCompose();
+    cwEl().style.display = 'none';
+    toast('Message sent — click to view', 'success', () => openThreadFromOutside(thread.id));
+    if (visible()) loadList({ silent: true });
+  }
+
+  function closeCompose() {
+    cwEl().style.display = 'none';
+    $('#mp-ib-cw-suggest').style.display = 'none';
+  }
+
+  // ── Show / open from elsewhere ──────────────────────────────────────────────
+  async function show({ refresh = false } = {}) {
+    if (!ib.book || refresh) loadBook(refresh).then(renderNav).catch(() => {});
+    renderNav();
+    if (!ib.loaded || refresh) await loadList();
+    else { renderList(); renderToolbar(); loadList({ silent: true }); }
+    if (ib.pendingOpen) {
+      const id = ib.pendingOpen;
+      ib.pendingOpen = null;
+      openThread(id);
+    } else {
+      renderReader();
+    }
+  }
+
+  /** Opens My Projects → Inbox with a thread in the reading pane (notification / toast click). */
+  function openThreadFromOutside(threadId) {
+    ib.pendingOpen = +threadId || null;
+    if (ib.folder === 'trash') ib.folder = 'inbox';
+    if (window._mp) window._mp.view = 'inbox';
+    if (_activeTab() !== 'my-projects') activateTab('my-projects');
+    else window.switchMpView?.('inbox');
+  }
+
+  function setFolder(folder) {
+    ib.folder = folder;
+    ib.project = '';
+    ib.page = 1;
+    ib.selected.clear();
+    renderNav();
+    loadList();
+  }
+
+  // ── Wiring ──────────────────────────────────────────────────────────────────
+  $$('#mp-ib-folders [data-ib-folder]').forEach(b => b.addEventListener('click', () => setFolder(b.dataset.ibFolder)));
+  $('#mp-ib-compose')?.addEventListener('click', () => compose());
+  $('#mp-ib-refresh')?.addEventListener('click', () => { loadBook(true).then(renderNav).catch(() => {}); loadList(); });
+  $('#mp-ib-prev')?.addEventListener('click', () => goPage(-1));
+  $('#mp-ib-next')?.addEventListener('click', () => goPage(1));
+  $('#mp-ib-selall')?.addEventListener('change', function () {
+    ib.selected = new Set(this.checked ? ib.threads.map(t => +t.id) : []);
+    renderList(); renderToolbar();
+  });
+
+  let _searchTimer = null;
+  $('#mp-ib-search')?.addEventListener('input', function () {
+    clearTimeout(_searchTimer);
+    _searchTimer = setTimeout(() => { ib.search = this.value.trim(); ib.page = 1; ib.selected.clear(); loadList(); }, 300);
+  });
+  $('#mp-ib-search')?.addEventListener('keydown', function (e) { if (e.key === 'Escape') { this.value = ''; this.dispatchEvent(new Event('input')); this.blur(); } });
+
+  // Compose window
+  $('#mp-ib-cw-head')?.addEventListener('click', e => {
+    if (e.target.closest('.mp-ib-cw-btn')) return;
+    cwEl().classList.toggle('is-min');
+  });
+  $('#mp-ib-cw-min')?.addEventListener('click', () => cwEl().classList.toggle('is-min'));
+  $('#mp-ib-cw-max')?.addEventListener('click', () => { cwEl().classList.remove('is-min'); cwEl().classList.toggle('is-max'); });
+  $('#mp-ib-cw-close')?.addEventListener('click', closeCompose);
+  $('#mp-ib-cw-discard')?.addEventListener('click', () => { resetCompose(); closeCompose(); toast('Draft discarded', 'info'); });
+  $('#mp-ib-cw-send')?.addEventListener('click', sendCompose);
+  $('#mp-ib-cw-attach')?.addEventListener('click', async () => { cw.files.push(...await pickFiles()); renderCompose(); });
+  $('#mp-ib-cw-project')?.addEventListener('change', renderCompose);
+  $('#mp-ib-cw-subject')?.addEventListener('input', renderCompose);
+  $('#mp-ib-cw-team')?.addEventListener('click', () => {
+    const proj = ib.book?.projects.find(p => String(p.id) === $('#mp-ib-cw-project').value);
+    proj?.member_ids.forEach(id => addRecipient({ id }));
+    renderCompose();
+  });
+  $('#mp-ib-cw-chips')?.addEventListener('click', () => $('#mp-ib-cw-to').focus());
+  $('#mp-ib-cw-to')?.addEventListener('input', () => { cw.sugIdx = 0; renderSuggest(); });
+  $('#mp-ib-cw-to')?.addEventListener('blur', () => setTimeout(() => { $('#mp-ib-cw-suggest').style.display = 'none'; }, 120));
+  $('#mp-ib-cw-to')?.addEventListener('keydown', e => {
+    const box = $('#mp-ib-cw-suggest');
+    const hits = box._hits || [];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (!hits.length) return;
+      e.preventDefault();
+      cw.sugIdx = (cw.sugIdx + (e.key === 'ArrowDown' ? 1 : -1) + hits.length) % hits.length;
+      renderSuggest();
+    } else if ((e.key === 'Enter' || e.key === ',' || e.key === 'Tab') && e.target.value.trim() && box.style.display !== 'none') {
+      if (!hits.length) return;
+      e.preventDefault();
+      pickSuggestion(hits[cw.sugIdx]);
+    } else if (e.key === 'Backspace' && !e.target.value && cw.to.length) {
+      cw.to.pop();
+      renderCompose();
+    }
+  });
+  [$('#mp-ib-cw-text'), $('#mp-ib-cw-subject')].forEach(el => el?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendCompose(); }
+  }));
+
+  // Gmail shortcuts (only while the inbox is on screen and no field / dialog has focus).
+  document.addEventListener('keydown', e => {
+    if (!visible() || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if ([...$$('.modal-overlay')].some(m => m.style.display !== 'none' && m.offsetParent)) return;
+
+    const idx = ib.threads.findIndex(t => +t.id === ib.openId);
+    const k = e.key;
+    if (k === 'c')                         compose();
+    else if (k === '/')                    $('#mp-ib-search').focus();
+    else if (k === 'j' || k === 'k') {
+      if (!ib.threads.length) return;
+      const next = idx === -1 ? 0 : Math.min(ib.threads.length - 1, Math.max(0, idx + (k === 'j' ? 1 : -1)));
+      openThread(+ib.threads[next].id);
+      $(`#mp-ib-list [data-ib-thread="${ib.threads[next].id}"]`)?.scrollIntoView({ block: 'nearest' });
+    }
+    else if (k === 'Escape' && ib.openId) closeReader();
+    else if (!ib.openId && !ib.selected.size) return;
+    else if (k === 'r' && ib.openId)      openReply();
+    else if (k === 'e')                   doAction(ib.selected.size ? [...ib.selected] : [ib.openId], ib.folder === 'archive' ? 'unarchive' : 'archive');
+    else if (k === '#' || k === 'Delete') doAction(ib.selected.size ? [...ib.selected] : [ib.openId], ib.folder === 'trash' ? 'delete' : 'trash');
+    else if (k === 's' && ib.openId)      doAction([ib.openId], ib.thread?.is_starred ? 'unstar' : 'star');
+    else if (k === 'U')                   doAction(ib.selected.size ? [...ib.selected] : [ib.openId], 'unread');
+    else return;
+    e.preventDefault();
+  });
+
+  // Keep the unread badge and the open folder fresh while My Projects is on screen.
+  setInterval(() => {
+    if (document.hidden || !$('#pm-mine-view')?.offsetParent) return;
+    if (visible() && ib.loaded) loadList({ silent: true });
+    else refreshCounts();
+  }, POLL_MS);
+
+  return { show, compose, refreshCounts, openThreadFromOutside };
+})();
+window.MpInbox = MpInbox;
 
 // ── Event Tab: Brands + Reporters ────────────────────────────────────────
 (function () {

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\ProjectManage\Http\Controllers\Api\ProjectInboxApiController;
 use Modules\ProjectManage\Http\Controllers\Api\ProjectManageApiController;
 
 Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(function () {
@@ -65,8 +66,20 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get   ('pm/my-work/attachments/{id}/download', [$c, 'myWorkAttachmentDownload'])->where('id', '[0-9]+')->name('pm.my-work.attachments.download');
     Route::delete('pm/my-work/attachments/{id}',        [$c, 'myWorkAttachmentDestroy']) ->where('id', '[0-9]+')->name('pm.my-work.attachments.destroy');
 
+    // My Projects → Inbox (Gmail-style messages between project team members)
+    $i = ProjectInboxApiController::class;
+    Route::get   ('pm/inbox',                          [$i, 'index'])             ->name('pm.inbox.index');
+    Route::get   ('pm/inbox/counts',                   [$i, 'counts'])            ->name('pm.inbox.counts');
+    Route::get   ('pm/inbox/contacts',                 [$i, 'contacts'])          ->name('pm.inbox.contacts');
+    Route::post  ('pm/inbox/threads',                  [$i, 'store'])             ->name('pm.inbox.threads.store');
+    Route::post  ('pm/inbox/threads/actions',          [$i, 'action'])            ->name('pm.inbox.threads.action');
+    Route::get   ('pm/inbox/threads/{id}',             [$i, 'show'])              ->where('id', '[0-9]+')->name('pm.inbox.threads.show');
+    Route::post  ('pm/inbox/threads/{id}/reply',       [$i, 'reply'])             ->where('id', '[0-9]+')->name('pm.inbox.threads.reply');
+    Route::post  ('pm/inbox/messages/{id}/attachments',[$i, 'attachmentStore'])   ->where('id', '[0-9]+')->name('pm.inbox.messages.attachments.store');
+    Route::get   ('pm/inbox/attachments/{id}/download',[$i, 'attachmentDownload'])->where('id', '[0-9]+')->name('pm.inbox.attachments.download');
+
     // Milestones
-    Route::get   ('pm/projects/{id}/milestones',     [$c, 'milestoneIndex'])   ->where('id', '[0-9]+')->name('pm.projects.milestones.index');
+    Route::get   ('pm/projects/{id}/milestones',    [$c, 'milestoneIndex'])   ->where('id', '[0-9]+')->name('pm.projects.milestones.index');
     Route::post  ('pm/projects/{id}/milestones',     [$c, 'milestoneStore'])   ->where('id', '[0-9]+')->name('pm.projects.milestones.store');
     Route::post  ('pm/projects/{id}/milestones/reorder', [$c, 'milestoneReorder'])->where('id', '[0-9]+')->name('pm.projects.milestones.reorder');
     Route::patch ('pm/milestones/{id}',              [$c, 'milestoneUpdate'])  ->where('id', '[0-9]+')->name('pm.milestones.update');
