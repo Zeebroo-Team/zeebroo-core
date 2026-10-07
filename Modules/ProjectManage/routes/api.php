@@ -61,6 +61,15 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::get  ('pm/my-work/tasks/{id}',       [$c, 'myWorkTaskShow'])  ->where('id', '[0-9]+')->name('pm.my-work.tasks.show');
     Route::patch('pm/my-work/tasks/{id}/status', [$c, 'myWorkTaskStatus'])->where('id', '[0-9]+')->name('pm.my-work.tasks.status');
     Route::post ('pm/my-work/tasks/{id}/comments', [$c, 'myWorkTaskComment'])->where('id', '[0-9]+')->name('pm.my-work.tasks.comment');
+
+    // Task deletion: the owner deletes directly; other assignees ask the owner, who approves / rejects
+    Route::delete('pm/my-work/tasks/{id}',                 [$c, 'myWorkTaskDestroy'])         ->where('id', '[0-9]+')->name('pm.my-work.tasks.destroy');
+    Route::post  ('pm/my-work/tasks/{id}/delete-request',  [$c, 'myWorkTaskDeleteRequest'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.delete-request');
+    Route::get   ('pm/my-work/delete-requests',            [$c, 'myWorkDeleteRequestIndex'])  ->name('pm.my-work.delete-requests.index');
+    Route::get   ('pm/my-work/delete-requests/{id}',       [$c, 'myWorkDeleteRequestShow'])   ->where('id', '[0-9]+')->name('pm.my-work.delete-requests.show');
+    Route::post  ('pm/my-work/delete-requests/{id}/approve', [$c, 'myWorkDeleteRequestApprove'])->where('id', '[0-9]+')->name('pm.my-work.delete-requests.approve');
+    Route::post  ('pm/my-work/delete-requests/{id}/reject',  [$c, 'myWorkDeleteRequestReject']) ->where('id', '[0-9]+')->name('pm.my-work.delete-requests.reject');
+    Route::post ('pm/my-work/comments/{id}/attachments', [$c, 'myWorkCommentAttachmentStore'])->where('id', '[0-9]+')->name('pm.my-work.comments.attachments.store');
     Route::get   ('pm/my-work/tasks/{id}/attachments',  [$c, 'myWorkAttachmentIndex'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.attachments.index');
     Route::post  ('pm/my-work/tasks/{id}/attachments',  [$c, 'myWorkAttachmentStore'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.attachments.store');
     Route::get   ('pm/my-work/attachments/{id}/download', [$c, 'myWorkAttachmentDownload'])->where('id', '[0-9]+')->name('pm.my-work.attachments.download');

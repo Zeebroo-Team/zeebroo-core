@@ -19,6 +19,7 @@ use Modules\ProjectManage\Models\InboxMessage;
 use Modules\ProjectManage\Models\InboxThread;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
+use Modules\ProjectManage\Models\TaskDeleteRequest;
 use Modules\Purchase\Models\ChequePayment;
 use Modules\Purchase\Models\Purchase;
 
@@ -316,6 +317,69 @@ class PosNotificationService
                 payload: ['thread_id' => $thread->id, 'message_id' => $message->id, 'subject' => $thread->subject],
             );
         }
+    }
+
+    /** Asks the task owner to approve or reject a teammate's request to delete the task. */
+    public function notifyTaskDeleteRequested(TaskDeleteRequest $request): void
+    {
+        $task = $request->task;
+        $project = $task->project;
+        $requester = $request->requester?->name ?? 'A teammate';
+        $reason = filled($request->reason) ? ' Reason: '.mb_strimwidth($request->reason, 0, 120, '…') : '';
+
+        $this->createForUser(
+            business: $project->business,
+            userId: (int) $request->owner_id,
+            type: PosNotification::TYPE_TASK_DELETE_REQUESTED,
+            referenceType: 'task_delete_request',
+            referenceId: (int) $request->id,
+            title: 'Task delete request',
+            message: "{$requester} asked to delete \"{$task->title}\" in {$project->name}.{$reason}",
+            payload: [
+                'request_id' => $request->id,
+                'task_id' => $task->id,
+                'task_title' => $task->title,
+                'project_id' => $project->id,
+                'project_name' => $project->name,
+            ],
+        );
+    }
+
+    /**
+     * Tells the requester whether the owner approved (task deleted) or rejected their
+     * delete request, and marks the owner's own request notification as read.
+     */
+    public function notifyTaskDeleteDecided(TaskDeleteRequest $request, Task $task, bool $approved): void
+    {
+        $project = $task->project;
+        $owner = $request->owner?->name ?? 'The task owner';
+
+        PosNotification::query()
+            ->where('type', PosNotification::TYPE_TASK_DELETE_REQUESTED)
+            ->where('reference_type', 'task_delete_request')
+            ->where('reference_id', $request->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        $this->createForUser(
+            business: $project->business,
+            userId: (int) $request->requested_by,
+            type: PosNotification::TYPE_TASK_DELETE_DECIDED,
+            referenceType: 'task_delete_request',
+            referenceId: (int) $request->id,
+            title: $approved ? 'Delete request approved' : 'Delete request rejected',
+            message: $approved
+                ? "{$owner} approved your request — \"{$task->title}\" in {$project->name} was deleted."
+                : "{$owner} rejected your request to delete \"{$task->title}\" in {$project->name}.",
+            payload: [
+                'request_id' => $request->id,
+                'approved' => $approved,
+                'task_id' => $approved ? null : $task->id,
+                'task_title' => $task->title,
+                'project_id' => $project->id,
+                'project_name' => $project->name,
+            ],
+        );
     }
 
     // ---- Sync (condition-based notifications, auto-clear when the condition resolves) ----

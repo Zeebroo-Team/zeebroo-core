@@ -47,6 +47,9 @@ const API = (() => {
     paymentDetail:        (paymentId) => request('GET', `/auth/payment/${paymentId}`),
     updateProfile:      (body) => request('PUT', '/auth/profile', body),
     updatePassword:     (body) => request('PUT', '/auth/password', body),
+    // Profile photo — upload goes through electronAPI.apiUpload (multipart "files[]").
+    profileAvatarUploadPath: '/auth/profile/avatar',
+    deleteProfileAvatar: () => request('DELETE', '/auth/profile/avatar'),
 
     // Business selection
     businesses:      ()     => request('GET',  '/businesses'),
@@ -669,8 +672,16 @@ const API = (() => {
     pmMyWorkTaskShow:      (id)        => request('GET',    `/pm/my-work/tasks/${id}`),
     pmMyWorkProjectShow:   (id)        => request('GET',    `/pm/my-work/projects/${id}`),
     pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
-    pmMyWorkTaskComment:   (id, body, parentId = null) => request('POST', `/pm/my-work/tasks/${id}/comments`, { body, parent_id: parentId }),
+    pmMyWorkTaskComment:   (id, body, parentId = null, hasFiles = false) => request('POST', `/pm/my-work/tasks/${id}/comments`, { body, parent_id: parentId, has_files: hasFiles }),
+    pmMyWorkCommentAttachmentUploadPath: (commentId) => `/pm/my-work/comments/${commentId}/attachments`,
     pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),
+    // Task deletion: owner deletes; others send a delete request the owner approves / rejects
+    pmMyWorkTaskDelete:          (id)         => request('DELETE', `/pm/my-work/tasks/${id}`),
+    pmMyWorkTaskDeleteRequest:   (id, reason) => request('POST',   `/pm/my-work/tasks/${id}/delete-request`, { reason: reason || null }),
+    pmMyWorkDeleteRequests:      ()           => request('GET',    '/pm/my-work/delete-requests'),
+    pmMyWorkDeleteRequestShow:   (id)         => request('GET',    `/pm/my-work/delete-requests/${id}`),
+    pmMyWorkDeleteRequestApprove:(id)         => request('POST',   `/pm/my-work/delete-requests/${id}/approve`),
+    pmMyWorkDeleteRequestReject: (id)         => request('POST',   `/pm/my-work/delete-requests/${id}/reject`),
     // My Projects → Inbox (team messages). Attachments upload per file via electronAPI.apiUpload
     // after the message is sent; downloads go through electronAPI.downloadFile.
     pmInbox:               (params = {}) => request('GET', `/pm/inbox?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),

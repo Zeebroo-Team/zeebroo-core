@@ -164,7 +164,7 @@ class InboxService
     /** Every message of the thread (oldest first) with attachments; marks the thread read. */
     public function show(InboxThread $thread, int $userId): array
     {
-        $thread->load(['project:id,name,color', 'participants.user:id,name,email', 'messages.user:id,name', 'messages.attachments']);
+        $thread->load(['project:id,name,color', 'participants.user:id,name,email,avatar_path', 'messages.user:id,name,avatar_path', 'messages.attachments']);
         $me = $thread->participants->firstWhere('user_id', $userId);
         $previousRead = (int) ($me?->last_read_message_id ?? 0);
 
@@ -256,7 +256,7 @@ class InboxService
         $others = $thread->participants()->where('user_id', '!=', $senderId)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
         $this->notify($thread, $message, $others, $senderId);
 
-        return $message->load(['user:id,name', 'attachments']);
+        return $message->load(['user:id,name,avatar_path', 'attachments']);
     }
 
     /**
@@ -369,6 +369,7 @@ class InboxService
             'user_id'     => $m->user_id ? (int) $m->user_id : null,
             'sender_name' => $name,
             'initial'     => $this->initial($name),
+            'avatar_url'  => $m->user?->avatarUrl(),
             'is_mine'     => (int) $m->user_id === $userId,
             'body'        => $m->body,
             'created_at'  => $m->created_at?->toDateTimeString(),
@@ -390,7 +391,7 @@ class InboxService
         if ($withExtras) {
             $query->addSelect(['unread_count' => $this->unreadSubquery($userId)])
                 ->withCount(['messages', 'attachments'])
-                ->with(['project:id,name,color', 'participants.user:id,name', 'latestMessage.user:id,name']);
+                ->with(['project:id,name,color', 'participants.user:id,name,avatar_path', 'latestMessage.user:id,name']);
         }
 
         return $query;
@@ -466,8 +467,9 @@ class InboxService
                 'id'      => (int) $p->user_id,
                 'name'    => $p->user?->name ?? 'Former user',
                 'email'   => $p->user?->email,
-                'initial' => $this->initial($p->user?->name ?? '?'),
-                'is_me'   => (int) $p->user_id === $userId,
+                'initial'    => $this->initial($p->user?->name ?? '?'),
+                'avatar_url' => $p->user?->avatarUrl(),
+                'is_me'      => (int) $p->user_id === $userId,
             ])
             ->sortBy(fn ($p) => $p['is_me'] ? 1 : 0)   // others first
             ->values()
