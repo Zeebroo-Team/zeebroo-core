@@ -303,6 +303,7 @@ const _sbSubItems = {
     { view:'overview',       icon:'fa-house',                label:'Overview' },
     { view:'tasks',          icon:'fa-list-check',           label:'My Tasks' },
     { view:'board',          icon:'fa-table-columns',        label:'Kanban Board' },
+    { view:'calendar',       icon:'fa-calendar-days',        label:'Calendar' },
   ],
 };
 
@@ -51944,6 +51945,14 @@ const TeamProfile = (() => {
     boardMilestone:'',
     boardPriority: '',
     boardDue:      '',
+    calDate:       null,    // anchor Date of the shown period (set on first render)
+    calMode:       'month', // 'month' | 'week' | 'agenda'
+    calSelected:   null,    // YYYY-MM-DD shown in the day panel
+    calProject:    '',
+    calMilestone:  '',
+    calPriority:   '',
+    calSearch:     '',
+    calShowDone:   true,
   };
 
   // Local YYYY-MM-DD — toISOString() is UTC and would shift "today" near midnight.
@@ -51999,7 +52008,7 @@ const TeamProfile = (() => {
   function _fillProjectSelects() {
     const opts = '<option value="">All projects</option>' +
       mp.projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-    [['#mp-task-project', 'taskProject'], ['#mp-board-project', 'boardProject']].forEach(([sel, key]) => {
+    [['#mp-task-project', 'taskProject'], ['#mp-board-project', 'boardProject'], ['#mp-cal-project', 'calProject']].forEach(([sel, key]) => {
       const el = $(sel);
       if (!el) return;
       if (mp[key] && !_project(mp[key])) mp[key] = '';   // project no longer visible
@@ -52008,6 +52017,7 @@ const TeamProfile = (() => {
     });
     _fillMilestoneSelect('#mp-task-milestone', 'taskProject', 'taskMilestone');
     _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+    _fillMilestoneSelect('#mp-cal-milestone', 'calProject', 'calMilestone');
   }
 
   // Milestone filter: built from the milestones of my tasks, limited to the selected project.
@@ -52076,12 +52086,12 @@ const TeamProfile = (() => {
   }
 
   // ── View switcher ───────────────────────────────────────────────────────────
-  // Inner tabs of the My Projects tab (Overview / My Tasks / Kanban Board).
+  // Inner tabs of the My Projects tab (Overview / My Tasks / Kanban Board / Calendar).
   async function switchMpView(view, { refresh = false } = {}) {
     mp.view = view;
     $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
     _sbSubActivate('my-projects', view);
-    ['overview', 'tasks', 'board'].forEach(v => {
+    ['overview', 'tasks', 'board', 'calendar'].forEach(v => {
       const el = $(`#mp-${v}-view`);
       if (el) el.style.display = v === view ? 'flex' : 'none';
     });
@@ -52097,6 +52107,7 @@ const TeamProfile = (() => {
     if (mp.view === 'overview')   renderMpOverview();
     else if (mp.view === 'tasks') renderMpTasks();
     else if (mp.view === 'board') renderMpBoard();
+    else if (mp.view === 'calendar') renderMpCalendar();
   }
 
   // ── Overview: stats, overdue / today / upcoming, my projects ───────────────
@@ -52441,6 +52452,492 @@ const TeamProfile = (() => {
       toast('Move failed: ' + (err.message || err), 'error');
     }
     renderMpBoard();
+  }
+
+  // ── Calendar: my tasks by due date — month grid, week columns or agenda list ──
+  // Weeks start on Monday. Days outside the shown month are dimmed but still list
+  // their tasks. The side panel shows the selected day in full detail.
+  const MP_CAL_MAX = 3;   // chips per month cell when the cell height can't be measured
+  const MP_CAL_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+  const _parseYmd  = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+  const _addDays   = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+  const _weekStart = d => _addDays(d, -((d.getDay() + 6) % 7));
+  const _isoWeek   = d => {
+    const th = _addDays(d, 3 - ((d.getDay() + 6) % 7));   // Thursday of this week decides the year
+    return 1 + Math.floor(Math.round((th - new Date(th.getFullYear(), 0, 1)) / 86400000) / 7);
+  };
+  const _dayDiff   = key => Math.round((_parseYmd(key) - _parseYmd(_today())) / 86400000);
+  function _calRel(key) {
+    const n = _dayDiff(key);
+    if (n === 0)  return 'Today';
+    if (n === 1)  return 'Tomorrow';
+    if (n === -1) return 'Yesterday';
+    return n > 0 ? `In ${n} days` : `${-n} days ago`;
+  }
+  const _sumHours = list => list.reduce((h, t) => h + (+t.estimated_hours || 0), 0);
+  const _fmtHours = h => (Math.round(h * 10) / 10) + 'h';
+
+  function _calMatches(t, withDone = mp.calShowDone) {
+    if (!withDone && _isDone(t)) return false;
+    if (mp.calProject && +t.project_id !== +mp.calProject) return false;
+    if (!_matchesMilestone(t, mp.calMilestone)) return false;
+    if (mp.calPriority && t.priority !== mp.calPriority) return false;
+    if (mp.calSearch) {
+      const q = mp.calSearch.toLowerCase();
+      if (![t.title, t.project_name, t.milestone_name, t.description].some(v => v && String(v).toLowerCase().includes(q))) return false;
+    }
+    return true;
+  }
+
+  const _calSortDay = (a, b) =>
+    (_isDone(a) - _isDone(b)) || (PRIORITY_RANK[a.priority] ?? 9) - (PRIORITY_RANK[b.priority] ?? 9);
+
+  // Visible tasks grouped by due date (YYYY-MM-DD), each day sorted open → high priority first.
+  function _calByDay() {
+    const byDay = new Map();
+    mp.tasks.forEach(t => {
+      if (!t.due_date || !_calMatches(t)) return;
+      if (!byDay.has(t.due_date)) byDay.set(t.due_date, []);
+      byDay.get(t.due_date).push(t);
+    });
+    byDay.forEach(list => list.sort(_calSortDay));
+    return byDay;
+  }
+
+  const _calDeadlines = key => mp.projects.filter(p =>
+    p.due_date === key && (!mp.calProject || +p.id === +mp.calProject));
+
+  // The period the stats and the title describe: the week in week mode, else the month.
+  function _calPeriod() {
+    const a = mp.calDate;
+    if (mp.calMode === 'week') { const s = _weekStart(a); return [s, _addDays(s, 6)]; }
+    return [new Date(a.getFullYear(), a.getMonth(), 1), new Date(a.getFullYear(), a.getMonth() + 1, 0)];
+  }
+
+  function _calShift(dir) {
+    const a = mp.calDate || new Date();
+    mp.calDate = mp.calMode === 'week'
+      ? _addDays(a, 7 * dir)
+      : new Date(a.getFullYear(), a.getMonth() + dir, 1);
+    // Keep the day panel inside the new period: today if it is in there, else its first day.
+    const [from, to] = _calPeriod();
+    const today = _today();
+    mp.calSelected = today >= _ymd(from) && today <= _ymd(to) ? today : _ymd(from);
+    renderMpCalendar();
+  }
+
+  function _calGoTo(key) {
+    mp.calDate     = _parseYmd(key);
+    mp.calSelected = key;
+    renderMpCalendar();
+  }
+
+  function _calSetMode(mode) {
+    mp.calMode = mode;
+    if (mp.calSelected) mp.calDate = _parseYmd(mp.calSelected);   // stay around the selected day
+    renderMpCalendar();
+  }
+
+  function renderMpCalendar() {
+    const grid = $('#mp-cal-grid');
+    if (!grid) return;
+    if (!mp.calDate)     mp.calDate     = new Date();
+    if (!mp.calSelected) mp.calSelected = _today();
+
+    $$('#mp-cal-modes [data-cal-mode]').forEach(b => b.classList.toggle('active', b.dataset.calMode === mp.calMode));
+
+    const byDay = _calByDay();
+    const [from, to] = _calPeriod();
+
+    // Title + subtitle
+    const titleEl = $('#mp-cal-title');
+    const subEl   = $('#mp-cal-subtitle');
+    if (mp.calMode === 'week') {
+      const sameMonth = from.getMonth() === to.getMonth();
+      if (titleEl) titleEl.textContent =
+        `${from.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${to.toLocaleDateString(undefined, sameMonth ? { day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' })}`;
+      if (subEl) subEl.textContent = `Week ${_isoWeek(from)}`;
+    } else {
+      if (titleEl) titleEl.textContent = mp.calDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      if (subEl) subEl.textContent = mp.calMode === 'agenda' ? 'Agenda' : '';
+    }
+
+    // Tasks without a due date never show on the calendar — say how many there are.
+    const noDue = mp.tasks.filter(t => !t.due_date && !_isDone(t) && _calMatches(t)).length;
+    const noDueEl = $('#mp-cal-nodue');
+    if (noDueEl) noDueEl.textContent = noDue ? `${noDue} open task${noDue === 1 ? '' : 's'} without a due date (not shown)` : '';
+
+    _renderCalStats(from, to);
+
+    const weekdays = $('#mp-cal-weekdays');
+    const agenda   = $('#mp-cal-agenda');
+    grid.classList.toggle('mp-cal-grid--week', mp.calMode === 'week');
+    if (mp.calMode === 'agenda') {
+      grid.style.display = 'none';
+      if (weekdays) weekdays.style.display = 'none';
+      if (agenda) { agenda.style.display = ''; _renderCalAgenda(agenda, byDay, from, to); }
+    } else {
+      grid.style.display = '';
+      if (agenda) agenda.style.display = 'none';
+      if (weekdays) {
+        weekdays.style.display = mp.calMode === 'month' ? '' : 'none';
+        weekdays.innerHTML = MP_CAL_WEEKDAYS.map(d => `<div>${d}</div>`).join('');
+      }
+      if (mp.calMode === 'week') _renderCalWeek(grid, byDay, from);
+      else                       _renderCalMonth(grid, byDay);
+    }
+
+    _renderCalSide(byDay);
+  }
+
+  // ── Stats strip for the shown period (done tasks always counted) ──
+  function _renderCalStats(from, to) {
+    const el = $('#mp-cal-stats');
+    if (!el) return;
+    const f = _ymd(from), t = _ymd(to);
+    const inPeriod = mp.tasks.filter(x => x.due_date && x.due_date >= f && x.due_date <= t && _calMatches(x, true));
+    const done     = inPeriod.filter(_isDone);
+    const open     = inPeriod.filter(x => !_isDone(x));
+    const high     = open.filter(x => x.priority === 'high');
+    const overdue  = mp.tasks.filter(x => _isOverdue(x) && _calMatches(x, true)).sort(_byDue);
+    const pct      = inPeriod.length ? Math.round(done.length / inPeriod.length * 100) : 0;
+    const est      = _sumHours(open);
+    const label    = mp.calMode === 'week' ? 'this week' : 'this month';
+
+    const tile = (cls, icon, value, text, attrs = '') => `
+      <div class="mp-cal-stat mp-cal-stat--${cls}"${attrs}>
+        <i class="fa ${icon}"></i>
+        <div><b>${value}</b><span>${text}</span></div>
+      </div>`;
+
+    el.innerHTML = `
+      ${tile('total', 'fa-list-check', inPeriod.length, `Due ${label}`)}
+      ${tile('open', 'fa-circle-half-stroke', open.length, 'Still open')}
+      ${tile('high', 'fa-arrow-up', high.length, 'High priority open')}
+      ${tile('overdue', 'fa-triangle-exclamation', overdue.length, overdue.length ? 'Overdue · click to jump' : 'Overdue (all dates)',
+        overdue.length ? ` data-cal-jump="${overdue[0].due_date}" title="Go to the oldest overdue task (${esc(overdue[0].due_date)})"` : '')}
+      ${tile('effort', 'fa-hourglass-half', est ? _fmtHours(est) : '—', 'Estimated open work')}
+      <div class="mp-cal-stat mp-cal-stat--progress">
+        <div class="mp-cal-progress-row"><span><i class="fa fa-circle-check"></i> ${done.length} of ${inPeriod.length} done ${label}</span><b>${pct}%</b></div>
+        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:#22c55e"></div></div>
+      </div>`;
+
+    el.querySelector('[data-cal-jump]')?.addEventListener('click', function () { _calGoTo(this.dataset.calJump); });
+  }
+
+  // ── Month grid ──
+  function _renderCalMonth(grid, byDay) {
+    const month = mp.calDate.getMonth();
+    const start = _weekStart(new Date(mp.calDate.getFullYear(), month, 1));
+    const end   = _addDays(_weekStart(new Date(mp.calDate.getFullYear(), month + 1, 0)), 6);
+    const today = _today();
+
+    // The whole month fits on screen: rows share the grid height, and each cell shows as
+    // many lines (deadlines + chips) as its height allows — the rest go under "+N more".
+    const rows  = Math.round((_dayDiff(_ymd(end)) - _dayDiff(_ymd(start)) + 1) / 7);
+    grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+    const cellH = grid.clientHeight / rows;
+    const lines = cellH > 40 ? Math.max(1, Math.floor((cellH - 44) / 21)) : MP_CAL_MAX;
+
+    const cells = [];
+    for (let d = start; d <= end; d = _addDays(d, 1)) {
+      const key       = _ymd(d);
+      const list      = byDay.get(key) || [];
+      const open      = list.filter(t => !_isDone(t));
+      const deadlines = _calDeadlines(key);
+      const fit       = Math.max(0, lines - deadlines.length);
+      const maxChips  = list.length > fit ? Math.max(0, fit - 1) : fit;   // keep a line for "+N more"
+      const cls       = ['mp-cal-day'];
+      if (d.getMonth() !== month)            cls.push('mp-cal-day--out');
+      if (key === today)                     cls.push('mp-cal-day--today');
+      if (key === mp.calSelected)            cls.push('mp-cal-day--selected');
+      if (d.getDay() === 0 || d.getDay() === 6) cls.push('mp-cal-day--weekend');
+      if (key < today)                       cls.push('mp-cal-day--past');
+      if (list.some(_isOverdue))             cls.push('mp-cal-day--has-overdue');
+      const shown = list.slice(0, maxChips);
+      const est   = _sumHours(open);
+      cells.push(`
+        <div class="${cls.join(' ')}" data-cal-day="${key}" title="${esc(d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))} · double-click to add a task">
+          <div class="mp-cal-day-head">
+            <span class="mp-cal-day-num">${d.getDate() === 1 ? `${d.toLocaleDateString(undefined, { month: 'short' })} 1` : d.getDate()}</span>
+            ${d.getDay() === 1 ? `<span class="mp-cal-weekno">W${_isoWeek(d)}</span>` : ''}
+            ${key === today ? '<span class="mp-cal-today-tag">Today</span>' : ''}
+            ${list.length ? `<span class="mp-cal-day-count" title="${open.length} open / ${list.length} total">${open.length < list.length ? `${open.length}/` : ''}${list.length}</span>` : ''}
+          </div>
+          <div class="mp-cal-day-body">
+            ${deadlines.map(_calDeadlineHtml).join('')}
+            ${shown.map(_calChip).join('')}
+            ${list.length > shown.length ? `<button class="mp-cal-more" data-cal-more="${key}">+${list.length - shown.length} more</button>` : ''}
+          </div>
+          ${est ? `<div class="mp-cal-day-load" title="Estimated open work"><i class="fa fa-hourglass-half"></i> ${_fmtHours(est)}</div>` : ''}
+        </div>`);
+    }
+    grid.innerHTML = cells.join('');
+    _bindCalDays(grid);
+  }
+
+  // ── Week: seven columns with full task cards ──
+  function _renderCalWeek(grid, byDay, from) {
+    const today = _today();
+    const cols = [];
+    for (let i = 0; i < 7; i++) {
+      const d         = _addDays(from, i);
+      const key       = _ymd(d);
+      const list      = byDay.get(key) || [];
+      const open      = list.filter(t => !_isDone(t));
+      const deadlines = _calDeadlines(key);
+      const cls       = ['mp-cal-day', 'mp-cal-wcol'];
+      if (key === today)                        cls.push('mp-cal-day--today');
+      if (key === mp.calSelected)               cls.push('mp-cal-day--selected');
+      if (d.getDay() === 0 || d.getDay() === 6) cls.push('mp-cal-day--weekend');
+      if (key < today)                          cls.push('mp-cal-day--past');
+      const est = _sumHours(open);
+      cols.push(`
+        <div class="${cls.join(' ')}" data-cal-day="${key}">
+          <div class="mp-cal-wcol-head">
+            <span class="mp-cal-wcol-dow">${MP_CAL_WEEKDAYS[i]}</span>
+            <span class="mp-cal-day-num">${d.getDate()}</span>
+            <span class="mp-cal-wcol-sum">${list.length ? `${open.length} open${est ? ` · ${_fmtHours(est)}` : ''}` : 'Free'}</span>
+          </div>
+          <div class="mp-cal-wcol-body">
+            ${deadlines.map(_calDeadlineHtml).join('')}
+            ${list.map(t => _calCard(t)).join('') || `<div class="mp-cal-empty-day">No tasks</div>`}
+            <button class="mp-cal-add-day" data-cal-add="${key}"><i class="fa fa-plus"></i> Add task</button>
+          </div>
+        </div>`);
+    }
+    grid.style.gridTemplateRows = 'minmax(0, 1fr)';
+    grid.innerHTML = cols.join('');
+    _bindCalDays(grid);
+    _bindToggles(grid);
+  }
+
+  // ── Agenda: every day of the month that has tasks, as a readable list ──
+  function _renderCalAgenda(el, byDay, from, to) {
+    const f = _ymd(from), t = _ymd(to), today = _today();
+    const keys = [...byDay.keys()].filter(k => k >= f && k <= t);
+    _calDeadlineKeys(f, t).forEach(k => { if (!keys.includes(k)) keys.push(k); });
+    if (today >= f && today <= t && !keys.includes(today)) keys.push(today);
+    keys.sort();
+
+    // Open tasks overdue from before this month, so nothing late hides off-screen.
+    const earlier = today >= f && today <= t
+      ? mp.tasks.filter(x => _isOverdue(x) && x.due_date < f && _calMatches(x)).sort(_byDue)
+      : [];
+
+    const group = (key, list, head) => `
+      <div class="mp-cal-ag-group${key === today ? ' mp-cal-ag-group--today' : ''}${key === mp.calSelected ? ' mp-cal-day--selected' : ''}" ${key ? `data-cal-day="${key}"` : ''}>
+        <div class="mp-cal-ag-head">${head}</div>
+        <div class="mp-cal-ag-list">
+          ${key ? _calDeadlines(key).map(_calDeadlineHtml).join('') : ''}
+          ${list.map(x => _calCard(x, { row: true, showDate: !key })).join('') || `<div class="mp-cal-empty-day">Nothing due — enjoy the free day.</div>`}
+        </div>
+      </div>`;
+
+    const html = [];
+    if (earlier.length) {
+      html.push(group(null, earlier,
+        `<span class="mp-cal-ag-date" style="color:#dc2626"><i class="fa fa-triangle-exclamation"></i> Overdue from earlier</span><span class="mp-cal-day-count">${earlier.length}</span>`));
+    }
+    keys.forEach(k => {
+      const d    = _parseYmd(k);
+      const list = byDay.get(k) || [];
+      const open = list.filter(x => !_isDone(x));
+      const est  = _sumHours(open);
+      html.push(group(k, list, `
+        <span class="mp-cal-ag-daynum">${d.getDate()}</span>
+        <span class="mp-cal-ag-date">${esc(d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}</span>
+        <span class="mp-cal-ag-rel${k < today ? ' mp-cal-ag-rel--past' : ''}">${_calRel(k)}</span>
+        <span class="mp-cal-ag-meta">${list.length ? `${open.length} open of ${list.length}${est ? ` · ${_fmtHours(est)} est.` : ''}` : ''}</span>`));
+    });
+
+    el.innerHTML = html.length ? html.join('') : `
+      <div class="mp-cal-ag-empty">
+        <i class="fa fa-calendar-check"></i>
+        <div>No tasks due in ${esc(mp.calDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}${mp.calSearch || mp.calProject || mp.calMilestone || mp.calPriority ? ' with these filters' : ''}.</div>
+      </div>`;
+    _bindCalDays(el);
+    _bindToggles(el);
+  }
+
+  const _calDeadlineKeys = (f, t) => [...new Set(mp.projects
+    .filter(p => p.due_date && p.due_date >= f && p.due_date <= t && (!mp.calProject || +p.id === +mp.calProject))
+    .map(p => p.due_date))];
+
+  function _calDeadlineHtml(p) {
+    return `<div class="mp-cal-deadline" data-cal-proj="${p.id}" title="Project deadline: ${esc(p.name)} — click for project details">
+      <i class="fa fa-flag-checkered"></i><span>${esc(p.name)}</span></div>`;
+  }
+
+  // Tooltip text for a task (multi-line title attribute).
+  function _calTip(t) {
+    const lines = [
+      t.title,
+      `Project: ${t.project_name || '—'}`,
+      t.milestone_name ? `Milestone: ${t.milestone_name}` : '',
+      `Status: ${_statusMeta(t).label} · Priority: ${t.priority}`,
+      t.estimated_hours != null ? `Estimate: ${t.estimated_hours}h · Logged: ${_fmtMinutes(t.logged_minutes)}` : '',
+      (t.assignees || []).length ? `Assignees: ${t.assignees.map(a => a.name).join(', ')}` : '',
+      _isOverdue(t) ? `⚠ Overdue (${_calRel(t.due_date)})` : '',
+    ];
+    return lines.filter(Boolean).join('\n');
+  }
+
+  // Compact chip (month grid)
+  function _calChip(t) {
+    const p     = _project(t.project_id);
+    const color = p?.color || 'var(--accent)';
+    const cls   = ['mp-cal-chip'];
+    if (_isDone(t))    cls.push('mp-cal-chip--done');
+    if (_isOverdue(t)) cls.push('mp-cal-chip--overdue');
+    const icon = _isDone(t) ? '<i class="fa fa-circle-check"></i>'
+      : _isOverdue(t) ? '<i class="fa fa-triangle-exclamation"></i>'
+      : t.priority === 'high' ? '<i class="fa fa-arrow-up mp-cal-chip-high"></i>' : '';
+    return `
+      <div class="${cls.join(' ')}" data-tid="${t.id}" style="--mp-chip-color:${esc(color)}" title="${esc(_calTip(t))}">
+        ${icon}<span>${esc(t.title)}</span>
+      </div>`;
+  }
+
+  // Full card (week columns, agenda rows, day panel). statusSelect = editable status.
+  function _calCard(t, { row = false, showDate = false, statusSelect = false } = {}) {
+    const p     = _project(t.project_id);
+    const color = p?.color || 'var(--accent)';
+    const done  = _isDone(t);
+    const cls   = ['mp-cal-card'];
+    if (row)           cls.push('mp-cal-card--row');
+    if (done)          cls.push('mp-cal-card--done');
+    if (_isOverdue(t)) cls.push('mp-cal-card--overdue');
+
+    const meta = [];
+    if (showDate)         meta.push(`<span>${_dueHtml(t)}</span>`);
+    if (t.milestone_name) meta.push(`<span title="Milestone"><i class="fa fa-flag"></i> ${esc(t.milestone_name)}</span>`);
+    if (t.estimated_hours != null || t.logged_minutes) {
+      meta.push(`<span title="Logged / estimated time"><i class="fa fa-clock"></i> ${_fmtMinutes(t.logged_minutes)}${t.estimated_hours != null ? ` / ${esc(t.estimated_hours)}h` : ''}</span>`);
+    }
+    if (t.attachments_count) meta.push(`<span title="Attachments"><i class="fa fa-paperclip"></i> ${+t.attachments_count}</span>`);
+    if ((t.assignees || []).length > 1) {
+      meta.push(`<span title="${esc(t.assignees.map(a => a.name).join(', '))}"><i class="fa fa-users"></i> ${t.assignees.length}</span>`);
+    }
+
+    const status = statusSelect
+      ? `<select class="mp-status-select" data-mp-status="${t.id}" title="Change status">${_statusesFor(t.project_id)
+          .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>`
+      : _statusBadge(t);
+
+    return `
+      <div class="${cls.join(' ')}" data-tid="${t.id}" style="--mp-chip-color:${esc(color)}" title="${esc(_calTip(t))}">
+        <div class="mp-cal-card-top">
+          <i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i>
+          <div class="mp-cal-card-main">
+            <div class="mp-cal-card-title">${esc(t.title)}</div>
+            <div class="mp-cal-card-proj"><span class="mp-cal-dot" style="background:${esc(color)}"></span>${esc(t.project_name || '—')}</div>
+          </div>
+        </div>
+        <div class="mp-cal-card-badges">
+          ${status}
+          <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+          ${_isOverdue(t) ? `<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> ${esc(_calRel(t.due_date))}</span>` : ''}
+        </div>
+        ${meta.length ? `<div class="mp-cal-card-meta">${meta.join('')}</div>` : ''}
+      </div>`;
+  }
+
+  // ── Day panel (right side): the selected day in full detail ──
+  function _renderCalSide(byDay) {
+    const side = $('#mp-cal-side');
+    if (!side) return;
+    const key       = mp.calSelected;
+    const d         = _parseYmd(key);
+    const list      = byDay.get(key) || [];
+    const open      = list.filter(t => !_isDone(t));
+    const deadlines = _calDeadlines(key);
+    const est       = _sumHours(open);
+    const logged    = list.reduce((m, t) => m + (+t.logged_minutes || 0), 0);
+    const rel       = _calRel(key);
+    const isPast    = key < _today();
+
+    side.innerHTML = `
+      <div class="mp-cal-side-head${key === _today() ? ' mp-cal-side-head--today' : ''}">
+        <div class="mp-cal-side-big">${d.getDate()}</div>
+        <div style="flex:1;min-width:0">
+          <div class="mp-cal-side-dow">${esc(d.toLocaleDateString(undefined, { weekday: 'long' }))}</div>
+          <div class="mp-cal-side-date">${esc(d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</div>
+        </div>
+        <span class="mp-cal-ag-rel${isPast ? ' mp-cal-ag-rel--past' : ''}">${rel}</span>
+      </div>
+      <div class="mp-cal-side-stats">
+        <div><b>${list.length}</b><span>Tasks</span></div>
+        <div><b>${open.length}</b><span>Open</span></div>
+        <div><b>${list.length - open.length}</b><span>Done</span></div>
+        <div><b>${est ? _fmtHours(est) : '—'}</b><span>Est. open</span></div>
+        <div><b>${logged ? _fmtMinutes(logged) : '—'}</b><span>Logged</span></div>
+      </div>
+      <button class="svc-form-btn svc-form-btn--primary mp-cal-side-add" data-cal-add="${key}">
+        <i class="fa fa-plus"></i> Add task due ${key === _today() ? 'today' : esc(d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))}
+      </button>
+      <div class="mp-cal-side-list">
+        ${deadlines.map(_calDeadlineHtml).join('')}
+        ${list.length
+          ? list.map(t => _calCard(t, { statusSelect: true })).join('')
+          : `<div class="mp-cal-side-empty">
+               <i class="fa fa-mug-hot"></i>
+               <div>Nothing due on this day${mp.calSearch || mp.calProject || mp.calMilestone || mp.calPriority ? ' with these filters' : ''}.</div>
+             </div>`}
+      </div>`;
+
+    _bindToggles(side);
+    _bindDetailOpen(side);
+    _bindCalExtras(side);
+    side.querySelectorAll('[data-mp-status]').forEach(sel => sel.addEventListener('change', async () => {
+      try {
+        await _setStatus(sel.dataset.mpStatus, sel.value);
+        toast('Status updated', 'success');
+      } catch (err) { toast(String(err.message || err), 'error'); }
+      renderMpCalendar();
+    }));
+  }
+
+  // Selects a day without rebuilding the grid (a rebuild between two clicks would break double-click).
+  function _calSelect(key) {
+    if (mp.calSelected === key) return;
+    mp.calSelected = key;
+    $$('#mp-calendar-view [data-cal-day]').forEach(el => el.classList.toggle('mp-cal-day--selected', el.dataset.calDay === key));
+    _renderCalSide(_calByDay());
+  }
+
+  // Day cells / columns / agenda groups: click selects, double-click adds a task due that day.
+  function _bindCalDays(root) {
+    _bindDetailOpen(root);
+    _bindCalExtras(root);
+    root.querySelectorAll('[data-cal-day]').forEach(el => {
+      el.addEventListener('click', e => {
+        if (e.target.closest('[data-mp-toggle], select')) return;
+        _calSelect(el.dataset.calDay);
+      });
+      el.addEventListener('dblclick', e => {
+        if (e.target.closest('[data-tid], [data-cal-proj], button, select')) return;
+        openMpTaskModal({ due: el.dataset.calDay, projectId: mp.calProject });
+      });
+    });
+    root.querySelectorAll('[data-cal-more]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _calSelect(btn.dataset.calMore);
+      $('#mp-cal-side')?.scrollTo({ top: 0, behavior: 'smooth' });
+    }));
+  }
+
+  // Project deadline markers and "Add task" buttons inside root.
+  function _bindCalExtras(root) {
+    root.querySelectorAll('[data-cal-proj]').forEach(el => el.addEventListener('click', e => {
+      e.stopPropagation();
+      openMpProjectDetail(el.dataset.calProj);
+    }));
+    root.querySelectorAll('[data-cal-add]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openMpTaskModal({ due: btn.dataset.calAdd, projectId: mp.calProject });
+    }));
   }
 
   // ── Task detail modal ───────────────────────────────────────────────────────
@@ -52855,7 +53352,8 @@ const TeamProfile = (() => {
     if (sel) sel.innerHTML = _statusesFor(projectId).map(s => `<option value="${esc(s.status)}">${esc(s.label)}</option>`).join('');
   }
 
-  async function openMpTaskModal() {
+  // opts.due prefills the due date, opts.projectId the project (the calendar passes both).
+  async function openMpTaskModal({ due = '', projectId = '' } = {}) {
     if (!mp.loaded) {
       try { await loadMyWork(); }
       catch (e) { toast('Failed to load your projects: ' + (e.message || e), 'error'); return; }
@@ -52869,14 +53367,14 @@ const TeamProfile = (() => {
     const projSel = $('#mp-tf-project');
     projSel.innerHTML = projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
     // Preselect the project the table is filtered to, when I can add tasks there
-    const preset = projects.find(p => +p.id === +mp.taskProject) || projects[0];
+    const preset = projects.find(p => +p.id === +(projectId || mp.taskProject)) || projects[0];
     projSel.value = String(preset.id);
     _fillTaskStatusSelect(preset.id);
 
     $('#mp-tf-title').value    = '';
     $('#mp-tf-desc').value     = '';
     $('#mp-tf-priority').value = 'normal';
-    $('#mp-tf-due').value      = '';
+    $('#mp-tf-due').value      = due || '';
     $('#mp-tf-hours').value    = '';
 
     $('#mp-task-modal').style.display = '';
@@ -52921,7 +53419,7 @@ const TeamProfile = (() => {
     }
   }
 
-  $('#mp-task-add-btn')?.addEventListener('click', openMpTaskModal);
+  $('#mp-task-add-btn')?.addEventListener('click', () => openMpTaskModal());
   $('#mp-tf-project')?.addEventListener('change', function () { _fillTaskStatusSelect(this.value); });
   $('#mp-task-modal-close')?.addEventListener('click',  _closeMpTaskModal);
   $('#mp-task-modal-cancel')?.addEventListener('click', _closeMpTaskModal);
@@ -52961,6 +53459,48 @@ const TeamProfile = (() => {
   $('#mp-board-priority')?.addEventListener('change', function () { mp.boardPriority = this.value; renderMpBoard(); });
   $('#mp-board-due')     ?.addEventListener('change', function () { mp.boardDue      = this.value; renderMpBoard(); });
 
+  const _calToday = () => _calGoTo(_today());
+  $('#mp-cal-prev') ?.addEventListener('click', () => _calShift(-1));
+  $('#mp-cal-next') ?.addEventListener('click', () => _calShift(1));
+  $('#mp-cal-today')?.addEventListener('click', _calToday);
+  $$('#mp-cal-modes [data-cal-mode]').forEach(b => b.addEventListener('click', () => _calSetMode(b.dataset.calMode)));
+  $('#mp-cal-add')?.addEventListener('click', () => openMpTaskModal({ due: mp.calSelected || _today(), projectId: mp.calProject }));
+  $('#mp-cal-search')?.addEventListener('input', function () { mp.calSearch = this.value.trim(); renderMpCalendar(); });
+  $('#mp-cal-project')?.addEventListener('change', function () {
+    mp.calProject = this.value;
+    _fillMilestoneSelect('#mp-cal-milestone', 'calProject', 'calMilestone');
+    renderMpCalendar();
+  });
+  $('#mp-cal-milestone')?.addEventListener('change', function () { mp.calMilestone = this.value; renderMpCalendar(); });
+  $('#mp-cal-priority') ?.addEventListener('change', function () { mp.calPriority  = this.value; renderMpCalendar(); });
+  $('#mp-cal-show-done')?.addEventListener('change', function () { mp.calShowDone  = this.checked; renderMpCalendar(); });
+
+  // Month cells fit their task count to the cell height — refit when the window size changes.
+  let _calResizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_calResizeTimer);
+    _calResizeTimer = setTimeout(() => {
+      if (mp.view === 'calendar' && mp.calMode === 'month' && $('#mp-calendar-view')?.offsetParent) renderMpCalendar();
+    }, 150);
+  });
+
+  // Calendar shortcuts: ← → move, T today, M / W / A switch view (only while the calendar is on screen).
+  document.addEventListener('keydown', e => {
+    if (mp.view !== 'calendar' || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (!$('#mp-calendar-view')?.offsetParent) return;
+    if (e.target.closest?.('input, textarea, select, [contenteditable="true"]')) return;
+    if (['#mp-detail-modal', '#mp-task-modal', '#mp-project-modal'].some(s => { const m = $(s); return m && m.style.display !== 'none'; })) return;
+    const k = e.key.toLowerCase();
+    if (e.key === 'ArrowLeft')       _calShift(-1);
+    else if (e.key === 'ArrowRight') _calShift(1);
+    else if (k === 't')              _calToday();
+    else if (k === 'm')              _calSetMode('month');
+    else if (k === 'w')              _calSetMode('week');
+    else if (k === 'a')              _calSetMode('agenda');
+    else return;
+    e.preventDefault();
+  });
+
   // Ribbon (My Projects page)
   const _mpOpen = view => {
     mp.view = view;   // activateTab('my-projects') opens this inner tab
@@ -52970,6 +53510,7 @@ const TeamProfile = (() => {
   $('#rb-mp-overview')?.addEventListener('click', () => _mpOpen('overview'));
   $('#rb-mp-tasks')   ?.addEventListener('click', () => _mpOpen('tasks'));
   $('#rb-mp-board')   ?.addEventListener('click', () => _mpOpen('board'));
+  $('#rb-mp-calendar')?.addEventListener('click', () => _mpOpen('calendar'));
   $('#rb-mp-new-task')?.addEventListener('click', () => {
     if (_activeTab() !== 'my-projects') activateTab('my-projects');
     openMpTaskModal();

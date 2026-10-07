@@ -1670,6 +1670,9 @@
             <button class="ribbon-btn-lg" id="rb-mp-board">
               <i class="fa fa-table-columns"></i>Kanban<br>Board
             </button>
+            <button class="ribbon-btn-lg" id="rb-mp-calendar">
+              <i class="fa fa-calendar-days"></i>Calendar
+            </button>
           </div>
           <div class="ribbon-group-label">My Projects</div>
         </div>
@@ -9168,6 +9171,7 @@
         <button class="fin-subnav-btn active" data-mpsub="overview"><i class="fa fa-house"></i> Overview</button>
         <button class="fin-subnav-btn"         data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
         <button class="fin-subnav-btn"         data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
+        <button class="fin-subnav-btn"         data-mpsub="calendar"><i class="fa fa-calendar-days"></i> Calendar</button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9264,6 +9268,64 @@
         </div>
         <!-- Columns: built-in statuses + custom statuses of the visible projects (built by renderMpBoard) -->
         <div id="mp-board-columns" class="pm-kanban-wrap"></div>
+      </div>
+
+      <!-- ── Calendar view (tasks by due date: month / week / agenda + day panel) ── -->
+      <div id="mp-calendar-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar mp-cal-toolbar">
+          <div class="mp-cal-navgroup">
+            <button class="mp-cal-nav" id="mp-cal-prev" title="Previous (←)"><i class="fa fa-chevron-left"></i></button>
+            <button class="mp-cal-nav" id="mp-cal-today" title="Jump to today (T)">Today</button>
+            <button class="mp-cal-nav" id="mp-cal-next" title="Next (→)"><i class="fa fa-chevron-right"></i></button>
+          </div>
+          <div class="mp-cal-titlebox">
+            <span class="mp-cal-title" id="mp-cal-title"></span>
+            <span class="mp-cal-subtitle" id="mp-cal-subtitle"></span>
+          </div>
+          <div class="mp-cal-modes" id="mp-cal-modes">
+            <button class="mp-cal-mode active" data-cal-mode="month" title="Month view (M)"><i class="fa fa-calendar-days"></i> Month</button>
+            <button class="mp-cal-mode" data-cal-mode="week" title="Week view (W)"><i class="fa fa-calendar-week"></i> Week</button>
+            <button class="mp-cal-mode" data-cal-mode="agenda" title="Agenda list (A)"><i class="fa fa-list-ul"></i> Agenda</button>
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="mp-cal-add" style="margin-left:auto;padding:5px 14px;font-size:12px;white-space:nowrap">
+            <i class="fa fa-plus"></i> New Task
+          </button>
+        </div>
+        <div class="finance-toolbar mp-cal-toolbar mp-cal-toolbar--filters">
+          <div class="finance-search-wrap" style="max-width:220px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mp-cal-search" placeholder="Search tasks…" autocomplete="off">
+          </div>
+          <select class="mp-filter-select" id="mp-cal-project" title="Filter by project"></select>
+          <select class="mp-filter-select" id="mp-cal-milestone" title="Filter by milestone"></select>
+          <select class="mp-filter-select" id="mp-cal-priority" title="Filter by priority">
+            <option value="">All priorities</option>
+            <option value="high">High</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <label class="mp-cal-toggle"><input type="checkbox" id="mp-cal-show-done" checked> Show done</label>
+          <div class="mp-cal-legend">
+            <span><i class="mp-cal-lg mp-cal-lg--overdue"></i>Overdue</span>
+            <span><i class="mp-cal-lg mp-cal-lg--today"></i>Due today</span>
+            <span><i class="fa fa-arrow-up" style="color:#ef4444"></i>High priority</span>
+            <span><i class="fa fa-circle-check" style="color:#22c55e"></i>Done</span>
+            <span><i class="fa fa-flag-checkered" style="color:#8b5cf6"></i>Project deadline</span>
+          </div>
+        </div>
+        <div class="mp-cal-stats" id="mp-cal-stats"></div>
+        <div class="mp-cal-body">
+          <div class="mp-cal-wrap" id="mp-cal-wrap">
+            <div class="mp-cal-weekdays" id="mp-cal-weekdays"></div>
+            <div class="mp-cal-grid" id="mp-cal-grid"></div>
+            <div class="mp-cal-agenda" id="mp-cal-agenda" style="display:none"></div>
+          </div>
+          <aside class="mp-cal-side" id="mp-cal-side"></aside>
+        </div>
+        <div class="mp-cal-hint" id="mp-cal-hint">
+          <i class="fa fa-lightbulb"></i> Click a day to see its tasks · double-click a day to add a task on it · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>T</kbd> today · <kbd>M</kbd> <kbd>W</kbd> <kbd>A</kbd> switch view
+          <span id="mp-cal-nodue" style="margin-left:auto"></span>
+        </div>
       </div>
 
       </div><!-- /pm-mine-view -->
