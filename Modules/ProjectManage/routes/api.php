@@ -18,6 +18,9 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('pm/projects/{id}/members',          [$c, 'memberStore'])  ->where('id', '[0-9]+')->name('pm.projects.members.store');
     Route::delete('pm/projects/{id}/members/{userId}', [$c, 'memberDestroy'])->where(['id' => '[0-9]+', 'userId' => '[0-9]+'])->name('pm.projects.members.destroy');
 
+    // Team-member profile (Projects + My Projects; scoped to shared projects for assignees)
+    Route::get   ('pm/team-members/{userId}',          [$c, 'memberProfile'])->where('userId', '[0-9]+')->name('pm.team-members.show');
+
     // Board
     Route::get('pm/projects/{id}/board',     [$c, 'board'])         ->where('id', '[0-9]+')->name('pm.projects.board');
 

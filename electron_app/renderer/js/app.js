@@ -49610,7 +49610,7 @@ const TaskFiles = (() => {
             <i class="fa ${icon}" style="font-size:20px;color:${color};flex-shrink:0;width:20px;text-align:center"></i>
             <div style="flex:1;min-width:0">
               <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
-              <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${esc(a.uploaded_by || '')} · ${esc(a.created_at || '')}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${TeamProfile.link(a.user_id, a.uploaded_by)} · ${esc(a.created_at || '')}</div>
             </div>
             <button class="pm-task-card-move" data-tf-dl="${a.id}" title="Download"><i class="fa fa-download"></i></button>
             ${canDelete(a) ? `<button class="pm-task-card-move" data-tf-del="${a.id}" title="Delete" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>` : ''}
@@ -49676,6 +49676,156 @@ const TaskFiles = (() => {
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _modalTaskId !== null) closeModal(); });
 
   return { mount, openModal };
+})();
+
+// ── Team-member profile (shared by Projects + My Projects) ──────────────────
+// Any element carrying data-profile-uid (a name, avatar or chip) opens the person's
+// profile card on click. The server scopes what is visible: managers see any business
+// user, assignees only teammates who share a project with them.
+const TeamProfile = (() => {
+  const esc = escHtml;
+  const ROLE_BADGE = { owner: 'blue', admin: 'blue', manager: 'amber', staff: 'gray', former: 'red' };
+  let _uid = null;
+
+  const avatarColor = name => {
+    let h = 0;
+    for (const ch of String(name || '')) h = (h * 31 + ch.codePointAt(0)) % 360;
+    return `hsl(${h}, 55%, 45%)`;
+  };
+
+  /** A clickable name: `TeamProfile.link(u.id, u.name)`; falls back to plain text without an id. */
+  function link(uid, name, cls = '') {
+    if (!uid) return esc(name || '');
+    return `<span class="tp-link ${cls}" data-profile-uid="${+uid}" data-profile-name="${esc(name || '')}" title="View ${esc(name || 'profile')}'s profile">${esc(name || '')}</span>`;
+  }
+
+  /** Comma-separated clickable names of task assignees ([{id, name}]). */
+  const links = (users = []) => users.map(u => link(u.id, u.name)).join(', ');
+
+  function _ago(dt) {
+    if (!dt) return null;
+    const mins = Math.round((Date.now() - new Date(dt.replace(' ', 'T')).getTime()) / 60000);
+    if (!Number.isFinite(mins)) return dt;
+    if (mins < 5)  return 'Active now';
+    if (mins < 60) return `Active ${mins} min ago`;
+    if (mins < 1440) return `Active ${Math.round(mins / 60)} h ago`;
+    if (mins < 43200) return `Active ${Math.round(mins / 1440)} d ago`;
+    return `Last seen ${dt.slice(0, 10)}`;
+  }
+
+  function _avatar(name, initial, photo) {
+    return `<div class="tp-avatar" style="background:${avatarColor(name)}">${photo
+      ? `<img src="${esc(photo)}" alt="" onerror="this.remove()">` : ''}${photo ? '' : esc(initial || (String(name || '').trim().charAt(0) || '?').toUpperCase())}</div>`;
+  }
+
+  function _render(p, fallbackName, error) {
+    const body = $('#team-profile-body');
+    if (!body) return;
+    const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    $('#team-profile-heading').textContent = p?.name || fallbackName || 'Team Member';
+
+    if (error) {
+      body.innerHTML = `
+        <div class="tp-head">${_avatar(fallbackName, null, null)}<div><div class="tp-name">${esc(fallbackName || 'Team member')}</div></div></div>
+        <div style="font-size:12px;color:#ef4444">${esc(error)}</div>`;
+      return;
+    }
+    if (!p) {
+      body.innerHTML = `
+        <div class="tp-head">${_avatar(fallbackName, null, null)}<div><div class="tp-name">${esc(fallbackName || '')}</div></div></div>
+        <div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading profile…</div>`;
+      return;
+    }
+
+    const e    = p.employee || {};
+    const role = p.role === 'former' ? 'Left business' : (p.role || '');
+    const sub  = [e.job_title, e.department].filter(Boolean).map(esc).join(' · ');
+    const seen = _ago(p.last_seen_at);
+    const row  = (icon, label, value) => value ? `
+      <div style="display:flex;gap:8px;font-size:12px;align-items:baseline">
+        <i class="fa ${icon}" style="width:14px;text-align:center;color:var(--text-muted)"></i>
+        <span style="width:96px;color:var(--text-muted)">${label}</span>
+        <span style="flex:1;min-width:0;overflow-wrap:anywhere">${value}</span>
+      </div>` : '';
+    const s = p.stats || {};
+
+    body.innerHTML = `
+      <div class="tp-head">
+        ${_avatar(p.name, p.initial, e.photo_url)}
+        <div style="min-width:0">
+          <div class="tp-name">${esc(p.name)}${p.is_me ? ` ${muted('(you)')}` : ''}</div>
+          ${sub ? `<div class="tp-sub">${sub}</div>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            ${role ? `<span class="inv-badge inv-badge-${ROLE_BADGE[p.role] || 'gray'}" style="text-transform:capitalize">${esc(role)}</span>` : ''}
+            ${seen ? `<span style="font-size:11px;color:var(--text-muted)"><i class="fa fa-circle" style="font-size:7px;vertical-align:middle;color:${seen === 'Active now' ? '#22c55e' : '#9ca3af'}"></i> ${esc(seen)}</span>` : ''}
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${row('fa-envelope', 'Email', p.email ? `<a href="mailto:${esc(p.email)}" style="color:var(--accent)">${esc(p.email)}</a>` : '')}
+        ${row('fa-phone', 'Phone', e.phone ? esc(e.phone) : '')}
+        ${row('fa-id-card', 'Employee ID', e.employee_id ? esc(e.employee_id) : '')}
+        ${row('fa-calendar-check', 'Joined', e.date_of_joining ? esc(e.date_of_joining) : '')}
+      </div>
+
+      <div class="tp-stats">
+        <div class="tp-stat"><b>${s.projects || 0}</b><span>Projects</span></div>
+        <div class="tp-stat"><b>${s.open || 0}</b><span>Open tasks</span></div>
+        <div class="tp-stat tp-stat--overdue"><b>${s.overdue || 0}</b><span>Overdue</span></div>
+        <div class="tp-stat"><b>${s.done || 0}</b><span>Done</span></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:600"><i class="fa fa-diagram-project" style="margin-right:5px;color:var(--accent)"></i>${p.is_me ? 'Projects' : 'Shared Projects'} (${(p.projects || []).length})</div>
+        ${(p.projects || []).length ? p.projects.map(pr => `
+          <div class="tp-proj">
+            <span class="pm-col-dot" style="background:${esc(pr.color || '#9ca3af')}"></span>
+            <span style="flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(pr.name)}">${esc(pr.name)}</span>
+            ${pr.is_member ? '' : `<span style="font-size:10px;color:var(--text-muted)">not on team</span>`}
+            <span style="font-size:11px;white-space:nowrap">${pr.open_tasks} open ${muted(`/ ${pr.total_tasks} total`)}</span>
+          </div>`).join('')
+          : `<div style="font-size:11px">${muted('No projects in common yet.')}</div>`}
+      </div>`;
+  }
+
+  async function open(uid, fallbackName) {
+    uid = +uid;
+    if (!uid) return;
+    _uid = uid;
+    _render(null, fallbackName);
+    $('#team-profile-modal').style.display = '';
+    let profile = null, error = null;
+    try {
+      const res = await API.pmTeamMemberProfile(uid);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load profile');
+      profile = res.body?.data;
+    } catch (e) { error = String(e.message || e); }
+    if (_uid === uid) _render(profile, fallbackName, error);
+  }
+
+  function close() {
+    _uid = null;
+    const m = $('#team-profile-modal'); if (m) m.style.display = 'none';
+  }
+
+  // Capture phase so a click on a name inside a clickable card / row opens the profile only.
+  document.addEventListener('click', e => {
+    const el = e.target.closest?.('[data-profile-uid]');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    open(el.dataset.profileUid, el.dataset.profileName);
+  }, true);
+  // Esc closes the profile first, not the task detail underneath it.
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _uid !== null) { e.stopImmediatePropagation(); close(); }
+  }, true);
+  $('#team-profile-close')?.addEventListener('click',  close);
+  $('#team-profile-cancel')?.addEventListener('click', close);
+  $('#team-profile-modal')?.addEventListener('click', e => { if (e.target === $('#team-profile-modal')) close(); });
+
+  return { open, link, links, avatarColor };
 })();
 
 // ── Project Management ─────────────────────────────────────────────────────
@@ -50005,8 +50155,8 @@ const TaskFiles = (() => {
     if (!sec) return;
     const rows = pm.members.map(u => `
       <tr data-uid="${u.id}">
-        <td style="width:40px"><span style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((u.name || '?').charAt(0).toUpperCase())}</span></td>
-        <td><div style="font-size:12px;font-weight:700">${esc(u.name)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</div></td>
+        <td style="width:40px"><span class="tp-avatar-btn" data-profile-uid="${u.id}" data-profile-name="${esc(u.name)}" title="View profile" style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((u.name || '?').charAt(0).toUpperCase())}</span></td>
+        <td><div style="font-size:12px;font-weight:700">${TeamProfile.link(u.id, u.name)}</div><div style="font-size:11px;color:var(--text-muted)">${esc(u.email || '')}</div></td>
         <td><span class="inv-badge inv-badge-${PM_ROLE_BADGE[u.role] || 'gray'}">${esc(u.role === 'former' ? 'Left business' : u.role)}</span></td>
         <td style="font-size:12px">${u.open_tasks} open <span style="color:var(--text-muted)">/ ${u.total_tasks} total</span></td>
         <td style="width:40px;text-align:right"><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-remove-uid="${u.id}" title="Remove from project"><i class="fa fa-user-minus" style="color:#ef4444"></i></button></td>
@@ -50323,7 +50473,7 @@ const TaskFiles = (() => {
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
-        ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${esc(t.assigned_name)}</span>` : ''}
+        ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name)}</span>` : ''}
         ${t.due_date ? `<span class="pm-task-card-due${overdue ? ' pm-task-card-due--overdue' : ''}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:2px"></i>' : ''}${esc(t.due_date)}</span>` : ''}
         ${t.milestone_name ? `<span class="pm-task-card-assign"><i class="fa fa-flag" style="margin-right:2px"></i>${esc(t.milestone_name)}</span>` : ''}
       </div>
@@ -50872,7 +51022,7 @@ const TaskFiles = (() => {
           <i class="fa ${isDone ? 'fa-circle-check' : 'fa-circle'} pm-tl-task-dot" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i>
           <span class="pm-tl-task-title">${esc(t.title)}</span>
           <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
-          ${t.assigned_name ? `<span class="pm-tl-task-meta"><i class="fa fa-user"></i> ${esc(t.assigned_name)}</span>` : ''}
+          ${t.assigned_name ? `<span class="pm-tl-task-meta"><i class="fa fa-user"></i> ${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name)}</span>` : ''}
           <span class="pm-tl-task-meta${t.is_overdue ? ' pm-tl-task-meta--overdue' : ''}">${t.is_overdue ? '<i class="fa fa-triangle-exclamation"></i>' : '<i class="fa fa-calendar"></i>'} ${esc(t.due_date || 'No due date')}</span>
           <span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span>
         </li>`;
@@ -51225,7 +51375,7 @@ const TaskFiles = (() => {
         <td style="font-size:12px;font-weight:600">${esc(t.title)}</td>
         ${projectCol}
         <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
-        <td style="font-size:11px;color:var(--text-muted)">${esc(t.assigned_name || '—')}</td>
+        <td style="font-size:11px;color:var(--text-muted)">${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name || '—')}</td>
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
         <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g,' '))}</span></td>
         <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
@@ -52312,7 +52462,7 @@ const TaskFiles = (() => {
     const opts  = _statusesFor(t.project_id)
       .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
     const assignees = (t.assignees || []).length
-      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${esc(a.name)}</span>`).join(' ')
+      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${TeamProfile.link(a.id, a.name)}</span>`).join(' ')
       : muted('Unassigned');
     const est    = t.estimated_hours != null ? `${t.estimated_hours} h` : '—';
     const logged = _fmtMinutes(t.logged_minutes);
@@ -52339,7 +52489,7 @@ const TaskFiles = (() => {
                <tbody>${logs.map(l => `
                  <tr style="border-top:1px solid var(--border)">
                    <td style="padding:4px;white-space:nowrap">${esc(l.logged_at || '—')}</td>
-                   <td style="padding:4px">${esc(l.user)}</td>
+                   <td style="padding:4px">${TeamProfile.link(l.user_id, l.user)}</td>
                    <td style="padding:4px;white-space:nowrap">${_fmtMinutes(l.minutes)}</td>
                    <td style="padding:4px">${esc(l.note || '')}</td>
                  </tr>`).join('')}</tbody>
@@ -52415,14 +52565,10 @@ const TaskFiles = (() => {
   }
 
   // ── Task comments: threads (comment + one level of replies), avatar = first-name initial ──
-  const _avatarColor = name => {
-    let h = 0;
-    for (const ch of String(name || '')) h = (h * 31 + ch.codePointAt(0)) % 360;
-    return `hsl(${h}, 55%, 45%)`;
-  };
   const _initialOf = name => (String(name || '').trim().charAt(0) || '?').toUpperCase();
-  const _avatarHtml = (name, initial) =>
-    `<div class="mp-cmt-avatar" style="background:${_avatarColor(name)}" title="${esc(name || '')}">${esc(initial || _initialOf(name))}</div>`;
+  // With a user id the avatar opens that person's profile.
+  const _avatarHtml = (name, initial, uid) =>
+    `<div class="mp-cmt-avatar" style="background:${TeamProfile.avatarColor(name)}" title="${esc(uid ? `View ${name || ''}'s profile` : (name || ''))}"${uid ? ` data-profile-uid="${+uid}" data-profile-name="${esc(name || '')}"` : ''}>${esc(initial || _initialOf(name))}</div>`;
 
   function _commentHtml(c, parent) {
     const replies = c.replies || [];
@@ -52430,11 +52576,11 @@ const TaskFiles = (() => {
     const replyBtn = `<button class="mp-cmt-reply-btn" data-cmt-reply="${parent ? parent.id : c.id}"${parent ? ` data-cmt-mention="${esc(c.first_name || c.user)}"` : ''}><i class="fa fa-reply"></i> Reply</button>`;
     return `
       <div class="mp-cmt${parent ? ' mp-cmt--reply' : ''}">
-        ${_avatarHtml(c.user, c.initial)}
+        ${_avatarHtml(c.user, c.initial, c.user_id)}
         <div class="mp-cmt-main">
           <div class="mp-cmt-bubble">
             <div class="mp-cmt-head">
-              <b>${esc(c.user)}${c.is_mine ? ' <span style="font-weight:400;color:var(--text-muted)">(you)</span>' : ''}</b>
+              <b>${TeamProfile.link(c.user_id, c.user)}${c.is_mine ? ' <span style="font-weight:400;color:var(--text-muted)">(you)</span>' : ''}</b>
               <span style="color:var(--text-muted)">${esc(c.created_at || '')}</span>
             </div>
             <div class="mp-cmt-body">${esc(c.body)}</div>

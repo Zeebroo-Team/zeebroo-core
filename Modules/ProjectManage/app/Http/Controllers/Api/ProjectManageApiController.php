@@ -141,6 +141,25 @@ class ProjectManageApiController extends Controller
         return response()->json($this->membersPayload($project));
     }
 
+    /**
+     * Team-member profile, for both the Projects tab (Manage All Projects — any business user)
+     * and My Projects (Assigned Project Access — only teammates sharing a project with the caller).
+     */
+    public function memberProfile(Request $request, int $userId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $member   = $this->resolveMember($request, $business);
+        $canManage = $member === null || $member->hasPermission('projects_access');
+        if (! $canManage) {
+            $this->abortUnlessPerm($request, $business, 'projects_assigned');
+        }
+
+        $profile = $this->projects->memberProfile($business, $userId, (int) $request->user()->id, $canManage);
+        abort_unless($profile, 404, 'This person is not on any of your project teams.');
+
+        return response()->json(['data' => $profile]);
+    }
+
     public function memberStore(Request $request, int $projectId): JsonResponse
     {
         $business = $this->manageBusinessOrAbort($request);

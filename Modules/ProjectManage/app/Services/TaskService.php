@@ -119,6 +119,7 @@ class TaskService
             ])->values(),
             'time_logs' => $task->timeLogs->map(fn (TimeLog $l) => [
                 'id'        => $l->id,
+                'user_id'   => $l->user_id,
                 'user'      => $l->user?->name ?? 'System',
                 'minutes'   => (int) $l->minutes,
                 'logged_at' => $l->logged_at?->toDateString(),

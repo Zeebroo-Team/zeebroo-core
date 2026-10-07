@@ -639,6 +639,7 @@ const API = (() => {
     pmMembers:             (pid)       => request('GET',    `/pm/projects/${pid}/members`),
     pmMemberAdd:           (pid, ids)  => request('POST',   `/pm/projects/${pid}/members`, { user_ids: ids }),
     pmMemberRemove:        (pid, uid)  => request('DELETE', `/pm/projects/${pid}/members/${uid}`),
+    pmTeamMemberProfile:   (uid)       => request('GET',    `/pm/team-members/${uid}`),
     pmBoard:               (id)        => request('GET',    `/pm/projects/${id}/board`),
     pmStatuses:            (pid)       => request('GET',    `/pm/projects/${pid}/statuses`),
     pmStatusCreate:        (pid, body) => request('POST',   `/pm/projects/${pid}/statuses`, body),

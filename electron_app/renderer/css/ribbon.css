@@ -18873,6 +18873,29 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .mp-cmt-form textarea:focus { outline: none; border-color: var(--accent); }
 
+/* ── Team-member profile (click any person's name / avatar in Projects + My Projects) ── */
+#team-profile-modal { z-index: 860; }   /* opened from inside other project modals */
+[data-profile-uid] { cursor: pointer; }
+.tp-link { color: inherit; border-bottom: 1px dashed transparent; }
+.tp-link:hover { color: var(--accent); border-bottom-color: currentColor; }
+.mp-cmt-avatar[data-profile-uid]:hover,
+.tp-avatar-btn[data-profile-uid]:hover { box-shadow: 0 0 0 2px var(--accent); }
+.tp-head { display: flex; align-items: center; gap: 14px; }
+.tp-avatar {
+  width: 64px; height: 64px; border-radius: 50%; flex-shrink: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 26px; font-weight: 700; user-select: none;
+}
+.tp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.tp-name { font-size: 17px; font-weight: 700; overflow-wrap: anywhere; }
+.tp-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.tp-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.tp-stat { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; text-align: center; }
+.tp-stat b { display: block; font-size: 18px; }
+.tp-stat span { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+.tp-stat--overdue b { color: #dc2626; }
+.tp-proj { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px; }
+
 .mp-filter-select, .mp-status-select {
   font-size: 12px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 6px;
