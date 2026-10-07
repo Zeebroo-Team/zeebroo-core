@@ -55,6 +55,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post ('pm/my-work/tasks',            [$c, 'myWorkTaskStore']) ->name('pm.my-work.tasks.store');
     Route::get  ('pm/my-work/tasks/{id}',       [$c, 'myWorkTaskShow'])  ->where('id', '[0-9]+')->name('pm.my-work.tasks.show');
     Route::patch('pm/my-work/tasks/{id}/status', [$c, 'myWorkTaskStatus'])->where('id', '[0-9]+')->name('pm.my-work.tasks.status');
+    Route::post ('pm/my-work/tasks/{id}/comments', [$c, 'myWorkTaskComment'])->where('id', '[0-9]+')->name('pm.my-work.tasks.comment');
     Route::get   ('pm/my-work/tasks/{id}/attachments',  [$c, 'myWorkAttachmentIndex'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.attachments.index');
     Route::post  ('pm/my-work/tasks/{id}/attachments',  [$c, 'myWorkAttachmentStore'])   ->where('id', '[0-9]+')->name('pm.my-work.tasks.attachments.store');
     Route::get   ('pm/my-work/attachments/{id}/download', [$c, 'myWorkAttachmentDownload'])->where('id', '[0-9]+')->name('pm.my-work.attachments.download');

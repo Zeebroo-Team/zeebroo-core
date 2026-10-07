@@ -52330,18 +52330,9 @@ const TaskFiles = (() => {
     } else if (extra.error) {
       activity = `<div style="font-size:11px;color:#ef4444">${esc(extra.error)}</div>`;
     } else {
-      const comments = extra.comments || [];
       const logs     = extra.time_logs || [];
       activity =
-        section('fa-comments', `Comments (${comments.length})`, comments.length
-          ? comments.map(c => `
-              <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px">
-                <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;margin-bottom:4px">
-                  <b>${esc(c.user)}</b>${muted(esc(c.created_at || ''))}
-                </div>
-                <div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(c.body)}</div>
-              </div>`).join('')
-          : `<div style="font-size:11px">${muted('No comments yet.')}</div>`) +
+        `<div id="mp-detail-comments"></div>` +
         section('fa-stopwatch', `Time Logs (${logs.length})`, logs.length
           ? `<table style="width:100%;border-collapse:collapse;font-size:11px">
                <thead><tr style="text-align:left;color:var(--text-muted)"><th style="padding:4px">Date</th><th style="padding:4px">User</th><th style="padding:4px">Time</th><th style="padding:4px">Note</th></tr></thead>
@@ -52409,6 +52400,9 @@ const TaskFiles = (() => {
       filesEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
     }
 
+    const commentsEl = $('#mp-detail-comments');
+    if (commentsEl) _mountMpComments(commentsEl, t, extra);
+
     $('#mp-detail-status')?.addEventListener('change', async function () {
       try {
         await _setStatus(t.id, this.value);
@@ -52418,6 +52412,112 @@ const TaskFiles = (() => {
       const fresh = _task(t.id);
       if (fresh && _mpDetailId === t.id) _renderMpDetail(fresh, extra);
     });
+  }
+
+  // ── Task comments: threads (comment + one level of replies), avatar = first-name initial ──
+  const _avatarColor = name => {
+    let h = 0;
+    for (const ch of String(name || '')) h = (h * 31 + ch.codePointAt(0)) % 360;
+    return `hsl(${h}, 55%, 45%)`;
+  };
+  const _initialOf = name => (String(name || '').trim().charAt(0) || '?').toUpperCase();
+  const _avatarHtml = (name, initial) =>
+    `<div class="mp-cmt-avatar" style="background:${_avatarColor(name)}" title="${esc(name || '')}">${esc(initial || _initialOf(name))}</div>`;
+
+  function _commentHtml(c, parent) {
+    const replies = c.replies || [];
+    // Replying to a reply goes into the same thread, addressed to its author.
+    const replyBtn = `<button class="mp-cmt-reply-btn" data-cmt-reply="${parent ? parent.id : c.id}"${parent ? ` data-cmt-mention="${esc(c.first_name || c.user)}"` : ''}><i class="fa fa-reply"></i> Reply</button>`;
+    return `
+      <div class="mp-cmt${parent ? ' mp-cmt--reply' : ''}">
+        ${_avatarHtml(c.user, c.initial)}
+        <div class="mp-cmt-main">
+          <div class="mp-cmt-bubble">
+            <div class="mp-cmt-head">
+              <b>${esc(c.user)}${c.is_mine ? ' <span style="font-weight:400;color:var(--text-muted)">(you)</span>' : ''}</b>
+              <span style="color:var(--text-muted)">${esc(c.created_at || '')}</span>
+            </div>
+            <div class="mp-cmt-body">${esc(c.body)}</div>
+          </div>
+          <div class="mp-cmt-actions">${replyBtn}</div>
+          ${!parent && replies.length ? `<div class="mp-cmt-replies">${replies.map(r => _commentHtml(r, c)).join('')}</div>` : ''}
+          ${!parent ? `<div data-cmt-reply-slot="${c.id}"></div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  const _cmtFormHtml = (placeholder, label) => `
+    <div class="mp-cmt-form">
+      ${_avatarHtml(state._userName || 'You')}
+      <textarea rows="2" maxlength="5000" placeholder="${placeholder}"></textarea>
+      <button class="po-btn-primary" data-cmt-send style="padding:6px 12px;font-size:11px;white-space:nowrap"><i class="fa fa-paper-plane"></i> ${label}</button>
+    </div>`;
+
+  /** Comment list + composer inside the task detail. Posts update extra.comments in place. */
+  function _mountMpComments(el, t, extra) {
+    const comments = extra.comments || (extra.comments = []);
+
+    async function send(form, parentId) {
+      const ta  = form.querySelector('textarea');
+      const btn = form.querySelector('[data-cmt-send]');
+      const body = ta.value.trim();
+      if (!body) { ta.focus(); return; }
+      btn.disabled = true;
+      try {
+        const res = await API.pmMyWorkTaskComment(t.id, body, parentId);
+        if (res.status >= 400) {
+          throw new Error(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to post comment'));
+        }
+        const c = res.body?.data;
+        const thread = c?.parent_id ? comments.find(x => +x.id === +c.parent_id) : null;
+        if (thread) (thread.replies ||= []).push(c);
+        else comments.push({ ...c, replies: [] });
+        render();
+      } catch (e) {
+        toast(String(e.message || e), 'error');
+        btn.disabled = false;
+      }
+    }
+
+    function bindForm(form, parentId) {
+      const ta = form.querySelector('textarea');
+      form.querySelector('[data-cmt-send]').addEventListener('click', () => send(form, parentId));
+      ta.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(form, parentId); }
+        // Esc closes an open reply box instead of the whole task detail.
+        if (e.key === 'Escape' && parentId) { e.stopPropagation(); form.remove(); }
+      });
+    }
+
+    function render() {
+      const total = comments.reduce((n, c) => n + 1 + (c.replies || []).length, 0);
+      el.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:12px;font-weight:600"><i class="fa fa-comments" style="margin-right:5px;color:var(--accent)"></i>Comments (${total})</div>
+          ${comments.length
+            ? comments.map(c => _commentHtml(c, null)).join('')
+            : `<div style="font-size:11px;color:var(--text-muted)">No comments yet. Start the conversation below.</div>`}
+          <div data-cmt-main>${_cmtFormHtml('Write a comment… (Ctrl+Enter to send)', 'Comment')}</div>
+        </div>`;
+
+      bindForm(el.querySelector('[data-cmt-main] .mp-cmt-form'), null);
+
+      el.querySelectorAll('[data-cmt-reply]').forEach(btn => btn.addEventListener('click', () => {
+        const slot = el.querySelector(`[data-cmt-reply-slot="${btn.dataset.cmtReply}"]`);
+        if (!slot) return;
+        el.querySelectorAll('[data-cmt-reply-slot]').forEach(s => { if (s !== slot) s.innerHTML = ''; });
+        if (!slot.firstElementChild) {
+          slot.innerHTML = _cmtFormHtml('Write a reply… (Ctrl+Enter to send, Esc to cancel)', 'Reply');
+          bindForm(slot.firstElementChild, +btn.dataset.cmtReply);
+        }
+        const ta = slot.querySelector('textarea');
+        if (btn.dataset.cmtMention && !ta.value) ta.value = `@${btn.dataset.cmtMention} `;
+        ta.focus();
+        ta.setSelectionRange(ta.value.length, ta.value.length);
+      }));
+    }
+
+    render();
   }
 
   async function openMpTaskDetail(taskId) {

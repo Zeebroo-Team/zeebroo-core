@@ -327,19 +327,8 @@ class ProjectManageApiController extends Controller
     public function taskComment(Request $request, int $id): JsonResponse
     {
         $business = $this->manageBusinessOrAbort($request);
-        $task     = $this->resolveTask($business, $id);
 
-        $body    = $request->validate(['body' => 'required|string|max:5000'])['body'];
-        $comment = $this->tasks->addComment($task, $request->user()?->id ?? 0, $body);
-
-        return response()->json([
-            'data' => [
-                'id'         => $comment->id,
-                'user'       => $comment->user?->name ?? 'System',
-                'body'       => $comment->body,
-                'created_at' => $comment->created_at?->toDateTimeString(),
-            ],
-        ], 201);
+        return $this->storeComment($request, $this->resolveTask($business, $id));
     }
 
     public function taskTime(Request $request, int $id): JsonResponse
@@ -489,6 +478,16 @@ class ProjectManageApiController extends Controller
         $task = $this->tasks->moveStatus($task, $status);
 
         return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project']))]);
+    }
+
+    /** Comment (or reply, with parent_id) on a task assigned to me. */
+    public function myWorkTaskComment(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only comment on tasks assigned to you.');
+
+        return $this->storeComment($request, $task);
     }
 
     /** Files of a task assigned to me (the detail endpoint also returns them). */
@@ -646,6 +645,18 @@ class ProjectManageApiController extends Controller
         $attachment = TaskAttachment::with('task.project')->findOrFail($id);
         abort_unless((int) $attachment->task->project->business_id === (int) $business->id, 404);
         return $attachment;
+    }
+
+    private function storeComment(Request $request, Task $task): JsonResponse
+    {
+        $data = $request->validate([
+            'body'      => 'required|string|max:5000',
+            'parent_id' => 'nullable|integer',
+        ]);
+
+        $comment = $this->tasks->addComment($task, (int) ($request->user()?->id ?? 0), $data['body'], $data['parent_id'] ?? null);
+
+        return response()->json(['data' => $this->tasks->fmtComment($comment)], 201);
     }
 
     private function storeAttachments(Request $request, Task $task): JsonResponse

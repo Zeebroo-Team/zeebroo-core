@@ -18850,6 +18850,29 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .mp-due--overdue { color: #dc2626; font-weight: 700; }
 .mp-due--today   { color: #d97706; font-weight: 700; }
 
+/* Task comments (My Projects task detail) — threads with first-name avatars */
+.mp-cmt { display: flex; gap: 9px; align-items: flex-start; }
+.mp-cmt-avatar {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 700; user-select: none;
+}
+.mp-cmt--reply .mp-cmt-avatar { width: 22px; height: 22px; font-size: 10px; }
+.mp-cmt-main { flex: 1; min-width: 0; }
+.mp-cmt-bubble { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; background: var(--surface); }
+.mp-cmt-head { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; margin-bottom: 3px; }
+.mp-cmt-body { font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mp-cmt-actions { font-size: 11px; margin: 3px 0 0 4px; }
+.mp-cmt-reply-btn { background: none; border: none; padding: 0; color: var(--text-muted); cursor: pointer; font-size: 11px; font-weight: 600; }
+.mp-cmt-reply-btn:hover { color: var(--accent); }
+.mp-cmt-replies { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--border); }
+.mp-cmt-form { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.mp-cmt-form textarea {
+  flex: 1; min-height: 34px; max-height: 140px; resize: vertical; font: inherit; font-size: 12px;
+  padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text);
+}
+.mp-cmt-form textarea:focus { outline: none; border-color: var(--accent); }
+
 .mp-filter-select, .mp-status-select {
   font-size: 12px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 6px;
