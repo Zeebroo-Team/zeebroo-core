@@ -52216,16 +52216,23 @@ const TeamProfile = (() => {
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
         <div class="mp-proj-foot">
           <span class="pm-task-count"><i class="fa fa-user-check" style="margin-right:5px"></i>${mine.length} my task${mine.length === 1 ? '' : 's'} · ${done} done</span>
+          <button class="mp-proj-info" title="Project details and team members"><i class="fa fa-circle-info"></i> Details</button>
           <span class="mp-proj-open">Open <i class="fa fa-arrow-right"></i></span>
         </div>`;
-      card.addEventListener('click', () => {
-        mp.boardProject = String(p.id);
-        const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
-        _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
-        switchMpView('board');
+      card.querySelector('.mp-proj-info').addEventListener('click', e => {
+        e.stopPropagation();
+        openMpProjectDetail(p.id);
       });
+      card.addEventListener('click', () => _openMpBoardFor(p.id));
       grid.appendChild(card);
     });
+  }
+
+  function _openMpBoardFor(projectId) {
+    mp.boardProject = String(projectId);
+    const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
+    _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+    switchMpView('board');
   }
 
   // ── My Tasks: filterable, sortable table ────────────────────────────────────
@@ -52508,7 +52515,10 @@ const TeamProfile = (() => {
             ${t.is_overdue ? '<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
           </div>
         </div>
-        <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
+          <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
+          <button class="po-btn-ghost" id="mp-detail-view-project" style="padding:5px 10px;font-size:11px;white-space:nowrap" title="Project details and team members"><i class="fa fa-diagram-project"></i> View Project Details</button>
+        </div>
       </div>
 
       ${section('fa-align-left', 'Description', t.description
@@ -52552,6 +52562,8 @@ const TeamProfile = (() => {
 
     const commentsEl = $('#mp-detail-comments');
     if (commentsEl) _mountMpComments(commentsEl, t, extra);
+
+    $('#mp-detail-view-project')?.addEventListener('click', () => openMpProjectDetail(t.project_id));
 
     $('#mp-detail-status')?.addEventListener('change', async function () {
       try {
@@ -52697,6 +52709,142 @@ const TeamProfile = (() => {
   $('#mp-detail-cancel')?.addEventListener('click', _closeMpTaskDetail);
   $('#mp-detail-modal')?.addEventListener('click', e => { if (e.target === $('#mp-detail-modal')) _closeMpTaskDetail(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _mpDetailId !== null) _closeMpTaskDetail(); });
+
+  // ── Project detail (from a task's "View Project" button or a project card) ──
+  // Project fields, progress, the team (names open their profiles), milestones and my own counts.
+  const _MP_ROLE_BADGE = { owner: 'blue', admin: 'blue', manager: 'amber', staff: 'gray', former: 'red' };
+  const _MP_ASSIGN_LABEL = {
+    branch: 'Branch', department: 'Department', property: 'Property', employee: 'Employee',
+    modification: 'Modification', rental: 'Rental', other: 'Other',
+  };
+  let _mpProjectId = null;
+
+  function _renderMpProject(p, error) {
+    const body = $('#mp-project-body');
+    if (!body) return;
+    const muted   = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    const section = (icon, title, inner) => `
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:600"><i class="fa ${icon}" style="margin-right:5px;color:var(--accent)"></i>${title}</div>
+        ${inner}
+      </div>`;
+    const color = p?.color || 'var(--accent)';
+
+    $('#mp-project-heading').textContent = p?.name || 'Project Details';
+    if (error) { body.innerHTML = `<div style="font-size:12px;color:#ef4444">${esc(error)}</div>`; return; }
+    if (!p.members) {
+      body.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading project details…</div>`;
+      return;
+    }
+
+    const ts  = p.task_stats || {};
+    const pct = ts.total ? Math.round((ts.done || 0) / ts.total * 100) : 0;
+    const my  = p.my_stats || {};
+    const assignTo = p.assignment_type && p.assignment_type !== 'none'
+      ? `${esc(_MP_ASSIGN_LABEL[p.assignment_type] || p.assignment_type)}${p.assignment_name ? `: ${esc(p.assignment_name)}` : ''}`
+      : '';
+    const money = v => Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const members = p.members.length ? p.members.map(u => `
+      <div class="mp-pd-member">
+        <div class="mp-pd-member-avatar" style="background:${TeamProfile.avatarColor(u.name)}" data-profile-uid="${+u.id}" data-profile-name="${esc(u.name)}" title="View profile">${esc((String(u.name || '').trim().charAt(0) || '?').toUpperCase())}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${TeamProfile.link(u.id, u.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.email || '')}</div>
+        </div>
+        <span class="inv-badge inv-badge-${_MP_ROLE_BADGE[u.role] || 'gray'}" style="text-transform:capitalize">${esc(u.role === 'former' ? 'Left business' : u.role)}</span>
+        <span style="font-size:11px;white-space:nowrap">${u.open_tasks} open ${muted(`/ ${u.total_tasks}`)}</span>
+      </div>`).join('')
+      : `<div style="font-size:11px">${muted('No team members yet.')}</div>`;
+
+    const milestones = (p.milestones || []).length ? p.milestones.map(m => `
+      <div class="mp-pd-ms">
+        <i class="fa ${m.status === 'completed' ? 'fa-circle-check' : 'fa-flag'}" style="color:${m.status === 'completed' ? '#16a34a' : 'var(--text-muted)'}"></i>
+        <span style="flex:1;min-width:0;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.name)}">${esc(m.name)}</span>
+        ${m.due_date ? `<span style="font-size:11px;color:var(--text-muted);white-space:nowrap"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(m.due_date)}</span>` : ''}
+        <span style="font-size:11px;white-space:nowrap">${m.done_count}/${m.tasks_count} done</span>
+      </div>`).join('')
+      : `<div style="font-size:11px">${muted('No milestones.')}</div>`;
+
+    body.innerHTML = `
+      <div class="mp-pd-head">
+        <div class="mp-pd-avatar" style="background:${esc(color)}">${p.image_url
+          ? `<img src="${esc(p.image_url)}" alt="" onerror="this.remove()">`
+          : esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:16px;font-weight:700;overflow-wrap:anywhere">${esc(p.name)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            <span class="pm-status pm-status--${esc(p.status)}">${esc(String(p.status || '').replace(/_/g, ' '))}</span>
+            <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
+            ${p.is_member ? '' : `<span style="font-size:10px;color:var(--text-muted)">You are not on the team (assigned task only)</span>`}
+          </div>
+        </div>
+      </div>
+
+      ${section('fa-align-left', 'Description', p.description
+        ? `<div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--border);border-radius:6px;padding:8px 10px">${esc(p.description)}</div>`
+        : `<div style="font-size:11px">${muted('No description.')}</div>`)}
+
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 18px">
+        ${_detailRow('fa-play', 'Start Date', p.start_date ? esc(p.start_date) : muted('—'))}
+        ${_detailRow('fa-flag-checkered', 'Due Date', p.due_date ? esc(p.due_date) : muted('—'))}
+        ${_detailRow('fa-building', 'Project Type', p.project_type === 'customer' ? 'Customer project' : 'In-house')}
+        ${_detailRow('fa-handshake', 'Customer / Client', esc(p.customer_name || p.client_name || '') || muted('—'))}
+        ${assignTo ? _detailRow('fa-sitemap', 'Assigned To', assignTo) : ''}
+        ${p.budget != null ? _detailRow('fa-wallet', 'Budget', esc(money(p.budget))) : ''}
+        ${_detailRow('fa-user-pen', 'Created By', p.created_by_name ? esc(p.created_by_name) : muted('—'))}
+        ${_detailRow('fa-calendar-plus', 'Created', p.created_at ? esc(p.created_at) : muted('—'))}
+      </div>
+
+      ${section('fa-chart-line', 'Progress', `
+        <div class="mp-proj-progress-row"><span>${ts.done || 0} of ${ts.total || 0} tasks done</span><span class="pm-progress-pct">${pct}%</span></div>
+        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
+        <div class="tp-stats" style="margin-top:4px">
+          <div class="tp-stat"><b>${ts.total || 0}</b><span>All tasks</span></div>
+          <div class="tp-stat"><b>${p.members.length}</b><span>Team</span></div>
+          <div class="tp-stat"><b>${my.open || 0}</b><span>My open</span></div>
+          <div class="tp-stat tp-stat--overdue"><b>${my.overdue || 0}</b><span>My overdue</span></div>
+        </div>`)}
+
+      ${section('fa-users', `Team Members (${p.members.length})`, `<div style="display:flex;flex-direction:column;gap:6px">${members}</div>`)}
+
+      ${section('fa-flag', `Milestones (${(p.milestones || []).length})`, `<div style="display:flex;flex-direction:column;gap:6px">${milestones}</div>`)}`;
+  }
+
+  async function openMpProjectDetail(projectId) {
+    const pid = +projectId;
+    if (!pid) return;
+    _mpProjectId = pid;
+    // Cached card data first (no team yet → spinner), then the full detail.
+    _renderMpProject({ ..._project(pid), members: null });
+    $('#mp-project-modal').style.display = '';
+    let p = null, error = null;
+    try {
+      const res = await API.pmMyWorkProjectShow(pid);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load project details');
+      p = res.body?.data;
+    } catch (e) { error = String(e.message || e); }
+    if (_mpProjectId === pid) _renderMpProject(p || _project(pid), error || (p ? null : 'Project not found.'));
+  }
+
+  function _closeMpProjectDetail() {
+    _mpProjectId = null;
+    const m = $('#mp-project-modal'); if (m) m.style.display = 'none';
+  }
+
+  $('#mp-project-close')?.addEventListener('click',  _closeMpProjectDetail);
+  $('#mp-project-cancel')?.addEventListener('click', _closeMpProjectDetail);
+  $('#mp-project-modal')?.addEventListener('click', e => { if (e.target === $('#mp-project-modal')) _closeMpProjectDetail(); });
+  $('#mp-project-board')?.addEventListener('click', () => {
+    const pid = _mpProjectId;
+    _closeMpProjectDetail();
+    _closeMpTaskDetail();
+    if (pid) _openMpBoardFor(pid);
+  });
+  // Esc closes the project detail first, not the task detail underneath it.
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _mpProjectId !== null) { e.stopImmediatePropagation(); _closeMpProjectDetail(); }
+  }, true);
 
   // ── New Task (assigned to me) ───────────────────────────────────────────────
   // Only projects whose team I am on — the server rejects the rest.

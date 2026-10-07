@@ -18896,6 +18896,31 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .tp-stat--overdue b { color: #dc2626; }
 .tp-proj { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px; }
 
+/* ── My Projects: project detail (from a task's "View Project" button or a project card) ── */
+#mp-project-modal { z-index: 850; }   /* above the task detail, below the team-member profile */
+.mp-pd-head { display: flex; align-items: center; gap: 12px; }
+.mp-pd-avatar {
+  width: 48px; height: 48px; border-radius: 10px; flex-shrink: 0; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 20px; font-weight: 700;
+}
+.mp-pd-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.mp-pd-member {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px;
+}
+.mp-pd-member-avatar {
+  width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-size: 12px; font-weight: 700;
+}
+.mp-pd-ms { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px; }
+.mp-proj-info {
+  margin-left: auto; margin-right: 10px; font-size: 11px; color: var(--text-muted);
+  background: none; border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; cursor: pointer;
+}
+.mp-proj-info:hover { color: var(--accent); border-color: var(--accent); }
+
 .mp-filter-select, .mp-status-select {
   font-size: 12px; padding: 5px 8px;
   border: 1px solid var(--border); border-radius: 6px;

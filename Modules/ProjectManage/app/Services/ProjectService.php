@@ -179,6 +179,49 @@ class ProjectService
     }
 
     /**
+     * A non-archived project of the business that the user is on the team of or has a task in
+     * (the My Projects scope), loaded for the project-detail view; null when out of scope.
+     */
+    public function findForAssignee(Business $business, int $projectId, int $userId): ?Project
+    {
+        return Project::query()
+            ->where('business_id', $business->id)
+            ->where('id', $projectId)
+            ->where('status', '!=', Project::STATUS_ARCHIVED)
+            ->where(fn ($q) => $q->whereHas('members', fn ($m) => $m->where('users.id', $userId))
+                                 ->orWhereHas('tasks.assignees', fn ($a) => $a->where('users.id', $userId)))
+            ->withCount('members')
+            ->with(['customer', 'branch', 'department', 'property', 'employee', 'modification', 'rental', 'imageFile', 'createdBy'])
+            ->first();
+    }
+
+    /**
+     * The user's own task counts in a project.
+     *
+     * @return array{total:int,open:int,overdue:int,done:int}
+     */
+    public function userTaskStats(Project $project, int $userId): array
+    {
+        $done = Task::STATUS_DONE;
+        $row  = DB::table('pm_task_assignees as a')
+            ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
+            ->where('a.user_id', $userId)
+            ->where('t.project_id', $project->id)
+            ->selectRaw(
+                'count(*) as total,
+                 sum(case when t.status = ? then 0 else 1 end) as open,
+                 sum(case when t.status <> ? and t.due_date is not null and t.due_date < ? then 1 else 0 end) as overdue',
+                [$done, $done, now()->toDateString()]
+            )
+            ->first();
+
+        $total = (int) ($row->total ?? 0);
+        $open  = (int) ($row->open ?? 0);
+
+        return ['total' => $total, 'open' => $open, 'overdue' => (int) ($row->overdue ?? 0), 'done' => $total - $open];
+    }
+
+    /**
      * Team-member profile card: who they are (business role, HR job title / department / photo)
      * and the projects they work on with their task counts there.
      *

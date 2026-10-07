@@ -667,6 +667,7 @@ const API = (() => {
     // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
     pmMyWork:              ()          => request('GET',    '/pm/my-work'),
     pmMyWorkTaskShow:      (id)        => request('GET',    `/pm/my-work/tasks/${id}`),
+    pmMyWorkProjectShow:   (id)        => request('GET',    `/pm/my-work/projects/${id}`),
     pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
     pmMyWorkTaskComment:   (id, body, parentId = null) => request('POST', `/pm/my-work/tasks/${id}/comments`, { body, parent_id: parentId }),
     pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),

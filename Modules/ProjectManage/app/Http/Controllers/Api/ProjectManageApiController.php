@@ -471,6 +471,36 @@ class ProjectManageApiController extends Controller
         return response()->json(['data' => $this->fmtTask($task)], 201);
     }
 
+    /**
+     * Full detail of a project I work on (team member or task assignee): the project fields,
+     * its team with their task counts, milestones and my own task counts there.
+     * The budget is shown to project managers only.
+     */
+    public function myWorkProjectShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+        $project  = $this->projects->findForAssignee($business, $id, $userId);
+        abort_unless($project, 404, 'You are not working on this project.');
+
+        $member    = $this->resolveMember($request, $business);
+        $canManage = $member === null || $member->hasPermission('projects_access');
+
+        $data = $this->fmtProject($project);
+        if (! $canManage) {
+            $data['budget'] = null;
+        }
+
+        return response()->json(['data' => $data + [
+            'statuses'        => $this->tasks->statusesForProject($project),
+            'is_member'       => $project->hasMember($userId),
+            'created_by_name' => $project->createdBy?->name,
+            'members'         => $this->projects->membersForProject($project)->values(),
+            'milestones'      => $this->milestones->listForProject($project)->map(fn ($m) => $this->fmtMilestone($m))->values(),
+            'my_stats'        => $this->projects->userTaskStats($project, $userId),
+        ]]);
+    }
+
     /** Full detail of a task assigned to me: the task plus its comments and time logs. */
     public function myWorkTaskShow(Request $request, int $id): JsonResponse
     {
