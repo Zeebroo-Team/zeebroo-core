@@ -821,7 +821,14 @@ ipcMain.handle('fetch-json', async (_e, url) => {
 });
 
 // ── Multipart file upload ─────────────────────────────────────────────────
-const MIME_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', svg:'image/svg+xml', pdf:'application/pdf' };
+const MIME_EXT = {
+  jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', svg:'image/svg+xml', bmp:'image/bmp', pdf:'application/pdf',
+  doc:'application/msword', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls:'application/vnd.ms-excel', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt:'application/vnd.ms-powerpoint', pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt:'application/vnd.oasis.opendocument.text', ods:'application/vnd.oasis.opendocument.spreadsheet',
+  txt:'text/plain', csv:'text/csv', rtf:'application/rtf', zip:'application/zip', rar:'application/vnd.rar', '7z':'application/x-7z-compressed',
+};
 function extMime(filePath) {
   const ext = path.extname(filePath).slice(1).toLowerCase();
   return MIME_EXT[ext] || 'application/octet-stream';
@@ -830,7 +837,7 @@ function buildMultipart(boundary, files) {
   const CRLF = '\r\n';
   const parts = [];
   for (const { fieldName, filePath, fileName, mime } of files) {
-    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"${CRLF}Content-Type: ${mime}${CRLF}${CRLF}`));
+    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${fieldName}"; filename="${String(fileName).replace(/["\r\n]/g, '')}"${CRLF}Content-Type: ${mime}${CRLF}${CRLF}`));
     parts.push(fs.readFileSync(filePath));
     parts.push(Buffer.from(CRLF));
   }

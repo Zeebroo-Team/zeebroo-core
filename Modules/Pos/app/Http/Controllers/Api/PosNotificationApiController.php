@@ -22,13 +22,13 @@ class PosNotificationApiController extends Controller
         $status = (string) $request->query('status', 'all');
         $limit = max(1, min(200, (int) $request->query('limit', 50)));
 
-        return response()->json($this->service->list($business, $status, $limit));
+        return response()->json($this->service->list($business, $status, $limit, $request->user()?->id));
     }
 
     public function markRead(Request $request, int $id): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->service->markRead($business, $id);
+        $this->service->markRead($business, $id, $request->user()?->id);
 
         return response()->json(['message' => 'Notification marked as read.']);
     }
@@ -36,7 +36,7 @@ class PosNotificationApiController extends Controller
     public function markUnread(Request $request, int $id): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->service->markUnread($business, $id);
+        $this->service->markUnread($business, $id, $request->user()?->id);
 
         return response()->json(['message' => 'Notification marked as unread.']);
     }
@@ -44,7 +44,7 @@ class PosNotificationApiController extends Controller
     public function markAllRead(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->service->markAllRead($business);
+        $this->service->markAllRead($business, $request->user()?->id);
 
         return response()->json(['message' => 'All notifications marked as read.']);
     }
@@ -52,7 +52,7 @@ class PosNotificationApiController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->service->delete($business, $id);
+        $this->service->delete($business, $id, $request->user()?->id);
 
         return response()->json(['message' => 'Notification deleted.']);
     }
@@ -60,7 +60,7 @@ class PosNotificationApiController extends Controller
     public function clearAll(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->service->clearAll($business);
+        $this->service->clearAll($business, $request->user()?->id);
 
         return response()->json(['message' => 'All notifications cleared.']);
     }

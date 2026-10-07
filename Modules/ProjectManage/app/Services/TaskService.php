@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Modules\Business\Models\Business;
+use Modules\Pos\Services\PosNotificationService;
 use Modules\ProjectManage\Models\Task;
 use Modules\ProjectManage\Models\TaskComment;
 use Modules\ProjectManage\Models\TaskStatus;
@@ -20,6 +21,7 @@ class TaskService
         $query = Task::query()
             ->where('project_id', $project->id)
             ->with(['assignees', 'milestone'])
+            ->withCount('attachments')
             ->orderBy('sort_order')
             ->orderByDesc('id');
 
@@ -46,7 +48,8 @@ class TaskService
     {
         $query = Task::query()
             ->whereHas('project', fn ($q) => $q->where('business_id', $business->id))
-            ->with(['assignees', 'project', 'milestone']);
+            ->with(['assignees', 'project', 'milestone'])
+            ->withCount('attachments');
 
         match ($filter) {
             'overdue' => $query->whereNotIn('status', [Task::STATUS_DONE])
@@ -75,6 +78,7 @@ class TaskService
             ->whereHas('project', fn ($q) => $q->where('business_id', $business->id)->where('status', '!=', Project::STATUS_ARCHIVED))
             ->whereHas('assignees', fn ($q) => $q->where('users.id', $userId))
             ->with(['assignees', 'project', 'milestone'])
+            ->withCount('attachments')
             ->orderByRaw('due_date IS NULL')->orderBy('due_date')->orderByDesc('id')
             ->get();
 
@@ -94,6 +98,34 @@ class TaskService
     public function isAssignee(Task $task, int $userId): bool
     {
         return $task->assignees()->where('users.id', $userId)->exists();
+    }
+
+    /**
+     * Comments (oldest first), time logs and attachments (newest first) of a task, for the task detail view.
+     *
+     * @return array{comments: Collection, time_logs: Collection, attachments: Collection}
+     */
+    public function activityForTask(Task $task): array
+    {
+        $task->loadMissing(['comments.user', 'timeLogs.user', 'attachments.user']);
+        $files = app(TaskAttachmentService::class);
+
+        return [
+            'attachments' => $task->attachments->map(fn ($a) => $files->fmt($a))->values(),
+            'comments'  => $task->comments->map(fn (TaskComment $c) => [
+                'id'         => $c->id,
+                'user'       => $c->user?->name ?? 'System',
+                'body'       => $c->body,
+                'created_at' => $c->created_at?->toDateTimeString(),
+            ])->values(),
+            'time_logs' => $task->timeLogs->map(fn (TimeLog $l) => [
+                'id'        => $l->id,
+                'user'      => $l->user?->name ?? 'System',
+                'minutes'   => (int) $l->minutes,
+                'logged_at' => $l->logged_at?->toDateString(),
+                'note'      => $l->note,
+            ])->values(),
+        ];
     }
 
     /**
@@ -194,9 +226,27 @@ class TaskService
      */
     public function assign(Task $task, array $userIds): Task
     {
-        $task->syncAssignees($userIds);
+        $added = $task->syncAssignees($userIds);
+        $this->notifyAssigned($task, $added);
 
         return $task->fresh(['assignees', 'milestone', 'project']);
+    }
+
+    /** @param int[] $userIds newly added assignees */
+    private function notifyAssigned(Task $task, array $userIds): void
+    {
+        if ($userIds === []) {
+            return;
+        }
+
+        // A failed notification must never block the assignment itself.
+        DB::afterCommit(function () use ($task, $userIds) {
+            try {
+                app(PosNotificationService::class)->notifyTaskAssigned($task->fresh('project.business'), $userIds, auth()->id());
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        });
     }
 
     /** @return string[] */
@@ -215,6 +265,7 @@ class TaskService
         $tasks = Task::query()
             ->where('project_id', $project->id)
             ->with(['assignees', 'milestone'])
+            ->withCount('attachments')
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
@@ -297,7 +348,7 @@ class TaskService
                 'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
             ]);
 
-            $task->syncAssignees(self::assigneeIdsFrom($data) ?? []);
+            $this->notifyAssigned($task, $task->syncAssignees(self::assigneeIdsFrom($data) ?? []));
 
             return $task->fresh(['assignees', 'milestone', 'project']);
         });
@@ -326,7 +377,7 @@ class TaskService
 
             $ids = self::assigneeIdsFrom($data);
             if ($ids !== null) {
-                $task->syncAssignees($ids);
+                $this->notifyAssigned($task, $task->syncAssignees($ids));
             }
 
             return $task->fresh();
@@ -398,7 +449,9 @@ class TaskService
 
     public function delete(Task $task): void
     {
+        // Attachment rows cascade with the task; their stored files have to go explicitly.
         $task->delete();
+        app(TaskAttachmentService::class)->deleteAllForTask($task);
     }
 
     public function taskForBusiness(Business $business, Task $task): ?Task

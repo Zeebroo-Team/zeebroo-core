@@ -298,7 +298,11 @@ const _sbSubItems = {
     { view:'board',          icon:'fa-table-columns',        label:'Board' },
     { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
     { view:'mytasks',        icon:'fa-user-check',           label:'My Tasks' },
-    { view:'mine',           icon:'fa-user-check',           label:'My Projects' },
+  ],
+  'my-projects': [
+    { view:'overview',       icon:'fa-house',                label:'Overview' },
+    { view:'tasks',          icon:'fa-list-check',           label:'My Tasks' },
+    { view:'board',          icon:'fa-table-columns',        label:'Kanban Board' },
   ],
 };
 
@@ -356,7 +360,9 @@ function _sbNavSubSwitch(tab, view) {
   else if (tab === 'restaurant') switchRstView(view);
   else if (tab === 'mail')       window.switchMailView?.(view);
   else if (tab === 'crm')        window.switchCrmView?.(view);
-  else if (tab === 'projects')   window.switchPmView?.(view);  _sbSubActivate(tab, view);
+  else if (tab === 'projects')   window.switchPmView?.(view);
+  else if (tab === 'my-projects') window.switchMpView?.(view);
+  _sbSubActivate(tab, view);
 }
 
 _buildSidebarSubNavs();
@@ -496,7 +502,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'event-mgmt': 'panel-event-mgmt' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'my-projects': 'panel-my-projects', 'event-mgmt': 'panel-event-mgmt' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -517,8 +523,8 @@ function activateTab(tabName) {
   if (tabName === 'mail')       { switchMailView('inbox'); }
   if (tabName === 'crm')        { switchCrmView('overview'); }
   if (tabName === 'automations'){ loadAutomations(); }
-  // Assigned-only users (no "Manage All Projects") land straight on My Projects.
-  if (tabName === 'projects')    { switchPmView(state._pmCanManage === false ? 'mine' : 'overview'); }
+  if (tabName === 'projects')    { switchPmView('overview'); }
+  if (tabName === 'my-projects') { window.switchMpView?.(window._mp?.view || 'overview', { refresh: true }); }
   if (tabName === 'event-mgmt') { switchEvtView('brands'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
@@ -5858,9 +5864,8 @@ function applyFeatureVisibility() {
 
   const dev_enabled  = bf('developers');
   const auto_enabled = bf('automation_editor') && mp('automations_access');
-  const pm_manage    = bf('project_management') && mp('projects_access');    // Projects → Overview / Projects (manage all)
-  const pm_mine      = bf('project_management') && mp('projects_assigned');  // Projects → My Projects (assigned only)
-  const pm_enabled   = pm_manage || pm_mine;                                 // Projects ribbon tab
+  const pm_manage    = bf('project_management') && mp('projects_access');    // Projects tab (manage all)
+  const pm_mine      = bf('project_management') && mp('projects_assigned');  // My Projects tab (assigned only)
   const evt_enabled  = bf('event_management') && mp('event_access');
 
   // ── Cashier mode: POS-only ──
@@ -5898,7 +5903,8 @@ function applyFeatureVisibility() {
     mail:       mail_any,
     crm:        crm_any,
     automations:  auto_enabled,
-    projects:     pm_enabled,
+    projects:     pm_manage,
+    'my-projects': pm_mine,
     'event-mgmt': evt_enabled,
     users:        isAdminOrOwner,
   };
@@ -5972,24 +5978,8 @@ function applyFeatureVisibility() {
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
   if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
   if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
-  if (!pm_enabled && _activeTab() === 'projects') activateTab('home');
-
-  // ── Projects: sub-tabs + ribbon groups per permission ──
-  state._pmCanManage = pm_manage;
-  state._pmCanMine   = pm_mine;
-  $$('#panel-projects [data-pmsub]').forEach(b => {
-    b.style.display = (b.dataset.pmsub === 'mine' ? pm_mine : pm_manage) ? '' : 'none';
-  });
-  $$('.sb-sub-item[data-tab="projects"]').forEach(i => {
-    i.style.display = (i.dataset.subView === 'mine' ? pm_mine : pm_manage) ? '' : 'none';
-  });
-  ['#rb-pm-all-projects', '#rb-pm-new-task', '#rb-pm-board', '#rb-pm-tasks'].forEach(sel => grp(sel, pm_manage));
-  grp('#rb-mp-tasks', pm_mine);
-  // Currently on a sub-tab that is no longer allowed → switch to the one that is
-  if (pm_enabled && _activeTab() === 'projects') {
-    const cur = window._pm?.currentView;
-    if (cur === 'mine' ? !pm_mine : !pm_manage) switchPmView(pm_manage ? 'overview' : 'mine');
-  }
+  if (!pm_manage && _activeTab() === 'projects') activateTab(pm_mine ? 'my-projects' : 'home');
+  if (!pm_mine && _activeTab() === 'my-projects') activateTab('home');
 
   // ── Developers (account dropdown entry) ──
   const tpmDev = $('#tpm-developers');
@@ -8913,6 +8903,8 @@ const _notifIconMap = {
   payment_succeeded:              { icon: 'fa-circle-check',          cls: 'success' },
   payment_failed:                 { icon: 'fa-triangle-exclamation',  cls: 'danger'  },
   subscription_renewal_upcoming:  { icon: 'fa-calendar-days',         cls: 'warning' },
+  project_member_added:           { icon: 'fa-user-plus',             cls: 'info'    },
+  task_assigned:                  { icon: 'fa-list-check',            cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -9052,6 +9044,15 @@ function _notifNavigate(n) {
       if (typeof _salSwitchView === 'function') _salSwitchView('transactions');
       if (payload.sale_id && typeof _salSelectSale === 'function') _salSelectSale(payload.sale_id);
       break;
+    case 'project_member_added':
+    case 'task_assigned': {
+      // Addressed to the current user — open their own work in My Projects.
+      const view = n.type === 'task_assigned' ? 'tasks' : 'overview';
+      if (window._mp) window._mp.view = view;
+      if (_activeTab() !== 'my-projects') activateTab('my-projects');
+      else window.switchMpView?.(view, { refresh: true });
+      break;
+    }
     default:
       break;
   }
@@ -44665,7 +44666,7 @@ async function submitDsCreate() {
     ]},
     { key: 'projects', label: 'Projects', icon: 'fa-diagram-project', color: '#0891b2', items: [
       { key: 'projects_access',   label: 'Manage All Projects',     desc: 'Projects → Overview & Projects: view, create and manage every project and task in this business' },
-      { key: 'projects_assigned', label: 'Assigned Project Access', desc: 'Projects → My Projects: today/upcoming work, my tasks and a kanban board for tasks assigned to you' },
+      { key: 'projects_assigned', label: 'Assigned Project Access', desc: 'My Projects tab: today/upcoming work, my tasks and a kanban board for tasks assigned to you' },
     ]},
     { key: 'event', label: 'Event', icon: 'fa-calendar-days', color: '#d946ef', items: [
       { key: 'event_access', label: 'Access Event Management', desc: 'View and manage event bookings and schedules' },
@@ -49505,6 +49506,178 @@ async function submitDsCreate() {
   window.openDevDialog = openDevDialog;
 }());
 
+// ── Task attachments (shared by Projects + My Projects) ─────────────────────
+// Files (PDF, images, documents…) attached to a task. mode 'manage' = Projects tab
+// (projects_access, any file deletable); mode 'mine' = My Projects (assignee only,
+// may delete only their own uploads). Upload is multipart "files[]" via apiUpload,
+// download streams the binary through downloadFile (save dialog).
+const TaskFiles = (() => {
+  const esc = escHtml;
+  const EXTS = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'zip', 'rar', '7z'];
+  const MAX_BYTES = 20 * 1024 * 1024;
+
+  const ROUTES = {
+    manage: { list: API.pmTaskAttachments,   upload: API.pmTaskAttachmentUploadPath,   download: API.pmTaskAttachmentDownloadPath,   del: API.pmTaskAttachmentDelete },
+    mine:   { list: API.pmMyWorkAttachments, upload: API.pmMyWorkAttachmentUploadPath, download: API.pmMyWorkAttachmentDownloadPath, del: API.pmMyWorkAttachmentDelete },
+  };
+
+  const errMsg = (res, fallback) => res?.body?.errors
+    ? Object.values(res.body.errors).flat().join(' ')
+    : (res?.body?.message || fallback);
+
+  function fmtSize(b) {
+    b = +b || 0;
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  function iconFor(name) {
+    const ext = String(name || '').split('.').pop().toLowerCase();
+    if (ext === 'pdf') return ['fa-file-pdf', '#dc2626'];
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return ['fa-file-image', '#7c3aed'];
+    if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return ['fa-file-word', '#2563eb'];
+    if (['xls', 'xlsx', 'ods', 'csv'].includes(ext)) return ['fa-file-excel', '#16a34a'];
+    if (['ppt', 'pptx'].includes(ext)) return ['fa-file-powerpoint', '#ea580c'];
+    if (['zip', 'rar', '7z'].includes(ext)) return ['fa-file-zipper', '#a16207'];
+    return ['fa-file-lines', 'var(--text-muted)'];
+  }
+
+  async function list(mode, taskId) {
+    const res = await ROUTES[mode].list(taskId);
+    if (res.status >= 400) throw new Error(errMsg(res, 'Failed to load attachments'));
+    return res.body?.data || [];
+  }
+
+  /** Opens the file picker and uploads each chosen file. Returns the number uploaded. */
+  async function pickAndUpload(mode, taskId) {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Attach files to task',
+      filters: [
+        { name: 'Documents & Images', extensions: EXTS },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) return 0;
+
+    let ok = 0;
+    for (const filePath of result.filePaths) {
+      const name = filePath.split(/[\\/]/).pop();
+      const res  = await window.electronAPI.apiUpload(ROUTES[mode].upload(taskId), filePath);
+      if (res.status >= 200 && res.status < 300) ok++;
+      else toast(`${name}: ${res.status === 413 ? 'File is too large for the server.' : errMsg(res, 'Upload failed')}`, 'error');
+    }
+    if (ok) toast(`${ok} file${ok === 1 ? '' : 's'} attached`, 'info');
+    return ok;
+  }
+
+  async function download(mode, att) {
+    const res = await window.electronAPI.downloadFile(ROUTES[mode].download(att.id), att.name);
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+    toast(`Saved ${att.name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  async function remove(mode, att) {
+    const ok = await appConfirm({ title: 'Delete attachment?', message: `"${att.name}" will be permanently removed from this task.`, danger: true, icon: 'fa-trash', confirmText: '<i class="fa fa-trash"></i> Delete' });
+    if (!ok) return false;
+    const res = await ROUTES[mode].del(att.id);
+    if (res.status >= 400) { toast(errMsg(res, 'Delete failed'), 'error'); return false; }
+    return true;
+  }
+
+  /**
+   * Renders a self-contained attachments panel (header + Upload button + file list) into `el`.
+   * opts: { mode, taskId, attachments? (preloaded list), canDelete(att) → bool, onChange(count) }
+   */
+  async function mount(el, opts) {
+    const { mode, taskId, canDelete = () => true, onChange } = opts;
+    let files = opts.attachments || null;
+    let error = null;
+    let busy  = false;
+
+    function render() {
+      const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+      let listHtml;
+      if (error) listHtml = `<div style="font-size:11px;color:#ef4444">${esc(error)}</div>`;
+      else if (!files) listHtml = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
+      else if (!files.length) listHtml = `<div style="font-size:11px">${muted('No files attached yet. Upload PDFs, images or documents for reference.')}</div>`;
+      else listHtml = files.map(a => {
+        const [icon, color] = iconFor(a.name);
+        return `
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:6px;padding:7px 10px">
+            <i class="fa ${icon}" style="font-size:20px;color:${color};flex-shrink:0;width:20px;text-align:center"></i>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${esc(a.uploaded_by || '')} · ${esc(a.created_at || '')}</div>
+            </div>
+            <button class="pm-task-card-move" data-tf-dl="${a.id}" title="Download"><i class="fa fa-download"></i></button>
+            ${canDelete(a) ? `<button class="pm-task-card-move" data-tf-del="${a.id}" title="Delete" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>` : ''}
+          </div>`;
+      }).join('');
+
+      el.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:12px;font-weight:600;flex:1"><i class="fa fa-paperclip" style="margin-right:5px;color:var(--accent)"></i>Attachments${files ? ` (${files.length})` : ''}</div>
+            <button class="po-btn-ghost" data-tf-upload style="padding:3px 10px;font-size:11px"${busy ? ' disabled' : ''}>
+              <i class="fa ${busy ? 'fa-spinner fa-spin' : 'fa-upload'}"></i> ${busy ? 'Uploading…' : 'Upload Files'}
+            </button>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted)">PDF, images, Word, Excel, PowerPoint, text or zip — up to ${fmtSize(MAX_BYTES)} each.</div>
+          ${listHtml}
+        </div>`;
+
+      el.querySelector('[data-tf-upload]')?.addEventListener('click', async () => {
+        if (busy) return;
+        busy = true; render();
+        try {
+          if (await pickAndUpload(mode, taskId)) await reload();
+        } catch (e) { toast(String(e.message || e), 'error'); }
+        busy = false; render();
+      });
+      el.querySelectorAll('[data-tf-dl]').forEach(b => b.addEventListener('click', () => {
+        const a = files.find(x => +x.id === +b.dataset.tfDl);
+        if (a) download(mode, a);
+      }));
+      el.querySelectorAll('[data-tf-del]').forEach(b => b.addEventListener('click', async () => {
+        const a = files.find(x => +x.id === +b.dataset.tfDel);
+        if (a && await remove(mode, a)) await reload();
+      }));
+    }
+
+    async function reload() {
+      try { files = await list(mode, taskId); error = null; }
+      catch (e) { error = String(e.message || e); }
+      render();
+      if (files) onChange?.(files.length);
+    }
+
+    render();
+    if (!files) await reload();
+  }
+
+  // ── Stand-alone modal (Projects tab rows / board cards) ──
+  let _modalTaskId = null;
+  function closeModal() {
+    _modalTaskId = null;
+    const m = $('#task-files-modal'); if (m) m.style.display = 'none';
+  }
+  function openModal(mode, task, onChange) {
+    _modalTaskId = task.id;
+    $('#task-files-heading').textContent = `Attachments — ${task.title || 'Task'}`;
+    $('#task-files-modal').style.display = '';
+    mount($('#task-files-body'), { mode, taskId: task.id, onChange });
+  }
+  $('#task-files-close')?.addEventListener('click',  closeModal);
+  $('#task-files-cancel')?.addEventListener('click', closeModal);
+  $('#task-files-modal')?.addEventListener('click', e => { if (e.target === $('#task-files-modal')) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _modalTaskId !== null) closeModal(); });
+
+  return { mount, openModal };
+})();
+
 // ── Project Management ─────────────────────────────────────────────────────
 (function () {
   const esc = escHtml;
@@ -49534,20 +49707,16 @@ async function submitDsCreate() {
 
   // ── View switcher ───────────────────────────────────────────────────────────
   function switchPmView(view, { load = true } = {}) {
-    // Sub-tabs follow the permissions: Overview / Projects need "Manage All Projects",
-    // My Projects needs "Assigned Project Access".
-    if (view !== 'mine' && state._pmCanManage === false) view = 'mine';
-    if (view === 'mine' && state._pmCanMine === false)   view = 'overview';
+    // My Projects is its own ribbon tab now — keep old 'mine' callers working.
+    if (view === 'mine') { activateTab('my-projects'); return; }
     pm.currentView = view;
     $$('#panel-projects [data-pmsub]').forEach(b => b.classList.toggle('active', b.dataset.pmsub === view));
     const el = $('#pm-overview-view'); if (el) el.style.display = view === 'overview' ? 'flex' : 'none';
     const el2 = $('#pm-projects-view'); if (el2) el2.style.display = view === 'projects' ? 'flex' : 'none';
-    const el3 = $('#pm-mine-view'); if (el3) el3.style.display = view === 'mine' ? 'flex' : 'none';
     _sbSubActivate('projects', view);
     if (!load) return;
     if (view === 'overview') loadPmOverview();
     if (view === 'projects') loadPmProjectsView();
-    if (view === 'mine')     window.switchMpView?.(window._mp?.view || 'overview', { refresh: true });
   }
   window.switchPmView = switchPmView;
 
@@ -50162,9 +50331,15 @@ async function submitDsCreate() {
         <select class="pm-task-card-move" data-tid="${t.id}" title="Move to…">
           <option value="">Move…</option>${moveOpts}
         </select>
+        <button class="pm-task-card-move" data-card-files-tid="${t.id}" title="Attachments${t.attachments_count ? ` (${t.attachments_count})` : ''}"><i class="fa fa-paperclip"${t.attachments_count ? ' style="color:var(--accent)"' : ''}></i>${t.attachments_count ? ` ${t.attachments_count}` : ''}</button>
         <button class="pm-task-card-move" data-delete-tid="${t.id}" title="Delete task" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>
       </div>
     `;
+    card.querySelector('button[data-card-files-tid]').addEventListener('click', ev => {
+      ev.stopPropagation();
+      const before = +t.attachments_count || 0;
+      TaskFiles.openModal('manage', t, count => { if (count !== before) loadPmBoard(); });
+    });
     card.querySelector('select[data-tid]').addEventListener('change', async function () {
       const newStatus = this.value;
       if (!newStatus) return;
@@ -50655,7 +50830,7 @@ async function submitDsCreate() {
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
         <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span></td>
         <td><select class="pm-ms-select" data-ms-tid="${t.id}" title="Move to milestone">${_pmMilestoneOptions(t.milestone_id)}</select></td>
-        <td><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
+        <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
       </tr>`;
   }
 
@@ -51053,11 +51228,27 @@ async function submitDsCreate() {
         <td style="font-size:11px;color:var(--text-muted)">${esc(t.assigned_name || '—')}</td>
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
         <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g,' '))}</span></td>
-        <td><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
+        <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
       </tr>`;
   }
 
+  /** Paperclip button opening the task's attachments (shows the file count when there are any). */
+  function _pmFilesBtnHtml(t) {
+    const n = +t.attachments_count || 0;
+    return `<button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-files-tid="${t.id}" data-files-count="${n}" title="Attachments${n ? ` (${n})` : ''}"><i class="fa fa-paperclip"${n ? ' style="color:var(--accent)"' : ''}></i>${n ? ` ${n}` : ''}</button>`;
+  }
+
   function _bindTaskRowActions(tbody, reload) {
+    tbody.querySelectorAll('[data-files-tid]').forEach(btn => {
+      btn.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const tid   = +btn.dataset.filesTid;
+        const row   = btn.closest('[data-tid]');
+        const title = row?.dataset.title || row?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Task';
+        const before = +btn.dataset.filesCount || 0;
+        TaskFiles.openModal('manage', { id: tid, title }, count => { if (count !== before) reload(); });
+      });
+    });
     tbody.querySelectorAll('[data-toggle-tid]').forEach(ico => {
       ico.addEventListener('click', async function () {
         const tid  = +this.dataset.toggleTid;
@@ -51462,9 +51653,7 @@ async function submitDsCreate() {
   $('#rb-pm-new-project') ?.addEventListener('click', () => { activateTab('projects'); openNewProjectModal(); });
   $('#rb-pm-new-task')    ?.addEventListener('click', () => { activateTab('projects'); openNewTaskModal(pm.detailProjectId); });
   $('#rb-pm-refresh')     ?.addEventListener('click', () => {
-    if (pm.currentView === 'mine') {
-      window.switchMpView?.(window._mp?.view || 'overview', { refresh: true });
-    } else if (pm.detailProjectId) {
+    if (pm.detailProjectId) {
       ensurePmProjects(true).then(() => {
         const fresh = pm.projects.find(x => +x.id === +pm.detailProjectId);
         if (fresh) {
@@ -51597,10 +51786,12 @@ async function submitDsCreate() {
     projects:      [],      // each carries .statuses (built-in + custom board columns)
     taskFilter:    'open',
     taskProject:   '',
+    taskMilestone: '',      // '' = all, MP_NO_MS = tasks without a milestone, else a milestone id
     taskSearch:    '',
     sortKey:       'due_date',
     sortDir:       1,
     boardProject:  '',
+    boardMilestone:'',
     boardPriority: '',
     boardDue:      '',
   };
@@ -51665,6 +51856,39 @@ async function submitDsCreate() {
       el.innerHTML = opts;
       el.value = mp[key];
     });
+    _fillMilestoneSelect('#mp-task-milestone', 'taskProject', 'taskMilestone');
+    _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+  }
+
+  // Milestone filter: built from the milestones of my tasks, limited to the selected project.
+  // With "All projects" the milestones are grouped by project (names often repeat, e.g. "Phase 1").
+  const MP_NO_MS = '__none';
+  function _fillMilestoneSelect(sel, projKey, msKey) {
+    const el = $(sel);
+    if (!el) return;
+    const byProject = new Map();   // project_id → { name, ms: Map(id → name) }
+    let hasNone = false;
+    mp.tasks.forEach(t => {
+      if (mp[projKey] && +t.project_id !== +mp[projKey]) return;
+      if (!t.milestone_id) { hasNone = true; return; }
+      if (!byProject.has(+t.project_id)) byProject.set(+t.project_id, { name: t.project_name || '', ms: new Map() });
+      byProject.get(+t.project_id).ms.set(String(t.milestone_id), t.milestone_name || ('Milestone #' + t.milestone_id));
+    });
+    const msOpts = ms => [...ms].map(([id, name]) => `<option value="${id}">${esc(name)}</option>`).join('');
+    const groups = [...byProject.values()];
+    el.innerHTML = '<option value="">All milestones</option>' +
+      (mp[projKey] || groups.length < 2
+        ? groups.map(g => msOpts(g.ms)).join('')
+        : groups.map(g => `<optgroup label="${esc(g.name)}">${msOpts(g.ms)}</optgroup>`).join('')) +
+      (hasNone ? `<option value="${MP_NO_MS}">No milestone</option>` : '');
+    if (mp[msKey] && !el.querySelector(`option[value="${mp[msKey]}"]`)) mp[msKey] = '';   // not in this project
+    el.value = mp[msKey];
+  }
+
+  function _matchesMilestone(t, msFilter) {
+    if (!msFilter) return true;
+    if (msFilter === MP_NO_MS) return !t.milestone_id;
+    return String(t.milestone_id) === msFilter;
   }
 
   // Changes a task's status and patches the local copy with the server's response.
@@ -51690,11 +51914,23 @@ async function submitDsCreate() {
     }));
   }
 
+  // Rows / items carrying [data-tid] inside root open the task detail modal.
+  function _bindDetailOpen(root) {
+    root.querySelectorAll('[data-tid]').forEach(el => {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', e => {
+        if (e.target.closest('select, button, input, [data-mp-toggle]')) return;
+        openMpTaskDetail(el.dataset.tid);
+      });
+    });
+  }
+
   // ── View switcher ───────────────────────────────────────────────────────────
-  // Inner tabs of Projects → My Projects (Overview / My Tasks / Kanban Board).
+  // Inner tabs of the My Projects tab (Overview / My Tasks / Kanban Board).
   async function switchMpView(view, { refresh = false } = {}) {
     mp.view = view;
     $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
+    _sbSubActivate('my-projects', view);
     ['overview', 'tasks', 'board'].forEach(v => {
       const el = $(`#mp-${v}-view`);
       if (el) el.style.display = v === view ? 'flex' : 'none';
@@ -51769,6 +52005,7 @@ async function submitDsCreate() {
       body.innerHTML = list.length ? list.map(_ovItem).join('') : `
         <div class="mp-ov-empty"><i class="fa fa-mug-hot"></i><span>${emptyMsg}</span></div>`;
       _bindToggles(body);
+      _bindDetailOpen(body);
     };
     fill('overdue',  overdue,  'Nothing overdue.');
     fill('today',    today,    'Nothing due today.');
@@ -51834,6 +52071,7 @@ async function submitDsCreate() {
       card.addEventListener('click', () => {
         mp.boardProject = String(p.id);
         const sel = $('#mp-board-project'); if (sel) sel.value = mp.boardProject;
+        _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
         switchMpView('board');
       });
       grid.appendChild(card);
@@ -51857,6 +52095,7 @@ async function submitDsCreate() {
     const list = mp.tasks.filter(t => {
       if (!filterFn(t)) return false;
       if (mp.taskProject && +t.project_id !== +mp.taskProject) return false;
+      if (!_matchesMilestone(t, mp.taskMilestone)) return false;
       if (q && !`${t.title} ${t.project_name || ''} ${t.milestone_name || ''}`.toLowerCase().includes(q)) return false;
       return true;
     }).sort((a, b) => {
@@ -51881,7 +52120,7 @@ async function submitDsCreate() {
         <tr data-tid="${t.id}">
           <td><i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i></td>
           <td>
-            <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}</div>
+            <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}${t.attachments_count ? ` <span style="font-size:10px;font-weight:400;color:var(--text-muted)" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip"></i> ${t.attachments_count}</span>` : ''}</div>
             ${t.milestone_name ? `<div style="font-size:10px;color:var(--text-muted)"><i class="fa fa-flag"></i> ${esc(t.milestone_name)}</div>` : ''}
           </td>
           <td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>
@@ -51892,6 +52131,7 @@ async function submitDsCreate() {
     }).join('');
 
     _bindToggles(tbody);
+    _bindDetailOpen(tbody);
     tbody.querySelectorAll('[data-mp-status]').forEach(sel => sel.addEventListener('change', async () => {
       try {
         await _setStatus(sel.dataset.mpStatus, sel.value);
@@ -51924,6 +52164,7 @@ async function submitDsCreate() {
   function _boardTasks() {
     return mp.tasks.filter(t => {
       if (mp.boardProject && +t.project_id !== +mp.boardProject) return false;
+      if (!_matchesMilestone(t, mp.boardMilestone)) return false;
       if (mp.boardPriority && t.priority !== mp.boardPriority) return false;
       if (mp.boardDue === 'overdue' && !_isOverdue(t))  return false;
       if (mp.boardDue === 'today'   && !_isDueToday(t)) return false;
@@ -51971,6 +52212,7 @@ async function submitDsCreate() {
       <div class="pm-task-card-meta">
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
         ${t.due_date ? `<span class="pm-task-card-due">${_dueHtml(t)}</span>` : ''}
+        ${t.attachments_count ? `<span class="pm-task-card-assign" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip" style="margin-right:2px"></i>${t.attachments_count}</span>` : ''}
       </div>
       <div class="pm-task-card-meta">
         ${!mp.boardProject ? `<span class="pm-task-card-assign">${p?.color ? `<span class="pm-col-dot" style="display:inline-block;background:${esc(p.color)};margin-right:3px"></span>` : '<i class="fa fa-diagram-project" style="margin-right:2px"></i>'}${esc(t.project_name || '')}</span>` : ''}
@@ -51997,6 +52239,12 @@ async function submitDsCreate() {
     });
     card.querySelector('select').addEventListener('change', function () {
       if (this.value) _moveTask(t, this.value);
+    });
+    card.title = 'Click to view task details';
+    card.style.cursor = 'pointer';
+    card.addEventListener('click', e => {
+      if (e.target.closest('select, button, [data-mp-toggle]')) return;
+      openMpTaskDetail(t.id);
     });
     return card;
   }
@@ -52037,6 +52285,172 @@ async function submitDsCreate() {
     }
     renderMpBoard();
   }
+
+  // ── Task detail modal ───────────────────────────────────────────────────────
+  // Renders the cached task at once, then fetches comments + time logs from the server.
+  let _mpDetailId = null;
+
+  const _fmtMinutes = m => {
+    m = +m || 0;
+    const h = Math.floor(m / 60), r = m % 60;
+    return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`;
+  };
+
+  function _detailRow(icon, label, value) {
+    return `
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)"><i class="fa ${icon}" style="margin-right:4px"></i>${label}</div>
+        <div style="font-size:12px;overflow-wrap:anywhere">${value}</div>
+      </div>`;
+  }
+
+  function _renderMpDetail(t, extra) {
+    const body = $('#mp-detail-body');
+    if (!body) return;
+    const p     = _project(t.project_id);
+    const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    const opts  = _statusesFor(t.project_id)
+      .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+    const assignees = (t.assignees || []).length
+      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${esc(a.name)}</span>`).join(' ')
+      : muted('Unassigned');
+    const est    = t.estimated_hours != null ? `${t.estimated_hours} h` : '—';
+    const logged = _fmtMinutes(t.logged_minutes);
+    const pct    = t.estimated_hours ? Math.min(100, Math.round((t.logged_minutes || 0) / (t.estimated_hours * 60) * 100)) : null;
+
+    const section = (icon, title, inner) => `
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:12px;font-weight:600"><i class="fa ${icon}" style="margin-right:5px;color:var(--accent)"></i>${title}</div>
+        ${inner}
+      </div>`;
+
+    let activity;
+    if (!extra) {
+      activity = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading comments and time logs…</div>`;
+    } else if (extra.error) {
+      activity = `<div style="font-size:11px;color:#ef4444">${esc(extra.error)}</div>`;
+    } else {
+      const comments = extra.comments || [];
+      const logs     = extra.time_logs || [];
+      activity =
+        section('fa-comments', `Comments (${comments.length})`, comments.length
+          ? comments.map(c => `
+              <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px">
+                <div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;margin-bottom:4px">
+                  <b>${esc(c.user)}</b>${muted(esc(c.created_at || ''))}
+                </div>
+                <div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(c.body)}</div>
+              </div>`).join('')
+          : `<div style="font-size:11px">${muted('No comments yet.')}</div>`) +
+        section('fa-stopwatch', `Time Logs (${logs.length})`, logs.length
+          ? `<table style="width:100%;border-collapse:collapse;font-size:11px">
+               <thead><tr style="text-align:left;color:var(--text-muted)"><th style="padding:4px">Date</th><th style="padding:4px">User</th><th style="padding:4px">Time</th><th style="padding:4px">Note</th></tr></thead>
+               <tbody>${logs.map(l => `
+                 <tr style="border-top:1px solid var(--border)">
+                   <td style="padding:4px;white-space:nowrap">${esc(l.logged_at || '—')}</td>
+                   <td style="padding:4px">${esc(l.user)}</td>
+                   <td style="padding:4px;white-space:nowrap">${_fmtMinutes(l.minutes)}</td>
+                   <td style="padding:4px">${esc(l.note || '')}</td>
+                 </tr>`).join('')}</tbody>
+             </table>`
+          : `<div style="font-size:11px">${muted('No time logged yet.')}</div>`);
+    }
+
+    $('#mp-detail-heading').textContent = t.title || 'Task Details';
+    body.innerHTML = `
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:16px;font-weight:700;overflow-wrap:anywhere${_isDone(t) ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
+            ${_statusBadge(t)}
+            <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+            ${t.is_overdue ? '<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
+          </div>
+        </div>
+        <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
+      </div>
+
+      ${section('fa-align-left', 'Description', t.description
+        ? `<div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-secondary, transparent);border:1px solid var(--border);border-radius:6px;padding:8px 10px">${esc(t.description)}</div>`
+        : `<div style="font-size:11px">${muted('No description.')}</div>`)}
+
+      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 18px">
+        ${_detailRow('fa-diagram-project', 'Project', `${p?.color ? `<span class="pm-col-dot" style="display:inline-block;background:${esc(p.color)};margin-right:4px"></span>` : ''}${esc(t.project_name || '—')}`)}
+        ${_detailRow('fa-flag', 'Milestone / Phase', t.milestone_name ? esc(t.milestone_name) : muted('—'))}
+        ${_detailRow('fa-calendar', 'Due Date', _dueHtml(t))}
+        ${_detailRow('fa-users', 'Assignees', assignees)}
+        ${_detailRow('fa-hourglass-half', 'Estimated', esc(est))}
+        ${_detailRow('fa-clock', 'Logged', `${esc(logged)}${pct != null ? ` ${muted(`(${pct}% of estimate)`)}` : ''}`)}
+        ${_detailRow('fa-calendar-plus', 'Created', t.created_at ? esc(t.created_at) : muted('—'))}
+        ${_detailRow('fa-circle-check', 'Completed', t.completed_at ? esc(t.completed_at) : muted('—'))}
+      </div>
+
+      <div id="mp-detail-files"></div>
+
+      ${activity}`;
+
+    // Attachments: preloaded with the detail response; managed in place (upload / download / delete own).
+    const filesEl = $('#mp-detail-files');
+    if (filesEl && extra && !extra.error) {
+      TaskFiles.mount(filesEl, {
+        mode: 'mine',
+        taskId: t.id,
+        attachments: extra.attachments || undefined, // undefined → the panel fetches the list
+        canDelete: a => !!a.is_mine,
+        onChange: count => {
+          extra.attachments = null; // stale now — refetched by the panel itself
+          const cached = _task(t.id);
+          if (cached && cached.attachments_count !== count) { cached.attachments_count = count; _renderCurrent(); }
+        },
+      });
+    } else if (filesEl && extra?.error) {
+      filesEl.remove();
+    } else if (filesEl) {
+      filesEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
+    }
+
+    $('#mp-detail-status')?.addEventListener('change', async function () {
+      try {
+        await _setStatus(t.id, this.value);
+        toast('Status updated', 'success');
+      } catch (err) { toast(String(err.message || err), 'error'); }
+      _renderCurrent();
+      const fresh = _task(t.id);
+      if (fresh && _mpDetailId === t.id) _renderMpDetail(fresh, extra);
+    });
+  }
+
+  async function openMpTaskDetail(taskId) {
+    const t = _task(taskId);
+    if (!t) return;
+    _mpDetailId = t.id;
+    _renderMpDetail(t, null);
+    $('#mp-detail-modal').style.display = '';
+
+    let extra;
+    try {
+      const res = await API.pmMyWorkTaskShow(t.id);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load task details');
+      const d = res.body?.data || {};
+      // Refresh the cached copy with the server's latest values
+      const i = mp.tasks.findIndex(x => +x.id === +t.id);
+      if (i !== -1) { const { comments, time_logs, attachments, ...task } = d; mp.tasks[i] = { ...mp.tasks[i], ...task }; }
+      extra = { comments: d.comments || [], time_logs: d.time_logs || [], attachments: d.attachments || [] };
+    } catch (e) {
+      extra = { error: String(e.message || e) };
+    }
+    if (_mpDetailId === t.id && $('#mp-detail-modal').style.display !== 'none') _renderMpDetail(_task(t.id) || t, extra);
+  }
+
+  function _closeMpTaskDetail() {
+    _mpDetailId = null;
+    const m = $('#mp-detail-modal'); if (m) m.style.display = 'none';
+  }
+
+  $('#mp-detail-close')?.addEventListener('click',  _closeMpTaskDetail);
+  $('#mp-detail-cancel')?.addEventListener('click', _closeMpTaskDetail);
+  $('#mp-detail-modal')?.addEventListener('click', e => { if (e.target === $('#mp-detail-modal')) _closeMpTaskDetail(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _mpDetailId !== null) _closeMpTaskDetail(); });
 
   // ── New Task (assigned to me) ───────────────────────────────────────────────
   // Only projects whose team I am on — the server rejects the rest.
@@ -52126,7 +52540,12 @@ async function submitDsCreate() {
   $('#mp-ov-board-btn')?.addEventListener('click', () => switchMpView('board'));
 
   $('#mp-task-search')?.addEventListener('input', function () { mp.taskSearch = this.value; renderMpTasks(); });
-  $('#mp-task-project')?.addEventListener('change', function () { mp.taskProject = this.value; renderMpTasks(); });
+  $('#mp-task-project')?.addEventListener('change', function () {
+    mp.taskProject = this.value;
+    _fillMilestoneSelect('#mp-task-milestone', 'taskProject', 'taskMilestone');
+    renderMpTasks();
+  });
+  $('#mp-task-milestone')?.addEventListener('change', function () { mp.taskMilestone = this.value; renderMpTasks(); });
   $$('#mp-task-filter-chips [data-mptaskfilter]').forEach(chip => chip.addEventListener('click', function () {
     $$('#mp-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
     this.classList.add('active');
@@ -52139,20 +52558,29 @@ async function submitDsCreate() {
     renderMpTasks();
   }));
 
-  $('#mp-board-project') ?.addEventListener('change', function () { mp.boardProject  = this.value; renderMpBoard(); });
+  $('#mp-board-project') ?.addEventListener('change', function () {
+    mp.boardProject = this.value;
+    _fillMilestoneSelect('#mp-board-milestone', 'boardProject', 'boardMilestone');
+    renderMpBoard();
+  });
+  $('#mp-board-milestone')?.addEventListener('change', function () { mp.boardMilestone = this.value; renderMpBoard(); });
   $('#mp-board-priority')?.addEventListener('change', function () { mp.boardPriority = this.value; renderMpBoard(); });
   $('#mp-board-due')     ?.addEventListener('change', function () { mp.boardDue      = this.value; renderMpBoard(); });
 
-  // Ribbon
-  // Ribbon (Projects page → "My Projects" group)
+  // Ribbon (My Projects page)
   const _mpOpen = view => {
-    mp.view = view;   // switchPmView('mine') opens this inner tab
-    if (_activeTab() !== 'projects') activateTab('projects');
-    if (window._pm?.currentView !== 'mine') switchPmView('mine');
+    mp.view = view;   // activateTab('my-projects') opens this inner tab
+    if (_activeTab() !== 'my-projects') activateTab('my-projects');
     else switchMpView(view);
   };
-  $('#rb-mp-tasks')?.addEventListener('click', () => _mpOpen('tasks'));
-  $('#rb-mp-board')?.addEventListener('click', () => _mpOpen('board'));
+  $('#rb-mp-overview')?.addEventListener('click', () => _mpOpen('overview'));
+  $('#rb-mp-tasks')   ?.addEventListener('click', () => _mpOpen('tasks'));
+  $('#rb-mp-board')   ?.addEventListener('click', () => _mpOpen('board'));
+  $('#rb-mp-new-task')?.addEventListener('click', () => {
+    if (_activeTab() !== 'my-projects') activateTab('my-projects');
+    openMpTaskModal();
+  });
+  $('#rb-mp-refresh') ?.addEventListener('click', () => switchMpView(mp.view || 'overview', { refresh: true }));
 
   window._mp = mp;
 }());

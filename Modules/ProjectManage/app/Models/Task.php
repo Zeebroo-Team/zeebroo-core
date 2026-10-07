@@ -89,17 +89,25 @@ class Task extends Model
      *
      * @param int[] $userIds
      */
-    public function syncAssignees(array $userIds): void
+    /** @return int[] ids of users newly added as assignees */
+    public function syncAssignees(array $userIds): array
     {
         $userIds = array_values(array_unique(array_map('intval', $userIds)));
 
-        $this->assignees()->sync($userIds);
+        $changes = $this->assignees()->sync($userIds);
         $this->update(['assigned_to' => $userIds[0] ?? null]);
+
+        return array_map('intval', $changes['attached'] ?? []);
     }
 
     public function comments(): HasMany
     {
         return $this->hasMany(TaskComment::class)->orderBy('id');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TaskAttachment::class)->orderByDesc('id');
     }
 
     public function timeLogs(): HasMany

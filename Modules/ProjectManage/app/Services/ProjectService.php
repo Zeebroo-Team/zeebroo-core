@@ -15,6 +15,7 @@ use Modules\Business\Models\BusinessMember;
 use Modules\HRManagement\Models\Department;
 use Modules\HRManagement\Models\Employee;
 use Modules\Modification\Models\Modification;
+use Modules\Pos\Services\PosNotificationService;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
 
@@ -191,9 +192,18 @@ class ProjectService
             throw ValidationException::withMessages(['user_ids' => 'Only users of this business can be added to the project.']);
         }
 
-        $project->members()->syncWithoutDetaching(
+        $changes = $project->members()->syncWithoutDetaching(
             collect($userIds)->mapWithKeys(fn ($id) => [(int) $id => ['added_by' => $addedBy]])->all()
         );
+
+        // Only people who were not already on the team; a failed notification must not undo the add.
+        if ($added = $changes['attached'] ?? []) {
+            try {
+                app(PosNotificationService::class)->notifyProjectMembersAdded($project, $added, $addedBy);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
     }
 
     /** Removes a user from the team and from every task of theirs in this project. Returns how many tasks they were removed from. */

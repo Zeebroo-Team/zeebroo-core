@@ -18265,6 +18265,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 /* ── Automations panel ──────────────────────────────────────────────────── */
 #panel-automations.active { flex-direction: column; gap: 0; height: 100%; }
 #panel-projects.active    { flex-direction: column; height: 100%; }
+#panel-my-projects.active { flex-direction: column; height: 100%; }
 .auto-search-bar {
   display: flex;
   align-items: center;
