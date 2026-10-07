@@ -1677,6 +1677,9 @@
               <i class="fa fa-inbox"></i>Inbox
               <span class="mp-ib-badge mp-ib-badge--ribbon" data-ib-unread style="display:none"></span>
             </button>
+            <button class="ribbon-btn-lg" id="rb-mp-achievements">
+              <i class="fa fa-trophy"></i>My<br>Achievements
+            </button>
           </div>
           <div class="ribbon-group-label">My Projects</div>
         </div>
@@ -9163,37 +9166,86 @@
         <button class="fin-subnav-btn"         data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
         <button class="fin-subnav-btn"         data-mpsub="calendar"><i class="fa fa-calendar-days"></i> Calendar</button>
         <button class="fin-subnav-btn"         data-mpsub="inbox"><i class="fa fa-inbox"></i> Inbox <span class="mp-ib-badge" data-ib-unread style="display:none"></span></button>
+        <button class="fin-subnav-btn"         data-mpsub="achievements"><i class="fa fa-trophy"></i> My Achievements</button>
       </div>
 
       <!-- ── Overview view ── -->
-      <div id="mp-overview-view" style="display:flex;flex-direction:column;flex:1;overflow-y:auto;padding:14px 24px 20px;gap:14px">
-        <div class="mp-hero" id="mp-ov-hero"></div>
-        <div class="pm-stats-row" id="mp-ov-stats"></div>
+      <div id="mp-overview-view" style="display:flex;flex-direction:column;flex:1;overflow-y:auto">
+        <div class="mp-home">
+          <!-- Greeting (left) + summary pill (right) -->
+          <header class="mp-home-head">
+            <div>
+              <div class="mp-home-date" id="mp-ov-date"></div>
+              <h1 class="mp-home-greet" id="mp-ov-greet"></h1>
+            </div>
+            <div class="mp-home-pill" id="mp-ov-pill"></div>
+          </header>
 
-        <div class="mp-ov-columns">
-          <div class="mp-ov-list mp-ov-list--overdue">
-            <div class="mp-ov-list-head"><i class="fa fa-triangle-exclamation"></i><span>Overdue</span><span class="pm-col-count" id="mp-ov-overdue-count">0</span></div>
-            <div class="mp-ov-list-body" id="mp-ov-overdue"></div>
-          </div>
-          <div class="mp-ov-list mp-ov-list--today">
-            <div class="mp-ov-list-head"><i class="fa fa-calendar-day"></i><span>Due Today</span><span class="pm-col-count" id="mp-ov-today-count">0</span></div>
-            <div class="mp-ov-list-body" id="mp-ov-today"></div>
-          </div>
-          <div class="mp-ov-list mp-ov-list--upcoming">
-            <div class="mp-ov-list-head"><i class="fa fa-calendar-week"></i><span>Upcoming · next 7 days</span><span class="pm-col-count" id="mp-ov-upcoming-count">0</span></div>
-            <div class="mp-ov-list-body" id="mp-ov-upcoming"></div>
-          </div>
-        </div>
+          <div class="mp-home-layout">
+            <!-- ── Main column ── -->
+            <div class="mp-home-main">
+              <!-- This week strip -->
+              <section class="mp-w mp-w--week">
+                <div class="mp-w-head">
+                  <span class="mp-w-title">This week</span>
+                  <button class="mp-w-link" id="mp-ov-cal-btn">Calendar <i class="fa fa-arrow-right"></i></button>
+                </div>
+                <div class="mp-week" id="mp-ov-week"></div>
+              </section>
 
-        <div>
-          <div class="pm-ov-section-head">
-            <div class="pm-ov-section-head-left"><i class="fa fa-diagram-project"></i><span>My Projects</span></div>
-            <button class="pm-ov-viewall-btn" id="mp-ov-board-btn">Open board <i class="fa fa-arrow-right"></i></button>
-          </div>
-          <div id="mp-ov-projects" class="pm-projects-grid"></div>
-          <div id="mp-ov-projects-empty" class="mp-ov-projects-empty" style="display:none">
-            <i class="fa fa-folder-open" style="font-size:34px;margin-bottom:10px;display:block"></i>
-            <div style="font-size:13px">You are not on any project team yet.</div>
+              <div class="mp-home-grid">
+                <!-- My tasks widget -->
+                <section class="mp-w">
+                  <div class="mp-w-head">
+                    <span class="mp-w-title">My tasks</span>
+                    <button class="mp-w-link" id="mp-ov-tasks-all">View all <i class="fa fa-arrow-right"></i></button>
+                  </div>
+                  <div class="mp-w-tabs" id="mp-ov-task-tabs"></div>
+                  <button class="mp-w-create" id="mp-ov-task-create"><i class="fa fa-plus"></i> Create task</button>
+                  <div class="mp-w-body" id="mp-ov-task-list"></div>
+                </section>
+
+                <!-- Overdue widget -->
+                <section class="mp-w mp-w--overdue">
+                  <div class="mp-w-head">
+                    <span class="mp-w-title"><i class="fa fa-triangle-exclamation"></i> Overdue <span class="mp-w-count" id="mp-ov-overdue-count"></span></span>
+                    <button class="mp-w-link" id="mp-ov-overdue-all">View all <i class="fa fa-arrow-right"></i></button>
+                  </div>
+                  <div class="mp-w-body" id="mp-ov-overdue"></div>
+                </section>
+              </div>
+
+              <!-- My projects (list) -->
+              <section class="mp-w">
+                <div class="mp-w-head">
+                  <span class="mp-w-title">My projects</span>
+                  <button class="mp-w-link" id="mp-ov-board-btn">Open board <i class="fa fa-arrow-right"></i></button>
+                </div>
+                <div class="mp-w-tabs" id="mp-ov-proj-tabs"></div>
+                <div class="mp-plist" id="mp-ov-projects"></div>
+              </section>
+            </div>
+
+            <!-- ── Right sidebar ── -->
+            <aside class="mp-home-side">
+              <section class="mp-w">
+                <div class="mp-w-head"><span class="mp-w-title">Your progress</span></div>
+                <div id="mp-ov-progress"></div>
+              </section>
+
+              <section class="mp-w">
+                <div class="mp-w-head">
+                  <span class="mp-w-title">Team <span class="mp-w-count" id="mp-ov-team-count"></span></span>
+                  <button class="mp-w-link" id="mp-ov-team-msg" title="Message your team in the Inbox">Message <i class="fa fa-paper-plane"></i></button>
+                </div>
+                <div class="mp-team" id="mp-ov-team"></div>
+              </section>
+
+              <section class="mp-w">
+                <div class="mp-w-head"><span class="mp-w-title">Recent activity</span></div>
+                <div class="mp-feed" id="mp-ov-activity"></div>
+              </section>
+            </aside>
           </div>
         </div>
       </div>
@@ -9218,6 +9270,8 @@
             <i class="fa fa-plus"></i> New Task
           </button>
         </div>
+        <!-- Owner: delete requests from teammates waiting for approval -->
+        <div class="mp-delreq-banner" id="mp-delreq-banner" style="display:none"></div>
         <div style="flex:1;overflow-y:auto;padding:0 12px 12px">
           <table class="crm-table mp-sort-table" id="mp-tasks-table">
             <thead>
@@ -9228,10 +9282,11 @@
                 <th data-mpsort="priority">Priority</th>
                 <th data-mpsort="due_date">Due</th>
                 <th data-mpsort="status">Status</th>
+                <th style="width:40px"></th>
               </tr>
             </thead>
             <tbody id="mp-tasks-body">
-              <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -9278,24 +9333,27 @@
             <button class="mp-cal-mode" data-cal-mode="week" title="Week view (W)"><i class="fa fa-calendar-week"></i> Week</button>
             <button class="mp-cal-mode" data-cal-mode="agenda" title="Agenda list (A)"><i class="fa fa-list-ul"></i> Agenda</button>
           </div>
-          <button class="svc-form-btn svc-form-btn--primary" id="mp-cal-add" style="margin-left:auto;padding:5px 14px;font-size:12px;white-space:nowrap">
+          <div class="mp-cal-filters">
+            <div class="finance-search-wrap mp-cal-search">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="mp-cal-search" placeholder="Search tasks…" autocomplete="off">
+            </div>
+            <select class="mp-filter-select" id="mp-cal-project" title="Filter by project"></select>
+            <select class="mp-filter-select" id="mp-cal-milestone" title="Filter by milestone"></select>
+            <select class="mp-filter-select" id="mp-cal-priority" title="Filter by priority">
+              <option value="">All priorities</option>
+              <option value="high">High</option>
+              <option value="normal">Normal</option>
+              <option value="low">Low</option>
+            </select>
+            <label class="mp-cal-toggle"><input type="checkbox" id="mp-cal-show-done" checked> Show done</label>
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="mp-cal-add" style="padding:5px 14px;font-size:12px;white-space:nowrap">
             <i class="fa fa-plus"></i> New Task
           </button>
         </div>
-        <div class="finance-toolbar mp-cal-toolbar mp-cal-toolbar--filters">
-          <div class="finance-search-wrap" style="max-width:220px">
-            <i class="fa fa-magnifying-glass"></i>
-            <input type="text" id="mp-cal-search" placeholder="Search tasks…" autocomplete="off">
-          </div>
-          <select class="mp-filter-select" id="mp-cal-project" title="Filter by project"></select>
-          <select class="mp-filter-select" id="mp-cal-milestone" title="Filter by milestone"></select>
-          <select class="mp-filter-select" id="mp-cal-priority" title="Filter by priority">
-            <option value="">All priorities</option>
-            <option value="high">High</option>
-            <option value="normal">Normal</option>
-            <option value="low">Low</option>
-          </select>
-          <label class="mp-cal-toggle"><input type="checkbox" id="mp-cal-show-done" checked> Show done</label>
+        <div class="mp-cal-statbar">
+          <div class="mp-cal-stats" id="mp-cal-stats"></div>
           <div class="mp-cal-legend">
             <span><i class="mp-cal-lg mp-cal-lg--overdue"></i>Overdue</span>
             <span><i class="mp-cal-lg mp-cal-lg--today"></i>Due today</span>
@@ -9304,7 +9362,6 @@
             <span><i class="fa fa-flag-checkered" style="color:#8b5cf6"></i>Project deadline</span>
           </div>
         </div>
-        <div class="mp-cal-stats" id="mp-cal-stats"></div>
         <div class="mp-cal-body">
           <div class="mp-cal-wrap" id="mp-cal-wrap">
             <div class="mp-cal-weekdays" id="mp-cal-weekdays"></div>
@@ -9359,6 +9416,49 @@
               <i class="fa fa-lightbulb"></i> <kbd>C</kbd> compose · <kbd>J</kbd> <kbd>K</kbd> next / previous · <kbd>R</kbd> reply · <kbd>E</kbd> archive · <kbd>#</kbd> trash · <kbd>S</kbd> star · <kbd>Shift</kbd>+<kbd>U</kbd> mark unread · <kbd>/</kbd> search · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> send
             </div>
           </section>
+        </div>
+      </div>
+
+      <!-- ── My Achievements view (my completed tasks, project by project) ── -->
+      <div id="mp-achievements-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <div class="finance-search-wrap" style="max-width:240px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mp-ach-search" placeholder="Search completed tasks…" autocomplete="off">
+          </div>
+          <div class="svc-chip-bar" id="mp-ach-period-chips">
+            <button class="svc-chip active" data-ach-period="all">All time</button>
+            <button class="svc-chip" data-ach-period="year">This year</button>
+            <button class="svc-chip" data-ach-period="month">This month</button>
+            <button class="svc-chip" data-ach-period="week">Last 7 days</button>
+          </div>
+          <select class="mp-filter-select" id="mp-ach-project" title="Filter by project"></select>
+        </div>
+        <div class="mp-ach" style="flex:1;overflow-y:auto">
+          <div class="mp-ach-stats" id="mp-ach-stats"></div>
+          <div class="mp-ach-layout">
+            <!-- Completed tasks, divided by project -->
+            <section class="mp-ach-card mp-ach-done">
+              <div class="mp-ach-card-head">
+                <span><i class="fa fa-circle-check"></i> Completed tasks <span class="mp-ach-muted" id="mp-ach-done-sum"></span></span>
+                <button class="mp-ach-link" id="mp-ach-toggle-all"></button>
+              </div>
+              <div class="mp-ach-projects" id="mp-ach-projects"></div>
+            </section>
+            <aside class="mp-ach-side">
+              <section class="mp-ach-card">
+                <div class="mp-ach-card-head">
+                  <span><i class="fa fa-fire"></i> Activity · 12 weeks</span>
+                  <span class="mp-ach-muted" id="mp-ach-activity-sum"></span>
+                </div>
+                <div class="mp-ach-heat" id="mp-ach-heat"></div>
+              </section>
+              <section class="mp-ach-card">
+                <div class="mp-ach-card-head"><span><i class="fa fa-medal"></i> Badges</span><span class="mp-ach-muted" id="mp-ach-badge-sum"></span></div>
+                <div class="mp-ach-badges" id="mp-ach-badges"></div>
+              </section>
+            </aside>
+          </div>
         </div>
       </div>
 
@@ -10498,15 +10598,46 @@
 
   <!-- ── My Projects: Task Detail Modal ── -->
   <div class="modal-overlay" id="mp-detail-modal" style="display:none">
-    <div class="po-aim-shell" style="width:640px;max-height:88vh;display:flex;flex-direction:column">
-      <div class="po-aim-header">
-        <i class="fa fa-clipboard-list" style="color:var(--accent)"></i>
-        <span id="mp-detail-heading">Task Details</span>
-        <button class="psm-close" id="mp-detail-close"><i class="fa fa-xmark"></i></button>
+    <div class="po-aim-shell mpd-shell">
+      <div class="mpd-header">
+        <div class="mpd-crumb" id="mp-detail-heading">Task Details</div>
+        <button class="mpd-icon-btn" id="mp-detail-close" title="Close (Esc)"><i class="fa fa-xmark"></i></button>
       </div>
-      <div class="po-aim-body" id="mp-detail-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
+      <div class="mpd-body" id="mp-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Request Task Deletion (non-owner asks the task owner) ── -->
+  <div class="modal-overlay" id="mp-delreq-send-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:440px;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-trash-can-arrow-up" style="color:#dc2626"></i>
+        <span>Request task deletion</span>
+        <button class="psm-close" id="mp-delreq-send-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:12px;line-height:1.5" id="mp-delreq-send-text"></div>
+        <label style="font-size:11px;color:var(--text-muted)" for="mp-delreq-send-reason">Reason (optional)</label>
+        <textarea id="mp-delreq-send-reason" rows="3" maxlength="500" placeholder="Why should this task be deleted?" style="resize:vertical;font:inherit;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></textarea>
+      </div>
       <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="mp-detail-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-ghost" id="mp-delreq-send-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="mp-delreq-send-submit"><i class="fa fa-paper-plane"></i> Send request</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Delete Requests (owner approves / rejects; also opened from notifications) ── -->
+  <div class="modal-overlay" id="mp-delreq-modal" style="display:none">
+    <div class="po-aim-shell" style="width:560px;max-height:84vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-trash-can" style="color:#dc2626"></i>
+        <span>Task delete requests</span>
+        <button class="psm-close" id="mp-delreq-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="mp-delreq-body" style="display:flex;flex-direction:column;gap:10px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-delreq-done"><i class="fa fa-xmark"></i> Close</button>
       </div>
     </div>
   </div>

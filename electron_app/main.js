@@ -760,7 +760,7 @@ function apiDownloadFile(path_, token, businessId, branchId) {
     }, (res) => {
       const chunks = [];
       res.on('data', chunk => chunks.push(chunk));
-      res.on('end', () => resolve({ status: res.statusCode, buffer: Buffer.concat(chunks) }));
+      res.on('end', () => resolve({ status: res.statusCode, buffer: Buffer.concat(chunks), contentType: res.headers['content-type'] || '' }));
     });
 
     req.on('timeout', () => { req.destroy(new Error('Request timed out after 120s')); });
@@ -787,6 +787,22 @@ ipcMain.handle('api-download-file', async (_e, { path: p, suggestedFilename }) =
 
     fs.writeFileSync(filePath, res.buffer);
     return { status: 200, savedPath: filePath };
+  } catch (err) {
+    return { status: 0, message: err.message };
+  }
+});
+
+// Fetches an authenticated file (e.g. an uploaded image) and returns it as a data: URL so the
+// renderer can show an inline preview without exposing the API token to <img> requests.
+const PREVIEW_MAX_BYTES = 25 * 1024 * 1024;
+ipcMain.handle('api-fetch-data-url', async (_e, { path: p }) => {
+  try {
+    const res = await apiDownloadFile(p, config.token, config.business_id, config.branch_id);
+    if (res.status !== 200) return { status: res.status, message: `Preview failed (HTTP ${res.status}).` };
+    if (res.buffer.length > PREVIEW_MAX_BYTES) return { status: 413, message: 'File is too large to preview.' };
+    let mime = String(res.contentType).split(';')[0].trim();
+    if (!mime || mime === 'application/octet-stream') mime = extMime(p);
+    return { status: 200, dataUrl: `data:${mime};base64,${res.buffer.toString('base64')}` };
   } catch (err) {
     return { status: 0, message: err.message };
   }

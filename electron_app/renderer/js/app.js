@@ -305,6 +305,7 @@ const _sbSubItems = {
     { view:'board',          icon:'fa-table-columns',        label:'Kanban Board' },
     { view:'calendar',       icon:'fa-calendar-days',        label:'Calendar' },
     { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
+    { view:'achievements',   icon:'fa-trophy',               label:'My Achievements' },
   ],
 };
 
@@ -8921,6 +8922,8 @@ const _notifIconMap = {
   project_member_added:           { icon: 'fa-user-plus',             cls: 'info'    },
   task_assigned:                  { icon: 'fa-list-check',            cls: 'info'    },
   inbox_message:                  { icon: 'fa-envelope',              cls: 'info'    },
+  task_delete_requested:          { icon: 'fa-trash-can-arrow-up',    cls: 'warning' },
+  task_delete_decided:            { icon: 'fa-trash-can',             cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -9072,6 +9075,16 @@ function _notifNavigate(n) {
     case 'inbox_message':
       // A teammate wrote in a My Projects inbox thread — open it.
       window.MpInbox?.openThreadFromOutside(payload.thread_id);
+      break;
+    case 'task_delete_requested':
+      // A teammate asked to delete a task I own — approve / reject it.
+      window.MpDeleteRequests?.open(payload.request_id);
+      break;
+    case 'task_delete_decided':
+      // The owner approved (task gone) or rejected my request — reload My Tasks.
+      if (window._mp) window._mp.view = 'tasks';
+      if (_activeTab() !== 'my-projects') activateTab('my-projects');
+      else window.switchMpView?.('tasks', { refresh: true });
       break;
     default:
       break;
@@ -49591,6 +49604,194 @@ async function submitDsCreate() {
   window.openDevDialog = openDevDialog;
 }());
 
+// ── File previews (task attachments, task comments, inbox) ──────────────────
+// Images get inline thumbnails and open in a full-size viewer. Server files are fetched by
+// the main process (authenticated) as data: URLs and cached; files picked locally but not yet
+// uploaded are shown straight from disk (file://). Thumbnails are <img data-fp-api="…"> and are
+// filled by hydrate(root); anything with data-fp-view opens the viewer, grouped by data-fp-group.
+const FilePreview = (() => {
+  const esc = escHtml;
+  const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+  const CACHE_MAX  = 60;
+  const _cache = new Map(); // api path → Promise<data URL | null>
+
+  const isImage = (name, mime) =>
+    String(mime || '').startsWith('image/') || IMAGE_EXTS.includes(String(name || '').split('.').pop().toLowerCase());
+
+  function localUrl(p) {
+    const s = String(p).replace(/\\/g, '/');
+    return (s.startsWith('/') ? 'file://' : 'file:///') + encodeURI(s).replace(/#/g, '%23').replace(/\?/g, '%3F');
+  }
+
+  function load(apiPath) {
+    if (!_cache.has(apiPath)) {
+      if (_cache.size >= CACHE_MAX) _cache.delete(_cache.keys().next().value);
+      _cache.set(apiPath, window.electronAPI.fetchDataUrl(apiPath)
+        .then(r => (r?.status === 200 ? r.dataUrl : null), () => null)
+        .then(url => { if (!url) _cache.delete(apiPath); return url; }));
+    }
+    return _cache.get(apiPath);
+  }
+
+  /** Thumbnail of an uploaded image. download = API download path, group = viewer group. */
+  function thumbHtml({ download, name, group = '', cls = '' }) {
+    return `<img class="fp-thumb ${cls}" alt="${esc(name)}" title="${esc(name)} — click to preview"
+      data-fp-api="${esc(download)}" data-fp-download="${esc(download)}" data-fp-view data-fp-group="${esc(group)}" data-fp-name="${esc(name)}">`;
+  }
+
+  /** Fills every not-yet-loaded thumbnail inside root. */
+  function hydrate(root) {
+    root?.querySelectorAll('img[data-fp-api]:not([src])').forEach(async img => {
+      img.classList.add('is-loading');
+      const url = await load(img.dataset.fpApi);
+      img.classList.remove('is-loading');
+      if (url) img.src = url;
+      else img.classList.add('is-error');
+    });
+  }
+
+  /**
+   * Picked-but-not-uploaded files: images as removable thumbnails, others as file chips.
+   * Each × carries data-<removeAttr>="<index>".
+   */
+  function pendingHtml(files, removeAttr, group = 'pending') {
+    return files.map((f, i) => {
+      const x = `<i class="fa fa-xmark" data-${removeAttr}="${i}" title="Remove"></i>`;
+      if (isImage(f.name)) {
+        return `<span class="fp-pending" title="${esc(f.name)}">
+          <img src="${esc(localUrl(f.path))}" alt="${esc(f.name)}" data-fp-view data-fp-group="${esc(group)}" data-fp-name="${esc(f.name)}">${x}</span>`;
+      }
+      const [icon, color] = TaskFiles.iconFor(f.name);
+      return `<span class="mp-ib-att" style="cursor:default" title="${esc(f.name)}"><i class="fa ${icon}" style="color:${color}"></i><span>${esc(f.name)}</span>${x}</span>`;
+    }).join('');
+  }
+
+  async function pick(title = 'Attach files') {
+    const result = await window.electronAPI.showOpenDialog({
+      title,
+      filters: [
+        { name: 'Documents & Images', extensions: TaskFiles.EXTS },
+        { name: 'Images', extensions: IMAGE_EXTS },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) return [];
+    return result.filePaths.map(path => ({ path, name: path.split(/[\\/]/).pop() }));
+  }
+
+  async function save(apiPath, name) {
+    const res = await window.electronAPI.downloadFile(apiPath, name);
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+    toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  // ── Viewer ──
+  let lb = null; // { items: [{name, api, src, download}], idx }
+
+  function lbEl() {
+    let el = $('#fp-lightbox');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'fp-lightbox';
+    el.className = 'fp-lb';
+    el.style.display = 'none';
+    el.innerHTML = `
+      <div class="fp-lb-bar">
+        <i class="fa fa-image"></i>
+        <span class="fp-lb-name"></span>
+        <span class="fp-lb-count"></span>
+        <span style="flex:1"></span>
+        <button data-fp-lb="zoom" title="Actual size / fit to screen"><i class="fa fa-magnifying-glass-plus"></i></button>
+        <button data-fp-lb="download" title="Download"><i class="fa fa-download"></i></button>
+        <button data-fp-lb="close" title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="fp-lb-stage" data-fp-lb="backdrop">
+        <img class="fp-lb-img" alt="">
+        <div class="fp-lb-msg"></div>
+      </div>
+      <button class="fp-lb-nav fp-lb-prev" data-fp-lb="prev" title="Previous (←)"><i class="fa fa-chevron-left"></i></button>
+      <button class="fp-lb-nav fp-lb-next" data-fp-lb="next" title="Next (→)"><i class="fa fa-chevron-right"></i></button>`;
+    document.body.appendChild(el);
+
+    el.addEventListener('click', e => {
+      const act = e.target.closest('[data-fp-lb]')?.dataset.fpLb;
+      if (e.target.classList.contains('fp-lb-img')) { el.classList.toggle('is-zoomed'); return; }
+      if (act === 'close' || act === 'backdrop') close();
+      else if (act === 'prev') show(lb.idx - 1);
+      else if (act === 'next') show(lb.idx + 1);
+      else if (act === 'zoom') el.classList.toggle('is-zoomed');
+      else if (act === 'download') { const it = lb?.items[lb.idx]; if (it?.download) save(it.download, it.name); }
+    });
+    return el;
+  }
+
+  async function show(i) {
+    if (!lb) return;
+    const n = lb.items.length;
+    lb.idx = ((i % n) + n) % n;
+    const it  = lb.items[lb.idx];
+    const el  = lbEl();
+    const img = el.querySelector('.fp-lb-img');
+    const msg = el.querySelector('.fp-lb-msg');
+    el.classList.remove('is-zoomed');
+    el.querySelector('.fp-lb-name').textContent  = it.name || '';
+    el.querySelector('.fp-lb-count').textContent = n > 1 ? `${lb.idx + 1} / ${n}` : '';
+    el.querySelectorAll('.fp-lb-nav').forEach(b => { b.style.display = n > 1 ? '' : 'none'; });
+    el.querySelector('[data-fp-lb="download"]').style.display = it.download ? '' : 'none';
+
+    img.style.display = 'none';
+    msg.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Loading preview…';
+    const src = it.src || (it.api ? await load(it.api) : null);
+    if (lb?.items[lb.idx] !== it) return; // moved on while loading
+    if (src) { img.src = src; img.style.display = ''; msg.innerHTML = ''; }
+    else msg.innerHTML = '<i class="fa fa-triangle-exclamation"></i> Could not load this image.';
+  }
+
+  function open(items, idx = 0) {
+    if (!items.length) return;
+    lb = { items, idx };
+    lbEl().style.display = '';
+    show(idx);
+  }
+
+  function close() {
+    lb = null;
+    const el = $('#fp-lightbox');
+    if (el) { el.style.display = 'none'; el.querySelector('.fp-lb-img').removeAttribute('src'); }
+  }
+
+  // Any [data-fp-view] opens the viewer with the other images of its group.
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-fp-view]');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const group = el.dataset.fpGroup;
+    const els   = group ? [...document.querySelectorAll(`[data-fp-view][data-fp-group="${CSS.escape(group)}"]`)] : [el];
+    open(els.map(x => ({
+      name:     x.dataset.fpName || x.getAttribute('alt') || '',
+      api:      x.dataset.fpApi || null,
+      src:      x.dataset.fpApi ? (x.getAttribute('src') || null) : x.getAttribute('src'),
+      download: x.dataset.fpDownload || null,
+    })), Math.max(0, els.indexOf(el)));
+  });
+
+  // Capture phase: Esc / arrows act on the viewer only, not the modal underneath.
+  window.addEventListener('keydown', e => {
+    if (!lb) return;
+    if (e.key === 'Escape')          close();
+    else if (e.key === 'ArrowLeft')  show(lb.idx - 1);
+    else if (e.key === 'ArrowRight') show(lb.idx + 1);
+    else return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  }, true);
+
+  return { isImage, localUrl, thumbHtml, hydrate, pendingHtml, pick, save, open, close };
+})();
+
 // ── Task attachments (shared by Projects + My Projects) ─────────────────────
 // Files (PDF, images, documents…) attached to a task. mode 'manage' = Projects tab
 // (projects_access, any file deletable); mode 'mine' = My Projects (assignee only,
@@ -49687,12 +49888,16 @@ const TaskFiles = (() => {
       let listHtml;
       if (error) listHtml = `<div style="font-size:11px;color:#ef4444">${esc(error)}</div>`;
       else if (!files) listHtml = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
-      else if (!files.length) listHtml = `<div style="font-size:11px">${muted('No files attached yet. Upload PDFs, images or documents for reference.')}</div>`;
+      else if (!files.length) listHtml = `<div class="tf-empty" data-tf-upload style="font-size:11px">${muted('No files attached yet. Click to upload PDFs, images or documents.')}</div>`;
       else listHtml = files.map(a => {
         const [icon, color] = iconFor(a.name);
+        // Images show a thumbnail that opens the full-size viewer.
+        const lead = FilePreview.isImage(a.name, a.mime_type)
+          ? FilePreview.thumbHtml({ download: ROUTES[mode].download(a.id), name: a.name, group: `task-${taskId}`, cls: 'fp-thumb--sm' })
+          : `<i class="fa ${icon}" style="font-size:20px;color:${color};flex-shrink:0;width:20px;text-align:center"></i>`;
         return `
-          <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:6px;padding:7px 10px">
-            <i class="fa ${icon}" style="font-size:20px;color:${color};flex-shrink:0;width:20px;text-align:center"></i>
+          <div class="tf-item" style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:6px;padding:7px 10px">
+            ${lead}
             <div style="flex:1;min-width:0">
               <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
               <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${TeamProfile.link(a.user_id, a.uploaded_by)} · ${esc(a.created_at || '')}</div>
@@ -49703,25 +49908,26 @@ const TaskFiles = (() => {
       }).join('');
 
       el.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="font-size:12px;font-weight:600;flex:1"><i class="fa fa-paperclip" style="margin-right:5px;color:var(--accent)"></i>Attachments${files ? ` (${files.length})` : ''}</div>
-            <button class="po-btn-ghost" data-tf-upload style="padding:3px 10px;font-size:11px"${busy ? ' disabled' : ''}>
+        <div class="tf-panel" style="display:flex;flex-direction:column;gap:6px">
+          <div class="tf-head" style="display:flex;align-items:center;gap:8px">
+            <div class="tf-title" style="font-size:12px;font-weight:600;flex:1"><i class="fa fa-paperclip" style="margin-right:5px;color:var(--accent)"></i>Attachments${files ? ` <span class="tf-count">(${files.length})</span>` : ''}</div>
+            <button class="po-btn-ghost tf-upload" data-tf-upload style="padding:3px 10px;font-size:11px"${busy ? ' disabled' : ''} title="PDF, images, Word, Excel, PowerPoint, text or zip — up to ${fmtSize(MAX_BYTES)} each">
               <i class="fa ${busy ? 'fa-spinner fa-spin' : 'fa-upload'}"></i> ${busy ? 'Uploading…' : 'Upload Files'}
             </button>
           </div>
-          <div style="font-size:10px;color:var(--text-muted)">PDF, images, Word, Excel, PowerPoint, text or zip — up to ${fmtSize(MAX_BYTES)} each.</div>
-          ${listHtml}
+          <div class="tf-hint" style="font-size:10px;color:var(--text-muted)">PDF, images, Word, Excel, PowerPoint, text or zip — up to ${fmtSize(MAX_BYTES)} each.</div>
+          <div class="tf-list">${listHtml}</div>
         </div>`;
+      FilePreview.hydrate(el);
 
-      el.querySelector('[data-tf-upload]')?.addEventListener('click', async () => {
+      el.querySelectorAll('[data-tf-upload]').forEach(b => b.addEventListener('click', async () => {
         if (busy) return;
         busy = true; render();
         try {
           if (await pickAndUpload(mode, taskId)) await reload();
         } catch (e) { toast(String(e.message || e), 'error'); }
         busy = false; render();
-      });
+      }));
       el.querySelectorAll('[data-tf-dl]').forEach(b => b.addEventListener('click', () => {
         const a = files.find(x => +x.id === +b.dataset.tfDl);
         if (a) download(mode, a);
@@ -49760,7 +49966,7 @@ const TaskFiles = (() => {
   $('#task-files-modal')?.addEventListener('click', e => { if (e.target === $('#task-files-modal')) closeModal(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _modalTaskId !== null) closeModal(); });
 
-  return { mount, openModal, fmtSize, iconFor, EXTS };
+  return { mount, openModal, download, fmtSize, iconFor, EXTS, ROUTES };
 })();
 
 // ── Team-member profile (shared by Projects + My Projects) ──────────────────
@@ -52042,6 +52248,7 @@ const TeamProfile = (() => {
     loaded:        false,
     tasks:         [],
     projects:      [],      // each carries .statuses (built-in + custom board columns)
+    team:          [],      // teammates across my projects (incl. me, is_me) with project_ids
     taskFilter:    'open',
     taskProject:   '',
     taskMilestone: '',      // '' = all, MP_NO_MS = tasks without a milestone, else a milestone id
@@ -52060,6 +52267,15 @@ const TeamProfile = (() => {
     calPriority:   '',
     calSearch:     '',
     calShowDone:   true,
+    ovTaskTab:     'upcoming', // Overview "My tasks" widget: 'upcoming' | 'today' | 'completed'
+    ovTeamAll:     false,      // Overview "Team" panel expanded past the first 8
+    ovProjTab:     'active',   // Overview "Projects" widget: 'active' | 'completed' | 'all'
+    ovExpanded:    false,      // "Show more" in the My tasks widget
+    achPeriod:     'all',      // My Achievements: 'all' | 'year' | 'month' | 'week'
+    achProject:    '',
+    achSearch:     '',
+    achCollapsed:  new Set(),  // project ids whose completed list is folded away
+    deleteRequests: [],        // pending requests from teammates to delete tasks I own
   };
 
   // Local YYYY-MM-DD — toISOString() is UTC and would shift "today" near midnight.
@@ -52080,6 +52296,11 @@ const TeamProfile = (() => {
   function _statusMeta(t) {
     return _statusesFor(t.project_id).find(s => s.status === t.status)
       || { status: t.status, label: t.status.replace(/_/g, ' '), sort_order: 50, is_custom: true, color: null };
+  }
+
+  const BUILTIN_STATUS_COLORS = { todo: '#64748b', in_progress: '#3b82f6', review: '#a855f7', done: '#22c55e' };
+  function _statusColor(s) {
+    return (!s.is_custom && BUILTIN_STATUS_COLORS[s.status]) || s.color || '#0ea5e9';
   }
 
   function _statusBadge(t) {
@@ -52104,10 +52325,13 @@ const TeamProfile = (() => {
   }
 
   async function _fetchMyWork() {
-    const res = await API.pmMyWork();
+    // Delete requests waiting for me (tasks I own) load alongside; a failure there is not fatal.
+    const [res, reqs] = await Promise.all([API.pmMyWork(), API.pmMyWorkDeleteRequests().catch(() => null)]);
     if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
     mp.tasks    = res.body?.data?.tasks    || [];
     mp.projects = res.body?.data?.projects || [];
+    mp.team     = res.body?.data?.team     || [];
+    mp.deleteRequests = reqs && reqs.status < 400 ? (reqs.body?.data || []) : [];
     mp.loaded   = true;
     _fillProjectSelects();
   }
@@ -52115,7 +52339,7 @@ const TeamProfile = (() => {
   function _fillProjectSelects() {
     const opts = '<option value="">All projects</option>' +
       mp.projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
-    [['#mp-task-project', 'taskProject'], ['#mp-board-project', 'boardProject'], ['#mp-cal-project', 'calProject']].forEach(([sel, key]) => {
+    [['#mp-task-project', 'taskProject'], ['#mp-board-project', 'boardProject'], ['#mp-cal-project', 'calProject'], ['#mp-ach-project', 'achProject']].forEach(([sel, key]) => {
       const el = $(sel);
       if (!el) return;
       if (mp[key] && !_project(mp[key])) mp[key] = '';   // project no longer visible
@@ -52198,7 +52422,7 @@ const TeamProfile = (() => {
     mp.view = view;
     $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
     _sbSubActivate('my-projects', view);
-    ['overview', 'tasks', 'board', 'calendar', 'inbox'].forEach(v => {
+    ['overview', 'tasks', 'board', 'calendar', 'inbox', 'achievements'].forEach(v => {
       const el = $(`#mp-${v}-view`);
       if (el) el.style.display = v === view ? 'flex' : 'none';
     });
@@ -52218,135 +52442,364 @@ const TeamProfile = (() => {
     else if (mp.view === 'board') renderMpBoard();
     else if (mp.view === 'calendar') renderMpCalendar();
     else if (mp.view === 'inbox') window.MpInbox?.show();
+    else if (mp.view === 'achievements') renderMpAchievements();
   }
 
-  // ── Overview: stats, overdue / today / upcoming, my projects ───────────────
+  // ── Overview: greeting + pill, week strip, tasks / overdue / project cards, and a
+  //    right sidebar with progress, team (with photos) and recent activity ─────────────
+  const MP_OV_LIMIT = 7;
+  const _mpDayFmt   = (d, opts) => d.toLocaleDateString(undefined, opts);
+  const _mpDaysLate = t => Math.round((_parseYmd(_today()) - _parseYmd(t.due_date)) / 86400000);
+
+  // Short, human due label: Today / Tomorrow / Yesterday / weekday (this week) / "Oct 17".
+  function _ovDueLabel(t) {
+    if (!t.due_date) return '';
+    const d    = _parseYmd(t.due_date);
+    const diff = Math.round((d - _parseYmd(_today())) / 86400000);
+    let label;
+    if (diff === 0)                  label = 'Today';
+    else if (diff === 1)             label = 'Tomorrow';
+    else if (diff === -1)            label = 'Yesterday';
+    else if (diff > 1 && diff < 7)   label = _mpDayFmt(d, { weekday: 'long' });
+    else label = _mpDayFmt(d, d.getFullYear() === new Date().getFullYear()
+      ? { month: 'short', day: 'numeric' }
+      : { month: 'short', day: 'numeric', year: 'numeric' });
+    const cls = _isOverdue(t) ? 'is-overdue' : diff === 0 ? 'is-today' : diff === 1 ? 'is-soon' : '';
+    return `<span class="mp-w-due ${cls}">${esc(label)}</span>`;
+  }
+
+  // Server timestamps ("YYYY-MM-DD HH:MM:SS") are UTC (config app.timezone).
+  const _mpUtc = dt => new Date(String(dt).replace(' ', 'T') + 'Z');
+
+  // "5 min ago" / "3 h ago" / "2 d ago" / "Oct 3" for a server timestamp.
+  function _mpAgo(dt) {
+    const t = _mpUtc(dt);
+    const mins = Math.round((Date.now() - t.getTime()) / 60000);
+    if (!Number.isFinite(mins)) return '';
+    if (mins < 1)    return 'just now';
+    if (mins < 60)   return `${mins} min ago`;
+    if (mins < 1440) return `${Math.round(mins / 60)} h ago`;
+    if (mins < 10080) return `${Math.round(mins / 1440)} d ago`;
+    return _mpDayFmt(t, { month: 'short', day: 'numeric' });
+  }
+
+  // Round avatar (photo or coloured initial) that opens the member's profile.
+  function _ovAvatar(u, cls = '') {
+    return `<span class="mp-av ${cls}" style="background:${TeamProfile.avatarColor(u.name)}" data-profile-uid="${+u.id}" data-profile-name="${esc(u.name)}" title="${esc(u.name)}">${TeamProfile.avatarInner(u.name, u.avatar_url)}</span>`;
+  }
+
+  const _ovOnline = u => u.last_seen_at && (Date.now() - _mpUtc(u.last_seen_at).getTime()) < 5 * 60000;
+
+  function _goTasks(filter) {
+    $(`#mp-task-filter-chips [data-mptaskfilter="${filter}"]`)?.click();
+    switchMpView('tasks');
+  }
+
   function renderMpOverview() {
-    const open     = mp.tasks.filter(t => !_isDone(t));
-    const overdue  = open.filter(_isOverdue).sort(_byDue);
-    const today    = open.filter(_isDueToday);
-    const upcoming = open.filter(_isThisWeek).sort(_byDue);
+    const open      = mp.tasks.filter(t => !_isDone(t));
+    const overdue   = open.filter(_isOverdue);
+    const today     = open.filter(_isDueToday);
+    const completed = mp.tasks.length - open.length;
 
-    const heroEl = $('#mp-ov-hero');
-    if (heroEl) {
-      const hr = new Date().getHours();
-      const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
-      const dateStr = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-      const parts = [];
-      if (overdue.length) parts.push(`<b class="mp-hero-hl mp-hero-hl--overdue">${overdue.length} overdue</b>`);
-      if (today.length)   parts.push(`<b class="mp-hero-hl mp-hero-hl--today">${today.length} due today</b>`);
-      const summary = !open.length
-        ? 'You\'re all caught up — no open tasks. 🎉'
-        : parts.length
-          ? `You have ${parts.join(' and ')} out of ${open.length} open task${open.length === 1 ? '' : 's'}.`
-          : `You have ${open.length} open task${open.length === 1 ? '' : 's'} and nothing urgent. Nice work!`;
-      heroEl.innerHTML = `
-        <div class="mp-hero-text">
-          <div class="mp-hero-date">${esc(dateStr)}</div>
-          <div class="mp-hero-title">${greet} 👋</div>
-          <div class="mp-hero-sub">${summary}</div>
-        </div>`;
+    // Greeting
+    const hr    = new Date().getHours();
+    const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
+    const first = String(state._userName || '').trim().split(/\s+/)[0];
+    const dateEl  = $('#mp-ov-date');
+    const greetEl = $('#mp-ov-greet');
+    if (dateEl)  dateEl.textContent  = _mpDayFmt(new Date(), { weekday: 'long', month: 'long', day: 'numeric' });
+    if (greetEl) greetEl.textContent = first ? `${greet}, ${first}` : greet;
+
+    // Summary pill — each segment jumps to the matching My Tasks filter
+    const pill = $('#mp-ov-pill');
+    if (pill) {
+      const segs = [
+        { icon: 'fa-circle-check',         n: completed,      label: 'completed', go: 'done' },
+        { icon: 'fa-list-check',           n: open.length,    label: 'open',      go: 'open' },
+        { icon: 'fa-calendar-day',         n: today.length,   label: 'due today', go: 'today',   cls: today.length   ? 'is-today'   : '' },
+        { icon: 'fa-triangle-exclamation', n: overdue.length, label: 'overdue',   go: 'overdue', cls: overdue.length ? 'is-overdue' : '' },
+      ];
+      pill.innerHTML = segs.map(s => `
+        <button class="mp-home-pill-seg ${s.cls || ''}" data-mp-goto="${s.go}" title="View ${esc(s.label)} tasks">
+          <i class="fa ${s.icon}"></i><b>${s.n}</b><span>${s.label}</span>
+        </button>`).join('<span class="mp-home-pill-sep"></span>');
+      pill.querySelectorAll('[data-mp-goto]').forEach(b => b.addEventListener('click', () => _goTasks(b.dataset.mpGoto)));
     }
 
-    const tiles = [
-      { cls: 'total',     icon: 'fa-list-check',           label: 'Open Tasks', value: open.length,                   filter: 'open' },
-      { cls: 'on_hold',   icon: 'fa-calendar-day',         label: 'Due Today',  value: today.length,                  filter: 'today' },
-      { cls: 'overdue',   icon: 'fa-triangle-exclamation', label: 'Overdue',    value: overdue.length,                filter: 'overdue' },
-      { cls: 'active',    icon: 'fa-circle-check',         label: 'Completed',  value: mp.tasks.length - open.length, filter: 'done' },
-    ];
-    const statsEl = $('#mp-ov-stats');
-    if (statsEl) {
-      statsEl.innerHTML = tiles.map(s => `
-        <div class="pm-stat-tile pm-stat-tile--${s.cls} mp-stat-link" data-mp-goto="${s.filter}" title="View ${esc(s.label.toLowerCase())}">
-          <div class="pm-stat-tile-icon"><i class="fa ${s.icon}"></i></div>
-          <div><div class="pm-stat-tile-value">${s.value}</div><div class="pm-stat-tile-label">${s.label}</div></div>
-          <i class="fa fa-chevron-right mp-stat-arrow"></i>
-        </div>`).join('');
-      statsEl.querySelectorAll('[data-mp-goto]').forEach(el => el.addEventListener('click', () => {
-        $(`#mp-task-filter-chips [data-mptaskfilter="${el.dataset.mpGoto}"]`)?.click();
-        switchMpView('tasks');
-      }));
-    }
-
-    const fill = (key, list, emptyMsg) => {
-      const body = $(`#mp-ov-${key}`);
-      const cnt  = $(`#mp-ov-${key}-count`);
-      if (cnt) cnt.textContent = list.length;
-      if (!body) return;
-      body.innerHTML = list.length ? list.map(_ovItem).join('') : `
-        <div class="mp-ov-empty"><i class="fa fa-mug-hot"></i><span>${emptyMsg}</span></div>`;
-      _bindToggles(body);
-      _bindDetailOpen(body);
-    };
-    fill('overdue',  overdue,  'Nothing overdue.');
-    fill('today',    today,    'Nothing due today.');
-    fill('upcoming', upcoming, 'Nothing due in the next 7 days.');
-
-    _renderOverviewProjects();
+    _renderOvWeek();
+    _renderOvTasks();
+    _renderOvOverdue();
+    _renderOvProjects();
+    _renderOvProgress();
+    _renderOvTeam();
+    _renderOvActivity();
   }
 
-  function _ovItem(t) {
+  // Mon–Sun of the current week with the number of open tasks due each day.
+  function _renderOvWeek() {
+    const el = $('#mp-ov-week');
+    if (!el) return;
+    const start = _weekStart(new Date());
+    const tkey  = _today();
+    el.innerHTML = Array.from({ length: 7 }, (_, i) => {
+      const d    = _addDays(start, i);
+      const key  = _ymd(d);
+      const due  = mp.tasks.filter(t => !_isDone(t) && t.due_date === key);
+      const late = key < tkey && due.length;
+      const cls  = [key === tkey && 'is-today', key < tkey && 'is-past', late && 'is-late'].filter(Boolean).join(' ');
+      return `
+        <button class="mp-week-day ${cls}" data-day="${key}" title="Open ${esc(_mpDayFmt(d, { weekday: 'long', month: 'short', day: 'numeric' }))} in the calendar">
+          <span class="mp-week-dow">${esc(_mpDayFmt(d, { weekday: 'short' }))}</span>
+          <span class="mp-week-num">${d.getDate()}</span>
+          <span class="mp-week-cnt">${due.length ? `${due.length} task${due.length === 1 ? '' : 's'}` : '—'}</span>
+        </button>`;
+    }).join('');
+    el.querySelectorAll('[data-day]').forEach(b => b.addEventListener('click', () => {
+      mp.calDate     = _parseYmd(b.dataset.day);
+      mp.calSelected = b.dataset.day;
+      switchMpView('calendar');
+    }));
+  }
+
+  // Tab bar helper: [{ key, label, count? }] → buttons; onPick(key) re-renders.
+  function _ovTabs(el, tabs, active, onPick) {
+    el.innerHTML = tabs.map(t => `
+      <button class="mp-w-tab${t.key === active ? ' active' : ''}${t.alert ? ' is-alert' : ''}" data-key="${t.key}">
+        ${esc(t.label)}${t.count != null ? ` <span class="mp-w-tab-n">${t.count}</span>` : ''}
+      </button>`).join('');
+    el.querySelectorAll('[data-key]').forEach(b => b.addEventListener('click', () => onPick(b.dataset.key)));
+  }
+
+  // One task row (check, title, priority flag, project chip, due / days-late label).
+  function _ovTaskRow(t, { late = false } = {}) {
+    const done = _isDone(t);
+    const c    = esc(_project(t.project_id)?.color || '#64748b');
+    const n    = late ? _mpDaysLate(t) : 0;
     return `
-      <div class="mp-ov-item" data-tid="${t.id}">
-        <i class="fa fa-circle mp-check" data-mp-toggle="${t.id}" title="Mark as done"></i>
-        <div class="mp-ov-item-body">
-          <div class="mp-ov-item-title">${esc(t.title)}</div>
-          <div class="mp-ov-item-meta">
-            <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
-            <span><i class="fa fa-diagram-project"></i> ${esc(t.project_name || '')}</span>
-            ${t.due_date ? `<span>${_dueHtml(t)}</span>` : ''}
-          </div>
-        </div>
-        ${_statusBadge(t)}
+      <div class="mp-w-row${done ? ' is-done' : ''}" data-tid="${t.id}">
+        <i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i>
+        <span class="mp-w-row-title">${esc(t.title)}</span>
+        ${t.priority === 'high' && !done ? '<span class="mp-w-flag" title="High priority"><i class="fa fa-flag"></i></span>' : ''}
+        ${t.project_name ? `<span class="mp-w-chip" style="--c:${c}" title="${esc(t.project_name)}">${esc(t.project_name)}</span>` : ''}
+        ${late ? `<span class="mp-w-due is-overdue">${n} day${n === 1 ? '' : 's'} late</span>` : _ovDueLabel(t)}
       </div>`;
   }
 
-  function _renderOverviewProjects() {
-    const grid  = $('#mp-ov-projects');
-    const empty = $('#mp-ov-projects-empty');
-    if (!grid) return;
-    grid.innerHTML = '';
-    if (!mp.projects.length) { grid.style.display = 'none'; if (empty) empty.style.display = 'block'; return; }
-    grid.style.display = '';
-    if (empty) empty.style.display = 'none';
+  function _renderOvTasks() {
+    const tabsEl = $('#mp-ov-task-tabs');
+    const body   = $('#mp-ov-task-list');
+    if (!tabsEl || !body) return;
 
-    mp.projects.forEach(p => {
-      const mine  = mp.tasks.filter(t => +t.project_id === +p.id);
-      const done  = mine.filter(_isDone).length;
-      const pct   = mine.length ? Math.round((done / mine.length) * 100) : 0;
-      const color = p.color || 'var(--accent)';
-      const card  = document.createElement('div');
-      card.className = 'pm-project-card mp-proj-card';
-      card.style.setProperty('--mp-proj-color', color);
-      card.title = 'Open this project on the kanban board';
-      card.innerHTML = `
-        <div class="mp-proj-head">
-          <div class="mp-proj-avatar">${esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
-          <div class="mp-proj-title">
-            <span class="pm-project-card-name" title="${esc(p.name)}">${esc(p.name)}</span>
-            <div class="pm-project-card-meta">
-              <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
-              ${p.due_date ? `<span class="pm-task-card-due"><i class="fa fa-calendar" style="margin-right:3px"></i>${esc(p.due_date)}</span>` : ''}
+    const open = mp.tasks.filter(t => !_isDone(t));
+    const sets = {
+      upcoming:  open.filter(t => !_isOverdue(t)).sort(_byDue),
+      today:     open.filter(_isDueToday),
+      completed: mp.tasks.filter(_isDone).sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')),
+    };
+    if (!sets[mp.ovTaskTab]) mp.ovTaskTab = 'upcoming';
+    _ovTabs(tabsEl, [
+      { key: 'upcoming',  label: 'Upcoming',  count: sets.upcoming.length },
+      { key: 'today',     label: 'Due today', count: sets.today.length },
+      { key: 'completed', label: 'Completed', count: sets.completed.length },
+    ], mp.ovTaskTab, key => { mp.ovTaskTab = key; mp.ovExpanded = false; _renderOvTasks(); });
+
+    const list  = sets[mp.ovTaskTab];
+    const shown = mp.ovExpanded ? list : list.slice(0, MP_OV_LIMIT);
+    if (!list.length) {
+      const msg = { upcoming: 'No upcoming tasks — you\'re all caught up.', today: 'Nothing due today.', completed: 'No completed tasks yet.' }[mp.ovTaskTab];
+      body.innerHTML = `<div class="mp-w-empty"><i class="fa fa-mug-hot"></i><span>${msg}</span></div>`;
+      return;
+    }
+
+    body.innerHTML = shown.map(t => _ovTaskRow(t)).join('') + (list.length > MP_OV_LIMIT
+      ? `<button class="mp-w-more" id="mp-ov-more">${mp.ovExpanded ? 'Show less' : `Show ${list.length - MP_OV_LIMIT} more`}</button>`
+      : '');
+
+    $('#mp-ov-more')?.addEventListener('click', () => { mp.ovExpanded = !mp.ovExpanded; _renderOvTasks(); });
+    _bindToggles(body);
+    _bindDetailOpen(body);
+  }
+
+  // Overdue tasks, oldest first.
+  function _renderOvOverdue() {
+    const body = $('#mp-ov-overdue');
+    if (!body) return;
+    const list = mp.tasks.filter(_isOverdue).sort(_byDue);
+    const cnt  = $('#mp-ov-overdue-count'); if (cnt) cnt.textContent = list.length || '';
+    if (!list.length) {
+      body.innerHTML = `<div class="mp-w-empty is-good"><i class="fa fa-circle-check"></i><span>Nothing overdue — nice work!</span></div>`;
+      return;
+    }
+    body.innerHTML = list.slice(0, MP_OV_LIMIT).map(t => _ovTaskRow(t, { late: true })).join('') +
+      (list.length > MP_OV_LIMIT ? `<button class="mp-w-more" data-mp-overdue-more>Show all ${list.length}</button>` : '');
+    body.querySelector('[data-mp-overdue-more]')?.addEventListener('click', () => _goTasks('overdue'));
+    _bindToggles(body);
+    _bindDetailOpen(body);
+  }
+
+  function _renderOvProjects() {
+    const tabsEl = $('#mp-ov-proj-tabs');
+    const body   = $('#mp-ov-projects');
+    if (!tabsEl || !body) return;
+
+    const sets = {
+      active:    mp.projects.filter(p => p.status !== 'completed'),
+      completed: mp.projects.filter(p => p.status === 'completed'),
+      all:       mp.projects,
+    };
+    _ovTabs(tabsEl, [
+      { key: 'active',    label: 'Active',    count: sets.active.length },
+      { key: 'completed', label: 'Completed', count: sets.completed.length },
+      { key: 'all',       label: 'All',       count: sets.all.length },
+    ], mp.ovProjTab, key => { mp.ovProjTab = key; _renderOvProjects(); });
+
+    const list = sets[mp.ovProjTab] || [];
+    if (!list.length) {
+      body.innerHTML = `<div class="mp-w-empty"><i class="fa fa-folder-open"></i><span>${mp.projects.length ? 'No projects here.' : 'You are not on any project team yet.'}</span></div>`;
+      return;
+    }
+
+    body.innerHTML = `
+      <div class="mp-plist-head">
+        <span>Project</span><span>Open</span><span>Overdue</span><span>Done</span><span>Progress</span><span>Team</span><span>Due</span><span></span>
+      </div>` + list.map(p => {
+      const mine    = mp.tasks.filter(t => +t.project_id === +p.id);
+      const done    = mine.filter(_isDone).length;
+      const late    = mine.filter(_isOverdue).length;
+      const pct     = mine.length ? Math.round((done / mine.length) * 100) : 0;
+      const color   = esc(p.color || 'var(--accent)');
+      const members = mp.team.filter(u => (u.project_ids || []).includes(+p.id));
+      const stack   = members.slice(0, 4).map(u => _ovAvatar(u, 'mp-av--sm')).join('') +
+        (members.length > 4 ? `<span class="mp-av mp-av--sm mp-av--more">+${members.length - 4}</span>` : '');
+      return `
+        <div class="mp-prow" data-pid="${p.id}" style="--c:${color}" title="Open this project on the kanban board">
+          <div class="mp-prow-main">
+            <div class="mp-pcard-avatar">${p.image_url
+              ? `<img src="${esc(p.image_url)}" alt="" onerror="this.remove()">`
+              : esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
+            <div class="mp-pcard-title">
+              <div class="mp-pcard-name" title="${esc(p.name)}">${esc(p.name)}</div>
+              <div class="mp-pcard-sub">
+                <span class="pm-status pm-status--${esc(p.status)}">${esc(String(p.status).replace(/_/g, ' '))}</span>
+                <span class="pm-priority pm-priority--${esc(p.priority)}">${esc(p.priority)}</span>
+              </div>
             </div>
           </div>
-          <span class="pm-status pm-status--${esc(p.status)}">${esc(p.status.replace('_', ' '))}</span>
-        </div>
-        <div class="mp-proj-progress-row">
-          <span>Progress</span><span class="pm-progress-pct">${pct}%</span>
-        </div>
-        <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
-        <div class="mp-proj-foot">
-          <span class="pm-task-count"><i class="fa fa-user-check" style="margin-right:5px"></i>${mine.length} my task${mine.length === 1 ? '' : 's'} · ${done} done</span>
-          <button class="mp-proj-info" title="Project details and team members"><i class="fa fa-circle-info"></i> Details</button>
-          <span class="mp-proj-open">Open <i class="fa fa-arrow-right"></i></span>
+          <div class="mp-prow-num">${mine.length - done}</div>
+          <div class="mp-prow-num ${late ? 'is-overdue' : ''}">${late}</div>
+          <div class="mp-prow-num">${done}</div>
+          <div class="mp-pcard-progress">
+            <div class="mp-w-bar"><div style="width:${pct}%"></div></div>
+            <span>${pct}%</span>
+          </div>
+          <div class="mp-av-stack">${stack || '<span class="mp-pcard-muted">No team yet</span>'}</div>
+          <div class="mp-pcard-muted">${p.due_date ? `<i class="fa fa-calendar"></i> ${esc(_mpDayFmt(_parseYmd(p.due_date), { month: 'short', day: 'numeric', year: 'numeric' }))}` : '—'}</div>
+          <button class="mp-w-icon-btn" data-pinfo="${p.id}" title="Project details and team members"><i class="fa fa-circle-info"></i></button>
         </div>`;
-      card.querySelector('.mp-proj-info').addEventListener('click', e => {
-        e.stopPropagation();
-        openMpProjectDetail(p.id);
-      });
-      card.addEventListener('click', () => _openMpBoardFor(p.id));
-      grid.appendChild(card);
+    }).join('');
+
+    body.querySelectorAll('[data-pinfo]').forEach(b => b.addEventListener('click', e => {
+      e.stopPropagation();
+      openMpProjectDetail(b.dataset.pinfo);
+    }));
+    body.querySelectorAll('[data-pid]').forEach(card => card.addEventListener('click', () => _openMpBoardFor(card.dataset.pid)));
+  }
+
+  // Completion ring + my tasks broken down by status.
+  function _renderOvProgress() {
+    const el = $('#mp-ov-progress');
+    if (!el) return;
+    const total = mp.tasks.length;
+    const done  = mp.tasks.filter(_isDone).length;
+    const pct   = total ? Math.round((done / total) * 100) : 0;
+    const R = 34, C = 2 * Math.PI * R;
+
+    const groups = new Map();   // status → { label, color, n, order }
+    mp.tasks.forEach(t => {
+      const s = _statusMeta(t);
+      const g = groups.get(t.status) || { label: s.label, color: _statusColor(s), n: 0, order: s.sort_order ?? 50 };
+      g.n++;
+      groups.set(t.status, g);
     });
+    const rows = [...groups.values()].sort((a, b) => a.order - b.order);
+
+    el.innerHTML = `
+      <div class="mp-prog">
+        <svg class="mp-prog-ring" viewBox="0 0 80 80" width="84" height="84">
+          <circle cx="40" cy="40" r="${R}" class="mp-prog-track"></circle>
+          <circle cx="40" cy="40" r="${R}" class="mp-prog-fill" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - pct / 100)}"></circle>
+          <text x="40" y="44" text-anchor="middle" class="mp-prog-pct">${pct}%</text>
+        </svg>
+        <div class="mp-prog-text">
+          <b>${done} of ${total}</b>
+          <span>tasks completed</span>
+        </div>
+      </div>
+      ${rows.length ? `<div class="mp-prog-rows">${rows.map(g => `
+        <div class="mp-prog-row" style="--st:${esc(g.color)}">
+          <span class="mp-status-pill-dot"></span>
+          <span class="mp-prog-label">${esc(g.label)}</span>
+          <div class="mp-prog-bar"><div style="width:${total ? (g.n / total) * 100 : 0}%"></div></div>
+          <b>${g.n}</b>
+        </div>`).join('')}</div>` : ''}`;
+  }
+
+  // Teammates across my projects, with photo, online dot, shared projects and open tasks.
+  function _renderOvTeam() {
+    const el = $('#mp-ov-team');
+    if (!el) return;
+    const mates = mp.team.filter(u => !u.is_me);
+    const cnt = $('#mp-ov-team-count'); if (cnt) cnt.textContent = mates.length || '';
+    const msg = $('#mp-ov-team-msg'); if (msg) msg.style.display = mates.length && window.MpInbox ? '' : 'none';
+
+    if (!mates.length) {
+      el.innerHTML = `<div class="mp-w-empty"><i class="fa fa-user-group"></i><span>No teammates on your projects yet.</span></div>`;
+      return;
+    }
+    const limit = 8;
+    const shown = mp.ovTeamAll ? mates : mates.slice(0, limit);
+    const ROLE  = { owner: 'Owner', admin: 'Admin', manager: 'Manager', staff: 'Staff', former: 'Left business' };
+    el.innerHTML = shown.map(u => {
+      const shared = (u.project_ids || []).length;
+      return `
+        <div class="mp-team-row" data-profile-uid="${+u.id}" data-profile-name="${esc(u.name)}" title="View ${esc(u.name)}'s profile">
+          <span class="mp-av-wrap">${_ovAvatar(u)}${_ovOnline(u) ? '<i class="mp-av-online" title="Active now"></i>' : ''}</span>
+          <div class="mp-team-main">
+            <div class="mp-team-name">${esc(u.name)}</div>
+            <div class="mp-team-sub">${esc(ROLE[u.role] || String(u.role || '').replace(/_/g, ' ').replace(/^./, c => c.toUpperCase()))}${shared ? ` · ${shared} project${shared === 1 ? '' : 's'}` : ''}</div>
+          </div>
+          <span class="mp-team-open" title="Open tasks on your shared projects">${u.open_tasks} open</span>
+        </div>`;
+    }).join('') + (mates.length > limit
+      ? `<button class="mp-w-more" id="mp-ov-team-more">${mp.ovTeamAll ? 'Show less' : `Show all ${mates.length}`}</button>`
+      : '');
+    $('#mp-ov-team-more')?.addEventListener('click', () => { mp.ovTeamAll = !mp.ovTeamAll; _renderOvTeam(); });
+  }
+
+  // Latest things that happened to my tasks: completions and new assignments.
+  function _renderOvActivity() {
+    const el = $('#mp-ov-activity');
+    if (!el) return;
+    const events = [];
+    mp.tasks.forEach(t => {
+      if (t.completed_at) events.push({ at: t.completed_at, t, kind: 'done' });
+      if (t.created_at)   events.push({ at: t.created_at,   t, kind: 'new' });
+    });
+    events.sort((a, b) => b.at.localeCompare(a.at));
+    const list = events.slice(0, 8);
+    if (!list.length) {
+      el.innerHTML = `<div class="mp-w-empty"><i class="fa fa-wave-square"></i><span>No activity yet.</span></div>`;
+      return;
+    }
+    el.innerHTML = list.map(e => `
+      <div class="mp-feed-item mp-feed-item--${e.kind}" data-tid="${e.t.id}">
+        <span class="mp-feed-dot"><i class="fa ${e.kind === 'done' ? 'fa-check' : 'fa-plus'}"></i></span>
+        <div class="mp-feed-main">
+          <div class="mp-feed-text">${e.kind === 'done' ? 'Completed' : 'New task'} <b>${esc(e.t.title)}</b></div>
+          <div class="mp-feed-meta">${esc(e.t.project_name || '')}${e.t.project_name ? ' · ' : ''}${esc(_mpAgo(e.at))}</div>
+        </div>
+      </div>`).join('');
+    _bindDetailOpen(el);
   }
 
   function _openMpBoardFor(projectId) {
@@ -52386,16 +52839,18 @@ const TeamProfile = (() => {
       th.classList.toggle('mp-sort--desc', th.dataset.mpsort === mp.sortKey && mp.sortDir === -1);
     });
 
+    _renderDelReqBanner();
+
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:24px">${mp.tasks.length ? 'No tasks match your filters.' : 'No tasks are assigned to you yet.'}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">${mp.tasks.length ? 'No tasks match your filters.' : 'No tasks are assigned to you yet.'}</td></tr>`;
       return;
     }
     tbody.innerHTML = list.map(t => {
       const done = _isDone(t);
-      const opts = _statusesFor(t.project_id)
-        .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
+      const s = _statusMeta(t);
+      const c = esc(_statusColor(s));
       return `
-        <tr data-tid="${t.id}">
+        <tr data-tid="${t.id}" class="mp-task-row" style="--st:${c}">
           <td><i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i></td>
           <td>
             <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}${t.attachments_count ? ` <span style="font-size:10px;font-weight:400;color:var(--text-muted)" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip"></i> ${t.attachments_count}</span>` : ''}</div>
@@ -52404,19 +52859,275 @@ const TeamProfile = (() => {
           <td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>
           <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
           <td style="font-size:11px">${_dueHtml(t)}</td>
-          <td><select class="mp-status-select" data-mp-status="${t.id}">${opts}</select></td>
+          <td>
+            <button type="button" class="mp-status-pill" data-mp-status-btn="${t.id}" title="Change status">
+              <span class="mp-status-pill-dot"></span><span class="mp-status-pill-label">${esc(s.label)}</span><i class="fa fa-chevron-down mp-status-pill-caret"></i>
+            </button>
+          </td>
+          <td style="text-align:center">${_rowDeleteHtml(t)}</td>
         </tr>`;
     }).join('');
 
     _bindToggles(tbody);
     _bindDetailOpen(tbody);
-    tbody.querySelectorAll('[data-mp-status]').forEach(sel => sel.addEventListener('change', async () => {
+    tbody.querySelectorAll('[data-mp-del]').forEach(btn => btn.addEventListener('click', async e => {
+      e.stopPropagation();
+      const t = _task(btn.dataset.mpDel);
+      if (t && await _mpDeleteTask(t)) renderMpTasks();
+    }));
+    tbody.querySelectorAll('[data-mp-status-btn]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = _task(btn.dataset.mpStatusBtn);
+      if (t) _openStatusMenu(btn, t, () => renderMpTasks());
+    }));
+  }
+
+  // ── Task deletion ───────────────────────────────────────────────────────────
+  // The task owner deletes directly. Any other assignee sends a delete request; the
+  // owner is notified and approves (task deleted) or rejects it.
+  function _rowDeleteHtml(t) {
+    if (t.is_owner) {
+      return `<button type="button" class="mp-row-del" data-mp-del="${t.id}" title="Delete task"><i class="fa fa-trash-can"></i></button>`;
+    }
+    if (t.delete_request) {
+      return `<span class="mp-row-del is-pending" title="${t.delete_request.is_mine ? 'Your delete request is' : 'A delete request is'} waiting for the task owner"><i class="fa fa-hourglass-half"></i></span>`;
+    }
+    return `<button type="button" class="mp-row-del" data-mp-del="${t.id}" title="Ask the task owner to delete this task"><i class="fa fa-trash-can-arrow-up"></i></button>`;
+  }
+
+  // Resolves true when something changed (task deleted or request sent) and the caller should re-render.
+  async function _mpDeleteTask(t) {
+    if (t.is_owner) {
+      const ok = await appConfirm({
+        title: 'Delete task?',
+        message: `"${t.title}" will be permanently deleted together with its comments, files and time logs. This cannot be undone.`,
+        confirmText: '<i class="fa fa-trash"></i> Delete',
+        icon: 'fa-triangle-exclamation',
+        danger: true,
+      });
+      if (!ok) return false;
+      const res = await API.pmMyWorkTaskDelete(t.id);
+      if (res.status >= 400) { toast(res.body?.message || 'Failed to delete the task', 'error'); return false; }
+      mp.tasks = mp.tasks.filter(x => +x.id !== +t.id);
+      mp.deleteRequests = mp.deleteRequests.filter(r => +r.task_id !== +t.id);
+      toast('Task deleted', 'success');
+      return true;
+    }
+
+    if (t.delete_request) {
+      toast('A delete request for this task is already waiting for the task owner.', 'info');
+      return false;
+    }
+    const reason = await _askDeleteReason(t);
+    if (reason === null) return false;
+    const res = await API.pmMyWorkTaskDeleteRequest(t.id, reason);
+    if (res.status >= 400) { toast(res.body?.message || 'Failed to send the delete request', 'error'); return false; }
+    const d = res.body?.data || {};
+    t.delete_request = { id: d.id, requested_by: d.requested_by, is_mine: true, created_at: d.created_at };
+    toast('Delete request sent — the task owner has been notified.', 'info');
+    return true;
+  }
+
+  // Send-request dialog with an optional reason. Resolves the reason ('' when blank) or null on cancel.
+  function _askDeleteReason(t) {
+    const modal = $('#mp-delreq-send-modal');
+    const input = $('#mp-delreq-send-reason');
+    $('#mp-delreq-send-text').innerHTML =
+      `You are not the owner of <b>${esc(t.title)}</b>. Your request will be sent to the task owner, who can approve (delete the task) or reject it.`;
+    input.value = '';
+    modal.style.display = 'flex';
+    setTimeout(() => input.focus(), 30);
+
+    return new Promise(resolve => {
+      const finish = value => {
+        modal.style.display = 'none';
+        $('#mp-delreq-send-submit').removeEventListener('click', onSubmit);
+        $('#mp-delreq-send-cancel').removeEventListener('click', onCancel);
+        $('#mp-delreq-send-close').removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey, true);
+        resolve(value);
+      };
+      const onSubmit   = () => finish(input.value.trim());
+      const onCancel   = () => finish(null);
+      const onBackdrop = e => { if (e.target === modal) finish(null); };
+      const onKey      = e => { if (e.key === 'Escape') { e.stopPropagation(); finish(null); } };
+      $('#mp-delreq-send-submit').addEventListener('click', onSubmit);
+      $('#mp-delreq-send-cancel').addEventListener('click', onCancel);
+      $('#mp-delreq-send-close').addEventListener('click', onCancel);
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey, true);
+    });
+  }
+
+  // My Tasks banner for owners: "N delete requests are waiting for your approval".
+  function _renderDelReqBanner() {
+    const el = $('#mp-delreq-banner');
+    if (!el) return;
+    const n = mp.deleteRequests.length;
+    el.style.display = n ? '' : 'none';
+    if (!n) return;
+    el.innerHTML = `
+      <i class="fa fa-trash-can-arrow-up"></i>
+      <span><b>${n}</b> task delete request${n === 1 ? ' is' : 's are'} waiting for your approval.</span>
+      <button type="button" class="mp-delreq-banner-btn" id="mp-delreq-review">Review</button>`;
+    $('#mp-delreq-review')?.addEventListener('click', () => openMpDeleteRequests());
+  }
+
+  // Owner's review window. focusId (from a notification) highlights that request, or explains
+  // what happened to it when it is no longer pending.
+  async function openMpDeleteRequests(focusId = null) {
+    const modal = $('#mp-delreq-modal');
+    const body  = $('#mp-delreq-body');
+    modal.style.display = 'flex';
+    body.innerHTML = `<div class="mpd-empty"><i class="fa fa-spinner fa-spin"></i> Loading requests…</div>`;
+
+    const res = await API.pmMyWorkDeleteRequests();
+    if (res.status >= 400) {
+      body.innerHTML = `<div class="mpd-empty mpd-error"><i class="fa fa-circle-exclamation"></i> ${esc(res.body?.message || 'Failed to load delete requests')}</div>`;
+      return;
+    }
+    mp.deleteRequests = res.body?.data || [];
+
+    let note = '';
+    if (focusId && !mp.deleteRequests.some(r => +r.id === +focusId)) {
+      const one = await API.pmMyWorkDeleteRequestShow(focusId);
+      const r = one.status < 400 ? one.body?.data : null;
+      note = !r ? 'That request was already approved — the task has been deleted.'
+        : r.status === 'rejected' ? `You rejected ${esc(r.requester_name)}'s request to delete <b>${esc(r.task_title || 'this task')}</b>.`
+        : '';
+    }
+    _renderDelReqList(focusId, note);
+  }
+
+  function _renderDelReqList(focusId = null, note = '') {
+    const body = $('#mp-delreq-body');
+    if (!body) return;
+    const list = mp.deleteRequests;
+    body.innerHTML = (note ? `<div class="mp-delreq-note"><i class="fa fa-circle-info"></i> ${note}</div>` : '') + (list.length
+      ? list.map(r => `
+        <div class="mp-delreq-card${+r.id === +focusId ? ' is-focus' : ''}" data-delreq="${r.id}">
+          <div class="mp-delreq-head">
+            ${_ovAvatar({ id: r.requested_by, name: r.requester_name, avatar_url: r.requester_avatar_url })}
+            <div class="mp-delreq-who"><b>${esc(r.requester_name)}</b> wants to delete</div>
+            <span class="mp-delreq-time">${esc(_mpAgo(r.created_at))}</span>
+          </div>
+          <div class="mp-delreq-task">${esc(r.task_title || 'Task')}</div>
+          <div class="mp-delreq-meta">${esc(r.project_name || '')}${r.milestone_name ? ` · <i class="fa fa-flag"></i> ${esc(r.milestone_name)}` : ''}${r.task_due_date ? ` · Due ${esc(r.task_due_date)}` : ''}</div>
+          ${r.reason ? `<div class="mp-delreq-reason">"${esc(r.reason)}"</div>` : ''}
+          <div class="mp-delreq-actions">
+            <button class="po-btn-ghost" data-delreq-reject="${r.id}"><i class="fa fa-xmark"></i> Reject</button>
+            <button class="po-btn-primary mp-delreq-approve" data-delreq-approve="${r.id}"><i class="fa fa-trash"></i> Approve &amp; delete</button>
+          </div>
+        </div>`).join('')
+      : `<div class="mpd-empty"><i class="fa fa-circle-check"></i> No delete requests are waiting for you.</div>`);
+
+    body.querySelector('.mp-delreq-card.is-focus')?.scrollIntoView({ block: 'nearest' });
+    body.querySelectorAll('[data-delreq-approve]').forEach(b => b.addEventListener('click', () => _decideDelReq(+b.dataset.delreqApprove, true)));
+    body.querySelectorAll('[data-delreq-reject]').forEach(b => b.addEventListener('click', () => _decideDelReq(+b.dataset.delreqReject, false)));
+  }
+
+  async function _decideDelReq(id, approve) {
+    const r = mp.deleteRequests.find(x => +x.id === +id);
+    if (!r) return;
+    if (approve) {
+      const ok = await appConfirm({
+        title: 'Approve and delete the task?',
+        message: `"${r.task_title}" will be permanently deleted together with its comments, files and time logs. ${r.requester_name} will be notified.`,
+        confirmText: '<i class="fa fa-trash"></i> Approve & delete',
+        icon: 'fa-triangle-exclamation',
+        danger: true,
+      });
+      if (!ok) return;
+    }
+    const res = approve ? await API.pmMyWorkDeleteRequestApprove(id) : await API.pmMyWorkDeleteRequestReject(id);
+    if (res.status >= 400 && res.status !== 404 && res.status !== 409) {
+      toast(res.body?.message || 'Failed to update the request', 'error');
+      return;
+    }
+    if (res.status >= 400) toast(res.body?.message || 'This request was already handled.', 'info');
+    else toast(approve ? 'Task deleted' : `Request rejected — ${r.requester_name} has been notified.`, approve ? 'success' : 'info');
+
+    mp.deleteRequests = mp.deleteRequests.filter(x => +x.id !== +id);
+    if (approve) mp.tasks = mp.tasks.filter(t => +t.id !== +r.task_id);
+    else { const t = _task(r.task_id); if (t) t.delete_request = null; }
+    _renderDelReqList();
+    if (mp.loaded) _renderCurrent();
+  }
+
+  function _closeMpDeleteRequests() { const m = $('#mp-delreq-modal'); if (m) m.style.display = 'none'; }
+  $('#mp-delreq-close')?.addEventListener('click', _closeMpDeleteRequests);
+  $('#mp-delreq-done') ?.addEventListener('click', _closeMpDeleteRequests);
+  $('#mp-delreq-modal')?.addEventListener('click', e => { if (e.target === $('#mp-delreq-modal')) _closeMpDeleteRequests(); });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('#mp-delreq-modal')?.style.display === 'flex' && $('#app-confirm-modal')?.style.display !== 'flex') _closeMpDeleteRequests();
+  });
+  window.MpDeleteRequests = { open: openMpDeleteRequests };
+
+  // Popover status picker anchored to a pill button. onDone re-renders the caller.
+  let _statusMenuCleanup = null;
+  function _closeStatusMenu() {
+    _statusMenuCleanup?.();
+    _statusMenuCleanup = null;
+    document.querySelector('.mp-status-menu')?.remove();
+    document.querySelectorAll('.mp-status-pill.is-open').forEach(b => b.classList.remove('is-open'));
+  }
+
+  // onPick(status) replaces the default save (used by the board's optimistic move).
+  function _openStatusMenu(anchor, t, onDone, onPick) {
+    const wasOpen = anchor.classList.contains('is-open');
+    _closeStatusMenu();
+    if (wasOpen) return;
+
+    const menu = document.createElement('div');
+    menu.className = 'mp-status-menu';
+    menu.innerHTML = `<div class="mp-status-menu-head">Set status</div>` + _statusesFor(t.project_id).map(s => `
+      <button type="button" class="mp-status-menu-item${s.status === t.status ? ' is-active' : ''}" data-status="${esc(s.status)}" style="--st:${esc(_statusColor(s))}">
+        <span class="mp-status-pill-dot"></span><span class="mp-status-menu-label">${esc(s.label)}</span>
+        ${s.status === t.status ? '<i class="fa fa-check"></i>' : ''}
+      </button>`).join('');
+    document.body.appendChild(menu);
+    anchor.classList.add('is-open');
+
+    // Position below the anchor; flip above / clamp when it would leave the viewport.
+    const r = anchor.getBoundingClientRect();
+    const mh = menu.offsetHeight, mw = menu.offsetWidth;
+    const top = r.bottom + 4 + mh > window.innerHeight ? Math.max(8, r.top - 4 - mh) : r.bottom + 4;
+    menu.style.top  = `${top}px`;
+    menu.style.left = `${Math.min(r.left, window.innerWidth - mw - 8)}px`;
+
+    menu.addEventListener('click', async e => {
+      const item = e.target.closest('[data-status]');
+      if (!item) return;
+      e.stopPropagation();
+      _closeStatusMenu();
+      if (item.dataset.status === t.status) return;
+      if (onPick) return onPick(item.dataset.status);
       try {
-        await _setStatus(sel.dataset.mpStatus, sel.value);
+        await _setStatus(t.id, item.dataset.status);
         toast('Status updated', 'success');
       } catch (err) { toast(String(err.message || err), 'error'); }
-      renderMpTasks();
-    }));
+      onDone();
+    });
+
+    // Outside click / Esc / scroll / resize closes it. A press on the anchor itself is
+    // left to the anchor's click handler, which toggles the menu closed.
+    const dismiss = e => {
+      if (e.type === 'keydown' && e.key !== 'Escape') return;
+      if (e.type === 'mousedown' && (menu.contains(e.target) || anchor.contains(e.target))) return;
+      if (e.type === 'scroll' && menu.contains(e.target)) return;
+      _closeStatusMenu();
+    };
+    document.addEventListener('mousedown', dismiss, true);
+    document.addEventListener('keydown', dismiss, true);
+    document.addEventListener('scroll', dismiss, true);
+    window.addEventListener('resize', dismiss);
+    _statusMenuCleanup = () => {
+      document.removeEventListener('mousedown', dismiss, true);
+      document.removeEventListener('keydown', dismiss, true);
+      document.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('resize', dismiss);
+    };
   }
 
   // ── Kanban board ────────────────────────────────────────────────────────────
@@ -52464,6 +53175,7 @@ const TeamProfile = (() => {
       const colEl = document.createElement('div');
       colEl.className = 'pm-kanban-col';
       colEl.dataset.col = col.status;
+      colEl.style.setProperty('--st', _statusColor(col));
       const dot = col.is_custom
         ? `<span class="pm-col-dot" style="background:${esc(col.color || '#0ea5e9')}"></span>`
         : `<span class="pm-col-dot pm-col-dot--${col.status.replace(/_/g, '-')}"></span>`;
@@ -52483,8 +53195,8 @@ const TeamProfile = (() => {
     card.dataset.tid = t.id;
     card.draggable = true;
     const p = _project(t.project_id);
-    const moveOpts = _statusesFor(t.project_id).filter(s => s.status !== t.status)
-      .map(s => `<option value="${esc(s.status)}">${esc(s.label)}</option>`).join('');
+    const s = _statusMeta(t);
+    card.style.setProperty('--st', _statusColor(s));
     card.innerHTML = `
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
@@ -52497,7 +53209,9 @@ const TeamProfile = (() => {
         ${t.milestone_name ? `<span class="pm-task-card-assign"><i class="fa fa-flag" style="margin-right:2px"></i>${esc(t.milestone_name)}</span>` : ''}
       </div>
       <div class="pm-task-card-actions">
-        <select class="pm-task-card-move" title="Move to…"><option value="">Move…</option>${moveOpts}</select>
+        <button type="button" class="mp-status-pill mp-status-pill--sm" title="Change status">
+          <span class="mp-status-pill-dot"></span><span class="mp-status-pill-label">${esc(s.label)}</span><i class="fa fa-chevron-down mp-status-pill-caret"></i>
+        </button>
       </div>`;
 
     card.addEventListener('dragstart', e => {
@@ -52515,8 +53229,11 @@ const TeamProfile = (() => {
       card.classList.remove('pm-task-card--dragging');
       $$('#mp-board-columns .pm-kanban-col').forEach(c => c.classList.remove('mp-col--blocked', 'pm-kanban-col--dragover'));
     });
-    card.querySelector('select').addEventListener('change', function () {
-      if (this.value) _moveTask(t, this.value);
+    const pill = card.querySelector('.mp-status-pill');
+    pill.draggable = false;
+    pill.addEventListener('click', e => {
+      e.stopPropagation();
+      _openStatusMenu(pill, t, null, status => _moveTask(t, status));
     });
     card.title = 'Click to view task details';
     card.style.cursor = 'pointer';
@@ -52567,7 +53284,6 @@ const TeamProfile = (() => {
   // ── Calendar: my tasks by due date — month grid, week columns or agenda list ──
   // Weeks start on Monday. Days outside the shown month are dimmed but still list
   // their tasks. The side panel shows the selected day in full detail.
-  const MP_CAL_MAX = 3;   // chips per month cell when the cell height can't be measured
   const MP_CAL_WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   const _parseYmd  = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
@@ -52728,9 +53444,10 @@ const TeamProfile = (() => {
       ${tile('overdue', 'fa-triangle-exclamation', overdue.length, overdue.length ? 'Overdue · click to jump' : 'Overdue (all dates)',
         overdue.length ? ` data-cal-jump="${overdue[0].due_date}" title="Go to the oldest overdue task (${esc(overdue[0].due_date)})"` : '')}
       ${tile('effort', 'fa-hourglass-half', est ? _fmtHours(est) : '—', 'Estimated open work')}
-      <div class="mp-cal-stat mp-cal-stat--progress">
-        <div class="mp-cal-progress-row"><span><i class="fa fa-circle-check"></i> ${done.length} of ${inPeriod.length} done ${label}</span><b>${pct}%</b></div>
+      <div class="mp-cal-stat mp-cal-stat--progress" title="${done.length} of ${inPeriod.length} done ${label}">
+        <span class="mp-cal-progress-lbl"><i class="fa fa-circle-check"></i> ${done.length}/${inPeriod.length} done</span>
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:#22c55e"></div></div>
+        <b>${pct}%</b>
       </div>`;
 
     el.querySelector('[data-cal-jump]')?.addEventListener('click', function () { _calGoTo(this.dataset.calJump); });
@@ -52743,12 +53460,10 @@ const TeamProfile = (() => {
     const end   = _addDays(_weekStart(new Date(mp.calDate.getFullYear(), month + 1, 0)), 6);
     const today = _today();
 
-    // The whole month fits on screen: rows share the grid height, and each cell shows as
-    // many lines (deadlines + chips) as its height allows — the rest go under "+N more".
+    // The whole month fits on screen: rows share the grid height. Every chip is rendered,
+    // then _fitCalMonth hides the ones that don't fit their cell behind "+N more".
     const rows  = Math.round((_dayDiff(_ymd(end)) - _dayDiff(_ymd(start)) + 1) / 7);
     grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
-    const cellH = grid.clientHeight / rows;
-    const lines = cellH > 40 ? Math.max(1, Math.floor((cellH - 44) / 21)) : MP_CAL_MAX;
 
     const cells = [];
     for (let d = start; d <= end; d = _addDays(d, 1)) {
@@ -52756,8 +53471,6 @@ const TeamProfile = (() => {
       const list      = byDay.get(key) || [];
       const open      = list.filter(t => !_isDone(t));
       const deadlines = _calDeadlines(key);
-      const fit       = Math.max(0, lines - deadlines.length);
-      const maxChips  = list.length > fit ? Math.max(0, fit - 1) : fit;   // keep a line for "+N more"
       const cls       = ['mp-cal-day'];
       if (d.getMonth() !== month)            cls.push('mp-cal-day--out');
       if (key === today)                     cls.push('mp-cal-day--today');
@@ -52765,7 +53478,6 @@ const TeamProfile = (() => {
       if (d.getDay() === 0 || d.getDay() === 6) cls.push('mp-cal-day--weekend');
       if (key < today)                       cls.push('mp-cal-day--past');
       if (list.some(_isOverdue))             cls.push('mp-cal-day--has-overdue');
-      const shown = list.slice(0, maxChips);
       const est   = _sumHours(open);
       cells.push(`
         <div class="${cls.join(' ')}" data-cal-day="${key}" title="${esc(d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))} · double-click to add a task">
@@ -52777,14 +53489,44 @@ const TeamProfile = (() => {
           </div>
           <div class="mp-cal-day-body">
             ${deadlines.map(_calDeadlineHtml).join('')}
-            ${shown.map(_calChip).join('')}
-            ${list.length > shown.length ? `<button class="mp-cal-more" data-cal-more="${key}">+${list.length - shown.length} more</button>` : ''}
+            ${list.map(_calChip).join('')}
+            ${list.length ? `<button class="mp-cal-more" data-cal-more="${key}" hidden></button>` : ''}
           </div>
           ${est ? `<div class="mp-cal-day-load" title="Estimated open work"><i class="fa fa-hourglass-half"></i> ${_fmtHours(est)}</div>` : ''}
         </div>`);
     }
     grid.innerHTML = cells.join('');
     _bindCalDays(grid);
+    _fitCalMonth(grid);
+
+    // Re-fit when the grid's size changes (window resize, tab becoming visible, side panel).
+    if (!grid._mpFitObserver && window.ResizeObserver) {
+      grid._mpFitObserver = new ResizeObserver(() => {
+        if (grid.querySelector('.mp-cal-day-body')) _fitCalMonth(grid);
+      });
+      grid._mpFitObserver.observe(grid);
+    }
+  }
+
+  // Hides trailing chips of each month cell until its body stops overflowing, and shows
+  // "+N more" for the hidden ones. Skipped while the grid isn't laid out (height 0).
+  function _fitCalMonth(grid) {
+    if (!grid.clientHeight) return;
+    grid.querySelectorAll('.mp-cal-day-body').forEach(body => {
+      const more  = body.querySelector('.mp-cal-more');
+      if (!more) return;
+      const chips = [...body.querySelectorAll('.mp-cal-chip')];
+      chips.forEach(c => { c.hidden = false; });
+      more.hidden = true;
+      if (body.scrollHeight <= body.clientHeight + 1) return;
+      more.hidden = false;
+      let hidden = 0;
+      do {
+        chips[chips.length - 1 - hidden].hidden = true;
+        hidden++;
+        more.textContent = `+${hidden} more`;
+      } while (hidden < chips.length && body.scrollHeight > body.clientHeight + 1);
+    });
   }
 
   // ── Week: seven columns with full task cards ──
@@ -52896,8 +53638,7 @@ const TeamProfile = (() => {
 
   // Compact chip (month grid)
   function _calChip(t) {
-    const p     = _project(t.project_id);
-    const color = p?.color || 'var(--accent)';
+    const color = _statusColor(_statusMeta(t));
     const cls   = ['mp-cal-chip'];
     if (_isDone(t))    cls.push('mp-cal-chip--done');
     if (_isOverdue(t)) cls.push('mp-cal-chip--overdue');
@@ -52914,6 +53655,7 @@ const TeamProfile = (() => {
   function _calCard(t, { row = false, showDate = false, statusSelect = false } = {}) {
     const p     = _project(t.project_id);
     const color = p?.color || 'var(--accent)';
+    const sMeta = _statusMeta(t);
     const done  = _isDone(t);
     const cls   = ['mp-cal-card'];
     if (row)           cls.push('mp-cal-card--row');
@@ -52932,12 +53674,13 @@ const TeamProfile = (() => {
     }
 
     const status = statusSelect
-      ? `<select class="mp-status-select" data-mp-status="${t.id}" title="Change status">${_statusesFor(t.project_id)
-          .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('')}</select>`
+      ? `<button type="button" class="mp-status-pill mp-status-pill--sm" data-mp-status-btn="${t.id}" title="Change status">
+           <span class="mp-status-pill-dot"></span><span class="mp-status-pill-label">${esc(sMeta.label)}</span><i class="fa fa-chevron-down mp-status-pill-caret"></i>
+         </button>`
       : _statusBadge(t);
 
     return `
-      <div class="${cls.join(' ')}" data-tid="${t.id}" style="--mp-chip-color:${esc(color)}" title="${esc(_calTip(t))}">
+      <div class="${cls.join(' ')}" data-tid="${t.id}" style="--st:${esc(_statusColor(sMeta))}" title="${esc(_calTip(t))}">
         <div class="mp-cal-card-top">
           <i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i>
           <div class="mp-cal-card-main">
@@ -53000,12 +53743,10 @@ const TeamProfile = (() => {
     _bindToggles(side);
     _bindDetailOpen(side);
     _bindCalExtras(side);
-    side.querySelectorAll('[data-mp-status]').forEach(sel => sel.addEventListener('change', async () => {
-      try {
-        await _setStatus(sel.dataset.mpStatus, sel.value);
-        toast('Status updated', 'success');
-      } catch (err) { toast(String(err.message || err), 'error'); }
-      renderMpCalendar();
+    side.querySelectorAll('[data-mp-status-btn]').forEach(btn => btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const t = _task(btn.dataset.mpStatusBtn);
+      if (t) _openStatusMenu(btn, t, () => renderMpCalendar());
     }));
   }
 
@@ -53060,92 +53801,149 @@ const TeamProfile = (() => {
     return h ? `${h}h${r ? ` ${r}m` : ''}` : `${r}m`;
   };
 
-  function _detailRow(icon, label, value) {
-    return `
-      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
-        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)"><i class="fa ${icon}" style="margin-right:4px"></i>${label}</div>
-        <div style="font-size:12px;overflow-wrap:anywhere">${value}</div>
-      </div>`;
+  // Which activity tab (comments / time log) is showing — kept across re-renders of the same task.
+  let _mpDetailTab = 'comments';
+
+  // "2026-10-07 06:07:31" → "Oct 7, 6:07 AM" (year added when it isn't this year); raw value in the tooltip.
+  function _fmtWhen(s, withTime = true) {
+    if (!s) return '';
+    const str = String(s);
+    const d   = new Date(str.length === 10 ? `${str}T00:00` : str.replace(' ', 'T'));
+    if (isNaN(d)) return esc(str);
+    const opts = { month: 'short', day: 'numeric' };
+    if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+    if (withTime) Object.assign(opts, { hour: 'numeric', minute: '2-digit' });
+    return `<span title="${esc(str)}">${esc(d.toLocaleString('en-US', opts))}</span>`;
   }
+
+  const _detailProp = (label, value) => `
+    <div class="mpd-prop">
+      <div class="mpd-prop-label">${label}</div>
+      <div class="mpd-prop-value">${value}</div>
+    </div>`;
+
+  // Compact label ↔ value row for the sidebar groups.
+  const _mpdRow = (label, value) => `
+    <div class="mpd-row">
+      <div class="mpd-row-label">${label}</div>
+      <div class="mpd-row-value">${value}</div>
+    </div>`;
 
   function _renderMpDetail(t, extra) {
     const body = $('#mp-detail-body');
     if (!body) return;
     const p     = _project(t.project_id);
-    const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+    const muted = txt => `<span class="mpd-muted">${txt}</span>`;
     const opts  = _statusesFor(t.project_id)
       .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
     const assignees = (t.assignees || []).length
-      ? t.assignees.map(a => `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:3px"></i>${TeamProfile.link(a.id, a.name)}</span>`).join(' ')
+      ? `<div class="mpd-people">${t.assignees.map(a => `
+          <div class="mpd-person">${_avatarHtml(a.name, null, a.id, a.avatar_url)}<span>${TeamProfile.link(a.id, a.name)}</span></div>`).join('')}
+         </div>`
       : muted('Unassigned');
-    const est    = t.estimated_hours != null ? `${t.estimated_hours} h` : '—';
     const logged = _fmtMinutes(t.logged_minutes);
-    const pct    = t.estimated_hours ? Math.min(100, Math.round((t.logged_minutes || 0) / (t.estimated_hours * 60) * 100)) : null;
-
-    const section = (icon, title, inner) => `
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <div style="font-size:12px;font-weight:600"><i class="fa ${icon}" style="margin-right:5px;color:var(--accent)"></i>${title}</div>
-        ${inner}
-      </div>`;
+    const rawPct = t.estimated_hours ? Math.round((t.logged_minutes || 0) / (t.estimated_hours * 60) * 100) : null;
+    const time   = t.estimated_hours
+      ? `<div class="mpd-time"><span><b>${esc(logged)}</b> ${muted(`of ${esc(t.estimated_hours)}h`)}</span>${muted(`${rawPct}%`)}</div>
+         <div class="mpd-bar${rawPct > 100 ? ' mpd-bar--over' : ''}"><span style="width:${Math.min(100, rawPct)}%"></span></div>`
+      : `<b>${esc(logged)}</b> ${muted('· no estimate')}`;
 
     let activity;
     if (!extra) {
-      activity = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading comments and time logs…</div>`;
+      activity = `<div class="mpd-empty"><i class="fa fa-spinner fa-spin"></i> Loading activity…</div>`;
     } else if (extra.error) {
-      activity = `<div style="font-size:11px;color:#ef4444">${esc(extra.error)}</div>`;
+      activity = `<div class="mpd-empty mpd-error"><i class="fa fa-circle-exclamation"></i> ${esc(extra.error)}</div>`;
     } else {
-      const logs     = extra.time_logs || [];
-      activity =
-        `<div id="mp-detail-comments"></div>` +
-        section('fa-stopwatch', `Time Logs (${logs.length})`, logs.length
-          ? `<table style="width:100%;border-collapse:collapse;font-size:11px">
-               <thead><tr style="text-align:left;color:var(--text-muted)"><th style="padding:4px">Date</th><th style="padding:4px">User</th><th style="padding:4px">Time</th><th style="padding:4px">Note</th></tr></thead>
-               <tbody>${logs.map(l => `
-                 <tr style="border-top:1px solid var(--border)">
-                   <td style="padding:4px;white-space:nowrap">${esc(l.logged_at || '—')}</td>
-                   <td style="padding:4px">${TeamProfile.link(l.user_id, l.user)}</td>
-                   <td style="padding:4px;white-space:nowrap">${_fmtMinutes(l.minutes)}</td>
-                   <td style="padding:4px">${esc(l.note || '')}</td>
-                 </tr>`).join('')}</tbody>
-             </table>`
-          : `<div style="font-size:11px">${muted('No time logged yet.')}</div>`);
+      const logs = extra.time_logs || [];
+      const tab  = (key, label, count, id) => `
+        <button class="mpd-tab${_mpDetailTab === key ? ' is-active' : ''}" data-mpd-tab="${key}">
+          ${label} <span class="mpd-count"${id ? ` id="${id}"` : ''}>${count}</span>
+        </button>`;
+      activity = `
+        <div class="mpd-tabs">
+          ${tab('comments', 'Comments', (extra.comments || []).reduce((n, c) => n + 1 + (c.replies || []).length, 0), 'mp-detail-cmt-count')}
+          ${tab('time', 'Time log', logs.length)}
+        </div>
+        <div data-mpd-panel="comments" id="mp-detail-comments"${_mpDetailTab === 'comments' ? '' : ' hidden'}></div>
+        <div data-mpd-panel="time"${_mpDetailTab === 'time' ? '' : ' hidden'}>
+          ${logs.length
+            ? `<table class="mpd-table">
+                 <thead><tr><th>Date</th><th>Member</th><th>Duration</th><th>Note</th></tr></thead>
+                 <tbody>${logs.map(l => `
+                   <tr>
+                     <td style="white-space:nowrap">${l.logged_at ? _fmtWhen(l.logged_at, false) : '—'}</td>
+                     <td>${TeamProfile.link(l.user_id, l.user)}</td>
+                     <td style="white-space:nowrap">${_fmtMinutes(l.minutes)}</td>
+                     <td>${esc(l.note || '')}</td>
+                   </tr>`).join('')}</tbody>
+               </table>`
+            : `<div class="mpd-empty">No time logged yet.</div>`}
+        </div>`;
     }
 
-    $('#mp-detail-heading').textContent = t.title || 'Task Details';
+    $('#mp-detail-heading').innerHTML = `
+      <span class="mpd-crumb-proj">
+        <span class="mpd-dot" style="background:${esc(p?.color || 'var(--text-muted)')}"></span>
+        <span class="mpd-crumb-item">${esc(t.project_name || 'Project')}</span>
+      </span>
+      ${t.milestone_name ? `<i class="fa fa-chevron-right mpd-crumb-sep"></i><span class="mpd-crumb-item mpd-crumb-cur">${esc(t.milestone_name)}</span>` : ''}`;
+
     body.innerHTML = `
-      <div style="display:flex;align-items:flex-start;gap:10px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:16px;font-weight:700;overflow-wrap:anywhere${_isDone(t) ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}</div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px">
-            ${_statusBadge(t)}
-            <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
-            ${t.is_overdue ? '<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
-          </div>
+      <div class="mpd-main">
+        <h2 class="mpd-title${_isDone(t) ? ' is-done' : ''}">${esc(t.title)}</h2>
+        <div class="mpd-chips">
+          <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+          ${t.is_overdue ? '<span class="mpd-chip-overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;align-items:stretch">
-          <select class="mp-status-select" id="mp-detail-status" title="Change status">${opts}</select>
-          <button class="po-btn-ghost" id="mp-detail-view-project" style="padding:5px 10px;font-size:11px;white-space:nowrap" title="Project details and team members"><i class="fa fa-diagram-project"></i> View Project Details</button>
-        </div>
+
+        <section class="mpd-section">
+          <div class="mpd-section-title">Description</div>
+          ${t.description
+            ? `<div class="mpd-desc">${esc(t.description)}</div>`
+            : `<div class="mpd-desc mpd-desc--empty">No description provided.</div>`}
+        </section>
+
+        <section class="mpd-section" id="mp-detail-files"></section>
+
+        <section class="mpd-section mpd-activity">${activity}</section>
       </div>
 
-      ${section('fa-align-left', 'Description', t.description
-        ? `<div style="font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg-secondary, transparent);border:1px solid var(--border);border-radius:6px;padding:8px 10px">${esc(t.description)}</div>`
-        : `<div style="font-size:11px">${muted('No description.')}</div>`)}
+      <aside class="mpd-side">
+        <div class="mpd-prop">
+          <div class="mpd-prop-label">Status</div>
+          <select class="mp-status-select mpd-status" id="mp-detail-status" title="Change status">${opts}</select>
+        </div>
+        <div class="mpd-card">
+          ${_detailProp('Assignees', assignees)}
+        </div>
+        <div class="mpd-card">
+          ${_mpdRow('Due date', _dueHtml(t))}
+          ${_mpdRow('Priority', t.priority ? `<span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>` : muted('—'))}
+          ${_mpdRow('Milestone', t.milestone_name ? esc(t.milestone_name) : muted('None'))}
+        </div>
+        <div class="mpd-card">
+          ${_detailProp('Time tracked', time)}
+        </div>
+        <div class="mpd-card">
+          ${_mpdRow('Project', `<span class="mpd-dot" style="background:${esc(p?.color || 'var(--text-muted)')}"></span>${esc(t.project_name || '—')}`)}
+          ${_mpdRow('Created', t.created_at ? _fmtWhen(t.created_at) : muted('—'))}
+          ${_mpdRow('Completed', t.completed_at ? _fmtWhen(t.completed_at) : muted('Not yet'))}
+        </div>
+        <button class="po-btn-ghost mpd-side-btn" id="mp-detail-view-project" title="Project details and team members">
+          <i class="fa fa-diagram-project"></i> View project
+        </button>
+        ${t.is_owner
+          ? `<button class="po-btn-ghost mpd-side-btn mpd-side-btn--danger" id="mp-detail-delete" title="Permanently delete this task"><i class="fa fa-trash-can"></i> Delete task</button>`
+          : t.delete_request
+            ? `<button class="po-btn-ghost mpd-side-btn mpd-side-btn--pending" disabled title="Waiting for the task owner to approve"><i class="fa fa-hourglass-half"></i> Delete requested</button>`
+            : `<button class="po-btn-ghost mpd-side-btn mpd-side-btn--danger" id="mp-detail-delete" title="Ask the task owner to delete this task"><i class="fa fa-trash-can-arrow-up"></i> Request delete</button>`}
+      </aside>`;
 
-      <div style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:12px 18px">
-        ${_detailRow('fa-diagram-project', 'Project', `${p?.color ? `<span class="pm-col-dot" style="display:inline-block;background:${esc(p.color)};margin-right:4px"></span>` : ''}${esc(t.project_name || '—')}`)}
-        ${_detailRow('fa-flag', 'Milestone / Phase', t.milestone_name ? esc(t.milestone_name) : muted('—'))}
-        ${_detailRow('fa-calendar', 'Due Date', _dueHtml(t))}
-        ${_detailRow('fa-users', 'Assignees', assignees)}
-        ${_detailRow('fa-hourglass-half', 'Estimated', esc(est))}
-        ${_detailRow('fa-clock', 'Logged', `${esc(logged)}${pct != null ? ` ${muted(`(${pct}% of estimate)`)}` : ''}`)}
-        ${_detailRow('fa-calendar-plus', 'Created', t.created_at ? esc(t.created_at) : muted('—'))}
-        ${_detailRow('fa-circle-check', 'Completed', t.completed_at ? esc(t.completed_at) : muted('—'))}
-      </div>
-
-      <div id="mp-detail-files"></div>
-
-      ${activity}`;
+    body.querySelectorAll('[data-mpd-tab]').forEach(btn => btn.addEventListener('click', () => {
+      _mpDetailTab = btn.dataset.mpdTab;
+      body.querySelectorAll('[data-mpd-tab]').forEach(b => b.classList.toggle('is-active', b === btn));
+      body.querySelectorAll('[data-mpd-panel]').forEach(p => { p.hidden = p.dataset.mpdPanel !== _mpDetailTab; });
+    }));
 
     // Attachments: preloaded with the detail response; managed in place (upload / download / delete own).
     const filesEl = $('#mp-detail-files');
@@ -53164,13 +53962,20 @@ const TeamProfile = (() => {
     } else if (filesEl && extra?.error) {
       filesEl.remove();
     } else if (filesEl) {
-      filesEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
+      filesEl.innerHTML = `<div class="mpd-section-title">Attachments</div><div class="mpd-empty"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
     }
 
     const commentsEl = $('#mp-detail-comments');
     if (commentsEl) _mountMpComments(commentsEl, t, extra);
 
     $('#mp-detail-view-project')?.addEventListener('click', () => openMpProjectDetail(t.project_id));
+
+    $('#mp-detail-delete')?.addEventListener('click', async () => {
+      if (!(await _mpDeleteTask(t))) return;
+      if (!_task(t.id)) _closeMpTaskDetail();   // deleted
+      else _renderMpDetail(_task(t.id), extra); // request sent — show the pending state
+      _renderCurrent();
+    });
 
     $('#mp-detail-status')?.addEventListener('change', async function () {
       try {
@@ -53199,10 +54004,11 @@ const TeamProfile = (() => {
         <div class="mp-cmt-main">
           <div class="mp-cmt-bubble">
             <div class="mp-cmt-head">
-              <b>${TeamProfile.link(c.user_id, c.user)}${c.is_mine ? ' <span style="font-weight:400;color:var(--text-muted)">(you)</span>' : ''}</b>
-              <span style="color:var(--text-muted)">${esc(c.created_at || '')}</span>
+              <b>${TeamProfile.link(c.user_id, c.user)}${c.is_mine ? ' <span class="mp-cmt-you">(you)</span>' : ''}</b>
+              <span class="mp-cmt-time">${_fmtWhen(c.created_at)}</span>
             </div>
-            <div class="mp-cmt-body">${esc(c.body)}</div>
+            ${c.body ? `<div class="mp-cmt-body">${esc(c.body)}</div>` : ''}
+            ${_cmtFilesHtml(c)}
           </div>
           <div class="mp-cmt-actions">${replyBtn}</div>
           ${!parent && replies.length ? `<div class="mp-cmt-replies">${replies.map(r => _commentHtml(r, c)).join('')}</div>` : ''}
@@ -53211,11 +54017,33 @@ const TeamProfile = (() => {
       </div>`;
   }
 
-  const _cmtFormHtml = (placeholder, label) => `
+  // Files posted with a comment: images as a thumbnail strip (click → viewer), others as download chips.
+  function _cmtFilesHtml(c) {
+    const files = c.attachments || [];
+    if (!files.length) return '';
+    const dl     = id => TaskFiles.ROUTES.mine.download(id);
+    const images = files.filter(a => FilePreview.isImage(a.name, a.mime_type));
+    const others = files.filter(a => !FilePreview.isImage(a.name, a.mime_type));
+    return `
+      ${images.length ? `<div class="fp-grid">${images.map(a => FilePreview.thumbHtml({ download: dl(a.id), name: a.name, group: `cmt-${c.id}` })).join('')}</div>` : ''}
+      ${others.length ? `<div class="fp-chips">${others.map(a => {
+        const [icon, color] = TaskFiles.iconFor(a.name);
+        return `<span class="mp-ib-att" data-cmt-dl="${a.id}" title="${esc(a.name)} — click to download"><i class="fa ${icon}" style="color:${color}"></i><span>${esc(a.name)}</span><small>${TaskFiles.fmtSize(a.size_bytes)}</small></span>`;
+      }).join('')}</div>` : ''}`;
+  }
+
+  const _cmtFormHtml = (placeholder, label, hint) => `
     <div class="mp-cmt-form">
       ${_avatarHtml(state._userName || 'You', null, null, state._userAvatar)}
-      <textarea rows="2" maxlength="5000" placeholder="${placeholder}"></textarea>
-      <button class="po-btn-primary" data-cmt-send style="padding:6px 12px;font-size:11px;white-space:nowrap"><i class="fa fa-paper-plane"></i> ${label}</button>
+      <div class="mp-cmt-compose">
+        <textarea rows="2" maxlength="5000" placeholder="${placeholder}"></textarea>
+        <div class="mp-cmt-pending" data-cmt-files></div>
+        <div class="mp-cmt-toolbar">
+          <button class="mp-cmt-tool" data-cmt-attach title="Attach images or files"><i class="fa fa-paperclip"></i></button>
+          <span class="mp-cmt-hint">${hint}</span>
+          <button class="po-btn-primary mp-cmt-send" data-cmt-send>${label}</button>
+        </div>
+      </div>
     </div>`;
 
   /** Comment list + composer inside the task detail. Posts update extra.comments in place. */
@@ -53223,17 +54051,27 @@ const TeamProfile = (() => {
     const comments = extra.comments || (extra.comments = []);
 
     async function send(form, parentId) {
-      const ta  = form.querySelector('textarea');
-      const btn = form.querySelector('[data-cmt-send]');
-      const body = ta.value.trim();
-      if (!body) { ta.focus(); return; }
+      const ta    = form.querySelector('textarea');
+      const btn   = form.querySelector('[data-cmt-send]');
+      const files = form._files || [];
+      const body  = ta.value.trim();
+      if (!body && !files.length) { ta.focus(); return; }
       btn.disabled = true;
+      form.querySelector('[data-cmt-attach]').disabled = true;
       try {
-        const res = await API.pmMyWorkTaskComment(t.id, body, parentId);
+        const res = await API.pmMyWorkTaskComment(t.id, body, parentId, files.length > 0);
         if (res.status >= 400) {
           throw new Error(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to post comment'));
         }
         const c = res.body?.data;
+        // Files go up one by one after the comment exists (like inbox messages).
+        c.attachments = c.attachments || [];
+        if (files.length) btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Uploading…';
+        for (const f of files) {
+          const up = await window.electronAPI.apiUpload(API.pmMyWorkCommentAttachmentUploadPath(c.id), f.path);
+          if (up.status >= 200 && up.status < 300) c.attachments.push(...(up.body?.data || []));
+          else toast(`${f.name}: ${up.status === 413 ? 'File is too large for the server.' : (up.body?.errors ? Object.values(up.body.errors).flat().join(' ') : (up.body?.message || 'Upload failed'))}`, 'error');
+        }
         const thread = c?.parent_id ? comments.find(x => +x.id === +c.parent_id) : null;
         if (thread) (thread.replies ||= []).push(c);
         else comments.push({ ...c, replies: [] });
@@ -53241,12 +54079,34 @@ const TeamProfile = (() => {
       } catch (e) {
         toast(String(e.message || e), 'error');
         btn.disabled = false;
+        form.querySelector('[data-cmt-attach]').disabled = false;
       }
     }
 
+    function renderPending(form) {
+      const box = form.querySelector('[data-cmt-files]');
+      box.innerHTML = FilePreview.pendingHtml(form._files, 'cmt-unfile', `cmt-pending-${form._uid}`);
+      box.querySelectorAll('[data-cmt-unfile]').forEach(x => x.addEventListener('click', e => {
+        e.stopPropagation();
+        form._files.splice(+x.dataset.cmtUnfile, 1);
+        renderPending(form);
+      }));
+    }
+
+    let _formSeq = 0;
     function bindForm(form, parentId) {
       const ta = form.querySelector('textarea');
+      form._files = [];
+      form._uid   = ++_formSeq;
       form.querySelector('[data-cmt-send]').addEventListener('click', () => send(form, parentId));
+      form.querySelector('[data-cmt-attach]').addEventListener('click', async () => {
+        const picked = await FilePreview.pick('Attach to comment');
+        if (!picked.length) return;
+        form._files.push(...picked);
+        if (form._files.length > 10) { form._files.length = 10; toast('Up to 10 files per comment', 'info'); }
+        renderPending(form);
+        ta.focus();
+      });
       ta.addEventListener('keydown', e => {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(form, parentId); }
         // Esc closes an open reply box instead of the whole task detail.
@@ -53256,23 +54116,29 @@ const TeamProfile = (() => {
 
     function render() {
       const total = comments.reduce((n, c) => n + 1 + (c.replies || []).length, 0);
+      const countEl = $('#mp-detail-cmt-count');
+      if (countEl) countEl.textContent = total;
       el.innerHTML = `
-        <div style="display:flex;flex-direction:column;gap:8px">
-          <div style="font-size:12px;font-weight:600"><i class="fa fa-comments" style="margin-right:5px;color:var(--accent)"></i>Comments (${total})</div>
+        <div class="mp-cmt-list">
           ${comments.length
             ? comments.map(c => _commentHtml(c, null)).join('')
-            : `<div style="font-size:11px;color:var(--text-muted)">No comments yet. Start the conversation below.</div>`}
-          <div data-cmt-main>${_cmtFormHtml('Write a comment… (Ctrl+Enter to send)', 'Comment')}</div>
+            : `<div class="mpd-empty">No comments yet. Start the conversation below.</div>`}
+          <div data-cmt-main>${_cmtFormHtml('Add a comment…', 'Comment', 'Ctrl+Enter to send')}</div>
         </div>`;
 
       bindForm(el.querySelector('[data-cmt-main] .mp-cmt-form'), null);
+      FilePreview.hydrate(el);
+      el.querySelectorAll('[data-cmt-dl]').forEach(chip => chip.addEventListener('click', () => {
+        const a = comments.flatMap(c => [c, ...(c.replies || [])]).flatMap(c => c.attachments || []).find(x => +x.id === +chip.dataset.cmtDl);
+        if (a) TaskFiles.download('mine', a);
+      }));
 
       el.querySelectorAll('[data-cmt-reply]').forEach(btn => btn.addEventListener('click', () => {
         const slot = el.querySelector(`[data-cmt-reply-slot="${btn.dataset.cmtReply}"]`);
         if (!slot) return;
         el.querySelectorAll('[data-cmt-reply-slot]').forEach(s => { if (s !== slot) s.innerHTML = ''; });
         if (!slot.firstElementChild) {
-          slot.innerHTML = _cmtFormHtml('Write a reply… (Ctrl+Enter to send, Esc to cancel)', 'Reply');
+          slot.innerHTML = _cmtFormHtml('Write a reply…', 'Reply', 'Ctrl+Enter to send · Esc to cancel');
           bindForm(slot.firstElementChild, +btn.dataset.cmtReply);
         }
         const ta = slot.querySelector('textarea');
@@ -53288,7 +54154,8 @@ const TeamProfile = (() => {
   async function openMpTaskDetail(taskId) {
     const t = _task(taskId);
     if (!t) return;
-    _mpDetailId = t.id;
+    _mpDetailId  = t.id;
+    _mpDetailTab = 'comments';
     _renderMpDetail(t, null);
     $('#mp-detail-modal').style.display = '';
 
@@ -53313,7 +54180,6 @@ const TeamProfile = (() => {
   }
 
   $('#mp-detail-close')?.addEventListener('click',  _closeMpTaskDetail);
-  $('#mp-detail-cancel')?.addEventListener('click', _closeMpTaskDetail);
   $('#mp-detail-modal')?.addEventListener('click', e => { if (e.target === $('#mp-detail-modal')) _closeMpTaskDetail(); });
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && _mpDetailId !== null) _closeMpTaskDetail(); });
 
@@ -53325,6 +54191,14 @@ const TeamProfile = (() => {
     modification: 'Modification', rental: 'Rental', other: 'Other',
   };
   let _mpProjectId = null;
+
+  function _detailRow(icon, label, value) {
+    return `
+      <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)"><i class="fa ${icon}" style="margin-right:4px"></i>${label}</div>
+        <div style="font-size:12px;overflow-wrap:anywhere">${value}</div>
+      </div>`;
+  }
 
   function _renderMpProject(p, error) {
     const body = $('#mp-project-body');
@@ -53537,9 +54411,269 @@ const TeamProfile = (() => {
   $('#mp-task-modal')?.addEventListener('click', e => { if (e.target === $('#mp-task-modal')) _closeMpTaskModal(); });
   $('#mp-tf-title')?.addEventListener('keydown', e => { if (e.key === 'Enter') _saveMpTask(); });
 
+  // ── My Achievements: my completed tasks, project by project ────────────────
+  // Built from the same /pm/my-work payload (every task assigned to me, done ones included).
+  // Stats and project cards follow the period / project / search filters; the activity
+  // heatmap ignores the period and the badges are always all-time.
+  const _doneDay = t => (t.completed_at || '').slice(0, 10);
+  // Done on or before its due date (tasks without a due date count neither way).
+  const _onTime  = t => !!t.due_date && !!t.completed_at && _doneDay(t) <= t.due_date;
+  const _byDoneDesc = (a, b) => (b.completed_at || '').localeCompare(a.completed_at || '');
+
+  function _achPeriodStart() {
+    const d = new Date();
+    if (mp.achPeriod === 'week')  return _inDays(-6);
+    if (mp.achPeriod === 'month') return _ymd(new Date(d.getFullYear(), d.getMonth(), 1));
+    if (mp.achPeriod === 'year')  return `${d.getFullYear()}-01-01`;
+    return '';
+  }
+
+  // Consecutive days with at least one completion, ending today (or yesterday if nothing yet today).
+  function _achStreak(days) {
+    const d = new Date();
+    if (!days.has(_ymd(d))) d.setDate(d.getDate() - 1);
+    let n = 0;
+    while (days.has(_ymd(d))) { n++; d.setDate(d.getDate() - 1); }
+    return n;
+  }
+
+  function _achBestStreak(days) {
+    const sorted = [...days].sort();
+    let best = 0, run = 0, prev = null;
+    sorted.forEach(day => {
+      const cur = _parseYmd(day);
+      run = prev && Math.round((cur - prev) / 86400000) === 1 ? run + 1 : 1;
+      best = Math.max(best, run);
+      prev = cur;
+    });
+    return best;
+  }
+
+  function renderMpAchievements() {
+    const q      = mp.achSearch.trim().toLowerCase();
+    const start  = _achPeriodStart();
+    const allDone = mp.tasks.filter(_isDone);
+    const scoped = allDone.filter(t =>
+      (!mp.achProject || +t.project_id === +mp.achProject) &&
+      (!q || (t.title || '').toLowerCase().includes(q) || (t.project_name || '').toLowerCase().includes(q)));
+    const done   = start ? scoped.filter(t => _doneDay(t) >= start) : scoped;
+
+    _renderAchStats(done, scoped);
+    _renderAchHeat(scoped);
+    _renderAchBadges(allDone);
+    _renderAchProjects(done);
+  }
+
+  function _renderAchStats(done, scoped) {
+    const el = $('#mp-ach-stats');
+    if (!el) return;
+    const withDue  = done.filter(t => t.due_date && t.completed_at);
+    const onTime   = withDue.filter(_onTime).length;
+    const rate     = withDue.length ? Math.round(onTime / withDue.length * 100) : null;
+    const minutes  = done.reduce((m, t) => m + (+t.logged_minutes || 0), 0);
+    const projects = new Set(done.map(t => +t.project_id)).size;
+    const days     = new Set(scoped.map(_doneDay).filter(Boolean));
+    const streak   = _achStreak(days);
+    const tiles = [
+      { cls: 'done',    icon: 'fa-circle-check', value: done.length, label: 'Tasks completed' },
+      { cls: 'ontime',  icon: 'fa-bullseye',     value: rate == null ? '—' : `${rate}%`, label: 'On time',
+        sub: withDue.length ? `${onTime} of ${withDue.length} with a due date` : 'No due dates' },
+      { cls: 'high',    icon: 'fa-flag',         value: done.filter(t => t.priority === 'high').length, label: 'High priority done' },
+      { cls: 'time',    icon: 'fa-clock',        value: _fmtMinutes(minutes), label: 'Time logged' },
+      { cls: 'proj',    icon: 'fa-diagram-project', value: projects, label: projects === 1 ? 'Project' : 'Projects' },
+      { cls: 'streak',  icon: 'fa-fire',         value: `${streak}d`, label: 'Current streak', sub: `Best ${_achBestStreak(days)}d` },
+    ];
+    el.innerHTML = tiles.map(s => `
+      <div class="mp-ach-stat mp-ach-stat--${s.cls}">
+        <div class="mp-ach-stat-icon"><i class="fa ${s.icon}"></i></div>
+        <div class="mp-ach-stat-body">
+          <div class="mp-ach-stat-value">${esc(String(s.value))}</div>
+          <div class="mp-ach-stat-label">${esc(s.label)}</div>
+          ${s.sub ? `<div class="mp-ach-stat-sub">${esc(s.sub)}</div>` : ''}
+        </div>
+      </div>`).join('');
+  }
+
+  // GitHub-style grid: 12 week columns (Mon → Sun), shaded by completions per day.
+  function _renderAchHeat(scoped) {
+    const el = $('#mp-ach-heat');
+    if (!el) return;
+    const perDay = {};
+    scoped.forEach(t => { const d = _doneDay(t); if (d) perDay[d] = (perDay[d] || 0) + 1; });
+
+    const today = _today();
+    const first = new Date();
+    first.setDate(first.getDate() - ((first.getDay() + 6) % 7) - 11 * 7);   // Monday, 11 weeks back
+    let cells = '', total = 0;
+    for (let i = 0; i < 12 * 7; i++) {
+      const d   = new Date(first); d.setDate(first.getDate() + i);
+      const key = _ymd(d);
+      const n   = perDay[key] || 0;
+      const lvl = n === 0 ? 0 : n === 1 ? 1 : n === 2 ? 2 : n <= 4 ? 3 : 4;
+      if (key > today) { cells += '<span class="mp-ach-heat-cell is-future"></span>'; continue; }
+      total += n;
+      const label = `${n} task${n === 1 ? '' : 's'} · ${_mpDayFmt(d, { weekday: 'short', month: 'short', day: 'numeric' })}`;
+      cells += `<span class="mp-ach-heat-cell lvl-${lvl}${key === today ? ' is-today' : ''}" title="${esc(label)}"></span>`;
+    }
+    el.innerHTML = `
+      <div class="mp-ach-heat-days"><span>Mon</span><span></span><span>Wed</span><span></span><span>Fri</span><span></span><span></span></div>
+      <div class="mp-ach-heat-grid">${cells}</div>
+      <div class="mp-ach-heat-legend">Less ${[0, 1, 2, 3, 4].map(l => `<span class="mp-ach-heat-cell lvl-${l}"></span>`).join('')} More</div>`;
+    const sum = $('#mp-ach-activity-sum');
+    if (sum) sum.textContent = `${total} completed in 12 weeks`;
+  }
+
+  function _renderAchBadges(allDone) {
+    const el = $('#mp-ach-badges');
+    if (!el) return;
+    const onTime   = allDone.filter(_onTime).length;
+    const high     = allDone.filter(t => t.priority === 'high').length;
+    const projects = new Set(allDone.map(t => +t.project_id)).size;
+    const best     = _achBestStreak(new Set(allDone.map(_doneDay).filter(Boolean)));
+    const badges = [
+      { icon: 'fa-seedling',      name: 'First win',        need: 1,   have: allDone.length, desc: 'Complete your first task' },
+      { icon: 'fa-check-double',  name: 'Getting it done',  need: 10,  have: allDone.length, desc: 'Complete 10 tasks' },
+      { icon: 'fa-bolt',          name: 'Task crusher',     need: 25,  have: allDone.length, desc: 'Complete 25 tasks' },
+      { icon: 'fa-star',          name: 'Half century',     need: 50,  have: allDone.length, desc: 'Complete 50 tasks' },
+      { icon: 'fa-crown',         name: 'Centurion',        need: 100, have: allDone.length, desc: 'Complete 100 tasks' },
+      { icon: 'fa-stopwatch',     name: 'Punctual',         need: 10,  have: onTime,         desc: 'Finish 10 tasks on or before their due date' },
+      { icon: 'fa-fire-flame-curved', name: 'Firefighter',  need: 10,  have: high,           desc: 'Complete 10 high-priority tasks' },
+      { icon: 'fa-layer-group',   name: 'Team player',      need: 3,   have: projects,       desc: 'Complete tasks in 3 different projects' },
+      { icon: 'fa-fire',          name: 'On a roll',        need: 5,   have: best,           desc: 'Complete tasks 5 days in a row' },
+    ];
+    const earned = badges.filter(b => b.have >= b.need).length;
+    el.innerHTML = badges.map(b => {
+      const ok  = b.have >= b.need;
+      const pct = Math.min(100, Math.round(b.have / b.need * 100));
+      return `
+        <div class="mp-ach-badge${ok ? ' is-earned' : ''}" title="${esc(b.desc)}">
+          <div class="mp-ach-badge-icon"><i class="fa ${b.icon}"></i></div>
+          <div class="mp-ach-badge-name">${esc(b.name)}</div>
+          <div class="mp-ach-badge-prog">${ok ? '<i class="fa fa-check"></i> Earned' : `${Math.min(b.have, b.need)} / ${b.need}`}</div>
+          ${ok ? '' : `<div class="mp-w-bar mp-ach-badge-bar"><div style="width:${pct}%"></div></div>`}
+        </div>`;
+    }).join('');
+    const sum = $('#mp-ach-badge-sum');
+    if (sum) sum.textContent = `${earned} of ${badges.length} earned`;
+  }
+
+  // Full completed list, one collapsible group per project (most completed first).
+  function _renderAchProjects(done) {
+    const el = $('#mp-ach-projects');
+    if (!el) return;
+    const sum = $('#mp-ach-done-sum');
+    const toggleAll = $('#mp-ach-toggle-all');
+    if (sum) sum.textContent = done.length ? `· ${done.length}` : '';
+    if (toggleAll) toggleAll.style.display = done.length ? '' : 'none';
+    if (!done.length) {
+      const filtered = mp.achPeriod !== 'all' || mp.achProject || mp.achSearch.trim();
+      el.innerHTML = `<div class="mp-ach-empty"><i class="fa fa-trophy"></i>
+        <span>${filtered ? 'No completed tasks match these filters.' : 'No completed tasks yet — finish a task and it shows up here.'}</span></div>`;
+      return;
+    }
+
+    const groups = new Map();   // project_id → tasks
+    done.forEach(t => {
+      if (!groups.has(+t.project_id)) groups.set(+t.project_id, []);
+      groups.get(+t.project_id).push(t);
+    });
+    const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+
+    el.innerHTML = ordered.map(([pid, list]) => {
+      const p       = _project(pid);
+      const name    = p?.name || list[0].project_name || 'Project';
+      const color   = esc(p?.color || '#64748b');
+      const mine    = mp.tasks.filter(t => +t.project_id === pid);
+      const doneAll = mine.filter(_isDone).length;
+      const pct     = mine.length ? Math.round(doneAll / mine.length * 100) : 0;
+      const onTime  = list.filter(_onTime).length;
+      const mins    = list.reduce((m, t) => m + (+t.logged_minutes || 0), 0);
+      list.sort(_byDoneDesc);
+      const collapsed = mp.achCollapsed.has(pid);
+
+      return `
+        <section class="mp-ach-proj${collapsed ? ' is-collapsed' : ''}" style="--c:${color}">
+          <header class="mp-ach-proj-head" data-ach-toggle="${pid}" title="${collapsed ? 'Show' : 'Hide'} this project's tasks">
+            <i class="fa fa-chevron-down mp-ach-proj-caret"></i>
+            <div class="mp-w-proj-avatar mp-ach-proj-avatar">${esc(name.trim().charAt(0).toUpperCase())}</div>
+            <div class="mp-ach-proj-main">
+              <div class="mp-ach-proj-name">${esc(name)}</div>
+              <div class="mp-ach-proj-meta">
+                <span><i class="fa fa-circle-check"></i> ${list.length} completed</span>
+                <span><i class="fa fa-bullseye"></i> ${onTime} on time</span>
+                ${mins ? `<span><i class="fa fa-clock"></i> ${esc(_fmtMinutes(mins))}</span>` : ''}
+              </div>
+            </div>
+            <div class="mp-ach-proj-progress" title="${doneAll} of ${mine.length} of my tasks in this project are done">
+              <div class="mp-w-bar"><div style="width:${pct}%"></div></div>
+              <span>${doneAll}/${mine.length} · ${pct}%</span>
+            </div>
+            ${p ? `<button class="mp-w-icon-btn" data-ach-pinfo="${pid}" title="Project details and team members"><i class="fa fa-circle-info"></i></button>` : ''}
+          </header>
+          ${collapsed ? '' : `<div class="mp-ach-list">${list.map(_achTaskRow).join('')}</div>`}
+        </section>`;
+    }).join('');
+
+    if (toggleAll) {
+      const allCollapsed = ordered.every(([pid]) => mp.achCollapsed.has(pid));
+      toggleAll.innerHTML = allCollapsed
+        ? '<i class="fa fa-angles-down"></i> Expand all'
+        : '<i class="fa fa-angles-up"></i> Collapse all';
+      toggleAll.onclick = () => {
+        ordered.forEach(([pid]) => allCollapsed ? mp.achCollapsed.delete(pid) : mp.achCollapsed.add(pid));
+        _renderAchProjects(done);
+      };
+    }
+    el.querySelectorAll('[data-ach-toggle]').forEach(h => h.addEventListener('click', e => {
+      if (e.target.closest('button')) return;
+      const pid = +h.dataset.achToggle;
+      mp.achCollapsed.has(pid) ? mp.achCollapsed.delete(pid) : mp.achCollapsed.add(pid);
+      _renderAchProjects(done);
+    }));
+    el.querySelectorAll('[data-ach-pinfo]').forEach(b => b.addEventListener('click', () => openMpProjectDetail(b.dataset.achPinfo)));
+    _bindDetailOpen(el);
+  }
+
+  function _achTaskRow(t) {
+    const day  = _doneDay(t);
+    const when = day ? _mpDayFmt(_parseYmd(day), { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+    const timing = !t.due_date || !day ? ''
+      : _onTime(t) ? '<span class="mp-ach-tag mp-ach-tag--ontime">On time</span>'
+      : `<span class="mp-ach-tag mp-ach-tag--late" title="Due ${esc(t.due_date)}">Late</span>`;
+    return `
+      <div class="mp-ach-row" data-tid="${t.id}">
+        <i class="fa fa-circle-check mp-ach-row-check"></i>
+        <div class="mp-ach-row-main">
+          <div class="mp-ach-row-title">${esc(t.title)}</div>
+          <div class="mp-ach-row-meta">
+            <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
+            ${t.milestone_name ? `<span><i class="fa fa-flag"></i> ${esc(t.milestone_name)}</span>` : ''}
+            ${t.logged_minutes ? `<span><i class="fa fa-clock"></i> ${esc(_fmtMinutes(t.logged_minutes))}</span>` : ''}
+          </div>
+        </div>
+        ${timing}
+        <span class="mp-ach-row-date" title="Completed">${esc(when)}</span>
+      </div>`;
+  }
+
+  $$('#mp-ach-period-chips [data-ach-period]').forEach(chip => chip.addEventListener('click', () => {
+    $$('#mp-ach-period-chips [data-ach-period]').forEach(c => c.classList.toggle('active', c === chip));
+    mp.achPeriod = chip.dataset.achPeriod;
+    renderMpAchievements();
+  }));
+  $('#mp-ach-project')?.addEventListener('change', function () { mp.achProject = this.value; renderMpAchievements(); });
+  $('#mp-ach-search')?.addEventListener('input', function () { mp.achSearch = this.value; renderMpAchievements(); });
+
   // ── Wiring ──────────────────────────────────────────────────────────────────
   $$('#pm-mine-view [data-mpsub]').forEach(btn => btn.addEventListener('click', () => switchMpView(btn.dataset.mpsub)));
   $('#mp-ov-board-btn')?.addEventListener('click', () => switchMpView('board'));
+  $('#mp-ov-cal-btn')?.addEventListener('click', () => switchMpView('calendar'));
+  $('#mp-ov-tasks-all')?.addEventListener('click', () => _goTasks({ upcoming: 'open', today: 'today', completed: 'done' }[mp.ovTaskTab] || 'open'));
+  $('#mp-ov-overdue-all')?.addEventListener('click', () => _goTasks('overdue'));
+  $('#mp-ov-team-msg')?.addEventListener('click', () => window.MpInbox?.compose({
+    to: mp.team.filter(u => !u.is_me).map(u => ({ id: u.id, name: u.name, email: u.email, avatar_url: u.avatar_url })),
+  }));
+  $('#mp-ov-task-create')?.addEventListener('click', () => openMpTaskModal());
 
   $('#mp-task-search')?.addEventListener('input', function () { mp.taskSearch = this.value; renderMpTasks(); });
   $('#mp-task-project')?.addEventListener('change', function () {
@@ -53622,6 +54756,7 @@ const TeamProfile = (() => {
   $('#rb-mp-board')   ?.addEventListener('click', () => _mpOpen('board'));
   $('#rb-mp-calendar')?.addEventListener('click', () => _mpOpen('calendar'));
   $('#rb-mp-inbox')   ?.addEventListener('click', () => _mpOpen('inbox'));
+  $('#rb-mp-achievements')?.addEventListener('click', () => _mpOpen('achievements'));
   $('#rb-mp-new-task')?.addEventListener('click', () => {
     if (_activeTab() !== 'my-projects') activateTab('my-projects');
     openMpTaskModal();
@@ -53707,6 +54842,17 @@ const MpInbox = (() => {
       ${f.size_bytes != null ? `<small>${TaskFiles.fmtSize(f.size_bytes)}</small>` : ''}
       ${removable ? `<i class="fa fa-xmark" data-ib-unfile="${idx}" style="cursor:pointer" title="Remove"></i>` : ''}
     </span>`;
+  }
+
+  // A message's files: images as thumbnails (click → viewer, download from there), the rest as chips.
+  function msgFilesHtml(m) {
+    if (!m.attachments.length) return '';
+    const images = m.attachments.filter(a => FilePreview.isImage(a.name, a.mime_type));
+    const others = m.attachments.filter(a => !FilePreview.isImage(a.name, a.mime_type));
+    return `<div class="mp-ib-atts">
+      ${images.map(a => FilePreview.thumbHtml({ download: API.pmInboxAttachmentDownloadPath(a.id), name: a.name, group: `ib-msg-${m.id}` })).join('')}
+      ${others.map(a => fileChip(a, { download: true })).join('')}
+    </div>`;
   }
 
   // ── Data ────────────────────────────────────────────────────────────────────
@@ -53954,7 +55100,7 @@ const MpInbox = (() => {
               <span class="mp-ib-msg-time">${m.attachments.length ? '<i class="fa fa-paperclip" style="margin-right:6px"></i>' : ''}${esc(longTime(m.created_at))}</span>
             </div>
             <div class="mp-ib-msg-body">${esc(m.body)}</div>
-            ${m.attachments.length ? `<div class="mp-ib-atts">${m.attachments.map(a => fileChip(a, { download: true })).join('')}</div>` : ''}
+            ${msgFilesHtml(m)}
           </div>`;
         }).join('')}
       </div>
@@ -53970,6 +55116,7 @@ const MpInbox = (() => {
       h.closest('.mp-ib-msg').classList.toggle('is-collapsed');
     }));
     bindDownloads(reader);
+    FilePreview.hydrate(reader);
     renderReplyBox(others);
     reader.scrollTop = reader.scrollHeight;
   }
@@ -54003,7 +55150,7 @@ const MpInbox = (() => {
       <div class="mp-ib-reply">
         <div class="mp-ib-reply-to"><i class="fa fa-reply${others.length > 1 ? '-all' : ''}"></i> ${esc(toNames)}</div>
         <textarea id="mp-ib-reply-text" placeholder="Write your reply…" maxlength="20000">${esc(ib.reply.text)}</textarea>
-        <div class="mp-ib-reply-files">${ib.reply.files.map((f, i) => fileChip(f, { removable: true, idx: i })).join('')}</div>
+        <div class="mp-ib-reply-files">${FilePreview.pendingHtml(ib.reply.files, 'ib-unfile', 'ib-reply-pending')}</div>
         <div class="mp-ib-reply-foot">
           <button class="mp-ib-send" id="mp-ib-reply-send" title="Send (Ctrl+Enter)"><i class="fa fa-paper-plane"></i> Send</button>
           <button class="mp-ib-tool" id="mp-ib-reply-attach" title="Attach files"><i class="fa fa-paperclip"></i></button>
@@ -54059,15 +55206,7 @@ const MpInbox = (() => {
   }
 
   // ── Files ───────────────────────────────────────────────────────────────────
-  async function pickFiles() {
-    const result = await window.electronAPI.showOpenDialog({
-      title: 'Attach files',
-      filters: [{ name: 'Documents & Images', extensions: TaskFiles.EXTS }, { name: 'All Files', extensions: ['*'] }],
-      properties: ['openFile', 'multiSelections'],
-    });
-    if (result.canceled || !result.filePaths?.length) return [];
-    return result.filePaths.map(path => ({ path, name: path.split(/[\\/]/).pop() }));
-  }
+  const pickFiles = () => FilePreview.pick('Attach files');
 
   /** Uploads picked files to a sent message, one request per file (like task attachments). */
   async function uploadFiles(messageId, files) {
@@ -54199,7 +55338,7 @@ const MpInbox = (() => {
     teamBtn.style.display = missing.length ? '' : 'none';
     teamBtn.innerHTML = `<i class="fa fa-users"></i> Add whole team (${missing.length})`;
 
-    $('#mp-ib-cw-files').innerHTML = cw.files.map((f, i) => fileChip(f, { removable: true, idx: i })).join('');
+    $('#mp-ib-cw-files').innerHTML = FilePreview.pendingHtml(cw.files, 'ib-unfile', 'ib-cw-pending');
     $('#mp-ib-cw-files').querySelectorAll('[data-ib-unfile]').forEach(x => x.addEventListener('click', () => {
       cw.files.splice(+x.dataset.ibUnfile, 1);
       renderCompose();

@@ -182,6 +182,52 @@ class ProjectService
     }
 
     /**
+     * Everyone on the teams of the given projects (the My Projects overview "Team" panel): who
+     * they are, which of these projects they share, and their open task count across them.
+     *
+     * @param  Collection<int, Project>  $projects
+     * @return Collection<int, array{id:int,name:string,email:?string,avatar_url:?string,role:string,is_me:bool,last_seen_at:?string,project_ids:int[],open_tasks:int}>
+     */
+    public function teammatesForProjects(Business $business, Collection $projects, int $userId): Collection
+    {
+        $projectIds = $projects->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if (! $projectIds) {
+            return collect();
+        }
+
+        $roles = $this->businessUsers($business)->pluck('role', 'id');
+
+        $memberships = DB::table('pm_project_members')
+            ->whereIn('project_id', $projectIds)
+            ->get(['project_id', 'user_id'])
+            ->groupBy('user_id');
+
+        $open = DB::table('pm_task_assignees as a')
+            ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
+            ->whereIn('t.project_id', $projectIds)
+            ->where('t.status', '!=', Task::STATUS_DONE)
+            ->selectRaw('a.user_id, count(*) as open')
+            ->groupBy('a.user_id')
+            ->pluck('open', 'user_id');
+
+        return User::whereIn('id', $memberships->keys())
+            ->get()
+            ->map(fn (User $u) => [
+                'id'           => (int) $u->id,
+                'name'         => $u->name,
+                'email'        => $u->email,
+                'avatar_url'   => $u->avatarUrl(),
+                'role'         => $roles[$u->id] ?? 'former',
+                'is_me'        => (int) $u->id === $userId,
+                'last_seen_at' => $u->last_seen_at?->toDateTimeString(),
+                'project_ids'  => $memberships[$u->id]->pluck('project_id')->map(fn ($id) => (int) $id)->values()->all(),
+                'open_tasks'   => (int) ($open[$u->id] ?? 0),
+            ])
+            ->sortBy([['is_me', 'desc'], ['name', 'asc']])
+            ->values();
+    }
+
+    /**
      * A non-archived project of the business that the user is on the team of or has a task in
      * (the My Projects scope), loaded for the project-detail view; null when out of scope.
      */

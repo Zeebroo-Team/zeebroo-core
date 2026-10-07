@@ -45,6 +45,10 @@ class PosNotification extends Model
 
     public const TYPE_INBOX_MESSAGE = 'inbox_message';
 
+    public const TYPE_TASK_DELETE_REQUESTED = 'task_delete_requested';
+
+    public const TYPE_TASK_DELETE_DECIDED = 'task_delete_decided';
+
     protected $table = 'pos_notifications';
 
     protected $fillable = [

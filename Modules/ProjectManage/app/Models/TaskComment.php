@@ -33,6 +33,12 @@ class TaskComment extends Model
         return $this->hasMany(self::class, 'parent_id')->orderBy('id');
     }
 
+    /** Files posted with this comment (images, PDFs…). */
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TaskAttachment::class, 'comment_id')->orderBy('id');
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class);

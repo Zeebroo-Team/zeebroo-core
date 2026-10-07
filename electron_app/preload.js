@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // API
   apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
   downloadFile:    (path, suggestedFilename) => ipcRenderer.invoke('api-download-file', { path, suggestedFilename }),
+  fetchDataUrl:    (path)               => ipcRenderer.invoke('api-fetch-data-url', { path }),
   printReceipt:    ()                   => ipcRenderer.invoke('print-receipt'),
   getPrinters:         ()      => ipcRenderer.invoke('get-printers'),
   getPrinterConfig:    ()      => ipcRenderer.invoke('get-printer-config'),

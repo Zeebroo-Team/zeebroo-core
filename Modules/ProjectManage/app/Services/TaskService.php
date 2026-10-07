@@ -77,7 +77,7 @@ class TaskService
         $tasks = Task::query()
             ->whereHas('project', fn ($q) => $q->where('business_id', $business->id)->where('status', '!=', Project::STATUS_ARCHIVED))
             ->whereHas('assignees', fn ($q) => $q->where('users.id', $userId))
-            ->with(['assignees', 'project', 'milestone'])
+            ->with(['assignees', 'project.business', 'milestone', 'pendingDeleteRequest'])
             ->withCount('attachments')
             ->orderByRaw('due_date IS NULL')->orderBy('due_date')->orderByDesc('id')
             ->get();
@@ -108,7 +108,7 @@ class TaskService
      */
     public function activityForTask(Task $task): array
     {
-        $task->loadMissing(['comments.user', 'timeLogs.user', 'attachments.user']);
+        $task->loadMissing(['comments.user', 'comments.attachments.user', 'timeLogs.user', 'attachments.user']);
         $files   = app(TaskAttachmentService::class);
         $replies = $task->comments->whereNotNull('parent_id')->groupBy('parent_id');
 
@@ -346,6 +346,8 @@ class TaskService
                 'due_date'        => filled($data['due_date'] ?? '') ? $data['due_date'] : null,
                 'sort_order'      => (int) ($data['sort_order'] ?? 0),
                 'estimated_hours' => filled($data['estimated_hours'] ?? '') ? $data['estimated_hours'] : null,
+                // The creator owns the task (POS cashier tokens are not users — no owner recorded).
+                'created_by'      => auth()->user() instanceof \App\Models\User ? (int) auth()->id() : null,
             ]);
 
             $this->notifyAssigned($task, $task->syncAssignees(self::assigneeIdsFrom($data) ?? []));
@@ -462,6 +464,10 @@ class TaskService
             'avatar_url' => $c->user?->avatarUrl(),
             'is_mine'    => $c->user_id !== null && (int) $c->user_id === (int) auth()->id(),
             'body'       => $c->body,
+            // Files posted with the comment (images are previewed inline by the desktop).
+            'attachments' => $c->relationLoaded('attachments')
+                ? $c->attachments->map(fn ($a) => app(TaskAttachmentService::class)->fmt($a))->values()
+                : [],
             'created_at' => $c->created_at?->toDateTimeString(),
         ];
     }

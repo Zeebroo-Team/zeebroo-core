@@ -13,8 +13,11 @@ use Modules\ProjectManage\Models\Task;
 use Modules\ProjectManage\Models\TaskStatus;
 use Modules\ProjectManage\Services\MilestoneService;
 use Modules\ProjectManage\Models\TaskAttachment;
+use Modules\ProjectManage\Models\TaskComment;
+use Modules\ProjectManage\Models\TaskDeleteRequest;
 use Modules\ProjectManage\Services\ProjectService;
 use Modules\ProjectManage\Services\TaskAttachmentService;
+use Modules\ProjectManage\Services\TaskDeleteRequestService;
 use Modules\ProjectManage\Services\TaskService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
@@ -28,6 +31,7 @@ class ProjectManageApiController extends Controller
         private readonly TaskService      $tasks,
         private readonly MilestoneService $milestones,
         private readonly TaskAttachmentService $attachments,
+        private readonly TaskDeleteRequestService $deleteRequests,
     ) {}
 
     // ── Projects ─────────────────────────────────────────────────────────────
@@ -441,6 +445,8 @@ class ProjectManageApiController extends Controller
                 // Only team members may add tasks for themselves (see myWorkTaskStore).
                 'is_member' => $p->members()->where('users.id', $userId)->exists(),
             ])->values(),
+            // Teammates across these projects (Overview "Team" panel and project-card avatars).
+            'team'     => $this->projects->teammatesForProjects($business, $work['projects'], $userId),
         ]]);
     }
 
@@ -508,7 +514,7 @@ class ProjectManageApiController extends Controller
         $task     = $this->resolveTask($business, $id);
         abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only view tasks assigned to you.');
 
-        $task->loadMissing(['assignees', 'milestone']);
+        $task->loadMissing(['assignees', 'milestone', 'pendingDeleteRequest']);
 
         return response()->json(['data' => $this->fmtTask($task) + $this->tasks->activityForTask($task)]);
     }
@@ -526,7 +532,7 @@ class ProjectManageApiController extends Controller
 
         $task = $this->tasks->moveStatus($task, $status);
 
-        return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project']))]);
+        return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project', 'pendingDeleteRequest']))]);
     }
 
     /** Comment (or reply, with parent_id) on a task assigned to me. */
@@ -537,6 +543,61 @@ class ProjectManageApiController extends Controller
         abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only comment on tasks assigned to you.');
 
         return $this->storeComment($request, $task);
+    }
+
+    /** The task owner deletes a task outright; anyone else sends a delete request instead. */
+    public function myWorkTaskDestroy(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($task->isOwnedBy((int) $request->user()->id), 403, 'Only the task owner can delete this task — send a delete request instead.');
+
+        $this->tasks->delete($task);
+
+        return response()->json(['message' => 'Task deleted.']);
+    }
+
+    /** Asks the owner of a task assigned to me to delete it (they get a notification). */
+    public function myWorkTaskDeleteRequest(Request $request, int $id): JsonResponse
+    {
+        $task   = $this->resolveMyTask($request, $id);
+        $reason = $request->validate(['reason' => 'nullable|string|max:500'])['reason'] ?? null;
+
+        $deleteRequest = $this->deleteRequests->request($task, (int) $request->user()->id, $reason);
+
+        return response()->json([
+            'message' => 'Delete request sent to the task owner.',
+            'data'    => $this->deleteRequests->fmt($deleteRequest->load(['task.project', 'task.milestone', 'requester'])),
+        ], 201);
+    }
+
+    /** Delete requests waiting for my decision (tasks I own). */
+    public function myWorkDeleteRequestIndex(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $list     = $this->deleteRequests->pendingForOwner($business, (int) $request->user()->id);
+
+        return response()->json(['data' => $list->map(fn ($r) => $this->deleteRequests->fmt($r))->values()]);
+    }
+
+    /** One request addressed to me — any status, so a stale notification still shows what happened. */
+    public function myWorkDeleteRequestShow(Request $request, int $id): JsonResponse
+    {
+        return response()->json(['data' => $this->deleteRequests->fmt($this->resolveDeleteRequest($request, $id))]);
+    }
+
+    public function myWorkDeleteRequestApprove(Request $request, int $id): JsonResponse
+    {
+        $this->deleteRequests->approve($this->resolveDeleteRequest($request, $id));
+
+        return response()->json(['message' => 'Request approved — the task was deleted.']);
+    }
+
+    public function myWorkDeleteRequestReject(Request $request, int $id): JsonResponse
+    {
+        $deleteRequest = $this->deleteRequests->reject($this->resolveDeleteRequest($request, $id));
+
+        return response()->json(['message' => 'Request rejected.', 'data' => $this->deleteRequests->fmt($deleteRequest)]);
     }
 
     /** Files of a task assigned to me (the detail endpoint also returns them). */
@@ -550,6 +611,16 @@ class ProjectManageApiController extends Controller
     public function myWorkAttachmentStore(Request $request, int $id): JsonResponse
     {
         return $this->storeAttachments($request, $this->resolveMyTask($request, $id));
+    }
+
+    /** Files (images, PDFs…) for a comment I just posted; sent right after the comment itself. */
+    public function myWorkCommentAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        $comment = TaskComment::findOrFail($id);
+        $task    = $this->resolveMyTask($request, (int) $comment->task_id);
+        abort_unless((int) $comment->user_id === (int) $request->user()->id, 403, 'You can only attach files to your own comments.');
+
+        return $this->storeAttachments($request, $task, $comment);
     }
 
     public function myWorkAttachmentDownload(Request $request, int $id): StreamedResponse
@@ -689,6 +760,19 @@ class ProjectManageApiController extends Controller
         return $task;
     }
 
+    /**
+     * A delete request addressed to the caller. Only business access is required — the
+     * owner may manage projects without "Assigned Project Access" and still gets asked.
+     */
+    private function resolveDeleteRequest(Request $request, int $id): TaskDeleteRequest
+    {
+        $business      = $this->businessOrAbort($request);
+        $deleteRequest = $this->deleteRequests->findForOwner($business, $id, (int) $request->user()->id);
+        abort_unless($deleteRequest, 404, 'This delete request no longer exists — it may already have been approved.');
+
+        return $deleteRequest;
+    }
+
     private function resolveAttachment(\Modules\Business\Models\Business $business, int $id): TaskAttachment
     {
         $attachment = TaskAttachment::with('task.project')->findOrFail($id);
@@ -698,21 +782,23 @@ class ProjectManageApiController extends Controller
 
     private function storeComment(Request $request, Task $task): JsonResponse
     {
+        // has_files: the client uploads files to the comment right after, so the text may be empty.
         $data = $request->validate([
-            'body'      => 'required|string|max:5000',
+            'body'      => 'nullable|string|max:5000|required_unless:has_files,true,1',
             'parent_id' => 'nullable|integer',
-        ]);
+            'has_files' => 'nullable|boolean',
+        ], ['body.required_unless' => 'Write a comment or attach a file.']);
 
-        $comment = $this->tasks->addComment($task, (int) ($request->user()?->id ?? 0), $data['body'], $data['parent_id'] ?? null);
+        $comment = $this->tasks->addComment($task, (int) ($request->user()?->id ?? 0), (string) ($data['body'] ?? ''), $data['parent_id'] ?? null);
 
         return response()->json(['data' => $this->tasks->fmtComment($comment)], 201);
     }
 
-    private function storeAttachments(Request $request, Task $task): JsonResponse
+    private function storeAttachments(Request $request, Task $task, ?TaskComment $comment = null): JsonResponse
     {
         $request->validate(TaskAttachmentService::uploadRules(), TaskAttachmentService::uploadMessages());
 
-        $stored = $this->attachments->store($task, $request->file('files', []), $request->user()?->id);
+        $stored = $this->attachments->store($task, $request->file('files', []), $request->user()?->id, $comment);
 
         return response()->json(['data' => $stored->map(fn ($a) => $this->attachments->fmt($a))->values()], 201);
     }
@@ -818,6 +904,16 @@ class ProjectManageApiController extends Controller
             'is_overdue'       => $t->isOverdue(),
             'completed_at'     => $t->completed_at?->toDateTimeString(),
             'created_at'       => $t->created_at?->toDateTimeString(),
+            // Deletion (My Projects): the owner deletes directly, others send a delete request.
+            'created_by'       => $t->created_by !== null ? (int) $t->created_by : null,
+            'owner_id'         => $t->ownerId(),
+            'is_owner'         => auth()->id() !== null && $t->isOwnedBy((int) auth()->id()),
+            'delete_request'   => $t->relationLoaded('pendingDeleteRequest') && $t->pendingDeleteRequest ? [
+                'id'           => $t->pendingDeleteRequest->id,
+                'requested_by' => (int) $t->pendingDeleteRequest->requested_by,
+                'is_mine'      => (int) $t->pendingDeleteRequest->requested_by === (int) auth()->id(),
+                'created_at'   => $t->pendingDeleteRequest->created_at?->toDateTimeString(),
+            ] : null,
         ];
     }
 

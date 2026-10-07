@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Task extends Model
 {
@@ -48,6 +49,7 @@ class Task extends Model
         'status',
         'priority',
         'assigned_to',
+        'created_by',
         'due_date',
         'sort_order',
         'estimated_hours',
@@ -100,14 +102,42 @@ class Task extends Model
         return array_map('intval', $changes['attached'] ?? []);
     }
 
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'created_by');
+    }
+
+    /**
+     * The user who may delete the task outright: its creator; on older tasks (no creator
+     * recorded) the project creator, then the business owner.
+     */
+    public function ownerId(): ?int
+    {
+        $id = $this->created_by ?? $this->project?->created_by ?? $this->project?->business?->user_id;
+
+        return $id !== null ? (int) $id : null;
+    }
+
+    public function isOwnedBy(int $userId): bool
+    {
+        return $this->ownerId() === $userId;
+    }
+
+    /** The open delete request on this task, if any (one at a time). */
+    public function pendingDeleteRequest(): HasOne
+    {
+        return $this->hasOne(TaskDeleteRequest::class)->where('status', TaskDeleteRequest::STATUS_PENDING)->latestOfMany();
+    }
+
     public function comments(): HasMany
     {
         return $this->hasMany(TaskComment::class)->orderBy('id');
     }
 
+    /** Task-level files; files posted with a comment hang off that comment instead. */
     public function attachments(): HasMany
     {
-        return $this->hasMany(TaskAttachment::class)->orderByDesc('id');
+        return $this->hasMany(TaskAttachment::class)->whereNull('comment_id')->orderByDesc('id');
     }
 
     public function timeLogs(): HasMany
