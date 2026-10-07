@@ -105,6 +105,11 @@ class Task extends Model
         return $this->hasMany(TaskComment::class)->orderBy('id');
     }
 
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(TaskAttachment::class)->orderByDesc('id');
+    }
+
     public function timeLogs(): HasMany
     {
         return $this->hasMany(TimeLog::class)->orderByDesc('logged_at');

@@ -21,6 +21,7 @@ class TaskService
         $query = Task::query()
             ->where('project_id', $project->id)
             ->with(['assignees', 'milestone'])
+            ->withCount('attachments')
             ->orderBy('sort_order')
             ->orderByDesc('id');
 
@@ -47,7 +48,8 @@ class TaskService
     {
         $query = Task::query()
             ->whereHas('project', fn ($q) => $q->where('business_id', $business->id))
-            ->with(['assignees', 'project', 'milestone']);
+            ->with(['assignees', 'project', 'milestone'])
+            ->withCount('attachments');
 
         match ($filter) {
             'overdue' => $query->whereNotIn('status', [Task::STATUS_DONE])
@@ -76,6 +78,7 @@ class TaskService
             ->whereHas('project', fn ($q) => $q->where('business_id', $business->id)->where('status', '!=', Project::STATUS_ARCHIVED))
             ->whereHas('assignees', fn ($q) => $q->where('users.id', $userId))
             ->with(['assignees', 'project', 'milestone'])
+            ->withCount('attachments')
             ->orderByRaw('due_date IS NULL')->orderBy('due_date')->orderByDesc('id')
             ->get();
 
@@ -98,15 +101,17 @@ class TaskService
     }
 
     /**
-     * Comments (oldest first) and time logs (newest first) of a task, for the task detail view.
+     * Comments (oldest first), time logs and attachments (newest first) of a task, for the task detail view.
      *
-     * @return array{comments: Collection, time_logs: Collection}
+     * @return array{comments: Collection, time_logs: Collection, attachments: Collection}
      */
     public function activityForTask(Task $task): array
     {
-        $task->loadMissing(['comments.user', 'timeLogs.user']);
+        $task->loadMissing(['comments.user', 'timeLogs.user', 'attachments.user']);
+        $files = app(TaskAttachmentService::class);
 
         return [
+            'attachments' => $task->attachments->map(fn ($a) => $files->fmt($a))->values(),
             'comments'  => $task->comments->map(fn (TaskComment $c) => [
                 'id'         => $c->id,
                 'user'       => $c->user?->name ?? 'System',
@@ -260,6 +265,7 @@ class TaskService
         $tasks = Task::query()
             ->where('project_id', $project->id)
             ->with(['assignees', 'milestone'])
+            ->withCount('attachments')
             ->orderBy('sort_order')
             ->orderBy('id')
             ->get()
@@ -443,7 +449,9 @@ class TaskService
 
     public function delete(Task $task): void
     {
+        // Attachment rows cascade with the task; their stored files have to go explicitly.
         $task->delete();
+        app(TaskAttachmentService::class)->deleteAllForTask($task);
     }
 
     public function taskForBusiness(Business $business, Task $task): ?Task

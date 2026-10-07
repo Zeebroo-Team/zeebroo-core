@@ -49506,6 +49506,178 @@ async function submitDsCreate() {
   window.openDevDialog = openDevDialog;
 }());
 
+// ── Task attachments (shared by Projects + My Projects) ─────────────────────
+// Files (PDF, images, documents…) attached to a task. mode 'manage' = Projects tab
+// (projects_access, any file deletable); mode 'mine' = My Projects (assignee only,
+// may delete only their own uploads). Upload is multipart "files[]" via apiUpload,
+// download streams the binary through downloadFile (save dialog).
+const TaskFiles = (() => {
+  const esc = escHtml;
+  const EXTS = ['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'ppt', 'pptx', 'txt', 'rtf', 'odt', 'ods', 'zip', 'rar', '7z'];
+  const MAX_BYTES = 20 * 1024 * 1024;
+
+  const ROUTES = {
+    manage: { list: API.pmTaskAttachments,   upload: API.pmTaskAttachmentUploadPath,   download: API.pmTaskAttachmentDownloadPath,   del: API.pmTaskAttachmentDelete },
+    mine:   { list: API.pmMyWorkAttachments, upload: API.pmMyWorkAttachmentUploadPath, download: API.pmMyWorkAttachmentDownloadPath, del: API.pmMyWorkAttachmentDelete },
+  };
+
+  const errMsg = (res, fallback) => res?.body?.errors
+    ? Object.values(res.body.errors).flat().join(' ')
+    : (res?.body?.message || fallback);
+
+  function fmtSize(b) {
+    b = +b || 0;
+    if (b < 1024) return `${b} B`;
+    if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+    return `${(b / 1024 / 1024).toFixed(1)} MB`;
+  }
+
+  function iconFor(name) {
+    const ext = String(name || '').split('.').pop().toLowerCase();
+    if (ext === 'pdf') return ['fa-file-pdf', '#dc2626'];
+    if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(ext)) return ['fa-file-image', '#7c3aed'];
+    if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return ['fa-file-word', '#2563eb'];
+    if (['xls', 'xlsx', 'ods', 'csv'].includes(ext)) return ['fa-file-excel', '#16a34a'];
+    if (['ppt', 'pptx'].includes(ext)) return ['fa-file-powerpoint', '#ea580c'];
+    if (['zip', 'rar', '7z'].includes(ext)) return ['fa-file-zipper', '#a16207'];
+    return ['fa-file-lines', 'var(--text-muted)'];
+  }
+
+  async function list(mode, taskId) {
+    const res = await ROUTES[mode].list(taskId);
+    if (res.status >= 400) throw new Error(errMsg(res, 'Failed to load attachments'));
+    return res.body?.data || [];
+  }
+
+  /** Opens the file picker and uploads each chosen file. Returns the number uploaded. */
+  async function pickAndUpload(mode, taskId) {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Attach files to task',
+      filters: [
+        { name: 'Documents & Images', extensions: EXTS },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) return 0;
+
+    let ok = 0;
+    for (const filePath of result.filePaths) {
+      const name = filePath.split(/[\\/]/).pop();
+      const res  = await window.electronAPI.apiUpload(ROUTES[mode].upload(taskId), filePath);
+      if (res.status >= 200 && res.status < 300) ok++;
+      else toast(`${name}: ${res.status === 413 ? 'File is too large for the server.' : errMsg(res, 'Upload failed')}`, 'error');
+    }
+    if (ok) toast(`${ok} file${ok === 1 ? '' : 's'} attached`, 'info');
+    return ok;
+  }
+
+  async function download(mode, att) {
+    const res = await window.electronAPI.downloadFile(ROUTES[mode].download(att.id), att.name);
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+    toast(`Saved ${att.name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  async function remove(mode, att) {
+    const ok = await appConfirm({ title: 'Delete attachment?', message: `"${att.name}" will be permanently removed from this task.`, danger: true, icon: 'fa-trash', confirmText: '<i class="fa fa-trash"></i> Delete' });
+    if (!ok) return false;
+    const res = await ROUTES[mode].del(att.id);
+    if (res.status >= 400) { toast(errMsg(res, 'Delete failed'), 'error'); return false; }
+    return true;
+  }
+
+  /**
+   * Renders a self-contained attachments panel (header + Upload button + file list) into `el`.
+   * opts: { mode, taskId, attachments? (preloaded list), canDelete(att) → bool, onChange(count) }
+   */
+  async function mount(el, opts) {
+    const { mode, taskId, canDelete = () => true, onChange } = opts;
+    let files = opts.attachments || null;
+    let error = null;
+    let busy  = false;
+
+    function render() {
+      const muted = txt => `<span style="color:var(--text-muted)">${txt}</span>`;
+      let listHtml;
+      if (error) listHtml = `<div style="font-size:11px;color:#ef4444">${esc(error)}</div>`;
+      else if (!files) listHtml = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
+      else if (!files.length) listHtml = `<div style="font-size:11px">${muted('No files attached yet. Upload PDFs, images or documents for reference.')}</div>`;
+      else listHtml = files.map(a => {
+        const [icon, color] = iconFor(a.name);
+        return `
+          <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--border);border-radius:6px;padding:7px 10px">
+            <i class="fa ${icon}" style="font-size:20px;color:${color};flex-shrink:0;width:20px;text-align:center"></i>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.name)}">${esc(a.name)}</div>
+              <div style="font-size:10px;color:var(--text-muted)">${esc(fmtSize(a.size_bytes))} · ${esc(a.uploaded_by || '')} · ${esc(a.created_at || '')}</div>
+            </div>
+            <button class="pm-task-card-move" data-tf-dl="${a.id}" title="Download"><i class="fa fa-download"></i></button>
+            ${canDelete(a) ? `<button class="pm-task-card-move" data-tf-del="${a.id}" title="Delete" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>` : ''}
+          </div>`;
+      }).join('');
+
+      el.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:12px;font-weight:600;flex:1"><i class="fa fa-paperclip" style="margin-right:5px;color:var(--accent)"></i>Attachments${files ? ` (${files.length})` : ''}</div>
+            <button class="po-btn-ghost" data-tf-upload style="padding:3px 10px;font-size:11px"${busy ? ' disabled' : ''}>
+              <i class="fa ${busy ? 'fa-spinner fa-spin' : 'fa-upload'}"></i> ${busy ? 'Uploading…' : 'Upload Files'}
+            </button>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted)">PDF, images, Word, Excel, PowerPoint, text or zip — up to ${fmtSize(MAX_BYTES)} each.</div>
+          ${listHtml}
+        </div>`;
+
+      el.querySelector('[data-tf-upload]')?.addEventListener('click', async () => {
+        if (busy) return;
+        busy = true; render();
+        try {
+          if (await pickAndUpload(mode, taskId)) await reload();
+        } catch (e) { toast(String(e.message || e), 'error'); }
+        busy = false; render();
+      });
+      el.querySelectorAll('[data-tf-dl]').forEach(b => b.addEventListener('click', () => {
+        const a = files.find(x => +x.id === +b.dataset.tfDl);
+        if (a) download(mode, a);
+      }));
+      el.querySelectorAll('[data-tf-del]').forEach(b => b.addEventListener('click', async () => {
+        const a = files.find(x => +x.id === +b.dataset.tfDel);
+        if (a && await remove(mode, a)) await reload();
+      }));
+    }
+
+    async function reload() {
+      try { files = await list(mode, taskId); error = null; }
+      catch (e) { error = String(e.message || e); }
+      render();
+      if (files) onChange?.(files.length);
+    }
+
+    render();
+    if (!files) await reload();
+  }
+
+  // ── Stand-alone modal (Projects tab rows / board cards) ──
+  let _modalTaskId = null;
+  function closeModal() {
+    _modalTaskId = null;
+    const m = $('#task-files-modal'); if (m) m.style.display = 'none';
+  }
+  function openModal(mode, task, onChange) {
+    _modalTaskId = task.id;
+    $('#task-files-heading').textContent = `Attachments — ${task.title || 'Task'}`;
+    $('#task-files-modal').style.display = '';
+    mount($('#task-files-body'), { mode, taskId: task.id, onChange });
+  }
+  $('#task-files-close')?.addEventListener('click',  closeModal);
+  $('#task-files-cancel')?.addEventListener('click', closeModal);
+  $('#task-files-modal')?.addEventListener('click', e => { if (e.target === $('#task-files-modal')) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && _modalTaskId !== null) closeModal(); });
+
+  return { mount, openModal };
+})();
+
 // ── Project Management ─────────────────────────────────────────────────────
 (function () {
   const esc = escHtml;
@@ -50159,9 +50331,15 @@ async function submitDsCreate() {
         <select class="pm-task-card-move" data-tid="${t.id}" title="Move to…">
           <option value="">Move…</option>${moveOpts}
         </select>
+        <button class="pm-task-card-move" data-card-files-tid="${t.id}" title="Attachments${t.attachments_count ? ` (${t.attachments_count})` : ''}"><i class="fa fa-paperclip"${t.attachments_count ? ' style="color:var(--accent)"' : ''}></i>${t.attachments_count ? ` ${t.attachments_count}` : ''}</button>
         <button class="pm-task-card-move" data-delete-tid="${t.id}" title="Delete task" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>
       </div>
     `;
+    card.querySelector('button[data-card-files-tid]').addEventListener('click', ev => {
+      ev.stopPropagation();
+      const before = +t.attachments_count || 0;
+      TaskFiles.openModal('manage', t, count => { if (count !== before) loadPmBoard(); });
+    });
     card.querySelector('select[data-tid]').addEventListener('change', async function () {
       const newStatus = this.value;
       if (!newStatus) return;
@@ -50652,7 +50830,7 @@ async function submitDsCreate() {
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
         <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span></td>
         <td><select class="pm-ms-select" data-ms-tid="${t.id}" title="Move to milestone">${_pmMilestoneOptions(t.milestone_id)}</select></td>
-        <td><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
+        <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
       </tr>`;
   }
 
@@ -51050,11 +51228,27 @@ async function submitDsCreate() {
         <td style="font-size:11px;color:var(--text-muted)">${esc(t.assigned_name || '—')}</td>
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
         <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g,' '))}</span></td>
-        <td><button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
+        <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
       </tr>`;
   }
 
+  /** Paperclip button opening the task's attachments (shows the file count when there are any). */
+  function _pmFilesBtnHtml(t) {
+    const n = +t.attachments_count || 0;
+    return `<button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-files-tid="${t.id}" data-files-count="${n}" title="Attachments${n ? ` (${n})` : ''}"><i class="fa fa-paperclip"${n ? ' style="color:var(--accent)"' : ''}></i>${n ? ` ${n}` : ''}</button>`;
+  }
+
   function _bindTaskRowActions(tbody, reload) {
+    tbody.querySelectorAll('[data-files-tid]').forEach(btn => {
+      btn.addEventListener('click', ev => {
+        ev.stopPropagation();
+        const tid   = +btn.dataset.filesTid;
+        const row   = btn.closest('[data-tid]');
+        const title = row?.dataset.title || row?.querySelector('td:nth-child(2)')?.textContent?.trim() || 'Task';
+        const before = +btn.dataset.filesCount || 0;
+        TaskFiles.openModal('manage', { id: tid, title }, count => { if (count !== before) reload(); });
+      });
+    });
     tbody.querySelectorAll('[data-toggle-tid]').forEach(ico => {
       ico.addEventListener('click', async function () {
         const tid  = +this.dataset.toggleTid;
@@ -51926,7 +52120,7 @@ async function submitDsCreate() {
         <tr data-tid="${t.id}">
           <td><i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i></td>
           <td>
-            <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}</div>
+            <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}${t.attachments_count ? ` <span style="font-size:10px;font-weight:400;color:var(--text-muted)" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip"></i> ${t.attachments_count}</span>` : ''}</div>
             ${t.milestone_name ? `<div style="font-size:10px;color:var(--text-muted)"><i class="fa fa-flag"></i> ${esc(t.milestone_name)}</div>` : ''}
           </td>
           <td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>
@@ -52018,6 +52212,7 @@ async function submitDsCreate() {
       <div class="pm-task-card-meta">
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
         ${t.due_date ? `<span class="pm-task-card-due">${_dueHtml(t)}</span>` : ''}
+        ${t.attachments_count ? `<span class="pm-task-card-assign" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip" style="margin-right:2px"></i>${t.attachments_count}</span>` : ''}
       </div>
       <div class="pm-task-card-meta">
         ${!mp.boardProject ? `<span class="pm-task-card-assign">${p?.color ? `<span class="pm-col-dot" style="display:inline-block;background:${esc(p.color)};margin-right:3px"></span>` : '<i class="fa fa-diagram-project" style="margin-right:2px"></i>'}${esc(t.project_name || '')}</span>` : ''}
@@ -52190,7 +52385,29 @@ async function submitDsCreate() {
         ${_detailRow('fa-circle-check', 'Completed', t.completed_at ? esc(t.completed_at) : muted('—'))}
       </div>
 
+      <div id="mp-detail-files"></div>
+
       ${activity}`;
+
+    // Attachments: preloaded with the detail response; managed in place (upload / download / delete own).
+    const filesEl = $('#mp-detail-files');
+    if (filesEl && extra && !extra.error) {
+      TaskFiles.mount(filesEl, {
+        mode: 'mine',
+        taskId: t.id,
+        attachments: extra.attachments || undefined, // undefined → the panel fetches the list
+        canDelete: a => !!a.is_mine,
+        onChange: count => {
+          extra.attachments = null; // stale now — refetched by the panel itself
+          const cached = _task(t.id);
+          if (cached && cached.attachments_count !== count) { cached.attachments_count = count; _renderCurrent(); }
+        },
+      });
+    } else if (filesEl && extra?.error) {
+      filesEl.remove();
+    } else if (filesEl) {
+      filesEl.innerHTML = `<div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attachments…</div>`;
+    }
 
     $('#mp-detail-status')?.addEventListener('change', async function () {
       try {
@@ -52217,8 +52434,8 @@ async function submitDsCreate() {
       const d = res.body?.data || {};
       // Refresh the cached copy with the server's latest values
       const i = mp.tasks.findIndex(x => +x.id === +t.id);
-      if (i !== -1) { const { comments, time_logs, ...task } = d; mp.tasks[i] = { ...mp.tasks[i], ...task }; }
-      extra = { comments: d.comments || [], time_logs: d.time_logs || [] };
+      if (i !== -1) { const { comments, time_logs, attachments, ...task } = d; mp.tasks[i] = { ...mp.tasks[i], ...task }; }
+      extra = { comments: d.comments || [], time_logs: d.time_logs || [], attachments: d.attachments || [] };
     } catch (e) {
       extra = { error: String(e.message || e) };
     }

@@ -10379,6 +10379,21 @@
     </div>
   </div>
 
+  <!-- ── Projects: Task Attachments Modal (files per task — upload / download) ── -->
+  <div class="modal-overlay" id="task-files-modal" style="display:none">
+    <div class="po-aim-shell" style="width:560px;max-height:80vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-paperclip" style="color:var(--accent)"></i>
+        <span id="task-files-heading">Attachments</span>
+        <button class="psm-close" id="task-files-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="task-files-body" style="display:flex;flex-direction:column;gap:10px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="task-files-cancel"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── Promoter Modal ── -->
   <div class="modal-overlay" id="pmt-modal" style="display:none">
     <div class="po-aim-shell" style="width:520px">

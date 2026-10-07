@@ -652,6 +652,16 @@ const API = (() => {
     pmTaskComment:         (id, body)  => request('POST',   `/pm/tasks/${id}/comments`, { body }),
     pmTaskTime:            (id, data)  => request('POST',   `/pm/tasks/${id}/time`, data),
     pmTaskDelete:          (id)        => request('DELETE', `/pm/tasks/${id}`),
+    // Task attachments — uploads go through electronAPI.apiUpload (multipart "files[]"),
+    // downloads through electronAPI.downloadFile (binary + save dialog).
+    pmTaskAttachments:          (tid)  => request('GET',    `/pm/tasks/${tid}/attachments`),
+    pmTaskAttachmentUploadPath: (tid)  => `/pm/tasks/${tid}/attachments`,
+    pmTaskAttachmentDownloadPath:(id)  => `/pm/task-attachments/${id}/download`,
+    pmTaskAttachmentDelete:     (id)   => request('DELETE', `/pm/task-attachments/${id}`),
+    pmMyWorkAttachments:          (tid) => request('GET',    `/pm/my-work/tasks/${tid}/attachments`),
+    pmMyWorkAttachmentUploadPath: (tid) => `/pm/my-work/tasks/${tid}/attachments`,
+    pmMyWorkAttachmentDownloadPath:(id) => `/pm/my-work/attachments/${id}/download`,
+    pmMyWorkAttachmentDelete:     (id)  => request('DELETE', `/pm/my-work/attachments/${id}`),
     pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
     // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
     pmMyWork:              ()          => request('GET',    '/pm/my-work'),

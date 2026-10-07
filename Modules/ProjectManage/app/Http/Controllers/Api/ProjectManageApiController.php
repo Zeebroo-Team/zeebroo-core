@@ -12,8 +12,11 @@ use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
 use Modules\ProjectManage\Models\TaskStatus;
 use Modules\ProjectManage\Services\MilestoneService;
+use Modules\ProjectManage\Models\TaskAttachment;
 use Modules\ProjectManage\Services\ProjectService;
+use Modules\ProjectManage\Services\TaskAttachmentService;
 use Modules\ProjectManage\Services\TaskService;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
 class ProjectManageApiController extends Controller
@@ -24,6 +27,7 @@ class ProjectManageApiController extends Controller
         private readonly ProjectService   $projects,
         private readonly TaskService      $tasks,
         private readonly MilestoneService $milestones,
+        private readonly TaskAttachmentService $attachments,
     ) {}
 
     // ── Projects ─────────────────────────────────────────────────────────────
@@ -368,6 +372,39 @@ class ProjectManageApiController extends Controller
         return response()->json(['message' => 'Task deleted.']);
     }
 
+    // ── Task attachments (Projects tab — any task of the business) ───────────
+
+    public function taskAttachmentIndex(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        return response()->json(['data' => $this->attachments->listForTask($task)->map(fn ($a) => $this->attachments->fmt($a))]);
+    }
+
+    public function taskAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        return $this->storeAttachments($request, $task);
+    }
+
+    public function taskAttachmentDownload(Request $request, int $id): StreamedResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+
+        return $this->attachments->download($this->resolveAttachment($business, $id));
+    }
+
+    public function taskAttachmentDestroy(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $this->attachments->delete($this->resolveAttachment($business, $id));
+
+        return response()->json(['message' => 'Attachment deleted.']);
+    }
+
     public function myTasks(Request $request): JsonResponse
     {
         $business = $this->manageBusinessOrAbort($request);
@@ -452,6 +489,42 @@ class ProjectManageApiController extends Controller
         $task = $this->tasks->moveStatus($task, $status);
 
         return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project']))]);
+    }
+
+    /** Files of a task assigned to me (the detail endpoint also returns them). */
+    public function myWorkAttachmentIndex(Request $request, int $id): JsonResponse
+    {
+        $task = $this->resolveMyTask($request, $id);
+
+        return response()->json(['data' => $this->attachments->listForTask($task)->map(fn ($a) => $this->attachments->fmt($a))]);
+    }
+
+    public function myWorkAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        return $this->storeAttachments($request, $this->resolveMyTask($request, $id));
+    }
+
+    public function myWorkAttachmentDownload(Request $request, int $id): StreamedResponse
+    {
+        $business   = $this->assignedBusinessOrAbort($request);
+        $attachment = $this->resolveAttachment($business, $id);
+        abort_unless($this->tasks->isAssignee($attachment->task, (int) $request->user()->id), 403, 'You can only download files of tasks assigned to you.');
+
+        return $this->attachments->download($attachment);
+    }
+
+    /** Assignees may only remove files they uploaded themselves. */
+    public function myWorkAttachmentDestroy(Request $request, int $id): JsonResponse
+    {
+        $business   = $this->assignedBusinessOrAbort($request);
+        $attachment = $this->resolveAttachment($business, $id);
+        $userId     = (int) $request->user()->id;
+        abort_unless($this->tasks->isAssignee($attachment->task, $userId), 403, 'You can only manage files of tasks assigned to you.');
+        abort_unless((int) $attachment->user_id === $userId, 403, 'You can only delete files you uploaded.');
+
+        $this->attachments->delete($attachment);
+
+        return response()->json(['message' => 'Attachment deleted.']);
     }
 
     // ── Milestones ───────────────────────────────────────────────────────────
@@ -558,6 +631,32 @@ class ProjectManageApiController extends Controller
         return $task;
     }
 
+    /** A task assigned to the caller (My Projects endpoints). */
+    private function resolveMyTask(Request $request, int $id): Task
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only manage files of tasks assigned to you.');
+
+        return $task;
+    }
+
+    private function resolveAttachment(\Modules\Business\Models\Business $business, int $id): TaskAttachment
+    {
+        $attachment = TaskAttachment::with('task.project')->findOrFail($id);
+        abort_unless((int) $attachment->task->project->business_id === (int) $business->id, 404);
+        return $attachment;
+    }
+
+    private function storeAttachments(Request $request, Task $task): JsonResponse
+    {
+        $request->validate(TaskAttachmentService::uploadRules(), TaskAttachmentService::uploadMessages());
+
+        $stored = $this->attachments->store($task, $request->file('files', []), $request->user()?->id);
+
+        return response()->json(['data' => $stored->map(fn ($a) => $this->attachments->fmt($a))->values()], 201);
+    }
+
     /** milestone_id must be null or a milestone of the given project. */
     private function milestoneIdRule(Project $project): array
     {
@@ -655,6 +754,7 @@ class ProjectManageApiController extends Controller
             'due_date'         => $t->due_date?->toDateString(),
             'estimated_hours'  => $t->estimated_hours ? (float) $t->estimated_hours : null,
             'logged_minutes'   => $t->totalLoggedMinutes(),
+            'attachments_count'=> (int) ($t->attachments_count ?? $t->attachments()->count()),
             'is_overdue'       => $t->isOverdue(),
             'completed_at'     => $t->completed_at?->toDateTimeString(),
             'created_at'       => $t->created_at?->toDateTimeString(),
