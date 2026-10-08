@@ -6,7 +6,7 @@
     $pc      = $priorityColor[$t->priority] ?? '#6b7280';
 @endphp
 <tr class="pm-ms-task" draggable="true"
-    data-tid="{{ $t->id }}" data-status="{{ $t->status }}" data-done="{{ $isDone ? 1 : 0 }}"
+    data-tid="{{ $t->id }}" data-status="{{ $t->status }}" data-done="{{ $isDone ? 1 : 0 }}" data-cancelled="{{ $t->isCancelled() ? 1 : 0 }}"
     data-milestone-url="{{ route('pm.tasks.milestone', $t) }}">
     <td class="pm-drag-handle" title="Drag to another milestone"><i class="fa fa-grip-vertical"></i></td>
     <td>
@@ -26,8 +26,9 @@
         @if($overdue)<i class="fa fa-triangle-exclamation" style="margin-right:3px;"></i>@endif
         {{ $t->due_date ? $t->due_date->format('d M Y') : '—' }}
     </td>
-    <td>
-        <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};">{{ $statusTabs[$t->status] ?? ucfirst(str_replace('_', ' ', $t->status)) }}</span>
+    <td style="white-space:nowrap;">
+        <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};" title="Stage">{{ $statusTabs[$t->status] ?? 'Not Defined' }}</span>
+        @include('projectmanage::tasks.partials.completion-badge', ['task' => $t])
     </td>
     <td>
         <select class="pm-ms-select" data-ms-select title="Move to milestone">

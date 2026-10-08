@@ -70,7 +70,7 @@ class TaskController extends Controller
 
         $tasks = $filter === 'overdue'
             ? $tasks->filter(fn (Task $t) => $t->isOverdue())->values()
-            : $tasks->filter(fn (Task $t) => !$t->isCompleted())->values();
+            : $tasks->filter(fn (Task $t) => $t->isOpen())->values();
 
         return view('projectmanage::tasks.mine', [
             'business' => $business,
@@ -303,6 +303,7 @@ class TaskController extends Controller
             'title'           => ['required', 'string', 'max:200'],
             'description'     => ['nullable', 'string', 'max:10000'],
             'status'          => ['nullable', Rule::in($this->taskService->statusKeysForProject($project))],
+            'completion_status' => ['nullable', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
             'priority'        => ['nullable', Rule::in([Task::PRIORITY_LOW, Task::PRIORITY_NORMAL, Task::PRIORITY_HIGH])],
             'due_date'        => ['nullable', 'date'],
             'estimated_hours' => ['nullable', 'numeric', 'min:0', 'max:99999'],

@@ -99,6 +99,7 @@ class ProjectController extends Controller
             'business'    => $business,
             'project'     => $project,
             'stats'       => $stats,
+            'stages'      => $this->taskService->statusesForProject($project),
             'milestones'  => $milestones,
             'recentTasks' => $recentTasks,
             'hasTasks'    => $project->tasks()->exists(),

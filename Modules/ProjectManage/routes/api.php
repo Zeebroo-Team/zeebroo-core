@@ -30,13 +30,18 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post  ('pm/projects/{id}/statuses', [$c, 'statusStore'])  ->where('id', '[0-9]+')->name('pm.projects.statuses.store');
     Route::patch ('pm/statuses/{id}',          [$c, 'statusUpdate']) ->where('id', '[0-9]+')->name('pm.statuses.update');
     Route::delete('pm/statuses/{id}',          [$c, 'statusDestroy'])->where('id', '[0-9]+')->name('pm.statuses.destroy');
+    // By key — works for built-ins (To Do, In Progress, Review, Done) too
+    Route::patch ('pm/projects/{id}/statuses/{key}', [$c, 'statusUpdateByKey']) ->where(['id' => '[0-9]+', 'key' => '[a-z0-9_]+'])->name('pm.projects.statuses.update-key');
+    Route::delete('pm/projects/{id}/statuses/{key}', [$c, 'statusDestroyByKey'])->where(['id' => '[0-9]+', 'key' => '[a-z0-9_]+'])->name('pm.projects.statuses.destroy-key');
 
     // Tasks (project-scoped)
     Route::get ('pm/projects/{id}/tasks',    [$c, 'taskIndex'])     ->where('id', '[0-9]+')->name('pm.projects.tasks.index');
     Route::post('pm/projects/{id}/tasks',    [$c, 'taskStore'])     ->where('id', '[0-9]+')->name('pm.projects.tasks.store');
 
     // Tasks (task-scoped)
+    Route::get   ('pm/tasks/{id}',          [$c, 'taskShow'])      ->where('id', '[0-9]+')->name('pm.tasks.show');
     Route::patch ('pm/tasks/{id}/status',   [$c, 'taskStatus'])    ->where('id', '[0-9]+')->name('pm.tasks.status');
+    Route::patch ('pm/tasks/{id}/completion-status', [$c, 'taskCompletionStatus'])->where('id', '[0-9]+')->name('pm.tasks.completion-status');
     Route::patch ('pm/tasks/{id}/milestone',[$c, 'taskMilestone']) ->where('id', '[0-9]+')->name('pm.tasks.milestone');
     Route::patch ('pm/tasks/{id}/assignees',[$c, 'taskAssign'])    ->where('id', '[0-9]+')->name('pm.tasks.assignees');
     Route::post  ('pm/tasks/{id}/complete', [$c, 'taskComplete'])  ->where('id', '[0-9]+')->name('pm.tasks.complete');
@@ -48,6 +53,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     // Task attachments (files: PDF, images, documents…)
     Route::get   ('pm/tasks/{id}/attachments',          [$c, 'taskAttachmentIndex'])   ->where('id', '[0-9]+')->name('pm.tasks.attachments.index');
     Route::post  ('pm/tasks/{id}/attachments',          [$c, 'taskAttachmentStore'])   ->where('id', '[0-9]+')->name('pm.tasks.attachments.store');
+    Route::post  ('pm/comments/{id}/attachments',       [$c, 'commentAttachmentStore'])->where('id', '[0-9]+')->name('pm.comments.attachments.store');
     Route::get   ('pm/task-attachments/{id}/download',  [$c, 'taskAttachmentDownload'])->where('id', '[0-9]+')->name('pm.task-attachments.download');
     Route::delete('pm/task-attachments/{id}',           [$c, 'taskAttachmentDestroy']) ->where('id', '[0-9]+')->name('pm.task-attachments.destroy');
 
@@ -60,6 +66,7 @@ Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(funct
     Route::post ('pm/my-work/tasks',            [$c, 'myWorkTaskStore']) ->name('pm.my-work.tasks.store');
     Route::get  ('pm/my-work/tasks/{id}',       [$c, 'myWorkTaskShow'])  ->where('id', '[0-9]+')->name('pm.my-work.tasks.show');
     Route::patch('pm/my-work/tasks/{id}/status', [$c, 'myWorkTaskStatus'])->where('id', '[0-9]+')->name('pm.my-work.tasks.status');
+    Route::patch('pm/my-work/tasks/{id}/completion-status', [$c, 'myWorkTaskCompletionStatus'])->where('id', '[0-9]+')->name('pm.my-work.tasks.completion-status');
     Route::post ('pm/my-work/tasks/{id}/comments', [$c, 'myWorkTaskComment'])->where('id', '[0-9]+')->name('pm.my-work.tasks.comment');
 
     // Task deletion: the owner deletes directly; other assignees ask the owner, who approves / rejects

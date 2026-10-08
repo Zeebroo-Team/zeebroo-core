@@ -55,9 +55,11 @@
             <div style="margin-bottom:16px;">
                 <h2 style="margin:0 0 8px;font-size:18px;font-weight:800;color:var(--text);line-height:1.3;">{{ $task->title }}</h2>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                    <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};">
-                        {{ ucfirst(str_replace('_', ' ', $task->status)) }}
+                    @php $stage = collect($statuses)->firstWhere('status', $task->status); $sc = $stage['color'] ?? $sc; @endphp
+                    <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};" title="Stage">
+                        {{ $stage['label'] ?? 'Not Defined' }}
                     </span>
+                    @include('projectmanage::tasks.partials.completion-badge', ['task' => $task])
                     <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:{{ $pc }};font-weight:600;">
                         <span style="width:8px;height:8px;border-radius:50%;background:{{ $pc }};display:inline-block;"></span>
                         {{ ucfirst($task->priority) }} priority
@@ -102,7 +104,7 @@
                             </div>
                             <div class="pcat-form-grid pcat-form-grid--2" style="margin-bottom:10px;">
                                 <div class="pcat-field">
-                                    <label>Status</label>
+                                    <label>Stage</label>
                                     <select name="status">
                                         @foreach($statuses as $s)
                                             <option value="{{ $s['status'] }}" @selected(old('status',$task->status)===$s['status'])>{{ $s['label'] }}</option>
@@ -115,6 +117,16 @@
                                         <option value="low"    @selected(old('priority',$task->priority)==='low')>Low</option>
                                         <option value="normal" @selected(old('priority',$task->priority)==='normal')>Normal</option>
                                         <option value="high"   @selected(old('priority',$task->priority)==='high')>High</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="pcat-form-grid pcat-form-grid--2" style="margin-bottom:10px;">
+                                <div class="pcat-field">
+                                    <label>Status</label>
+                                    <select name="completion_status">
+                                        @foreach(\Modules\ProjectManage\Models\Task::COMPLETION_STATUSES as $key => $label)
+                                            <option value="{{ $key }}" @selected(old('completion_status', $task->completionStatus())===$key)>{{ $label }}</option>
+                                        @endforeach
                                     </select>
                                 </div>
                             </div>
@@ -293,7 +305,7 @@
             </div>
 
             <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
-                @if(!$task->isCompleted())
+                @if($task->isOpen())
                     <form method="POST" action="{{ route('pm.tasks.complete', $task) }}">
                         @csrf
                         <button type="submit" class="linkbtn" style="width:100%;padding:9px;font-size:13px;text-align:center;">

@@ -139,7 +139,8 @@
                 <button type="button" class="mp-chip" data-filter="open">Open</button>
                 <button type="button" class="mp-chip" data-filter="today">Due Today</button>
                 <button type="button" class="mp-chip" data-filter="overdue">Overdue</button>
-                <button type="button" class="mp-chip" data-filter="done">Done</button>
+                <button type="button" class="mp-chip" data-filter="done">Completed</button>
+                <button type="button" class="mp-chip" data-filter="cancelled">Cancelled</button>
                 <button type="button" class="mp-chip" data-filter="all">All</button>
             </div>
             <select id="mp-task-project"></select>
@@ -154,7 +155,7 @@
                         <th data-sort="project_name">Project</th>
                         <th data-sort="priority">Priority</th>
                         <th data-sort="due_date">Due date</th>
-                        <th data-sort="status">Status</th>
+                        <th data-sort="status">Stage</th>
                     </tr>
                 </thead>
                 <tbody id="mp-tasks-body"></tbody>
@@ -200,7 +201,7 @@
                             <select id="mp-tf-project" required></select>
                         </div>
                         <div class="pcat-field">
-                            <label>Status</label>
+                            <label>Stage</label>
                             <select id="mp-tf-status"></select>
                         </div>
                     </div>
@@ -246,9 +247,10 @@
     'use strict';
 
     var URLS = {
-        data:   @js(route('pm.my-projects.data')),
-        store:  @js(route('pm.my-projects.tasks.store')),
-        status: @js(route('pm.my-projects.tasks.status', ['task' => '__ID__'])),
+        data:       @js(route('pm.my-projects.data')),
+        store:      @js(route('pm.my-projects.tasks.store')),
+        status:     @js(route('pm.my-projects.tasks.status', ['task' => '__ID__'])),
+        completion: @js(route('pm.my-projects.tasks.completion-status', ['task' => '__ID__'])),
     };
     var CSRF = @js(csrf_token());
 
@@ -291,7 +293,13 @@
     function today() { return ymd(new Date()); }
     function inDays(n) { var d = new Date(); d.setDate(d.getDate() + n); return ymd(d); }
 
-    function isDone(t)     { return t.status === 'done'; }
+    // Completion status (incomplete / complete / cancelled) is separate from the stage (t.status).
+    var COMPLETION = { incomplete: 'Incomplete', complete: 'Complete', cancelled: 'Cancelled' };
+    var COMPLETION_COLORS = { incomplete: '#6b7280', complete: '#16a34a', cancelled: '#dc2626' };
+    function completionOf(t) { return t.completion_status || 'incomplete'; }
+    function isComplete(t)  { return completionOf(t) === 'complete'; }
+    function isCancelled(t) { return completionOf(t) === 'cancelled'; }
+    function isDone(t)      { return completionOf(t) !== 'incomplete'; }   // closed: complete or cancelled
     function isOverdue(t)  { return !isDone(t) && !!t.due_date && t.due_date < today(); }
     function isDueToday(t) { return !isDone(t) && t.due_date === today(); }
     function isThisWeek(t) { return !isDone(t) && !!t.due_date && t.due_date > today() && t.due_date <= inDays(7); }
@@ -302,15 +310,21 @@
     function task(id)        { return mp.tasks.find(function (t) { return +t.id === +id; }); }
 
     function colColor(s) { return s.color || BUILTIN_COLORS[s.status] || '#0ea5e9'; }
+    // Tasks whose stage was deleted from their project
+    var UNDEFINED_COL = { status: 'undefined', label: 'Not Defined', sort_order: 0, is_custom: false, is_undefined: true, color: '#9ca3af' };
+    function isOrphan(t) { return !statusesFor(t.project_id).some(function (s) { return s.status === t.status; }); }
     function statusMeta(t) {
-        return statusesFor(t.project_id).find(function (s) { return s.status === t.status; })
-            || { status: t.status, label: t.status.replace(/_/g, ' '), sort_order: 50, is_custom: true, color: null };
+        return statusesFor(t.project_id).find(function (s) { return s.status === t.status; }) || UNDEFINED_COL;
     }
 
     // ── HTML snippets ──
     function statusBadge(t) {
         var s = statusMeta(t);
-        return '<span class="mp-status" style="--mp-c:' + esc(colColor(s)) + '">' + esc(s.label) + '</span>';
+        return '<span class="mp-status" style="--mp-c:' + esc(colColor(s)) + '" title="Stage">' + esc(s.label) + '</span>';
+    }
+    function completionBadge(t) {
+        var cs = completionOf(t);
+        return '<span class="mp-status" style="--mp-c:' + (COMPLETION_COLORS[cs] || '#6b7280') + '" title="Status">' + esc(COMPLETION[cs] || cs) + '</span>';
     }
     function priorityBadge(p) {
         return '<span class="mp-pri" style="--mp-c:' + (PRIORITY_COLORS[p] || '#6b7280') + '">' + esc(p) + '</span>';
@@ -323,8 +337,10 @@
     }
     function checkBtn(t) {
         var done = isDone(t);
-        return '<button type="button" class="mp-check' + (done ? ' mp-check--done' : '') + '" data-mp-toggle="' + t.id + '" title="' + (done ? 'Reopen' : 'Mark as done') + '">'
-             + '<i class="fa ' + (done ? 'fa-circle-check' : 'fa-circle') + '"></i></button>';
+        var icon = isCancelled(t) ? 'fa-circle-xmark' : done ? 'fa-circle-check' : 'fa-circle';
+        return '<button type="button" class="mp-check' + (done ? ' mp-check--done' : '') + '" data-mp-toggle="' + t.id + '" title="' + (done ? 'Reopen' : 'Mark as complete') + '"'
+             + (isCancelled(t) ? ' style="color:#dc2626;"' : '') + '>'
+             + '<i class="fa ' + icon + '"></i></button>';
     }
 
     // ── Server calls ──
@@ -353,12 +369,23 @@
         });
     }
 
-    // Changes a task's status and patches the local copy with the server's response.
+    // Changes a task's stage and patches the local copy with the server's response.
     function setStatus(taskId, status) {
         return request('PATCH', URLS.status.replace('__ID__', taskId), { status: status }).then(function (json) {
-            var i = mp.tasks.findIndex(function (t) { return +t.id === +taskId; });
-            if (i !== -1 && json.data) mp.tasks[i] = json.data;
+            patchTask(taskId, json.data);
         });
+    }
+
+    // Changes a task's completion status (incomplete / complete / cancelled), stage untouched.
+    function setCompletion(taskId, completion) {
+        return request('PATCH', URLS.completion.replace('__ID__', taskId), { completion_status: completion }).then(function (json) {
+            patchTask(taskId, json.data);
+        });
+    }
+
+    function patchTask(taskId, data) {
+        var i = mp.tasks.findIndex(function (t) { return +t.id === +taskId; });
+        if (i !== -1 && data) mp.tasks[i] = data;
     }
 
     function notify(msg) { window.alert(msg); }
@@ -371,7 +398,7 @@
                 var t = task(el.getAttribute('data-mp-toggle'));
                 if (!t) return;
                 el.disabled = true;
-                setStatus(t.id, isDone(t) ? 'todo' : 'done')
+                setCompletion(t.id, isDone(t) ? 'incomplete' : 'complete')
                     .catch(function (err) { notify(err.message); })
                     .then(renderCurrent);
             });
@@ -436,7 +463,7 @@
             { color: '#2563eb', icon: 'fa-list-check',           label: 'Open Tasks', value: open.length,                   filter: 'open' },
             { color: '#d97706', icon: 'fa-calendar-day',         label: 'Due Today',  value: dueToday.length,               filter: 'today' },
             { color: '#dc2626', icon: 'fa-triangle-exclamation', label: 'Overdue',    value: overdue.length,                filter: 'overdue' },
-            { color: '#16a34a', icon: 'fa-circle-check',         label: 'Completed',  value: mp.tasks.length - open.length, filter: 'done' },
+            { color: '#16a34a', icon: 'fa-circle-check',         label: 'Completed',  value: mp.tasks.filter(isComplete).length, filter: 'done' },
         ];
         var stats = $('#mp-stats');
         stats.innerHTML = tiles.map(function (s) {
@@ -482,8 +509,9 @@
         }
         grid.innerHTML = mp.projects.map(function (p) {
             var mine  = mp.tasks.filter(function (t) { return +t.project_id === +p.id; });
-            var done  = mine.filter(isDone).length;
-            var pct   = mine.length ? Math.round(done / mine.length * 100) : 0;
+            var done  = mine.filter(isComplete).length;
+            var counted = mine.length - mine.filter(isCancelled).length;   // cancelled tasks don't count
+            var pct   = counted ? Math.round(done / counted * 100) : 0;
             var color = p.color || 'var(--primary)';
             return '<div class="mp-proj" style="--mp-c:' + esc(color) + '" data-board-project="' + p.id + '" title="Open this project on the kanban board">'
                  + '<div class="mp-proj__head">'
@@ -529,7 +557,7 @@
         var filterFn = {
             all: function () { return true; },
             open: function (t) { return !isDone(t); },
-            today: isDueToday, overdue: isOverdue, done: isDone,
+            today: isDueToday, overdue: isOverdue, done: isComplete, cancelled: isCancelled,
         }[mp.taskFilter] || function () { return true; };
 
         var list = mp.tasks.filter(function (t) {
@@ -555,9 +583,10 @@
         }
         tbody.innerHTML = list.map(function (t) {
             var done = isDone(t);
-            var opts = statusesFor(t.project_id).map(function (s) {
-                return '<option value="' + esc(s.status) + '"' + (s.status === t.status ? ' selected' : '') + '>' + esc(s.label) + '</option>';
-            }).join('');
+            var opts = (isOrphan(t) ? '<option value="" selected disabled>Not Defined</option>' : '')
+                + statusesFor(t.project_id).map(function (s) {
+                    return '<option value="' + esc(s.status) + '"' + (s.status === t.status ? ' selected' : '') + '>' + esc(s.label) + '</option>';
+                }).join('');
             return '<tr>'
                  + '<td>' + checkBtn(t) + '</td>'
                  + '<td><a href="' + esc(t.url) + '" style="font-weight:600;text-decoration:none;color:' + (done ? 'var(--muted)' : 'var(--text)') + ';' + (done ? 'text-decoration:line-through;' : '') + '">' + esc(t.title) + '</a>'
@@ -566,7 +595,7 @@
                  + '<td style="font-size:12px;color:var(--muted);">' + esc(t.project_name) + '</td>'
                  + '<td>' + priorityBadge(t.priority) + '</td>'
                  + '<td style="font-size:12px;">' + dueHtml(t) + '</td>'
-                 + '<td><select class="mp-status-select" data-mp-status="' + t.id + '">' + opts + '</select></td>'
+                 + '<td style="white-space:nowrap;"><select class="mp-status-select" data-mp-status="' + t.id + '" title="Stage">' + opts + '</select> ' + completionBadge(t) + '</td>'
                  + '</tr>';
         }).join('');
 
@@ -585,16 +614,27 @@
     // One project selected → exactly its columns. All projects → the built-in columns plus
     // every custom status (merged by key) of the projects that hold my tasks. A card can
     // only be dropped on a column that exists in its own project.
+    // Built-in stages appear only when one of these projects still has them; a built-in that the
+    // projects renamed / recoloured differently falls back to its default name and colour.
     function boardColumns() {
         if (mp.boardProject) return statusesFor(mp.boardProject);
-        var byKey = new Map(BUILTIN_COLS.map(function (c) { return [c.status, c]; }));
         var withTasks = new Set(mp.tasks.map(function (t) { return +t.project_id; }));
-        mp.projects.filter(function (p) { return withTasks.has(+p.id); }).forEach(function (p) {
-            (p.statuses || []).forEach(function (s) {
-                if (!s.is_custom) return;
-                var col = byKey.get(s.status) || Object.assign({}, s, { projectNames: [] });
-                col.projectNames.push(p.name);
-                byKey.set(s.status, col);
+        var projects  = mp.projects.filter(function (p) { return withTasks.has(+p.id); });
+        if (!projects.length) return BUILTIN_COLS;
+        var byKey = new Map();
+        projects.forEach(function (p) {
+            statusesFor(p.id).forEach(function (s) {
+                var col = byKey.get(s.status);
+                if (!col) {
+                    byKey.set(s.status, Object.assign({}, s, { projectNames: s.is_custom ? [p.name] : null }));
+                    return;
+                }
+                if (col.projectNames) col.projectNames.push(p.name);
+                var builtin = BUILTIN_COLS.find(function (b) { return b.status === s.status; });
+                if (builtin && (col.label !== s.label || col.color !== s.color)) {
+                    col.label = builtin.label;
+                    col.color = null;
+                }
             });
         });
         return Array.from(byKey.values()).sort(function (a, b) {
@@ -620,8 +660,11 @@
         var wrap  = $('#mp-board');
         var tasks = boardTasks();
         wrap.innerHTML = '';
-        boardColumns().forEach(function (col) {
-            var colTasks = tasks.filter(function (t) { return t.status === col.status; });
+        // "Not Defined" (tasks whose stage was deleted) leads the board while it holds tasks.
+        var orphans = tasks.filter(isOrphan);
+        var cols    = boardColumns();
+        (orphans.length ? [UNDEFINED_COL].concat(cols) : cols).forEach(function (col) {
+            var colTasks = col.is_undefined ? orphans : tasks.filter(function (t) { return t.status === col.status && !isOrphan(t); });
             var colEl = document.createElement('div');
             colEl.className = 'mp-col';
             colEl.style.setProperty('--mp-c', colColor(col));
@@ -634,7 +677,7 @@
                 + '<div class="mp-col__cards">' + (colTasks.length ? '' : '<div class="mp-empty" style="padding:8px 2px;font-size:12px;">No tasks</div>') + '</div>';
             var cards = $('.mp-col__cards', colEl);
             colTasks.forEach(function (t) { cards.appendChild(boardCard(t)); });
-            bindDrop(colEl, col);
+            if (!col.is_undefined) bindDrop(colEl, col);   // not a drop target
             wrap.appendChild(colEl);
         });
     }
@@ -649,7 +692,7 @@
         }).join('');
         card.innerHTML =
             '<a class="mp-card__title" href="' + esc(t.url) + '" draggable="false">' + esc(t.title) + '</a>'
-            + '<div class="mp-meta">' + priorityBadge(t.priority) + (t.due_date ? dueHtml(t) : '') + '</div>'
+            + '<div class="mp-meta">' + completionBadge(t) + priorityBadge(t.priority) + (t.due_date ? dueHtml(t) : '') + '</div>'
             + '<div class="mp-meta">'
             +   (!mp.boardProject ? '<span><span class="mp-dot" style="--mp-c:' + esc((p && p.color) || 'var(--muted)') + '"></span> ' + esc(t.project_name) + '</span>' : '')
             +   (t.milestone_name ? '<span><i class="fa fa-flag"></i> ' + esc(t.milestone_name) + '</span>' : '')
@@ -699,7 +742,7 @@
     // Optimistic move: update locally and re-render, then roll back if the server refuses.
     function moveTask(t, toStatus) {
         if (!statusesFor(t.project_id).some(function (s) { return s.status === toStatus; })) {
-            notify('"' + t.project_name + '" has no such status column.');
+            notify('"' + t.project_name + '" has no such stage column.');
             return;
         }
         var fromStatus = t.status;

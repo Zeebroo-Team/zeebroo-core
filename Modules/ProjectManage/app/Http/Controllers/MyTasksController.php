@@ -30,8 +30,9 @@ class MyTasksController extends Controller
         $filterTabs = [
             'open'    => 'Open',
             'overdue' => 'Overdue',
-            'done'    => 'Done',
-            'all'     => 'All',
+            'done'      => 'Completed',
+            'cancelled' => 'Cancelled',
+            'all'       => 'All',
         ];
 
         return view('projectmanage::my-tasks.index', [

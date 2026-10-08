@@ -18,7 +18,9 @@
     $msDone   = $milestones->filter->isCompleted()->count();
     $tDone    = $tasks->filter->isCompleted()->count();
     $tOverdue = $tasks->filter->isOverdue()->count();
-    $pctAll   = $tasks->count() ? (int) round($tDone / $tasks->count() * 100) : 0;
+    // Cancelled tasks are left out of progress.
+    $tCounted = $tasks->count() - $tasks->filter->isCancelled()->count();
+    $pctAll   = $tCounted ? (int) round($tDone / $tCounted * 100) : 0;
     $starts   = $milestones->map(fn ($m) => $m->start_date ?? $m->due_date)->filter()->sort()->values();
     $ends     = $milestones->map(fn ($m) => $m->due_date ?? $m->start_date)->filter()->sort()->values();
 @endphp
@@ -281,7 +283,7 @@
                                 <thead>
                                     <tr>
                                         <th style="width:18px;"></th><th style="width:26px;"></th><th>Task</th><th>Priority</th>
-                                        <th>Assigned</th><th>Due</th><th>Status</th><th style="width:160px;">Milestone</th><th style="text-align:right;width:70px;"></th>
+                                        <th>Assigned</th><th>Due</th><th>Stage</th><th style="width:160px;">Milestone</th><th style="text-align:right;width:70px;"></th>
                                     </tr>
                                 </thead>
                                 <tbody data-task-list>
@@ -308,7 +310,7 @@
                 · Today {{ $today->format('d M Y') }}
             </span>
             <span><i class="fa fa-flag"></i> <b>{{ $msDone }}/{{ $milestones->count() }}</b> milestones done</span>
-            <span><i class="fa fa-list-check"></i> <b>{{ $tDone }}/{{ $tasks->count() }}</b> tasks done</span>
+            <span><i class="fa fa-list-check"></i> <b>{{ $tDone }}/{{ $tCounted }}</b> tasks done</span>
             <span class="{{ $tOverdue ? 'warn' : '' }}"><i class="fa fa-triangle-exclamation"></i> <b>{{ $tOverdue }}</b> overdue</span>
             <span class="pm-ms-prog" title="{{ $pctAll }}% of tasks done"><span class="pm-bar"><span style="width:{{ $pctAll }}%"></span></span> {{ $pctAll }}%</span>
         </div>
@@ -355,7 +357,7 @@
             </div>
             <div class="pm-dialog__row">
                 <div class="pcat-field">
-                    <label>Status</label>
+                    <label>Stage</label>
                     <select name="status">
                         @foreach($statusTabs as $key => $label)
                             @continue($key === '')
@@ -509,21 +511,24 @@
     // ── Progress, empty placeholders, jump-list counts and status filter (client-side) ──
     function refresh() {
         $all('[data-group]').forEach(function (g) {
-            var all = $all('[data-tid]', g), done = 0, visible = 0;
+            var all = $all('[data-tid]', g), done = 0, cancelled = 0, visible = 0;
             all.forEach(function (t) {
                 var show = !statusFilter || t.getAttribute('data-status') === statusFilter;
                 t.style.display = show ? '' : 'none';
                 if (show) visible++;
                 if (t.getAttribute('data-done') === '1') done++;
+                if (t.getAttribute('data-cancelled') === '1') cancelled++;
             });
             var prog = g.querySelector('[data-prog]');
             if (prog) {
                 var text = prog.querySelector('[data-prog-text]');
                 var fill = prog.querySelector('.pm-bar > span');
                 if (prog.getAttribute('data-prog') === 'bar') {
-                    if (fill) fill.style.width = (all.length ? Math.round(done / all.length * 100) : 0) + '%';
-                    text.textContent = done + '/' + all.length + ' done';
-                    prog.title = done + ' of ' + all.length + ' tasks done';
+                    // Cancelled tasks don't count towards progress.
+                    var counted = all.length - cancelled;
+                    if (fill) fill.style.width = (counted ? Math.round(done / counted * 100) : 0) + '%';
+                    text.textContent = done + '/' + counted + ' done';
+                    prog.title = done + ' of ' + counted + ' tasks done' + (cancelled ? ' (' + cancelled + ' cancelled)' : '');
                 } else {
                     text.textContent = all.length + ' task' + (all.length === 1 ? '' : 's');
                 }

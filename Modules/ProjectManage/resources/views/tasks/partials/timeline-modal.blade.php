@@ -32,7 +32,7 @@
         <div class="pm-tlm-bar">
             <div class="pm-tlm-stats">
                 <span class="pm-tlm-stat"><i class="fa fa-flag"></i> <b>{{ $msDone }}/{{ $milestones->count() }}</b> milestones done</span>
-                <span class="pm-tlm-stat"><i class="fa fa-list-check"></i> <b>{{ $tDone }}/{{ $tasks->count() }}</b> tasks done</span>
+                <span class="pm-tlm-stat"><i class="fa fa-list-check"></i> <b>{{ $tDone }}/{{ $tCounted }}</b> tasks done</span>
                 <span class="pm-tlm-stat {{ $tOverdue ? 'pm-tlm-stat--warn' : '' }}"><i class="fa fa-triangle-exclamation"></i> <b>{{ $tOverdue }}</b> overdue</span>
                 <span class="pm-ms-prog pm-tlm-overall" title="{{ $pctAll }}% of tasks done"><span class="pm-bar"><span style="width:{{ $pctAll }}%"></span></span> {{ $pctAll }}%</span>
             </div>
