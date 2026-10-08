@@ -22653,6 +22653,7 @@ function bindProductCardClicks(container) {
   container.querySelectorAll('.product-card:not(.is-out)').forEach(card => {
     const p = state.products.find(pr => pr.id === Number(card.dataset.id));
     card.addEventListener('click', () => {
+      _setFlySource(card);
       if (p) handleProductClick(p);
       else addToCart({ id: Number(card.dataset.id), name: card.dataset.name, price: parseFloat(card.dataset.price), stock: card.dataset.stock !== '' ? Number(card.dataset.stock) : null, layerId: null, layerLabel: null });
     });
@@ -29677,6 +29678,7 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       const cards = _pgCards();
       const p = state.products.find(pr => pr.id === Number(cards[_pgSelIdx]?.dataset.id));
+      if (cards[_pgSelIdx]) _setFlySource(cards[_pgSelIdx]);
       if (p) handleProductClick(p);
     }
     if (e.key === 'Escape' && _pgSelIdx >= 0) {
@@ -30213,11 +30215,89 @@ async function handleProductClick(p) {
 // ── Cart ───────────────────────────────────────────────────────────────────
 const _beep = new Audio('sounds/beep.wav');
 
+// ── Fly-to-cart animation ──────────────────────────────────────────────────
+// The clicked card is remembered so the animation can play once the item is
+// actually added (after any price / warranty / layer prompts resolve).
+let _flySrc = null;
+let _flyInFlight = 0;
+let _flyPendingDiff = 0;
+
+function _setFlySource(card) {
+  _flySrc = { card, productId: Number(card.dataset.id), at: Date.now() };
+}
+
+function _flyToCart(productId) {
+  const src = _flySrc;
+  _flySrc = null;
+  if (!src || src.productId !== productId || !src.card.isConnected) return;
+  if (Date.now() - src.at > 60000) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+  const target = $('#cart-header .fa-cart-shopping');
+  const visual = src.card.querySelector('img, .p-icon');
+  if (!target || !visual) return;
+
+  const from = visual.getBoundingClientRect();
+  const to   = target.getBoundingClientRect();
+  if (!from.width || !to.width) return;
+
+  src.card.classList.remove('fly-press');
+  void src.card.offsetWidth;
+  src.card.classList.add('fly-press');
+
+  const ghost = document.createElement('div');
+  ghost.className = 'fly-to-cart';
+  ghost.appendChild(visual.cloneNode(true));
+  Object.assign(ghost.style, {
+    left: from.left + 'px', top: from.top + 'px',
+    width: from.width + 'px', height: from.height + 'px',
+  });
+  document.body.appendChild(ghost);
+
+  // Parabolic "jump" path: rises above the start, then drops into the cart icon
+  const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+  const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+  const jump = Math.max(90, Math.abs(dx) * 0.25);
+  const endScale = Math.max(0.08, 28 / from.width);
+  const steps = 14;
+  const frames = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = dx * t;
+    const y = dy * t - jump * 4 * t * (1 - t);
+    const s = 1 + (endScale - 1) * t * t;
+    const r = 25 * t;
+    frames.push({
+      transform: `translate(${x}px, ${y}px) scale(${s}) rotate(${r}deg)`,
+      opacity: t > 0.85 ? 1 - (t - 0.85) / 0.15 * 0.6 : 1,
+      offset: t,
+    });
+  }
+
+  _flyInFlight++;
+  const anim = ghost.animate(frames, { duration: 700, easing: 'cubic-bezier(.45,.05,.55,.95)', fill: 'forwards' });
+  anim.onfinish = anim.oncancel = () => {
+    ghost.remove();
+    _flyInFlight = Math.max(0, _flyInFlight - 1);
+    if (!_flyInFlight && _flyPendingDiff > 0) {
+      _popCartBadge(_flyPendingDiff);
+      _flyPendingDiff = 0;
+    }
+    const icon = $('#cart-header .fa-cart-shopping');
+    if (!icon) return;
+    icon.classList.remove('cart-bump');
+    void icon.offsetWidth;
+    icon.classList.add('cart-bump');
+    icon.addEventListener('animationend', () => icon.classList.remove('cart-bump'), { once: true });
+  };
+}
+
 function addToCart(product) {
   _beep.currentTime = 0;
   _beep.play().catch(() => {});
   const tab = activeTab();
   if (!tab) return;
+  _flyToCart(product.id);
   let key = product.layerId != null ? `${product.id}:${product.layerId}` : `${product.id}`;
   if (product._isRental) key += `:${product._rentalReturnDate || ''}`;
   // Each dynamic-price entry is its own line (e.g. two separate Rs 350 reloads).
@@ -30240,9 +30320,45 @@ function addToCart(product) {
 // Stable reference so innerHTML wipes never lose the node
 const _cartEmptyEl = $('#cart-empty');
 
+// Cart icon counter — pops and shows "+N" when the count goes up
+let _cartBadgeCount = 0;
+let _cartBadgeTabId = null;
+
+function _updateCartBadge(tab, cart) {
+  const badge = $('#cart-count-badge');
+  if (!badge) return;
+  const count = cart.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+  const tabId = tab ? tab.id : null;
+  const diff  = tabId === _cartBadgeTabId ? count - _cartBadgeCount : 0;
+  _cartBadgeCount = count;
+  _cartBadgeTabId = tabId;
+
+  badge.textContent = count > 999 ? '999+' : String(+count.toFixed(2));
+  badge.style.display = count > 0 ? '' : 'none';
+  if (diff <= 0) return;
+  // A product is mid-flight — pop when it lands in the cart instead
+  if (_flyInFlight) { _flyPendingDiff += diff; return; }
+  _popCartBadge(diff);
+}
+
+function _popCartBadge(diff) {
+  const badge = $('#cart-count-badge');
+  if (!badge || diff <= 0 || badge.style.display === 'none') return;
+  badge.classList.remove('count-pop');
+  void badge.offsetWidth;
+  badge.classList.add('count-pop');
+
+  const plus = document.createElement('span');
+  plus.className = 'cart-count-plus';
+  plus.textContent = `+${+diff.toFixed(2)}`;
+  badge.parentNode.appendChild(plus);
+  plus.addEventListener('animationend', () => plus.remove(), { once: true });
+}
+
 function renderCart() {
   const tab    = activeTab();
   const cart   = tab ? tab.cart : [];
+  _updateCartBadge(tab, cart);
   const items  = $('#cart-items');
   const footer = $('#cart-footer');
   const empty  = _cartEmptyEl;

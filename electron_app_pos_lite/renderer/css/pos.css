@@ -327,6 +327,54 @@ html, body {
 }
 .cart-header i { color: var(--accent); margin-right: 6px; }
 
+/* ── Fly-to-cart animation + cart counter ────────────────────────────── */
+.fly-to-cart {
+  position: fixed; z-index: 99999; pointer-events: none;
+  border-radius: 10px; overflow: hidden;
+  background: #f3f4f6; color: var(--muted); font-size: 22px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center;
+  will-change: transform, opacity;
+}
+.fly-to-cart img { width: 100%; height: 100%; object-fit: cover; }
+.product-card.fly-press { animation: flyPress .28s ease; }
+@keyframes flyPress {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(.95); }
+  100% { transform: scale(1); }
+}
+.cart-icon-wrap { position: relative; display: inline-flex; align-items: center; margin-right: 8px; }
+.cart-icon-wrap #cart-icon { margin-right: 0; display: inline-block; }
+#cart-icon.cart-bump { animation: cartBump .45s cubic-bezier(.3,1.6,.5,1); }
+@keyframes cartBump {
+  0%   { transform: scale(1) rotate(0); }
+  30%  { transform: scale(1.45) rotate(-12deg); }
+  60%  { transform: scale(.9) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.cart-count-badge {
+  position: absolute; top: -9px; right: -11px;
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px #fff;
+}
+.cart-count-badge.count-pop { animation: countPop .4s cubic-bezier(.3,1.6,.5,1); }
+@keyframes countPop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.6); }
+  100% { transform: scale(1); }
+}
+.cart-count-plus {
+  position: absolute; top: -10px; right: -16px; pointer-events: none;
+  color: #16a34a; font-size: 12px; font-weight: 800; white-space: nowrap;
+  animation: countPlus .8s ease-out forwards;
+}
+@keyframes countPlus {
+  0%   { opacity: 0; transform: translateY(4px) scale(.8); }
+  20%  { opacity: 1; transform: translateY(-4px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-22px) scale(1); }
+}
+
 .cart-customer-box {
   padding: 0 18px 12px;
   border-bottom: 1px solid var(--border);
