@@ -250,7 +250,30 @@ class ProjectManageApiController extends Controller
 
         $this->tasks->deleteStatus($status);
 
-        return response()->json(['message' => 'Status deleted. Its tasks were moved to To Do.']);
+        return response()->json(['message' => 'Stage deleted. Its tasks were moved to Not Defined.']);
+    }
+
+    /** Edit any status (built-in or custom) by its key — built-ins have no id until first edited. */
+    public function statusUpdateByKey(Request $request, int $projectId, string $key): JsonResponse
+    {
+        $business  = $this->manageBusinessOrAbort($request);
+        $project   = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+        $validated = $request->validate(TaskService::statusRules(partial: true));
+
+        $status = $this->tasks->updateStatus($this->tasks->statusForKey($project, $key), $validated);
+
+        return response()->json(['data' => $this->tasks->fmtStatus($status)]);
+    }
+
+    /** Delete any status (built-in or custom) by its key; its tasks move to Not Defined. */
+    public function statusDestroyByKey(Request $request, int $projectId, string $key): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $this->tasks->deleteStatus($this->tasks->statusForKey($project, $key));
+
+        return response()->json(['message' => 'Stage deleted. Its tasks were moved to Not Defined.']);
     }
 
     // ── Tasks ────────────────────────────────────────────────────────────────
@@ -260,7 +283,7 @@ class ProjectManageApiController extends Controller
         $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
-        $filters = $request->only(['status', 'milestone_id', 'assigned_to', 'priority']);
+        $filters = $request->only(['status', 'completion_status', 'milestone_id', 'assigned_to', 'priority']);
         $tasks   = $this->tasks->listForProject($project, $filters);
 
         return response()->json(['data' => $tasks->map(fn ($t) => $this->fmtTask($t))]);
@@ -275,6 +298,7 @@ class ProjectManageApiController extends Controller
             'title'            => 'required|string|max:200',
             'description'      => 'nullable|string|max:5000',
             'status'           => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
+            'completion_status'=> ['nullable', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
             'priority'         => 'nullable|in:low,normal,high',
             'milestone_id'     => $this->milestoneIdRule($project),
             'due_date'         => 'nullable|date',
@@ -302,6 +326,18 @@ class ProjectManageApiController extends Controller
         return response()->json(['data' => $this->fmtTask($task)]);
     }
 
+    /** Full detail of any task of the business (board card click): the task plus its comments, time logs and files. */
+    public function taskShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        $task->loadMissing(['assignees', 'milestone', 'project', 'creator']);
+
+        return response()->json(['data' => $this->fmtTask($task) + $this->tasks->activityForTask($task) + [
+            'created_by_name' => $task->creator?->name,
+        ]]);
+    }
+
     public function taskStatus(Request $request, int $id): JsonResponse
     {
         $business = $this->manageBusinessOrAbort($request);
@@ -311,6 +347,17 @@ class ProjectManageApiController extends Controller
             'status' => ['required', Rule::in($this->tasks->statusKeysForProject($task->project))],
         ])['status'];
         $task   = $this->tasks->moveStatus($task, $status);
+
+        return response()->json(['data' => $this->fmtTask($task)]);
+    }
+
+    /** Completion status (incomplete / complete / cancelled) — independent of the stage. */
+    public function taskCompletionStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        $task = $this->tasks->setCompletionStatus($task, $this->validatedCompletionStatus($request));
 
         return response()->json(['data' => $this->fmtTask($task)]);
     }
@@ -402,6 +449,17 @@ class ProjectManageApiController extends Controller
         return $this->storeAttachments($request, $task);
     }
 
+    /** Files posted with one of my comments, on any task of the business (board task detail). */
+    public function commentAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $comment  = TaskComment::findOrFail($id);
+        $task     = $this->resolveTask($business, (int) $comment->task_id);
+        abort_unless((int) $comment->user_id === (int) $request->user()->id, 403, 'You can only attach files to your own comments.');
+
+        return $this->storeAttachments($request, $task, $comment);
+    }
+
     public function taskAttachmentDownload(Request $request, int $id): StreamedResponse
     {
         $business = $this->manageBusinessOrAbort($request);
@@ -467,6 +525,7 @@ class ProjectManageApiController extends Controller
             'title'           => 'required|string|max:200',
             'description'     => 'nullable|string|max:5000',
             'status'          => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
+            'completion_status' => ['nullable', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
             'priority'        => 'nullable|in:low,normal,high',
             'due_date'        => 'nullable|date',
             'estimated_hours' => 'nullable|numeric|min:0',
@@ -533,6 +592,25 @@ class ProjectManageApiController extends Controller
         $task = $this->tasks->moveStatus($task, $status);
 
         return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project', 'pendingDeleteRequest']))]);
+    }
+
+    /** Completion status (incomplete / complete / cancelled) for a task assigned to me. */
+    public function myWorkTaskCompletionStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only update tasks assigned to you.');
+
+        $task = $this->tasks->setCompletionStatus($task, $this->validatedCompletionStatus($request));
+
+        return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project', 'pendingDeleteRequest']))]);
+    }
+
+    private function validatedCompletionStatus(Request $request): string
+    {
+        return $request->validate([
+            'completion_status' => ['required', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
+        ], ['completion_status.in' => 'Status must be incomplete, complete or cancelled.'])['completion_status'];
     }
 
     /** Comment (or reply, with parent_id) on a task assigned to me. */
@@ -891,6 +969,9 @@ class ProjectManageApiController extends Controller
             'title'            => $t->title,
             'description'      => $t->description,
             'status'           => $t->status,
+            // Completion status, separate from the stage above: incomplete / complete / cancelled.
+            'completion_status'=> $t->completionStatus(),
+            'completion_label' => $t->completionLabel(),
             'priority'         => $t->priority,
             'assignees'        => $t->assignees->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name, 'avatar_url' => $u->avatarUrl()])->values(),
             'assignee_ids'     => $t->assignees->pluck('id')->map(fn ($id) => (int) $id)->values(),
@@ -930,7 +1011,7 @@ class ProjectManageApiController extends Controller
             'status'       => $m->status,
             'completed_at' => $m->completed_at?->toDateTimeString(),
             'tasks_count'  => $m->tasks_count ?? $m->tasks()->count(),
-            'done_count'   => $m->done_tasks_count ?? $m->tasks()->where('status', Task::STATUS_DONE)->count(),
+            'done_count'   => $m->done_tasks_count ?? $m->tasks()->where('completion_status', Task::COMPLETION_COMPLETE)->count(),
         ];
     }
 }

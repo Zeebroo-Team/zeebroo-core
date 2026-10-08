@@ -19,7 +19,7 @@ class MilestoneService
             ->where('project_id', $project->id)
             ->withCount([
                 'tasks',
-                'tasks as done_tasks_count' => fn ($q) => $q->where('status', Task::STATUS_DONE),
+                'tasks as done_tasks_count' => fn ($q) => $q->where('completion_status', Task::COMPLETION_COMPLETE),
             ])
             ->orderBy('sort_order')
             ->orderByRaw('start_date IS NULL')

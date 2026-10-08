@@ -26,7 +26,7 @@ class TaskStatusController extends Controller
 
         $this->taskService->createStatus($project, $request->validate(TaskService::statusRules()));
 
-        return redirect()->route('pm.projects.tasks.board', $project)->with('status', 'Status added.');
+        return redirect()->route('pm.projects.tasks.board', $project)->with('status', 'Stage added.');
     }
 
     public function update(Request $request, TaskStatus $taskStatus): RedirectResponse
@@ -38,7 +38,7 @@ class TaskStatusController extends Controller
 
         $this->taskService->updateStatus($taskStatus, $request->validate(TaskService::statusRules(partial: true)));
 
-        return redirect()->route('pm.projects.tasks.board', $taskStatus->project_id)->with('status', 'Status updated.');
+        return redirect()->route('pm.projects.tasks.board', $taskStatus->project_id)->with('status', 'Stage updated.');
     }
 
     public function destroy(Request $request, TaskStatus $taskStatus): RedirectResponse
@@ -51,6 +51,35 @@ class TaskStatusController extends Controller
         $projectId = $taskStatus->project_id;
         $this->taskService->deleteStatus($taskStatus);
 
-        return redirect()->route('pm.projects.tasks.board', $projectId)->with('status', 'Status deleted. Its tasks were moved to To Do.');
+        return redirect()->route('pm.projects.tasks.board', $projectId)->with('status', 'Stage deleted. Its tasks were moved to Not Defined.');
+    }
+
+    /** Edit any status (built-in or custom) by its key. */
+    public function updateByKey(Request $request, Project $project, string $statusKey): RedirectResponse
+    {
+        $business = $this->requireProject($request, $project);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $this->taskService->updateStatus(
+            $this->taskService->statusForKey($project, $statusKey),
+            $request->validate(TaskService::statusRules(partial: true)),
+        );
+
+        return redirect()->route('pm.projects.tasks.board', $project)->with('status', 'Stage updated.');
+    }
+
+    /** Delete any status (built-in or custom) by its key; its tasks move to Not Defined. */
+    public function destroyByKey(Request $request, Project $project, string $statusKey): RedirectResponse
+    {
+        $business = $this->requireProject($request, $project);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $this->taskService->deleteStatus($this->taskService->statusForKey($project, $statusKey));
+
+        return redirect()->route('pm.projects.tasks.board', $project)->with('status', 'Stage deleted. Its tasks were moved to Not Defined.');
     }
 }

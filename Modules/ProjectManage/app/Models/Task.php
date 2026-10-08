@@ -17,6 +17,9 @@ class Task extends Model
     const STATUS_REVIEW      = 'review';
     const STATUS_DONE        = 'done';
 
+    /** Tasks whose status was deleted land here ("Not Defined" board column). */
+    const STATUS_UNDEFINED   = 'undefined';
+
     const BUILTIN_STATUSES = [
         self::STATUS_TODO        => 'To Do',
         self::STATUS_IN_PROGRESS => 'In Progress',
@@ -37,6 +40,22 @@ class Task extends Model
 
     const CUSTOM_SORT_MAX = 98;
 
+    /** Default stage automation of built-ins without an override row: entering Done marks a task complete. */
+    const BUILTIN_AUTO_COMPLETION = [
+        self::STATUS_DONE => self::COMPLETION_COMPLETE,
+    ];
+
+    /** Completion status — separate from the stage (board column) held in `status`. */
+    const COMPLETION_INCOMPLETE = 'incomplete';
+    const COMPLETION_COMPLETE   = 'complete';
+    const COMPLETION_CANCELLED  = 'cancelled';
+
+    const COMPLETION_STATUSES = [
+        self::COMPLETION_INCOMPLETE => 'Incomplete',
+        self::COMPLETION_COMPLETE   => 'Complete',
+        self::COMPLETION_CANCELLED  => 'Cancelled',
+    ];
+
     const PRIORITY_LOW    = 'low';
     const PRIORITY_NORMAL = 'normal';
     const PRIORITY_HIGH   = 'high';
@@ -47,6 +66,7 @@ class Task extends Model
         'title',
         'description',
         'status',
+        'completion_status',
         'priority',
         'assigned_to',
         'created_by',
@@ -145,15 +165,38 @@ class Task extends Model
         return $this->hasMany(TimeLog::class)->orderByDesc('logged_at');
     }
 
+    /** Completed = completion status "complete" — whatever stage (board column) the task sits in. */
     public function isCompleted(): bool
     {
-        return $this->status === self::STATUS_DONE;
+        return $this->completionStatus() === self::COMPLETION_COMPLETE;
+    }
+
+    /** Open = still incomplete (complete and cancelled tasks are both closed). */
+    public function isOpen(): bool
+    {
+        return $this->completionStatus() === self::COMPLETION_INCOMPLETE;
+    }
+
+    public function completionStatus(): string
+    {
+        return $this->completion_status ?: self::COMPLETION_INCOMPLETE;
+    }
+
+    public function completionLabel(): string
+    {
+        return self::COMPLETION_STATUSES[$this->completionStatus()] ?? ucfirst($this->completionStatus());
+    }
+
+    public function isCancelled(): bool
+    {
+        return $this->completionStatus() === self::COMPLETION_CANCELLED;
     }
 
     public function isOverdue(): bool
     {
         // due_date is a midnight date, so isPast() would flag tasks due *today* — compare to today instead.
-        return !$this->isCompleted() && $this->due_date && $this->due_date->lt(today());
+        // Complete / cancelled tasks are never overdue, whatever stage they sit in.
+        return $this->isOpen() && $this->due_date && $this->due_date->lt(today());
     }
 
     public function totalLoggedMinutes(): int

@@ -8,10 +8,14 @@
         'color'      => $c['color'] ?: ($builtinColors[$c['status']] ?? '#0ea5e9'),
         'sort_order' => $c['sort_order'],
         'is_custom'  => $c['is_custom'],
+        'is_undefined' => $c['is_undefined'] ?? false,
+        'auto'       => $c['auto_completion_status'] ?? null,
         'tasks'      => $c['tasks'],
     ]])->all();
+    $completionLabels = \Modules\ProjectManage\Models\Task::COMPLETION_STATUSES;
     $sortMax = \Modules\ProjectManage\Models\Task::CUSTOM_SORT_MAX;
-    $sortHint = 'To Do = 1, In Progress = 2, Review = 3, Done is always last.';
+    $sortHint = 'Columns are ordered by sort number (lowest first). Done is always last.';
+    $undefinedKey = \Modules\ProjectManage\Models\Task::STATUS_UNDEFINED;
     $priorityColor = ['high'=>'#dc2626','normal'=>'#f59e0b','low'=>'#6b7280'];
 @endphp
 
@@ -25,6 +29,9 @@
 .pm-col__icon{background:none;border:none;cursor:pointer;color:var(--muted);padding:2px 4px;font-size:11px;}
 .pm-col__icon:hover{color:var(--text);}
 .pm-col__icon--danger:hover{color:#dc2626;}
+.pm-col__icon--auto-on{color:#f59e0b;}
+.pm-col__icon--auto-on:hover{color:#d97706;}
+.pm-status-form select{font-size:12px;height:34px;margin:0;padding:0 8px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:var(--text);width:100%;}
 .pm-col__sort{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0;text-transform:none;}
 .pm-status-form{display:none;border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--card);}
 .pm-status-form.open{display:block;}
@@ -75,12 +82,12 @@
     <div class="pm-board-toolbar">
         <button type="button" class="linkbtn" data-toggle-form="pm-status-add"
                 style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fa fa-table-columns"></i> Add Status
+            <i class="fa fa-table-columns"></i> Add Stage
         </button>
         <form method="POST" action="{{ route('pm.projects.statuses.store', $project) }}" class="pm-status-form" id="pm-status-add">
             @csrf
             <div class="pm-status-form__row">
-                <div style="flex:1 1 200px;"><label>Status name *</label><input type="text" name="label" maxlength="60" required placeholder="e.g. Testing, Blocked"></div>
+                <div style="flex:1 1 200px;"><label>Stage name *</label><input type="text" name="label" maxlength="60" required placeholder="e.g. Testing, Blocked"></div>
                 <div><label>Color</label><input type="color" name="color" value="#0ea5e9"></div>
                 <div style="flex:0 0 110px;"><label>Sort number</label><input type="number" name="sort_order" min="0" max="{{ $sortMax }}" placeholder="Auto"></div>
                 <button type="submit" class="linkbtn" style="padding:6px 12px;font-size:12px;"><i class="fa fa-plus"></i> Add</button>
@@ -101,34 +108,57 @@
                         {{ $colTasks->count() }}
                     </span>
                     <span class="pm-col__head-actions">
-                        @if($status !== \Modules\ProjectManage\Models\Task::STATUS_DONE)
+                        @if($status !== \Modules\ProjectManage\Models\Task::STATUS_DONE && !$meta['is_undefined'])
                             <span class="pm-col__sort" title="Sort number">#{{ $meta['sort_order'] }}</span>
                         @endif
-                        @if($meta['is_custom'])
-                            <button type="button" class="pm-col__icon" title="Edit status" data-toggle-form="pm-status-edit-{{ $meta['id'] }}"><i class="fa fa-pen"></i></button>
-                            <form method="POST" action="{{ route('pm.statuses.destroy', $meta['id']) }}" style="display:inline;"
-                                  onsubmit="return confirm(@js($colTasks->count() ? "Delete status \"{$meta['label']}\"? Its {$colTasks->count()} task(s) will be moved to To Do." : "Delete status \"{$meta['label']}\"?"));">
+                        @if(!$meta['is_undefined'])
+                            <button type="button" class="pm-col__icon {{ $meta['auto'] ? 'pm-col__icon--auto-on' : '' }}" data-toggle-form="pm-status-auto-{{ $status }}"
+                                    title="{{ $meta['auto'] ? 'Automation: tasks moved here become ' . ($completionLabels[$meta['auto']] ?? $meta['auto']) : 'Automation: off' }}"><i class="fa fa-bolt"></i></button>
+                            <button type="button" class="pm-col__icon" title="Edit stage" data-toggle-form="pm-status-edit-{{ $status }}"><i class="fa fa-pen"></i></button>
+                            <form method="POST" action="{{ route('pm.projects.statuses.destroy-key', [$project, $status]) }}" style="display:inline;"
+                                  onsubmit="return confirm(@js($colTasks->count() ? "Delete stage \"{$meta['label']}\"? Its {$colTasks->count()} task(s) will be moved to Not Defined." : "Delete stage \"{$meta['label']}\"?"));">
                                 @csrf
                                 @method('DELETE')
-                                <button type="submit" class="pm-col__icon pm-col__icon--danger" title="Delete status"><i class="fa fa-trash"></i></button>
+                                <button type="submit" class="pm-col__icon pm-col__icon--danger" title="Delete stage"><i class="fa fa-trash"></i></button>
                             </form>
                         @endif
                     </span>
                 </div>
 
-                @if($meta['is_custom'])
-                    <form method="POST" action="{{ route('pm.statuses.update', $meta['id']) }}" class="pm-status-form" id="pm-status-edit-{{ $meta['id'] }}">
+                @if(!$meta['is_undefined'])
+                    {{-- Stage automation (⚡): completion status a task gets when it is moved into this stage --}}
+                    <form method="POST" action="{{ route('pm.projects.statuses.update-key', [$project, $status]) }}" class="pm-status-form" id="pm-status-auto-{{ $status }}">
                         @csrf
                         @method('PUT')
-                        <div style="margin-bottom:6px;"><label>Status name</label><input type="text" name="label" maxlength="60" required value="{{ $meta['label'] }}"></div>
+                        <label><i class="fa fa-bolt" style="color:#f59e0b;"></i> When a task is moved here, set its status to</label>
+                        <select name="auto_completion_status">
+                            <option value="" @selected(!$meta['auto'])>Don't change (off)</option>
+                            @foreach($completionLabels as $ck => $cl)
+                                <option value="{{ $ck }}" @selected($meta['auto'] === $ck)>{{ $cl }}</option>
+                            @endforeach
+                        </select>
+                        <div class="pm-status-form__hint">Moving the task on to a stage without automation sets it back to Incomplete.</div>
+                        <div style="display:flex;gap:6px;margin-top:8px;">
+                            <button type="submit" class="linkbtn" style="padding:5px 12px;font-size:12px;">Save</button>
+                            <button type="button" class="linkbtn" data-toggle-form="pm-status-auto-{{ $status }}"
+                                    style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);">Cancel</button>
+                        </div>
+                    </form>
+
+                    <form method="POST" action="{{ route('pm.projects.statuses.update-key', [$project, $status]) }}" class="pm-status-form" id="pm-status-edit-{{ $status }}">
+                        @csrf
+                        @method('PUT')
+                        <div style="margin-bottom:6px;"><label>Stage name</label><input type="text" name="label" maxlength="60" required value="{{ $meta['label'] }}"></div>
                         <div class="pm-status-form__row">
                             <div><label>Color</label><input type="color" name="color" value="{{ $meta['color'] }}"></div>
-                            <div style="flex:1;"><label>Sort number</label><input type="number" name="sort_order" min="0" max="{{ $sortMax }}" value="{{ $meta['sort_order'] }}" required></div>
+                            @if($status !== \Modules\ProjectManage\Models\Task::STATUS_DONE)
+                                <div style="flex:1;"><label>Sort number</label><input type="number" name="sort_order" min="0" max="{{ $sortMax }}" value="{{ $meta['sort_order'] }}" required></div>
+                            @endif
                         </div>
                         <div class="pm-status-form__hint">{{ $sortHint }}</div>
                         <div style="display:flex;gap:6px;margin-top:8px;">
                             <button type="submit" class="linkbtn" style="padding:5px 12px;font-size:12px;">Save</button>
-                            <button type="button" class="linkbtn" data-toggle-form="pm-status-edit-{{ $meta['id'] }}"
+                            <button type="button" class="linkbtn" data-toggle-form="pm-status-edit-{{ $status }}"
                                     style="padding:5px 10px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);">Cancel</button>
                         </div>
                     </form>
@@ -179,6 +209,7 @@
                                 </button>
                                 <div class="pm-move-menu" style="display:none;position:absolute;top:100%;left:0;z-index:50;background:var(--card);border:1px solid var(--border);border-radius:8px;min-width:130px;box-shadow:0 8px 24px rgba(0,0,0,.2);padding:4px 0;">
                                     @foreach($colMeta as $ns => $nm)
+                                        @continue($ns === $undefinedKey)
                                             {{-- Rendered for every status; the card's own status is hidden so a drag-and-drop move can just toggle visibility --}}
                                             <form method="POST" action="{{ route('pm.tasks.status', $t) }}" data-move-status="{{ $ns }}" @if($ns === $status) style="display:none;" @endif>
                                                 @csrf
@@ -198,6 +229,7 @@
                 @endforeach
 
                 {{-- Add task at bottom of column --}}
+                @if(!$meta['is_undefined'])
                 <div class="pm-board-add-form">
                     <button type="button" class="pm-board-add-toggle" data-col="{{ $status }}">
                         <i class="fa fa-plus" style="font-size:10px;"></i> Add task
@@ -224,6 +256,7 @@
                         </form>
                     </div>
                 </div>
+                @endif
             </div>
         @endforeach
     </div>
@@ -272,7 +305,7 @@
         if (el) el.textContent = Math.max(0, (parseInt(el.textContent, 10) || 0) + delta);
     }
     function placeCard(card, col, status) {
-        col.insertBefore(card, col.querySelector('.pm-board-add-form'));
+        col.insertBefore(card, col.querySelector('.pm-board-add-form')); // null (Not Defined) appends
         card.setAttribute('data-status', status);
         card.querySelectorAll('[data-move-status]').forEach(function (f) {
             f.style.display = f.getAttribute('data-move-status') === status ? 'none' : '';
@@ -296,7 +329,8 @@
         });
     });
 
-    document.querySelectorAll('.pm-col[data-col]').forEach(function (col) {
+    // "Not Defined" only holds tasks whose status was deleted — it is not a drop target.
+    document.querySelectorAll('.pm-col[data-col]:not([data-col="{{ $undefinedKey }}"])').forEach(function (col) {
         col.addEventListener('dragover', function (e) {
             if (!dragCard) return;
             e.preventDefault();

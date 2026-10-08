@@ -78,24 +78,44 @@ class MyProjectsController extends Controller
         return response()->json(['data' => $this->fmtTask($task->fresh(['milestone', 'project']))], 201);
     }
 
-    /** Status change (kanban drag & drop, status select, complete / reopen) for a task assigned to me. */
+    /** Stage change (kanban drag & drop, stage select) for a task assigned to me. */
     public function status(Request $request, Task $task): JsonResponse
     {
-        $business = $this->requireJsonBusiness($request);
-        $task->loadMissing('project');
-        abort_unless((int) $task->project->business_id === (int) $business->id, 404);
-        abort_unless($this->taskService->isAssignee($task, (int) $request->user()->id), 403, 'You can only update tasks assigned to you.');
+        $this->authorizeMyTask($request, $task);
 
         $status = $request->validate([
             'status' => ['required', Rule::in($this->taskService->statusKeysForProject($task->project))],
-        ], ['status.in' => 'This project does not have that status.'])['status'];
+        ], ['status.in' => 'This project does not have that stage.'])['status'];
 
         $task = $this->taskService->moveStatus($task, $status);
 
         return response()->json(['data' => $this->fmtTask($task->fresh(['milestone', 'project']))]);
     }
 
+    /** Completion status (incomplete / complete / cancelled — the check button) for a task assigned to me. */
+    public function completionStatus(Request $request, Task $task): JsonResponse
+    {
+        $this->authorizeMyTask($request, $task);
+
+        $completion = $request->validate([
+            'completion_status' => ['required', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
+        ], ['completion_status.in' => 'Status must be incomplete, complete or cancelled.'])['completion_status'];
+
+        $task = $this->taskService->setCompletionStatus($task, $completion);
+
+        return response()->json(['data' => $this->fmtTask($task->fresh(['milestone', 'project']))]);
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /** The task must belong to the current business and be assigned to me. */
+    private function authorizeMyTask(Request $request, Task $task): void
+    {
+        $business = $this->requireJsonBusiness($request);
+        $task->loadMissing('project');
+        abort_unless((int) $task->project->business_id === (int) $business->id, 404);
+        abort_unless($this->taskService->isAssignee($task, (int) $request->user()->id), 403, 'You can only update tasks assigned to you.');
+    }
 
     private function requireJsonBusiness(Request $request): Business
     {
@@ -136,6 +156,8 @@ class MyProjectsController extends Controller
             'milestone_name' => $t->milestone?->name,
             'title'          => $t->title,
             'status'         => $t->status,
+            'completion_status' => $t->completionStatus(),
+            'completion_label'  => $t->completionLabel(),
             'priority'       => $t->priority,
             'due_date'       => $t->due_date?->toDateString(),
             'url'            => route('pm.tasks.show', $t),

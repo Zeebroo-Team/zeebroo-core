@@ -18622,6 +18622,22 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 :root[data-theme="light"] .pm-priority--normal { background: #eff6ff; color: #1d4ed8; }
 :root[data-theme="light"] .pm-priority--high   { background: #fef2f2; color: #dc2626; }
 
+/* Task completion status (incomplete / complete / cancelled) — separate from the stage */
+.pm-completion { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 6px; border: 1px solid currentColor; letter-spacing: .02em; }
+.pm-completion--incomplete { color: #6b7280; }
+.pm-completion--complete   { color: #16a34a; background: #f0fdf4; }
+.pm-completion--cancelled  { color: #dc2626; background: #fef2f2; }
+.pm-task-card--cancelled .pm-task-card-title { text-decoration: line-through; color: var(--text-muted); }
+.pm-task-card--complete  .pm-task-card-title { color: var(--text-muted); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .pm-completion--incomplete { color: #9ca3af; }
+  :root:not([data-theme="light"]) .pm-completion--complete   { color: #4ade80; background: rgba(21,128,61,.18); }
+  :root:not([data-theme="light"]) .pm-completion--cancelled  { color: #fca5a5; background: rgba(220,38,38,.18); }
+}
+:root[data-theme="dark"] .pm-completion--incomplete { color: #9ca3af; }
+:root[data-theme="dark"] .pm-completion--complete   { color: #4ade80; background: rgba(21,128,61,.18); }
+:root[data-theme="dark"] .pm-completion--cancelled  { color: #fca5a5; background: rgba(220,38,38,.18); }
+
 /* Status badges */
 .pm-status { display: inline-flex; align-items: center; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 6px; text-transform: uppercase; letter-spacing: .04em; }
 .pm-status--todo       { background: #f3f4f6; color: #6b7280; }
@@ -18676,6 +18692,11 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
   border: 1.5px solid var(--border);
 }
 
+/* Tasks whose status was deleted */
+.pm-kanban-col--undefined {
+  border-style: dashed;
+}
+
 .pm-kanban-col-head {
   display: flex;
   align-items: center;
@@ -18716,6 +18737,21 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .pm-col-del:hover { color: #dc2626; }
 .pm-col-edit:hover { color: var(--accent); }
+.pm-col-auto:hover,
+.pm-col-auto--on { color: #f59e0b; }
+.pm-col-auto--on:hover { color: #d97706; }
+
+/* Stage automation modal options */
+.pm-auto-opts { display: flex; flex-direction: column; gap: 6px; }
+.pm-auto-opt {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  cursor: pointer; font-size: 12px;
+}
+.pm-auto-opt input { margin-top: 2px; }
+.pm-auto-opt span { display: flex; flex-direction: column; gap: 1px; }
+.pm-auto-opt small { color: var(--text-muted); font-size: 11px; }
+.pm-auto-opt--on { border-color: #f59e0b; background: color-mix(in srgb, #f59e0b 8%, transparent); }
 .pm-col-sort {
   font-size: 10px;
   font-weight: 600;
@@ -18951,6 +18987,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .mp-prog-bar { flex: 1; height: 6px; border-radius: 6px; background: var(--border-light); overflow: hidden; }
 .mp-prog-bar > div { height: 100%; border-radius: 6px; background: var(--st); }
 .mp-prog-row b { width: 22px; text-align: right; font-size: 12px; }
+.mp-prog-head { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
 
 /* Sidebar: team */
 .mp-team { display: flex; flex-direction: column; }
@@ -19016,6 +19053,7 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .mp-check { color: #d1d5db; cursor: pointer; font-size: 14px; flex-shrink: 0; }
 .mp-check:hover { color: #22c55e; }
 .mp-check--done { color: #22c55e; }
+.mp-check--cancelled { color: #ef4444; }
 
 .mp-due { color: var(--text-muted); white-space: nowrap; }
 .mp-due--overdue { color: #dc2626; font-weight: 700; }
@@ -19037,6 +19075,24 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .mpd-crumb-sep { font-size: 8px; opacity: .5; }
 .mpd-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; margin-right: 6px; vertical-align: middle; }
 .mpd-crumb .mpd-dot { margin-right: 0; }
+/* Status + stage pills at the top-left of the task detail header */
+.mpd-head-status, .mpd-head-stage {
+  display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0;
+  font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; white-space: nowrap;
+}
+.mpd-head-status--incomplete { color: #4b5563; background: #f3f4f6; }
+.mpd-head-status--complete   { color: #fff; background: #16a34a; }
+.mpd-head-status--cancelled  { color: #fff; background: #dc2626; }
+.mpd-head-stage {
+  color: var(--stage); border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent);
+  background: color-mix(in srgb, var(--stage) 12%, transparent);
+}
+.mpd-head-stage .mpd-dot { margin-right: 0; }
+.mpd-head-sep { width: 1px; height: 16px; background: var(--border-color, #e5e7eb); flex-shrink: 0; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mpd-head-status--incomplete { color: #d1d5db; background: rgba(156,163,175,.18); }
+}
+:root[data-theme="dark"] .mpd-head-status--incomplete { color: #d1d5db; background: rgba(156,163,175,.18); }
 .mpd-icon-btn {
   width: 28px; height: 28px; border-radius: 6px; border: none; background: none;
   color: var(--text-muted); cursor: pointer; font-size: 14px; flex-shrink: 0;
@@ -20253,8 +20309,9 @@ button.mp-row-del:hover { color: #dc2626; background: color-mix(in srgb, #dc2626
 .pm-tl-task::before { content: ''; position: absolute; left: -14px; top: 50%; width: 12px; height: 2px; background: var(--border); }
 .pm-tl-task:hover { border-color: var(--accent); }
 .pm-tl-task-dot { cursor: pointer; font-size: 13px; color: #d1d5db; }
-.pm-tl-task--done .pm-tl-task-dot { color: #22c55e; }
-.pm-tl-task--done .pm-tl-task-title { text-decoration: line-through; color: var(--text-muted); }
+/* Struck through by completion status (complete / cancelled), not by the Done stage */
+.pm-tl-task--complete .pm-tl-task-title,
+.pm-tl-task--cancelled .pm-tl-task-title { text-decoration: line-through; color: var(--text-muted); }
 .pm-tl-task-title { font-weight: 600; flex: 1; min-width: 120px; }
 .pm-tl-task-meta { font-size: 11px; color: var(--text-muted); }
 .pm-tl-task-meta .fa { margin-right: 2px; }

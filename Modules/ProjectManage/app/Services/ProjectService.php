@@ -161,7 +161,7 @@ class ProjectService
         $counts = DB::table('pm_task_assignees as a')
             ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
             ->where('t.project_id', $project->id)
-            ->selectRaw('a.user_id, count(*) as total, sum(case when t.status = ? then 0 else 1 end) as open', [Task::STATUS_DONE])
+            ->selectRaw('a.user_id, count(*) as total, sum(case when t.completion_status = ? then 1 else 0 end) as open', [Task::COMPLETION_INCOMPLETE])
             ->groupBy('a.user_id')
             ->get()
             ->keyBy('user_id');
@@ -205,7 +205,7 @@ class ProjectService
         $open = DB::table('pm_task_assignees as a')
             ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
             ->whereIn('t.project_id', $projectIds)
-            ->where('t.status', '!=', Task::STATUS_DONE)
+            ->where('t.completion_status', Task::COMPLETION_INCOMPLETE)
             ->selectRaw('a.user_id, count(*) as open')
             ->groupBy('a.user_id')
             ->pluck('open', 'user_id');
@@ -247,27 +247,43 @@ class ProjectService
     /**
      * The user's own task counts in a project.
      *
-     * @return array{total:int,open:int,overdue:int,done:int}
+     * Open = incomplete, done = complete; cancelled tasks are neither.
+     *
+     * @return array{total:int,open:int,overdue:int,done:int,cancelled:int}
      */
     public function userTaskStats(Project $project, int $userId): array
     {
-        $done = Task::STATUS_DONE;
-        $row  = DB::table('pm_task_assignees as a')
+        $row = DB::table('pm_task_assignees as a')
             ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
             ->where('a.user_id', $userId)
             ->where('t.project_id', $project->id)
-            ->selectRaw(
-                'count(*) as total,
-                 sum(case when t.status = ? then 0 else 1 end) as open,
-                 sum(case when t.status <> ? and t.due_date is not null and t.due_date < ? then 1 else 0 end) as overdue',
-                [$done, $done, now()->toDateString()]
-            )
+            ->selectRaw(self::COMPLETION_COUNTS_SQL, self::completionCountBindings())
             ->first();
 
-        $total = (int) ($row->total ?? 0);
-        $open  = (int) ($row->open ?? 0);
+        return [
+            'total'     => (int) ($row->total ?? 0),
+            'open'      => (int) ($row->open ?? 0),
+            'overdue'   => (int) ($row->overdue ?? 0),
+            'done'      => (int) ($row->done ?? 0),
+            'cancelled' => (int) ($row->cancelled ?? 0),
+        ];
+    }
 
-        return ['total' => $total, 'open' => $open, 'overdue' => (int) ($row->overdue ?? 0), 'done' => $total - $open];
+    /** total / open / overdue / done / cancelled task counts over pm_tasks as t (by completion status). */
+    private const COMPLETION_COUNTS_SQL = 'count(*) as total,
+         sum(case when t.completion_status = ? then 1 else 0 end) as open,
+         sum(case when t.completion_status = ? and t.due_date is not null and t.due_date < ? then 1 else 0 end) as overdue,
+         sum(case when t.completion_status = ? then 1 else 0 end) as done,
+         sum(case when t.completion_status = ? then 1 else 0 end) as cancelled';
+
+    private static function completionCountBindings(): array
+    {
+        return [
+            Task::COMPLETION_INCOMPLETE,
+            Task::COMPLETION_INCOMPLETE, now()->toDateString(),
+            Task::COMPLETION_COMPLETE,
+            Task::COMPLETION_CANCELLED,
+        ];
     }
 
     /**
@@ -305,17 +321,11 @@ class ProjectService
             return null;
         }
 
-        $done   = Task::STATUS_DONE;
         $counts = DB::table('pm_task_assignees as a')
             ->join('pm_tasks as t', 't.id', '=', 'a.task_id')
             ->where('a.user_id', $userId)
             ->whereIn('t.project_id', $projects->pluck('id'))
-            ->selectRaw(
-                't.project_id, count(*) as total,
-                 sum(case when t.status = ? then 0 else 1 end) as open,
-                 sum(case when t.status <> ? and t.due_date is not null and t.due_date < ? then 1 else 0 end) as overdue',
-                [$done, $done, now()->toDateString()]
-            )
+            ->selectRaw('t.project_id, ' . self::COMPLETION_COUNTS_SQL, self::completionCountBindings())
             ->groupBy('t.project_id')
             ->get()
             ->keyBy('project_id');
@@ -353,7 +363,8 @@ class ProjectService
                 'total'    => (int) $counts->sum('total'),
                 'open'     => (int) $counts->sum('open'),
                 'overdue'  => (int) $counts->sum('overdue'),
-                'done'     => (int) ($counts->sum('total') - $counts->sum('open')),
+                'done'     => (int) $counts->sum('done'),
+                'cancelled'=> (int) $counts->sum('cancelled'),
             ],
             'projects'     => $projects->map(fn (Project $p) => [
                 'id'          => (int) $p->id,

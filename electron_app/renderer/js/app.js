@@ -34419,6 +34419,24 @@ function escAttr(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// ── PM task completion status (separate from the stage / board column) ─────
+const PM_COMPLETION = { incomplete: 'Incomplete', complete: 'Complete', cancelled: 'Cancelled' };
+function pmCompletionOf(t) { return t?.completion_status || (t?.status === 'done' ? 'complete' : 'incomplete'); }
+// Progress % from task_stats: completed tasks over the ones that still count (cancelled are left out).
+function pmProgressPct(s) {
+  const base = (s?.total || 0) - (s?.cancelled || 0);
+  return base > 0 ? Math.round(((s?.done || 0) / base) * 100) : 0;
+}
+function pmCompletionBadge(t) {
+  const cs = pmCompletionOf(t);
+  return `<span class="pm-completion pm-completion--${escAttr(cs)}" title="Status">${escHtml(PM_COMPLETION[cs] || cs)}</span>`;
+}
+function pmCompletionOptions(t) {
+  const cs = pmCompletionOf(t);
+  return Object.entries(PM_COMPLETION)
+    .map(([k, l]) => `<option value="${k}"${k === cs ? ' selected' : ''}>${l}</option>`).join('');
+}
+
 // ── Platform class ─────────────────────────────────────────────────────────
 const isMac = window.electronAPI.platform === 'darwin';
 if (isMac) {
@@ -50254,7 +50272,8 @@ const TeamProfile = (() => {
   function _pmProjectCardEl(p, onClick) {
     const done  = p.task_stats?.done  || 0;
     const total = p.task_stats?.total || 0;
-    const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+    const cancelled = p.task_stats?.cancelled || 0;
+    const pct   = pmProgressPct(p.task_stats);
     const colorBar = p.color ? `<div class="pm-project-card--color-bar" style="background:${esc(p.color)}"></div>` : '';
     const thumb = `
       <div class="pm-project-card-thumb">
@@ -50280,7 +50299,7 @@ const TeamProfile = (() => {
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
         <span class="pm-progress-pct">${pct}%</span>
       </div>
-      <div class="pm-task-count"><i class="fa fa-bars-progress" style="margin-right:4px;color:var(--text-muted)"></i>${total} tasks · ${done} done</div>
+      <div class="pm-task-count"><i class="fa fa-bars-progress" style="margin-right:4px;color:var(--text-muted)"></i>${total} tasks · ${done} complete${cancelled ? ` · ${cancelled} cancelled` : ''}</div>
     `;
     card.addEventListener('click', onClick || (() => openProjectDetail(p.id)));
     return card;
@@ -50329,6 +50348,9 @@ const TeamProfile = (() => {
     pm.collapsedMs      = new Set();
     pm.members          = [];
     pm.availableUsers   = [];
+    pm.taskFilter       = '';
+    _pmApplyStages(null);       // defaults until this project's stages arrive
+    loadPmStages(+projectId);
     const list   = $('#pm-projects-list');
     const detail = $('#pm-detail-view');
     if (list)   list.style.display   = 'none';
@@ -50383,9 +50405,9 @@ const TeamProfile = (() => {
 
   function _pmRenderDashboardPane(p) {
     const s     = p.task_stats || {};
-    const total = s.total || 0;
     const done  = s.done  || 0;
-    const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+    const counted = (s.total || 0) - (s.cancelled || 0);   // cancelled tasks don't count towards progress
+    const pct   = pmProgressPct(s);
     const pane = $('#pm-pane-dashboard');
     if (!pane) return;
     pane.innerHTML = `
@@ -50393,13 +50415,13 @@ const TeamProfile = (() => {
         <div class="inv-section-title"><i class="fa fa-chart-simple"></i> Progress</div>
         <div style="padding:14px 16px">
           <div class="pm-progress-bar-wrap" style="height:8px;margin-bottom:6px"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
-          <div style="font-size:12px;color:var(--text-muted)">${done} of ${total} tasks done (${pct}%)</div>
+          <div style="font-size:12px;color:var(--text-muted)">${done} of ${counted} tasks complete (${pct}%)${s.cancelled ? ` · ${s.cancelled} cancelled` : ''}</div>
         </div>
         <div class="inv-detail-grid">
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">To Do</div><div class="inv-detail-cell-value">${s.todo || 0}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">In Progress</div><div class="inv-detail-cell-value">${s.in_progress || 0}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Review</div><div class="inv-detail-cell-value">${s.review || 0}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Done</div><div class="inv-detail-cell-value">${s.done || 0}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Incomplete</div><div class="inv-detail-cell-value">${s.incomplete ?? s.open ?? 0}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Complete</div><div class="inv-detail-cell-value" style="color:#16a34a">${s.complete ?? done}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Cancelled</div><div class="inv-detail-cell-value" style="color:#dc2626">${s.cancelled || 0}</div></div>
+          <div class="inv-detail-cell"><div class="inv-detail-cell-label">All Tasks</div><div class="inv-detail-cell-value">${s.total || 0}</div></div>
         </div>
       </div>
       <div class="inv-section">
@@ -50588,8 +50610,41 @@ const TeamProfile = (() => {
   ];
   pm.boardColumns = PM_BUILTIN_STATUSES;
 
+  // The open project's stages (renamed / deleted built-ins + custom ones) drive the stage
+  // filter chips, the stage selects and the stage badges. Refreshed with the board and task list.
+  function _pmApplyStages(cols) {
+    pm.boardColumns = cols?.length ? cols : PM_BUILTIN_STATUSES;
+    if (pm.taskFilter && !pm.boardColumns.some(c => c.status === pm.taskFilter)) pm.taskFilter = '';
+    _pmRenderStageChips();
+  }
+
+  function _pmStageFilters() {
+    return [['', 'All'], ...pm.boardColumns.map(c => [c.status, c.label])];
+  }
+
+  function _pmRenderStageChips() {
+    const bar = $('#pm-task-filter-chips');
+    if (!bar) return;
+    bar.innerHTML = _pmStageFilters().map(([v, l]) =>
+      `<button class="svc-chip${(pm.taskFilter || '') === v ? ' active' : ''}" data-pmtaskfilter="${esc(v)}">${esc(l)}</button>`).join('');
+  }
+
+  // Stage of a task in the open project; null when its stage was deleted (Not Defined).
+  function _pmStageOf(t) {
+    return pm.boardColumns.find(c => c.status === t.status) || null;
+  }
+
+  async function loadPmStages(projectId = pm.detailProjectId) {
+    try {
+      const res = await API.pmStatuses(projectId);
+      if (res.status >= 400 || +projectId !== +pm.detailProjectId) return;
+      _pmApplyStages(res.body?.data || []);
+    } catch { /* keep the current columns */ }
+  }
+
   function _pmColDot(col) {
-    return col.is_custom
+    // Built-ins use their class colour until a colour is set on them
+    return col.is_custom || col.color
       ? `<span class="pm-col-dot" style="background:${esc(col.color || '#0ea5e9')}"></span>`
       : `<span class="pm-col-dot pm-col-dot--${col.status.replace(/_/g, '-')}"></span>`;
   }
@@ -50605,19 +50660,22 @@ const TeamProfile = (() => {
       const res = await API.pmBoard(projectId);
       if (res.status >= 400) throw new Error(res.body?.message || 'Load failed');
       const columns = res.body.columns || [];
-      pm.boardColumns = columns.map(({ tasks, ...meta }) => meta);
+      // "Not Defined" (tasks whose status was deleted) is not a move / drop target
+      _pmApplyStages(columns.filter(c => !c.is_undefined).map(({ tasks, ...meta }) => meta));
       wrap.innerHTML = '';
       columns.forEach(col => {
         const colEl = document.createElement('div');
-        colEl.className = 'pm-kanban-col';
+        colEl.className = 'pm-kanban-col' + (col.is_undefined ? ' pm-kanban-col--undefined' : '');
         colEl.dataset.col = col.status;
-        _pmBindColumnDrop(colEl);
+        if (!col.is_undefined) _pmBindColumnDrop(colEl);
         colEl.innerHTML = `
           <div class="pm-kanban-col-head">
             ${_pmColDot(col)}${esc(col.label)}
             <span class="pm-col-count">${col.tasks.length}</span>
-            ${col.status !== 'done' ? `<span class="pm-col-sort" title="Sort number">#${col.sort_order}</span>` : ''}
-            ${col.is_custom ? `<button class="pm-col-del pm-col-edit" title="Edit status"><i class="fa fa-pen"></i></button><button class="pm-col-del" data-del title="Delete status"><i class="fa fa-xmark"></i></button>` : ''}
+            ${col.status !== 'done' && !col.is_undefined ? `<span class="pm-col-sort" title="Sort number">#${col.sort_order}</span>` : ''}
+            ${col.is_undefined
+              ? `<span class="pm-col-sort" title="Tasks whose stage was deleted — move them to a stage">no stage</span>`
+              : `<button class="pm-col-del pm-col-auto${col.auto_completion_status ? ' pm-col-auto--on' : ''}" title="${esc(_pmAutoTitle(col))}"><i class="fa fa-bolt"></i></button><button class="pm-col-del pm-col-edit" title="Edit stage"><i class="fa fa-pen"></i></button><button class="pm-col-del" data-del title="Delete stage"><i class="fa fa-xmark"></i></button>`}
           </div>
           <div class="pm-kanban-cards"></div>`;
         const cardsEl = colEl.querySelector('.pm-kanban-cards');
@@ -50626,16 +50684,17 @@ const TeamProfile = (() => {
         } else {
           col.tasks.forEach(t => cardsEl.appendChild(_pmTaskCard(t)));
         }
+        colEl.querySelector('.pm-col-auto')?.addEventListener('click', () => openPmStageAutoModal(projectId, col));
         colEl.querySelector('.pm-col-edit')?.addEventListener('click', () => openPmStatusModal(projectId, col));
         colEl.querySelector('[data-del]')?.addEventListener('click', async () => {
           const msg = col.tasks.length
-            ? `Delete status "${col.label}"? Its ${col.tasks.length} task(s) will be moved to To Do.`
-            : `Delete status "${col.label}"?`;
+            ? `Delete stage "${col.label}"? Its ${col.tasks.length} task(s) will be moved to Not Defined.`
+            : `Delete stage "${col.label}"?`;
           if (!confirm(msg)) return;
           try {
-            const r = await API.pmStatusDelete(col.id);
+            const r = await API.pmStatusDeleteKey(projectId, col.status);
             if (r.status >= 400) throw new Error(r.body?.message || 'Delete failed');
-            toast('Status deleted', 'success');
+            toast('Stage deleted', 'success');
             loadPmBoard();
           } catch (e) { toast('Delete failed: ' + e, 'error'); }
         });
@@ -50647,32 +50706,101 @@ const TeamProfile = (() => {
     }
   }
 
-  // Add (existing = null) or edit a custom status. Sort number places it among the
-  // built-ins (To Do = 1, In Progress = 2, Review = 3); Done is always last.
+  // ── Stage automation (⚡) ───────────────────────────────────────────────────
+  // A stage can set the completion status of every task moved into it (e.g. Done → Complete).
+  // The server applies it on every move (board, list, My Projects), so this only edits the rule.
+  const PM_COMPLETION_LABELS = { incomplete: 'Incomplete', complete: 'Complete', cancelled: 'Cancelled' };
+
+  function _pmAutoTitle(col) {
+    const cs = col.auto_completion_status;
+    return cs ? `Automation: tasks moved here become ${PM_COMPLETION_LABELS[cs] || cs}` : 'Automation: off — click to set';
+  }
+
+  function openPmStageAutoModal(projectId, col) {
+    const current = col.auto_completion_status || '';
+    const opt = (value, label, hint) => `
+      <label class="pm-auto-opt${current === value ? ' pm-auto-opt--on' : ''}">
+        <input type="radio" name="pm-auto-cs" value="${value}" ${current === value ? 'checked' : ''}>
+        <span><b>${label}</b><small>${hint}</small></span>
+      </label>`;
+    const overlay = document.createElement('div');
+    overlay.className = 'pm-modal-overlay';
+    overlay.innerHTML = `
+      <div class="pm-modal" style="max-width:420px">
+        <div class="pm-modal-hdr">
+          <i class="fa fa-bolt" style="color:#f59e0b"></i>
+          <span class="pm-modal-title">Stage Automation — ${esc(col.label)}</span>
+          <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
+        </div>
+        <div class="pm-modal-body">
+          <div class="pm-modal-alert" id="pm-auto-alert"></div>
+          <div style="font-size:12px;color:var(--text-muted)">When a task is moved into <b>${esc(col.label)}</b>, set its status to:</div>
+          <div class="pm-auto-opts">
+            ${opt('', "Don't change", 'Off — the task keeps its current status')}
+            ${opt('complete', 'Complete', 'e.g. moving a task to Done completes it')}
+            ${opt('incomplete', 'Incomplete', 'Reopens the task')}
+            ${opt('cancelled', 'Cancelled', 'Marks the task as cancelled')}
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">Moving the task on to a stage without automation sets it back to Incomplete.</div>
+        </div>
+        <div class="pm-modal-footer">
+          <button class="pm-btn-secondary" data-close>Cancel</button>
+          <button class="pm-btn-primary" id="pm-auto-save"><i class="fa fa-floppy-disk"></i> Save</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => overlay.remove()));
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelectorAll('input[name="pm-auto-cs"]').forEach(r => r.addEventListener('change', () => {
+      overlay.querySelectorAll('.pm-auto-opt').forEach(l => l.classList.toggle('pm-auto-opt--on', l.contains(r) && r.checked));
+    }));
+    $('#pm-auto-save').addEventListener('click', async () => {
+      const value = overlay.querySelector('input[name="pm-auto-cs"]:checked')?.value || null;
+      $('#pm-auto-save').disabled = true;
+      try {
+        const res = await API.pmStatusUpdateKey(projectId, col.status, { auto_completion_status: value });
+        if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
+        overlay.remove();
+        toast(value ? `Automation on: moved tasks become ${PM_COMPLETION_LABELS[value]}` : 'Automation turned off', 'success');
+        loadPmBoard(projectId, { silent: true });
+      } catch (e) {
+        const alertEl = $('#pm-auto-alert');
+        alertEl.textContent = String(e.message || e);
+        alertEl.style.display = 'block';
+        $('#pm-auto-save').disabled = false;
+      }
+    });
+  }
+
+  // Add (existing = null) or edit any status — built-in or custom. Columns are ordered by
+  // sort number; Done is always last, so its sort number can't be changed.
   function openPmStatusModal(projectId = pm.detailProjectId, existing = null) {
     if (!projectId) return;
     const isEdit = !!existing;
+    const isDone = existing?.status === 'done';
+    const sortHint = (pm.boardColumns || []).filter(c => c.status !== 'done')
+      .map(c => `${esc(c.label)} = ${c.sort_order}`).join(', ');
     const overlay = document.createElement('div');
     overlay.className = 'pm-modal-overlay';
     overlay.innerHTML = `
       <div class="pm-modal" style="max-width:420px">
         <div class="pm-modal-hdr">
           <i class="fa fa-table-columns" style="color:var(--accent)"></i>
-          <span class="pm-modal-title">${isEdit ? 'Edit Status' : 'Add Status'}</span>
+          <span class="pm-modal-title">${isEdit ? 'Edit Stage' : 'Add Stage'}</span>
           <button class="pm-modal-close" data-close><i class="fa fa-xmark"></i></button>
         </div>
         <div class="pm-modal-body">
           <div class="pm-modal-alert" id="pm-ns-alert"></div>
-          <div><div class="pm-field-label">Status Name *</div><input id="pm-ns-label" class="pm-field-input" maxlength="60" placeholder="e.g. Testing, Blocked" value="${isEdit ? esc(existing.label) : ''}"></div>
+          <div><div class="pm-field-label">Stage Name *</div><input id="pm-ns-label" class="pm-field-input" maxlength="60" placeholder="e.g. Testing, Blocked" value="${isEdit ? esc(existing.label) : ''}"></div>
           <div class="pm-field-row">
             <div><div class="pm-field-label">Color</div><input id="pm-ns-color" type="color" class="pm-field-input" value="${esc(existing?.color || '#0ea5e9')}" style="height:36px;padding:2px 6px"></div>
-            <div><div class="pm-field-label">Sort Number</div><input id="pm-ns-sort" type="number" min="0" max="98" class="pm-field-input" placeholder="Auto" value="${isEdit ? esc(existing.sort_order) : ''}"></div>
+            ${isDone ? '' : `<div><div class="pm-field-label">Sort Number</div><input id="pm-ns-sort" type="number" min="0" max="98" class="pm-field-input" placeholder="Auto" value="${isEdit ? esc(existing.sort_order) : ''}"></div>`}
           </div>
-          <div style="font-size:11px;color:var(--text-muted)">To Do = 1, In Progress = 2, Review = 3, Done is always last.${isEdit ? '' : ' Leave blank to add after the last status.'}</div>
+          <div style="font-size:11px;color:var(--text-muted)">${sortHint ? sortHint + '. ' : ''}Done is always last.${isEdit ? '' : ' Leave blank to add after the last stage.'}</div>
         </div>
         <div class="pm-modal-footer">
           <button class="pm-btn-secondary" data-close>Cancel</button>
-          <button class="pm-btn-primary" id="pm-ns-save"><i class="fa fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Add Status'}</button>
+          <button class="pm-btn-primary" id="pm-ns-save"><i class="fa fa-floppy-disk"></i> ${isEdit ? 'Save Changes' : 'Add Stage'}</button>
         </div>
       </div>`;
     document.body.appendChild(overlay);
@@ -50681,8 +50809,8 @@ const TeamProfile = (() => {
     const save = async () => {
       const label   = $('#pm-ns-label')?.value.trim();
       const alertEl = $('#pm-ns-alert');
-      if (!label) { alertEl.textContent = 'Status name is required.'; alertEl.style.display = 'block'; return; }
-      const sortRaw = $('#pm-ns-sort')?.value.trim();
+      if (!label) { alertEl.textContent = 'Stage name is required.'; alertEl.style.display = 'block'; return; }
+      const sortRaw = $('#pm-ns-sort')?.value.trim() ?? '';
       if (sortRaw !== '' && (!/^\d+$/.test(sortRaw) || +sortRaw > 98)) {
         alertEl.textContent = 'Sort number must be between 0 and 98.'; alertEl.style.display = 'block'; return;
       }
@@ -50690,11 +50818,11 @@ const TeamProfile = (() => {
       const body = { label, color: $('#pm-ns-color')?.value || null, sort_order: sortRaw === '' ? null : +sortRaw };
       try {
         const res = isEdit
-          ? await API.pmStatusUpdate(existing.id, body)
+          ? await API.pmStatusUpdateKey(projectId, existing.status, body)
           : await API.pmStatusCreate(projectId, body);
         if (res.status >= 400) throw new Error(res.body?.message || 'Save failed');
         overlay.remove();
-        toast(isEdit ? 'Status updated' : 'Status added', 'success');
+        toast(isEdit ? 'Stage updated' : 'Stage added', 'success');
         loadPmBoard(projectId);
       } catch (e) {
         alertEl.textContent = String(e);
@@ -50764,7 +50892,8 @@ const TeamProfile = (() => {
   function _pmTaskCard(t) {
     const overdue  = t.is_overdue;
     const card = document.createElement('div');
-    card.className = 'pm-task-card';
+    const cs = pmCompletionOf(t);
+    card.className = 'pm-task-card pm-task-card--' + cs;
     card.dataset.tid = t.id;
     card.dataset.status = t.status;
     card.draggable = true;
@@ -50786,6 +50915,7 @@ const TeamProfile = (() => {
     card.innerHTML = `
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
+        ${pmCompletionBadge(t)}
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
         ${t.assigned_name ? `<span class="pm-task-card-assign"><i class="fa fa-user" style="margin-right:2px"></i>${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name)}</span>` : ''}
         ${t.due_date ? `<span class="pm-task-card-due${overdue ? ' pm-task-card-due--overdue' : ''}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:2px"></i>' : ''}${esc(t.due_date)}</span>` : ''}
@@ -50795,6 +50925,7 @@ const TeamProfile = (() => {
         <select class="pm-task-card-move" data-tid="${t.id}" title="Move to…">
           <option value="">Move…</option>${moveOpts}
         </select>
+        <select class="pm-task-card-move" data-completion-tid="${t.id}" title="Status">${pmCompletionOptions(t)}</select>
         <button class="pm-task-card-move" data-card-files-tid="${t.id}" title="Attachments${t.attachments_count ? ` (${t.attachments_count})` : ''}"><i class="fa fa-paperclip"${t.attachments_count ? ' style="color:var(--accent)"' : ''}></i>${t.attachments_count ? ` ${t.attachments_count}` : ''}</button>
         <button class="pm-task-card-move" data-delete-tid="${t.id}" title="Delete task" style="border-color:#fca5a5;color:#dc2626"><i class="fa fa-trash"></i></button>
       </div>
@@ -50813,12 +50944,35 @@ const TeamProfile = (() => {
         loadPmBoard();
       } catch (e) { toast('Move failed: ' + e, 'error'); }
     });
+    card.querySelector('select[data-completion-tid]').addEventListener('change', async function () {
+      try {
+        const res = await API.pmTaskCompletion(t.id, this.value);
+        if (res.status >= 400) throw new Error(res.body?.message || 'Update failed');
+        loadPmBoard();
+      } catch (e) { toast('Status update failed: ' + (e.message || e), 'error'); this.value = cs; }
+    });
     card.querySelector('button[data-delete-tid]').addEventListener('click', async function (ev) {
       ev.stopPropagation();
       if (!confirm('Delete task "' + t.title + '"?')) return;
       try { await API.pmTaskDelete(t.id); loadPmBoard(); } catch (e) { toast('Delete failed: ' + e, 'error'); }
     });
+    // Click anywhere else on the card → task detail
+    card.addEventListener('click', ev => {
+      if (ev.target.closest('select, button, a, [data-profile-uid]')) return;
+      openPmTaskDetail(t);
+    });
     return card;
+  }
+
+  // ── Task detail (board card click) ──────────────────────────────────────────
+  // Opens the shared task detail modal (My Projects) in board mode: manager endpoints, this project's stages.
+  function openPmTaskDetail(t) {
+    const p = pm.detailProject;
+    window.openPmBoardTaskDetail?.(t, {
+      project:  p ? { id: p.id, name: p.name, color: p.color } : null,
+      statuses: pm.boardColumns,
+      onChange: () => loadPmBoard(pm.detailProjectId, { silent: true }),
+    });
   }
 
   // ── Tasks (scoped to the open project), split by milestone ──────────────────
@@ -50856,8 +51010,9 @@ const TeamProfile = (() => {
 
   // Progress over all of the milestone's tasks (ignores the status filter)
   function _pmMsProgress(key) {
-    const list = pm.tasks.filter(t => _pmTaskMsKey(t) === String(key));
-    const done = list.filter(t => t.status === 'done').length;
+    // Cancelled tasks are left out of the total
+    const list = pm.tasks.filter(t => _pmTaskMsKey(t) === String(key) && pmCompletionOf(t) !== 'cancelled');
+    const done = list.filter(t => pmCompletionOf(t) === 'complete').length;
     return { total: list.length, done, pct: list.length ? Math.round(done / list.length * 100) : 0 };
   }
 
@@ -51057,9 +51212,7 @@ const TeamProfile = (() => {
     if ($('#pm-tl-modal-body')) _pmRenderTimelineModal();   // keep the full timeline modal in sync while open
   }
 
-  // ── Full timeline modal: summary + status filter + milestone jump list + timeline ──
-  const PM_TLM_FILTERS = [['', 'All'], ['todo', 'To Do'], ['in_progress', 'In Progress'], ['review', 'Review'], ['done', 'Done']];
-
+  // ── Full timeline modal: summary + stage filter + milestone jump list + timeline ──
   function openPmTimelineModal() {
     if (!pm.detailProjectId || $('#pm-tl-modal-body')) return;
     const overlay = document.createElement('div');
@@ -51082,7 +51235,7 @@ const TeamProfile = (() => {
         <div class="pm-tlm-bar">
           <div class="pm-tlm-stats" id="pm-tlm-stats"></div>
           <div class="svc-chip-bar pm-tlm-filters">
-            ${PM_TLM_FILTERS.map(([v, l]) => `<button class="svc-chip" data-tlm-filter="${v}">${l}</button>`).join('')}
+            ${_pmStageFilters().map(([v, l]) => `<button class="svc-chip" data-tlm-filter="${esc(v)}">${esc(l)}</button>`).join('')}
           </div>
         </div>
         <div class="pm-tlm-main">
@@ -51153,9 +51306,10 @@ const TeamProfile = (() => {
     // Summary
     const ms        = pm.milestones;
     const msDone    = ms.filter(m => m.status === 'completed').length;
-    const tDone     = pm.tasks.filter(t => t.status === 'done').length;
-    const tOverdue  = pm.tasks.filter(t => t.is_overdue && t.status !== 'done').length;
-    const pct       = pm.tasks.length ? Math.round(tDone / pm.tasks.length * 100) : 0;
+    const tCounted  = pm.tasks.filter(t => pmCompletionOf(t) !== 'cancelled').length;   // cancelled don't count
+    const tDone     = pm.tasks.filter(t => pmCompletionOf(t) === 'complete').length;
+    const tOverdue  = pm.tasks.filter(t => t.is_overdue).length;
+    const pct       = tCounted ? Math.round(tDone / tCounted * 100) : 0;
     const starts    = ms.map(m => m.start_date || m.due_date).filter(Boolean).sort();
     const ends      = ms.map(m => m.due_date || m.start_date).filter(Boolean).sort();
     const sub = $('#pm-tlm-sub');
@@ -51165,7 +51319,7 @@ const TeamProfile = (() => {
     const stats = $('#pm-tlm-stats');
     if (stats) stats.innerHTML = `
       <div class="pm-tlm-stat"><i class="fa fa-flag"></i><b>${msDone}/${ms.length}</b> milestones done</div>
-      <div class="pm-tlm-stat"><i class="fa fa-list-check"></i><b>${tDone}/${pm.tasks.length}</b> tasks done</div>
+      <div class="pm-tlm-stat"><i class="fa fa-list-check"></i><b>${tDone}/${tCounted}</b> tasks done</div>
       <div class="pm-tlm-stat${tOverdue ? ' pm-tlm-stat--warn' : ''}"><i class="fa fa-triangle-exclamation"></i><b>${tOverdue}</b> overdue</div>
       <div class="pm-tlm-overall" title="${pct}% of tasks done">
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%"></div></div>
@@ -51273,7 +51427,7 @@ const TeamProfile = (() => {
           <table class="crm-table pm-ms-table">
             <thead><tr>
               <th style="width:22px"></th><th style="width:28px"></th><th>Task</th><th>Priority</th>
-              <th>Assigned</th><th>Due</th><th>Status</th><th style="width:150px">Milestone</th><th style="width:40px"></th>
+              <th>Assigned</th><th>Due</th><th>Stage</th><th style="width:150px">Milestone</th><th style="width:40px"></th>
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>
@@ -51281,18 +51435,34 @@ const TeamProfile = (() => {
       </div>`;
   }
 
+  // Stage badge in the open project's own name / colour ("Not Defined" when its stage was deleted).
+  function _pmStageBadge(t) {
+    const s = _pmStageOf(t) || { label: 'Not Defined', color: '#9ca3af' };
+    if (!s.color) return `<span class="pm-status pm-status--${esc(s.status)}" title="Stage">${esc(s.label)}</span>`;
+    const c = esc(s.color);
+    return `<span class="pm-status" style="background:color-mix(in srgb, ${c} 15%, transparent);color:${c}" title="Stage">${esc(s.label)}</span>`;
+  }
+
+  // Complete / reopen icon: closed (complete or cancelled) tasks reopen, open ones complete.
+  function _pmToggleIcon(t, extra = '') {
+    const cs   = pmCompletionOf(t);
+    const done = cs !== 'incomplete';
+    const icon = cs === 'cancelled' ? 'fa-circle-xmark' : done ? 'fa-circle-check' : 'fa-circle';
+    const clr  = cs === 'cancelled' ? '#dc2626' : done ? '#22c55e' : '#d1d5db';
+    return `<i class="fa ${icon}${extra ? ' ' + extra : ''}" style="color:${clr};cursor:pointer" data-toggle-tid="${t.id}" data-done="${done}" title="${done ? 'Reopen' : 'Complete'}"></i>`;
+  }
+
   function _pmMsTaskRow(t) {
     const overdue = t.is_overdue;
-    const isDone  = t.status === 'done';
     return `
       <tr class="pm-ms-task" data-tid="${t.id}" data-title="${esc(t.title)}" draggable="true">
         <td class="pm-drag-handle" title="Drag to another milestone"><i class="fa fa-grip-vertical"></i></td>
-        <td><i class="fa ${isDone ? 'fa-circle-check' : 'fa-circle'}" style="color:${isDone ? '#22c55e' : '#d1d5db'};cursor:pointer;font-size:14px" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i></td>
+        <td style="font-size:14px">${_pmToggleIcon(t)}</td>
         <td style="font-size:12px;font-weight:600">${esc(t.title)}</td>
         <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
         <td><button type="button" class="pm-assignees-btn" data-assign-tid="${t.id}" title="Assign project members">${_pmAssigneeChips(t.assignees)}</button></td>
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
-        <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span></td>
+        <td style="white-space:nowrap">${_pmStageBadge(t)} ${pmCompletionBadge(t)}</td>
         <td><select class="pm-ms-select" data-ms-tid="${t.id}" title="Move to milestone">${_pmMilestoneOptions(t.milestone_id)}</select></td>
         <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
       </tr>`;
@@ -51330,15 +51500,14 @@ const TeamProfile = (() => {
     // Tasks run top-to-bottom by due date (undated last)
     const tasks = [...g.tasks].sort((a, b) => (a.due_date || '9999') < (b.due_date || '9999') ? -1 : (a.due_date || '9999') > (b.due_date || '9999') ? 1 : a.id - b.id);
     const taskHtml = tasks.length ? tasks.map(t => {
-      const isDone = t.status === 'done';
       return `
-        <li class="pm-tl-task pm-tl-task--${esc(t.status)}${t.is_overdue ? ' pm-tl-task--overdue' : ''}" data-tid="${t.id}" data-title="${esc(t.title)}" draggable="true">
-          <i class="fa ${isDone ? 'fa-circle-check' : 'fa-circle'} pm-tl-task-dot" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i>
+        <li class="pm-tl-task pm-tl-task--${esc(t.status)} pm-tl-task--${esc(pmCompletionOf(t))}${t.is_overdue ? ' pm-tl-task--overdue' : ''}" data-tid="${t.id}" data-title="${esc(t.title)}" draggable="true">
+          ${_pmToggleIcon(t, 'pm-tl-task-dot')}
           <span class="pm-tl-task-title">${esc(t.title)}</span>
           <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
           ${t.assigned_name ? `<span class="pm-tl-task-meta"><i class="fa fa-user"></i> ${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name)}</span>` : ''}
           <span class="pm-tl-task-meta${t.is_overdue ? ' pm-tl-task-meta--overdue' : ''}">${t.is_overdue ? '<i class="fa fa-triangle-exclamation"></i>' : '<i class="fa fa-calendar"></i>'} ${esc(t.due_date || 'No due date')}</span>
-          <span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g, ' '))}</span>
+          ${_pmStageBadge(t)} ${pmCompletionBadge(t)}
         </li>`;
     }).join('') : `<li class="pm-tl-task-empty">${pm.taskFilter ? 'No tasks match this filter.' : 'No tasks — drag a task here.'}</li>`;
 
@@ -51677,21 +51846,18 @@ const TeamProfile = (() => {
 
   function _pmTaskRow(t, cols, showProject = false) {
     const overdue  = t.is_overdue;
-    const isDone   = t.status === 'done';
-    const checkIco = isDone ? 'fa-circle-check' : 'fa-circle';
-    const checkClr = isDone ? '#22c55e' : '#d1d5db';
     const projectCol = showProject
       ? `<td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>`
       : '';
     return `
       <tr data-tid="${t.id}">
-        <td><i class="fa ${checkIco}" style="color:${checkClr};cursor:pointer;font-size:14px" data-toggle-tid="${t.id}" data-done="${isDone}" title="${isDone ? 'Reopen' : 'Complete'}"></i></td>
+        <td style="font-size:14px">${_pmToggleIcon(t)}</td>
         <td style="font-size:12px;font-weight:600">${esc(t.title)}</td>
         ${projectCol}
         <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
         <td style="font-size:11px;color:var(--text-muted)">${t.assignees?.length ? TeamProfile.links(t.assignees) : esc(t.assigned_name || '—')}</td>
         <td style="font-size:11px${overdue ? ';color:#dc2626;font-weight:700' : ';color:var(--text-muted)'}">${overdue ? '<i class="fa fa-triangle-exclamation" style="margin-right:3px"></i>' : ''}${esc(t.due_date || '—')}</td>
-        <td><span class="pm-status pm-status--${esc(t.status)}">${esc(t.status.replace(/_/g,' '))}</span></td>
+        <td style="white-space:nowrap">${_pmStageBadge(t)} ${pmCompletionBadge(t)}</td>
         <td style="white-space:nowrap">${_pmFilesBtnHtml(t)} <button class="svc-form-btn" style="padding:2px 8px;font-size:11px" data-delete-tid="${t.id}" title="Delete"><i class="fa fa-trash" style="color:#ef4444"></i></button></td>
       </tr>`;
   }
@@ -51718,8 +51884,8 @@ const TeamProfile = (() => {
         const tid  = +this.dataset.toggleTid;
         const done = this.dataset.done === 'true';
         try {
-          if (done) await API.pmTaskReopen(tid);
-          else      await API.pmTaskComplete(tid);
+          const res = await API.pmTaskCompletion(tid, done ? 'incomplete' : 'complete');
+          if (res.status >= 400) throw new Error(res.body?.message || 'Update failed');
           reload();
         } catch (e) { toast('Action failed: ' + e, 'error'); }
       });
@@ -51992,7 +52158,7 @@ const TeamProfile = (() => {
           </div>
           <div class="pm-field-row">
             <div>
-              <div class="pm-field-label">Status</div>
+              <div class="pm-field-label">Stage</div>
               <select id="pm-nt-status" class="pm-field-select">
                 ${PM_BUILTIN_STATUSES.map(s => `<option value="${s.status}">${s.label}</option>`).join('')}
               </select>
@@ -52084,7 +52250,7 @@ const TeamProfile = (() => {
           title,
           milestone_id:     $('#pm-nt-milestone')?.value || null,
           assignee_ids:     [...overlay.querySelectorAll('#pm-nt-assignees input:checked')].map(i => +i.value),
-          status:          $('#pm-nt-status')?.value   || 'todo',
+          status:          $('#pm-nt-status')?.value   || null,   // null → the project's default stage
           priority:         $('#pm-nt-priority')?.value || 'normal',
           due_date:         $('#pm-nt-due')?.value   || null,
           estimated_hours:  $('#pm-nt-hours')?.value || null,
@@ -52170,13 +52336,14 @@ const TeamProfile = (() => {
   });
 
   // ── Task filter chips (detail: Task tab) ────────────────────────────────────
-  $$('#pm-task-filter-chips [data-pmtaskfilter]').forEach(chip => {
-    chip.addEventListener('click', function () {
-      $$('#pm-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-      pm.taskFilter = this.dataset.pmtaskfilter;
-      _pmRenderTaskViews();   // all tasks are already loaded; filter client-side
-    });
+  // Chips are rebuilt from the project's stages (_pmRenderStageChips), so listen on the bar.
+  $('#pm-task-filter-chips')?.addEventListener('click', e => {
+    const chip = e.target.closest('[data-pmtaskfilter]');
+    if (!chip) return;
+    $$('#pm-task-filter-chips .svc-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    pm.taskFilter = chip.dataset.pmtaskfilter;
+    _pmRenderTaskViews();   // all tasks are already loaded; filter client-side
   });
 
   // ── Task sub-views (detail: Task tab → By Milestone / Timeline) ─────────────
@@ -52283,7 +52450,9 @@ const TeamProfile = (() => {
   const _today  = () => _ymd(new Date());
   const _inDays = n => { const d = new Date(); d.setDate(d.getDate() + n); return _ymd(d); };
 
-  const _isDone     = t => t.status === 'done';
+  const _isDone      = t => pmCompletionOf(t) !== 'incomplete';   // closed: complete or cancelled
+  const _isComplete  = t => pmCompletionOf(t) === 'complete';     // "completed" counts / lists
+  const _isCancelled = t => pmCompletionOf(t) === 'cancelled';
   const _isOverdue  = t => !_isDone(t) && !!t.due_date && t.due_date < _today();
   const _isDueToday = t => !_isDone(t) && t.due_date === _today();
   const _isThisWeek = t => !_isDone(t) && !!t.due_date && t.due_date > _today() && t.due_date <= _inDays(7);
@@ -52295,19 +52464,25 @@ const TeamProfile = (() => {
 
   function _statusMeta(t) {
     return _statusesFor(t.project_id).find(s => s.status === t.status)
-      || { status: t.status, label: t.status.replace(/_/g, ' '), sort_order: 50, is_custom: true, color: null };
+      || MP_UNDEFINED_COL;
   }
+
+  // Tasks whose status was deleted from their project
+  const MP_UNDEFINED_COL = { status: 'undefined', label: 'Not Defined', sort_order: 0, is_custom: false, is_undefined: true, color: '#9ca3af' };
+  const _isOrphan = t => !_statusesFor(t.project_id).some(s => s.status === t.status);
 
   const BUILTIN_STATUS_COLORS = { todo: '#64748b', in_progress: '#3b82f6', review: '#a855f7', done: '#22c55e' };
   function _statusColor(s) {
-    return (!s.is_custom && BUILTIN_STATUS_COLORS[s.status]) || s.color || '#0ea5e9';
+    // A colour set on a built-in (per project) wins over its default
+    return s.color || BUILTIN_STATUS_COLORS[s.status] || '#0ea5e9';
   }
 
   function _statusBadge(t) {
     const s = _statusMeta(t);
-    if (!s.is_custom) return `<span class="pm-status pm-status--${esc(t.status)}">${esc(s.label)}</span>`;
+    // Built-ins keep their class colour until a colour is set on them; Not Defined is grey.
+    if (!s.is_custom && !s.color) return `<span class="pm-status pm-status--${esc(t.status)}" title="Stage">${esc(s.label)}</span>`;
     const c = esc(s.color || '#0ea5e9');
-    return `<span class="pm-status" style="background:color-mix(in srgb, ${c} 15%, transparent);color:${c}">${esc(s.label)}</span>`;
+    return `<span class="pm-status" style="background:color-mix(in srgb, ${c} 15%, transparent);color:${c}" title="Stage">${esc(s.label)}</span>`;
   }
 
   function _dueHtml(t) {
@@ -52390,6 +52565,14 @@ const TeamProfile = (() => {
     if (i !== -1 && res.body?.data) mp.tasks[i] = res.body.data;
   }
 
+  // Changes a task's completion status (incomplete / complete / cancelled), stage untouched.
+  async function _setCompletion(taskId, completion) {
+    const res = await API.pmMyWorkTaskCompletion(taskId, completion);
+    if (res.status >= 400) throw new Error(res.body?.message || 'Update failed');
+    const i = mp.tasks.findIndex(t => +t.id === +taskId);
+    if (i !== -1 && res.body?.data) mp.tasks[i] = res.body.data;
+  }
+
   // Complete / reopen check icons ([data-mp-toggle]) inside root.
   function _bindToggles(root) {
     root.querySelectorAll('[data-mp-toggle]').forEach(el => el.addEventListener('click', async e => {
@@ -52398,7 +52581,7 @@ const TeamProfile = (() => {
       if (!t) return;
       const wasDone = _isDone(t);
       try {
-        await _setStatus(t.id, wasDone ? 'todo' : 'done');
+        await _setCompletion(t.id, wasDone ? 'incomplete' : 'complete');
         toast(wasDone ? 'Task reopened' : 'Task completed', 'success');
       } catch (err) { toast(String(err.message || err), 'error'); }
       _renderCurrent();
@@ -52499,7 +52682,7 @@ const TeamProfile = (() => {
     const open      = mp.tasks.filter(t => !_isDone(t));
     const overdue   = open.filter(_isOverdue);
     const today     = open.filter(_isDueToday);
-    const completed = mp.tasks.length - open.length;
+    const completed = mp.tasks.filter(_isComplete).length;   // cancelled tasks are neither open nor completed
 
     // Greeting
     const hr    = new Date().getHours();
@@ -52575,9 +52758,10 @@ const TeamProfile = (() => {
     const done = _isDone(t);
     const c    = esc(_project(t.project_id)?.color || '#64748b');
     const n    = late ? _mpDaysLate(t) : 0;
+    const icon = _isCancelled(t) ? 'fa-circle-xmark' : done ? 'fa-circle-check' : 'fa-circle';
     return `
       <div class="mp-w-row${done ? ' is-done' : ''}" data-tid="${t.id}">
-        <i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i>
+        <i class="fa ${icon} mp-check${done ? ' mp-check--done' : ''}${_isCancelled(t) ? ' mp-check--cancelled' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as complete'}"></i>
         <span class="mp-w-row-title">${esc(t.title)}</span>
         ${t.priority === 'high' && !done ? '<span class="mp-w-flag" title="High priority"><i class="fa fa-flag"></i></span>' : ''}
         ${t.project_name ? `<span class="mp-w-chip" style="--c:${c}" title="${esc(t.project_name)}">${esc(t.project_name)}</span>` : ''}
@@ -52594,7 +52778,7 @@ const TeamProfile = (() => {
     const sets = {
       upcoming:  open.filter(t => !_isOverdue(t)).sort(_byDue),
       today:     open.filter(_isDueToday),
-      completed: mp.tasks.filter(_isDone).sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')),
+      completed: mp.tasks.filter(_isComplete).sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')),
     };
     if (!sets[mp.ovTaskTab]) mp.ovTaskTab = 'upcoming';
     _ovTabs(tabsEl, [
@@ -52664,9 +52848,11 @@ const TeamProfile = (() => {
         <span>Project</span><span>Open</span><span>Overdue</span><span>Done</span><span>Progress</span><span>Team</span><span>Due</span><span></span>
       </div>` + list.map(p => {
       const mine    = mp.tasks.filter(t => +t.project_id === +p.id);
-      const done    = mine.filter(_isDone).length;
+      const done    = mine.filter(_isComplete).length;
+      const open    = mine.filter(t => !_isDone(t)).length;
       const late    = mine.filter(_isOverdue).length;
-      const pct     = mine.length ? Math.round((done / mine.length) * 100) : 0;
+      const counted = mine.length - mine.filter(_isCancelled).length;   // cancelled don't count
+      const pct     = counted ? Math.round((done / counted) * 100) : 0;
       const color   = esc(p.color || 'var(--accent)');
       const members = mp.team.filter(u => (u.project_ids || []).includes(+p.id));
       const stack   = members.slice(0, 4).map(u => _ovAvatar(u, 'mp-av--sm')).join('') +
@@ -52685,7 +52871,7 @@ const TeamProfile = (() => {
               </div>
             </div>
           </div>
-          <div class="mp-prow-num">${mine.length - done}</div>
+          <div class="mp-prow-num">${open}</div>
           <div class="mp-prow-num ${late ? 'is-overdue' : ''}">${late}</div>
           <div class="mp-prow-num">${done}</div>
           <div class="mp-pcard-progress">
@@ -52705,13 +52891,20 @@ const TeamProfile = (() => {
     body.querySelectorAll('[data-pid]').forEach(card => card.addEventListener('click', () => _openMpBoardFor(card.dataset.pid)));
   }
 
-  // Completion ring + my tasks broken down by status.
+  // Completion ring + my tasks broken down by stage and by status.
   function _renderOvProgress() {
     const el = $('#mp-ov-progress');
     if (!el) return;
-    const total = mp.tasks.length;
-    const done  = mp.tasks.filter(_isDone).length;
-    const pct   = total ? Math.round((done / total) * 100) : 0;
+    const total     = mp.tasks.length;
+    const cancelled = mp.tasks.filter(_isCancelled).length;
+    const counted   = total - cancelled;   // cancelled tasks don't count towards progress
+    const done      = mp.tasks.filter(_isComplete).length;
+    const pct       = counted ? Math.round((done / counted) * 100) : 0;
+    const byStatus  = [
+      { label: 'Incomplete', color: '#64748b', n: mp.tasks.filter(t => !_isDone(t)).length },
+      { label: 'Complete',   color: '#22c55e', n: done },
+      { label: 'Cancelled',  color: '#ef4444', n: cancelled },
+    ];
     const R = 34, C = 2 * Math.PI * R;
 
     const groups = new Map();   // status → { label, color, n, order }
@@ -52731,17 +52924,23 @@ const TeamProfile = (() => {
           <text x="40" y="44" text-anchor="middle" class="mp-prog-pct">${pct}%</text>
         </svg>
         <div class="mp-prog-text">
-          <b>${done} of ${total}</b>
-          <span>tasks completed</span>
+          <b>${done} of ${counted}</b>
+          <span>tasks completed${cancelled ? ` · ${cancelled} cancelled` : ''}</span>
         </div>
       </div>
-      ${rows.length ? `<div class="mp-prog-rows">${rows.map(g => `
+      ${rows.length ? `<div class="mp-prog-rows"><div class="mp-prog-head">Stage</div>${rows.map(_ovProgRow).join('')}</div>` : ''}
+      ${total ? `<div class="mp-prog-rows"><div class="mp-prog-head">Status</div>${byStatus.map(_ovProgRow).join('')}</div>` : ''}`;
+  }
+
+  function _ovProgRow(g) {
+    const total = mp.tasks.length;
+    return `
         <div class="mp-prog-row" style="--st:${esc(g.color)}">
           <span class="mp-status-pill-dot"></span>
           <span class="mp-prog-label">${esc(g.label)}</span>
           <div class="mp-prog-bar"><div style="width:${total ? (g.n / total) * 100 : 0}%"></div></div>
           <b>${g.n}</b>
-        </div>`).join('')}</div>` : ''}`;
+        </div>`;
   }
 
   // Teammates across my projects, with photo, online dot, shared projects and open tasks.
@@ -52821,7 +53020,7 @@ const TeamProfile = (() => {
     const tbody = $('#mp-tasks-body');
     if (!tbody) return;
     const q = mp.taskSearch.trim().toLowerCase();
-    const filterFn = { all: () => true, open: t => !_isDone(t), today: _isDueToday, overdue: _isOverdue, done: _isDone }[mp.taskFilter] || (() => true);
+    const filterFn = { all: () => true, open: t => !_isDone(t), today: _isDueToday, overdue: _isOverdue, done: _isComplete, cancelled: _isCancelled }[mp.taskFilter] || (() => true);
 
     const list = mp.tasks.filter(t => {
       if (!filterFn(t)) return false;
@@ -52851,7 +53050,7 @@ const TeamProfile = (() => {
       const c = esc(_statusColor(s));
       return `
         <tr data-tid="${t.id}" class="mp-task-row" style="--st:${c}">
-          <td><i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i></td>
+          <td><i class="fa ${_isCancelled(t) ? 'fa-circle-xmark' : done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}${_isCancelled(t) ? ' mp-check--cancelled' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as complete'}"></i></td>
           <td>
             <div style="font-size:12px;font-weight:600${done ? ';text-decoration:line-through;color:var(--text-muted)' : ''}">${esc(t.title)}${t.attachments_count ? ` <span style="font-size:10px;font-weight:400;color:var(--text-muted)" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip"></i> ${t.attachments_count}</span>` : ''}</div>
             ${t.milestone_name ? `<div style="font-size:10px;color:var(--text-muted)"><i class="fa fa-flag"></i> ${esc(t.milestone_name)}</div>` : ''}
@@ -52859,10 +53058,11 @@ const TeamProfile = (() => {
           <td style="font-size:11px;color:var(--text-muted)">${esc(t.project_name || '')}</td>
           <td><span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span></td>
           <td style="font-size:11px">${_dueHtml(t)}</td>
-          <td>
-            <button type="button" class="mp-status-pill" data-mp-status-btn="${t.id}" title="Change status">
+          <td style="white-space:nowrap">
+            <button type="button" class="mp-status-pill" data-mp-status-btn="${t.id}" title="Change stage">
               <span class="mp-status-pill-dot"></span><span class="mp-status-pill-label">${esc(s.label)}</span><i class="fa fa-chevron-down mp-status-pill-caret"></i>
             </button>
+            ${pmCompletionBadge(t)}
           </td>
           <td style="text-align:center">${_rowDeleteHtml(t)}</td>
         </tr>`;
@@ -53105,7 +53305,7 @@ const TeamProfile = (() => {
       if (onPick) return onPick(item.dataset.status);
       try {
         await _setStatus(t.id, item.dataset.status);
-        toast('Status updated', 'success');
+        toast('Stage updated', 'success');
       } catch (err) { toast(String(err.message || err), 'error'); }
       onDone();
     });
@@ -53134,17 +53334,23 @@ const TeamProfile = (() => {
   // One project selected → exactly its columns. All projects → the built-in columns
   // plus every custom status (merged by key) of the projects that hold my tasks. A card
   // can only be dropped on a column that exists in its own project.
+  // All projects: every stage of the projects holding my tasks, merged by key. Built-ins appear
+  // only while one of those projects still has them; projects that renamed / recoloured a
+  // built-in differently share its default name and colour.
   function _boardColumns() {
     if (mp.boardProject) return _statusesFor(mp.boardProject);
-    const byKey = new Map(BUILTIN_COLS.map(c => [c.status, c]));
     const withTasks = new Set(mp.tasks.map(t => +t.project_id));
-    mp.projects.filter(p => withTasks.has(+p.id)).forEach(p => {
-      (p.statuses || []).forEach(s => {
-        if (!s.is_custom) return;
+    const projects  = mp.projects.filter(p => withTasks.has(+p.id));
+    if (!projects.length) return BUILTIN_COLS;
+    const byKey = new Map();
+    projects.forEach(p => {
+      _statusesFor(p.id).forEach(s => {
+        const col = byKey.get(s.status);
         // Remember which projects own a custom column — only their cards can move into it.
-        const col = byKey.get(s.status) || { ...s, projectNames: [] };
-        col.projectNames.push(p.name);
-        byKey.set(s.status, col);
+        if (!col) { byKey.set(s.status, { ...s, projectNames: s.is_custom ? [p.name] : null }); return; }
+        if (col.projectNames) col.projectNames.push(p.name);
+        const builtin = BUILTIN_COLS.find(b => b.status === s.status);
+        if (builtin && (col.label !== s.label || col.color !== s.color)) Object.assign(col, { label: builtin.label, color: null });
       });
     });
     return [...byKey.values()].sort((a, b) => a.sort_order - b.sort_order || (a.is_custom - b.is_custom));
@@ -53170,13 +53376,15 @@ const TeamProfile = (() => {
     if (!wrap) return;
     const tasks = _boardTasks();
     wrap.innerHTML = '';
-    _boardColumns().forEach(col => {
-      const colTasks = tasks.filter(t => t.status === col.status);
+    const orphans = tasks.filter(_isOrphan);
+    const cols = _boardColumns();
+    (orphans.length ? [MP_UNDEFINED_COL, ...cols] : cols).forEach(col => {
+      const colTasks = col.is_undefined ? orphans : tasks.filter(t => t.status === col.status && !_isOrphan(t));
       const colEl = document.createElement('div');
-      colEl.className = 'pm-kanban-col';
+      colEl.className = 'pm-kanban-col' + (col.is_undefined ? ' pm-kanban-col--undefined' : '');
       colEl.dataset.col = col.status;
       colEl.style.setProperty('--st', _statusColor(col));
-      const dot = col.is_custom
+      const dot = col.is_custom || col.color
         ? `<span class="pm-col-dot" style="background:${esc(col.color || '#0ea5e9')}"></span>`
         : `<span class="pm-col-dot pm-col-dot--${col.status.replace(/_/g, '-')}"></span>`;
       colEl.innerHTML = `
@@ -53184,14 +53392,14 @@ const TeamProfile = (() => {
         <div class="pm-kanban-cards">${colTasks.length ? '' : '<div class="pm-kanban-empty" style="font-size:11px;color:var(--text-muted);padding:4px 2px">No tasks</div>'}</div>`;
       const cardsEl = colEl.querySelector('.pm-kanban-cards');
       colTasks.forEach(t => cardsEl.appendChild(_boardCard(t)));
-      _bindBoardDrop(colEl, col);
+      if (!col.is_undefined) _bindBoardDrop(colEl, col);
       wrap.appendChild(colEl);
     });
   }
 
   function _boardCard(t) {
     const card = document.createElement('div');
-    card.className = 'pm-task-card';
+    card.className = 'pm-task-card pm-task-card--' + pmCompletionOf(t);
     card.dataset.tid = t.id;
     card.draggable = true;
     const p = _project(t.project_id);
@@ -53200,6 +53408,7 @@ const TeamProfile = (() => {
     card.innerHTML = `
       <div class="pm-task-card-title">${esc(t.title)}</div>
       <div class="pm-task-card-meta">
+        ${pmCompletionBadge(t)}
         <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
         ${t.due_date ? `<span class="pm-task-card-due">${_dueHtml(t)}</span>` : ''}
         ${t.attachments_count ? `<span class="pm-task-card-assign" title="${t.attachments_count} attachment(s)"><i class="fa fa-paperclip" style="margin-right:2px"></i>${t.attachments_count}</span>` : ''}
@@ -53209,7 +53418,7 @@ const TeamProfile = (() => {
         ${t.milestone_name ? `<span class="pm-task-card-assign"><i class="fa fa-flag" style="margin-right:2px"></i>${esc(t.milestone_name)}</span>` : ''}
       </div>
       <div class="pm-task-card-actions">
-        <button type="button" class="mp-status-pill mp-status-pill--sm" title="Change status">
+        <button type="button" class="mp-status-pill mp-status-pill--sm" title="Change stage">
           <span class="mp-status-pill-dot"></span><span class="mp-status-pill-label">${esc(s.label)}</span><i class="fa fa-chevron-down mp-status-pill-caret"></i>
         </button>
       </div>`;
@@ -53266,7 +53475,7 @@ const TeamProfile = (() => {
   // Optimistic move: update locally and re-render, then roll back if the server refuses.
   async function _moveTask(t, toStatus) {
     if (!_statusesFor(t.project_id).some(s => s.status === toStatus)) {
-      toast(`"${t.project_name}" has no such status column.`, 'error');
+      toast(`"${t.project_name}" has no such stage column.`, 'error');
       return;
     }
     const fromStatus = t.status;
@@ -53423,11 +53632,12 @@ const TeamProfile = (() => {
     if (!el) return;
     const f = _ymd(from), t = _ymd(to);
     const inPeriod = mp.tasks.filter(x => x.due_date && x.due_date >= f && x.due_date <= t && _calMatches(x, true));
-    const done     = inPeriod.filter(_isDone);
+    const done     = inPeriod.filter(_isComplete);
     const open     = inPeriod.filter(x => !_isDone(x));
+    const counted  = inPeriod.length - inPeriod.filter(_isCancelled).length;   // cancelled don't count
     const high     = open.filter(x => x.priority === 'high');
     const overdue  = mp.tasks.filter(x => _isOverdue(x) && _calMatches(x, true)).sort(_byDue);
-    const pct      = inPeriod.length ? Math.round(done.length / inPeriod.length * 100) : 0;
+    const pct      = counted ? Math.round(done.length / counted * 100) : 0;
     const est      = _sumHours(open);
     const label    = mp.calMode === 'week' ? 'this week' : 'this month';
 
@@ -53444,8 +53654,8 @@ const TeamProfile = (() => {
       ${tile('overdue', 'fa-triangle-exclamation', overdue.length, overdue.length ? 'Overdue · click to jump' : 'Overdue (all dates)',
         overdue.length ? ` data-cal-jump="${overdue[0].due_date}" title="Go to the oldest overdue task (${esc(overdue[0].due_date)})"` : '')}
       ${tile('effort', 'fa-hourglass-half', est ? _fmtHours(est) : '—', 'Estimated open work')}
-      <div class="mp-cal-stat mp-cal-stat--progress" title="${done.length} of ${inPeriod.length} done ${label}">
-        <span class="mp-cal-progress-lbl"><i class="fa fa-circle-check"></i> ${done.length}/${inPeriod.length} done</span>
+      <div class="mp-cal-stat mp-cal-stat--progress" title="${done.length} of ${counted} done ${label}">
+        <span class="mp-cal-progress-lbl"><i class="fa fa-circle-check"></i> ${done.length}/${counted} done</span>
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:#22c55e"></div></div>
         <b>${pct}%</b>
       </div>`;
@@ -53628,7 +53838,7 @@ const TeamProfile = (() => {
       t.title,
       `Project: ${t.project_name || '—'}`,
       t.milestone_name ? `Milestone: ${t.milestone_name}` : '',
-      `Status: ${_statusMeta(t).label} · Priority: ${t.priority}`,
+      `Stage: ${_statusMeta(t).label} · Status: ${PM_COMPLETION[pmCompletionOf(t)]} · Priority: ${t.priority}`,
       t.estimated_hours != null ? `Estimate: ${t.estimated_hours}h · Logged: ${_fmtMinutes(t.logged_minutes)}` : '',
       (t.assignees || []).length ? `Assignees: ${t.assignees.map(a => a.name).join(', ')}` : '',
       _isOverdue(t) ? `⚠ Overdue (${_calRel(t.due_date)})` : '',
@@ -53642,7 +53852,8 @@ const TeamProfile = (() => {
     const cls   = ['mp-cal-chip'];
     if (_isDone(t))    cls.push('mp-cal-chip--done');
     if (_isOverdue(t)) cls.push('mp-cal-chip--overdue');
-    const icon = _isDone(t) ? '<i class="fa fa-circle-check"></i>'
+    const icon = _isCancelled(t) ? '<i class="fa fa-circle-xmark"></i>'
+      : _isDone(t) ? '<i class="fa fa-circle-check"></i>'
       : _isOverdue(t) ? '<i class="fa fa-triangle-exclamation"></i>'
       : t.priority === 'high' ? '<i class="fa fa-arrow-up mp-cal-chip-high"></i>' : '';
     return `
@@ -53674,7 +53885,7 @@ const TeamProfile = (() => {
     }
 
     const status = statusSelect
-      ? `<button type="button" class="mp-status-pill mp-status-pill--sm" data-mp-status-btn="${t.id}" title="Change status">
+      ? `<button type="button" class="mp-status-pill mp-status-pill--sm" data-mp-status-btn="${t.id}" title="Change stage">
            <span class="mp-status-pill-dot"></span><span class="mp-status-pill-label">${esc(sMeta.label)}</span><i class="fa fa-chevron-down mp-status-pill-caret"></i>
          </button>`
       : _statusBadge(t);
@@ -53682,7 +53893,7 @@ const TeamProfile = (() => {
     return `
       <div class="${cls.join(' ')}" data-tid="${t.id}" style="--st:${esc(_statusColor(sMeta))}" title="${esc(_calTip(t))}">
         <div class="mp-cal-card-top">
-          <i class="fa ${done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as done'}"></i>
+          <i class="fa ${_isCancelled(t) ? 'fa-circle-xmark' : done ? 'fa-circle-check' : 'fa-circle'} mp-check${done ? ' mp-check--done' : ''}${_isCancelled(t) ? ' mp-check--cancelled' : ''}" data-mp-toggle="${t.id}" title="${done ? 'Reopen' : 'Mark as complete'}"></i>
           <div class="mp-cal-card-main">
             <div class="mp-cal-card-title">${esc(t.title)}</div>
             <div class="mp-cal-card-proj"><span class="mp-cal-dot" style="background:${esc(color)}"></span>${esc(t.project_name || '—')}</div>
@@ -53690,6 +53901,7 @@ const TeamProfile = (() => {
         </div>
         <div class="mp-cal-card-badges">
           ${status}
+          ${_isDone(t) ? pmCompletionBadge(t) : ''}
           <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
           ${_isOverdue(t) ? `<span class="mp-due mp-due--overdue"><i class="fa fa-triangle-exclamation"></i> ${esc(_calRel(t.due_date))}</span>` : ''}
         </div>
@@ -53804,6 +54016,12 @@ const TeamProfile = (() => {
   // Which activity tab (comments / time log) is showing — kept across re-renders of the same task.
   let _mpDetailTab = 'comments';
 
+  // Set while the modal shows a Project Management board task (manager access, /pm/tasks
+  // endpoints) instead of one of my own tasks: { task, project, statuses, changed, onChange }.
+  let _mpBoard = null;
+  const _detailTask = id => _mpBoard ? (+_mpBoard.task.id === +id ? _mpBoard.task : null) : _task(id);
+  const _filesMode  = () => _mpBoard ? 'manage' : 'mine';
+
   // "2026-10-07 06:07:31" → "Oct 7, 6:07 AM" (year added when it isn't this year); raw value in the tooltip.
   function _fmtWhen(s, withTime = true) {
     if (!s) return '';
@@ -53832,9 +54050,9 @@ const TeamProfile = (() => {
   function _renderMpDetail(t, extra) {
     const body = $('#mp-detail-body');
     if (!body) return;
-    const p     = _project(t.project_id);
+    const p     = _mpBoard ? _mpBoard.project : _project(t.project_id);
     const muted = txt => `<span class="mpd-muted">${txt}</span>`;
-    const opts  = _statusesFor(t.project_id)
+    const opts  = (_mpBoard ? _mpBoard.statuses : _statusesFor(t.project_id))
       .map(s => `<option value="${esc(s.status)}"${s.status === t.status ? ' selected' : ''}>${esc(s.label)}</option>`).join('');
     const assignees = (t.assignees || []).length
       ? `<div class="mpd-people">${t.assignees.map(a => `
@@ -53881,7 +54099,19 @@ const TeamProfile = (() => {
         </div>`;
     }
 
+    // Prominent status (completion + stage) in the header's top-left corner.
+    const cs         = pmCompletionOf(t);
+    const csIcon     = { complete: 'fa-circle-check', cancelled: 'fa-circle-xmark' }[cs] || 'fa-circle-half-stroke';
+    const stage      = (_mpBoard ? _mpBoard.statuses : _statusesFor(t.project_id)).find(s => s.status === t.status);
+    const stageColor = esc(stage ? _statusColor(stage) : '#9ca3af');
     $('#mp-detail-heading').innerHTML = `
+      <span class="mpd-head-status mpd-head-status--${esc(cs)}" title="Status">
+        <i class="fa ${csIcon}"></i>${esc(PM_COMPLETION[cs] || cs)}
+      </span>
+      <span class="mpd-head-stage" title="Stage" style="--stage:${stageColor}">
+        <span class="mpd-dot" style="background:${stageColor}"></span>${esc(stage?.label || t.status || '—')}
+      </span>
+      <span class="mpd-head-sep"></span>
       <span class="mpd-crumb-proj">
         <span class="mpd-dot" style="background:${esc(p?.color || 'var(--text-muted)')}"></span>
         <span class="mpd-crumb-item">${esc(t.project_name || 'Project')}</span>
@@ -53892,6 +54122,7 @@ const TeamProfile = (() => {
       <div class="mpd-main">
         <h2 class="mpd-title${_isDone(t) ? ' is-done' : ''}">${esc(t.title)}</h2>
         <div class="mpd-chips">
+          ${pmCompletionBadge(t)}
           <span class="pm-priority pm-priority--${esc(t.priority)}">${esc(t.priority)}</span>
           ${t.is_overdue ? '<span class="mpd-chip-overdue"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}
         </div>
@@ -53910,8 +54141,12 @@ const TeamProfile = (() => {
 
       <aside class="mpd-side">
         <div class="mpd-prop">
+          <div class="mpd-prop-label">Stage</div>
+          <select class="mp-status-select mpd-status" id="mp-detail-status" title="Change stage">${opts}</select>
+        </div>
+        <div class="mpd-prop">
           <div class="mpd-prop-label">Status</div>
-          <select class="mp-status-select mpd-status" id="mp-detail-status" title="Change status">${opts}</select>
+          <select class="mp-status-select mpd-status" id="mp-detail-completion" title="Change status">${pmCompletionOptions(t)}</select>
         </div>
         <div class="mpd-card">
           ${_detailProp('Assignees', assignees)}
@@ -53929,10 +54164,10 @@ const TeamProfile = (() => {
           ${_mpdRow('Created', t.created_at ? _fmtWhen(t.created_at) : muted('—'))}
           ${_mpdRow('Completed', t.completed_at ? _fmtWhen(t.completed_at) : muted('Not yet'))}
         </div>
-        <button class="po-btn-ghost mpd-side-btn" id="mp-detail-view-project" title="Project details and team members">
+        ${_mpBoard ? '' : `<button class="po-btn-ghost mpd-side-btn" id="mp-detail-view-project" title="Project details and team members">
           <i class="fa fa-diagram-project"></i> View project
-        </button>
-        ${t.is_owner
+        </button>`}
+        ${t.is_owner || _mpBoard
           ? `<button class="po-btn-ghost mpd-side-btn mpd-side-btn--danger" id="mp-detail-delete" title="Permanently delete this task"><i class="fa fa-trash-can"></i> Delete task</button>`
           : t.delete_request
             ? `<button class="po-btn-ghost mpd-side-btn mpd-side-btn--pending" disabled title="Waiting for the task owner to approve"><i class="fa fa-hourglass-half"></i> Delete requested</button>`
@@ -53949,14 +54184,17 @@ const TeamProfile = (() => {
     const filesEl = $('#mp-detail-files');
     if (filesEl && extra && !extra.error) {
       TaskFiles.mount(filesEl, {
-        mode: 'mine',
+        mode: _filesMode(),
         taskId: t.id,
         attachments: extra.attachments || undefined, // undefined → the panel fetches the list
-        canDelete: a => !!a.is_mine,
+        canDelete: a => !!_mpBoard || !!a.is_mine,
         onChange: count => {
           extra.attachments = null; // stale now — refetched by the panel itself
-          const cached = _task(t.id);
-          if (cached && cached.attachments_count !== count) { cached.attachments_count = count; _renderCurrent(); }
+          const cached = _detailTask(t.id);
+          if (cached && cached.attachments_count !== count) {
+            cached.attachments_count = count;
+            if (_mpBoard) _mpBoard.changed = true; else _renderCurrent();
+          }
         },
       });
     } else if (filesEl && extra?.error) {
@@ -53971,19 +54209,49 @@ const TeamProfile = (() => {
     $('#mp-detail-view-project')?.addEventListener('click', () => openMpProjectDetail(t.project_id));
 
     $('#mp-detail-delete')?.addEventListener('click', async () => {
+      if (_mpBoard) {
+        const ok = await appConfirm({ title: 'Delete task?', message: `"${t.title}" will be permanently deleted.`, danger: true, icon: 'fa-trash', confirmText: '<i class="fa fa-trash"></i> Delete' });
+        if (!ok) return;
+        const res = await API.pmTaskDelete(t.id);
+        if (res.status >= 400) { toast(res.body?.message || 'Delete failed', 'error'); return; }
+        toast('Task deleted', 'success');
+        _mpBoard.changed = true;
+        _closeMpTaskDetail();
+        return;
+      }
       if (!(await _mpDeleteTask(t))) return;
       if (!_task(t.id)) _closeMpTaskDetail();   // deleted
       else _renderMpDetail(_task(t.id), extra); // request sent — show the pending state
       _renderCurrent();
     });
 
-    $('#mp-detail-status')?.addEventListener('change', async function () {
+    // Board tasks go through the manager endpoints and keep their own copy of the task.
+    async function boardUpdate(call) {
+      const res = await call;
+      if (res.status >= 400) throw new Error(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Update failed'));
+      Object.assign(_mpBoard.task, res.body?.data || {});
+      _mpBoard.changed = true;
+    }
+
+    $('#mp-detail-completion')?.addEventListener('change', async function () {
       try {
-        await _setStatus(t.id, this.value);
+        if (_mpBoard) await boardUpdate(API.pmTaskCompletion(t.id, this.value));
+        else await _setCompletion(t.id, this.value);
         toast('Status updated', 'success');
       } catch (err) { toast(String(err.message || err), 'error'); }
-      _renderCurrent();
-      const fresh = _task(t.id);
+      if (!_mpBoard) _renderCurrent();
+      const fresh = _detailTask(t.id);
+      if (fresh && _mpDetailId === t.id) _renderMpDetail(fresh, extra);
+    });
+
+    $('#mp-detail-status')?.addEventListener('change', async function () {
+      try {
+        if (_mpBoard) await boardUpdate(API.pmTaskStatus(t.id, this.value));
+        else await _setStatus(t.id, this.value);
+        toast('Stage updated', 'success');
+      } catch (err) { toast(String(err.message || err), 'error'); }
+      if (!_mpBoard) _renderCurrent();
+      const fresh = _detailTask(t.id);
       if (fresh && _mpDetailId === t.id) _renderMpDetail(fresh, extra);
     });
   }
@@ -54021,7 +54289,7 @@ const TeamProfile = (() => {
   function _cmtFilesHtml(c) {
     const files = c.attachments || [];
     if (!files.length) return '';
-    const dl     = id => TaskFiles.ROUTES.mine.download(id);
+    const dl     = id => TaskFiles.ROUTES[_filesMode()].download(id);
     const images = files.filter(a => FilePreview.isImage(a.name, a.mime_type));
     const others = files.filter(a => !FilePreview.isImage(a.name, a.mime_type));
     return `
@@ -54059,7 +54327,9 @@ const TeamProfile = (() => {
       btn.disabled = true;
       form.querySelector('[data-cmt-attach]').disabled = true;
       try {
-        const res = await API.pmMyWorkTaskComment(t.id, body, parentId, files.length > 0);
+        const res = _mpBoard
+          ? await API.pmTaskComment(t.id, body, parentId, files.length > 0)
+          : await API.pmMyWorkTaskComment(t.id, body, parentId, files.length > 0);
         if (res.status >= 400) {
           throw new Error(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to post comment'));
         }
@@ -54068,7 +54338,7 @@ const TeamProfile = (() => {
         c.attachments = c.attachments || [];
         if (files.length) btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Uploading…';
         for (const f of files) {
-          const up = await window.electronAPI.apiUpload(API.pmMyWorkCommentAttachmentUploadPath(c.id), f.path);
+          const up = await window.electronAPI.apiUpload(_mpBoard ? API.pmCommentAttachmentUploadPath(c.id) : API.pmMyWorkCommentAttachmentUploadPath(c.id), f.path);
           if (up.status >= 200 && up.status < 300) c.attachments.push(...(up.body?.data || []));
           else toast(`${f.name}: ${up.status === 413 ? 'File is too large for the server.' : (up.body?.errors ? Object.values(up.body.errors).flat().join(' ') : (up.body?.message || 'Upload failed'))}`, 'error');
         }
@@ -54130,7 +54400,7 @@ const TeamProfile = (() => {
       FilePreview.hydrate(el);
       el.querySelectorAll('[data-cmt-dl]').forEach(chip => chip.addEventListener('click', () => {
         const a = comments.flatMap(c => [c, ...(c.replies || [])]).flatMap(c => c.attachments || []).find(x => +x.id === +chip.dataset.cmtDl);
-        if (a) TaskFiles.download('mine', a);
+        if (a) TaskFiles.download(_filesMode(), a);
       }));
 
       el.querySelectorAll('[data-cmt-reply]').forEach(btn => btn.addEventListener('click', () => {
@@ -54154,6 +54424,7 @@ const TeamProfile = (() => {
   async function openMpTaskDetail(taskId) {
     const t = _task(taskId);
     if (!t) return;
+    _mpBoard     = null;
     _mpDetailId  = t.id;
     _mpDetailTab = 'comments';
     _renderMpDetail(t, null);
@@ -54174,9 +54445,37 @@ const TeamProfile = (() => {
     if (_mpDetailId === t.id && $('#mp-detail-modal').style.display !== 'none') _renderMpDetail(_task(t.id) || t, extra);
   }
 
+  /**
+   * Same task detail for a Project Management board card (any task of the project, manager access).
+   * opts: { project: { id, name, color }, statuses: board columns, onChange() — called on close if anything changed }
+   */
+  async function openPmBoardTaskDetail(task, opts = {}) {
+    const board = _mpBoard = { task: { ...task }, project: opts.project || null, statuses: opts.statuses || BUILTIN_COLS, changed: false, onChange: opts.onChange };
+    _mpDetailId  = task.id;
+    _mpDetailTab = 'comments';
+    _renderMpDetail(board.task, null);
+    $('#mp-detail-modal').style.display = '';
+
+    let extra;
+    try {
+      const res = await API.pmTaskShow(task.id);
+      if (res.status >= 400) throw new Error(res.body?.message || 'Failed to load task details');
+      const { comments, time_logs, attachments, ...fresh } = res.body?.data || {};
+      Object.assign(board.task, fresh);
+      extra = { comments: comments || [], time_logs: time_logs || [], attachments: attachments || [] };
+    } catch (e) {
+      extra = { error: String(e.message || e) };
+    }
+    if (_mpBoard === board && _mpDetailId === task.id && $('#mp-detail-modal').style.display !== 'none') _renderMpDetail(board.task, extra);
+  }
+  window.openPmBoardTaskDetail = openPmBoardTaskDetail;
+
   function _closeMpTaskDetail() {
     _mpDetailId = null;
     const m = $('#mp-detail-modal'); if (m) m.style.display = 'none';
+    const board = _mpBoard;
+    _mpBoard = null;
+    if (board?.changed) board.onChange?.();
   }
 
   $('#mp-detail-close')?.addEventListener('click',  _closeMpTaskDetail);
@@ -54219,7 +54518,7 @@ const TeamProfile = (() => {
     }
 
     const ts  = p.task_stats || {};
-    const pct = ts.total ? Math.round((ts.done || 0) / ts.total * 100) : 0;
+    const pct = pmProgressPct(ts);
     const my  = p.my_stats || {};
     const assignTo = p.assignment_type && p.assignment_type !== 'none'
       ? `${esc(_MP_ASSIGN_LABEL[p.assignment_type] || p.assignment_type)}${p.assignment_name ? `: ${esc(p.assignment_name)}` : ''}`
@@ -54278,7 +54577,7 @@ const TeamProfile = (() => {
       </div>
 
       ${section('fa-chart-line', 'Progress', `
-        <div class="mp-proj-progress-row"><span>${ts.done || 0} of ${ts.total || 0} tasks done</span><span class="pm-progress-pct">${pct}%</span></div>
+        <div class="mp-proj-progress-row"><span>${ts.done || 0} of ${(ts.total || 0) - (ts.cancelled || 0)} tasks done${ts.cancelled ? ` · ${ts.cancelled} cancelled` : ''}</span><span class="pm-progress-pct">${pct}%</span></div>
         <div class="pm-progress-bar-wrap"><div class="pm-progress-bar-fill" style="width:${pct}%;background:${esc(color)}"></div></div>
         <div class="tp-stats" style="margin-top:4px">
           <div class="tp-stat"><b>${ts.total || 0}</b><span>All tasks</span></div>
@@ -54452,7 +54751,7 @@ const TeamProfile = (() => {
   function renderMpAchievements() {
     const q      = mp.achSearch.trim().toLowerCase();
     const start  = _achPeriodStart();
-    const allDone = mp.tasks.filter(_isDone);
+    const allDone = mp.tasks.filter(_isComplete);   // achievements: completed only, not cancelled
     const scoped = allDone.filter(t =>
       (!mp.achProject || +t.project_id === +mp.achProject) &&
       (!q || (t.title || '').toLowerCase().includes(q) || (t.project_name || '').toLowerCase().includes(q)));
@@ -54584,8 +54883,9 @@ const TeamProfile = (() => {
       const name    = p?.name || list[0].project_name || 'Project';
       const color   = esc(p?.color || '#64748b');
       const mine    = mp.tasks.filter(t => +t.project_id === pid);
-      const doneAll = mine.filter(_isDone).length;
-      const pct     = mine.length ? Math.round(doneAll / mine.length * 100) : 0;
+      const doneAll = mine.filter(_isComplete).length;
+      const counted = mine.length - mine.filter(_isCancelled).length;   // cancelled don't count
+      const pct     = counted ? Math.round(doneAll / counted * 100) : 0;
       const onTime  = list.filter(_onTime).length;
       const mins    = list.reduce((m, t) => m + (+t.logged_minutes || 0), 0);
       list.sort(_byDoneDesc);

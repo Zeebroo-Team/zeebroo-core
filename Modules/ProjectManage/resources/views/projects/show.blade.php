@@ -98,14 +98,33 @@
         @endif
     </div>
 
-    {{-- Task stat cards --}}
+    {{-- Task stat cards: completion status, then one card per stage (board column) --}}
+    @php
+        $stageColor  = fn (array $s) => $s['color'] ?: ($taskStatusColor[$s['status']] ?? '#0ea5e9');
+        $stageLabels = collect($stages)->pluck('label', 'status');
+        $orphanCount = collect($stats['stages'])->except($stageLabels->keys()->all())->sum();
+    @endphp
     <div class="pm-stat-grid">
-        @foreach(['todo' => 'To Do', 'in_progress' => 'In Progress', 'review' => 'Review', 'done' => 'Done'] as $key => $label)
-            <div class="pm-stat" style="border-top:3px solid {{ $taskStatusColor[$key] }};">
+        @foreach([['Incomplete', 'incomplete', '#6b7280'], ['Complete', 'complete', '#16a34a'], ['Cancelled', 'cancelled', '#dc2626']] as [$label, $key, $color])
+            <div class="pm-stat" style="border-top:3px solid {{ $color }};">
                 <p class="pm-stat__label">{{ $label }}</p>
-                <p class="pm-stat__value" style="color:{{ $taskStatusColor[$key] }};">{{ $stats[$key] }}</p>
+                <p class="pm-stat__value" style="color:{{ $color }};">{{ $stats[$key] }}</p>
             </div>
         @endforeach
+        <div class="pm-stat" style="border-top:3px solid var(--primary);">
+            <p class="pm-stat__label">Progress</p>
+            <p class="pm-stat__value" style="color:var(--primary);">{{ \Modules\ProjectManage\Models\Project::progressPct($stats) }}%</p>
+        </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:-8px 0 18px;">
+        @foreach($stages as $s)
+            <span class="pcat-badge" style="border-color:{{ $stageColor($s) }};color:{{ $stageColor($s) }};" title="Stage">
+                {{ $s['label'] }} · {{ $stats['stages'][$s['status']] ?? 0 }}
+            </span>
+        @endforeach
+        @if($orphanCount)
+            <span class="pcat-badge" style="border-color:#9ca3af;color:#9ca3af;" title="Tasks whose stage was deleted">Not Defined · {{ $orphanCount }}</span>
+        @endif
     </div>
 
     {{-- Action buttons --}}
@@ -246,6 +265,7 @@
                     <thead>
                         <tr>
                             <th>Title</th>
+                            <th>Stage</th>
                             <th>Status</th>
                             <th>Assigned to</th>
                             <th>Due date</th>
@@ -255,16 +275,18 @@
                     <tbody>
                         @foreach($recentTasks as $t)
                             @php
-                                $sc = $taskStatusColor[$t->status] ?? '#6b7280';
+                                $stage = collect($stages)->firstWhere('status', $t->status);
+                                $sc = $stage ? $stageColor($stage) : '#9ca3af';
                                 $overdue = $t->isOverdue();
                             @endphp
                             <tr>
                                 <td style="font-weight:600;color:var(--text);">{{ $t->title }}</td>
                                 <td>
                                     <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};">
-                                        {{ ucfirst(str_replace('_', ' ', $t->status)) }}
+                                        {{ $stage['label'] ?? 'Not Defined' }}
                                     </span>
                                 </td>
+                                <td>@include('projectmanage::tasks.partials.completion-badge', ['task' => $t])</td>
                                 <td>{{ $t->assignees->pluck('name')->implode(', ') ?: '—' }}</td>
                                 <td style="{{ $overdue ? 'color:#dc2626;font-weight:700;' : '' }}">
                                     {{ $t->due_date ? $t->due_date->format('d M Y') : '—' }}

@@ -43,6 +43,9 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/pm/projects/{project}/statuses', [TaskStatusController::class, 'store'])  ->name('pm.projects.statuses.store');
     Route::put('/pm/statuses/{taskStatus}',        [TaskStatusController::class, 'update']) ->name('pm.statuses.update');
     Route::delete('/pm/statuses/{taskStatus}',     [TaskStatusController::class, 'destroy'])->name('pm.statuses.destroy');
+    // By key — works for built-ins (To Do, In Progress, Review, Done) too
+    Route::put('/pm/projects/{project}/statuses/{statusKey}',    [TaskStatusController::class, 'updateByKey']) ->where('statusKey', '[a-z0-9_]+')->name('pm.projects.statuses.update-key');
+    Route::delete('/pm/projects/{project}/statuses/{statusKey}', [TaskStatusController::class, 'destroyByKey'])->where('statusKey', '[a-z0-9_]+')->name('pm.projects.statuses.destroy-key');
 
     // Tasks (task-scoped)
     Route::get('/pm/tasks/{task}',             [TaskController::class, 'show'])    ->name('pm.tasks.show');
@@ -64,4 +67,5 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/pm/my-projects/data',                  [MyProjectsController::class, 'data'])     ->name('pm.my-projects.data');
     Route::post('/pm/my-projects/tasks',                [MyProjectsController::class, 'storeTask'])->name('pm.my-projects.tasks.store');
     Route::patch('/pm/my-projects/tasks/{task}/status', [MyProjectsController::class, 'status'])   ->name('pm.my-projects.tasks.status');
+    Route::patch('/pm/my-projects/tasks/{task}/completion-status', [MyProjectsController::class, 'completionStatus'])->name('pm.my-projects.tasks.completion-status');
 });

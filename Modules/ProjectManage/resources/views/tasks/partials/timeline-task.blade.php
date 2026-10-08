@@ -6,7 +6,7 @@
     $pc      = $priorityColor[$t->priority] ?? '#6b7280';
 @endphp
 <li class="pm-tl-task{{ $isDone ? ' is-done' : '' }}{{ $overdue ? ' is-overdue' : '' }}" draggable="true"
-    data-tid="{{ $t->id }}" data-status="{{ $t->status }}" data-done="{{ $isDone ? 1 : 0 }}"
+    data-tid="{{ $t->id }}" data-status="{{ $t->status }}" data-done="{{ $isDone ? 1 : 0 }}" data-cancelled="{{ $t->isCancelled() ? 1 : 0 }}"
     data-milestone-url="{{ route('pm.tasks.milestone', $t) }}">
     <form method="POST" action="{{ route($isDone ? 'pm.tasks.reopen' : 'pm.tasks.complete', $t) }}" class="pm-done-form">
         @csrf
@@ -21,5 +21,6 @@
         <i class="fa {{ $overdue ? 'fa-triangle-exclamation' : 'fa-calendar' }}"></i>
         {{ $t->due_date ? $t->due_date->format('d M Y') : 'No due date' }}
     </span>
-    <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};">{{ $statusTabs[$t->status] ?? ucfirst(str_replace('_', ' ', $t->status)) }}</span>
+    <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};" title="Stage">{{ $statusTabs[$t->status] ?? 'Not Defined' }}</span>
+    @include('projectmanage::tasks.partials.completion-badge', ['task' => $t])
 </li>

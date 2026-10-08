@@ -9096,7 +9096,7 @@
             <div class="inv-tab-pane" id="pm-pane-board">
               <div class="finance-toolbar" style="gap:8px;padding:0 0 10px">
                 <button class="svc-form-btn svc-form-btn--primary" id="pm-board-new-task-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
-                <button class="svc-form-btn" id="pm-board-add-status-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-table-columns"></i> Add Status</button>
+                <button class="svc-form-btn" id="pm-board-add-status-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-table-columns"></i> Add Stage</button>
               </div>
               <!-- Columns are rendered from the API (built-in + custom statuses) by loadPmBoard() -->
               <div id="pm-board-columns" class="pm-kanban-wrap"></div>
@@ -9109,12 +9109,9 @@
                   <button class="pm-subtab" data-pmtaskview="timeline"><i class="fa fa-timeline"></i> Timeline</button>
                 </div>
                 <button class="svc-form-btn" id="pm-timeline-full-btn" title="Open the full timeline in a larger view" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-up-right-and-down-left-from-center"></i> View Timeline</button>
+                <!-- Stage chips: rebuilt from the open project's stages by _pmRenderStageChips() -->
                 <div class="svc-chip-bar" id="pm-task-filter-chips">
                   <button class="svc-chip active" data-pmtaskfilter="">All</button>
-                  <button class="svc-chip" data-pmtaskfilter="todo">To Do</button>
-                  <button class="svc-chip" data-pmtaskfilter="in_progress">In Progress</button>
-                  <button class="svc-chip" data-pmtaskfilter="review">Review</button>
-                  <button class="svc-chip" data-pmtaskfilter="done">Done</button>
                 </div>
                 <button class="svc-form-btn" id="pm-milestone-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-flag"></i> New Milestone</button>
                 <button class="svc-form-btn svc-form-btn--primary" id="pm-tasks-new-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
@@ -9138,7 +9135,7 @@
                     <th>Task</th>
                     <th>Priority</th>
                     <th>Due</th>
-                    <th>Status</th>
+                    <th>Stage</th>
                     <th style="width:40px"></th>
                   </tr>
                 </thead>
@@ -9262,7 +9259,8 @@
             <button class="svc-chip active" data-mptaskfilter="open">Open</button>
             <button class="svc-chip" data-mptaskfilter="today">Due Today</button>
             <button class="svc-chip" data-mptaskfilter="overdue">Overdue</button>
-            <button class="svc-chip" data-mptaskfilter="done">Done</button>
+            <button class="svc-chip" data-mptaskfilter="done">Completed</button>
+            <button class="svc-chip" data-mptaskfilter="cancelled">Cancelled</button>
           </div>
           <select class="mp-filter-select" id="mp-task-project" title="Filter by project"></select>
           <select class="mp-filter-select" id="mp-task-milestone" title="Filter by milestone"></select>
@@ -9281,7 +9279,7 @@
                 <th data-mpsort="project_name">Project</th>
                 <th data-mpsort="priority">Priority</th>
                 <th data-mpsort="due_date">Due</th>
-                <th data-mpsort="status">Status</th>
+                <th data-mpsort="status">Stage</th>
                 <th style="width:40px"></th>
               </tr>
             </thead>
@@ -9310,7 +9308,7 @@
             <option value="week">Due in 7 days</option>
             <option value="none">No due date</option>
           </select>
-          <span id="mp-board-hint" style="font-size:11px;color:var(--text-muted);margin-left:auto">Drag a card to another column to change its status.</span>
+          <span id="mp-board-hint" style="font-size:11px;color:var(--text-muted);margin-left:auto">Drag a card to another column to change its stage.</span>
         </div>
         <!-- Columns: built-in statuses + custom statuses of the visible projects (built by renderMpBoard) -->
         <div id="mp-board-columns" class="pm-kanban-wrap"></div>
@@ -10532,7 +10530,7 @@
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
           <div class="po-field">
-            <label class="po-field-label">Status</label>
+            <label class="po-field-label">Stage</label>
             <select id="mp-tf-status" class="po-field-input"></select>
           </div>
           <div class="po-field">
