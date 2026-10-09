@@ -55,9 +55,11 @@
             <div style="margin-bottom:16px;">
                 <h2 style="margin:0 0 8px;font-size:18px;font-weight:800;color:var(--text);line-height:1.3;">{{ $task->title }}</h2>
                 <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                    <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};">
-                        {{ ucfirst(str_replace('_', ' ', $task->status)) }}
+                    @php $stage = collect($statuses)->firstWhere('status', $task->status); $sc = $stage['color'] ?? $sc; @endphp
+                    <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};" title="Stage">
+                        {{ $stage['label'] ?? 'Not Defined' }}
                     </span>
+                    @include('projectmanage::tasks.partials.completion-badge', ['task' => $task])
                     <span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:{{ $pc }};font-weight:600;">
                         <span style="width:8px;height:8px;border-radius:50%;background:{{ $pc }};display:inline-block;"></span>
                         {{ ucfirst($task->priority) }} priority
@@ -69,7 +71,7 @@
                         <span style="font-size:12px;{{ $overdue ? 'color:#dc2626;font-weight:700;' : 'color:var(--muted);' }}">
                             <i class="fa fa-calendar"></i>
                             Due {{ $task->due_date->format('d M Y') }}
-                            @if($overdue) &mdash; overdue@endif
+                            @if($overdue) &mdash; overdue @endif
                         </span>
                     @endif
                 </div>
@@ -102,12 +104,11 @@
                             </div>
                             <div class="pcat-form-grid pcat-form-grid--2" style="margin-bottom:10px;">
                                 <div class="pcat-field">
-                                    <label>Status</label>
+                                    <label>Stage</label>
                                     <select name="status">
-                                        <option value="todo"        @selected(old('status',$task->status)==='todo')>To Do</option>
-                                        <option value="in_progress" @selected(old('status',$task->status)==='in_progress')>In Progress</option>
-                                        <option value="review"      @selected(old('status',$task->status)==='review')>Review</option>
-                                        <option value="done"        @selected(old('status',$task->status)==='done')>Done</option>
+                                        @foreach($statuses as $s)
+                                            <option value="{{ $s['status'] }}" @selected(old('status',$task->status)===$s['status'])>{{ $s['label'] }}</option>
+                                        @endforeach
                                     </select>
                                 </div>
                                 <div class="pcat-field">
@@ -121,13 +122,30 @@
                             </div>
                             <div class="pcat-form-grid pcat-form-grid--2" style="margin-bottom:10px;">
                                 <div class="pcat-field">
-                                    <label>Assigned to</label>
-                                    <select name="assigned_to">
-                                        <option value="">Unassigned</option>
-                                        @foreach($assignableUsers as $u)
-                                            <option value="{{ $u->id }}" @selected(old('assigned_to',(string)$task->assigned_to)===(string)$u->id)>{{ $u->name }}</option>
+                                    <label>Status</label>
+                                    <select name="completion_status">
+                                        @foreach(\Modules\ProjectManage\Models\Task::COMPLETION_STATUSES as $key => $label)
+                                            <option value="{{ $key }}" @selected(old('completion_status', $task->completionStatus())===$key)>{{ $label }}</option>
                                         @endforeach
                                     </select>
+                                </div>
+                            </div>
+                            <div class="pcat-form-grid pcat-form-grid--2" style="margin-bottom:10px;">
+                                <div class="pcat-field">
+                                    <label>Assigned to <span style="font-weight:400;color:var(--muted);">(project team)</span></label>
+                                    {{-- Empty value so unticking everyone clears the assignees --}}
+                                    <input type="hidden" name="assignee_ids" value="">
+                                    @php($checkedIds = array_map('strval', (array) old('assignee_ids', $task->assignees->pluck('id')->all())))
+                                    <div style="max-height:120px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:4px 8px;">
+                                        @forelse($assignableUsers as $u)
+                                            <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:500;padding:3px 0;cursor:pointer;">
+                                                <input type="checkbox" name="assignee_ids[]" value="{{ $u->id }}" @checked(in_array((string) $u->id, $checkedIds, true))>
+                                                {{ $u->name }}
+                                            </label>
+                                        @empty
+                                            <div style="font-size:11px;color:var(--muted);padding:3px 0;">No team members — add them on the project's Assignment tab.</div>
+                                        @endforelse
+                                    </div>
                                 </div>
                                 <div class="pcat-field">
                                     <label>Milestone</label>
@@ -262,7 +280,7 @@
         <aside class="pm-sidebar">
             <div class="pm-sidebar__row">
                 <span class="pm-sidebar__label">Assigned to</span>
-                <span style="font-weight:600;color:var(--text);">{{ $task->assignedTo?->name ?? 'Unassigned' }}</span>
+                <span style="font-weight:600;color:var(--text);">{{ $task->assignees->pluck('name')->implode(', ') ?: 'Unassigned' }}</span>
             </div>
             <div class="pm-sidebar__row">
                 <span class="pm-sidebar__label">Project</span>
@@ -287,7 +305,7 @@
             </div>
 
             <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
-                @if(!$task->isCompleted())
+                @if($task->isOpen())
                     <form method="POST" action="{{ route('pm.tasks.complete', $task) }}">
                         @csrf
                         <button type="submit" class="linkbtn" style="width:100%;padding:9px;font-size:13px;text-align:center;">

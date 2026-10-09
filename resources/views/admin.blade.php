@@ -35,6 +35,19 @@
 .adash-recent-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
 .adash-recent-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
 .adash-recent-time{font-size:11px;color:var(--muted);flex-shrink:0;}
+/* ── recent payments ── */
+.adash-recent-head-meta{font-size:12px;color:var(--muted);font-weight:500;margin-left:10px;}
+a.adash-recent-row{text-decoration:none;color:inherit;transition:background .12s ease;}
+a.adash-recent-row:hover{background:color-mix(in srgb,var(--primary) 5%,transparent);}
+.adash-pay-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:13px;flex-shrink:0;background:color-mix(in srgb,#10b981 12%,transparent);color:#059669;}
+.adash-pay-amount{font-size:13px;font-weight:750;white-space:nowrap;flex-shrink:0;}
+.adash-pay-status{display:inline-flex;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;text-transform:capitalize;flex-shrink:0;min-width:72px;justify-content:center;}
+.adash-pay-status--succeeded{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
+.adash-pay-status--pending,.adash-pay-status--processing{background:color-mix(in srgb,#f59e0b 15%,transparent);color:#b45309;}
+.adash-pay-status--failed,.adash-pay-status--canceled{background:color-mix(in srgb,#ef4444 14%,transparent);color:#dc2626;}
+.adash-pay-status--refunded{background:color-mix(in srgb,#64748b 15%,transparent);color:#64748b;}
+.adash-empty{padding:28px 20px;text-align:center;font-size:13px;color:var(--muted);}
+@media(max-width:560px){.adash-recent-time{display:none;}}
 </style>
 
 <div class="adash">
@@ -154,6 +167,36 @@
                 <span class="adash-recent-role adash-recent-role--{{ $rRole }}">{{ ucfirst($rRole) }}</span>
             </div>
         @endforeach
+    </div>
+
+    {{-- ── RECENT PAYMENTS ── --}}
+    <div class="adash-recent" style="margin-bottom:28px;">
+        <div class="adash-recent-head">
+            <h3 class="adash-recent-title">
+                <i class="fa fa-credit-card" style="color:var(--primary);margin-right:7px;"></i>Payment History
+                @if($paymentSummary['revenue']->isNotEmpty())
+                    <span class="adash-recent-head-meta">
+                        {{ $paymentSummary['revenue']->map(fn ($t, $c) => $c.' '.number_format($t, 2))->implode(' · ') }} collected
+                    </span>
+                @endif
+            </h3>
+            <a href="{{ route('admin.payments.index') }}" class="adash-recent-link">View all <i class="fa fa-arrow-right"></i></a>
+        </div>
+        @forelse($recentPayments as $rp)
+            @php $rpDate = $rp->paid_at ?? $rp->created_at; @endphp
+            <a href="{{ route('admin.payments.show', $rp->id) }}" class="adash-recent-row" title="View payment details">
+                <div class="adash-pay-icon"><i class="fa fa-receipt"></i></div>
+                <div style="flex:1;min-width:0;">
+                    <div class="adash-recent-name">{{ $rp->business?->name ?? 'Unknown business' }}</div>
+                    <div class="adash-recent-email">{{ $rp->package?->name ?? ucfirst($rp->payment_type) }} · {{ $rp->user?->email ?? '—' }}</div>
+                </div>
+                <div class="adash-recent-time" title="{{ $rpDate?->format('d M Y, H:i') }}">{{ $rpDate?->diffForHumans() }}</div>
+                <div class="adash-pay-amount">{{ strtoupper($rp->currency ?? 'USD') }} {{ number_format((float) $rp->amount, 2) }}</div>
+                <span class="adash-pay-status adash-pay-status--{{ $rp->payment_status }}">{{ $rp->payment_status }}</span>
+            </a>
+        @empty
+            <div class="adash-empty">No payments recorded yet.</div>
+        @endforelse
     </div>
 
 </div>

@@ -10,9 +10,16 @@ use Illuminate\Validation\Rule;
 use Modules\ProjectManage\Models\Milestone;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
+use Modules\ProjectManage\Models\TaskStatus;
 use Modules\ProjectManage\Services\MilestoneService;
+use Modules\ProjectManage\Models\TaskAttachment;
+use Modules\ProjectManage\Models\TaskComment;
+use Modules\ProjectManage\Models\TaskDeleteRequest;
 use Modules\ProjectManage\Services\ProjectService;
+use Modules\ProjectManage\Services\TaskAttachmentService;
+use Modules\ProjectManage\Services\TaskDeleteRequestService;
 use Modules\ProjectManage\Services\TaskService;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
 class ProjectManageApiController extends Controller
@@ -23,23 +30,30 @@ class ProjectManageApiController extends Controller
         private readonly ProjectService   $projects,
         private readonly TaskService      $tasks,
         private readonly MilestoneService $milestones,
+        private readonly TaskAttachmentService $attachments,
+        private readonly TaskDeleteRequestService $deleteRequests,
     ) {}
 
     // ── Projects ─────────────────────────────────────────────────────────────
 
     public function projectIndex(Request $request): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
 
-        $filter   = $request->query('filter', 'all');
-        $list     = $this->projects->listForBusiness($business, $filter);
+        // Legacy desktop clients send ?filter=<status|all>; map it onto the service's filters array.
+        $status = (string) $request->query('status', $request->query('filter', 'all'));
+        $list   = $this->projects->listForBusiness($business, [
+            'status'       => $status === 'all' ? '' : $status,
+            'project_type' => (string) $request->query('project_type', ''),
+            'search'       => (string) $request->query('search', ''),
+        ]);
 
         return response()->json(['data' => $list->map(fn ($p) => $this->fmtProject($p))]);
     }
 
     public function projectStore(Request $request): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $validated = $request->validate(array_merge([
             'name'        => 'required|string|max:150',
             'description' => 'nullable|string|max:2000',
@@ -58,7 +72,7 @@ class ProjectManageApiController extends Controller
 
     public function projectUpdate(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
         $validated = $request->validate(array_merge([
@@ -108,7 +122,7 @@ class ProjectManageApiController extends Controller
 
     public function projectDestroy(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
         try {
@@ -120,23 +134,76 @@ class ProjectManageApiController extends Controller
         return response()->json(['message' => 'Project deleted.']);
     }
 
+    // ── Project members (team) ───────────────────────────────────────────────
+
+    /** The project team plus the business users that can still be added. */
+    public function memberIndex(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        return response()->json($this->membersPayload($project));
+    }
+
+    /**
+     * Team-member profile, for both the Projects tab (Manage All Projects — any business user)
+     * and My Projects (Assigned Project Access — only teammates sharing a project with the caller).
+     */
+    public function memberProfile(Request $request, int $userId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $member   = $this->resolveMember($request, $business);
+        $canManage = $member === null || $member->hasPermission('projects_access');
+        if (! $canManage) {
+            $this->abortUnlessPerm($request, $business, 'projects_assigned');
+        }
+
+        $profile = $this->projects->memberProfile($business, $userId, (int) $request->user()->id, $canManage);
+        abort_unless($profile, 404, 'This person is not on any of your project teams.');
+
+        return response()->json(['data' => $profile]);
+    }
+
+    public function memberStore(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $userIds = $request->validate([
+            'user_ids'   => 'required|array|min:1|max:200',
+            'user_ids.*' => 'integer',
+        ])['user_ids'];
+
+        try {
+            $this->projects->addMembers($project, $userIds, $request->user()?->id);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['message' => collect($e->errors())->flatten()->first()], 422);
+        }
+
+        return response()->json($this->membersPayload($project), 201);
+    }
+
+    public function memberDestroy(Request $request, int $projectId, int $userId): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $unassigned = $this->projects->removeMember($project, $userId);
+
+        return response()->json(['unassigned_tasks' => $unassigned] + $this->membersPayload($project));
+    }
+
     // ── Board ────────────────────────────────────────────────────────────────
 
     public function board(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $id)->firstOrFail();
 
-        $board = $this->tasks->boardForProject($project);
-
-        $labels = ['todo' => 'To Do', 'in_progress' => 'In Progress', 'review' => 'Review', 'done' => 'Done'];
-        $columns = collect($board)->map(function ($tasks, $status) use ($labels) {
-            return [
-                'status' => $status,
-                'label'  => $labels[$status] ?? $status,
-                'tasks'  => $tasks->map(fn ($t) => $this->fmtTask($t))->values(),
-            ];
-        })->values();
+        $columns = array_map(
+            fn (array $col) => ['tasks' => $col['tasks']->map(fn ($t) => $this->fmtTask($t))->values()] + $col,
+            $this->tasks->boardForProject($project),
+        );
 
         return response()->json([
             'project' => $this->fmtProject($project),
@@ -144,14 +211,79 @@ class ProjectManageApiController extends Controller
         ]);
     }
 
+    // ── Task statuses (board columns) ────────────────────────────────────────
+
+    public function statusIndex(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        return response()->json(['data' => $this->tasks->statusesForProject($project)]);
+    }
+
+    public function statusStore(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $validated = $request->validate(TaskService::statusRules());
+        $status    = $this->tasks->createStatus($project, $validated);
+
+        return response()->json(['data' => $this->tasks->fmtStatus($status)], 201);
+    }
+
+    public function statusUpdate(Request $request, int $id): JsonResponse
+    {
+        $business  = $this->manageBusinessOrAbort($request);
+        $status    = $this->resolveStatus($business, $id);
+        $validated = $request->validate(TaskService::statusRules(partial: true));
+
+        $status = $this->tasks->updateStatus($status, $validated);
+
+        return response()->json(['data' => $this->tasks->fmtStatus($status)]);
+    }
+
+    public function statusDestroy(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $status   = $this->resolveStatus($business, $id);
+
+        $this->tasks->deleteStatus($status);
+
+        return response()->json(['message' => 'Stage deleted. Its tasks were moved to Not Defined.']);
+    }
+
+    /** Edit any status (built-in or custom) by its key — built-ins have no id until first edited. */
+    public function statusUpdateByKey(Request $request, int $projectId, string $key): JsonResponse
+    {
+        $business  = $this->manageBusinessOrAbort($request);
+        $project   = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+        $validated = $request->validate(TaskService::statusRules(partial: true));
+
+        $status = $this->tasks->updateStatus($this->tasks->statusForKey($project, $key), $validated);
+
+        return response()->json(['data' => $this->tasks->fmtStatus($status)]);
+    }
+
+    /** Delete any status (built-in or custom) by its key; its tasks move to Not Defined. */
+    public function statusDestroyByKey(Request $request, int $projectId, string $key): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $this->tasks->deleteStatus($this->tasks->statusForKey($project, $key));
+
+        return response()->json(['message' => 'Stage deleted. Its tasks were moved to Not Defined.']);
+    }
+
     // ── Tasks ────────────────────────────────────────────────────────────────
 
     public function taskIndex(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
-        $filters = $request->only(['status', 'milestone_id', 'assigned_to', 'priority']);
+        $filters = $request->only(['status', 'completion_status', 'milestone_id', 'assigned_to', 'priority']);
         $tasks   = $this->tasks->listForProject($project, $filters);
 
         return response()->json(['data' => $tasks->map(fn ($t) => $this->fmtTask($t))]);
@@ -159,39 +291,94 @@ class ProjectManageApiController extends Controller
 
     public function taskStore(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
-        $validated = $request->validate([
+        $validated = $request->validate(array_merge([
             'title'            => 'required|string|max:200',
             'description'      => 'nullable|string|max:5000',
-            'status'           => 'nullable|in:todo,in_progress,review,done',
+            'status'           => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
+            'completion_status'=> ['nullable', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
             'priority'         => 'nullable|in:low,normal,high',
-            'milestone_id'     => 'nullable|integer',
-            'assigned_to'      => 'nullable|integer|exists:users,id',
+            'milestone_id'     => $this->milestoneIdRule($project),
             'due_date'         => 'nullable|date',
             'estimated_hours'  => 'nullable|numeric|min:0',
-        ]);
+        ], TaskService::assigneeRules($project)), TaskService::assigneeMessages());
 
         $task = $this->tasks->create($project, $validated);
 
         return response()->json(['data' => $this->fmtTask($task)], 201);
     }
 
-    public function taskStatus(Request $request, int $id): JsonResponse
+    /** Replaces the task's assignees with assignee_ids (all must be project members; [] = unassigned). */
+    public function taskAssign(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
-        $status = $request->validate(['status' => 'required|in:todo,in_progress,review,done'])['status'];
+        $validated = $request->validate(
+            TaskService::assigneeRules($task->project),
+            TaskService::assigneeMessages(),
+        );
+
+        $task = $this->tasks->assign($task, TaskService::assigneeIdsFrom($validated) ?? []);
+
+        return response()->json(['data' => $this->fmtTask($task)]);
+    }
+
+    /** Full detail of any task of the business (board card click): the task plus its comments, time logs and files. */
+    public function taskShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        $task->loadMissing(['assignees', 'milestone', 'project', 'creator']);
+
+        return response()->json(['data' => $this->fmtTask($task) + $this->tasks->activityForTask($task) + [
+            'created_by_name' => $task->creator?->name,
+        ]]);
+    }
+
+    public function taskStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        $status = $request->validate([
+            'status' => ['required', Rule::in($this->tasks->statusKeysForProject($task->project))],
+        ])['status'];
         $task   = $this->tasks->moveStatus($task, $status);
+
+        return response()->json(['data' => $this->fmtTask($task)]);
+    }
+
+    /** Completion status (incomplete / complete / cancelled) — independent of the stage. */
+    public function taskCompletionStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        $task = $this->tasks->setCompletionStatus($task, $this->validatedCompletionStatus($request));
+
+        return response()->json(['data' => $this->fmtTask($task)]);
+    }
+
+    public function taskMilestone(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        $milestoneId = $request->validate([
+            'milestone_id' => $this->milestoneIdRule($task->project),
+        ])['milestone_id'] ?? null;
+
+        $task = $this->tasks->moveMilestone($task, $milestoneId !== null ? (int) $milestoneId : null);
 
         return response()->json(['data' => $this->fmtTask($task)]);
     }
 
     public function taskComplete(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
         $task     = $this->tasks->complete($task);
 
@@ -200,7 +387,7 @@ class ProjectManageApiController extends Controller
 
     public function taskReopen(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
         $task     = $this->tasks->reopen($task);
 
@@ -209,25 +396,14 @@ class ProjectManageApiController extends Controller
 
     public function taskComment(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
-        $task     = $this->resolveTask($business, $id);
+        $business = $this->manageBusinessOrAbort($request);
 
-        $body    = $request->validate(['body' => 'required|string|max:5000'])['body'];
-        $comment = $this->tasks->addComment($task, $request->user()?->id ?? 0, $body);
-
-        return response()->json([
-            'data' => [
-                'id'         => $comment->id,
-                'user'       => $comment->user?->name ?? 'System',
-                'body'       => $comment->body,
-                'created_at' => $comment->created_at?->toDateTimeString(),
-            ],
-        ], 201);
+        return $this->storeComment($request, $this->resolveTask($business, $id));
     }
 
     public function taskTime(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
 
         $validated = $request->validate([
@@ -248,16 +424,60 @@ class ProjectManageApiController extends Controller
 
     public function taskDestroy(Request $request, int $id): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $task     = $this->resolveTask($business, $id);
         $this->tasks->delete($task);
 
         return response()->json(['message' => 'Task deleted.']);
     }
 
+    // ── Task attachments (Projects tab — any task of the business) ───────────
+
+    public function taskAttachmentIndex(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        return response()->json(['data' => $this->attachments->listForTask($task)->map(fn ($a) => $this->attachments->fmt($a))]);
+    }
+
+    public function taskAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+
+        return $this->storeAttachments($request, $task);
+    }
+
+    /** Files posted with one of my comments, on any task of the business (board task detail). */
+    public function commentAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $comment  = TaskComment::findOrFail($id);
+        $task     = $this->resolveTask($business, (int) $comment->task_id);
+        abort_unless((int) $comment->user_id === (int) $request->user()->id, 403, 'You can only attach files to your own comments.');
+
+        return $this->storeAttachments($request, $task, $comment);
+    }
+
+    public function taskAttachmentDownload(Request $request, int $id): StreamedResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+
+        return $this->attachments->download($this->resolveAttachment($business, $id));
+    }
+
+    public function taskAttachmentDestroy(Request $request, int $id): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $this->attachments->delete($this->resolveAttachment($business, $id));
+
+        return response()->json(['message' => 'Attachment deleted.']);
+    }
+
     public function myTasks(Request $request): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $filter = (string) $request->query('filter', 'open');
 
         $tasks = $this->tasks->listForBusiness($business, $filter);
@@ -265,11 +485,250 @@ class ProjectManageApiController extends Controller
         return response()->json(['data' => $tasks->map(fn ($t) => $this->fmtTask($t))]);
     }
 
+    // ── My Projects (assigned access) ────────────────────────────────────────
+    // Gated by projects_assigned instead of projects_access: the user only sees and
+    // moves tasks assigned to them, never the rest of the business's projects.
+
+    /** Tasks assigned to me (all statuses) + the projects they belong to, each with its board statuses. */
+    public function myWork(Request $request): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+        $work     = $this->tasks->assignedWorkForUser($business, $userId);
+
+        return response()->json(['data' => [
+            'tasks'    => $work['tasks']->map(fn ($t) => $this->fmtTask($t))->values(),
+            'projects' => $work['projects']->map(fn ($p) => $this->fmtProject($p) + [
+                'statuses'  => $this->tasks->statusesForProject($p),
+                // Only team members may add tasks for themselves (see myWorkTaskStore).
+                'is_member' => $p->members()->where('users.id', $userId)->exists(),
+            ])->values(),
+            // Teammates across these projects (Overview "Team" panel and project-card avatars).
+            'team'     => $this->projects->teammatesForProjects($business, $work['projects'], $userId),
+        ]]);
+    }
+
+    /** Creates a task assigned to me, in a (non-archived) project whose team I am on. */
+    public function myWorkTaskStore(Request $request): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+
+        $projectId = (int) $request->validate(['project_id' => 'required|integer'])['project_id'];
+        $project   = Project::where('business_id', $business->id)
+            ->where('id', $projectId)
+            ->where('status', '!=', Project::STATUS_ARCHIVED)
+            ->firstOrFail();
+        abort_unless($project->members()->where('users.id', $userId)->exists(), 403, 'You can only add tasks to projects you are a member of.');
+
+        $validated = $request->validate([
+            'title'           => 'required|string|max:200',
+            'description'     => 'nullable|string|max:5000',
+            'status'          => ['nullable', Rule::in($this->tasks->statusKeysForProject($project))],
+            'completion_status' => ['nullable', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
+            'priority'        => 'nullable|in:low,normal,high',
+            'due_date'        => 'nullable|date',
+            'estimated_hours' => 'nullable|numeric|min:0',
+        ], ['status.in' => 'This project does not have that status.']);
+
+        $task = $this->tasks->createForSelf($project, $validated, $userId);
+
+        return response()->json(['data' => $this->fmtTask($task)], 201);
+    }
+
+    /**
+     * Full detail of a project I work on (team member or task assignee): the project fields,
+     * its team with their task counts, milestones and my own task counts there.
+     * The budget is shown to project managers only.
+     */
+    public function myWorkProjectShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+        $project  = $this->projects->findForAssignee($business, $id, $userId);
+        abort_unless($project, 404, 'You are not working on this project.');
+
+        $member    = $this->resolveMember($request, $business);
+        $canManage = $member === null || $member->hasPermission('projects_access');
+
+        $data = $this->fmtProject($project);
+        if (! $canManage) {
+            $data['budget'] = null;
+        }
+
+        return response()->json(['data' => $data + [
+            'statuses'        => $this->tasks->statusesForProject($project),
+            'is_member'       => $project->hasMember($userId),
+            'created_by_name' => $project->createdBy?->name,
+            'members'         => $this->projects->membersForProject($project)->values(),
+            'milestones'      => $this->milestones->listForProject($project)->map(fn ($m) => $this->fmtMilestone($m))->values(),
+            'my_stats'        => $this->projects->userTaskStats($project, $userId),
+        ]]);
+    }
+
+    /** Full detail of a task assigned to me: the task plus its comments and time logs. */
+    public function myWorkTaskShow(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only view tasks assigned to you.');
+
+        $task->loadMissing(['assignees', 'milestone', 'pendingDeleteRequest']);
+
+        return response()->json(['data' => $this->fmtTask($task) + $this->tasks->activityForTask($task)]);
+    }
+
+    /** Status change (kanban drag & drop, complete / reopen) for a task assigned to me. */
+    public function myWorkTaskStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only update tasks assigned to you.');
+
+        $status = $request->validate([
+            'status' => ['required', Rule::in($this->tasks->statusKeysForProject($task->project))],
+        ], ['status.in' => 'This project does not have that status.'])['status'];
+
+        $task = $this->tasks->moveStatus($task, $status);
+
+        return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project', 'pendingDeleteRequest']))]);
+    }
+
+    /** Completion status (incomplete / complete / cancelled) for a task assigned to me. */
+    public function myWorkTaskCompletionStatus(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only update tasks assigned to you.');
+
+        $task = $this->tasks->setCompletionStatus($task, $this->validatedCompletionStatus($request));
+
+        return response()->json(['data' => $this->fmtTask($task->fresh(['assignees', 'milestone', 'project', 'pendingDeleteRequest']))]);
+    }
+
+    private function validatedCompletionStatus(Request $request): string
+    {
+        return $request->validate([
+            'completion_status' => ['required', Rule::in(array_keys(Task::COMPLETION_STATUSES))],
+        ], ['completion_status.in' => 'Status must be incomplete, complete or cancelled.'])['completion_status'];
+    }
+
+    /** Comment (or reply, with parent_id) on a task assigned to me. */
+    public function myWorkTaskComment(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only comment on tasks assigned to you.');
+
+        return $this->storeComment($request, $task);
+    }
+
+    /** The task owner deletes a task outright; anyone else sends a delete request instead. */
+    public function myWorkTaskDestroy(Request $request, int $id): JsonResponse
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($task->isOwnedBy((int) $request->user()->id), 403, 'Only the task owner can delete this task — send a delete request instead.');
+
+        $this->tasks->delete($task);
+
+        return response()->json(['message' => 'Task deleted.']);
+    }
+
+    /** Asks the owner of a task assigned to me to delete it (they get a notification). */
+    public function myWorkTaskDeleteRequest(Request $request, int $id): JsonResponse
+    {
+        $task   = $this->resolveMyTask($request, $id);
+        $reason = $request->validate(['reason' => 'nullable|string|max:500'])['reason'] ?? null;
+
+        $deleteRequest = $this->deleteRequests->request($task, (int) $request->user()->id, $reason);
+
+        return response()->json([
+            'message' => 'Delete request sent to the task owner.',
+            'data'    => $this->deleteRequests->fmt($deleteRequest->load(['task.project', 'task.milestone', 'requester'])),
+        ], 201);
+    }
+
+    /** Delete requests waiting for my decision (tasks I own). */
+    public function myWorkDeleteRequestIndex(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $list     = $this->deleteRequests->pendingForOwner($business, (int) $request->user()->id);
+
+        return response()->json(['data' => $list->map(fn ($r) => $this->deleteRequests->fmt($r))->values()]);
+    }
+
+    /** One request addressed to me — any status, so a stale notification still shows what happened. */
+    public function myWorkDeleteRequestShow(Request $request, int $id): JsonResponse
+    {
+        return response()->json(['data' => $this->deleteRequests->fmt($this->resolveDeleteRequest($request, $id))]);
+    }
+
+    public function myWorkDeleteRequestApprove(Request $request, int $id): JsonResponse
+    {
+        $this->deleteRequests->approve($this->resolveDeleteRequest($request, $id));
+
+        return response()->json(['message' => 'Request approved — the task was deleted.']);
+    }
+
+    public function myWorkDeleteRequestReject(Request $request, int $id): JsonResponse
+    {
+        $deleteRequest = $this->deleteRequests->reject($this->resolveDeleteRequest($request, $id));
+
+        return response()->json(['message' => 'Request rejected.', 'data' => $this->deleteRequests->fmt($deleteRequest)]);
+    }
+
+    /** Files of a task assigned to me (the detail endpoint also returns them). */
+    public function myWorkAttachmentIndex(Request $request, int $id): JsonResponse
+    {
+        $task = $this->resolveMyTask($request, $id);
+
+        return response()->json(['data' => $this->attachments->listForTask($task)->map(fn ($a) => $this->attachments->fmt($a))]);
+    }
+
+    public function myWorkAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        return $this->storeAttachments($request, $this->resolveMyTask($request, $id));
+    }
+
+    /** Files (images, PDFs…) for a comment I just posted; sent right after the comment itself. */
+    public function myWorkCommentAttachmentStore(Request $request, int $id): JsonResponse
+    {
+        $comment = TaskComment::findOrFail($id);
+        $task    = $this->resolveMyTask($request, (int) $comment->task_id);
+        abort_unless((int) $comment->user_id === (int) $request->user()->id, 403, 'You can only attach files to your own comments.');
+
+        return $this->storeAttachments($request, $task, $comment);
+    }
+
+    public function myWorkAttachmentDownload(Request $request, int $id): StreamedResponse
+    {
+        $business   = $this->assignedBusinessOrAbort($request);
+        $attachment = $this->resolveAttachment($business, $id);
+        abort_unless($this->tasks->isAssignee($attachment->task, (int) $request->user()->id), 403, 'You can only download files of tasks assigned to you.');
+
+        return $this->attachments->download($attachment);
+    }
+
+    /** Assignees may only remove files they uploaded themselves. */
+    public function myWorkAttachmentDestroy(Request $request, int $id): JsonResponse
+    {
+        $business   = $this->assignedBusinessOrAbort($request);
+        $attachment = $this->resolveAttachment($business, $id);
+        $userId     = (int) $request->user()->id;
+        abort_unless($this->tasks->isAssignee($attachment->task, $userId), 403, 'You can only manage files of tasks assigned to you.');
+        abort_unless((int) $attachment->user_id === $userId, 403, 'You can only delete files you uploaded.');
+
+        $this->attachments->delete($attachment);
+
+        return response()->json(['message' => 'Attachment deleted.']);
+    }
+
     // ── Milestones ───────────────────────────────────────────────────────────
 
     public function milestoneIndex(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
         $list = $this->milestones->listForProject($project);
@@ -279,32 +738,63 @@ class ProjectManageApiController extends Controller
 
     public function milestoneStore(Request $request, int $projectId): JsonResponse
     {
-        $business = $this->businessOrAbort($request);
+        $business = $this->manageBusinessOrAbort($request);
         $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
 
-        $validated = $request->validate([
-            'name'        => 'required|string|max:150',
-            'description' => 'nullable|string|max:2000',
-            'due_date'    => 'nullable|date',
-        ]);
+        $validated = $request->validate(MilestoneService::rules());
 
         $milestone = $this->milestones->create($project, $validated);
 
         return response()->json(['data' => $this->fmtMilestone($milestone)], 201);
     }
 
+    public function milestoneUpdate(Request $request, int $id): JsonResponse
+    {
+        $business  = $this->manageBusinessOrAbort($request);
+        $milestone = $this->resolveMilestone($business, $id);
+
+        $validated = $request->validate(MilestoneService::rules(partial: true));
+        $milestone = $this->milestones->update($milestone, $validated);
+
+        return response()->json(['data' => $this->fmtMilestone($milestone)]);
+    }
+
+    public function milestoneReorder(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->manageBusinessOrAbort($request);
+        $project  = Project::where('business_id', $business->id)->where('id', $projectId)->firstOrFail();
+
+        $ids = $request->validate([
+            'ids'   => 'required|array|max:500',
+            'ids.*' => 'integer',
+        ])['ids'];
+
+        $this->milestones->reorder($project, $ids);
+
+        return response()->json(['data' => $this->milestones->listForProject($project)->map(fn ($m) => $this->fmtMilestone($m))]);
+    }
+
     public function milestoneComplete(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
         $milestone = $this->milestones->complete($milestone);
 
         return response()->json(['data' => $this->fmtMilestone($milestone)]);
     }
 
+    public function milestoneReopen(Request $request, int $id): JsonResponse
+    {
+        $business  = $this->manageBusinessOrAbort($request);
+        $milestone = $this->resolveMilestone($business, $id);
+        $milestone = $this->milestones->reopen($milestone);
+
+        return response()->json(['data' => $this->fmtMilestone($milestone)]);
+    }
+
     public function milestoneDestroy(Request $request, int $id): JsonResponse
     {
-        $business  = $this->businessOrAbort($request);
+        $business  = $this->manageBusinessOrAbort($request);
         $milestone = $this->resolveMilestone($business, $id);
         $this->milestones->delete($milestone);
 
@@ -313,6 +803,24 @@ class ProjectManageApiController extends Controller
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    /** Business for the Projects-tab endpoints — requires "Manage All Projects" (owners/admins always pass). */
+    private function manageBusinessOrAbort(Request $request): \Modules\Business\Models\Business
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'projects_access');
+
+        return $business;
+    }
+
+    /** Business for the My Projects endpoints — requires "Assigned Project Access". */
+    private function assignedBusinessOrAbort(Request $request): \Modules\Business\Models\Business
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'projects_assigned');
+
+        return $business;
+    }
+
     private function resolveTask(\Modules\Business\Models\Business $business, int $id): Task
     {
         $task = Task::with('project')->findOrFail($id);
@@ -320,11 +828,91 @@ class ProjectManageApiController extends Controller
         return $task;
     }
 
+    /** A task assigned to the caller (My Projects endpoints). */
+    private function resolveMyTask(Request $request, int $id): Task
+    {
+        $business = $this->assignedBusinessOrAbort($request);
+        $task     = $this->resolveTask($business, $id);
+        abort_unless($this->tasks->isAssignee($task, (int) $request->user()->id), 403, 'You can only manage files of tasks assigned to you.');
+
+        return $task;
+    }
+
+    /**
+     * A delete request addressed to the caller. Only business access is required — the
+     * owner may manage projects without "Assigned Project Access" and still gets asked.
+     */
+    private function resolveDeleteRequest(Request $request, int $id): TaskDeleteRequest
+    {
+        $business      = $this->businessOrAbort($request);
+        $deleteRequest = $this->deleteRequests->findForOwner($business, $id, (int) $request->user()->id);
+        abort_unless($deleteRequest, 404, 'This delete request no longer exists — it may already have been approved.');
+
+        return $deleteRequest;
+    }
+
+    private function resolveAttachment(\Modules\Business\Models\Business $business, int $id): TaskAttachment
+    {
+        $attachment = TaskAttachment::with('task.project')->findOrFail($id);
+        abort_unless((int) $attachment->task->project->business_id === (int) $business->id, 404);
+        return $attachment;
+    }
+
+    private function storeComment(Request $request, Task $task): JsonResponse
+    {
+        // has_files: the client uploads files to the comment right after, so the text may be empty.
+        $data = $request->validate([
+            'body'      => 'nullable|string|max:5000|required_unless:has_files,true,1',
+            'parent_id' => 'nullable|integer',
+            'has_files' => 'nullable|boolean',
+        ], ['body.required_unless' => 'Write a comment or attach a file.']);
+
+        $comment = $this->tasks->addComment($task, (int) ($request->user()?->id ?? 0), (string) ($data['body'] ?? ''), $data['parent_id'] ?? null);
+
+        return response()->json(['data' => $this->tasks->fmtComment($comment)], 201);
+    }
+
+    private function storeAttachments(Request $request, Task $task, ?TaskComment $comment = null): JsonResponse
+    {
+        $request->validate(TaskAttachmentService::uploadRules(), TaskAttachmentService::uploadMessages());
+
+        $stored = $this->attachments->store($task, $request->file('files', []), $request->user()?->id, $comment);
+
+        return response()->json(['data' => $stored->map(fn ($a) => $this->attachments->fmt($a))->values()], 201);
+    }
+
+    /** milestone_id must be null or a milestone of the given project. */
+    private function milestoneIdRule(Project $project): array
+    {
+        return ['nullable', 'integer', Rule::exists('pm_milestones', 'id')->where(fn ($q) => $q->where('project_id', $project->id))];
+    }
+
+    private function resolveStatus(\Modules\Business\Models\Business $business, int $id): TaskStatus
+    {
+        $status = TaskStatus::with('project')->findOrFail($id);
+        abort_unless((int) $status->project->business_id === (int) $business->id, 404);
+        return $status;
+    }
+
     private function resolveMilestone(\Modules\Business\Models\Business $business, int $id): Milestone
     {
         $milestone = Milestone::with('project')->findOrFail($id);
         abort_unless((int) $milestone->project->business_id === (int) $business->id, 404);
         return $milestone;
+    }
+
+    /** @return array{data: \Illuminate\Support\Collection, available: \Illuminate\Support\Collection} */
+    private function membersPayload(Project $project): array
+    {
+        $members   = $this->projects->membersForProject($project);
+        $memberIds = $members->pluck('id')->all();
+
+        return [
+            'data'      => $members,
+            'available' => $this->projects->businessUsers($project->business)
+                ->reject(fn (array $u) => in_array($u['id'], $memberIds, true))
+                ->values(),
+        ];
     }
 
     private function fmtProject(Project $p): array
@@ -355,6 +943,7 @@ class ProjectManageApiController extends Controller
             'budget'      => $p->budget ? (float) $p->budget : null,
             'task_stats'  => $stats,
             'tasks_count' => $stats['total'],
+            'members_count' => (int) ($p->members_count ?? $p->members()->count()),
             'created_at'  => $p->created_at?->toDateTimeString(),
 
             'project_type'          => $p->project_type,
@@ -380,15 +969,32 @@ class ProjectManageApiController extends Controller
             'title'            => $t->title,
             'description'      => $t->description,
             'status'           => $t->status,
+            // Completion status, separate from the stage above: incomplete / complete / cancelled.
+            'completion_status'=> $t->completionStatus(),
+            'completion_label' => $t->completionLabel(),
             'priority'         => $t->priority,
+            'assignees'        => $t->assignees->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name, 'avatar_url' => $u->avatarUrl()])->values(),
+            'assignee_ids'     => $t->assignees->pluck('id')->map(fn ($id) => (int) $id)->values(),
+            // Legacy single-assignee fields (older desktop builds): first assignee id, all names.
             'assigned_to'      => $t->assigned_to,
-            'assigned_name'    => $t->assignedTo?->name,
+            'assigned_name'    => $t->assignees->pluck('name')->implode(', ') ?: null,
             'due_date'         => $t->due_date?->toDateString(),
             'estimated_hours'  => $t->estimated_hours ? (float) $t->estimated_hours : null,
             'logged_minutes'   => $t->totalLoggedMinutes(),
+            'attachments_count'=> (int) ($t->attachments_count ?? $t->attachments()->count()),
             'is_overdue'       => $t->isOverdue(),
             'completed_at'     => $t->completed_at?->toDateTimeString(),
             'created_at'       => $t->created_at?->toDateTimeString(),
+            // Deletion (My Projects): the owner deletes directly, others send a delete request.
+            'created_by'       => $t->created_by !== null ? (int) $t->created_by : null,
+            'owner_id'         => $t->ownerId(),
+            'is_owner'         => auth()->id() !== null && $t->isOwnedBy((int) auth()->id()),
+            'delete_request'   => $t->relationLoaded('pendingDeleteRequest') && $t->pendingDeleteRequest ? [
+                'id'           => $t->pendingDeleteRequest->id,
+                'requested_by' => (int) $t->pendingDeleteRequest->requested_by,
+                'is_mine'      => (int) $t->pendingDeleteRequest->requested_by === (int) auth()->id(),
+                'created_at'   => $t->pendingDeleteRequest->created_at?->toDateTimeString(),
+            ] : null,
         ];
     }
 
@@ -399,10 +1005,13 @@ class ProjectManageApiController extends Controller
             'project_id'   => $m->project_id,
             'name'         => $m->name,
             'description'  => $m->description,
+            'start_date'   => $m->start_date?->toDateString(),
             'due_date'     => $m->due_date?->toDateString(),
+            'sort_order'   => (int) $m->sort_order,
             'status'       => $m->status,
             'completed_at' => $m->completed_at?->toDateTimeString(),
-            'tasks_count'  => $m->tasks()->count(),
+            'tasks_count'  => $m->tasks_count ?? $m->tasks()->count(),
+            'done_count'   => $m->done_tasks_count ?? $m->tasks()->where('completion_status', Task::COMPLETION_COMPLETE)->count(),
         ];
     }
 }

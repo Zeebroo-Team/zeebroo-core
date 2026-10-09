@@ -305,6 +305,16 @@
                                 <a href="{{ route('admin.users.show', $u) }}" class="adu-act-btn" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                                     <i class="fa fa-eye"></i> View
                                 </a>
+                                @unless($isSelf)
+                                    <button type="button" class="adu-act-btn adu-act-btn--danger adu-delete-btn"
+                                        data-action="{{ route('admin.users.destroy', $u) }}"
+                                        data-user-name="{{ $u->name }}"
+                                        data-user-email="{{ $u->email }}"
+                                        data-owns="{{ ($u->businesses_count || $u->accounts_count) ? '1' : '0' }}"
+                                        data-owns-label="{{ $u->businesses_count }} business{{ $u->businesses_count === 1 ? '' : 'es' }} and {{ $u->accounts_count }} account{{ $u->accounts_count === 1 ? '' : 's' }}">
+                                        <i class="fa fa-trash"></i> Delete
+                                    </button>
+                                @endunless
                             </div>
                         </td>
                     </tr>
@@ -454,6 +464,35 @@
             <button type="button" class="adu-cancel-btn" id="adcModalCancel">Cancel</button>
             <button type="button" class="adu-act-btn adu-act-btn--danger adc-confirm-btn" id="adcModalConfirm"><i class="fa fa-ban"></i> Disable account</button>
         </div>
+    </div>
+</div>
+
+<div id="addModal" class="adu-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="addModalTitle">
+    <div class="adu-modal-backdrop" id="addModalBackdrop"></div>
+    <div class="adu-modal-shell adc-modal-shell">
+        <form id="addForm" method="POST" action="">
+            @csrf
+            @method('DELETE')
+            <input type="hidden" name="with_owned_data" id="addWithData" value="0">
+            <div class="adu-modal-head">
+                <div>
+                    <h2 class="adu-modal-title" id="addModalTitle">Delete user?</h2>
+                    <p class="adu-modal-sub">This cannot be undone.</p>
+                </div>
+                <button type="button" class="adu-modal-close" id="addModalClose" aria-label="Close">&times;</button>
+            </div>
+            <div class="adu-modal-body">
+                <p id="addModalMessage" class="adc-modal-message"></p>
+                <div class="adu-field" id="addConfirmField" style="display:none;margin-top:16px;">
+                    <label for="addConfirmEmail">Type the user's email to confirm</label>
+                    <input type="text" id="addConfirmEmail" name="confirm_email" autocomplete="off">
+                </div>
+            </div>
+            <div class="adu-modal-foot">
+                <button type="button" class="adu-cancel-btn" id="addModalCancel">Cancel</button>
+                <button type="submit" class="adu-act-btn adu-act-btn--danger adc-confirm-btn" id="addModalConfirm"><i class="fa fa-trash"></i> Delete user</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -682,6 +721,52 @@
                 return;
             }
             form.submit();
+        });
+    });
+})();
+
+(function () {
+    var modal      = document.getElementById('addModal');
+    var form       = document.getElementById('addForm');
+    var messageEl  = document.getElementById('addModalMessage');
+    var withDataEl = document.getElementById('addWithData');
+    var fieldEl    = document.getElementById('addConfirmField');
+    var emailEl    = document.getElementById('addConfirmEmail');
+    var confirmBtn = document.getElementById('addModalConfirm');
+    var expectedEmail = '';
+
+    function openModal() { modal.classList.add('is-open'); document.body.style.overflow = 'hidden'; }
+    function closeModal() { modal.classList.remove('is-open'); document.body.style.overflow = ''; }
+
+    function syncConfirm() {
+        if (fieldEl.style.display === 'none') { confirmBtn.disabled = false; return; }
+        confirmBtn.disabled = emailEl.value.trim().toLowerCase() !== expectedEmail.toLowerCase();
+    }
+
+    ['addModalClose', 'addModalCancel', 'addModalBackdrop'].forEach(function (id) {
+        document.getElementById(id).addEventListener('click', closeModal);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+    });
+    emailEl.addEventListener('input', syncConfirm);
+
+    document.querySelectorAll('.adu-delete-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var name = btn.getAttribute('data-user-name');
+            var owns = btn.getAttribute('data-owns') === '1';
+            expectedEmail = btn.getAttribute('data-user-email');
+
+            form.action = btn.getAttribute('data-action');
+            withDataEl.value = owns ? '1' : '0';
+            emailEl.value = '';
+            fieldEl.style.display = owns ? 'block' : 'none';
+            messageEl.textContent = owns
+                ? 'Delete ' + name + '? They own ' + btn.getAttribute('data-owns-label') + '. Everything in them (sales, products, customers, payments, files and more) will be permanently deleted along with the login.'
+                : 'Delete ' + name + ' (' + expectedEmail + ')? Their login is removed and they are signed out of the web and desktop app immediately.';
+            syncConfirm();
+            openModal();
+            if (owns) emailEl.focus();
         });
     });
 })();

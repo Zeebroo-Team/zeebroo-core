@@ -12,11 +12,15 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Modules\Auth\Services\AuthService;
+use Modules\Auth\Services\EmailVerificationService;
+use Modules\Auth\Services\PasswordResetService;
+use Modules\Mail\Services\AutomatedEmailService;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
 use Modules\Package\Models\Package;
 use Modules\Payment\Models\Payment;
 use Modules\Payment\Services\PaymentProvisioningService;
+use Modules\Pos\Services\PosUserAvatarService;
 
 class PosAuthApiController extends Controller
 {
@@ -54,11 +58,7 @@ class PosAuthApiController extends Controller
         return response()->json([
             'token_type' => 'Bearer',
             'access_token' => $token->plainTextToken,
-            'user' => [
-                'id' => (int) $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
+            'user' => $this->userPayload($user),
         ]);
     }
 
@@ -128,11 +128,7 @@ class PosAuthApiController extends Controller
         return response()->json([
             'token_type'   => 'Bearer',
             'access_token' => $token->plainTextToken,
-            'user' => [
-                'id'    => (int) $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-            ],
+            'user' => $this->userPayload($user),
             'business' => [
                 'id'   => (int) $business->id,
                 'name' => $business->name,
@@ -191,11 +187,7 @@ class PosAuthApiController extends Controller
         $user = $request->user();
 
         return response()->json([
-            'data' => [
-                'id'    => (int) $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-            ],
+            'data' => $this->userPayload($user),
         ]);
     }
 
@@ -211,11 +203,46 @@ class PosAuthApiController extends Controller
         $user->update($validated);
 
         return response()->json([
-            'data' => [
-                'id'    => (int) $user->id,
-                'name'  => $user->name,
-                'email' => $user->email,
-            ],
+            'data' => $this->userPayload($user),
+        ]);
+    }
+
+    /**
+     * Profile photo upload. Accepts `avatar` or the desktop client's multipart `files[]`
+     * (electronAPI.apiUpload always sends that field name) — only the first file is used.
+     */
+    public function uploadAvatar(Request $request, PosUserAvatarService $avatars): JsonResponse
+    {
+        $imageRules = ['file', 'mimes:jpg,jpeg,png,webp,gif', 'max:5120'];
+
+        $request->validate([
+            'avatar'  => ['nullable', ...$imageRules],
+            'files'   => ['nullable', 'array', 'max:1'],
+            'files.*' => $imageRules,
+        ]);
+
+        $file = $request->file('avatar') ?? ($request->file('files')[0] ?? null);
+        if ($file === null) {
+            throw ValidationException::withMessages([
+                'avatar' => ['Choose an image to upload.'],
+            ]);
+        }
+
+        $user = $request->user();
+        $avatars->upload($user, $file);
+
+        return response()->json([
+            'data' => $this->userPayload($user),
+        ]);
+    }
+
+    public function deleteAvatar(Request $request, PosUserAvatarService $avatars): JsonResponse
+    {
+        $user = $request->user();
+        $avatars->remove($user);
+
+        return response()->json([
+            'data' => $this->userPayload($user),
         ]);
     }
 
@@ -241,6 +268,97 @@ class PosAuthApiController extends Controller
         ]);
     }
 
+    /** Step 1 of "forgot password": email a 6-digit reset code (same flow as the web /forgot-password page). */
+    public function forgotPassword(Request $request, PasswordResetService $passwords, AutomatedEmailService $automated): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        try {
+            $passwords->sendCode($validated['email']);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'We couldn\'t send the email right now. Please try again in a few minutes.',
+            ], 503);
+        }
+
+        return response()->json([
+            'message' => 'If an account exists for that email, a 6-digit reset code has been sent to it.',
+            'expires_in_minutes' => $automated->otpMinutes(),
+        ]);
+    }
+
+    /** Step 2: verify the code and set the new password. Revokes every existing token and session. */
+    public function resetPassword(Request $request, PasswordResetService $passwords): JsonResponse
+    {
+        $validated = $request->validate([
+            'email'    => ['required', 'email', 'max:255'],
+            'otp'      => ['required', 'string', 'digits:6'],
+            'password' => ['required', 'confirmed', Password::min(8)],
+        ]);
+
+        $passwords->reset($validated['email'], $validated['otp'], $validated['password']);
+
+        return response()->json([
+            'message' => 'Password reset. Sign in with your new password.',
+        ]);
+    }
+
+    /** Sign-up email verification: check the 6-digit code emailed at registration. */
+    public function verifyEmail(Request $request, EmailVerificationService $verification): JsonResponse
+    {
+        $validated = $request->validate([
+            'otp' => ['required', 'string', 'digits:6'],
+        ]);
+
+        $user = $request->user();
+        abort_unless($user instanceof User, 403);
+
+        $verification->verify($user, $validated['otp']);
+
+        return response()->json([
+            'message' => 'Email verified.',
+            'user'    => $this->userPayload($user->refresh()),
+        ]);
+    }
+
+    /** Email a new verification code (at most one per minute). */
+    public function resendEmailVerification(Request $request, EmailVerificationService $verification): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user instanceof User, 403);
+
+        if (! $verification->isPending($user)) {
+            return response()->json(['message' => 'Your email is already verified.', 'user' => $this->userPayload($user)]);
+        }
+
+        if ($wait = $verification->resendAvailableIn($user)) {
+            return response()->json([
+                'message'     => "Please wait {$wait} seconds before requesting another code.",
+                'retry_after' => $wait,
+            ], 429);
+        }
+
+        try {
+            $verification->sendCode($user);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'message' => 'We couldn\'t send the email right now. Please try again in a few minutes.',
+            ], 503);
+        }
+
+        return response()->json([
+            'message'            => 'A new verification code has been sent to '.$user->email.'.',
+            'expires_in_minutes' => $verification->expiryMinutes(),
+            'retry_after'        => EmailVerificationService::RESEND_SECONDS,
+        ]);
+    }
+
     public function revoke(Request $request): JsonResponse
     {
         $request->user()?->currentAccessToken()?->delete();
@@ -248,5 +366,26 @@ class PosAuthApiController extends Controller
         return response()->json([
             'message' => 'Token revoked.',
         ]);
+    }
+
+    /**
+     * User shape shared by token / register / me / profile. `email_verification_required`
+     * tells the desktop clients to show their "enter the code" screen before anything else.
+     */
+    private function userPayload($user): array
+    {
+        $pending = $user instanceof User && app(EmailVerificationService::class)->isPending($user);
+
+        return [
+            'id'                          => (int) $user->id,
+            'name'                        => $user->name,
+            'email'                       => $user->email,
+            'avatar_url'                  => $user instanceof User ? app(PosUserAvatarService::class)->url($user) : null,
+            'email_verified'            => ! $pending,
+            // Set only once the sign-up code was actually entered — legacy accounts stay null.
+            'email_verified_at'           => $user->email_verified_at?->toIso8601String(),
+            'email_verification_required' => $pending,
+            'email_verification_minutes'  => $pending ? app(EmailVerificationService::class)->expiryMinutes() : null,
+        ];
     }
 }

@@ -29,9 +29,9 @@
           <input id="search-input" type="text" placeholder="Search products by name or SKU…" />
         </div>
         <div class="mode-tabs" id="mode-tabs">
-          <button class="mode-tab active" data-mode="products"><i class="fa-solid fa-box"></i> Products</button>
-          <button class="mode-tab" data-mode="rental"><i class="fa-solid fa-box-open"></i> Rental</button>
-          <button class="mode-tab" data-mode="dynamic"><i class="fa-solid fa-chart-line"></i> Dynamic</button>
+          <button class="mode-tab active" data-mode="products" title="Alt+1"><i class="fa-solid fa-box"></i> Products <kbd class="mode-kbd">Alt+1</kbd></button>
+          <button class="mode-tab" data-mode="rental" title="Alt+2"><i class="fa-solid fa-box-open"></i> Rental <kbd class="mode-kbd">Alt+2</kbd></button>
+          <button class="mode-tab" data-mode="dynamic" title="Alt+3"><i class="fa-solid fa-chart-line"></i> Dynamic <kbd class="mode-kbd">Alt+3</kbd></button>
         </div>
         <div class="chip-scroll-wrap">
           <button type="button" class="chip-arrow chip-arrow-left" id="chip-arrow-left" aria-label="Scroll categories left"><i class="fa-solid fa-chevron-left"></i></button>
@@ -47,9 +47,9 @@
 
       <div class="cart-pane">
         <div class="cart-header">
-          <span><i class="fa-solid fa-cart-shopping"></i>Cart</span>
-          <button type="button" class="cart-gift-btn" id="gift-check-btn" title="Check gift card balance"><i class="fa-solid fa-gift"></i> Gift Card</button>
-          <button type="button" class="cart-gift-btn cart-coupon-btn" id="coupon-check-btn" title="Check coupon"><i class="fa-solid fa-ticket"></i> Coupon</button>
+          <span><span class="cart-icon-wrap"><i class="fa-solid fa-cart-shopping" id="cart-icon"></i><span class="cart-count-badge" id="cart-count-badge" style="display:none">0</span></span>Cart</span>
+          <button type="button" class="cart-gift-btn" id="gift-check-btn" title="Check gift card balance (Ctrl+G)"><i class="fa-solid fa-gift"></i> Gift Card</button>
+          <button type="button" class="cart-gift-btn cart-coupon-btn" id="coupon-check-btn" title="Check coupon (Ctrl+K)"><i class="fa-solid fa-ticket"></i> Coupon</button>
         </div>
         <div class="cart-customer-box checkout-customer-box" id="cart-customer-box">
           <div id="cart-customer-empty">

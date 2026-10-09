@@ -432,7 +432,10 @@ function renderProducts() {
   }).join('');
 
   grid.querySelectorAll('.product-card:not(.out-of-stock)').forEach((card) => {
-    card.addEventListener('click', () => routeAddToCart(Number(card.dataset.id)));
+    card.addEventListener('click', () => {
+      setFlySource(card);
+      routeAddToCart(Number(card.dataset.id));
+    });
   });
 }
 
@@ -469,6 +472,114 @@ function playBeep() {
   _beep.play().catch(() => {});
 }
 
+// ── Fly-to-cart animation ────────────────────────────────────────────────
+// The clicked card is remembered so the animation plays once the item is
+// actually added (after any price / rental / dynamic-price prompts resolve).
+let flySrc = null;
+let flyInFlight = 0;
+let flyPendingDiff = 0;
+
+function setFlySource(card) {
+  flySrc = { card, productId: Number(card.dataset.id), at: Date.now() };
+}
+
+function flyToCart(productId) {
+  const src = flySrc;
+  flySrc = null;
+  if (!src || src.productId !== productId || !src.card.isConnected) return;
+  if (Date.now() - src.at > 60000) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+  const target = document.getElementById('cart-icon');
+  const visual = src.card.querySelector('.product-thumb');
+  if (!target || !visual) return;
+
+  const from = visual.getBoundingClientRect();
+  const to = target.getBoundingClientRect();
+  if (!from.width || !to.width) return;
+
+  src.card.classList.remove('fly-press');
+  void src.card.offsetWidth;
+  src.card.classList.add('fly-press');
+
+  const ghost = document.createElement('div');
+  ghost.className = 'fly-to-cart';
+  ghost.innerHTML = visual.innerHTML;
+  Object.assign(ghost.style, {
+    left: from.left + 'px', top: from.top + 'px',
+    width: from.width + 'px', height: from.height + 'px',
+  });
+  document.body.appendChild(ghost);
+
+  // Parabolic "jump" path: rises above the start, then drops into the cart icon
+  const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+  const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+  const jump = Math.max(90, Math.abs(dx) * 0.25);
+  const endScale = Math.max(0.08, 28 / from.width);
+  const steps = 14;
+  const frames = [];
+  for (let i = 0; i <= steps; i++) {
+    const p = i / steps;
+    const x = dx * p;
+    const y = dy * p - jump * 4 * p * (1 - p);
+    const s = 1 + (endScale - 1) * p * p;
+    frames.push({
+      transform: `translate(${x}px, ${y}px) scale(${s}) rotate(${25 * p}deg)`,
+      opacity: p > 0.85 ? 1 - (p - 0.85) / 0.15 * 0.6 : 1,
+      offset: p,
+    });
+  }
+
+  flyInFlight++;
+  const anim = ghost.animate(frames, { duration: 700, easing: 'cubic-bezier(.45,.05,.55,.95)', fill: 'forwards' });
+  anim.onfinish = anim.oncancel = () => {
+    ghost.remove();
+    flyInFlight = Math.max(0, flyInFlight - 1);
+    if (!flyInFlight && flyPendingDiff > 0) {
+      popCartBadge(flyPendingDiff);
+      flyPendingDiff = 0;
+    }
+    const icon = document.getElementById('cart-icon');
+    if (!icon) return;
+    icon.classList.remove('cart-bump');
+    void icon.offsetWidth;
+    icon.classList.add('cart-bump');
+    icon.addEventListener('animationend', () => icon.classList.remove('cart-bump'), { once: true });
+  };
+}
+
+// ── Cart icon counter — pops and shows "+N" when the count goes up ───────
+let cartBadgeCount = 0;
+
+function updateCartBadge() {
+  const badge = document.getElementById('cart-count-badge');
+  if (!badge) return;
+  const count = cart.reduce((s, c) => s + (Number(c.qty) || 0), 0);
+  const diff = count - cartBadgeCount;
+  cartBadgeCount = count;
+
+  badge.textContent = count > 999 ? '999+' : String(+count.toFixed(2));
+  badge.style.display = count > 0 ? '' : 'none';
+  if (diff <= 0) return;
+  // A product is mid-flight — pop when it lands in the cart instead
+  if (flyInFlight) { flyPendingDiff += diff; return; }
+  popCartBadge(diff);
+}
+
+function popCartBadge(diff) {
+  const badge = document.getElementById('cart-count-badge');
+  if (!badge || diff <= 0 || badge.style.display === 'none') return;
+  badge.classList.remove('count-pop');
+  void badge.offsetWidth;
+  badge.classList.add('count-pop');
+
+  const plus = document.createElement('span');
+  plus.className = 'cart-count-plus';
+  plus.textContent = `+${+diff.toFixed(2)}`;
+  badge.parentNode.appendChild(plus);
+  plus.addEventListener('animationend', () => plus.remove(), { once: true });
+}
+
 function addToCart(productId) {
   const product = products.find((p) => p.id === productId);
   if (!product) return;
@@ -478,8 +589,10 @@ function addToCart(productId) {
   const cartKey = `p-${productId}`;
   const existing = cart.find((c) => c.cartKey === cartKey);
   if (existing) {
-    if (existing.qty < product.stock_quantity) existing.qty += 1;
-    else showToast(t('No more stock available for this item.'), 'error');
+    if (existing.qty < product.stock_quantity) {
+      existing.qty += 1;
+      flyToCart(productId);
+    } else showToast(t('No more stock available for this item.'), 'error');
     renderCart();
     return;
   }
@@ -519,6 +632,7 @@ function addToCart(productId) {
     warrantyDate,
     itemDiscountPercent: 0,
   });
+  flyToCart(productId);
   renderCart();
 }
 
@@ -543,9 +657,12 @@ async function addRentalToCart(product) {
   const existing = cart.find((c) => c.cartKey === cartKey);
 
   if (existing) {
-    if (existing.qty < product.stock_quantity) existing.qty += 1;
-    else showToast(t('No more stock available for this rental.'), 'error');
+    if (existing.qty < product.stock_quantity) {
+      existing.qty += 1;
+      flyToCart(product.id);
+    } else showToast(t('No more stock available for this rental.'), 'error');
   } else {
+    flyToCart(product.id);
     cart.push({
       cartKey,
       product_id: product.id,
@@ -584,6 +701,7 @@ async function addDynamicToCart(product) {
     customUnitPrice: linked ? null : result.amount,
     itemDiscountPercent: 0,
   });
+  flyToCart(product.id);
   renderCart();
 }
 
@@ -615,6 +733,7 @@ function lineTotal(c) {
 }
 
 function renderCart() {
+  updateCartBadge();
   if (!cart.length) {
     cartItemsEl.innerHTML = `<div class="cart-empty">${t('Cart is empty. Click a product to add it.')}</div>`;
   } else {
@@ -2428,12 +2547,32 @@ async function loadSettings() {
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
   return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal,
-    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal]
+    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal,
+    giftCheckModal, couponCheckModal]
     .some((m) => m.classList.contains('show'));
 }
 
 document.addEventListener('keydown', (e) => {
   if (isAnyPosModalOpen()) return;
+  const mod = e.ctrlKey || e.metaKey;
+
+  // Ctrl+G gift card balance, Ctrl+K coupon check
+  if (mod && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'g') { e.preventDefault(); openGiftCheckModal(); return; }
+    if (k === 'k') { e.preventDefault(); openCouponCheckModal(); return; }
+  }
+
+  // Alt+1…3 switch Products / Rental / Dynamic mode tabs
+  if (e.altKey && !mod && !e.shiftKey) {
+    const mode = { '1': 'products', '2': 'rental', '3': 'dynamic' }[e.key];
+    if (mode) {
+      e.preventDefault();
+      document.querySelector(`.mode-tab[data-mode="${mode}"]`)?.click();
+      return;
+    }
+  }
+
   switch (e.key) {
     case 'F2':
       e.preventDefault();

@@ -34,6 +34,24 @@ class PosMediaApiController extends Controller
         ]);
     }
 
+    /** User profile photo uploaded from the desktop "My Profile" modal. */
+    public function userAvatar(int $user, string $filename): StreamedResponse
+    {
+        $disk = Storage::disk('public');
+        $path = 'user-avatars/'.$user.'/'.$filename;
+
+        abort_unless($disk->exists($path), 404);
+
+        return response()->stream(function () use ($disk, $path) {
+            fpassthru($disk->readStream($path));
+        }, 200, [
+            'Content-Type' => $disk->mimeType($path) ?: 'application/octet-stream',
+            'Content-Length' => $disk->size($path),
+            'Cache-Control' => 'public, max-age=86400',
+            'Access-Control-Allow-Origin' => '*',
+        ]);
+    }
+
     /**
      * Generic version of businessLogo() for files that were saved outside the dedicated
      * logo-upload flow (e.g. via the file manager) and so live elsewhere on the `public`

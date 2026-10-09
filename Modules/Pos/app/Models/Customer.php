@@ -28,6 +28,11 @@ class Customer extends Model
         return $this->hasMany(CustomerSubscription::class, 'pos_customer_id');
     }
 
+    public function rentals(): HasMany
+    {
+        return $this->hasMany(ProductRental::class, 'pos_customer_id');
+    }
+
     public function category(): BelongsTo
     {
         return $this->belongsTo(CustomerCategory::class, 'customer_category_id');

@@ -4,9 +4,7 @@ namespace Modules\ProjectManage\Http\Controllers\Concerns;
 
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Modules\Business\Models\Business;
-use Modules\Business\Models\BusinessMember;
 use Modules\ProjectManage\Models\Project;
 use Modules\ProjectManage\Models\Task;
 
@@ -47,21 +45,5 @@ trait ResolvesProjectManageBusiness
         abort_unless((int) $task->project->business_id === (int) $business->id, 404);
 
         return $business;
-    }
-
-    /**
-     * @return Collection<int, \App\Models\User>
-     */
-    protected function assignableUsers(Business $business): Collection
-    {
-        $memberUsers = BusinessMember::query()
-            ->where('business_id', $business->id)
-            ->where('status', 'active')
-            ->with('user')
-            ->get()
-            ->pluck('user')
-            ->filter();
-
-        return $memberUsers->push($business->user)->filter()->unique('id')->sortBy('name')->values();
     }
 }

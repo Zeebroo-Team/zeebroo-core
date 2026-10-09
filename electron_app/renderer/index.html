@@ -200,7 +200,10 @@
           <input type="email" id="login-email" placeholder="you@example.com" autocomplete="email">
         </div>
         <div class="form-group">
-          <label for="login-password">Password</label>
+          <div class="form-label-row">
+            <label for="login-password">Password</label>
+            <a href="#" id="go-forgot" class="forgot-link">Forgot password?</a>
+          </div>
           <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
         </div>
         <button class="btn-primary" id="login-btn">
@@ -252,6 +255,49 @@
         <i class="fa fa-arrow-right-to-bracket"></i>&nbsp; Login
       </button>
       <p class="auth-switch-link" style="margin-top:14px"><a href="#" id="go-owner-login"><i class="fa fa-arrow-left"></i> Back to owner login</a></p>
+    </div>
+
+    <!-- ── Forgot Password card (email → code + new password) ── -->
+    <div class="login-card" id="forgot-card" style="display:none">
+      <div class="cashier-login-icon"><i class="fa fa-key"></i></div>
+      <h2 class="cashier-login-title">Reset Password</h2>
+
+      <!-- Step 1: email -->
+      <div id="forgot-step-1">
+        <p>Enter your account email and we'll send you a 6-digit code.</p>
+        <div id="forgot-alert" class="alert alert-error" style="display:none"></div>
+        <div class="form-group">
+          <label for="forgot-email">Email</label>
+          <input type="email" id="forgot-email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <button class="btn-primary" id="forgot-send-btn">
+          <i class="fa fa-paper-plane"></i>&nbsp; Send Code
+        </button>
+      </div>
+
+      <!-- Step 2: code + new password -->
+      <div id="forgot-step-2" style="display:none">
+        <p id="forgot-sent-msg"></p>
+        <div id="reset-alert" class="alert alert-error" style="display:none"></div>
+        <div class="form-group">
+          <label for="reset-otp">6-digit code</label>
+          <input type="text" id="reset-otp" class="otp-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+        </div>
+        <div class="form-group">
+          <label for="reset-password">New password</label>
+          <input type="password" id="reset-password" placeholder="At least 8 characters" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="reset-password2">Confirm new password</label>
+          <input type="password" id="reset-password2" placeholder="Repeat password" autocomplete="new-password">
+        </div>
+        <button class="btn-primary" id="reset-btn">
+          <i class="fa fa-check"></i>&nbsp; Reset Password
+        </button>
+        <p class="auth-switch-link" style="margin:10px 0 0;padding:0">Didn't get it? <a href="#" id="forgot-resend">Send a new code</a></p>
+      </div>
+
+      <p class="auth-switch-link" style="margin-top:14px"><a href="#" id="forgot-back"><i class="fa fa-arrow-left"></i> Back to sign in</a></p>
     </div>
 
     <!-- ── Sign Up card (4-step onboarding wizard) ── -->
@@ -616,6 +662,11 @@
           <button class="tpm-item" id="tpm-my-profile">
             <i class="fa fa-circle-user"></i> My Profile
           </button>
+          <!-- Sign-up email status — filled by _renderEmailVerifyMenu() in app.js -->
+          <button class="tpm-item" id="tpm-email-verify" style="display:none">
+            <i class="fa fa-envelope"></i> Email
+            <span class="tpm-ev-pill" id="tpm-ev-pill"></span>
+          </button>
           <button class="tpm-item" id="tpm-settings">
             <i class="fa fa-gear"></i> Settings
           </button>
@@ -703,7 +754,8 @@
         <div class="sb-nav-item has-sub" data-tab="mail"><i class="fa fa-envelope"></i><span>Mail</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="automations" style="display:none"><i class="fa fa-bolt"></i><span>Automations</span></div>
-        <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Project Management</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="my-projects"><i class="fa fa-user-check"></i><span>My Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
       </nav>
       <div id="sidebar-bottom">
@@ -733,7 +785,8 @@
         <div class="ribbon-tab" data-tab="mail">Mail</div>
         <div class="ribbon-tab" data-tab="crm">CRM</div>
         <div class="ribbon-tab" data-tab="automations" style="display:none">Automations</div>
-        <div class="ribbon-tab" data-tab="projects">Projects</div>
+        <div class="ribbon-tab" data-tab="projects">Project Management</div>
+        <div class="ribbon-tab" data-tab="my-projects">My Projects</div>
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
       </div>
       <div class="rb-notif-wrap" id="rb-notif-wrap">
@@ -923,13 +976,13 @@
             <button class="ribbon-btn-lg" id="rb-customers">
               <i class="fa fa-users"></i>Customers
             </button>
-            <button class="ribbon-btn-lg" id="rb-accounts">
+            <button class="ribbon-btn-lg" id="rb-accounts" style="display:none">
               <i class="fa fa-wallet"></i>Accounts
             </button>
-            <button class="ribbon-btn-lg" id="rb-gift-card-check">
+            <button class="ribbon-btn-lg" id="rb-gift-card-check" title="Gift Card Balance (Ctrl+G)">
               <i class="fa fa-gift"></i>Gift Card<br>Balance
             </button>
-            <button class="ribbon-btn-lg" id="rb-coupon-check">
+            <button class="ribbon-btn-lg" id="rb-coupon-check" title="Check Coupon (Ctrl+K)">
               <i class="fa fa-ticket"></i>Check<br>Coupon
             </button>
           </div>
@@ -939,7 +992,7 @@
         <!-- Configure group -->
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-pos-settings">
+            <button class="ribbon-btn-lg" id="rb-pos-settings" style="display:none">
               <i class="fa fa-gear"></i>POS<br>Settings
             </button>
             <button class="ribbon-btn-lg" id="rb-receipt-editor">
@@ -1603,6 +1656,54 @@
 
       </div><!-- /projects page -->
 
+      <!-- ── My Projects page (Assigned Project Access) ── -->
+      <div class="ribbon-page" data-page="my-projects">
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mp-overview">
+              <i class="fa fa-house"></i>Overview
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mp-tasks">
+              <i class="fa fa-list-check"></i>My<br>Tasks
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mp-board">
+              <i class="fa fa-table-columns"></i>Kanban<br>Board
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mp-calendar">
+              <i class="fa fa-calendar-days"></i>Calendar
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mp-inbox" style="position:relative">
+              <i class="fa fa-inbox"></i>Inbox
+              <span class="mp-ib-badge mp-ib-badge--ribbon" data-ib-unread style="display:none"></span>
+            </button>
+            <button class="ribbon-btn-lg" id="rb-mp-achievements">
+              <i class="fa fa-trophy"></i>My<br>Achievements
+            </button>
+          </div>
+          <div class="ribbon-group-label">My Projects</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-mp-new-task">
+              <i class="fa fa-plus"></i>New<br>Task
+            </button>
+          </div>
+          <div class="ribbon-group-label">Tasks</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-mp-refresh">
+              <i class="fa fa-rotate"></i>Refresh
+            </button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+
+      </div><!-- /my-projects page -->
+
       <!-- ── Brand Management page ── -->
       <div class="ribbon-page" data-page="event-mgmt">
 
@@ -1712,6 +1813,14 @@
       <span id="billing-alert-text"></span>
       <button class="po-btn-primary" id="billing-alert-pay-btn"><i class="fa fa-credit-card"></i> Pay Now</button>
       <button class="billing-alert-dismiss" id="billing-alert-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Sign-up email not verified yet (opens #email-verify-modal) -->
+    <div id="email-verify-bar" class="billing-alert-bar email-verify-bar" style="display:none">
+      <i class="fa fa-envelope"></i>
+      <span id="email-verify-bar-text"></span>
+      <button class="po-btn-primary" id="email-verify-bar-btn"><i class="fa fa-envelope-circle-check"></i> Verify Now</button>
+      <button class="billing-alert-dismiss" id="email-verify-bar-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
     </div>
 
     <!-- Subscription overdue — full lockout screen -->
@@ -2362,10 +2471,10 @@
         <div id="product-grid-area">
           <!-- POS mode switcher: Products | Services -->
           <div id="pos-mode-bar">
-            <button class="pos-mode-btn active" data-mode="products"><i class="fa fa-box"></i> Products</button>
-            <button class="pos-mode-btn" data-mode="services"><i class="fa fa-screwdriver-wrench"></i> Services</button>
-            <button class="pos-mode-btn" data-mode="rentals"><i class="fa fa-calendar-days"></i> Rental</button>
-            <button class="pos-mode-btn" data-mode="dynamic"><i class="fa fa-wand-magic-sparkles"></i> Dynamic</button>
+            <button class="pos-mode-btn active" data-mode="products" title="Products (Alt+1)"><i class="fa fa-box"></i> Products <kbd>Alt+1</kbd></button>
+            <button class="pos-mode-btn" data-mode="services" title="Services (Alt+2)"><i class="fa fa-screwdriver-wrench"></i> Services <kbd>Alt+2</kbd></button>
+            <button class="pos-mode-btn" data-mode="rentals" title="Rental (Alt+3)"><i class="fa fa-calendar-days"></i> Rental <kbd>Alt+3</kbd></button>
+            <button class="pos-mode-btn" data-mode="dynamic" title="Dynamic (Alt+4)"><i class="fa fa-wand-magic-sparkles"></i> Dynamic <kbd>Alt+4</kbd></button>
           </div>
           <div id="product-search-bar">
             <i class="fa fa-magnifying-glass" style="color:var(--text-muted)"></i>
@@ -2441,7 +2550,10 @@
         </div>
         <div id="cart-area">
           <div id="cart-header">
-            <i class="fa fa-cart-shopping" style="color:var(--accent)"></i>
+            <span class="cart-icon-wrap">
+              <i class="fa fa-cart-shopping" style="color:var(--accent)"></i>
+              <span class="cart-count-badge" id="cart-count-badge" style="display:none">0</span>
+            </span>
             <span id="cart-session-name">Session 1</span>
             <button class="cart-hdr-btn" id="btn-park" title="Hold sale (F6)">
               <i class="fa fa-pause"></i>
@@ -8850,13 +8962,6 @@
     <!-- ── Projects Panel ───────────────────────────────────────────────── -->
     <div class="content-panel" id="panel-projects" style="flex-direction:column">
 
-      <!-- Header bar -->
-      <div class="auto-search-bar">
-        <i class="fa fa-diagram-project" style="color:var(--accent);font-size:15px;flex-shrink:0"></i>
-        <span style="font-size:13px;font-weight:700;flex-shrink:0">Projects</span>
-        <span style="font-size:11px;color:var(--text-muted);margin-left:8px;flex-shrink:0">— delivery tracking, tasks &amp; milestones</span>
-      </div>
-
       <!-- Subnav -->
       <div class="fin-subnav">
         <button class="fin-subnav-btn active" data-pmsub="overview"><i class="fa fa-house"></i> Overview</button>
@@ -8868,7 +8973,7 @@
         <div class="pm-welcome-card">
           <div class="pm-welcome-icon"><i class="fa fa-diagram-project"></i></div>
           <div class="pm-welcome-body">
-            <div class="pm-welcome-title">Welcome to Projects</div>
+            <div class="pm-welcome-title">Welcome to Project Management</div>
             <div class="pm-welcome-desc">Plan delivery, track tasks and manage boards for every project — in-house or for a customer. Assign work to a branch, department, employee, property or customer, follow progress on a kanban board, and keep on top of what's due.</div>
             <div class="pm-welcome-actions">
               <button class="svc-form-btn svc-form-btn--primary" id="pm-ov-new-project-btn"><i class="fa fa-plus"></i> New Project</button>
@@ -8994,54 +9099,29 @@
             <div class="inv-tab-pane" id="pm-pane-board">
               <div class="finance-toolbar" style="gap:8px;padding:0 0 10px">
                 <button class="svc-form-btn svc-form-btn--primary" id="pm-board-new-task-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+                <button class="svc-form-btn" id="pm-board-add-status-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-table-columns"></i> Add Stage</button>
               </div>
-              <div id="pm-board-columns" class="pm-kanban-wrap">
-                <div class="pm-kanban-col" data-col="todo">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--todo"></span>To Do <span class="pm-col-count" id="pm-col-count-todo">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-todo"></div>
-                </div>
-                <div class="pm-kanban-col" data-col="in_progress">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--in-progress"></span>In Progress <span class="pm-col-count" id="pm-col-count-in_progress">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-in_progress"></div>
-                </div>
-                <div class="pm-kanban-col" data-col="review">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--review"></span>Review <span class="pm-col-count" id="pm-col-count-review">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-review"></div>
-                </div>
-                <div class="pm-kanban-col" data-col="done">
-                  <div class="pm-kanban-col-head"><span class="pm-col-dot pm-col-dot--done"></span>Done <span class="pm-col-count" id="pm-col-count-done">0</span></div>
-                  <div class="pm-kanban-cards" id="pm-col-done"></div>
-                </div>
-              </div>
+              <!-- Columns are rendered from the API (built-in + custom statuses) by loadPmBoard() -->
+              <div id="pm-board-columns" class="pm-kanban-wrap"></div>
             </div>
 
             <div class="inv-tab-pane" id="pm-pane-task">
-              <div class="finance-toolbar" style="gap:8px;padding:0 0 10px">
+              <div class="finance-toolbar" style="gap:8px;padding:0 0 10px;flex-wrap:wrap">
+                <div class="pm-subtabs" id="pm-task-subtabs">
+                  <button class="pm-subtab active" data-pmtaskview="milestones"><i class="fa fa-layer-group"></i> By Milestone</button>
+                  <button class="pm-subtab" data-pmtaskview="timeline"><i class="fa fa-timeline"></i> Timeline</button>
+                </div>
+                <button class="svc-form-btn" id="pm-timeline-full-btn" title="Open the full timeline in a larger view" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-up-right-and-down-left-from-center"></i> View Timeline</button>
+                <!-- Stage chips: rebuilt from the open project's stages by _pmRenderStageChips() -->
                 <div class="svc-chip-bar" id="pm-task-filter-chips">
                   <button class="svc-chip active" data-pmtaskfilter="">All</button>
-                  <button class="svc-chip" data-pmtaskfilter="todo">To Do</button>
-                  <button class="svc-chip" data-pmtaskfilter="in_progress">In Progress</button>
-                  <button class="svc-chip" data-pmtaskfilter="review">Review</button>
-                  <button class="svc-chip" data-pmtaskfilter="done">Done</button>
                 </div>
-                <button class="svc-form-btn svc-form-btn--primary" id="pm-tasks-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
+                <button class="svc-form-btn" id="pm-milestone-new-btn" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-flag"></i> New Milestone</button>
+                <button class="svc-form-btn svc-form-btn--primary" id="pm-tasks-new-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> New Task</button>
               </div>
-              <table class="crm-table" id="pm-tasks-table">
-                <thead>
-                  <tr>
-                    <th style="width:28px"></th>
-                    <th>Task</th>
-                    <th>Priority</th>
-                    <th>Assigned</th>
-                    <th>Due</th>
-                    <th>Status</th>
-                    <th style="width:40px"></th>
-                  </tr>
-                </thead>
-                <tbody id="pm-tasks-body">
-                  <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
-                </tbody>
-              </table>
+              <!-- Both views are rendered from pm.milestones + pm.tasks by loadPmTasks() -->
+              <div id="pm-task-groups"></div>
+              <div id="pm-task-timeline" class="pm-tl" style="display:none"></div>
             </div>
 
             <div class="inv-tab-pane" id="pm-pane-mytask">
@@ -9058,7 +9138,7 @@
                     <th>Task</th>
                     <th>Priority</th>
                     <th>Due</th>
-                    <th>Status</th>
+                    <th>Stage</th>
                     <th style="width:40px"></th>
                   </tr>
                 </thead>
@@ -9073,6 +9153,319 @@
       </div><!-- /pm-projects-view -->
 
     </div><!-- /panel-projects -->
+
+    <!-- ── My Projects Panel (Assigned Project Access) — tasks assigned to me ── -->
+    <div class="content-panel" id="panel-my-projects" style="flex-direction:column">
+
+      <div id="pm-mine-view" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+
+      <!-- Inner tabs -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-mpsub="overview"><i class="fa fa-house"></i> Overview</button>
+        <button class="fin-subnav-btn"         data-mpsub="tasks"><i class="fa fa-list-check"></i> My Tasks</button>
+        <button class="fin-subnav-btn"         data-mpsub="board"><i class="fa fa-table-columns"></i> Kanban Board</button>
+        <button class="fin-subnav-btn"         data-mpsub="calendar"><i class="fa fa-calendar-days"></i> Calendar</button>
+        <button class="fin-subnav-btn"         data-mpsub="inbox"><i class="fa fa-inbox"></i> Inbox <span class="mp-ib-badge" data-ib-unread style="display:none"></span></button>
+        <button class="fin-subnav-btn"         data-mpsub="achievements"><i class="fa fa-trophy"></i> My Achievements</button>
+      </div>
+
+      <!-- ── Overview view ── -->
+      <div id="mp-overview-view" style="display:flex;flex-direction:column;flex:1;overflow-y:auto">
+        <div class="mp-home">
+          <!-- Greeting (left) + summary pill (right) -->
+          <header class="mp-home-head">
+            <div>
+              <div class="mp-home-date" id="mp-ov-date"></div>
+              <h1 class="mp-home-greet" id="mp-ov-greet"></h1>
+            </div>
+            <div class="mp-home-pill" id="mp-ov-pill"></div>
+          </header>
+
+          <div class="mp-home-layout">
+            <!-- ── Main column ── -->
+            <div class="mp-home-main">
+              <!-- This week strip -->
+              <section class="mp-w mp-w--week">
+                <div class="mp-w-head">
+                  <span class="mp-w-title">This week</span>
+                  <button class="mp-w-link" id="mp-ov-cal-btn">Calendar <i class="fa fa-arrow-right"></i></button>
+                </div>
+                <div class="mp-week" id="mp-ov-week"></div>
+              </section>
+
+              <div class="mp-home-grid">
+                <!-- My tasks widget -->
+                <section class="mp-w">
+                  <div class="mp-w-head">
+                    <span class="mp-w-title">My tasks</span>
+                    <button class="mp-w-link" id="mp-ov-tasks-all">View all <i class="fa fa-arrow-right"></i></button>
+                  </div>
+                  <div class="mp-w-tabs" id="mp-ov-task-tabs"></div>
+                  <button class="mp-w-create" id="mp-ov-task-create"><i class="fa fa-plus"></i> Create task</button>
+                  <div class="mp-w-body" id="mp-ov-task-list"></div>
+                </section>
+
+                <!-- Overdue widget -->
+                <section class="mp-w mp-w--overdue">
+                  <div class="mp-w-head">
+                    <span class="mp-w-title"><i class="fa fa-triangle-exclamation"></i> Overdue <span class="mp-w-count" id="mp-ov-overdue-count"></span></span>
+                    <button class="mp-w-link" id="mp-ov-overdue-all">View all <i class="fa fa-arrow-right"></i></button>
+                  </div>
+                  <div class="mp-w-body" id="mp-ov-overdue"></div>
+                </section>
+              </div>
+
+              <!-- My projects (list) -->
+              <section class="mp-w">
+                <div class="mp-w-head">
+                  <span class="mp-w-title">My projects</span>
+                  <button class="mp-w-link" id="mp-ov-board-btn">Open board <i class="fa fa-arrow-right"></i></button>
+                </div>
+                <div class="mp-w-tabs" id="mp-ov-proj-tabs"></div>
+                <div class="mp-plist" id="mp-ov-projects"></div>
+              </section>
+            </div>
+
+            <!-- ── Right sidebar ── -->
+            <aside class="mp-home-side">
+              <section class="mp-w">
+                <div class="mp-w-head"><span class="mp-w-title">Your progress</span></div>
+                <div id="mp-ov-progress"></div>
+              </section>
+
+              <section class="mp-w">
+                <div class="mp-w-head">
+                  <span class="mp-w-title">Team <span class="mp-w-count" id="mp-ov-team-count"></span></span>
+                  <button class="mp-w-link" id="mp-ov-team-msg" title="Message your team in the Inbox">Message <i class="fa fa-paper-plane"></i></button>
+                </div>
+                <div class="mp-team" id="mp-ov-team"></div>
+              </section>
+
+              <section class="mp-w">
+                <div class="mp-w-head"><span class="mp-w-title">Recent activity</span></div>
+                <div class="mp-feed" id="mp-ov-activity"></div>
+              </section>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── My Tasks view (sortable table) ── -->
+      <div id="mp-tasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <div class="finance-search-wrap" style="max-width:240px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mp-task-search" placeholder="Search tasks…" autocomplete="off">
+          </div>
+          <div class="svc-chip-bar" id="mp-task-filter-chips">
+            <button class="svc-chip" data-mptaskfilter="all">All</button>
+            <button class="svc-chip active" data-mptaskfilter="open">Open</button>
+            <button class="svc-chip" data-mptaskfilter="today">Due Today</button>
+            <button class="svc-chip" data-mptaskfilter="overdue">Overdue</button>
+            <button class="svc-chip" data-mptaskfilter="done">Completed</button>
+            <button class="svc-chip" data-mptaskfilter="cancelled">Cancelled</button>
+          </div>
+          <select class="mp-filter-select" id="mp-task-project" title="Filter by project"></select>
+          <select class="mp-filter-select" id="mp-task-milestone" title="Filter by milestone"></select>
+          <button class="svc-form-btn svc-form-btn--primary" id="mp-task-add-btn" style="margin-left:auto;padding:5px 14px;font-size:12px;white-space:nowrap">
+            <i class="fa fa-plus"></i> New Task
+          </button>
+        </div>
+        <!-- Owner: delete requests from teammates waiting for approval -->
+        <div class="mp-delreq-banner" id="mp-delreq-banner" style="display:none"></div>
+        <div style="flex:1;overflow-y:auto;padding:0 12px 12px">
+          <table class="crm-table mp-sort-table" id="mp-tasks-table">
+            <thead>
+              <tr>
+                <th style="width:28px"></th>
+                <th data-mpsort="title">Task</th>
+                <th data-mpsort="project_name">Project</th>
+                <th data-mpsort="priority">Priority</th>
+                <th data-mpsort="due_date">Due</th>
+                <th data-mpsort="status">Stage</th>
+                <th style="width:40px"></th>
+              </tr>
+            </thead>
+            <tbody id="mp-tasks-body">
+              <tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:24px">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Kanban view ── -->
+      <div id="mp-board-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <select class="mp-filter-select" id="mp-board-project" title="Filter by project"></select>
+          <select class="mp-filter-select" id="mp-board-milestone" title="Filter by milestone"></select>
+          <select class="mp-filter-select" id="mp-board-priority" title="Filter by priority">
+            <option value="">All priorities</option>
+            <option value="high">High</option>
+            <option value="normal">Normal</option>
+            <option value="low">Low</option>
+          </select>
+          <select class="mp-filter-select" id="mp-board-due" title="Filter by due date">
+            <option value="">Any due date</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due today</option>
+            <option value="week">Due in 7 days</option>
+            <option value="none">No due date</option>
+          </select>
+          <span id="mp-board-hint" style="font-size:11px;color:var(--text-muted);margin-left:auto">Drag a card to another column to change its stage.</span>
+        </div>
+        <!-- Columns: built-in statuses + custom statuses of the visible projects (built by renderMpBoard) -->
+        <div id="mp-board-columns" class="pm-kanban-wrap"></div>
+      </div>
+
+      <!-- ── Calendar view (tasks by due date: month / week / agenda + day panel) ── -->
+      <div id="mp-calendar-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar mp-cal-toolbar">
+          <div class="mp-cal-navgroup">
+            <button class="mp-cal-nav" id="mp-cal-prev" title="Previous (←)"><i class="fa fa-chevron-left"></i></button>
+            <button class="mp-cal-nav" id="mp-cal-today" title="Jump to today (T)">Today</button>
+            <button class="mp-cal-nav" id="mp-cal-next" title="Next (→)"><i class="fa fa-chevron-right"></i></button>
+          </div>
+          <div class="mp-cal-titlebox">
+            <span class="mp-cal-title" id="mp-cal-title"></span>
+            <span class="mp-cal-subtitle" id="mp-cal-subtitle"></span>
+          </div>
+          <div class="mp-cal-modes" id="mp-cal-modes">
+            <button class="mp-cal-mode active" data-cal-mode="month" title="Month view (M)"><i class="fa fa-calendar-days"></i> Month</button>
+            <button class="mp-cal-mode" data-cal-mode="week" title="Week view (W)"><i class="fa fa-calendar-week"></i> Week</button>
+            <button class="mp-cal-mode" data-cal-mode="agenda" title="Agenda list (A)"><i class="fa fa-list-ul"></i> Agenda</button>
+          </div>
+          <div class="mp-cal-filters">
+            <div class="finance-search-wrap mp-cal-search">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="mp-cal-search" placeholder="Search tasks…" autocomplete="off">
+            </div>
+            <select class="mp-filter-select" id="mp-cal-project" title="Filter by project"></select>
+            <select class="mp-filter-select" id="mp-cal-milestone" title="Filter by milestone"></select>
+            <select class="mp-filter-select" id="mp-cal-priority" title="Filter by priority">
+              <option value="">All priorities</option>
+              <option value="high">High</option>
+              <option value="normal">Normal</option>
+              <option value="low">Low</option>
+            </select>
+            <label class="mp-cal-toggle"><input type="checkbox" id="mp-cal-show-done" checked> Show done</label>
+          </div>
+          <button class="svc-form-btn svc-form-btn--primary" id="mp-cal-add" style="padding:5px 14px;font-size:12px;white-space:nowrap">
+            <i class="fa fa-plus"></i> New Task
+          </button>
+        </div>
+        <div class="mp-cal-statbar">
+          <div class="mp-cal-stats" id="mp-cal-stats"></div>
+          <div class="mp-cal-legend">
+            <span><i class="mp-cal-lg mp-cal-lg--overdue"></i>Overdue</span>
+            <span><i class="mp-cal-lg mp-cal-lg--today"></i>Due today</span>
+            <span><i class="fa fa-arrow-up" style="color:#ef4444"></i>High priority</span>
+            <span><i class="fa fa-circle-check" style="color:#22c55e"></i>Done</span>
+            <span><i class="fa fa-flag-checkered" style="color:#8b5cf6"></i>Project deadline</span>
+          </div>
+        </div>
+        <div class="mp-cal-body">
+          <div class="mp-cal-wrap" id="mp-cal-wrap">
+            <div class="mp-cal-weekdays" id="mp-cal-weekdays"></div>
+            <div class="mp-cal-grid" id="mp-cal-grid"></div>
+            <div class="mp-cal-agenda" id="mp-cal-agenda" style="display:none"></div>
+          </div>
+          <aside class="mp-cal-side" id="mp-cal-side"></aside>
+        </div>
+        <div class="mp-cal-hint" id="mp-cal-hint">
+          <i class="fa fa-lightbulb"></i> Click a day to see its tasks · double-click a day to add a task on it · <kbd>←</kbd> <kbd>→</kbd> move · <kbd>T</kbd> today · <kbd>M</kbd> <kbd>W</kbd> <kbd>A</kbd> switch view
+          <span id="mp-cal-nodue" style="margin-left:auto"></span>
+        </div>
+      </div>
+
+      <!-- ── Inbox view (Gmail-style messages between project team members) ── -->
+      <div id="mp-inbox-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="mp-ib">
+          <aside class="mp-ib-nav">
+            <button class="mp-ib-compose" id="mp-ib-compose" title="Compose (C)"><i class="fa fa-pen"></i> Compose</button>
+            <div class="mp-ib-folders" id="mp-ib-folders">
+              <button class="mp-ib-folder active" data-ib-folder="inbox"><i class="fa fa-inbox"></i><span>Inbox</span><b data-ib-count="inbox"></b></button>
+              <button class="mp-ib-folder" data-ib-folder="unread"><i class="fa fa-envelope"></i><span>Unread</span></button>
+              <button class="mp-ib-folder" data-ib-folder="starred"><i class="fa fa-star"></i><span>Starred</span><b data-ib-count="starred"></b></button>
+              <button class="mp-ib-folder" data-ib-folder="sent"><i class="fa fa-paper-plane"></i><span>Sent</span></button>
+              <button class="mp-ib-folder" data-ib-folder="archive"><i class="fa fa-box-archive"></i><span>Archive</span></button>
+              <button class="mp-ib-folder" data-ib-folder="trash"><i class="fa fa-trash-can"></i><span>Trash</span></button>
+            </div>
+            <div class="mp-ib-nav-label">Projects</div>
+            <div class="mp-ib-projects" id="mp-ib-projects"></div>
+          </aside>
+
+          <section class="mp-ib-main">
+            <div class="mp-ib-toolbar">
+              <label class="mp-ib-check" title="Select all"><input type="checkbox" id="mp-ib-selall"></label>
+              <button class="mp-ib-tool" id="mp-ib-refresh" title="Refresh"><i class="fa fa-rotate-right"></i></button>
+              <div class="mp-ib-bulk" id="mp-ib-bulk"></div>
+              <div class="finance-search-wrap mp-ib-search">
+                <i class="fa fa-magnifying-glass"></i>
+                <input type="text" id="mp-ib-search" placeholder="Search mail — subject, text, people, files  ( / )" autocomplete="off">
+              </div>
+              <div class="mp-ib-pager">
+                <span id="mp-ib-range"></span>
+                <button class="mp-ib-tool" id="mp-ib-prev" title="Newer"><i class="fa fa-chevron-left"></i></button>
+                <button class="mp-ib-tool" id="mp-ib-next" title="Older"><i class="fa fa-chevron-right"></i></button>
+              </div>
+            </div>
+            <div class="mp-ib-split">
+              <div class="mp-ib-list" id="mp-ib-list"></div>
+              <div class="mp-ib-reader" id="mp-ib-reader"></div>
+            </div>
+            <div class="mp-cal-hint">
+              <i class="fa fa-lightbulb"></i> <kbd>C</kbd> compose · <kbd>J</kbd> <kbd>K</kbd> next / previous · <kbd>R</kbd> reply · <kbd>E</kbd> archive · <kbd>#</kbd> trash · <kbd>S</kbd> star · <kbd>Shift</kbd>+<kbd>U</kbd> mark unread · <kbd>/</kbd> search · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> send
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ── My Achievements view (my completed tasks, project by project) ── -->
+      <div id="mp-achievements-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="finance-toolbar" style="gap:8px;flex-wrap:wrap">
+          <div class="finance-search-wrap" style="max-width:240px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="mp-ach-search" placeholder="Search completed tasks…" autocomplete="off">
+          </div>
+          <div class="svc-chip-bar" id="mp-ach-period-chips">
+            <button class="svc-chip active" data-ach-period="all">All time</button>
+            <button class="svc-chip" data-ach-period="year">This year</button>
+            <button class="svc-chip" data-ach-period="month">This month</button>
+            <button class="svc-chip" data-ach-period="week">Last 7 days</button>
+          </div>
+          <select class="mp-filter-select" id="mp-ach-project" title="Filter by project"></select>
+        </div>
+        <div class="mp-ach" style="flex:1;overflow-y:auto">
+          <div class="mp-ach-stats" id="mp-ach-stats"></div>
+          <div class="mp-ach-layout">
+            <!-- Completed tasks, divided by project -->
+            <section class="mp-ach-card mp-ach-done">
+              <div class="mp-ach-card-head">
+                <span><i class="fa fa-circle-check"></i> Completed tasks <span class="mp-ach-muted" id="mp-ach-done-sum"></span></span>
+                <button class="mp-ach-link" id="mp-ach-toggle-all"></button>
+              </div>
+              <div class="mp-ach-projects" id="mp-ach-projects"></div>
+            </section>
+            <aside class="mp-ach-side">
+              <section class="mp-ach-card">
+                <div class="mp-ach-card-head">
+                  <span><i class="fa fa-fire"></i> Activity · 12 weeks</span>
+                  <span class="mp-ach-muted" id="mp-ach-activity-sum"></span>
+                </div>
+                <div class="mp-ach-heat" id="mp-ach-heat"></div>
+              </section>
+              <section class="mp-ach-card">
+                <div class="mp-ach-card-head"><span><i class="fa fa-medal"></i> Badges</span><span class="mp-ach-muted" id="mp-ach-badge-sum"></span></div>
+                <div class="mp-ach-badges" id="mp-ach-badges"></div>
+              </section>
+            </aside>
+          </div>
+        </div>
+      </div>
+
+      </div><!-- /pm-mine-view -->
+
+    </div><!-- /panel-my-projects -->
 
     <!-- ── Event Panel (Brands + Reporters) ─────────────────────────── -->
     <div class="content-panel" id="panel-event-mgmt" style="flex-direction:column">
@@ -10110,6 +10503,189 @@
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crd-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="crd-modal-save"><i class="fa fa-floppy-disk"></i> Save Coordinator</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: New Task (assigned to me) Modal ── -->
+  <div class="modal-overlay" id="mp-task-modal" style="display:none">
+    <div class="po-aim-shell" style="width:min(820px,94vw)">
+      <div class="po-aim-header">
+        <i class="fa fa-list-check" style="color:var(--accent)"></i>
+        <span>New Task</span>
+        <button class="psm-close" id="mp-task-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="mp-task-modal-alert" class="svc-form-alert" style="display:none"></div>
+        <div style="font-size:11px;color:var(--text-muted)"><i class="fa fa-user-check" style="margin-right:4px"></i>The task will be assigned to you.</div>
+
+        <div class="po-field">
+          <label class="po-field-label">Project <span class="po-required">*</span></label>
+          <select id="mp-tf-project" class="po-field-input"></select>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Title <span class="po-required">*</span></label>
+          <input type="text" id="mp-tf-title" class="po-field-input" placeholder="What needs to be done?" maxlength="200">
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Description</label>
+          <textarea id="mp-tf-desc" class="po-field-input" rows="5" maxlength="5000" placeholder="Details (optional)"></textarea>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="po-field">
+            <label class="po-field-label">Stage</label>
+            <select id="mp-tf-status" class="po-field-input"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Priority</label>
+            <select id="mp-tf-priority" class="po-field-input">
+              <option value="low">Low</option>
+              <option value="normal" selected>Normal</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Due Date</label>
+            <input type="date" id="mp-tf-due" class="po-field-input">
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Estimated Hours</label>
+            <input type="number" id="mp-tf-hours" class="po-field-input" min="0" step="0.5" placeholder="Optional">
+          </div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-task-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="mp-task-modal-save"><i class="fa fa-floppy-disk"></i> Create Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Inbox compose window (docked bottom-right, like Gmail) ── -->
+  <div class="mp-ib-compose-win" id="mp-ib-compose-win" style="display:none">
+    <div class="mp-ib-cw-head" id="mp-ib-cw-head">
+      <span id="mp-ib-cw-title">New Message</span>
+      <button class="mp-ib-cw-btn" id="mp-ib-cw-min" title="Minimize"><i class="fa fa-minus"></i></button>
+      <button class="mp-ib-cw-btn" id="mp-ib-cw-max" title="Full screen"><i class="fa fa-up-right-and-down-left-from-center"></i></button>
+      <button class="mp-ib-cw-btn" id="mp-ib-cw-close" title="Save & close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="mp-ib-cw-body">
+      <div class="mp-ib-cw-row mp-ib-cw-to">
+        <span class="mp-ib-cw-label">To</span>
+        <div class="mp-ib-chips" id="mp-ib-cw-chips">
+          <input type="text" id="mp-ib-cw-to" placeholder="Type a teammate's name…" autocomplete="off">
+        </div>
+        <div class="mp-ib-suggest" id="mp-ib-cw-suggest" style="display:none"></div>
+      </div>
+      <div class="mp-ib-cw-row">
+        <span class="mp-ib-cw-label">Project</span>
+        <select id="mp-ib-cw-project" class="mp-ib-cw-select" title="Tag the conversation with a project (optional)"></select>
+        <button class="mp-ib-cw-link" id="mp-ib-cw-team" style="display:none" title="Add everyone on this project's team"><i class="fa fa-users"></i> Add whole team</button>
+      </div>
+      <div class="mp-ib-cw-row">
+        <input type="text" id="mp-ib-cw-subject" class="mp-ib-cw-subject" placeholder="Subject" maxlength="200">
+      </div>
+      <textarea id="mp-ib-cw-text" class="mp-ib-cw-text" placeholder="Write your message…" maxlength="20000"></textarea>
+      <div class="mp-ib-cw-files" id="mp-ib-cw-files"></div>
+      <div class="mp-ib-cw-alert" id="mp-ib-cw-alert" style="display:none"></div>
+    </div>
+    <div class="mp-ib-cw-foot">
+      <button class="mp-ib-send" id="mp-ib-cw-send" title="Send (Ctrl+Enter)"><i class="fa fa-paper-plane"></i> Send</button>
+      <button class="mp-ib-tool" id="mp-ib-cw-attach" title="Attach files"><i class="fa fa-paperclip"></i></button>
+      <span style="flex:1"></span>
+      <button class="mp-ib-tool" id="mp-ib-cw-discard" title="Discard draft"><i class="fa fa-trash-can"></i></button>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Task Detail Modal ── -->
+  <div class="modal-overlay" id="mp-detail-modal" style="display:none">
+    <div class="po-aim-shell mpd-shell">
+      <div class="mpd-header">
+        <div class="mpd-crumb" id="mp-detail-heading">Task Details</div>
+        <button class="mpd-icon-btn" id="mp-detail-close" title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="mpd-body" id="mp-detail-body"></div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Request Task Deletion (non-owner asks the task owner) ── -->
+  <div class="modal-overlay" id="mp-delreq-send-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:440px;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-trash-can-arrow-up" style="color:#dc2626"></i>
+        <span>Request task deletion</span>
+        <button class="psm-close" id="mp-delreq-send-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:10px">
+        <div style="font-size:12px;line-height:1.5" id="mp-delreq-send-text"></div>
+        <label style="font-size:11px;color:var(--text-muted)" for="mp-delreq-send-reason">Reason (optional)</label>
+        <textarea id="mp-delreq-send-reason" rows="3" maxlength="500" placeholder="Why should this task be deleted?" style="resize:vertical;font:inherit;font-size:12px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text)"></textarea>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-delreq-send-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="mp-delreq-send-submit"><i class="fa fa-paper-plane"></i> Send request</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Delete Requests (owner approves / rejects; also opened from notifications) ── -->
+  <div class="modal-overlay" id="mp-delreq-modal" style="display:none">
+    <div class="po-aim-shell" style="width:560px;max-height:84vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-trash-can" style="color:#dc2626"></i>
+        <span>Task delete requests</span>
+        <button class="psm-close" id="mp-delreq-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="mp-delreq-body" style="display:flex;flex-direction:column;gap:10px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-delreq-done"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── My Projects: Project Detail Modal (opened from a task or a project card) ── -->
+  <div class="modal-overlay" id="mp-project-modal" style="display:none">
+    <div class="po-aim-shell" style="width:680px;max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-diagram-project" style="color:var(--accent)"></i>
+        <span id="mp-project-heading">Project Details</span>
+        <button class="psm-close" id="mp-project-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="mp-project-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="mp-project-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-primary" id="mp-project-board"><i class="fa fa-table-columns"></i> Open Board</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Projects: Task Attachments Modal (files per task — upload / download) ── -->
+  <div class="modal-overlay" id="task-files-modal" style="display:none">
+    <div class="po-aim-shell" style="width:560px;max-height:80vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-paperclip" style="color:var(--accent)"></i>
+        <span id="task-files-heading">Attachments</span>
+        <button class="psm-close" id="task-files-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="task-files-body" style="display:flex;flex-direction:column;gap:10px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="task-files-cancel"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Team Member Profile Modal (Projects + My Projects) ── -->
+  <div class="modal-overlay" id="team-profile-modal" style="display:none">
+    <div class="po-aim-shell" style="width:520px;max-height:82vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-id-badge" style="color:var(--accent)"></i>
+        <span id="team-profile-heading">Team Member</span>
+        <button class="psm-close" id="team-profile-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="team-profile-body" style="display:flex;flex-direction:column;gap:14px;overflow-y:auto"></div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="team-profile-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-primary" id="team-profile-message" style="display:none"><i class="fa fa-envelope"></i> Send message</button>
       </div>
     </div>
   </div>
@@ -15190,18 +15766,21 @@
               <span class="cm-dv-sales-badge" id="cm-dv-sales-badge">0 sales</span>
             </div>
           </div>
+          <div class="cm-dv-rental-alert" id="cm-dv-rental-alert" style="display:none"></div>
           <div class="cm-dv-fields" id="cm-dv-fields"></div>
           <div class="cm-dv-tabs" id="cm-dv-tabs">
             <button class="cm-dv-tab active" data-cm-tab="sales"><i class="fa fa-clock-rotate-left"></i> Recent Sales</button>
             <button class="cm-dv-tab" data-cm-tab="subs"><i class="fa fa-rotate"></i> Subscriptions</button>
             <button class="cm-dv-tab" data-cm-tab="warranty"><i class="fa fa-shield-halved"></i> Warranty</button>
             <button class="cm-dv-tab" data-cm-tab="credit"><i class="fa fa-hand-holding-dollar"></i> Credit / Due</button>
+            <button class="cm-dv-tab" data-cm-tab="rentals"><i class="fa fa-calendar-days"></i> Rentals <span class="cm-dv-tab-count" id="cm-dv-rentals-count" style="display:none"></span></button>
           </div>
           <div class="cm-dv-tab-panels" id="cm-dv-tab-panels">
             <div class="cm-dv-tab-panel cm-dv-history" id="cm-dv-history"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-subs" style="display:none"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-warranty" style="display:none"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-credit" style="display:none"></div>
+            <div class="cm-dv-tab-panel" id="cm-dv-panel-rentals" style="display:none"></div>
           </div>
           <div class="cm-dv-actions">
             <button class="cm-btn-edit"   id="cm-btn-edit"><i class="fa fa-pen"></i> Edit</button>
@@ -17131,6 +17710,30 @@
 </div>
 
 <!-- ── About Zeebroo POS Modal ──────────────────────────────────────────── -->
+<!-- Verify email modal (PosAuthApiController verifyEmail / resendEmailVerification) -->
+<div id="email-verify-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:min(420px,94vw)">
+    <div class="po-aim-header">
+      <i class="fa fa-envelope-circle-check" style="color:var(--accent)"></i>
+      <span>Verify Your Email</span>
+      <button class="psm-close" id="email-verify-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body">
+      <p id="email-verify-msg" style="margin:0 0 12px;font-size:13px;color:var(--text-muted);line-height:1.5"></p>
+      <div id="email-verify-alert" class="alert alert-error" style="display:none"></div>
+      <div class="po-field">
+        <label class="po-field-label">6-digit code</label>
+        <input type="text" id="email-verify-otp" class="po-field-input otp-input" inputmode="numeric" maxlength="6" placeholder="••••••" autocomplete="one-time-code">
+      </div>
+      <p style="margin:8px 0 0;font-size:12px;color:var(--text-muted)">Didn't get it? <a href="#" id="email-verify-resend">Send a new code</a></p>
+    </div>
+    <div class="po-aim-footer">
+      <button class="po-btn-ghost" id="email-verify-cancel"><i class="fa fa-xmark"></i> Later</button>
+      <button class="po-btn-primary" id="email-verify-submit"><i class="fa fa-check"></i> Verify Email</button>
+    </div>
+  </div>
+</div>
+
 <div id="about-modal-overlay" class="modal-overlay" style="display:none">
   <div class="po-aim-shell" style="width:min(420px,94vw)">
     <div class="po-aim-header">
@@ -17205,8 +17808,16 @@
           <div style="display:flex;align-items:center;margin-bottom:10px">
             <span class="tpm-section-label" style="padding:0">Profile Details</span>
           </div>
-          <div style="display:flex;flex-direction:column;align-items:center;padding:6px 0 18px">
-            <div class="tpm-avatar" id="mp-avatar" style="width:64px;height:64px;font-size:26px">S</div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:6px 0 18px">
+            <button type="button" class="mp-avatar-btn" id="mp-avatar-btn" title="Change profile photo">
+              <div class="tpm-avatar" id="mp-avatar" style="width:80px;height:80px;font-size:32px">S</div>
+              <span class="mp-avatar-overlay"><i class="fa fa-camera"></i></span>
+            </button>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="po-btn-outline" id="mp-avatar-change"><i class="fa fa-camera"></i> Change Photo</button>
+              <button type="button" class="po-btn-ghost" id="mp-avatar-remove" style="display:none"><i class="fa fa-trash"></i> Remove</button>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted)">JPG, PNG, WEBP or GIF · max 5 MB</span>
           </div>
           <div class="po-field">
             <label class="po-field-label">Full Name <span class="po-required">*</span></label>

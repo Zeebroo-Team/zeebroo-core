@@ -39,11 +39,22 @@ class PosNotification extends Model
 
     public const TYPE_SUBSCRIPTION_RENEWAL_UPCOMING = 'subscription_renewal_upcoming';
 
+    public const TYPE_PROJECT_MEMBER_ADDED = 'project_member_added';
+
+    public const TYPE_TASK_ASSIGNED = 'task_assigned';
+
+    public const TYPE_INBOX_MESSAGE = 'inbox_message';
+
+    public const TYPE_TASK_DELETE_REQUESTED = 'task_delete_requested';
+
+    public const TYPE_TASK_DELETE_DECIDED = 'task_delete_decided';
+
     protected $table = 'pos_notifications';
 
     protected $fillable = [
         'business_id',
         'branch_id',
+        'user_id',
         'type',
         'title',
         'message',
@@ -91,5 +102,12 @@ class PosNotification extends Model
     public function scopeNotDismissed(Builder $query): Builder
     {
         return $query->whereNull('dismissed_at');
+    }
+
+    /** Business-wide notifications plus the ones addressed to this user. */
+    public function scopeVisibleTo(Builder $query, ?int $userId): Builder
+    {
+        return $query->where(fn (Builder $q) => $q->whereNull('user_id')
+            ->when($userId, fn (Builder $q) => $q->orWhere('user_id', $userId)));
     }
 }

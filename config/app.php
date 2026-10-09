@@ -56,6 +56,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Hidden User Email Domains
+    |--------------------------------------------------------------------------
+    |
+    | Comma-separated email domains (e.g. throwaway/test domains) whose users
+    | are hidden from the admin User Management list.
+    |
+    */
+
+    'hidden_user_email_domains' => array_values(array_filter(array_map(
+        fn ($domain) => strtolower(ltrim(trim($domain), '@')),
+        explode(',', (string) env('HIDDEN_USER_EMAIL_DOMAINS', ''))
+    ))),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |

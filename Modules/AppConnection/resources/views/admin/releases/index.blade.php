@@ -267,6 +267,7 @@
                         data-release-date="{{ $release->release_date?->toDateString() }}"
                         data-channel="{{ $release->channel }}"
                         data-is-latest="{{ $release->is_latest ? '1' : '0' }}"
+                        data-notified="{{ $release->users_notified_at ? '1' : '0' }}"
                         data-notes="{{ implode("\n", $release->notes ?? []) }}"
                         data-windows-url="{{ $release->windows_url }}"
                         data-macos-url="{{ $release->macos_url }}"
@@ -369,6 +370,13 @@
           </label>
         </div>
 
+        <div class="arl-field" id="arl-notify-field">
+          <label class="arl-check-row" style="text-transform:none;letter-spacing:0;font-weight:normal;cursor:pointer">
+            <input type="checkbox" name="notify_users" id="arl-f-notify" value="1" {{ old('notify_users', $arlIsEditReopen ? 0 : 1) ? 'checked' : '' }}>
+            <span><strong>Email users</strong> — announce this release using the <a href="{{ route('admin.automated-emails.edit', 'new_release') }}" target="_blank">New release</a> template (sent once per release)</span>
+          </label>
+        </div>
+
         <div class="arl-field">
           <label>Release Notes</label>
           <textarea name="notes" id="arl-f-notes" rows="4"
@@ -431,6 +439,8 @@
   var releaseDateEl = document.getElementById('arl-f-release-date');
   var channelEl     = document.getElementById('arl-f-channel');
   var isLatestEl    = document.getElementById('arl-f-is-latest');
+  var notifyEl      = document.getElementById('arl-f-notify');
+  var notifyField   = document.getElementById('arl-notify-field');
   var notesEl       = document.getElementById('arl-f-notes');
   var windowsEl     = document.getElementById('arl-f-windows-url');
   var macosEl       = document.getElementById('arl-f-macos-url');
@@ -453,6 +463,8 @@
     releaseDateEl.value = new Date().toISOString().slice(0, 10);
     channelEl.value = 'stable';
     isLatestEl.checked = true;
+    notifyField.style.display = '';
+    notifyEl.checked = true;
     notesEl.value = '';
     windowsEl.value = '';
     macosEl.value = '';
@@ -490,6 +502,9 @@
       releaseDateEl.value = btn.getAttribute('data-release-date');
       channelEl.value = btn.getAttribute('data-channel');
       isLatestEl.checked = btn.getAttribute('data-is-latest') === '1';
+      // Already announced releases can't be emailed again.
+      notifyField.style.display = btn.getAttribute('data-notified') === '1' ? 'none' : '';
+      notifyEl.checked = false;
       notesEl.value = btn.getAttribute('data-notes');
       windowsEl.value = btn.getAttribute('data-windows-url');
       macosEl.value = btn.getAttribute('data-macos-url');

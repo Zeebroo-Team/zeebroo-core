@@ -466,7 +466,7 @@ class BusinessController extends Controller
             'branch_name' => ['required', 'string', 'max:255'],
             'branch_description' => ['nullable', 'string', 'max:5000'],
             'branch_address' => ['nullable', 'string', 'max:2000'],
-            'branch_phone' => ['nullable', 'string', 'max:40'],
+            'branch_phone' => ['required', 'string', 'max:40'],
             'branch_email' => ['nullable', 'email', 'max:255'],
             'data_storage_type' => ['required', Rule::in(['online', 'self_hosted'])],
             'data_agreement_accepted' => ['required_if:data_storage_type,online', 'nullable', 'accepted'],

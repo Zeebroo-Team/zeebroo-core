@@ -316,7 +316,18 @@ class AdminUserController extends Controller
             ]);
         }
 
-        if ($reason = $this->users->undeletableReason($user)) {
+        // Owners' businesses/accounts cascade away with them, so that path needs the admin
+        // to retype the user's email — a plain click is not enough for that much data.
+        $withOwnedData = $request->boolean('with_owned_data')
+            && strcasecmp(trim((string) $request->input('confirm_email')), (string) $user->email) === 0;
+
+        if ($request->boolean('with_owned_data') && ! $withOwnedData) {
+            return redirect()->route('admin.users.index')->withErrors([
+                'delete' => __('The email you typed did not match. Nothing was deleted.'),
+            ]);
+        }
+
+        if ($reason = $this->users->undeletableReason($user, $withOwnedData)) {
             return redirect()->route('admin.users.index')->withErrors(['delete' => $reason]);
         }
 

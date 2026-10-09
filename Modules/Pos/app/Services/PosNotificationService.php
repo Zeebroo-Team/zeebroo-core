@@ -2,6 +2,7 @@
 
 namespace Modules\Pos\Services;
 
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Modules\Account\Models\Investment;
 use Modules\Account\Models\Property;
@@ -14,6 +15,11 @@ use Modules\Payment\Models\Payment;
 use Modules\Pos\Models\PosNotification;
 use Modules\Pos\Models\Sale;
 use Modules\Product\Models\Product;
+use Modules\ProjectManage\Models\InboxMessage;
+use Modules\ProjectManage\Models\InboxThread;
+use Modules\ProjectManage\Models\Project;
+use Modules\ProjectManage\Models\Task;
+use Modules\ProjectManage\Models\TaskDeleteRequest;
 use Modules\Purchase\Models\ChequePayment;
 use Modules\Purchase\Models\Purchase;
 
@@ -53,10 +59,9 @@ class PosNotificationService
     }
 
     /** @return array{data: array<int, array<string, mixed>>, unread_count: int} */
-    public function list(Business $business, ?string $status = null, int $limit = 50): array
+    public function list(Business $business, ?string $status = null, int $limit = 50, ?int $userId = null): array
     {
-        $query = PosNotification::query()
-            ->where('business_id', $business->id)
+        $query = $this->visible($business, $userId)
             ->notDismissed()
             ->orderByDesc('created_at');
 
@@ -67,7 +72,7 @@ class PosNotificationService
         }
 
         $notifications = $query->limit($limit)->get();
-        $unreadCount = PosNotification::query()->where('business_id', $business->id)->notDismissed()->unread()->count();
+        $unreadCount = $this->visible($business, $userId)->notDismissed()->unread()->count();
 
         return [
             'data' => $notifications->map(fn (PosNotification $n) => $this->format($n))->all(),
@@ -75,48 +80,42 @@ class PosNotificationService
         ];
     }
 
-    public function markRead(Business $business, int $id): bool
+    public function markRead(Business $business, int $id, ?int $userId = null): bool
     {
-        return (bool) PosNotification::query()
-            ->where('business_id', $business->id)
+        return (bool) $this->visible($business, $userId)
             ->whereKey($id)
             ->update(['read_at' => now()]);
     }
 
-    public function markUnread(Business $business, int $id): bool
+    public function markUnread(Business $business, int $id, ?int $userId = null): bool
     {
-        return (bool) PosNotification::query()
-            ->where('business_id', $business->id)
+        return (bool) $this->visible($business, $userId)
             ->whereKey($id)
             ->update(['read_at' => null]);
     }
 
-    public function markAllRead(Business $business): int
+    public function markAllRead(Business $business, ?int $userId = null): int
     {
-        return PosNotification::query()
-            ->where('business_id', $business->id)
+        return $this->visible($business, $userId)
             ->whereNull('read_at')
             ->update(['read_at' => now()]);
     }
 
-    public function delete(Business $business, int $id): bool
+    public function delete(Business $business, int $id, ?int $userId = null): bool
     {
         // Soft-dismiss rather than hard-delete: condition-based notifications
         // (stock, overdue bills, etc.) are re-synced periodically, and without
         // this the sync would just recreate the same alert a few minutes later.
         // upsert() checks dismissed_at and only resurfaces the notification if
         // its underlying condition has materially changed.
-        return (bool) PosNotification::query()
-            ->where('business_id', $business->id)
+        return (bool) $this->visible($business, $userId)
             ->whereKey($id)
             ->update(['dismissed_at' => now()]);
     }
 
-    public function clearAll(Business $business): int
+    public function clearAll(Business $business, ?int $userId = null): int
     {
-        return PosNotification::query()
-            ->where('business_id', $business->id)
-            ->delete();
+        return $this->visible($business, $userId)->delete();
     }
 
     /** @return array<string, mixed> */
@@ -229,6 +228,156 @@ class PosNotificationService
                 'currency' => $payment->currency,
                 'plan' => $plan,
                 'failure_reason' => $payment->failure_reason,
+            ],
+        );
+    }
+
+    /**
+     * Tells each newly added team member they were added to the project.
+     * The person who added them is skipped — they already know.
+     *
+     * @param int[] $userIds
+     */
+    public function notifyProjectMembersAdded(Project $project, array $userIds, ?int $actorId = null): void
+    {
+        $actor = $actorId ? User::find($actorId)?->name : null;
+
+        foreach ($this->recipients($userIds, $actorId) as $userId) {
+            $this->createForUser(
+                business: $project->business,
+                userId: $userId,
+                type: PosNotification::TYPE_PROJECT_MEMBER_ADDED,
+                referenceType: 'project',
+                referenceId: (int) $project->id,
+                title: 'Added to a project',
+                message: ($actor ? "{$actor} added you to" : 'You were added to')." the project \"{$project->name}\".",
+                payload: ['project_id' => $project->id, 'project_name' => $project->name],
+            );
+        }
+    }
+
+    /**
+     * Tells each newly assigned user about the task — including someone who assigns
+     * it to themselves, so it still shows up in their notifications.
+     *
+     * @param int[] $userIds
+     */
+    public function notifyTaskAssigned(Task $task, array $userIds, ?int $actorId = null): void
+    {
+        $project = $task->project;
+        $actor = $actorId ? User::find($actorId)?->name : null;
+        $due = $task->due_date ? ' Due '.$task->due_date->toFormattedDateString().'.' : '';
+
+        foreach ($this->recipients($userIds, null) as $userId) {
+            $by = match (true) {
+                $userId === (int) $actorId => 'You assigned yourself',
+                $actor !== null => "{$actor} assigned you",
+                default => 'You were assigned',
+            };
+
+            $this->createForUser(
+                business: $project->business,
+                userId: $userId,
+                type: PosNotification::TYPE_TASK_ASSIGNED,
+                referenceType: 'task',
+                referenceId: (int) $task->id,
+                title: 'Task assigned to you',
+                message: "{$by} \"{$task->title}\" in {$project->name}.{$due}",
+                payload: [
+                    'task_id' => $task->id,
+                    'task_title' => $task->title,
+                    'project_id' => $project->id,
+                    'project_name' => $project->name,
+                    'due_date' => $task->due_date?->toDateString(),
+                ],
+            );
+        }
+    }
+
+    /**
+     * Tells each recipient about a new My Projects inbox message. One row per thread,
+     * re-surfaced (unread) on every new message instead of stacking duplicates.
+     *
+     * @param int[] $userIds
+     */
+    public function notifyInboxMessage(InboxThread $thread, InboxMessage $message, array $userIds, ?int $actorId = null): void
+    {
+        $sender  = $actorId ? (User::find($actorId)?->name ?? 'A teammate') : 'A teammate';
+        $snippet = mb_strimwidth(preg_replace('/\s+/', ' ', trim($message->body)), 0, 120, '…');
+
+        foreach ($this->recipients($userIds, $actorId) as $userId) {
+            $this->createForUser(
+                business: $thread->business,
+                userId: $userId,
+                type: PosNotification::TYPE_INBOX_MESSAGE,
+                referenceType: 'inbox_thread',
+                referenceId: (int) $thread->id,
+                title: "New message from {$sender}",
+                message: "{$thread->subject} — {$snippet}",
+                payload: ['thread_id' => $thread->id, 'message_id' => $message->id, 'subject' => $thread->subject],
+            );
+        }
+    }
+
+    /** Asks the task owner to approve or reject a teammate's request to delete the task. */
+    public function notifyTaskDeleteRequested(TaskDeleteRequest $request): void
+    {
+        $task = $request->task;
+        $project = $task->project;
+        $requester = $request->requester?->name ?? 'A teammate';
+        $reason = filled($request->reason) ? ' Reason: '.mb_strimwidth($request->reason, 0, 120, '…') : '';
+
+        $this->createForUser(
+            business: $project->business,
+            userId: (int) $request->owner_id,
+            type: PosNotification::TYPE_TASK_DELETE_REQUESTED,
+            referenceType: 'task_delete_request',
+            referenceId: (int) $request->id,
+            title: 'Task delete request',
+            message: "{$requester} asked to delete \"{$task->title}\" in {$project->name}.{$reason}",
+            payload: [
+                'request_id' => $request->id,
+                'task_id' => $task->id,
+                'task_title' => $task->title,
+                'project_id' => $project->id,
+                'project_name' => $project->name,
+            ],
+        );
+    }
+
+    /**
+     * Tells the requester whether the owner approved (task deleted) or rejected their
+     * delete request, and marks the owner's own request notification as read.
+     */
+    public function notifyTaskDeleteDecided(TaskDeleteRequest $request, Task $task, bool $approved): void
+    {
+        $project = $task->project;
+        $owner = $request->owner?->name ?? 'The task owner';
+
+        PosNotification::query()
+            ->where('type', PosNotification::TYPE_TASK_DELETE_REQUESTED)
+            ->where('reference_type', 'task_delete_request')
+            ->where('reference_id', $request->id)
+            ->whereNull('read_at')
+            ->update(['read_at' => now()]);
+
+        $this->createForUser(
+            business: $project->business,
+            userId: (int) $request->requested_by,
+            type: PosNotification::TYPE_TASK_DELETE_DECIDED,
+            referenceType: 'task_delete_request',
+            referenceId: (int) $request->id,
+            title: $approved ? 'Delete request approved' : 'Delete request rejected',
+            message: $approved
+                ? "{$owner} approved your request — \"{$task->title}\" in {$project->name} was deleted."
+                : "{$owner} rejected your request to delete \"{$task->title}\" in {$project->name}.",
+            payload: [
+                'request_id' => $request->id,
+                'approved' => $approved,
+                'task_id' => $approved ? null : $task->id,
+                'task_title' => $task->title,
+                'project_id' => $project->id,
+                'project_name' => $project->name,
             ],
         );
     }
@@ -521,6 +670,66 @@ class PosNotificationService
     }
 
     // ---- Shared helpers ----
+
+    /** Notifications in this business that the given user may see. */
+    private function visible(Business $business, ?int $userId)
+    {
+        return PosNotification::query()
+            ->where('business_id', $business->id)
+            ->visibleTo($userId);
+    }
+
+    /**
+     * @param int[] $userIds
+     * @return int[]
+     */
+    private function recipients(array $userIds, ?int $actorId): array
+    {
+        return array_values(array_unique(array_filter(
+            array_map('intval', $userIds),
+            fn (int $id) => $id > 0 && $id !== (int) $actorId,
+        )));
+    }
+
+    /**
+     * One-off notification addressed to a single user. Re-assigning re-surfaces
+     * the same row (unread, undismissed) instead of stacking duplicates.
+     *
+     * @param array<string, mixed> $payload
+     */
+    private function createForUser(
+        Business $business,
+        int $userId,
+        string $type,
+        string $referenceType,
+        int $referenceId,
+        string $title,
+        string $message,
+        array $payload,
+    ): void {
+        $notification = PosNotification::query()->updateOrCreate(
+            [
+                'business_id' => $business->id,
+                'user_id' => $userId,
+                'type' => $type,
+                'reference_type' => $referenceType,
+                'reference_id' => $referenceId,
+            ],
+            [
+                'branch_id' => null,
+                'title' => $title,
+                'message' => $message,
+                'payload' => $payload,
+                'read_at' => null,
+                'dismissed_at' => null,
+            ],
+        );
+
+        // Bump to the top of the list when an old row is re-surfaced.
+        if (! $notification->wasRecentlyCreated) {
+            $notification->forceFill(['created_at' => now()])->save();
+        }
+    }
 
     /** @param array<string, mixed> $payload */
     private function upsert(

@@ -4,6 +4,7 @@ namespace Modules\ProjectManage\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Modules\Business\Models\Branch;
@@ -122,9 +123,27 @@ class Project extends Model
         return $this->hasMany(Task::class);
     }
 
+    public function customStatuses(): HasMany
+    {
+        return $this->hasMany(TaskStatus::class)->orderBy('sort_order')->orderBy('id');
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'created_by');
+    }
+
+    /** Users on the project team — the only users its tasks can be assigned to. */
+    public function members(): BelongsToMany
+    {
+        return $this->belongsToMany(\App\Models\User::class, 'pm_project_members')
+            ->withPivot('added_by')
+            ->withTimestamps();
+    }
+
+    public function hasMember(int $userId): bool
+    {
+        return $this->members()->where('users.id', $userId)->exists();
     }
 
     public function assignedUsers(): HasManyThrough
@@ -155,21 +174,48 @@ class Project extends Model
     }
 
     /**
-     * @return array{todo:int,in_progress:int,review:int,done:int,total:int}
+     * Task counts by completion status (incomplete / complete / cancelled) and by stage.
+     * "done" = completed tasks and "open" = incomplete ones, whatever stage they sit in;
+     * cancelled tasks are neither, and are left out of progress (see progressPct()).
+     *
+     * @return array{todo:int,in_progress:int,review:int,done_stage:int,stages:array<string,int>,incomplete:int,complete:int,cancelled:int,open:int,done:int,total:int}
      */
     public function taskStats(): array
     {
-        $counts = $this->tasks()
-            ->selectRaw('status, count(*) as cnt')
-            ->groupBy('status')
-            ->pluck('cnt', 'status');
+        $rows = $this->tasks()
+            ->selectRaw('status, completion_status, count(*) as cnt')
+            ->groupBy('status', 'completion_status')
+            ->get();
+
+        $stages     = $rows->groupBy('status')->map(fn ($g) => (int) $g->sum('cnt'))->all();
+        $completion = $rows->groupBy(fn ($r) => $r->completion_status ?: Task::COMPLETION_INCOMPLETE)
+            ->map(fn ($g) => (int) $g->sum('cnt'));
+
+        $incomplete = (int) ($completion[Task::COMPLETION_INCOMPLETE] ?? 0);
+        $complete   = (int) ($completion[Task::COMPLETION_COMPLETE] ?? 0);
 
         return [
-            'todo'        => (int) ($counts[Task::STATUS_TODO] ?? 0),
-            'in_progress' => (int) ($counts[Task::STATUS_IN_PROGRESS] ?? 0),
-            'review'      => (int) ($counts[Task::STATUS_REVIEW] ?? 0),
-            'done'        => (int) ($counts[Task::STATUS_DONE] ?? 0),
-            'total'       => (int) $counts->sum(),
+            // Stage (board column) counts — built-ins by name, every stage in "stages".
+            'todo'        => (int) ($stages[Task::STATUS_TODO] ?? 0),
+            'in_progress' => (int) ($stages[Task::STATUS_IN_PROGRESS] ?? 0),
+            'review'      => (int) ($stages[Task::STATUS_REVIEW] ?? 0),
+            'done_stage'  => (int) ($stages[Task::STATUS_DONE] ?? 0),
+            'stages'      => $stages,
+            // Completion status counts.
+            'incomplete'  => $incomplete,
+            'complete'    => $complete,
+            'cancelled'   => (int) ($completion[Task::COMPLETION_CANCELLED] ?? 0),
+            'open'        => $incomplete,
+            'done'        => $complete,
+            'total'       => (int) $rows->sum('cnt'),
         ];
+    }
+
+    /** Completed share of the tasks that still count (cancelled ones are left out), 0–100. */
+    public static function progressPct(array $stats): int
+    {
+        $base = ($stats['total'] ?? 0) - ($stats['cancelled'] ?? 0);
+
+        return $base > 0 ? (int) round(($stats['done'] ?? 0) / $base * 100) : 0;
     }
 }
