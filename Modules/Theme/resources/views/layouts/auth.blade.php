@@ -198,6 +198,55 @@
             .auth-visual__title{font-size:clamp(1.45rem,5vw,1.85rem);}
             .auth-visual__footnote{margin-top:20px;}
             .auth-split__main{padding-top:clamp(24px,5vmin,40px);padding-bottom:clamp(32px,8vmin,48px);}
+            /* Tablets/phones: compact intro panel on top, form directly below */
+            .auth-split__main{flex:none;justify-content:flex-start;}
+            .auth-split__visual{min-height:0;justify-content:flex-start;}
+        }
+        @media (max-width:600px){
+            .auth-split__main{padding:12px 14px 6px;background:transparent;}
+            /* Phone: form sits in a compact card over the ASCII background */
+            .auth-shell{
+                max-width:none;background:var(--card);border-radius:16px;padding:20px 16px 18px;
+                border:1px solid color-mix(in srgb,var(--border) 70%,transparent);
+                box-shadow:0 1px 0 rgba(0,0,0,.03),0 10px 30px rgba(15,23,42,.07);
+            }
+            .auth-brand{gap:10px;margin-bottom:14px;}
+            .auth-brand__mark{width:36px;height:36px;font-size:15px;border-radius:9px;}
+            .auth-brand__text h1{font-size:1.1rem;}
+            .auth-brand__text p{font-size:12px;margin-top:2px;}
+            .auth-body .sub{font-size:12.5px;margin-bottom:14px;}
+            .field{margin-bottom:10px;}
+            .field label{font-size:10.5px;margin-bottom:5px;}
+            /* Keep 16px to stop iOS Safari zooming on focus; trim height instead */
+            .field input,.field select{font-size:16px;padding:9px 12px;border-radius:9px;}
+            .field .error{font-size:12px;min-height:0;margin-top:4px;}
+            .field .error:empty{display:none;}
+            .auth-check{flex-wrap:wrap;row-gap:6px;gap:8px;margin:10px 0 14px;font-size:13px;}
+            .auth-check input[type=checkbox]{width:16px;height:16px;}
+            .auth-check a{font-size:12px !important;}
+            .auth-btn{padding:10px 14px;font-size:14px;border-radius:9px;}
+            .auth-divider{margin:14px 0 10px;font-size:10.5px;}
+            .auth-oauth{padding:9px 14px;font-size:13px;gap:9px;border-radius:9px;}
+            .auth-oauth svg{width:17px;height:17px;}
+            .auth-alt-links{flex-wrap:wrap;margin-top:10px;}
+            .auth-alt-pill{padding:8px 12px;font-size:12px;}
+            .auth-footer{flex-wrap:wrap;gap:4px 12px;padding:12px 8px 6px;font-size:11px;text-align:center;}
+            .auth-split__visual{padding:20px 14px 0;background:transparent;border-bottom:none;}
+            .auth-visual__inner{border-radius:16px;padding:16px;}
+            .auth-visual__brand{font-size:11px;gap:8px;}
+            .auth-visual__brand-mark{width:30px;height:30px;font-size:12px;border-radius:8px;}
+            .auth-visual__title{font-size:1.1rem;margin:12px 0 6px;}
+            .auth-visual__lead{font-size:12.5px;margin-bottom:14px;}
+            .auth-visual__list{gap:10px;}
+            .auth-visual__list li{font-size:12.5px;gap:9px;}
+            .auth-visual__list .fa-fw{font-size:13px;margin-top:2px;}
+            .auth-visual__footnote{display:none;}
+        }
+        @media (max-width:360px){
+            .auth-split__main{padding:14px 10px 4px;}
+            .auth-shell{padding:16px 13px 14px;border-radius:14px;}
+            .auth-brand__text h1{font-size:1rem;}
+            .auth-check{font-size:12px;}
         }
     </style>
     @stack('auth-styles')
