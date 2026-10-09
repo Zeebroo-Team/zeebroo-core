@@ -689,15 +689,15 @@ class _SignupIllustrationState extends State<_SignupIllustration>
     },
     child: SizedBox(
       width: double.infinity,
-      height: 205,
       child: Stack(
-        fit: StackFit.expand,
         children: [
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                radius: 0.78,
-                colors: [Color(0x164F91F7), Color(0x004F91F7)],
+          const Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  radius: 0.78,
+                  colors: [Color(0x164F91F7), Color(0x004F91F7)],
+                ),
               ),
             ),
           ),
@@ -729,7 +729,8 @@ class _SignupIllustrationState extends State<_SignupIllustration>
               ).createShader(bounds),
               child: Image.asset(
                 widget.assetPath,
-                fit: BoxFit.cover,
+                width: double.infinity,
+                fit: BoxFit.fitWidth,
                 alignment: Alignment.center,
                 filterQuality: FilterQuality.high,
               ),

@@ -320,9 +320,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('purchase-orders/{purchase}/receive', [PosPurchaseOrderApiController::class, 'receive'])->name('purchase-orders.receive');
     Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
 
+    Route::post('expenses/bills/scan', \Modules\Pos\Http\Controllers\Api\PosExpenseBillScanApiController::class)
+        ->middleware('throttle:10,1')->name('expenses.bills.scan');
     Route::post('expenses/bills', [PosExpenseBillApiController::class, 'store'])->name('expenses.bills.store');
     Route::get('expenses/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'index'])->name('expenses.bills.index');
     Route::get('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'show'])->name('expenses.bills.show');
+    Route::put('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'update'])->name('expenses.bills.update');
     Route::post('expenses/bills/{bill}/pay', [PosExpenseBillApiController::class, 'pay'])->name('expenses.bills.pay');
     Route::delete('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'destroy'])->name('expenses.bills.destroy');
     Route::get('expenses/bill-assignment-targets', [PosExpenseBillAssignmentApiController::class, 'index'])->name('expenses.bill-assignment-targets');
@@ -330,6 +333,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('expenses/modifications', [PosExpenseModificationApiController::class, 'index'])->name('expenses.modifications.index');
     Route::post('expenses/modifications', [PosExpenseModificationApiController::class, 'store'])->name('expenses.modifications.store');
     Route::get('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'show'])->name('expenses.modifications.show');
+    Route::put('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'update'])->name('expenses.modifications.update');
     Route::delete('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'destroy'])->name('expenses.modifications.destroy');
     Route::get('expenses/investments', [PosExpenseInvestmentApiController::class, 'index'])->name('expenses.investments.index');
     Route::post('expenses/investments', [PosExpenseInvestmentApiController::class, 'store'])->name('expenses.investments.store');
@@ -388,6 +392,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('rentals', [PosRentalApiController::class, 'index'])->name('rentals.index');
     Route::post('rentals', [PosRentalApiController::class, 'store'])->name('rentals.store');
     Route::get('rentals/{rental}', [PosRentalApiController::class, 'show'])->name('rentals.show');
+    Route::put('rentals/{rental}', [PosRentalApiController::class, 'update'])->name('rentals.update');
     Route::post('rentals/{rental}/pay', [PosRentalApiController::class, 'pay'])->name('rentals.pay');
     Route::delete('rentals/{rental}', [PosRentalApiController::class, 'destroy'])->name('rentals.destroy');
 
@@ -411,6 +416,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('loans', [PosLoanApiController::class, 'index'])->name('loans.index');
     Route::post('loans', [PosLoanApiController::class, 'store'])->name('loans.store');
     Route::get('loans/{loan}', [PosLoanApiController::class, 'show'])->name('loans.show');
+    Route::put('loans/{loan}', [PosLoanApiController::class, 'update'])->name('loans.update');
     Route::post('loans/{loan}/pay', [PosLoanApiController::class, 'pay'])->name('loans.pay');
     Route::delete('loans/{loan}', [PosLoanApiController::class, 'destroy'])->name('loans.destroy');
     Route::get('banks', [\Modules\Pos\Http\Controllers\Api\PosBankApiController::class, 'index'])->name('banks.index');

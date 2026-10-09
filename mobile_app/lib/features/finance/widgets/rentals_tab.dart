@@ -9,6 +9,7 @@ import '../../dashboard/widgets/stat_tile.dart';
 import '../../inventory/widgets/list_states.dart';
 import '../../inventory/widgets/picker_sheet.dart';
 import 'finance_common.dart';
+import '../../payments/data/payment_manager_repository.dart';
 
 const _kRecurringTypes = [
   ('per_day', 'Per day'),
@@ -24,7 +25,8 @@ class RentalsTab extends StatefulWidget {
   State<RentalsTab> createState() => _RentalsTabState();
 }
 
-class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMixin {
+class _RentalsTabState extends State<RentalsTab>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -45,7 +47,10 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeRentals, bypassCache: forceRefresh);
+      final res = await ApiClient.instance.get(
+        ApiEndpoints.financeRentals,
+        bypassCache: forceRefresh,
+      );
       final body = res.data;
       _rentals = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -88,10 +93,16 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
       );
       if (!confirmed) return;
       try {
-        await ApiClient.instance.delete(ApiEndpoints.financeRental((rental['id'] as num).toInt()));
+        await ApiClient.instance.delete(
+          ApiEndpoints.financeRental((rental['id'] as num).toInt()),
+        );
         _load();
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+        }
       }
     }
   }
@@ -106,7 +117,14 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
           child: Row(
             children: [
               const Expanded(
-                child: Text('Rentals', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+                child: Text(
+                  'Rentals',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
               ),
               AddButton(onTap: _openAdd),
             ],
@@ -119,7 +137,9 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
 
   Widget _buildBody() {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null && _rentals.isEmpty) return ErrorState(error: _error!, onRetry: _load);
+    if (_error != null && _rentals.isEmpty) {
+      return ErrorState(error: _error!, onRetry: _load);
+    }
     if (_rentals.isEmpty) return const EmptyState(message: 'No rentals yet.');
 
     return RefreshIndicator(
@@ -129,7 +149,11 @@ class _RentalsTabState extends State<RentalsTab> with AutomaticKeepAliveClientMi
         children: [
           StatGrid(
             tiles: [
-              StatTile(label: 'Active rentals', value: '${_summary['active_count'] ?? _rentals.length}', icon: Icons.apartment_outlined),
+              StatTile(
+                label: 'Active rentals',
+                value: '${_summary['active_count'] ?? _rentals.length}',
+                icon: Icons.apartment_outlined,
+              ),
               StatTile(
                 label: 'Overdue',
                 value: '${_summary['overdue_count'] ?? 0}',
@@ -178,10 +202,17 @@ class _RentalCard extends StatelessWidget {
                   (rental['property_type'] as String?) ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
-              FinanceBadge(label: overdue ? 'OVERDUE' : 'ACTIVE', color: overdue ? AppColors.error : AppColors.success),
+              FinanceBadge(
+                label: overdue ? 'OVERDUE' : 'ACTIVE',
+                color: overdue ? AppColors.error : AppColors.success,
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -189,11 +220,21 @@ class _RentalCard extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (purpose != null && purpose.isNotEmpty) FinanceBadge(label: purpose, color: AppColors.textMuted),
-              FinanceBadge(label: (rental['cadence_label'] as String?) ?? '', color: AppColors.textMuted),
+              if (purpose != null && purpose.isNotEmpty)
+                FinanceBadge(label: purpose, color: AppColors.textMuted),
+              FinanceBadge(
+                label: (rental['cadence_label'] as String?) ?? '',
+                color: AppColors.textMuted,
+              ),
               if (keyMoneyFmt != null && keyMoneyFmt.isNotEmpty)
-                FinanceBadge(label: 'Key money $keyMoneyFmt', color: AppColors.primary),
-              FinanceBadge(label: 'Until ${rental['agreement_valid_until_year'] ?? ''}', color: AppColors.textMuted),
+                FinanceBadge(
+                  label: 'Key money $keyMoneyFmt',
+                  color: AppColors.primary,
+                ),
+              FinanceBadge(
+                label: 'Until ${rental['agreement_valid_until_year'] ?? ''}',
+                color: AppColors.textMuted,
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -202,17 +243,31 @@ class _RentalCard extends StatelessWidget {
             children: [
               Text(
                 'Due ${(rental['due_date_fmt'] as String?) ?? formatDate(rental['due_date'] as String?)}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
               ),
               Text(
-                (rental['recurring_cost_fmt'] as String?) ?? formatMoney(rental['recurring_cost']),
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                (rental['recurring_cost_fmt'] as String?) ??
+                    formatMoney(rental['recurring_cost']),
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
               ),
             ],
           ),
           if ((rental['account_name'] as String?)?.isNotEmpty ?? false) ...[
             const SizedBox(height: 6),
-            Text('Debited from ${rental['account_name']}', style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+            Text(
+              'Debited from ${rental['account_name']}',
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
+            ),
           ],
         ],
       ),
@@ -221,7 +276,13 @@ class _RentalCard extends StatelessWidget {
 }
 
 class AddRentalSheet extends StatefulWidget {
-  const AddRentalSheet();
+  const AddRentalSheet({
+    super.key,
+    this.record,
+    this.repository = const PaymentManagerRepository(),
+  });
+  final Map<String, dynamic>? record;
+  final PaymentManagerRepository repository;
 
   @override
   State<AddRentalSheet> createState() => AddRentalSheetState();
@@ -232,7 +293,9 @@ class AddRentalSheetState extends State<AddRentalSheet> {
   final _propertyTypeCtrl = TextEditingController();
   final _purposeCtrl = TextEditingController();
   final _keyMoneyCtrl = TextEditingController();
-  final _agreementYearCtrl = TextEditingController(text: '${DateTime.now().year + 1}');
+  final _agreementYearCtrl = TextEditingController(
+    text: '${DateTime.now().year + 1}',
+  );
   final _costCtrl = TextEditingController();
   final _remindCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
@@ -255,6 +318,31 @@ class AddRentalSheetState extends State<AddRentalSheet> {
   @override
   void initState() {
     super.initState();
+    final r = widget.record;
+    if (r != null) {
+      _propertyTypeCtrl.text = r['property_type']?.toString() ?? '';
+      _purposeCtrl.text = r['purpose']?.toString() ?? '';
+      _keyMoneyCtrl.text = r['key_money']?.toString() ?? '';
+      _agreementYearCtrl.text =
+          r['agreement_valid_until_year']?.toString() ?? '';
+      _costCtrl.text = r['recurring_cost']?.toString() ?? '';
+      _remindCtrl.text = r['remind_before_days']?.toString() ?? '';
+      _notesCtrl.text = r['notes']?.toString() ?? '';
+      _recurringType = r['recurring_type'] ?? 'per_month';
+      _firstInstallmentDate = DateTime.tryParse(
+        r['first_installment_due_date'] ?? '',
+      );
+      _accountId = (r['deduct_account_id'] as num?)?.toInt();
+      _dueDate = DateTime.tryParse(r['actual_due_date'] ?? '');
+      final landlord = r['landlord'] as Map? ?? {};
+      _ownerNameCtrl.text = landlord['name']?.toString() ?? '';
+      _ownerEmailCtrl.text = landlord['email']?.toString() ?? '';
+      _ownerPhoneCtrl.text = landlord['phone']?.toString() ?? '';
+      _ownerAddressCtrl.text = landlord['street_address']?.toString() ?? '';
+      _ownerBankDetailsCtrl.text =
+          landlord['bank_account_details']?.toString() ?? '';
+      _ownerNotesCtrl.text = landlord['notes']?.toString() ?? '';
+    }
     _loadAccounts();
   }
 
@@ -278,8 +366,8 @@ class AddRentalSheetState extends State<AddRentalSheet> {
 
   Future<void> _loadAccounts() async {
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.accounts);
-      _accounts = parseListData(res.data);
+      final res = await widget.repository.get(ApiEndpoints.accounts);
+      _accounts = parseListData(res);
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
@@ -289,8 +377,10 @@ class AddRentalSheetState extends State<AddRentalSheet> {
 
   Future<void> _submit() async {
     final formOk = _formKey.currentState?.validate() ?? false;
+    if (_saving) return;
     if (!formOk) return;
-    if (_ownerEmailCtrl.text.trim().isEmpty && _ownerPhoneCtrl.text.trim().isEmpty) {
+    if (_ownerEmailCtrl.text.trim().isEmpty &&
+        _ownerPhoneCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Provide the landlord\'s email or phone.');
       return;
     }
@@ -300,31 +390,53 @@ class AddRentalSheetState extends State<AddRentalSheet> {
       _error = null;
     });
     try {
-      await ApiClient.instance.post(
-        ApiEndpoints.financeRentals,
-        data: {
-          'property_type': _propertyTypeCtrl.text.trim(),
-          if (_purposeCtrl.text.trim().isNotEmpty) 'purpose': _purposeCtrl.text.trim(),
-          if (_keyMoneyCtrl.text.trim().isNotEmpty) 'key_money': double.tryParse(_keyMoneyCtrl.text.trim()),
-          'agreement_valid_until_year': int.tryParse(_agreementYearCtrl.text.trim()),
-          if (_accountId != null) 'deduct_account_id': _accountId,
-          'recurring_cost': double.tryParse(_costCtrl.text.trim()) ?? 0,
-          'recurring_type': _recurringType,
-          if (_remindCtrl.text.trim().isNotEmpty) 'remind_before_days': int.tryParse(_remindCtrl.text.trim()),
-          if (_dueDate != null) 'due_date': toApiDate(_dueDate!),
-          if (_firstInstallmentDate != null) 'first_installment_due_date': toApiDate(_firstInstallmentDate!),
-          if (_notesCtrl.text.trim().isNotEmpty) 'notes': _notesCtrl.text.trim(),
-          'owner_name': _ownerNameCtrl.text.trim(),
-          if (_ownerEmailCtrl.text.trim().isNotEmpty) 'owner_email': _ownerEmailCtrl.text.trim(),
-          if (_ownerPhoneCtrl.text.trim().isNotEmpty) 'owner_phone': _ownerPhoneCtrl.text.trim(),
-          if (_ownerAddressCtrl.text.trim().isNotEmpty) 'owner_address': _ownerAddressCtrl.text.trim(),
-          if (_ownerBankDetailsCtrl.text.trim().isNotEmpty) 'owner_bank_details': _ownerBankDetailsCtrl.text.trim(),
-          if (_ownerNotesCtrl.text.trim().isNotEmpty) 'owner_notes': _ownerNotesCtrl.text.trim(),
+      await widget.repository.save(ApiEndpoints.financeRentals, {
+        if (widget.record != null) ...{
+          'purpose': null,
+          'key_money': null,
+          'deduct_account_id': null,
+          'remind_before_days': null,
+          'due_date': null,
+          'first_installment_due_date': null,
+          'notes': null,
+          'owner_email': null,
+          'owner_phone': null,
+          'owner_address': null,
+          'owner_bank_details': null,
+          'owner_notes': null,
         },
-      );
+        'property_type': _propertyTypeCtrl.text.trim(),
+        if (_purposeCtrl.text.trim().isNotEmpty)
+          'purpose': _purposeCtrl.text.trim(),
+        if (_keyMoneyCtrl.text.trim().isNotEmpty)
+          'key_money': double.tryParse(_keyMoneyCtrl.text.trim()),
+        'agreement_valid_until_year': int.tryParse(
+          _agreementYearCtrl.text.trim(),
+        ),
+        if (_accountId != null) 'deduct_account_id': _accountId,
+        'recurring_cost': double.tryParse(_costCtrl.text.trim()) ?? 0,
+        'recurring_type': _recurringType,
+        if (_remindCtrl.text.trim().isNotEmpty)
+          'remind_before_days': int.tryParse(_remindCtrl.text.trim()),
+        if (_dueDate != null) 'due_date': toApiDate(_dueDate!),
+        if (_firstInstallmentDate != null)
+          'first_installment_due_date': toApiDate(_firstInstallmentDate!),
+        if (_notesCtrl.text.trim().isNotEmpty) 'notes': _notesCtrl.text.trim(),
+        'owner_name': _ownerNameCtrl.text.trim(),
+        if (_ownerEmailCtrl.text.trim().isNotEmpty)
+          'owner_email': _ownerEmailCtrl.text.trim(),
+        if (_ownerPhoneCtrl.text.trim().isNotEmpty)
+          'owner_phone': _ownerPhoneCtrl.text.trim(),
+        if (_ownerAddressCtrl.text.trim().isNotEmpty)
+          'owner_address': _ownerAddressCtrl.text.trim(),
+        if (_ownerBankDetailsCtrl.text.trim().isNotEmpty)
+          'owner_bank_details': _ownerBankDetailsCtrl.text.trim(),
+        if (_ownerNotesCtrl.text.trim().isNotEmpty)
+          'owner_notes': _ownerNotesCtrl.text.trim(),
+      }, id: (widget.record?['id'] as num?)?.toInt());
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      setState(() => _error = apiErrorMessage(e));
+      if (mounted) setState(() => _error = apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -332,7 +444,7 @@ class AddRentalSheetState extends State<AddRentalSheet> {
 
   @override
   Widget build(BuildContext context) => FormSheetShell(
-    title: 'Add rental',
+    title: widget.record == null ? 'Add rental' : 'Edit rental',
     loading: _loadingOptions,
     child: Form(
       key: _formKey,
@@ -343,7 +455,8 @@ class AddRentalSheetState extends State<AddRentalSheet> {
           TextFormField(
             controller: _propertyTypeCtrl,
             decoration: const InputDecoration(labelText: 'Property type'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Required' : null,
           ),
           const SizedBox(height: 14),
           TextFormField(
@@ -354,14 +467,20 @@ class AddRentalSheetState extends State<AddRentalSheet> {
           TextFormField(
             controller: _keyMoneyCtrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Key money (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Key money (optional)',
+            ),
           ),
           const SizedBox(height: 14),
           TextFormField(
             controller: _agreementYearCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Agreement valid until (year)'),
-            validator: (v) => (int.tryParse((v ?? '').trim()) == null) ? 'Enter a valid year' : null,
+            decoration: const InputDecoration(
+              labelText: 'Agreement valid until (year)',
+            ),
+            validator: (v) => (int.tryParse((v ?? '').trim()) == null)
+                ? 'Enter a valid year'
+                : null,
           ),
           const SizedBox(height: 14),
           TextFormField(
@@ -377,11 +496,19 @@ class AddRentalSheetState extends State<AddRentalSheet> {
           DropdownButtonFormField<String>(
             initialValue: _recurringType,
             decoration: const InputDecoration(labelText: 'Billing cadence'),
-            items: [for (final r in _kRecurringTypes) DropdownMenuItem(value: r.$1, child: Text(r.$2))],
-            onChanged: (v) => setState(() => _recurringType = v ?? _recurringType),
+            items: [
+              for (final r in _kRecurringTypes)
+                DropdownMenuItem(value: r.$1, child: Text(r.$2)),
+            ],
+            onChanged: (v) =>
+                setState(() => _recurringType = v ?? _recurringType),
           ),
           const SizedBox(height: 14),
-          FinanceDateField(label: 'Due date (optional)', value: _dueDate, onPick: (d) => setState(() => _dueDate = d)),
+          FinanceDateField(
+            label: 'Due date (optional)',
+            value: _dueDate,
+            onPick: (d) => setState(() => _dueDate = d),
+          ),
           const SizedBox(height: 14),
           FinanceDateField(
             label: 'First installment date (optional)',
@@ -392,28 +519,54 @@ class AddRentalSheetState extends State<AddRentalSheet> {
           TextFormField(
             controller: _remindCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Remind before (days, optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Remind before (days, optional)',
+            ),
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int?>(
+            isExpanded: true,
             initialValue: _accountId,
-            decoration: const InputDecoration(labelText: 'Debit account (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Debit account (optional)',
+            ),
             items: [
+              if (_accountId != null &&
+                  !_accounts.any((e) => e['id'] == _accountId))
+                DropdownMenuItem(
+                  value: _accountId,
+                  child: const Text('Current account (unavailable)'),
+                ),
               const DropdownMenuItem(value: null, child: Text('—')),
               for (final a in _accounts)
-                DropdownMenuItem(value: (a['id'] as num).toInt(), child: Text(a['account_name'] as String? ?? '')),
+                DropdownMenuItem(
+                  value: (a['id'] as num).toInt(),
+                  child: Text(a['account_name'] as String? ?? ''),
+                ),
             ],
             onChanged: (v) => setState(() => _accountId = v),
           ),
           const SizedBox(height: 14),
-          TextFormField(controller: _notesCtrl, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (optional)')),
+          TextFormField(
+            controller: _notesCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(labelText: 'Notes (optional)'),
+          ),
           const SizedBox(height: 18),
-          const Text('Landlord', style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+          const Text(
+            'Landlord',
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
+          ),
           const SizedBox(height: 10),
           TextFormField(
             controller: _ownerNameCtrl,
             decoration: const InputDecoration(labelText: 'Landlord name'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Required' : null,
           ),
           const SizedBox(height: 14),
           TextFormField(
@@ -429,28 +582,41 @@ class AddRentalSheetState extends State<AddRentalSheet> {
           ),
           const Padding(
             padding: EdgeInsets.only(top: 4),
-            child: Text('Provide at least one of email or phone.', style: TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+            child: Text(
+              'Provide at least one of email or phone.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+            ),
           ),
           const SizedBox(height: 14),
           TextFormField(
             controller: _ownerAddressCtrl,
-            decoration: const InputDecoration(labelText: 'Landlord address (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Landlord address (optional)',
+            ),
           ),
           const SizedBox(height: 14),
           TextFormField(
             controller: _ownerBankDetailsCtrl,
             maxLines: 2,
-            decoration: const InputDecoration(labelText: 'Landlord bank details (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Landlord bank details (optional)',
+            ),
           ),
           const SizedBox(height: 14),
           TextFormField(
             controller: _ownerNotesCtrl,
             maxLines: 2,
-            decoration: const InputDecoration(labelText: 'Landlord notes (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Landlord notes (optional)',
+            ),
           ),
           sheetError(_error),
           const SizedBox(height: 8),
-          SheetSubmitButton(label: 'Add rental', saving: _saving, onPressed: _submit),
+          SheetSubmitButton(
+            label: widget.record == null ? 'Add rental' : 'Save changes',
+            saving: _saving,
+            onPressed: _submit,
+          ),
         ],
       ),
     ),
@@ -531,7 +697,11 @@ class _PayRentalSheetState extends State<_PayRentalSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        FinanceDateField(label: 'Payment date', value: _dueDate, onPick: (d) => setState(() => _dueDate = d)),
+        FinanceDateField(
+          label: 'Payment date',
+          value: _dueDate,
+          onPick: (d) => setState(() => _dueDate = d),
+        ),
         const SizedBox(height: 14),
         SegmentedButton<String>(
           segments: const [
@@ -548,14 +718,21 @@ class _PayRentalSheetState extends State<_PayRentalSheet> {
             decoration: const InputDecoration(labelText: 'Debit account'),
             items: [
               for (final a in _accounts)
-                DropdownMenuItem(value: (a['id'] as num).toInt(), child: Text(a['account_name'] as String? ?? '')),
+                DropdownMenuItem(
+                  value: (a['id'] as num).toInt(),
+                  child: Text(a['account_name'] as String? ?? ''),
+                ),
             ],
             onChanged: (v) => setState(() => _accountId = v),
           ),
         ],
         sheetError(_error),
         const SizedBox(height: 8),
-        SheetSubmitButton(label: 'Record payment', saving: _saving, onPressed: _submit),
+        SheetSubmitButton(
+          label: 'Record payment',
+          saving: _saving,
+          onPressed: _submit,
+        ),
       ],
     ),
   );

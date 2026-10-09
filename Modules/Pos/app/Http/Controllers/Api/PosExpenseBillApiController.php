@@ -26,9 +26,24 @@ class PosExpenseBillApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        return $this->saveBill($request);
+    }
+
+    public function update(Request $request, Bill $bill): JsonResponse
+    {
+        return $this->saveBill($request, $bill);
+    }
+
+    private function saveBill(Request $request, ?Bill $bill = null): JsonResponse
+    {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'fin_bills');
         $user     = $request->user();
+
+        if ($bill !== null && ((int) $bill->business_id !== (int) $business->id
+            || ! $this->service->billForUser($user, $bill))) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
 
         $request->merge([
             'branch_id'                  => $request->filled('branch_id')       ? $request->integer('branch_id')       : null,
@@ -121,6 +136,14 @@ class PosExpenseBillApiController extends Controller
         }
 
         $validated['recurring_cost'] = round((float) ($validated['recurring_cost'] ?? 0), 2);
+
+        if ($bill !== null) {
+            if (! $this->service->updateForUser($user, $bill, $validated)) {
+                return response()->json(['message' => 'Unable to update this bill.'], 403);
+            }
+
+            return response()->json(['message' => 'Bill updated successfully.', 'data' => $this->format($bill->refresh())]);
+        }
 
         $bill = $this->service->create($user, $business, $validated);
 

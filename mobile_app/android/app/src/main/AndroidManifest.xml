@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Add customer: fill the form from a picked phone-book contact -->
+    <uses-permission android:name="android.permission.READ_CONTACTS"/>
     <application
         android:label="zeebroo_mobile"
         android:name="${applicationName}"
@@ -41,6 +43,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Billing: open Stripe checkout in the browser (url_launcher) -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

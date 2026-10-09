@@ -63,8 +63,25 @@ class PosLoanApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        return $this->saveLoan($request);
+    }
+
+    public function update(Request $request, Loan $loan): JsonResponse
+    {
+        return $this->saveLoan($request, $loan);
+    }
+
+    private function saveLoan(Request $request, ?Loan $loan = null): JsonResponse
+    {
         $business = $this->businessOrAbort($request);
         $user     = $request->user();
+
+        if ($loan !== null) {
+            $this->abortUnlessPerm($request, $business, 'fin_bills');
+            if ((int) $loan->business_id !== (int) $business->id || ! $this->service->loanForUser($user, $loan)) {
+                return response()->json(['message' => 'Loan not found.'], 404);
+            }
+        }
 
         $request->merge([
             'bank_id'                    => $request->filled('bank_id')                    ? $request->integer('bank_id')                   : null,
@@ -88,10 +105,15 @@ class PosLoanApiController extends Controller
             'remind_before_days'         => ['nullable', 'integer', 'min:0', 'max:365'],
         ]);
 
-        $loan = $this->service->create($user, $business, $validated);
+        $editing = $loan !== null;
+        if ($editing) {
+            $loan->update($validated);
+        } else {
+            $loan = $this->service->create($user, $business, $validated);
+        }
         $loan->load(['bank', 'deductAccount.bank', 'deductAccount.bankType']);
 
-        return response()->json(['message' => 'Loan created successfully.', 'data' => $this->format($loan)], 201);
+        return response()->json(['message' => $editing ? 'Loan updated successfully.' : 'Loan created successfully.', 'data' => $this->format($loan)], $editing ? 200 : 201);
     }
 
     public function show(Request $request, Loan $loan): JsonResponse

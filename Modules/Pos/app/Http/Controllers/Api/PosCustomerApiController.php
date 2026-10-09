@@ -23,6 +23,7 @@ class PosCustomerApiController extends Controller
         $business = $this->businessOrAbort($request);
         $q = (string) $request->query('q', '');
         $categoryId = $request->query('category_id');
+        $customerType = (string) $request->query('customer_type', '');
 
         $customers = Customer::query()
             ->where('business_id', $business->id)
@@ -32,6 +33,7 @@ class PosCustomerApiController extends Controller
                     ->orWhere('email', 'like', "%{$q}%");
             }))
             ->when($categoryId !== null && $categoryId !== '', fn ($query) => $query->where('customer_category_id', (int) $categoryId))
+            ->when(in_array($customerType, ['retail', 'wholesale'], true), fn ($query) => $query->where('customer_type', $customerType))
             ->withCount('sales')
             ->with('category:id,name')
             ->orderBy('name')

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
@@ -8,8 +9,8 @@ import 'add_account_sheet.dart';
 
 /// First home tab — a compact balance row for the business's bank accounts
 /// (tap to switch or add an account), the caller's [belowBalance] content
-/// (today's sales + quick actions), then a recent-transactions feed sourced
-/// from bill/rental payments.
+/// (today's sales + quick actions), then today's recent POS sales — the same
+/// feed as the desktop app's "Recent Transactions".
 class AccountOverviewTab extends StatefulWidget {
   const AccountOverviewTab({super.key, this.belowBalance, this.onPullRefresh});
 
@@ -20,10 +21,10 @@ class AccountOverviewTab extends StatefulWidget {
   final VoidCallback? onPullRefresh;
 
   @override
-  State<AccountOverviewTab> createState() => _AccountOverviewTabState();
+  State<AccountOverviewTab> createState() => AccountOverviewTabState();
 }
 
-class _AccountOverviewTabState extends State<AccountOverviewTab>
+class AccountOverviewTabState extends State<AccountOverviewTab>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -48,15 +49,17 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
     try {
       final results = await Future.wait([
         ApiClient.instance.get(ApiEndpoints.accounts, bypassCache: forceRefresh),
-        ApiClient.instance.get(ApiEndpoints.expensesOverview, bypassCache: forceRefresh),
+        ApiClient.instance.get(ApiEndpoints.todaySummary, bypassCache: forceRefresh),
         ApiClient.instance.get(ApiEndpoints.businessSettings, bypassCache: forceRefresh),
       ]);
 
       final accRaw = results[0].data;
       final accounts = (accRaw is Map ? accRaw['data'] : accRaw) as List? ?? [];
-      final expRaw = results[1].data;
-      final expData = (expRaw is Map ? expRaw['data'] : expRaw) as Map<String, dynamic>?;
-      final recent = (expData?['recent_payments'] as List?) ?? [];
+      // Same `recent_sales` feed the desktop app's Today summary renders
+      // under "Recent Transactions".
+      final todayRaw = results[1].data;
+      final todayData = (todayRaw is Map ? todayRaw['data'] : todayRaw) as Map<String, dynamic>?;
+      final recent = (todayData?['recent_sales'] as List?) ?? [];
       final settingsRaw = results[2].data;
       final settingsData = (settingsRaw is Map ? settingsRaw['data'] : settingsRaw) as Map<String, dynamic>?;
 
@@ -72,6 +75,23 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
       _error = apiErrorMessage(e);
     } finally {
       if (mounted) setState(() {});
+    }
+  }
+
+  /// Quietly re-fetches just the recent sales list (no error card, no
+  /// spinner) — used by the Overview's background auto-refresh.
+  Future<void> reloadRecentSales() async {
+    try {
+      final res = await ApiClient.instance.get(ApiEndpoints.todaySummary, bypassCache: true);
+      final raw = res.data;
+      final data = (raw is Map ? raw['data'] : raw) as Map<String, dynamic>?;
+      final recent = (data?['recent_sales'] as List?) ?? [];
+      if (!mounted) return;
+      setState(() {
+        _recentTxns = recent.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      });
+    } catch (_) {
+      // Keep showing the last good list; the next tick or a pull-to-refresh retries.
     }
   }
 
@@ -325,7 +345,7 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
             borderRadius: BorderRadius.circular(16),
             boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
           ),
-          child: const Text('No transactions yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          child: const Text('No sales recorded today.',style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
         )
       else
         Container(
@@ -351,29 +371,34 @@ class _TransactionTile extends StatelessWidget {
   const _TransactionTile({required this.txn});
   final Map<String, dynamic> txn;
 
+  static const _methodIcons = {
+    'cash': Icons.payments_rounded,
+    'card': Icons.credit_card_rounded,
+    'credit': Icons.volunteer_activism_rounded,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final title = (txn['source_title'] as String?) ?? (txn['source_label'] as String?) ?? 'Payment';
-    final subtitle = [txn['source_label'], txn['date_fmt']]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .join(' · ');
-    final amount = formatMoney(txn['amount']);
+    final title = (txn['sale_number'] as String?) ?? '#${txn['id']}';
+    final soldAt = DateTime.tryParse(txn['sold_at'] as String? ?? '')?.toLocal();
+    final items = (txn['items_count'] as num?)?.toInt() ?? 0;
+    final subtitle = [
+      if (soldAt != null) DateFormat('hh:mm a').format(soldAt),
+      '$items item${items == 1 ? '' : 's'}',
+    ].join(' · ');
 
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
       leading: Container(
         width: 38,
         height: 38,
-        decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(11)),
+        decoration: BoxDecoration(color: AppColors.primaryLt, borderRadius: BorderRadius.circular(11)),
         alignment: Alignment.center,
-        child: const Icon(Icons.arrow_upward_rounded, size: 17, color: AppColors.error),
+        child: Icon(_methodIcons[txn['payment_method']] ?? Icons.receipt_rounded, size: 18, color: AppColors.primaryDk),
       ),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textDark)),
-      subtitle: subtitle.isEmpty
-          ? null
-          : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
-      trailing: Text('-$amount', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.error)),
+      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+      trailing: Text(formatMoney(txn['total']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textDark)),
     );
   }
 }

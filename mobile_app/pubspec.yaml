@@ -11,6 +11,12 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.8
+  audioplayers: ^6.8.1
+
+  # Saved-sale receipt export and system printing/sharing
+  pdf: ^3.13.1
+  printing: ^5.15.1
+  intl: ^0.20.2
 
   # HTTP
   dio: ^5.7.0
@@ -34,6 +40,8 @@ dependencies:
   # Remove this dependency (and its usage in lib/main.dart) once development is done.
   device_preview: ^1.2.0
   mobile_scanner: ^7.4.2
+  flutter_contacts: ^2.6.0
+  url_launcher: ^6.3.3
 
 dev_dependencies:
   flutter_test:
@@ -42,6 +50,14 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: ReceiptMono
+      fonts:
+        - asset: assets/fonts/CourierPrime-Regular.ttf
+        - asset: assets/fonts/CourierPrime-Bold.ttf
+          weight: 700
   assets:
     - assets/images/
     - assets/images/signup/
+    - assets/sounds/beep.wav
+    - assets/fonts/
