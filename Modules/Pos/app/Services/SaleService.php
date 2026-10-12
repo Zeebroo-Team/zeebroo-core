@@ -236,6 +236,12 @@ class SaleService
         ?string $giftCardCode = null,
         ?float $giftCardAmount = null,
         ?string $couponCode = null,
+        // Mobile offline sales only (POST sales/offline). Left at their defaults
+        // every other caller behaves exactly as before.
+        ?\Carbon\CarbonInterface $soldAt = null,
+        bool $honourClientPrices = false,
+        ?string $clientUuid = null,
+        ?string $offlineRef = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -246,7 +252,7 @@ class SaleService
             fn ($i) => ($i['item_type'] ?? '') === 'service' && !empty($i['service_item_id']),
         ));
 
-        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems) : [];
+        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems, $honourClientPrices) : [];
         $serviceLines = $this->normalizeServiceCartItems($business, $rawServiceItems);
 
         if ($productLines === [] && $serviceLines === []) {
@@ -269,12 +275,14 @@ class SaleService
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds)
             ->concat($this->campaignService->activeForProducts($business, $cartProductIds));
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount, $couponCode) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount, $couponCode, $soldAt, $clientUuid, $offlineRef) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
                 'user_id' => $user->id,
                 'sale_number' => $this->nextSaleNumber($business),
+                'client_uuid' => $clientUuid,
+                'offline_ref' => $offlineRef,
                 'status' => Sale::STATUS_COMPLETED,
                 'payment_method' => $paymentMethod,
                 'channel' => $channel,
@@ -287,7 +295,7 @@ class SaleService
                 'total' => 0,
                 'amount_paid' => 0,
                 'notes' => filled($notes) ? trim((string) $notes) : null,
-                'sold_at' => now(),
+                'sold_at' => $soldAt ?? now(),
                 'is_settled' => !$deferSettlement,
                 'settled_at' => $deferSettlement ? null : now(),
             ]);
@@ -668,7 +676,7 @@ class SaleService
      * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, product_selling_unit_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null, warranty_type?: ?string, warranty_days?: ?int}>  $items
      * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float, warranty_type: ?string, warranty_days: ?int}>
      */
-    private function normalizeCartItems(Business $business, array $items): array
+    private function normalizeCartItems(Business $business, array $items, bool $honourClientPrices = false): array
     {
         if ($items === []) {
             throw ValidationException::withMessages([
@@ -767,6 +775,10 @@ class SaleService
                 $customUnitPrice = $product->dynamic_price_qty_linked
                     ? 1.0
                     : ($row['custom_unit_price'] ?? null);
+            } elseif ($honourClientPrices && ! $product->is_rental && $row['custom_unit_price'] !== null) {
+                // Offline sale: keep the (already discounted) price the customer
+                // paid on the phone, even if the catalog price changed since.
+                $customUnitPrice = $row['custom_unit_price'];
             }
 
             $layerId = $row['product_stock_layer_id'];

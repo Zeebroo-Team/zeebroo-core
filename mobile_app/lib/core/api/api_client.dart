@@ -12,6 +12,10 @@ class ApiClient {
 
   late final Dio _dio = _build();
 
+  /// Tests: answer requests with a fake adapter instead of the network.
+  @visibleForTesting
+  set httpClientAdapter(HttpClientAdapter adapter) => _dio.httpClientAdapter = adapter;
+
   Dio _build() {
     final dio = Dio(
       BaseOptions(
@@ -92,8 +96,10 @@ class ApiClient {
     return res.data ?? const [];
   }
 
-  Future<Response> post(String path, {dynamic data}) =>
-      _dio.post(path, data: data);
+  /// [headers] set here win over the stored business/branch (e.g. uploading an
+  /// offline sale to the business it was made in).
+  Future<Response> post(String path, {dynamic data, Map<String, dynamic>? headers}) =>
+      _dio.post(path, data: data, options: headers == null ? null : Options(headers: headers));
 
   Future<Response> put(String path, {dynamic data}) =>
       _dio.put(path, data: data);

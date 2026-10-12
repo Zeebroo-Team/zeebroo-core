@@ -36,6 +36,8 @@ class Sale extends Model
         'pos_counter_id',
         'user_id',
         'sale_number',
+        'client_uuid',
+        'offline_ref',
         'status',
         'payment_method',
         'channel',

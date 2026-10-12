@@ -64,6 +64,8 @@ use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
 use Modules\Pos\Http\Controllers\Api\PosNotificationApiController;
 use Modules\Pos\Http\Controllers\Api\PosSubscriptionApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
+use Modules\Pos\Http\Controllers\Api\PosOfflineSaleApiController;
+use Modules\Pos\Http\Controllers\Api\PosOfflineRecordApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductSyncApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
@@ -219,6 +221,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
 
     Route::get  ('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');
     Route::post ('sales',                  [PosSaleApiController::class, 'store']          )->name('sales.store');
+    // Mobile app: upload a sale recorded offline (idempotent via client_uuid)
+    Route::post ('sales/offline',          [PosOfflineSaleApiController::class, 'store']   )->name('sales.offline');
+    // Mobile app: upload customers and expenses recorded offline (idempotent via client_uuid)
+    Route::post ('customers/offline',      [PosOfflineRecordApiController::class, 'storeCustomer'])->name('customers.offline');
+    Route::post ('expenses/offline',       [PosOfflineRecordApiController::class, 'storeExpense'] )->name('expenses.offline');
     Route::get  ('sales/history',          [PosSaleApiController::class, 'history']         )->name('sales.history');
     Route::get  ('sales/pending-credits',  [PosSaleApiController::class, 'pendingCredits']  )->name('sales.pending-credits');
     Route::get  ('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');

@@ -6,7 +6,9 @@ import 'package:provider/provider.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../core/business/business_state.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../billing/screens/billing_screen.dart';
+import '../../pos/screens/offline_sales_screen.dart';
 import '../../business/screens/business_screen.dart';
 import '../../business/screens/select_business_screen.dart';
 import '../../inventory/screens/campaign_overview_screen.dart';
@@ -259,6 +261,40 @@ class AppSideDrawer extends StatelessWidget {
   Future<void> _confirmLogout(BuildContext context) async {
     final auth = context.read<AuthState>();
     final business = context.read<BusinessState>();
+
+    // Offline sales live only on this phone until uploaded — logging out
+    // must not strand them.
+    final sales = OfflineSales.instance;
+    await sales.start();
+    if (!context.mounted) return;
+    final waiting = sales.allWaitingCount;
+    if (waiting > 0) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Offline records not uploaded'),
+          content: Text(
+            '$waiting offline record${waiting == 1 ? ' is' : 's are'} (sales, customers or expenses) saved only on this phone. '
+            'Connect to the internet and upload ${waiting == 1 ? 'it' : 'them'} before logging out.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('OK')),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const OfflineSalesScreen()),
+                );
+              },
+              child: const Text('View offline records'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+    if (!context.mounted) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(

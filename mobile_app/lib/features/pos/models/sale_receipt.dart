@@ -33,6 +33,7 @@ class SaleReceipt {
       change = receiptNumber(data['change_amount']) ?? 0,
       giftCardAmount = receiptNumber(data['gift_card_amount']) ?? 0,
       giftCardCode = _text(_map(data['gift_card'])['code']),
+      isOffline = data['offline'] == true,
       items = List.unmodifiable([
         if (data['items'] is List)
           for (final item in data['items'] as List)
@@ -61,6 +62,9 @@ class SaleReceipt {
   final double? tendered;
   final List<ReceiptItem> items;
   final bool detailsAvailable;
+
+  /// Saved on the phone while offline; [saleNumber] is the temporary OFF- number.
+  final bool isOffline;
 
   String get dateLabel => soldAt == null
       ? 'Not available'

@@ -22,7 +22,9 @@ class PosServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        \Modules\Pos\Console\Commands\RepairSaleTimesCommand::class,
+    ];
 
     /**
      * Provider classes to register.

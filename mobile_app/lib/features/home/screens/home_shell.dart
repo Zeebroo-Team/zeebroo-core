@@ -5,6 +5,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/auth/auth_state.dart';
 import '../../../core/business/business_state.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../business/screens/select_business_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
@@ -36,6 +37,10 @@ class _HomeShellState extends State<HomeShell> {
   void initState() {
     super.initState();
     _loadUnreadCount();
+    // Uploads any offline sales left from earlier and keeps retrying.
+    OfflineSales.instance
+      ..start()
+      ..startAutoUpload();
   }
 
   Future<void> _loadUnreadCount() async {

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../core/offline/offline_customers.dart';
 import '../../../core/offline/offline_products.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../pos/screens/offline_sales_screen.dart';
 
 /// Settings that belong to this phone (not the business): currently the
 /// "Offline products" switch for an instant, on-device POS catalog.
@@ -15,6 +18,7 @@ class AppSettingsScreen extends StatefulWidget {
 
 class _AppSettingsScreenState extends State<AppSettingsScreen> {
   final _offline = OfflineProducts.instance;
+  final _sales = OfflineSales.instance;
   bool _loaded = false;
   int _count = 0;
   DateTime? _syncedAt;
@@ -23,12 +27,15 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
   void initState() {
     super.initState();
     _offline.addListener(_onOfflineChanged);
+    _sales.addListener(_onOfflineChanged);
+    _sales.start();
     _init();
   }
 
   @override
   void dispose() {
     _offline.removeListener(_onOfflineChanged);
+    _sales.removeListener(_onOfflineChanged);
     super.dispose();
   }
 
@@ -58,9 +65,11 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
       final ok = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Turn off offline products?'),
-          content: const Text(
-            'Saved products will be deleted from this phone. POS will load products from the server again.',
+          title: const Text('Turn off offline mode?'),
+          content: Text(
+            'Saved products and customers will be deleted from this phone and POS will load them from the server again. '
+            'New sales will need internet.'
+            '${_sales.allWaitingCount > 0 ? ' The ${_sales.allWaitingCount} offline record${_sales.allWaitingCount == 1 ? '' : 's'} not yet uploaded will be kept and still upload.' : ''}',
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
@@ -145,20 +154,25 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          SwitchListTile(
-                            key: const ValueKey('offline-products-switch'),
-                            value: _offline.enabled,
-                            onChanged: _offline.syncing && !_offline.enabled ? null : _toggle,
-                            title: const Text(
-                              'Save products on this phone',
-                              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
-                            ),
-                            subtitle: const Padding(
-                              padding: EdgeInsets.only(top: 4),
-                              child: Text(
-                                'POS opens instantly and search & barcode scan work without waiting. '
-                                'Products update in the background; sales still go to the server.',
-                                style: TextStyle(fontSize: 12.5, height: 1.4),
+                          // Own Material so the tap ripple shows on the white card.
+                          Material(
+                            type: MaterialType.transparency,
+                            child: SwitchListTile(
+                              key: const ValueKey('offline-products-switch'),
+                              value: _offline.enabled,
+                              onChanged: _offline.syncing && !_offline.enabled ? null : _toggle,
+                              title: const Text(
+                                'Offline mode',
+                                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14.5),
+                              ),
+                              subtitle: const Padding(
+                                padding: EdgeInsets.only(top: 4),
+                                child: Text(
+                                  'Saves products and customers on this phone so POS opens instantly, and keeps working when the internet drops: '
+                                  'sales (cash, card or credit), new customers and quick expenses are kept on the phone. '
+                                  'They upload automatically when you’re back online.',
+                                  style: TextStyle(fontSize: 12.5, height: 1.4),
+                                ),
                               ),
                             ),
                           ),
@@ -200,14 +214,21 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                               ),
                             Padding(
                               padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-                              child: Row(
+                              // Wraps onto two lines on narrow phones / large text.
+                              child: Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                spacing: 8,
                                 children: [
                                   TextButton.icon(
-                                    onPressed: _offline.syncing ? null : () => _offline.sync(),
-                                    icon: const Icon(Icons.sync_rounded, size: 18),
-                                    label: const Text('Sync now'),
+                                    onPressed: _offline.syncing
+                                        ? null
+                                        : () {
+                                            _offline.sync();
+                                            OfflineCustomers.instance.download(force: true);
+                                          },
+                                    icon: const Icon(Icons.cloud_download_rounded, size: 18),
+                                    label: const Text('Download latest'),
                                   ),
-                                  const Spacer(),
                                   TextButton.icon(
                                     style: TextButton.styleFrom(foregroundColor: AppColors.error),
                                     onPressed: _offline.syncing ? null : _clear,
@@ -221,6 +242,58 @@ class _AppSettingsScreenState extends State<AppSettingsScreen> {
                         ],
                       ),
               ),
+              if (OfflineProducts.supported) ...[
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(4, 24, 4, 8),
+                  child: Text(
+                    'OFFLINE RECORDS',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: AppColors.textMuted),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 12, 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE5E7EB)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Text(
+                        _sales.allWaitingCount == 0
+                            ? 'Everything saved offline is uploaded.'
+                            : '${_sales.allWaitingCount} offline record${_sales.allWaitingCount == 1 ? '' : 's'} not uploaded yet',
+                        style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                      ),
+                      if (_sales.lastError != null && !_sales.uploading) ...[
+                        const SizedBox(height: 6),
+                        Text(_sales.lastError!, style: const TextStyle(fontSize: 12, color: AppColors.error)),
+                      ],
+                      const SizedBox(height: 4),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        spacing: 8,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _sales.uploading || !_sales.hasPendingUploads ? null : _sales.upload,
+                            icon: _sales.uploading
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                : const Icon(Icons.cloud_upload_rounded, size: 18),
+                            label: Text(_sales.uploading ? 'Uploading…' : 'Upload pending'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const OfflineSalesScreen()),
+                            ),
+                            child: const Text('View offline records'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
   );
