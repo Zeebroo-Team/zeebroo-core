@@ -64,6 +64,7 @@ use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
 use Modules\Pos\Http\Controllers\Api\PosNotificationApiController;
 use Modules\Pos\Http\Controllers\Api\PosSubscriptionApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
+use Modules\Pos\Http\Controllers\Api\PosProductSyncApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -122,6 +123,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/sale-campaigns/products', [PosSaleCampaignApiController::class, 'products'])->name('online.sale-campaigns.products');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
+    // Mobile app "Offline products" cache sync (read-only, mobile-only)
+    Route::get('online/products/sync-index', [PosProductSyncApiController::class, 'index'])->name('online.products.sync-index');
+    Route::get('online/products/by-ids', [PosProductSyncApiController::class, 'byIds'])->name('online.products.by-ids');
     Route::get('online/products/{id}', [PosCatalogApiController::class, 'show'])->where('id', '[0-9]+')->name('online.products.show');
     Route::get  ('online/products/{id}/stock-history',                       [PosCatalogApiController::class, 'stockHistory'])->where('id', '[0-9]+')->name('online.products.stock-history');
     Route::patch('online/products/{id}/stock-layers/{layerId}/selling-price',   [PosCatalogApiController::class, 'updateLayerSellingPrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.selling-price');

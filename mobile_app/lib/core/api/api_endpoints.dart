@@ -59,6 +59,9 @@ class ApiEndpoints {
 
   // Catalog — product list + full CRUD (Inventory > Products tab)
   static const String products = '/v1/pos/online/products';
+  // "Offline products" on-device cache sync (mobile-only endpoints)
+  static const String productsSyncIndex = '/v1/pos/online/products/sync-index';
+  static const String productsByIds = '/v1/pos/online/products/by-ids';
   static String product(int id) => '/v1/pos/online/products/$id';
   static String productBySku(String sku) =>
       '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';

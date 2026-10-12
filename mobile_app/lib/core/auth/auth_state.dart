@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
+import '../offline/offline_products.dart';
 import 'auth_storage.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
@@ -163,6 +164,8 @@ class AuthState extends ChangeNotifier {
       /* Token may already be invalid server-side — clear local state regardless. */
     }
     await AuthStorage.clear();
+    // Don't leave this account's saved catalog for the next user.
+    await OfflineProducts.instance.onLogout().catchError((_) {});
     _user = null;
     _status = AuthStatus.unauthenticated;
     notifyListeners();

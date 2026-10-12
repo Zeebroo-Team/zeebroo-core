@@ -16,6 +16,7 @@ import '../../inventory/screens/product_overview_screen.dart';
 import '../../notifications/screens/notifications_screen.dart';
 import '../../payments/screens/payments_overview_screen.dart';
 import '../../profile/screens/profile_screen.dart';
+import '../../settings/screens/app_settings_screen.dart';
 import '../models/feature_entry.dart';
 import '../screens/feature_placeholder_screen.dart';
 
@@ -194,6 +195,18 @@ class AppSideDrawer extends StatelessWidget {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) => const BillingScreen(),
+                            ),
+                          );
+                        },
+                      ),
+                      _Row(
+                        icon: Icons.settings_outlined,
+                        label: 'App Settings',
+                        onTap: () {
+                          Navigator.of(context).pop();
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const AppSettingsScreen(),
                             ),
                           );
                         },

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_products.dart';
 
 class ScannerProductsPage {
   const ScannerProductsPage({required this.products, this.hasMore = false});
@@ -10,9 +11,15 @@ class ScannerProductsPage {
   final bool hasMore;
 }
 
-/// Uses the current authenticated business's existing POS catalog APIs.
+/// Uses the current authenticated business's existing POS catalog APIs —
+/// or, with "Offline products" on and synced, the phone's copy first.
 class ScannerProductRepository {
   Future<Map<String, dynamic>?> lookup(String code) async {
+    final offline = OfflineProducts.instance;
+    if (await offline.isReady().catchError((_) => false)) {
+      final local = await offline.productByCode(code).catchError((_) => null);
+      if (local != null) return local;
+    }
     try {
       final response = await ApiClient.instance.get(
         ApiEndpoints.productBySku(code),
@@ -28,6 +35,16 @@ class ScannerProductRepository {
   }
 
   Future<ScannerProductsPage> search(String query, {int page = 1}) async {
+    final offline = OfflineProducts.instance;
+    if (await offline.isReady().catchError((_) => false)) {
+      try {
+        // Local results come back in one go (no paging).
+        if (page > 1) return const ScannerProductsPage(products: []);
+        return ScannerProductsPage(products: await offline.products(search: query));
+      } catch (_) {
+        // fall back to the server below
+      }
+    }
     final response = await ApiClient.instance.get(
       ApiEndpoints.products,
       params: {'q': query, 'page': page, 'per_page': 40},

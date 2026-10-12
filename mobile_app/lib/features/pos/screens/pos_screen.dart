@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_products.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
 import '../data/scanner_cart_controller.dart';
@@ -94,6 +95,14 @@ class _PosScreenState extends State<PosScreen>
   int _selectedCategoryId = 0;
   int _productRequestId = 0;
 
+  // "Offline products" (App Settings): when on and synced, the catalog is
+  // read from the phone's SQLite copy; off, everything below loads online.
+  final _offline = OfflineProducts.instance;
+  bool _useLocal = false;
+  bool _wasSyncing = false;
+  Timer? _syncTimer;
+  static const _kSyncInterval = Duration(seconds: 60);
+
   // Cart
   final List<_CartItem> _cart = [];
   Map<String, dynamic>? _customer;
@@ -125,12 +134,47 @@ class _PosScreenState extends State<PosScreen>
     super.initState();
     _cart.addAll(widget.initialCart.map((item) => item.copy()));
     _addSoundPoolFuture ??= _prepareAddSound();
+    _startCatalog();
+  }
+
+  /// Decides between the on-device catalog and the online one, then loads.
+  Future<void> _startCatalog() async {
+    try {
+      await _offline.load();
+      if (_offline.enabled) {
+        _useLocal = await _offline.isReady();
+        _offline.addListener(_onOfflineChanged);
+        _syncTimer = Timer.periodic(_kSyncInterval, (_) {
+          if (ModalRoute.of(context)?.isCurrent ?? true) _offline.sync();
+        });
+        unawaited(_offline.sync());
+      }
+    } catch (_) {
+      _useLocal = false; // any local problem → plain online POS
+    }
+    if (!mounted) return;
     _loadCategories();
     _loadProducts();
   }
 
+  /// After each background sync, show the refreshed local catalog in place.
+  Future<void> _onOfflineChanged() async {
+    final finished = _wasSyncing && !_offline.syncing;
+    _wasSyncing = _offline.syncing;
+    if (!mounted) return;
+    setState(() {}); // offline note may have changed
+    if (!finished) return;
+    if (!_useLocal && await _offline.isReady()) _useLocal = true;
+    if (_useLocal && mounted) {
+      _loadCategories();
+      _loadProducts(silent: true);
+    }
+  }
+
   @override
   void dispose() {
+    _syncTimer?.cancel();
+    _offline.removeListener(_onOfflineChanged);
     _searchCtrl.dispose();
     _debounce?.cancel();
     _paidCtrl.dispose();
@@ -177,6 +221,15 @@ class _PosScreenState extends State<PosScreen>
   // ── Data ──────────────────────────────────────────────────────────────────
 
   Future<void> _loadCategories() async {
+    if (_useLocal) {
+      try {
+        final local = await _offline.categories();
+        if (mounted) setState(() => _categories = local);
+        return;
+      } catch (_) {
+        // fall through to the online categories
+      }
+    }
     try {
       final res = await ApiClient.instance.get(
         ApiEndpoints.categories,
@@ -195,12 +248,35 @@ class _PosScreenState extends State<PosScreen>
     } catch (_) {}
   }
 
-  Future<void> _loadProducts({String? query, bool forceRefresh = false}) async {
+  Future<void> _loadProducts({
+    String? query,
+    bool forceRefresh = false,
+    bool silent = false,
+  }) async {
     final search = query ?? _searchCtrl.text.trim();
     final category = _selectedCategoryId;
     // Only the newest request may update the list — a slow, older response
     // (e.g. the first unfiltered load) must not overwrite a search or filter.
     final requestId = ++_productRequestId;
+
+    if (_useLocal) {
+      // Pull-to-refresh: sync with the server first, then re-read locally.
+      if (forceRefresh) await _offline.sync();
+      try {
+        final local = await _offline.products(search: search, categoryId: category);
+        if (!mounted || requestId != _productRequestId) return;
+        setState(() {
+          _products = local;
+          _productError = null;
+          _loadingProducts = false;
+        });
+        return;
+      } catch (_) {
+        if (silent) return;
+        _useLocal = false; // local copy unusable → online for this session
+      }
+    }
+
     setState(() {
       _loadingProducts = true;
       _productError = null;
@@ -232,7 +308,8 @@ class _PosScreenState extends State<PosScreen>
   void _onSearchChanged(String value) {
     _debounce?.cancel();
     _debounce = Timer(
-      const Duration(milliseconds: 350),
+      // Local search is instant, so only wait for typing to pause briefly.
+      Duration(milliseconds: _useLocal ? 120 : 350),
       () => _loadProducts(query: value.trim()),
     );
   }
@@ -272,6 +349,14 @@ class _PosScreenState extends State<PosScreen>
   /// Looks a scanned/typed code up as a product or batch SKU and adds it to the
   /// cart. Never throws — the outcome says what to tell the cashier.
   Future<ScanOutcome> _addByCode(String code) async {
+    // Offline products: instant lookup on the phone; unknown codes (e.g. a
+    // product created a moment ago) still fall back to the server.
+    if (_useLocal) {
+      try {
+        final local = await _offline.productByCode(code);
+        if (local != null) return _addScannedProduct(local, code);
+      } catch (_) {}
+    }
     try {
       final res = await ApiClient.instance.get(
         ApiEndpoints.productBySku(code),
@@ -282,17 +367,7 @@ class _PosScreenState extends State<PosScreen>
       if (data is! Map)
         return ScanOutcome.failed('No product found for "$code"');
 
-      final product = Map<String, dynamic>.from(data);
-      final name = (product['name'] as String?) ?? code;
-      if (!_addToCart(product, quiet: true))
-        return ScanOutcome.failed('$name is out of stock');
-
-      final inCart = _cart
-          .firstWhere((c) => c.id == (product['id'] as num).toInt())
-          .qty;
-      return ScanOutcome.added(
-        inCart > 1 ? '$name · $inCart in cart' : '$name added',
-      );
+      return _addScannedProduct(Map<String, dynamic>.from(data), code);
     } on DioException catch (e) {
       if (e.response?.statusCode == 404)
         return ScanOutcome.failed('No product found for "$code"');
@@ -300,6 +375,19 @@ class _PosScreenState extends State<PosScreen>
     } catch (e) {
       return ScanOutcome.failed(apiErrorMessage(e));
     }
+  }
+
+  ScanOutcome _addScannedProduct(Map<String, dynamic> product, String code) {
+    final name = (product['name'] as String?) ?? code;
+    if (!_addToCart(product, quiet: true))
+      return ScanOutcome.failed('$name is out of stock');
+
+    final inCart = _cart
+        .firstWhere((c) => c.id == (product['id'] as num).toInt())
+        .qty;
+    return ScanOutcome.added(
+      inCart > 1 ? '$name · $inCart in cart' : '$name added',
+    );
   }
 
   Future<void> _openScanner() async {
@@ -509,8 +597,86 @@ class _PosScreenState extends State<PosScreen>
     }
   }
 
+  /// Offline products: the cart was built from the phone's copy, so confirm
+  /// the latest price/stock for just the cart items before payment. Returns
+  /// false if the cashier wants to review the cart first. The server still
+  /// re-checks everything when the sale is saved.
+  Future<bool> _confirmCartIsCurrent() async {
+    final ids = _cart.map((c) => c.id).toSet().toList();
+    final List<Map<String, dynamic>> latest;
+    try {
+      latest = await _offline.fetchLatest(ids).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Couldn’t confirm the latest prices — the server will check them when you pay.'),
+          ),
+        );
+      }
+      return true;
+    }
+    if (!mounted) return false;
+
+    final byId = {for (final p in latest) (p['id'] as num).toInt(): p};
+    final notes = <String>[];
+    setState(() {
+      for (var i = _cart.length - 1; i >= 0; i--) {
+        final item = _cart[i];
+        final fresh = byId[item.id];
+        if (fresh == null) {
+          notes.add('${item.name}: no longer available — removed from cart');
+          _cart.removeAt(i);
+          continue;
+        }
+        if (posProductIsOutOfStock(fresh)) {
+          notes.add('${item.name}: now out of stock — removed from cart');
+          _cart.removeAt(i);
+          continue;
+        }
+        final updated = _CartItem(product: fresh, qty: item.qty, itemDiscountPct: item.itemDiscountPct);
+        if ((updated.basePrice - item.basePrice).abs() >= 0.005) {
+          notes.add('${item.name}: ${formatMoney(item.basePrice)} → ${formatMoney(updated.basePrice)}');
+        }
+        _cart[i] = updated;
+      }
+    });
+    _loadProducts(silent: true); // show the refreshed stock/prices in the grid
+    if (notes.isEmpty) return true;
+
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cart updated'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Some items changed since products were last synced:'),
+            const SizedBox(height: 10),
+            for (final n in notes)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Text('• $n', style: const TextStyle(fontWeight: FontWeight.w600)),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Review cart')),
+          FilledButton(
+            onPressed: _cart.isEmpty ? null : () => Navigator.pop(ctx, true),
+            child: const Text('Continue to payment'),
+          ),
+        ],
+      ),
+    );
+    return proceed == true && _cart.isNotEmpty;
+  }
+
   Future<void> _openCheckout() async {
     if (_cart.isEmpty) return;
+    if (_useLocal && !await _confirmCartIsCurrent()) return;
+    if (!mounted || _cart.isEmpty) return;
     _paidCtrl.text = _total.toStringAsFixed(2);
     final receipt = await showModalBottomSheet<SaleReceipt>(
       context: context,
@@ -573,6 +739,8 @@ class _PosScreenState extends State<PosScreen>
       ),
     );
     if (!mounted || receipt == null) return;
+    // Stock just changed on the server — refresh the phone's copy quietly.
+    if (_offline.enabled) unawaited(_offline.sync());
     setState(() {
       _cart.clear();
       _customer = null;
@@ -619,6 +787,25 @@ class _PosScreenState extends State<PosScreen>
             onSubmitted: _onSearchSubmitted,
             onScan: _openScanner,
           ),
+          if (_useLocal && _offline.lastErrorWasConnection && !_offline.syncing)
+            Container(
+              key: const ValueKey('pos-offline-note'),
+              width: double.infinity,
+              color: AppColors.warning.withValues(alpha: 0.12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              child: const Row(
+                children: [
+                  Icon(Icons.cloud_off_rounded, size: 15, color: AppColors.textDark),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Offline — showing saved products. Payment needs internet.',
+                      style: TextStyle(fontSize: 12, color: AppColors.textDark),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           if (_productError != null && _products.isNotEmpty)
             Container(
               width: double.infinity,
