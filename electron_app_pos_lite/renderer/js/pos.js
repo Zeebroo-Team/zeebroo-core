@@ -1974,9 +1974,16 @@ numpadEl.addEventListener('click', (e) => {
   if (!btn) return;
   const key = btn.dataset.key;
   let val = amountReceivedInput.value;
+  // Amount still holds the auto-filled due → the next digit/dot starts a fresh entry
+  const isPrefilled = val === amountDueAfterGiftCard().toFixed(2);
   if (key === 'back') val = val.slice(0, -1);
-  else if (key === '.') { if (!val.includes('.')) val += '.'; }
-  else val += key;
+  else if (key === '.') { if (isPrefilled) val = '0.'; else if (!val.includes('.')) val += '.'; }
+  else {
+    val = (isPrefilled || val === '0' || val === '') ? key : val + key;
+    // Max 2 decimal places
+    const parts = val.split('.');
+    if (parts[1] && parts[1].length > 2) val = parts[0] + '.' + parts[1].slice(0, 2);
+  }
   amountReceivedInput.value = val;
   updateCheckoutTender();
 });

@@ -30853,9 +30853,13 @@ function _coNumpadKey(key) {
   } else if (key === 'back') {
     _coAmount = _coAmount.slice(0, -1);
   } else if (key === '.') {
-    if (!_coAmount.includes('.')) _coAmount += '.';
+    // Amount still holds the auto-filled due → start a fresh entry
+    if (_coAmount === _coGetDue().toFixed(2)) _coAmount = '0.';
+    else if (!_coAmount.includes('.')) _coAmount += '.';
   } else {
-    if (_coAmount === '0' || _coAmount === '') _coAmount = key;
+    // Amount still holds the auto-filled due (or is empty) → replace instead of appending,
+    // otherwise the 2-decimal cap below swallows every digit
+    if (_coAmount === '0' || _coAmount === '' || _coAmount === _coGetDue().toFixed(2)) _coAmount = key;
     else _coAmount += key;
     // Max 2 decimal places
     const parts = _coAmount.split('.');
