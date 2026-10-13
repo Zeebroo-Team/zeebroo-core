@@ -934,7 +934,7 @@
   }
 
   // ── Grace-period warning bar ────────────────────────────────────────────
-  // Before the lock kicks in (Payment::GRACE_PERIOD_DAYS after the payment
+  // Before the lock kicks in (the business's grace days — Payment::gracePeriodDaysFor() — after the payment
   // was created), the server reports the unpaid payment as `payment_due`.
   // Fixed to the bottom so it never pushes the full-height screens around;
   // dismissible for the rest of this session.

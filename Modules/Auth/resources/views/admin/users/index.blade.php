@@ -287,6 +287,7 @@
                                             'unlimited' => (bool) $b->has_unlimited_access,
                                             'manual' => (bool) $b->has_manual_features,
                                             'features' => $b->effectiveFeatureKeys(),
+                                            'grace_days' => $b->payment_grace_days,
                                         ])->values();
                                     @endphp
                                     <button type="button" class="adu-act-btn adu-package-btn"
@@ -427,6 +428,13 @@
                     </label>
                 </div>
                 <div class="adu-field">
+                    <label for="adpGraceDays">Payment grace period (days)</label>
+                    <input type="number" id="adpGraceDays" name="payment_grace_days" min="0" max="{{ (int) config('subscription.max_grace_period_days', 365) }}" step="1"
+                        placeholder="Default ({{ $defaultGraceDays }} {{ $defaultGraceDays === 1 ? 'day' : 'days' }})">
+                    <p class="adu-field-hint">How long this business can use the app with an unpaid subscription before access is locked. Leave blank for the default of {{ $defaultGraceDays }} {{ $defaultGraceDays === 1 ? 'day' : 'days' }}. Changing it also moves the deadline of a bill that's already pending.</p>
+                    @error('payment_grace_days')<p class="adu-field-err">{{ $message }}</p>@enderror
+                </div>
+                <div class="adu-field">
                     <label>Features</label>
                     <p class="adu-field-hint" style="margin:0 0 8px;">Checked features are available to this business. Untick to disable a feature the package includes; tick an extra one to grant it beyond the package.</p>
                     <div class="adp-feat-grid" id="adpFeatureGrid">
@@ -543,8 +551,7 @@
         emailEl.value = '';
         passwordEl.value = '';
         document.getElementById('aduPasswordConfirm').value = '';
-        roleEl.value = 'user';
-    }
+        roleEl.value = 'user';    }
 
     openBtn.addEventListener('click', function () { setCreateMode(); openModal(); });
     closeBtn.addEventListener('click', closeModal);
@@ -576,7 +583,6 @@
             roleEl.value = btn.getAttribute('data-user-role');
             editingSelf = isSelf;
             selfRoleHint.style.display = isSelf ? 'block' : 'none';
-
             openModal();
         });
     });
@@ -593,6 +599,7 @@
     var businessHintEl   = document.getElementById('adpBusinessHint');
     var packageEl  = document.getElementById('adpPackage');
     var unlimitedEl= document.getElementById('adpUnlimited');
+    var graceEl    = document.getElementById('adpGraceDays');
     var grid       = document.getElementById('adpFeatureGrid');
     var featureBoxes = document.querySelectorAll('.adp-f-feature');
     var currentBusinesses = [];
@@ -623,6 +630,7 @@
         form.action = '/admin/businesses/' + business.id + '/package';
         packageEl.value = business.manual ? 'manual' : (business.package_id ? String(business.package_id) : '');
         unlimitedEl.checked = !!business.unlimited;
+        graceEl.value = business.grace_days === null || business.grace_days === undefined ? '' : business.grace_days;
         featureBoxes.forEach(function (cb) { cb.checked = business.features.indexOf(cb.value) !== -1; });
         applyUnlimitedState();
     }

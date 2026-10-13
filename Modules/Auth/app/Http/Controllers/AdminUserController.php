@@ -37,6 +37,7 @@ class AdminUserController extends Controller
             'roles' => Role::orderBy('name')->pluck('name'),
             'packages' => Package::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
             'featureCatalog' => config('features.list', []),
+            'defaultGraceDays' => (int) config('subscription.grace_period_days', 2),
         ]);
     }
 
@@ -288,8 +289,7 @@ class AdminUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'string', Rule::exists('roles', 'name')],
-        ]);
+            'role' => ['required', 'string', Rule::exists('roles', 'name')],        ]);
 
         if ((int) $user->id === (int) $request->user()->id && $validated['role'] !== 'admin') {
             return redirect()->route('admin.users.index')->withErrors([

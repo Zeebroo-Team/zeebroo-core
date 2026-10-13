@@ -5,6 +5,7 @@ namespace Modules\Package\Services;
 use Modules\Business\Models\Business;
 use Modules\Package\Models\BusinessFeatureOverride;
 use Modules\Package\Models\Package;
+use Modules\Payment\Models\Payment;
 
 class BusinessPackageService
 {
@@ -53,5 +54,30 @@ class BusinessPackageService
                 ['enabled' => $row['enabled']],
             );
         }
+    }
+
+    /**
+     * Set the business's payment grace period (null = platform default) and
+     * move the deadline of its still-unsettled subscription payments by the
+     * change, so the adjustment applies to the bill that's already pending —
+     * and can unlock an already-overdue business — not only to future ones.
+     */
+    public function setGraceDays(Business $business, ?int $graceDays): void
+    {
+        $oldDays = $business->paymentGraceDays();
+        $business->payment_grace_days = $graceDays;
+        $business->save();
+
+        $deltaDays = $business->paymentGraceDays() - $oldDays;
+        if ($deltaDays === 0) {
+            return;
+        }
+
+        $business->payments()
+            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+            ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
+            ->whereNotNull('due_at')
+            ->get()
+            ->each(fn (Payment $payment) => $payment->update(['due_at' => $payment->due_at->addDays($deltaDays)]));
     }
 }
