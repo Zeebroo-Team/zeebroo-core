@@ -591,10 +591,12 @@ ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
 // Build a fully self-contained, clean HTML page for the thermal printer.
 // Running in a dedicated hidden window avoids all main-app CSS interference.
 const THERMAL_MARGIN_MM = 3;
+// Thermal heads print narrower than the roll: 80mm → 72mm (576 dots), 58mm → 48mm (384 dots).
+// Keep content inside that with a little slack for the driver's left offset, so the right edge isn't clipped.
+const THERMAL_SAFE_MM = { 80: 68, 58: 45 };
 function _thermalHtml(html, paperWidth) {
   const paperMm   = paperWidth === 58 ? 58 : 80;
-  const marginMm  = THERMAL_MARGIN_MM;
-  const contentMm = paperMm - marginMm * 2;
+  const contentMm = THERMAL_SAFE_MM[paperMm];
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -602,13 +604,15 @@ function _thermalHtml(html, paperWidth) {
 <title>Receipt</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html, body {
-    width: ${contentMm}mm;
+  html { width:100%; background:#fff; }
+  body {
+    width:100%; max-width: ${contentMm}mm; margin:0 auto;
     background: #fff; color: #000;
     font-family: 'Courier New', Courier, monospace;
     font-size: 10pt; line-height: 1.45;
+    overflow-wrap:anywhere;
   }
-  @page { size: ${paperMm}mm auto; margin: ${marginMm}mm; }
+  @page { size: ${paperMm}mm auto; margin: 0; }
   .rcpt-paper { width:100%; }
   .rcpt-logo-wrap    { text-align:center; margin-bottom:8px; }
   .rcpt-logo-img     { max-width:100px; max-height:48px; object-fit:contain; display:block; margin:0 auto; }
@@ -616,7 +620,8 @@ function _thermalHtml(html, paperWidth) {
   .rcpt-biz-sub      { text-align:center; font-size:8.5pt; color:#555; margin-bottom:8px; }
   .rcpt-divider      { border:none; border-top:1px dashed #999; margin:6px 0; }
   .rcpt-divider-solid{ border:none; border-top:1px solid #555; margin:6px 0; }
-  .rcpt-meta         { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-meta         { display:flex; justify-content:space-between; gap:6px; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-meta > *:last-child, .rcpt-customer > *:last-child, .rcpt-total-row > *:last-child { text-align:right; min-width:0; }
   .rcpt-items-header { display:flex; font-size:8pt; font-weight:700; text-transform:uppercase; color:#333; padding:3px 0; border-top:1px dashed #aaa; border-bottom:1px dashed #aaa; margin:4px 0; }
   .rcpt-items-header .ih-name  { flex:1; min-width:0; }
   .rcpt-items-header .ih-qty   { width:28px; text-align:right; flex-shrink:0; }
@@ -636,7 +641,7 @@ function _thermalHtml(html, paperWidth) {
   .rcpt-footer       { text-align:center; font-size:8pt; color:#555; margin-top:10px; line-height:1.5; }
   .rcpt-thank        { text-align:center; font-size:10pt; font-weight:700; margin:8px 0 3px; }
   .rcpt-note         { font-size:8.5pt; color:#444; margin:4px 0; font-style:italic; white-space:pre-wrap; }
-  .rcpt-customer     { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-customer     { display:flex; justify-content:space-between; gap:6px; font-size:8.5pt; color:#333; margin:1px 0; }
   .rcpt-item-disc    { display:flex; font-size:8pt; font-style:italic; padding:0 0 2px 8px; }
   .rcpt-item-disc .rid-label { flex:1; }
   .rcpt-item-disc .rid-per   { width:52px; text-align:right; }
