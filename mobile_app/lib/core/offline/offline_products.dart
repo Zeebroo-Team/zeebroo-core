@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
 import '../business/business_storage.dart';
+import 'offline_customers.dart';
 import 'product_store.dart';
 
 /// "Offline products" — an optional, per-phone copy of the POS catalog in
@@ -66,6 +67,7 @@ class OfflineProducts extends ChangeNotifier {
       unawaited(sync());
     } else {
       await _store.clearAll();
+      await OfflineCustomers.instance.clearSaved();
       notifyListeners();
     }
   }
@@ -80,6 +82,7 @@ class OfflineProducts extends ChangeNotifier {
   Future<void> onLogout() async {
     if (!supported) return;
     await _store.clearAll();
+    await OfflineCustomers.instance.clearSaved();
   }
 
   /// Current business/branch key; null when no business is selected.
@@ -123,6 +126,14 @@ class OfflineProducts extends ChangeNotifier {
     final scope = await currentScope();
     if (scope == null) return null;
     return _store.productByCode(scope, code);
+  }
+
+  /// After an offline sale: lower the saved stock so this phone doesn't sell
+  /// the same units twice before the next sync.
+  Future<void> reduceLocalStock(Map<int, double> sold) async {
+    final scope = await currentScope();
+    if (!enabled || scope == null) return;
+    await _store.reduceStock(scope, sold);
   }
 
   /// Fresh server cards for [ids] (used to re-check the cart before payment).
@@ -209,6 +220,8 @@ class OfflineProducts extends ChangeNotifier {
       await _store.setMeta(scope, version: version, syncedAt: DateTime.now());
       lastError = null;
       lastErrorWasConnection = false;
+      // Customers ride along so POS can pick one offline too.
+      unawaited(OfflineCustomers.instance.download());
     } catch (e) {
       final status = e is DioException ? e.response?.statusCode : null;
       // 404/405: the server predates the sync endpoints (not deployed yet).

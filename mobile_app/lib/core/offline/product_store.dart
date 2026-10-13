@@ -209,6 +209,27 @@ class ProductStore {
     });
   }
 
+  /// Lowers saved stock after an offline sale (product id → quantity sold).
+  /// The next sync replaces it with the server's figure.
+  Future<void> reduceStock(String scope, Map<int, double> sold) async {
+    if (sold.isEmpty) return;
+    final db = await _database;
+    await db.transaction((txn) async {
+      for (final entry in sold.entries) {
+        final rows = await txn.query('products',
+            columns: ['card'], where: 'scope = ? AND id = ?', whereArgs: [scope, entry.key], limit: 1);
+        if (rows.isEmpty) continue;
+        final card = _decode(rows.first['card']);
+        for (final key in ['stock_quantity', 'available_stock']) {
+          final value = (card[key] as num?)?.toDouble();
+          if (value != null) card[key] = (value - entry.value).clamp(0, double.infinity);
+        }
+        await txn.update('products', {'card': jsonEncode(card)},
+            where: 'scope = ? AND id = ?', whereArgs: [scope, entry.key]);
+      }
+    });
+  }
+
   Future<void> deleteProducts(String scope, Iterable<int> ids) async {
     final list = ids.toList();
     if (list.isEmpty) return;

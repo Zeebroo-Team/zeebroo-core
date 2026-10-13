@@ -1,13 +1,15 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
-import 'package:dio/dio.dart' show DioException;
+import 'package:dio/dio.dart' show DioException, DioExceptionType;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_customers.dart';
 import '../../../core/offline/offline_products.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
 import '../data/scanner_cart_controller.dart';
@@ -18,6 +20,7 @@ import '../models/sale_receipt.dart';
 import '../widgets/checkout_code_entry.dart';
 import '../widgets/customer_picker_sheet.dart';
 import 'barcode_scanner_screen.dart';
+import 'offline_sales_screen.dart';
 import 'sale_receipt_screen.dart';
 
 // ── Models ───────────────────────────────────────────────────────────────────
@@ -60,6 +63,15 @@ class _AppliedGiftCard {
   final String code;
   final String name;
   final double balance;
+}
+
+/// Checkout can't be saved offline; [message] is shown in the checkout sheet.
+class _OfflineCheckoutError implements Exception {
+  const _OfflineCheckoutError(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
@@ -137,8 +149,14 @@ class _PosScreenState extends State<PosScreen>
     _startCatalog();
   }
 
+  void _onOfflineSalesChanged() {
+    if (mounted) setState(() {});
+  }
+
   /// Decides between the on-device catalog and the online one, then loads.
   Future<void> _startCatalog() async {
+    OfflineSales.instance.addListener(_onOfflineSalesChanged);
+    unawaited(OfflineSales.instance.start());
     try {
       await _offline.load();
       if (_offline.enabled) {
@@ -175,6 +193,7 @@ class _PosScreenState extends State<PosScreen>
   void dispose() {
     _syncTimer?.cancel();
     _offline.removeListener(_onOfflineChanged);
+    OfflineSales.instance.removeListener(_onOfflineSalesChanged);
     _searchCtrl.dispose();
     _debounce?.cancel();
     _paidCtrl.dispose();
@@ -565,11 +584,18 @@ class _PosScreenState extends State<PosScreen>
     if (_checkingOut) throw StateError('A sale is already being submitted.');
     setState(() => _checkingOut = true);
     try {
+      // A customer added offline has no server id until it uploads.
+      var customerId = (customer?['id'] as num?)?.toInt();
+      final offlineCustomerUuid = customer != null && customerId == null ? customer['client_uuid'] as String? : null;
+      if (offlineCustomerUuid != null) {
+        customerId = await _offlineCustomerServerId(offlineCustomerUuid);
+      }
+
       final body = <String, dynamic>{
         'payment_method': paymentMethod,
         'amount_paid': amountPaid,
         if (paymentMethod == 'cash') 'amount_tendered': amountPaid,
-        if (customer != null) 'customer_id': customer['id'],
+        'customer_id': ?customerId,
         if (discountPercent > 0) 'discount_percent': discountPercent,
         if (discountFlat > 0) 'discount_flat': discountFlat,
         if (couponCode != null) 'coupon_code': couponCode,
@@ -591,10 +617,137 @@ class _PosScreenState extends State<PosScreen>
         ],
       };
 
-      return await _receiptRepository.completeSale(body);
+      // The customer added offline still couldn't be uploaded: the sale has
+      // to wait on the phone too, and goes up right after its customer.
+      final waitForCustomer = offlineCustomerUuid != null && customerId == null;
+      if (waitForCustomer) {
+        final refused = await OfflineCustomers.instance.failureFor(offlineCustomerUuid);
+        if (refused != null) {
+          throw _OfflineCheckoutError('This customer could not be saved on the server: $refused Pick another customer.');
+        }
+        if (!OfflineSales.instance.canRecord) {
+          throw const _OfflineCheckoutError(
+            'This customer was added offline and hasn’t uploaded yet. Turn on Offline mode or pick another customer.',
+          );
+        }
+        body['customer_client_uuid'] = offlineCustomerUuid;
+      }
+
+      if (!waitForCustomer) {
+        try {
+          return await _receiptRepository.completeSale(body);
+        } on DioException catch (e) {
+          if (!_couldNotReachServer(e) || !OfflineSales.instance.canRecord) rethrow;
+          // No connection at all, so the server never saw this sale: keep it
+          // on the phone and upload it later (below).
+        }
+      }
+
+      if (couponCode != null || giftCardCode != null) {
+        throw _OfflineCheckoutError(
+          waitForCustomer
+              ? 'This customer was added offline and hasn’t uploaded yet, so the sale is saved on the phone. Coupons and gift cards need a connection — remove them first.'
+              : 'No internet connection. Coupons and gift cards need a connection — remove them to save this sale offline.',
+        );
+      }
+      return await _recordOfflineSale(
+        body: body,
+        paymentMethod: paymentMethod,
+        amountPaid: amountPaid,
+        customer: customer,
+        discountPercent: discountPercent,
+        discountFlat: discountFlat,
+        notes: notes,
+      );
     } finally {
       if (mounted) setState(() => _checkingOut = false);
     }
+  }
+
+  /// Server id for a customer added offline: uploads waiting customers first
+  /// if needed (the connection may be back). Null while it can't upload.
+  Future<int?> _offlineCustomerServerId(String clientUuid) async {
+    final customers = OfflineCustomers.instance;
+    final known = await customers.serverIdFor(clientUuid);
+    if (known != null) return known;
+    await customers.upload();
+    return customers.serverIdFor(clientUuid);
+  }
+
+  /// True only when the request never reached the server (no network, DNS,
+  /// refused). A timeout *after* sending is excluded: the server may already
+  /// have saved that sale, and queuing it again would risk a duplicate.
+  static bool _couldNotReachServer(DioException e) =>
+      e.response == null &&
+      (e.type == DioExceptionType.connectionError || e.type == DioExceptionType.connectionTimeout);
+
+  /// Saves the cart as an offline sale and builds its receipt from the cart
+  /// (same JSON shape as the API's, so the normal receipt screen shows it).
+  Future<SaleReceipt> _recordOfflineSale({
+    required Map<String, dynamic> body,
+    required String paymentMethod,
+    required double amountPaid,
+    required Map<String, dynamic>? customer,
+    required double discountPercent,
+    required double discountFlat,
+    required String notes,
+  }) async {
+    final subtotal = _subtotalAfterItemDisc;
+    final orderDiscount = discountFlat > 0
+        ? discountFlat.clamp(0, subtotal).toDouble()
+        : subtotal * discountPercent / 100;
+    final total = (subtotal - orderDiscount).clamp(0, double.infinity).toDouble();
+    final isCash = paymentMethod == 'cash';
+
+    final offlineBody = {
+      ...body,
+      // Honour the price shown on the phone (server skips catalog discounts
+      // for these lines and applies only the item discount on top).
+      'items': [
+        for (final c in _cart)
+          {
+            'product_id': c.id,
+            'qty': c.qty,
+            'unit_price': double.parse(c.basePrice.toStringAsFixed(2)),
+            if (c.itemDiscountPct > 0) 'item_discount_percent': c.itemDiscountPct,
+          },
+      ],
+    };
+    final receiptJson = <String, dynamic>{
+      'payment_method': paymentMethod,
+      'payment_method_label': switch (paymentMethod) {
+        'card' => 'Card',
+        'credit' => 'Credit',
+        _ => 'Cash',
+      },
+      if (customer != null) 'customer_name': customer['name'],
+      'notes': notes,
+      'subtotal': subtotal,
+      'discount_amount': orderDiscount,
+      'total': total,
+      'amount_paid': paymentMethod == 'credit' ? 0 : total,
+      if (isCash) 'amount_tendered': amountPaid,
+      'change_amount': isCash ? (amountPaid - total).clamp(0, double.infinity) : 0,
+      'items': [
+        for (final c in _cart)
+          {
+            'product_name': c.name,
+            'quantity': c.qty,
+            'unit_sell_price': c.effectivePrice,
+            'discount_amount': c.basePrice - c.effectivePrice,
+            'line_total': c.lineTotal,
+          },
+      ],
+    };
+
+    final shown = await OfflineSales.instance.record(body: offlineBody, receipt: receiptJson);
+    unawaited(
+      OfflineProducts.instance
+          .reduceLocalStock({for (final c in _cart) c.id: c.qty.toDouble()})
+          .then((_) => _loadProducts(silent: true))
+          .catchError((_) {}),
+    );
+    return SaleReceipt.fromJson(shown);
   }
 
   /// Offline products: the cart was built from the phone's copy, so confirm
@@ -610,7 +763,7 @@ class _PosScreenState extends State<PosScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Couldn’t confirm the latest prices — the server will check them when you pay.'),
+            content: Text('Couldn’t check the latest prices (no connection). The prices shown will be used.'),
           ),
         );
       }
@@ -787,6 +940,56 @@ class _PosScreenState extends State<PosScreen>
             onSubmitted: _onSearchSubmitted,
             onScan: _openScanner,
           ),
+          // Thin loading bar while products load; the space is always kept so
+          // the grid doesn't jump when it appears or goes.
+          SizedBox(
+            height: 3,
+            child: _loadingProducts
+                ? const LinearProgressIndicator(
+                    key: ValueKey('pos-products-loading'),
+                    minHeight: 3,
+                    backgroundColor: AppColors.primaryLt,
+                    color: AppColors.primary,
+                  )
+                : null,
+          ),
+          if (OfflineSales.instance.waitingCount > 0)
+            Material(
+              key: const ValueKey('pos-offline-sales-strip'),
+              color: OfflineSales.instance.failedCount > 0
+                  ? AppColors.error.withValues(alpha: 0.10)
+                  : AppColors.primaryLt,
+              child: InkWell(
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const OfflineSalesScreen()),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: Row(
+                    children: [
+                      Icon(
+                        OfflineSales.instance.uploading ? Icons.cloud_upload_rounded : Icons.cloud_queue_rounded,
+                        size: 16,
+                        color: AppColors.textDark,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          [
+                            if (OfflineSales.instance.pendingCount > 0)
+                              '${OfflineSales.instance.pendingCount} offline sale${OfflineSales.instance.pendingCount == 1 ? '' : 's'} waiting to upload',
+                            if (OfflineSales.instance.failedCount > 0)
+                              '${OfflineSales.instance.failedCount} need${OfflineSales.instance.failedCount == 1 ? 's' : ''} attention',
+                          ].join(' · '),
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textDark),
+                        ),
+                      ),
+                      const Text('View', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.primaryDk)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (_useLocal && _offline.lastErrorWasConnection && !_offline.syncing)
             Container(
               key: const ValueKey('pos-offline-note'),
@@ -845,7 +1048,10 @@ class _PosScreenState extends State<PosScreen>
 
   Widget _buildGrid() {
     if (_loadingProducts && _products.isEmpty) {
-      return const SizedBox.expand();
+      return const Center(
+        key: ValueKey('pos-products-loading-message'),
+        child: Text('Loading products…', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+      );
     }
     if (_productError != null && _products.isEmpty) {
       return Center(

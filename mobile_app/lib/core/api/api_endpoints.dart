@@ -62,6 +62,10 @@ class ApiEndpoints {
   // "Offline products" on-device cache sync (mobile-only endpoints)
   static const String productsSyncIndex = '/v1/pos/online/products/sync-index';
   static const String productsByIds = '/v1/pos/online/products/by-ids';
+  // Upload a sale recorded offline (idempotent via client_uuid)
+  static const String offlineSales = '/v1/pos/sales/offline';
+  static const String offlineCustomers = '/v1/pos/customers/offline';
+  static const String offlineExpenses = '/v1/pos/expenses/offline';
   static String product(int id) => '/v1/pos/online/products/$id';
   static String productBySku(String sku) =>
       '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';

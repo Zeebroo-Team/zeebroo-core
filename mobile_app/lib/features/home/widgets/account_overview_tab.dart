@@ -3,8 +3,10 @@ import 'package:intl/intl.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
+import '../../pos/screens/offline_sales_screen.dart';
 import 'add_account_sheet.dart';
 
 /// First home tab — a compact balance row for the business's bank accounts
@@ -36,10 +38,57 @@ class AccountOverviewTabState extends State<AccountOverviewTab>
   int? _defaultAccountId;
   bool _settingDefault = false;
 
+  /// Today's sales saved on this phone that haven't uploaded yet — listed
+  /// above the server's recent sales (once uploaded they come from the server).
+  List<Map<String, dynamic>> _waitingTxns = [];
+
   @override
   void initState() {
     super.initState();
+    OfflineSales.instance.addListener(_onOfflineChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    OfflineSales.instance.removeListener(_onOfflineChanged);
+    super.dispose();
+  }
+
+  int _lastWaiting = 0;
+
+  void _onOfflineChanged() {
+    final waiting = OfflineSales.instance.waitingCount;
+    // Fewer waiting: some just uploaded and now show up in the server's list.
+    if (waiting < _lastWaiting) {
+      reloadRecentSales();
+    } else {
+      _loadWaiting().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+    _lastWaiting = waiting;
+  }
+
+  Future<void> _loadWaiting() async {
+    try {
+      final sales = await OfflineSales.instance.todayWaitingSales();
+      _waitingTxns = [
+        for (final s in sales)
+          {
+            'sale_number': s.offlineRef,
+            'sold_at': s.createdAt.toIso8601String(),
+            'payment_method': s.receipt['payment_method'],
+            'total': s.total,
+            'items_count': (s.receipt['items'] as List? ?? const [])
+                .whereType<Map>()
+                .fold<num>(0, (sum, i) => sum + ((i['quantity'] as num?) ?? 0)),
+            'offline': true,
+            'needs_attention': s.needsAttention,
+          },
+      ];
+      _lastWaiting = OfflineSales.instance.waitingCount;
+    } catch (_) {}
   }
 
   Future<void> _load({bool forceRefresh = false}) async {
@@ -74,6 +123,8 @@ class AccountOverviewTabState extends State<AccountOverviewTab>
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
+      // After the server, so a sale that uploaded meanwhile isn't listed twice.
+      await _loadWaiting();
       if (mounted) setState(() {});
     }
   }
@@ -86,13 +137,12 @@ class AccountOverviewTabState extends State<AccountOverviewTab>
       final raw = res.data;
       final data = (raw is Map ? raw['data'] : raw) as Map<String, dynamic>?;
       final recent = (data?['recent_sales'] as List?) ?? [];
-      if (!mounted) return;
-      setState(() {
-        _recentTxns = recent.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
-      });
+      _recentTxns = recent.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
     } catch (_) {
       // Keep showing the last good list; the next tick or a pull-to-refresh retries.
     }
+    await _loadWaiting();
+    if (mounted) setState(() {});
   }
 
   Future<void> _setDefaultAccount(int accountId) async {
@@ -245,7 +295,8 @@ class AccountOverviewTabState extends State<AccountOverviewTab>
             const SizedBox(height: 14),
             widget.belowBalance!,
           ],
-          if (_error == null) ...[
+          // Offline, the sales made on this phone are still listed.
+          if (_error == null || _waitingTxns.isNotEmpty) ...[
             const SizedBox(height: 26),
             _buildRecentTransactions(),
           ],
@@ -332,39 +383,42 @@ class AccountOverviewTabState extends State<AccountOverviewTab>
     );
   }
 
-  Widget _buildRecentTransactions() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('Recent transactions', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-      const SizedBox(height: 12),
-      if (_recentTxns.isEmpty)
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
-          ),
-          child: const Text('No sales recorded today.',style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-        )
-      else
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
-          ),
-          child: Column(
-            children: [
-              for (var i = 0; i < _recentTxns.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: AppColors.border),
-                _TransactionTile(txn: _recentTxns[i]),
+  Widget _buildRecentTransactions() {
+    final txns = [..._waitingTxns, ..._recentTxns];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Recent transactions', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+        const SizedBox(height: 12),
+        if (txns.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+            ),
+            child: const Text('No sales recorded today.',style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < txns.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, color: AppColors.border),
+                  _TransactionTile(txn: txns[i]),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _TransactionTile extends StatelessWidget {
@@ -382,22 +436,43 @@ class _TransactionTile extends StatelessWidget {
     final title = (txn['sale_number'] as String?) ?? '#${txn['id']}';
     final soldAt = DateTime.tryParse(txn['sold_at'] as String? ?? '')?.toLocal();
     final items = (txn['items_count'] as num?)?.toInt() ?? 0;
+    final offline = txn['offline'] == true;
+    final attention = txn['needs_attention'] == true;
     final subtitle = [
       if (soldAt != null) DateFormat('hh:mm a').format(soldAt),
       '$items item${items == 1 ? '' : 's'}',
+      if (offline) attention ? 'Needs attention' : 'Waiting to upload',
     ].join(' · ');
+    final accent = attention ? AppColors.error : AppColors.warning;
 
     return ListTile(
+      key: offline ? ValueKey('recent-offline-$title') : null,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      // Offline sales open the list where they can be uploaded or fixed.
+      onTap: offline
+          ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OfflineSalesScreen()))
+          : null,
       leading: Container(
         width: 38,
         height: 38,
-        decoration: BoxDecoration(color: AppColors.primaryLt, borderRadius: BorderRadius.circular(11)),
+        decoration: BoxDecoration(
+          color: offline ? accent.withValues(alpha: 0.12) : AppColors.primaryLt,
+          borderRadius: BorderRadius.circular(11),
+        ),
         alignment: Alignment.center,
-        child: Icon(_methodIcons[txn['payment_method']] ?? Icons.receipt_rounded, size: 18, color: AppColors.primaryDk),
+        child: Icon(
+          offline ? Icons.cloud_queue_rounded : (_methodIcons[txn['payment_method']] ?? Icons.receipt_rounded),
+          size: 18,
+          color: offline ? accent : AppColors.primaryDk,
+        ),
       ),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textDark)),
-      subtitle: Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
+      subtitle: Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 11.5, color: offline ? accent : AppColors.textMuted),
+      ),
       trailing: Text(formatMoney(txn['total']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textDark)),
     );
   }

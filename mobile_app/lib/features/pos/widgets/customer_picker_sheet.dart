@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_common.dart';
+import '../../../core/offline/offline_customers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/contact_autofill_button.dart';
 
@@ -31,6 +34,9 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
   bool _loading = true;
   String? _error;
 
+  /// No connection: the list comes from the customers saved on the phone.
+  bool _offline = false;
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +52,7 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
 
   Future<void> _loadCustomers([String query = '']) async {
     if (mounted) setState(() => _loading = true);
+    final offline = OfflineCustomers.instance;
     try {
       final response = await ApiClient.instance.get(
         ApiEndpoints.customers,
@@ -54,16 +61,31 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
       );
       final body = response.data;
       final rows = (body is Map ? body['data'] : body) as List? ?? [];
+      final customers = rows
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      unawaited(offline.remember(customers));
+      // Customers added offline that haven't uploaded yet are listed too.
+      final notUploaded = await offline.search(query, notUploadedOnly: true);
       if (!mounted) return;
       setState(() {
-        _customers = rows
-            .whereType<Map>()
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
+        _customers = [...notUploaded, ...customers];
         _error = null;
+        _offline = false;
       });
     } catch (error) {
-      if (mounted) setState(() => _error = apiErrorMessage(error));
+      if (couldNotReachServer(error) && offline.canRecord) {
+        final saved = await offline.search(query);
+        if (!mounted) return;
+        setState(() {
+          _customers = saved;
+          _error = null;
+          _offline = true;
+        });
+      } else if (mounted) {
+        setState(() => _error = apiErrorMessage(error));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -154,6 +176,23 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
                 ),
               ),
             ),
+            if (_offline)
+              Padding(
+                key: const ValueKey('customer-picker-offline'),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Row(
+                  children: const [
+                    Icon(Icons.cloud_off_rounded, size: 16, color: AppColors.warning),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Offline — showing customers saved on this phone.',
+                        style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             const Divider(height: 22),
             Expanded(child: _buildCustomerList()),
           ],
@@ -216,6 +255,7 @@ class _CustomerPickerSheetState extends State<CustomerPickerSheet> {
             [
               if (phone.isNotEmpty) phone,
               type == 'wholesale' ? 'Wholesale' : 'Retail',
+              if (customer['offline'] == true) 'Added offline',
             ].join('  •  '),
           ),
           trailing: const Icon(Icons.chevron_right_rounded),
@@ -302,19 +342,27 @@ class _CustomerFormSheetState extends State<CustomerFormSheet> {
       _saving = true;
       _error = null;
     });
+    final fields = {
+      'name': _nameController.text.trim(),
+      'phone': _nullable(_phoneController.text),
+      'email': _nullable(_emailController.text),
+      'address': _nullable(_addressController.text),
+      'notes': _nullable(_noteController.text),
+      'customer_category_id': _categoryId,
+      'customer_type': _customerType,
+    };
     try {
-      final response = await ApiClient.instance.post(
-        ApiEndpoints.customers,
-        data: {
-          'name': _nameController.text.trim(),
-          'phone': _nullable(_phoneController.text),
-          'email': _nullable(_emailController.text),
-          'address': _nullable(_addressController.text),
-          'notes': _nullable(_noteController.text),
-          'customer_category_id': _categoryId,
-          'customer_type': _customerType,
-        },
-      );
+      final Response<dynamic> response;
+      try {
+        response = await ApiClient.instance.post(ApiEndpoints.customers, data: fields);
+      } catch (error) {
+        if (!couldNotReachServer(error) || !OfflineCustomers.instance.canRecord) rethrow;
+        // No connection: keep the customer on the phone; it uploads before
+        // any sale made to it.
+        final saved = await OfflineCustomers.instance.record(fields);
+        if (mounted) Navigator.of(context).pop(saved);
+        return;
+      }
       final body = response.data;
       final row = body is Map ? body['data'] : null;
       if (!mounted) return;

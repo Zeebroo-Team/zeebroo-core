@@ -119,6 +119,29 @@ class _SaleReceiptScreenState extends State<SaleReceiptScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                if (receipt.isOffline)
+                  Container(
+                    key: const ValueKey('receipt-offline-note'),
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.cloud_off_rounded, size: 18, color: AppColors.textDark),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Saved offline as ${receipt.saleNumber}. It uploads automatically when you’re back online and then gets its POS number.',
+                            style: const TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textDark),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 if (_settings == null) const LinearProgressIndicator(),
                 if (settings.isFallback)
                   const Padding(
