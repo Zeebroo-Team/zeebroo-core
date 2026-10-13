@@ -10,7 +10,7 @@ use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
 /**
  * Blocks Pos API access once a business's subscription payment has passed its
- * `due_at` deadline (see Payment::GRACE_PERIOD_DAYS). Routes the desktop app
+ * `due_at` deadline (see Payment::gracePeriodDaysFor()). Routes the desktop app
  * needs even while locked — auth/me, billing endpoints, business switching,
  * notifications — are exempted via ->withoutMiddleware() in routes/api.php.
  */
