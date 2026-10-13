@@ -980,6 +980,10 @@ html, body {
   width: 100%;
   max-width: 320px;
 }
+/* 58 mm roll (Settings → Printer): narrower paper, Price / Disc columns dropped like the printout */
+.receipt-doc--bill[data-paper="58"] { font-size: 10px; padding: 12px 10px; }
+.receipt-doc--bill[data-paper="58"] .rd-col-price,
+.receipt-doc--bill[data-paper="58"] .rd-col-disc { display: none; }
 .receipt-doc--bill .rd-center { text-align: center; }
 .receipt-doc--bill .rd-business { font-weight: bold; font-size: 13px; }
 .receipt-doc--bill .rd-meta { font-size: 10px; margin: 1px 0; }

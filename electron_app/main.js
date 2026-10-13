@@ -332,7 +332,13 @@ ipcMain.handle('get-printers', async (e) => {
 ipcMain.handle('get-printer-config', () => {
   config = loadConfig();
   const tp = config.thermalPrinter || {};
-  return { name: tp.name || '', silent: tp.silent !== false, paperWidth: tp.paperWidth || 80, mode: tp.mode || 'escpos' };
+  return {
+    name:        tp.name || '',
+    silent:      tp.silent !== false,
+    paperWidth:  tp.paperWidth || 80,
+    mode:        tp.mode || 'escpos',
+    showPreview: tp.showPreview !== false,
+  };
 });
 
 ipcMain.handle('set-printer-config', (_e, cfg) => {
@@ -342,6 +348,7 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
     silent:     cfg.silent !== false,
     paperWidth: cfg.paperWidth === 58 ? 58 : 80,
     mode:       cfg.mode === 'html' ? 'html' : 'escpos',
+    showPreview: cfg.showPreview !== false,
   };
   saveConfig(config);
   return true;
@@ -349,10 +356,11 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
 
 // ── ESC/POS builder — pure Node.js, no native modules ────────────────────────
 function _escposBuffer(receipt, paperWidth) {
-  const COL  = paperWidth === 58 ? 30 : 42;
-  const NAMW = paperWidth === 58 ? 14 : 20;  // item name column width
+  // Font A is 12 dots wide: 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
+  const COL  = paperWidth === 58 ? 32 : 48;
+  const NAMW = paperWidth === 58 ? 16 : 24;  // item name column width
   const QTYF = 4;                              // qty column
-  const PRCF = paperWidth === 58 ?  0 :  8;  // price column (skipped on 58mm)
+  const PRCF = paperWidth === 58 ?  0 : 10;  // price column (skipped on 58mm)
   const TOTF = COL - NAMW - QTYF - PRCF;     // total column
 
   const buf = [];
@@ -580,21 +588,18 @@ ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
   }
 });
 
-ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
-  const { html = '', name = '', silent = true, paperWidth = 80 } = opts;
-
-  return new Promise((resolve) => {
-    const paperMm   = paperWidth === 58 ? 58 : 80;
-    const marginMm  = 3;
-    const contentMm = paperMm - marginMm * 2;
-
-    // Build a fully self-contained, clean HTML page for the thermal printer.
-    // Running in a dedicated hidden window avoids all main-app CSS interference
-    // and lets us use marginType:'printableArea' which every Windows driver accepts.
-    const fullHtml = `<!DOCTYPE html>
+// Build a fully self-contained, clean HTML page for the thermal printer.
+// Running in a dedicated hidden window avoids all main-app CSS interference.
+const THERMAL_MARGIN_MM = 3;
+function _thermalHtml(html, paperWidth) {
+  const paperMm   = paperWidth === 58 ? 58 : 80;
+  const marginMm  = THERMAL_MARGIN_MM;
+  const contentMm = paperMm - marginMm * 2;
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<title>Receipt</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body {
@@ -632,10 +637,25 @@ ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
   .rcpt-thank        { text-align:center; font-size:10pt; font-weight:700; margin:8px 0 3px; }
   .rcpt-note         { font-size:8.5pt; color:#444; margin:4px 0; font-style:italic; white-space:pre-wrap; }
   .rcpt-customer     { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-item-disc    { display:flex; font-size:8pt; font-style:italic; padding:0 0 2px 8px; }
+  .rcpt-item-disc .rid-label { flex:1; }
+  .rcpt-item-disc .rid-per   { width:52px; text-align:right; }
+  .rcpt-item-disc .rid-total { width:58px; text-align:right; }
+  ${paperMm === 58 ? `
+  html, body { font-size:9pt; }
+  .ih-price, .ri-price, .rid-per { display:none; }
+  .ih-qty, .ri-qty { width:22px; }` : ''}
 </style>
 </head>
 <body>${html}</body>
 </html>`;
+}
+
+ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
+  const { html = '', name = '', silent = true, paperWidth = 80 } = opts;
+
+  return new Promise((resolve) => {
+    const fullHtml = _thermalHtml(html, paperWidth);
 
     const thermalWin = new BrowserWindow({
       width: 400, height: 600,
@@ -683,6 +703,56 @@ ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
 
     thermalWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fullHtml));
   });
+});
+
+// Windows' system print dialog can't preview Electron pages ("This app doesn't
+// support print preview"), so when no printer is configured we render the receipt
+// to a PDF at the exact roll width and open it in Chromium's PDF viewer, which
+// shows a true-size preview and has its own Print button.
+ipcMain.handle('preview-receipt-pdf', async (_e, opts = {}) => {
+  const { html = '', paperWidth = 80 } = opts;
+  const os      = require('os');
+  const paperMm = paperWidth === 58 ? 58 : 80;
+  const MM_PER_IN = 25.4;
+
+  const renderWin = new BrowserWindow({
+    width: 400, height: 600, show: false, skipTaskbar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+  });
+  try {
+    await renderWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth)));
+    await new Promise(r => setTimeout(r, 300));  // let images / fonts settle
+
+    // Roll paper has no fixed length — size the page to the receipt's content height
+    // (body, not documentElement — the latter is never shorter than the 600px window)
+    const contentPx = await renderWin.webContents.executeJavaScript('Math.ceil(document.body.getBoundingClientRect().height)');
+    const heightMm  = (contentPx * MM_PER_IN / 96) + THERMAL_MARGIN_MM * 2 + 2;
+    const marginIn  = THERMAL_MARGIN_MM / MM_PER_IN;
+
+    const pdf = await renderWin.webContents.printToPDF({
+      pageSize:        { width: paperMm / MM_PER_IN, height: heightMm / MM_PER_IN },
+      margins:         { top: marginIn, bottom: marginIn, left: marginIn, right: marginIn },
+      printBackground: true,
+    });
+
+    const pdfPath = path.join(os.tmpdir(), `zeebroo-receipt-${Date.now()}.pdf`);
+    fs.writeFileSync(pdfPath, pdf);
+
+    const previewWin = new BrowserWindow({
+      width: 520, height: 820, title: `Receipt preview — ${paperMm} mm`,
+      parent: BrowserWindow.fromWebContents(_e.sender) || undefined,
+      autoHideMenuBar: true,
+      webPreferences: { plugins: true, nodeIntegration: false, contextIsolation: true, sandbox: true },
+    });
+    previewWin.on('page-title-updated', (ev) => ev.preventDefault());  // keep our title, not the file path
+    previewWin.once('closed', () => { try { fs.unlinkSync(pdfPath); } catch (_) {} });
+    await previewWin.loadFile(pdfPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!renderWin.isDestroyed()) renderWin.destroy();
+  }
 });
 
 // ── API proxy (avoids CORS in renderer) ──────────────────────────────────

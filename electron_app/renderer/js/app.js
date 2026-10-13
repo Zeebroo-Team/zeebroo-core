@@ -514,7 +514,7 @@ function activateTab(tabName) {
   if (tabName !== 'rst-pos') _rstPosStopPoll();
 
   if (tabName === 'home')       loadHomeDashboard();
-  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); _maybePosSetupWizard(); }
+  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); _maybePosSetupWizard(); _focusPosSearch(); }
   if (tabName === 'sales')      { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
   if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
   if (tabName === 'finance')    { switchFinView('flow'); }
@@ -19500,6 +19500,7 @@ $('#bc-print-all-btn')?.addEventListener('click', () => {
 });
 
 // ── Thermal printer settings (PSM Printer tab) ────────────────────────────
+let _psmPrinterLoaded = false;
 async function _psmLoadPrinterSettings() {
   const statusEl = $('#psm-printer-status');
   if (statusEl) statusEl.textContent = 'Loading printers…';
@@ -19523,6 +19524,9 @@ async function _psmLoadPrinterSettings() {
   if (paper) paper.value = String(cfg.paperWidth || 80);
   const silent = $('#psm-printer-silent');
   if (silent) silent.checked = cfg.silent !== false;
+  const preview = $('#psm-printer-preview');
+  if (preview) preview.checked = cfg.showPreview !== false;
+  _psmPrinterLoaded = true;
   if (statusEl) statusEl.textContent = printers.length
     ? `${printers.length} printer${printers.length > 1 ? 's' : ''} found`
     : 'No printers found — install your XP-80T driver and reconnect USB';
@@ -19530,14 +19534,32 @@ async function _psmLoadPrinterSettings() {
 
 $('#psm-printer-refresh')?.addEventListener('click', () => _psmLoadPrinterSettings());
 
-$('#psm-printer-save')?.addEventListener('click', async () => {
+$('#psm-printer-name')?.addEventListener('change', (e) => {
+  const statusEl = $('#psm-printer-status');
+  if (statusEl && _isVirtualPrinter(e.target.value)) {
+    statusEl.textContent = `"${e.target.value}" is a virtual printer — it saves a file and always asks for a file name. ` +
+      'Receipts will use HTML mode for it. Select your XP-80T for real, automatic printing.';
+  }
+});
+
+// Printer config is stored locally (electron config), not on the server — so the
+// main footer "Save settings" must save it too, not just the Printer tab's own button.
+async function _psmSavePrinterSettings() {
+  if (!_psmPrinterLoaded) return null;  // tab never opened — fields are empty, don't wipe the saved printer
   const cfg = {
     name:       $('#psm-printer-name')?.value       || '',
     mode:       $('#psm-printer-mode')?.value        || 'escpos',
     silent:   !!$('#psm-printer-silent')?.checked,
     paperWidth: parseInt($('#psm-printer-paper')?.value) || 80,
+    showPreview: $('#psm-printer-preview')?.checked !== false,
   };
   await window.electronAPI.setPrinterConfig(cfg);
+  return cfg;
+}
+
+$('#psm-printer-save')?.addEventListener('click', async () => {
+  const cfg = await _psmSavePrinterSettings();
+  if (!cfg) return;
   toast('Printer settings saved', 'success');
   const statusEl = $('#psm-printer-status');
   if (statusEl) statusEl.textContent = cfg.name
@@ -19553,35 +19575,33 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
     paperWidth: parseInt($('#psm-printer-paper')?.value) || 80,
   };
 
-  if (cfg.name && cfg.mode !== 'html') {
+  // Dummy sale so the test page shows a realistic receipt layout at the chosen width
+  const testSale = {
+    sale_number: 'TEST-0001',
+    sold_at:     new Date().toISOString(),
+    customer:    { name: 'Walk-in Customer' },
+    cashier:     { name: 'Cashier' },
+    notes:       `Test print · ${cfg.name || 'No printer (preview)'} · ${cfg.paperWidth}mm`,
+    items: [
+      { product_name: 'Wireless Mouse',                      quantity: 2,  unit_sell_price: 1250, line_total: 2500 },
+      { product_name: 'USB-C Charging Cable 1m (Braided)',   quantity: 1,  unit_sell_price: 850,  line_total: 850 },
+      { product_name: 'A4 Paper Ream 500 Sheets',            quantity: 3,  unit_sell_price: 1650, line_total: 4950 },
+      { product_name: 'Notebook A5 Ruled',                   quantity: 4,  unit_sell_price: 375,  line_total: 1500, discount_amount: 125 },
+      { product_name: 'Ballpoint Pen Blue',                  quantity: 10, unit_sell_price: 45,   line_total: 450 },
+    ],
+    subtotal:        10250,
+    discount_amount: 250,
+    _taxBreakdown:   [{ name: 'VAT', type: 'percent', value: 18, amount: 1800 }],
+    total:           11800,
+    amount_paid:     12000,
+    change_amount:   200,
+    payment_method: 'cash', payment_method_label: 'Cash',
+  };
+
+  if (cfg.name && cfg.mode !== 'html' && !_isVirtualPrinter(cfg.name)) {
     // ── ESC/POS test — structured data, raw bytes ────────────────────────────
-    const testReceipt = {
-      businessName: 'Zeebroo POS',
-      address:      '',
-      header:       'ESC/POS DIRECT TEST',
-      footer:       '*** END OF TEST ***',
-      currency:     '',
-      saleNumber:   'TEST-001',
-      date:         new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
-      customer:     '',
-      cashier:      '',
-      items: [
-        { name: 'Test Item A',    qty: 1, price: 10.00, total: 10.00, discount: 0 },
-        { name: 'Test Item B',    qty: 2, price:  5.00, total: 10.00, discount: 0 },
-        { name: 'Disc Item',      qty: 1, price: 15.00, total: 12.00, discount: 3.00 },
-      ],
-      subtotal:     32.00,
-      discount:     3.00,
-      discountPct:  '',
-      taxes:        [{ name: 'Tax 10%', amount: 2.90 }],
-      total:        31.90,
-      paid:         35.00,
-      change:        3.10,
-      paymentMethod:'Cash',
-      notes:        `Printer: ${cfg.name}\nPaper: ${cfg.paperWidth}mm`,
-    };
     const res = await window.electronAPI.printReceiptEscpos({
-      receipt:    testReceipt,
+      receipt:    _buildEscposReceiptData(testSale),
       name:       cfg.name,
       paperWidth: cfg.paperWidth,
     });
@@ -19590,18 +19610,8 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
 
   } else {
     // ── HTML window test (or no printer selected) ────────────────────────────
-    const w = cfg.paperWidth === 58 ? 50 : 72;
-    const testHtml = `
-      <div style="font-family:'Courier New',Courier,monospace;font-size:10pt;width:${w}mm;padding:0 2mm">
-        <div style="text-align:center;font-size:12pt;font-weight:bold;margin-bottom:4px">TEST PRINT</div>
-        <div style="border-top:1px dashed #000;border-bottom:1px dashed #000;padding:4px 0;text-align:center;margin-bottom:6px">
-          Zeebroo POS — HTML Window
-        </div>
-        <div>Printer: ${escHtml(cfg.name || 'System default')}</div>
-        <div>Paper: ${cfg.paperWidth}mm</div>
-        <div>Time: ${new Date().toLocaleTimeString()}</div>
-        <div style="border-top:1px dashed #000;margin-top:6px;padding-top:4px;text-align:center">*** END ***</div>
-      </div>`;
+    const rcpt     = buildReceiptHTML(testSale);
+    const testHtml = `<div class="rcpt-paper" data-lang="${rcpt.lang}">${rcpt.html}</div>`;
     if (cfg.name) {
       const res = await window.electronAPI.printReceiptThermal({
         html:       testHtml,
@@ -19612,37 +19622,12 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
       if (res && !res.success) toast(res.error || 'Print failed', 'error');
       else toast('HTML test page sent to printer', 'success');
     } else {
-      const printable = $('#receipt-printable');
-      if (!printable) return;
-      const prevHtml = printable.innerHTML;
-      _psmInjectThermalCss(cfg.paperWidth);
-      printable.innerHTML = testHtml;
-      printable.style.display = 'block';
-      try {
-        await window.electronAPI.printReceipt();
-        toast('Test page sent to printer', 'success');
-      } catch { /* ignore */ } finally {
-        printable.style.display = 'none';
-        printable.innerHTML = prevHtml;
-        _psmRemoveThermalCss();
-      }
+      const res = await window.electronAPI.previewReceiptPdf({ html: testHtml, paperWidth: cfg.paperWidth });
+      if (res && !res.success) toast(res.error || 'Could not open print preview', 'error');
     }
   }
 });
 
-// Inject/remove temporary @page CSS for correct thermal paper width
-function _psmInjectThermalCss(paperWidth) {
-  _psmRemoveThermalCss();
-  const w = paperWidth === 58 ? 58 : 80;
-  const printW = w - 8; // 4mm margin each side
-  const s = document.createElement('style');
-  s.id = 'thermal-print-override';
-  s.textContent = `@media print { @page { size: ${w}mm auto; margin: 0; } #receipt-printable { width: ${printW}mm !important; } }`;
-  document.head.appendChild(s);
-}
-function _psmRemoveThermalCss() {
-  $('#thermal-print-override')?.remove();
-}
 
 // ── Print settings strip ──────────────────────────────────────────────────
 $('#bc-ps-type')?.querySelectorAll('.bc-ps-seg-btn').forEach(btn => {
@@ -22495,7 +22480,9 @@ $('#inv-tabs').addEventListener('click', e => {
 });
 
 // ── Products ───────────────────────────────────────────────────────────────
+let _loadProductsSeq = 0;
 async function loadProducts(search = '', catId = 0, page = 1) {
+  const seq = ++_loadProductsSeq;
   // Bail if the POS mode has since switched away from Products — a stale
   // in-flight request (e.g. from before switching to Services/Rental) must
   // not repaint and un-hide #product-grid out from under the active mode.
@@ -22520,6 +22507,8 @@ async function loadProducts(search = '', catId = 0, page = 1) {
     discountOnly: applyDiscount,
   });
   if (state.posMode !== 'products') return;
+  // A newer request (e.g. the reset after a barcode scan) superseded this one
+  if (seq !== _loadProductsSeq) return;
   if (res.status !== 200) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load products</div>`;
     setStatus('Error loading products');
@@ -22843,29 +22832,56 @@ function _findBySku(q) {
   return state.products.find(p => p.sku && p.sku.trim().toLowerCase() === lower) || null;
 }
 
+// After a scan/add: clear the search and restore the full product grid
+function _resetSearchAfterScan() {
+  $('#product-search').value = '';
+  state.searchQuery = '';
+  _ssClose();
+  clearTimeout(searchTimer);
+  clearTimeout(_scanIdleTimer);
+  loadProducts('', state.activeCategory);
+}
+
 // Try exact SKU match → add to cart and clear; returns true if matched
 function _trySkuAdd(q) {
   const match = _findBySku(q);
   if (!match) return false;
   _addToCartDirectly(match);
-  $('#product-search').value = '';
-  state.searchQuery = '';
-  _ssClose();
-  clearTimeout(searchTimer);
+  _resetSearchAfterScan();
   return true;
+}
+
+// Batch SKU (per stock layer barcode, e.g. 32423-011) contains the query
+function _hasBatchSku(p, lower, exact = false) {
+  return (p.layers || []).some(l => {
+    const b = (l.batch_sku || '').toLowerCase();
+    return b && (exact ? b === lower : b.includes(lower));
+  });
+}
+
+// Scanner without an Enter suffix: once typing pauses, add an exact SKU / batch SKU match.
+// Waiting avoids adding product "32423" while the scanner is still sending "32423-011".
+let _scanIdleTimer = null;
+function _scheduleScanAdd(q) {
+  clearTimeout(_scanIdleTimer);
+  if (!q) return;
+  _scanIdleTimer = setTimeout(async () => {
+    if ($('#product-search').value.trim() !== q) return;
+    if (_trySkuAdd(q)) return;
+    const lower = q.toLowerCase();
+    if (state.products.some(p => _hasBatchSku(p, lower, true))) await _tryBatchSkuApiAdd(q);
+  }, 250);
 }
 
 function _ssRender(q) {
   const box = $('#search-suggest');
   if (!q) { _ssClose(); return; }
 
-  // Exact SKU match → auto-add immediately, no dropdown (barcode scanner mode)
-  if (_trySkuAdd(q)) return;
-
   const lower = q.toLowerCase();
   const matches = state.products.filter(p =>
     p.name.toLowerCase().includes(lower) ||
-    (p.sku && p.sku.toLowerCase().includes(lower))
+    (p.sku && p.sku.toLowerCase().includes(lower)) ||
+    _hasBatchSku(p, lower)
   );
 
   if (!matches.length) {
@@ -22941,6 +22957,7 @@ $('#product-search').addEventListener('input', (e) => {
   const q = e.target.value;
   state.searchQuery = q;
   _ssRender(q.trim());
+  _scheduleScanAdd(q.trim());
   if (q.trim()) {
     searchTimer = setTimeout(() => loadProducts(state.searchQuery, state.activeCategory), 400);
   }
@@ -22954,7 +22971,7 @@ async function _tryBatchSkuApiAdd(q) {
   if (!p || !p.id) return false;
   if (p.is_dynamic_pricing) {
     await handleDynamicProductClick(p);
-    $('#product-search').value = ''; state.searchQuery = ''; _ssClose(); clearTimeout(searchTimer);
+    _resetSearchAfterScan();
     return true;
   }
   const layerId = p.matched_layer_id ?? null;
@@ -22975,7 +22992,7 @@ async function _tryBatchSkuApiAdd(q) {
       } else {
         const wty = await _askWarranty(cartItem.name);
         if (wty === null) {
-          $('#product-search').value = ''; state.searchQuery = ''; _ssClose(); clearTimeout(searchTimer);
+          _resetSearchAfterScan();
           return true;
         }
         cartItem.warrantyType = wty.type;
@@ -22984,10 +23001,7 @@ async function _tryBatchSkuApiAdd(q) {
     }
   }
   addToCart(cartItem);
-  $('#product-search').value = '';
-  state.searchQuery = '';
-  _ssClose();
-  clearTimeout(searchTimer);
+  _resetSearchAfterScan();
   return true;
 }
 
@@ -23009,6 +23023,7 @@ $('#product-search').addEventListener('keydown', async (e) => {
   }
   if (e.key === 'Enter') {
     e.preventDefault();
+    clearTimeout(_scanIdleTimer);
     // 1. Exact product-level SKU match in local state (fast path)
     if (q && _trySkuAdd(q)) return;
     // 2. Batch SKU API lookup (e.g. PRD-IIW3ZFGK-02 not in local state)
@@ -23083,6 +23098,7 @@ function switchPosMode(mode) {
     if (svcSection) svcSection.style.display = 'none';
     if (rentalSection) rentalSection.style.display = 'none';
     loadProducts(state.searchQuery, state.activeCategory);
+    _focusPosSearch();
   } else if (mode === 'services') {
     productEls.forEach(el => el && (el.style.display = 'none'));
     if (svcSection) { svcSection.style.display = 'flex'; svcSection.style.flexDirection = 'column'; }
@@ -23586,6 +23602,19 @@ function _noModalOpen() {
   return ![...$$('.modal-overlay')].some(m => m.style.display !== 'none') &&
          $('#pos-layer-picker')?.getAttribute('aria-hidden') !== 'false' &&
          $('#search-suggest')?.style.display === 'none';
+}
+
+// Keep the POS product search focused so barcode scanner input always lands there
+function _posSearchReady() {
+  const inp = $('#product-search');
+  return !!inp && _posIsActive() && state.posMode === 'products' &&
+         inp.offsetParent !== null && !$('#backstage')?.classList.contains('open') &&
+         ![...$$('.modal-overlay')].some(m => m.style.display !== 'none') &&
+         $('#pos-layer-picker')?.getAttribute('aria-hidden') !== 'false';
+}
+
+function _focusPosSearch() {
+  setTimeout(() => { if (_posSearchReady()) $('#product-search').focus(); }, 60);
 }
 
 // ── End product grid keyboard navigation ───────────────────────────────────
@@ -28541,6 +28570,9 @@ $('#psm-save').addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  // Local printer config — independent of the server save below
+  await _psmSavePrinterSettings().catch(() => toast('Failed to save printer settings', 'error'));
+
   const payload = {
     business_name:               $('#psm-biz-name').value.trim(),
     business_logo_url:           _psmBizLogoUrl || null,
@@ -29154,9 +29186,27 @@ async function _posCreateInvoiceFromSale(sale, customerId) {
 // ── Receipt preview (simple, shown after checkout) ─────────────────────────
 let _receiptSale = null;
 
-function showReceiptModal(sale) {
+// Size the on-screen receipt preview to the configured thermal paper width (58 / 80 mm)
+async function _rcptApplyPaperWidth(...els) {
+  const cfg = await window.electronAPI.getPrinterConfig().catch(() => null);
+  const w   = cfg?.paperWidth === 58 ? '58' : '80';
+  els.forEach(el => { if (el) el.dataset.paper = w; });
+}
+
+// afterSale: called from checkout — honours the "Show receipt preview after sale"
+// printer setting; when that is off the bill prints straight away with no popup.
+async function showReceiptModal(sale, { afterSale = false } = {}) {
   _receiptSale = sale;
   _applyReceipt($('#rcpt-paper'), $('#receipt-printable'), buildReceiptHTML(sale));
+  if (afterSale) {
+    const cfg = await window.electronAPI.getPrinterConfig().catch(() => null);
+    if (cfg && cfg.showPreview === false) {
+      await _rcptApplyPaperWidth($('#receipt-printable .rcpt-paper'));
+      await _rcptPrint(cfg, { auto: true });
+      return;
+    }
+  }
+  _rcptApplyPaperWidth($('#rcpt-paper'), $('#receipt-printable .rcpt-paper'));
   $('#receipt-modal').style.display = 'flex';
 }
 
@@ -29206,10 +29256,35 @@ function _buildEscposReceiptData(sale) {
   };
 }
 
-$('#rcpt-print').addEventListener('click', async () => {
-  const cfg = await window.electronAPI.getPrinterConfig().catch(() => null);
+// Virtual "printers" (Print to PDF, XPS, OneNote, Fax) can't interpret raw ESC/POS bytes —
+// they'd save an empty/corrupt file — so they must always go through the HTML (GDI) path.
+function _isVirtualPrinter(name) {
+  return /pdf|xps|onenote|fax/i.test(String(name || ''));
+}
 
-  if (cfg?.name && cfg?.mode !== 'html') {
+// Print _receiptSale using the configured printer (or the PDF preview when none is set).
+// auto: no-preview checkout print — with no printer set, go silently to the Windows default printer.
+async function _rcptPrint(cfg, { auto = false } = {}) {
+  if (auto && !cfg?.name) {
+    // Virtual "printers" (Print to PDF, XPS, OneNote, Fax) always pop a Windows save dialog,
+    // which defeats auto-print — skip them and tell the cashier to pick a real printer.
+    const printers = await window.electronAPI.getPrinters().catch(() => []);
+    const def      = printers.find(p => p.isDefault);
+    if (!def || _isVirtualPrinter(def.name)) {
+      toast(`Bill not printed — ${def ? `default printer "${def.displayName}" is not a real printer` : 'no default printer'}. Select your receipt printer in Settings → Printer.`, 'warning');
+      return;
+    }
+    const res = await window.electronAPI.printReceiptThermal({
+      html:       $('#receipt-printable')?.innerHTML || '',
+      name:       '',   // empty → system default printer
+      silent:     true,
+      paperWidth: cfg?.paperWidth || 80,
+    });
+    if (res && !res.success) toast(res.error || 'Print failed — select a printer in Settings → Printer', 'error');
+    return;
+  }
+
+  if (cfg?.name && cfg?.mode !== 'html' && !_isVirtualPrinter(cfg.name)) {
     // ── ESC/POS direct — raw bytes, no GDI, no Windows driver conflict ──────
     const res = await window.electronAPI.printReceiptEscpos({
       receipt:    _buildEscposReceiptData(_receiptSale),
@@ -29230,16 +29305,17 @@ $('#rcpt-print').addEventListener('click', async () => {
     if (res && !res.success) toast(res.error || 'Print failed', 'error');
 
   } else {
-    // ── No printer configured — system print dialog ──────────────────────────
-    _psmInjectThermalCss(cfg?.paperWidth || 80);
-    $('#receipt-printable').style.display = 'block';
-    try {
-      await window.electronAPI.printReceipt();
-    } finally {
-      $('#receipt-printable').style.display = 'none';
-      _psmRemoveThermalCss();
-    }
+    // ── No printer configured — true-size PDF preview (has its own Print button) ─
+    const res = await window.electronAPI.previewReceiptPdf({
+      html:       $('#receipt-printable')?.innerHTML || '',
+      paperWidth: cfg?.paperWidth || 80,
+    });
+    if (res && !res.success) toast(res.error || 'Could not open print preview', 'error');
   }
+}
+
+$('#rcpt-print').addEventListener('click', async () => {
+  _rcptPrint(await window.electronAPI.getPrinterConfig().catch(() => null));
 });
 
 // ── Receipt layout editor (template designer) ──────────────────────────────
@@ -29462,6 +29538,7 @@ function showReceiptEditor() {
   _rcptEdLogoRender();
   _buildReceiptTemplates();
   _syncEditorPreview();
+  _rcptApplyPaperWidth($('#rcpt-ed-paper'));
   $('#receipt-editor-modal').style.display = 'flex';
 }
 
@@ -29658,6 +29735,17 @@ document.addEventListener('keydown', (e) => {
     if ((e.key === 'm' || e.key === 'M') && _ciSelIdx >= 0) {
       e.preventDefault(); openNoteModal(); return;
     }
+  }
+
+  // ── Barcode scanner capture: route stray typing into the product search ──
+  const _editable = inInput || document.activeElement?.isContentEditable;
+  if (!_editable && !mod && !e.altKey && e.key.length === 1 && _posSearchReady()) {
+    e.preventDefault();
+    const inp = $('#product-search');
+    inp.focus();
+    inp.value += e.key;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
   }
 
   // ── Product grid arrow-key navigation ────────────────────────────────────
@@ -30310,7 +30398,9 @@ function addToCart(product) {
   }
   renderCart();
   renderPosTabBar();
-  // Focus qty input of the item just added/updated
+  // Products mode: keep the search focused so the next barcode scan lands there
+  // (qty stays editable by click or the Q shortcut). Other modes focus the qty input.
+  if (state.posMode === 'products') { _focusPosSearch(); return; }
   requestAnimationFrame(() => {
     const input = $(`#cart-items .ci-qty-input[data-key="${CSS.escape(key)}"]`);
     if (input) { input.focus(); input.select(); }
@@ -30853,9 +30943,13 @@ function _coNumpadKey(key) {
   } else if (key === 'back') {
     _coAmount = _coAmount.slice(0, -1);
   } else if (key === '.') {
-    if (!_coAmount.includes('.')) _coAmount += '.';
+    // Amount still holds the auto-filled due → start a fresh entry
+    if (_coAmount === _coGetDue().toFixed(2)) _coAmount = '0.';
+    else if (!_coAmount.includes('.')) _coAmount += '.';
   } else {
-    if (_coAmount === '0' || _coAmount === '') _coAmount = key;
+    // Amount still holds the auto-filled due (or is empty) → replace instead of appending,
+    // otherwise the 2-decimal cap below swallows every digit
+    if (_coAmount === '0' || _coAmount === '' || _coAmount === _coGetDue().toFixed(2)) _coAmount = key;
     else _coAmount += key;
     // Max 2 decimal places
     const parts = _coAmount.split('.');
@@ -31408,7 +31502,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
     if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
       _posCreateInvoiceFromSale(sale, postCustomerId);
     } else {
-      showReceiptModal(sale);
+      showReceiptModal(sale, { afterSale: true });
     }
   }
 

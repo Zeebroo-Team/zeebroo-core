@@ -46,7 +46,8 @@ class PosCatalogService
             $like = '%'.addcslashes($term, '%_\\').'%';
             $query->where(function ($builder) use ($like) {
                 $builder->where('name', 'like', $like)
-                    ->orWhere('sku', 'like', $like);
+                    ->orWhere('sku', 'like', $like)
+                    ->orWhereHas('stockLayers', fn ($l) => $l->where('batch_sku', 'like', $like));
             });
         }
 
@@ -180,12 +181,13 @@ class PosCatalogService
             default       => null,
         };
 
-        // Every word must match the name or SKU, in any order ("activewear 3252").
+        // Every word must match the name, SKU or a batch SKU (barcode), in any order ("activewear 3252").
         foreach (preg_split('/\s+/', trim((string) $search), -1, PREG_SPLIT_NO_EMPTY) as $word) {
             $like = '%'.addcslashes($word, '%_\\').'%';
             $query->where(function ($builder) use ($like) {
                 $builder->where('name', 'like', $like)
-                    ->orWhere('sku', 'like', $like);
+                    ->orWhere('sku', 'like', $like)
+                    ->orWhereHas('stockLayers', fn ($l) => $l->where('batch_sku', 'like', $like));
             });
         }
 
@@ -460,6 +462,7 @@ class PosCatalogService
 
             $out[] = [
                 'id' => (int) $layer->id,
+                'batch_sku' => $layer->batch_sku,
                 'label' => $label,
                 'quantity_remaining' => round((float) $layer->quantity_remaining, 3),
                 'unit_cost' => round((float) $layer->unit_cost, 2),

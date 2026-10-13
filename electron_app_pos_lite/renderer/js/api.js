@@ -61,6 +61,8 @@ const API = (() => {
       const suffix = qs.toString();
       return request('GET', '/online/products' + (suffix ? `?${suffix}` : ''));
     },
+    // Exact product SKU or batch SKU (barcode scan)
+    productBySku: (sku) => request('GET', `/online/products/sku/${encodeURIComponent(sku)}`),
     posCategories: () => request('GET', '/online/categories'),
     checkout: (payload) => request('POST', '/online/checkout', payload),
 

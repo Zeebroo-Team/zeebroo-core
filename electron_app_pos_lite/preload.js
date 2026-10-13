@@ -29,6 +29,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printHtml: (html) => ipcRenderer.invoke('print-html', { html }),
   savePdf: (html, suggestedFilename) => ipcRenderer.invoke('save-html-as-pdf', { html, suggestedFilename }),
 
+  // Thermal printer (Settings → Printer) — stored in local config.json, per device
+  getPrinters: () => ipcRenderer.invoke('get-printers'),
+  getPrinterConfig: () => ipcRenderer.invoke('get-printer-config'),
+  setPrinterConfig: (cfg) => ipcRenderer.invoke('set-printer-config', cfg),
+  printReceiptEscpos: (opts) => ipcRenderer.invoke('print-receipt-escpos', opts),
+  printReceiptSilent: (opts) => ipcRenderer.invoke('print-receipt-silent', opts),
+  previewReceiptPdf: (opts) => ipcRenderer.invoke('preview-receipt-pdf', opts),
+
   // App updates (js/navbar.js "Check for updates") — latest Lite release from
   // /api/releases/latest?app=lite, installer download with % progress.
   platform: process.platform,
