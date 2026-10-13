@@ -2264,6 +2264,63 @@ paths:
                       total_monthly_fmt: { type: string }
                       total_items:       { type: integer }
 
+  # ─────────────────────────── SALES REPORTS ───────────────────────────
+
+  /reports/sales:
+    get:
+      tags: [Finance flow]
+      summary: Sales report across POS sales, invoices, quotations, sales orders and returns
+      description: |
+        Revenue = completed POS sales + paid invoices (minus returns for net sales).
+        Quotations and sales orders are reported as pipeline. Selecting a counter limits
+        everything to POS sales. Requires the `fin_btn_sales` member permission.
+      parameters:
+        - { name: date_from,  in: query, schema: { type: string, format: date }, description: 'Defaults to 29 days before date_to' }
+        - { name: date_to,    in: query, schema: { type: string, format: date }, description: 'Defaults to today' }
+        - { name: branch_id,  in: query, schema: { type: string }, description: "Branch / warehouse id, or 'none' for sales with no branch" }
+        - { name: counter_id, in: query, schema: { type: integer } }
+        - { name: group_by,   in: query, schema: { type: string, enum: [auto, day, week, month] } }
+        - { name: source,     in: query, schema: { type: string, enum: [all, pos, invoices, quotations, sales_orders] }, description: Transaction list only }
+        - { name: status,     in: query, schema: { type: string }, description: "Transaction list only; 'open' = draft/sent quotes + pending→processing orders" }
+        - { name: q,          in: query, schema: { type: string }, description: Search document number or customer name }
+        - { name: page,       in: query, schema: { type: integer } }
+        - { name: per_page,   in: query, schema: { type: integer, minimum: 5, maximum: 100 } }
+        - { name: export,     in: query, schema: { type: boolean }, description: Return up to 5000 transactions on one page }
+      responses:
+        '200':
+          description: Sales report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      range:         { type: object }
+                      filters:       { type: object, description: 'branches, counters, pos_only' }
+                      summary:
+                        type: object
+                        description: |
+                          Totals plus detail figures: gross_sales, discount_rate, return_rate, avg_items_per_sale,
+                          avg_daily_revenue, largest_sale, best_day {date,total}, active_days, walkin_count,
+                          unique_customers, new_customers, returning_customers, products_sold, discounted_count.
+                      trend:         { type: object }
+                      by_source:     { type: array, items: { type: object } }
+                      by_payment:    { type: array, items: { type: object } }
+                      by_branch:     { type: array, items: { type: object } }
+                      by_cashier:    { type: array, items: { type: object } }
+                      by_counter:    { type: array, items: { type: object } }
+                      by_channel:    { type: array, description: 'POS sales per channel (retail / online)', items: { type: object } }
+                      by_category:   { type: array, description: 'POS line totals per product category: label, products, qty, total, profit, margin, share', items: { type: object } }
+                      heatmap:       { type: array, description: '7 weekdays (Mon first) × 24 hours of POS revenue', items: { type: array, items: { type: number } } }
+                      heatmap_counts: { type: array, description: 'Same grid as heatmap, number of POS sales', items: { type: array, items: { type: integer } } }
+                      returns:       { type: object, description: 'by_reason, by_method, products (top 10 returned)' }
+                      top_products:  { type: array, description: 'Top 20: name, qty, revenue, share, avg_price, profit, margin', items: { type: object } }
+                      top_customers: { type: array, items: { type: object } }
+                      transactions:  { type: object, description: 'data, page, per_page, total, last_page' }
+        '403': { description: Member lacks the fin_btn_sales permission }
+
   # ─────────────────────────── LOANS ───────────────────────────
 
   /loans:

@@ -254,6 +254,7 @@ const _sbSubItems = {
     { view:'properties',     icon:'fa-building',             label:'Properties' },
     { view:'modifications',  icon:'fa-screwdriver-wrench',   label:'Modifications' },
     { view:'budget',         icon:'fa-table-cells',          label:'Budget' },
+    { view:'sales',          icon:'fa-chart-column',         label:'Sales Reports' },
   ],
   hr: [
     { view:'employees',      icon:'fa-users',                label:'Employees' },
@@ -3223,7 +3224,8 @@ $('#qt-detail-back').addEventListener('click', () => { _qt.activeId = null; load
 // ── View switcher ─────────────────────────────────────────────────────────
 function _qtShowView(view) {
   // Ensure the parent quotes view is visible inside the Sales panel
-  if ($('#sal-quotes-view').style.display === 'none') {
+  // (skipped while the detail is shown in the Sales Report popup)
+  if ($('#sal-quotes-view').style.display === 'none' && !$('#qt-detail-view').closest('.srp-rec-modal')) {
     _salSwitchView('quotes');
     return; // _salSwitchView → loadQuotesList → _qtShowView('list')
   }
@@ -6308,7 +6310,7 @@ function applyFeatureVisibility() {
     if (finGrps[1]) finGrps[1].style.display = (mp('fin_btn_rentals')||mp('fin_btn_properties')) ? '' : 'none';
     if (finGrps[2]) finGrps[2].style.display = (mp('fin_btn_profit')||mp('fin_btn_sales')) ? '' : 'none'; }
   // ── Finance panel: sub-nav tab gating with fallback ──
-  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), investments: mp('fin_tab_investments'), budget: mp('fin_tab_budget') };
+  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), investments: mp('fin_tab_investments'), budget: mp('fin_tab_budget'), sales: mp('fin_btn_sales') };
     $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(b => { b.style.display = _finTabPerms[b.dataset.fin] ? '' : 'none'; });
     const _finActive = $('#panel-finance .fin-subnav-btn.active');
     if (_finActive && !_finTabPerms[_finActive.dataset.fin]) {
@@ -32011,6 +32013,7 @@ $('#rb-bills-list').addEventListener('click', () => { activateTab('finance'); sw
 $('#rb-loans').addEventListener('click',      () => { activateTab('finance'); switchFinView('loans'); });
 $('#rb-rentals').addEventListener('click',    () => { activateTab('finance'); switchFinView('rentals'); });
 $('#rb-properties').addEventListener('click', () => { activateTab('finance'); switchFinView('properties'); });
+$('#rb-fin-sales')?.addEventListener('click', () => openSalesReport());
 $('#rb-return').addEventListener('click', () => openRefundModal());
 
 // ── Finance Panel ──────────────────────────────────────────────────────────
@@ -32924,6 +32927,11 @@ async function loadFinanceFlow() {
     if (section === 'loans')      switchFinView('loans');
     if (section === 'rentals')    switchFinView('rentals');
     if (section === 'properties') switchFinView('properties');
+    if (section === 'sales') {
+      const sub = (node.dataset.mmGoto || '').split(':')[1];
+      if (sub === 'credits') { activateTab('sales'); _salSwitchView('credits'); }
+      else openSalesReport({ source: sub });
+    }
   });
 
   requestAnimationFrame(() => setTimeout(drawMindMapConnectors, 30));
@@ -32956,12 +32964,14 @@ function renderFinanceFlowMindMap(bills, loans, rentals, summary, businessName) 
 
   const expNodes = [...billNodes, ...loanNodes, ...rentalNodes];
 
+  // Income nodes open the Sales Reports tab pre-filtered to that source
   const incNodes = [
-    { id: 'mm-n-pos',  icon: 'fa-cash-register', label: 'POS Sales',       meta: 'Sales transactions'  },
-    { id: 'mm-n-quo',  icon: 'fa-file-pen',       label: 'Quotations',      meta: 'Web panel'           },
-    { id: 'mm-n-inv',  icon: 'fa-file-invoice',   label: 'Invoices',        meta: 'Web panel'           },
-    { id: 'mm-n-cred', icon: 'fa-rotate-left',    label: 'Credit Recovery', meta: 'Outstanding credits' },
+    { id: 'mm-n-pos',  icon: 'fa-cash-register', label: 'POS Sales',       meta: 'Sales transactions',  goto: 'sales:pos'        },
+    { id: 'mm-n-quo',  icon: 'fa-file-pen',       label: 'Quotations',      meta: 'Quotes & win rate',   goto: 'sales:quotations' },
+    { id: 'mm-n-inv',  icon: 'fa-file-invoice',   label: 'Invoices',        meta: 'Paid & outstanding',  goto: 'sales:invoices'   },
+    { id: 'mm-n-cred', icon: 'fa-rotate-left',    label: 'Credit Recovery', meta: 'Outstanding credits', goto: 'sales:credits'    },
   ];
+  const canSalesReport = hasMemberPerm('fin_btn_sales');
 
   const expNodesHtml = expNodes.length === 0
     ? `<div class="mm-empty-col"><i class="fa fa-inbox"></i><span>No expenses recorded</span></div>`
@@ -32975,7 +32985,7 @@ function renderFinanceFlowMindMap(bills, loans, rentals, summary, businessName) 
     </div>`).join('');
 
   const incNodesHtml = incNodes.map(n => `
-    <div class="mm-node mm-node-inc mm-node-dim" id="${n.id}">
+    <div class="mm-node mm-node-inc${canSalesReport ? '' : ' mm-node-dim'}" id="${n.id}"${canSalesReport ? ` data-mm-goto="${n.goto}" title="Open Sales Reports"` : ''}>
       <div class="mm-node-body">
         <div class="mm-node-label">${escHtml(n.label)}</div>
         <div class="mm-node-meta">${escHtml(n.meta)}</div>
@@ -32999,9 +33009,9 @@ function renderFinanceFlowMindMap(bills, loans, rentals, summary, businessName) 
         </div>
       </div>
       <div class="mm-mid-col">
-        <div class="mm-hub mm-hub-inc" id="mm-hub-inc">
+        <div class="mm-hub mm-hub-inc" id="mm-hub-inc"${canSalesReport ? ' data-mm-goto="sales:all" style="cursor:pointer" title="Open Sales Reports"' : ''}>
           <div class="mm-hub-label">Income</div>
-          <div class="mm-hub-sub">Web panel</div>
+          <div class="mm-hub-sub">${canSalesReport ? 'View sales reports' : 'Web panel'}</div>
         </div>
       </div>
       <div class="mm-right-nodes" id="mm-right-nodes">${incNodesHtml}</div>
@@ -33086,6 +33096,7 @@ function switchFinView(view) {
   $('#modifications-list-view').style.display    = view === 'modifications' ? '' : 'none';
   $('#investments-list-view').style.display      = view === 'investments'   ? '' : 'none';
   $('#budget-list-view').style.display           = view === 'budget'        ? '' : 'none';
+  $('#sales-report-view').style.display          = view === 'sales'         ? '' : 'none';
   if (view === 'flow')          loadFinanceFlow();
   if (view === 'bills')         loadFinance();
   if (view === 'loans')         loadLoans();
@@ -33094,10 +33105,1263 @@ function switchFinView(view) {
   if (view === 'modifications') loadModifications();
   if (view === 'investments')   loadInvestments();
   if (view === 'budget')        loadBudgets();
+  if (view === 'sales')         loadSalesReport();
 }
 
 $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(btn => {
   btn.addEventListener('click', () => switchFinView(btn.dataset.fin));
+});
+
+// ── Finance → Sales Reports ──────────────────────────────────────────────────
+// Every income stream (POS sales, invoices, quotations, sales orders, returns) in one
+// report, filterable by period, branch / warehouse and counter. Exports to PDF or CSV.
+// Data: GET /reports/sales (PosSalesReportApiController → SalesReportService).
+const _srp = {
+  preset: '30d', from: '', to: '', branch: '', counter: '', group: 'auto',
+  tab: 'overview', chart: 'revenue',
+  txn: { source: 'all', status: '', q: '', page: 1 },
+  data: null, seq: 0, searchTimer: null, resizeTimer: null,
+};
+
+const SRP_SOURCES = {
+  pos:          { label: 'POS sales',    one: 'POS sale',    color: '#3b82f6' },
+  invoices:     { label: 'Invoices',     one: 'Invoice',     color: '#22c55e' },
+  quotations:   { label: 'Quotations',   one: 'Quotation',   color: '#a855f7' },
+  sales_orders: { label: 'Sales orders', one: 'Sales order', color: '#f59e0b' },
+};
+const SRP_STATUSES = {
+  pos:          ['completed', 'void'],
+  invoices:     ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+  // 'open' is a server-side meta-status: draft + sent quotes / pending → processing orders
+  quotations:   ['open', 'draft', 'sent', 'accepted', 'rejected', 'expired'],
+  sales_orders: ['open', 'pending', 'confirmed', 'processing', 'completed', 'cancelled'],
+};
+const SRP_TONE = {
+  completed: 'ok', paid: 'ok', accepted: 'ok',
+  void: 'bad', cancelled: 'bad', rejected: 'bad', overdue: 'bad',
+  expired: 'muted', draft: 'muted',
+  sent: 'info', pending: 'info', confirmed: 'info', processing: 'info', open: 'info',
+};
+const SRP_TABS = [
+  ['overview',     'Overview'],
+  ['breakdown',    'Breakdown'],
+  ['products',     'Products & categories'],
+  ['customers',    'Customers'],
+  ['returns',      'Returns'],
+  ['periods',      'By period'],
+  ['transactions', 'Transactions'],
+];
+const SRP_DAYS      = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const SRP_DAYS_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+const _srpMoney  = v => formatMoney(v, { currency: state.currency || '' });
+const _srpNum    = v => (Number(v) || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const _srpIso    = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const _srpHour   = h => `${(h % 12) || 12} ${h < 12 ? 'AM' : 'PM'}`;
+const _srpPlural = (n, word) => `${_srpNum(n)} ${word}${Number(n) === 1 ? '' : 's'}`;
+const _srpCap    = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+function _srpFmtDate(iso) {
+  const [y, m, d] = String(iso).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function _srpPayLabel(key) {
+  const known = { cash: 'Cash', card: 'Card', credit: 'Credit', gift_card: 'Gift card' };
+  return known[key] || String(key).replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function _srpPresetRange(preset) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const y = today.getFullYear(), m = today.getMonth();
+  const daysAgo = n => { const d = new Date(today); d.setDate(d.getDate() - n); return d; };
+  switch (preset) {
+    case 'today':     return [today, today];
+    case 'yesterday': return [daysAgo(1), daysAgo(1)];
+    case '7d':        return [daysAgo(6), today];
+    case 'mtd':       return [new Date(y, m, 1), today];
+    case 'lastmonth': return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+    case 'qtd':       return [new Date(y, Math.floor(m / 3) * 3, 1), today];
+    case 'ytd':       return [new Date(y, 0, 1), today];
+    case '12m':       return [new Date(y, m - 11, 1), today];
+    default:          return [daysAgo(29), today];
+  }
+}
+
+/** Presets fill the always-visible From / To pickers; 'custom' keeps whatever dates are there. */
+function _srpSetPreset(preset) {
+  _srp.preset = preset;
+  if (preset !== 'custom' || !_srp.from) {
+    const [f, t] = _srpPresetRange(preset);
+    _srp.from = _srpIso(f);
+    _srp.to   = _srpIso(t);
+  }
+  $('#srp-period').value = preset;
+  $('#srp-from').value   = _srp.from;
+  $('#srp-to').value     = _srp.to;
+}
+
+/** Entry point from the ribbon / Finance overview. `source` jumps to the matching transactions. */
+function openSalesReport(opts = {}) {
+  if (opts.source) {
+    const known = !!SRP_SOURCES[opts.source];
+    _srp.txn = { source: known ? opts.source : 'all', status: '', q: '', page: 1 };
+    _srp.tab = known ? 'transactions' : 'overview';
+  }
+  activateTab('finance');
+  switchFinView('sales');
+}
+
+function _srpParams(extra = {}) {
+  return {
+    date_from: _srp.from, date_to: _srp.to,
+    branch_id: _srp.branch, counter_id: _srp.counter, group_by: _srp.group,
+    source: _srp.txn.source, status: _srp.txn.status, q: _srp.txn.q,
+    page: _srp.txn.page, per_page: 25,
+    ...extra,
+  };
+}
+
+// Any change to the main filters goes back to page 1 of the transaction list
+function _srpReload() {
+  _srp.txn.page = 1;
+  loadSalesReport();
+}
+
+async function loadSalesReport({ txnOnly = false } = {}) {
+  if (!_srp.from) _srpSetPreset(_srp.preset);
+  const body = $('#srp-body');
+  const seq  = ++_srp.seq;
+
+  if (txnOnly && _srp.data && $('#srp-txn-body')) {
+    $('#srp-txn-body').classList.add('srp-dim');
+  } else {
+    txnOnly = false;
+    body.innerHTML = '<div class="srp-state"><i class="fa fa-spinner fa-spin"></i> Loading report…</div>';
+  }
+
+  let res;
+  try {
+    res = await API.salesReport(_srpParams());
+  } catch (err) {
+    res = { status: 0, body: { message: String(err) } };
+  }
+  if (seq !== _srp.seq) return; // superseded by a newer request
+
+  if (res.status !== 200 || !res.body?.data) {
+    const msg = res.status === 403
+      ? 'You do not have permission to view sales reports.'
+      : (res.body?.message || `Couldn't load the report (${res.status || 'no response'}).`);
+    body.innerHTML = `<div class="srp-state srp-state-error"><i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}
+      <button class="srp-ghost" id="srp-retry">Try again</button></div>`;
+    $('#srp-retry')?.addEventListener('click', () => loadSalesReport());
+    return;
+  }
+
+  _srp.data = res.body.data;
+  // The server caps a range at 3 years — show the dates actually used
+  if (_srp.data.range.from !== _srp.from || _srp.data.range.to !== _srp.to) {
+    if (_srp.data.range.from !== _srp.from) toast('Reports cover up to 3 years — the start date was moved forward', 'info');
+    _srp.from = _srp.data.range.from; _srp.to = _srp.data.range.to;
+    $('#srp-from').value = _srp.from; $('#srp-to').value = _srp.to;
+  }
+  if (!_srpSyncFilters(_srp.data.filters)) return; // stale branch/counter was cleared → reloading
+  _srpRenderScope();
+  if (txnOnly) _srpRenderTxn(); else _srpRender();
+}
+
+/** Fills the branch / counter dropdowns (hidden when unused). Returns false when a stale selection was cleared. */
+function _srpSyncFilters(f) {
+  const branches = f?.branches || [];
+  const counters = f?.counters || [];
+
+  const bSel = $('#srp-branch');
+  bSel.innerHTML = '<option value="">All branches &amp; warehouses</option>'
+    + branches.map(b => `<option value="${b.id}">${escHtml(b.name)}</option>`).join('')
+    + (branches.length ? '<option value="none">Main / unassigned</option>' : '');
+  $('#srp-branch-wrap').style.display = branches.length ? '' : 'none';
+
+  const branchCounters = /^\d+$/.test(_srp.branch)
+    ? counters.filter(c => c.branch_id === null || String(c.branch_id) === _srp.branch)
+    : counters;
+  const cSel = $('#srp-counter');
+  cSel.innerHTML = '<option value="">All counters</option>'
+    + branchCounters.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+  $('#srp-counter-wrap').style.display = branchCounters.length ? '' : 'none';
+
+  bSel.value = _srp.branch;
+  cSel.value = _srp.counter;
+
+  // e.g. the business was switched and the old branch id no longer exists
+  if (bSel.value !== _srp.branch || cSel.value !== _srp.counter) {
+    _srp.branch  = bSel.value;
+    _srp.counter = cSel.value;
+    _srpReload();
+    return false;
+  }
+  return true;
+}
+
+function _srpScopeNames(d) {
+  return {
+    branch: !_srp.branch ? 'All branches & warehouses'
+      : _srp.branch === 'none' ? 'Main / unassigned'
+      : (d.filters.branches.find(b => String(b.id) === _srp.branch)?.name || 'Branch'),
+    counter: _srp.counter ? (d.filters.counters.find(c => String(c.id) === _srp.counter)?.name || 'Counter') : '',
+  };
+}
+
+function _srpRenderScope() {
+  const d = _srp.data;
+  if (!d) return;
+  const r = d.range;
+  const filtered = _srp.branch || _srp.counter || _srp.preset !== '30d';
+  $('#srp-scope').innerHTML = `
+    <span>${_srpFmtDate(r.from)} – ${_srpFmtDate(r.to)}</span>
+    <span class="srp-sep">·</span>
+    <span>compared with ${_srpFmtDate(r.prev_from)} – ${_srpFmtDate(r.prev_to)}</span>
+    ${d.filters.pos_only ? '<span class="srp-sep">·</span><span class="srp-warn"><i class="fa fa-circle-info"></i> Counter selected — showing POS sales only</span>' : ''}
+    ${filtered ? '<button class="srp-link" id="srp-clear">Clear filters</button>' : ''}`;
+}
+
+function _srpRender() {
+  const d = _srp.data, s = d.summary;
+  const hasAny = s.transactions + s.void_count + s.returns_count + s.invoices.count + s.quotations.count + s.sales_orders.count > 0;
+
+  $('#srp-body').innerHTML = `
+    ${_srpKpisHtml(s)}
+    ${_srpStatsHtml(s)}
+    <div class="srp-grid srp-grid-main">
+      ${_srpChartCardHtml()}
+      ${_srpHighlightsHtml(d, hasAny)}
+    </div>
+    <div class="srp-tabs" id="srp-tabs">${SRP_TABS.map(([k, l]) =>
+      `<button class="srp-tab${_srp.tab === k ? ' active' : ''}" data-srp-tab="${k}">${l}${k === 'transactions'
+        ? ` <span class="srp-tab-count" id="srp-tab-count">${_srpNum(d.transactions.total)}</span>` : ''}</button>`).join('')}</div>
+    <div id="srp-tab-body"></div>`;
+
+  _srpRenderTab();
+  requestAnimationFrame(_srpDrawChart);
+}
+
+function _srpRenderTab() {
+  const d  = _srp.data;
+  const el = $('#srp-tab-body');
+  if (!d || !el) return;
+  $$('#srp-tabs .srp-tab').forEach(b => b.classList.toggle('active', b.dataset.srpTab === _srp.tab));
+
+  const perSale = r => `${_srpPlural(r.count, 'sale')} · avg ${_srpMoney(r.count ? r.total / r.count : 0)}`;
+
+  if (_srp.tab === 'breakdown') {
+    el.innerHTML = `
+      <div class="srp-grid">
+        ${_srpListCard('Branches & warehouses', d.by_branch, {
+          attrsFor: r => `data-srp-branch="${escHtml(r.key)}" title="Show only this branch"`,
+          activeKey: _srp.branch || null, hint: 'Click a branch to filter the whole report.',
+        })}
+        ${_srpListCard('Payment methods', d.by_payment, { countLabel: 'payment' })}
+        ${_srpListCard('Cashiers', d.by_cashier, { noteFor: perSale, hint: 'POS sales only · average sale per cashier.' })}
+        ${_srpListCard('Counters', d.by_counter, {
+          noteFor: perSale,
+          attrsFor: r => r.key === 'none' ? '' : `data-srp-counter="${escHtml(r.key)}" title="Show only this counter"`,
+          activeKey: _srp.counter || null, hint: 'POS sales only.',
+        })}
+        ${_srpListCard('Sales channels', d.by_channel || [], { noteFor: perSale, hint: 'POS sales only.' })}
+        ${_srpWeekdayHtml(d)}
+      </div>
+      ${_srpHourlyHtml(d)}
+      ${_srpHeatmapHtml(d.heatmap)}`;
+  } else if (_srp.tab === 'products') {
+    el.innerHTML = `${_srpTopProductsHtml(d.top_products, d.summary)}${_srpCategoriesHtml(d.by_category || [])}`;
+  } else if (_srp.tab === 'customers') {
+    el.innerHTML = `
+      <div class="srp-grid">
+        ${_srpCustomersHtml(d.summary)}
+        ${_srpListCard('Top customers', d.top_customers, {
+          noteFor: r => `${_srpPlural(r.count, 'purchase')} · avg ${_srpMoney(r.count ? r.total / r.count : 0)}`, limit: 10,
+        })}
+      </div>`;
+  } else if (_srp.tab === 'returns') {
+    el.innerHTML = _srpReturnsHtml(d);
+  } else if (_srp.tab === 'periods') {
+    el.innerHTML = _srpPeriodsHtml(d);
+  } else if (_srp.tab === 'transactions') {
+    el.innerHTML = _srpTxnCardHtml();
+    _srpRenderTxn();
+  } else {
+    el.innerHTML = `<div class="srp-grid">${_srpProfitHtml(d.summary)}${_srpInsightsHtml(d)}${_srpSourcesHtml(d)}${_srpPipelineHtml(d)}</div>`;
+  }
+}
+
+// ── Detail cards ─────────────────────────────────────────────────────────────
+function _srpFacts(items) {
+  return `<div class="srp-facts">${items.map(([label, value, sub = '', title = '']) =>
+    `<div class="srp-fact" title="${escHtml(title)}"><span>${label}</span><b>${value}</b>${sub ? `<small>${sub}</small>` : ''}</div>`).join('')}</div>`;
+}
+
+/** Gross sales → net sales, then POS sales → gross profit. */
+function _srpProfitHtml(s) {
+  const line = (label, value, cls = '', note = '') =>
+    `<div class="srp-pl-row ${cls}"><span>${label}</span><b>${value}${note ? `<small>${note}</small>` : ''}</b></div>`;
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">Sales & profit summary</div></div>
+      <div class="srp-pl">
+        ${line('Gross sales', _srpMoney(s.gross_sales))}
+        ${line('Discounts', `− ${_srpMoney(s.discounts)}`, 'minus', `${s.discount_rate}%`)}
+        ${line('Revenue', _srpMoney(s.revenue), 'total')}
+        ${line('Returns', `− ${_srpMoney(s.returns_total)}`, 'minus', `${s.return_rate}%`)}
+        ${line('Net sales', _srpMoney(s.net_sales), 'total')}
+      </div>
+      <div class="srp-pl srp-mt">
+        ${line('POS sales', _srpMoney(s.pos_total))}
+        ${line('Cost of goods sold', `− ${_srpMoney(s.cogs)}`, 'minus')}
+        ${line('Gross profit', _srpMoney(s.gross_profit), `total${s.gross_profit < 0 ? ' neg' : ''}`, `${s.gross_margin}% margin`)}
+      </div>
+      <div class="srp-hint">Cost prices are only recorded on POS sales, so profit covers POS sales. Invoices are not costed.</div>
+    </div>`;
+}
+
+function _srpInsightsHtml(d) {
+  const s = d.summary, days = d.range.days;
+  const best = s.best_day;
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">Sales insights</div></div>
+      ${_srpFacts([
+        ['Average per day', _srpMoney(s.avg_daily_revenue), `${_srpNum(s.active_days)} of ${_srpPlural(days, 'day')} had sales`],
+        ['Best day', best ? _srpMoney(best.total) : '—', best ? _srpFmtDate(best.date) : 'No sales yet'],
+        ['Largest POS sale', _srpMoney(s.largest_sale)],
+        ['Items per POS sale', _srpNum(s.avg_items_per_sale), `${_srpPlural(s.products_sold, 'product')} sold`],
+        ['Discounted sales', _srpNum(s.discounted_count), `${_srpMoney(s.discounts)} given away`],
+        ['Return rate', `${s.return_rate}%`, _srpPlural(s.returns_count, 'return'), 'Returns as a share of revenue'],
+      ])}
+    </div>`;
+}
+
+function _srpCustomersHtml(s) {
+  const named   = s.unique_customers;
+  const repeat  = named > 0 ? (s.returning_customers / named * 100).toFixed(1) : '0.0';
+  const walkPct = s.pos_count > 0 ? (s.walkin_count / s.pos_count * 100).toFixed(1) : '0.0';
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">Customer insights</div></div>
+      ${_srpFacts([
+        ['Customers who bought', _srpNum(named), 'Named customers (POS + invoices)'],
+        ['New customers', _srpNum(s.new_customers), 'Added during this period'],
+        ['Returning customers', _srpNum(s.returning_customers), `${repeat}% of buyers`],
+        ['Walk-in POS sales', _srpNum(s.walkin_count), `${walkPct}% of POS sales`],
+      ])}
+      <div class="srp-hint">Attach a customer at checkout to track repeat buyers.</div>
+    </div>`;
+}
+
+function _srpColsHtml(values, labels, titles) {
+  const max  = Math.max(...values, 0);
+  const peak = values.indexOf(max);
+  return `<div class="srp-cols">${values.map((v, i) => `
+    <div class="srp-col${max > 0 && i === peak ? ' peak' : ''}" title="${escHtml(titles[i])}">
+      <i style="height:${max > 0 ? Math.max(v / max * 100, v > 0 ? 2 : 0).toFixed(1) : 0}%"></i><span>${labels[i]}</span>
+    </div>`).join('')}</div>`;
+}
+
+function _srpWeekdayHtml(d) {
+  const hm = d.heatmap || [], hc = d.heatmap_counts || [];
+  const totals = hm.map(row => row.reduce((a, v) => a + v, 0));
+  const counts = hc.map(row => row.reduce((a, v) => a + v, 0));
+  const head = '<div class="srp-card-head"><div class="srp-card-title">By day of week</div><span class="srp-muted">POS sales</span></div>';
+  if (!totals.some(v => v > 0)) return `<div class="srp-card">${head}<div class="srp-empty">No POS sales to show</div></div>`;
+  const best = totals.indexOf(Math.max(...totals));
+  return `
+    <div class="srp-card">${head}
+      ${_srpColsHtml(totals, SRP_DAYS, totals.map((v, i) => `${SRP_DAYS_LONG[i]} · ${_srpMoney(v)} · ${_srpPlural(counts[i] || 0, 'sale')}`))}
+      <div class="srp-hint">Best day: <b>${SRP_DAYS_LONG[best]}</b> · ${_srpMoney(totals[best])} from ${_srpPlural(counts[best] || 0, 'sale')}
+        (avg ${_srpMoney(counts[best] ? totals[best] / counts[best] : 0)})</div>
+    </div>`;
+}
+
+function _srpHourlyHtml(d) {
+  const hm = d.heatmap || [], hc = d.heatmap_counts || [];
+  const totals = Array.from({ length: 24 }, (_, h) => hm.reduce((a, row) => a + (row[h] || 0), 0));
+  const counts = Array.from({ length: 24 }, (_, h) => hc.reduce((a, row) => a + (row[h] || 0), 0));
+  if (!totals.some(v => v > 0)) return '';
+  const best = totals.indexOf(Math.max(...totals));
+  const lbl  = h => (h % 3 === 0 ? (h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`) : '');
+  return `
+    <div class="srp-card srp-mt">
+      <div class="srp-card-head"><div class="srp-card-title">By hour of day</div><span class="srp-muted">POS sales</span></div>
+      ${_srpColsHtml(totals, totals.map((_, h) => lbl(h)), totals.map((v, h) => `${_srpHour(h)} – ${_srpHour((h + 1) % 24)} · ${_srpMoney(v)} · ${_srpPlural(counts[h], 'sale')}`))}
+      <div class="srp-hint">Peak hour: <b>${_srpHour(best)} – ${_srpHour((best + 1) % 24)}</b> · ${_srpMoney(totals[best])} from ${_srpPlural(counts[best], 'sale')}</div>
+    </div>`;
+}
+
+const _srpMarginTone = m => m >= 30 ? 'ok' : m >= 10 ? 'info' : m >= 0 ? 'muted' : 'bad';
+const _srpMarginPill = m => m === null || m === undefined ? '<span class="srp-muted">—</span>' : `<span class="srp-pill ${_srpMarginTone(m)}">${m}%</span>`;
+
+function _srpCategoriesHtml(rows) {
+  const head = '<div class="srp-card-head"><div class="srp-card-title">Sales by category</div><span class="srp-muted">POS sales</span></div>';
+  if (!rows.length) return `<div class="srp-card srp-mt">${head}<div class="srp-empty">No POS products sold in this period</div></div>`;
+  return `
+    <div class="srp-card srp-mt">${head}
+      <div class="srp-table-wrap">
+        <table class="srp-table">
+          <thead><tr><th>Category</th><th class="num">Products</th><th class="num">Qty</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+          <tbody>${rows.map(r => `
+            <tr>
+              <td>${escHtml(r.label)}</td>
+              <td class="num">${_srpNum(r.products)}</td>
+              <td class="num">${_srpNum(r.qty)}</td>
+              <td class="num">${_srpMoney(r.total)}</td>
+              <td class="num srp-muted">${r.share}%</td>
+              <td class="num">${r.margin === null ? '<span class="srp-muted">—</span>' : `<span class="${r.profit < 0 ? 'srp-neg' : ''}">${_srpMoney(r.profit)}</span>`}</td>
+              <td class="num">${_srpMarginPill(r.margin)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="srp-hint">Products in several categories are counted under their first category.</div>
+    </div>`;
+}
+
+function _srpReturnsHtml(d) {
+  const s = d.summary, r = d.returns || { by_reason: [], by_method: [], products: [] };
+  if (!s.returns_count) {
+    return '<div class="srp-card"><div class="srp-card-head"><div class="srp-card-title">Returns</div></div><div class="srp-empty">No returns in this period</div></div>';
+  }
+  const products = r.products.length ? `
+    <table class="srp-table">
+      <thead><tr><th>Product</th><th class="num">Returns</th><th class="num">Qty</th><th class="num">Refunded</th></tr></thead>
+      <tbody>${r.products.map((p, i) => `
+        <tr><td><span class="srp-rank">${i + 1}</span>${escHtml(p.name)}</td><td class="num">${_srpNum(p.returns)}</td>
+          <td class="num">${_srpNum(p.qty)}</td><td class="num">${_srpMoney(p.total)}</td></tr>`).join('')}
+      </tbody>
+    </table>` : '<div class="srp-empty">No returned items recorded</div>';
+  return `
+    <div class="srp-grid">
+      <div class="srp-card">
+        <div class="srp-card-head"><div class="srp-card-title">Returns summary</div></div>
+        <div class="srp-big">${_srpMoney(s.returns_total)}</div>
+        <div class="srp-big-sub">refunded across ${_srpPlural(s.returns_count, 'return')}</div>
+        ${_srpFacts([
+          ['Return rate', `${s.return_rate}%`, 'of revenue'],
+          ['Average refund', _srpMoney(s.returns_total / s.returns_count)],
+        ])}
+      </div>
+      <div class="srp-card">
+        <div class="srp-card-head"><div class="srp-card-title">Most returned products</div></div>
+        ${products}
+      </div>
+      ${_srpListCard('Return reasons', r.by_reason, { countLabel: 'return' })}
+      ${_srpListCard('Refund methods', r.by_method, { countLabel: 'refund' })}
+    </div>`;
+}
+
+/** One row per trend bucket (day / week / month) with totals. */
+function _srpPeriodsHtml(d) {
+  const t = d.trend;
+  const unit = { day: 'Day', week: 'Week of', month: 'Month' }[d.range.group_by] || 'Period';
+  const rows = t.labels.map((label, i) => ({
+    label, count: t.transactions[i] || 0, pos: t.pos[i] || 0, inv: t.invoices[i] || 0, ret: t.returns[i] || 0,
+  })).reverse(); // newest first
+  const sum = k => rows.reduce((a, r) => a + r[k], 0);
+  const tot = { count: sum('count'), pos: sum('pos'), inv: sum('inv'), ret: sum('ret') };
+  const cells = r => `
+    <td class="num">${_srpNum(r.count)}</td>
+    <td class="num">${_srpMoney(r.pos)}</td>
+    <td class="num">${_srpMoney(r.count ? r.pos / r.count : 0)}</td>
+    <td class="num">${_srpMoney(r.inv)}</td>
+    <td class="num">${r.ret > 0 ? `<span class="srp-neg">− ${_srpMoney(r.ret)}</span>` : _srpMoney(0)}</td>
+    <td class="num"><b>${_srpMoney(r.pos + r.inv - r.ret)}</b></td>`;
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head">
+        <div class="srp-card-title">Breakdown by period</div>
+        <span class="srp-muted">Grouped ${({ day: 'daily', week: 'weekly', month: 'monthly' })[d.range.group_by] || ''} — change it on the Sales trend chart</span>
+      </div>
+      <div class="srp-table-wrap">
+        <table class="srp-table">
+          <thead><tr><th>${unit}</th><th class="num">POS sales</th><th class="num">POS revenue</th><th class="num">Avg sale</th><th class="num">Paid invoices</th><th class="num">Returns</th><th class="num">Net</th></tr></thead>
+          <tbody>
+            ${rows.map(r => `<tr${r.count || r.inv || r.ret ? '' : ' class="srp-faint"'}><td>${escHtml(r.label)}</td>${cells(r)}</tr>`).join('')}
+            <tr class="srp-total-row"><td><b>Total</b></td>${cells(tot)}</tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+function _srpDelta(pct) {
+  if (pct === null || pct === undefined) return '<span class="srp-muted">No earlier data to compare</span>';
+  const cls = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+  return `<span class="srp-delta ${cls}">${pct > 0 ? '↑' : pct < 0 ? '↓' : ''}${Math.abs(pct)}%</span> <span class="srp-muted">vs previous period</span>`;
+}
+
+function _srpKpisHtml(s) {
+  const kpi = (label, value, foot, cls = '') => `
+    <div class="srp-kpi">
+      <div class="srp-kpi-lbl">${label}</div>
+      <div class="srp-kpi-val ${cls}" title="${escHtml(String(value))}">${value}</div>
+      <div class="srp-kpi-foot">${foot}</div>
+    </div>`;
+  return `
+    <div class="srp-kpis">
+      ${kpi('Revenue', _srpMoney(s.revenue), _srpDelta(s.revenue_change_pct))}
+      ${kpi('Transactions', _srpNum(s.transactions), _srpDelta(s.transactions_change_pct))}
+      ${kpi('Average sale', _srpMoney(s.avg_ticket), `<span class="srp-muted">${_srpNum(s.pos_count)} POS · ${_srpNum(s.invoices_paid_count)} invoices</span>`)}
+      ${kpi('Gross profit', _srpMoney(s.gross_profit), `<span class="srp-muted">${s.gross_margin}% margin on POS sales</span>`, s.gross_profit < 0 ? 'neg' : '')}
+    </div>`;
+}
+
+function _srpStatsHtml(s) {
+  const stat = (label, value, title = '') => `<div class="srp-stat" title="${escHtml(title)}"><span>${label}</span><b>${value}</b></div>`;
+  return `
+    <div class="srp-stats">
+      ${stat('Net sales', _srpMoney(s.net_sales), 'Revenue minus returns')}
+      ${stat('Returns', _srpMoney(s.returns_total), _srpPlural(s.returns_count, 'return'))}
+      ${stat('Discounts', _srpMoney(s.discounts), 'Order and coupon discounts on POS sales')}
+      ${stat('Voided', _srpMoney(s.void_total), _srpPlural(s.void_count, 'voided sale'))}
+      ${stat('Unpaid credit', _srpMoney(s.credit_outstanding), 'POS credit sales not yet settled')}
+      ${stat('To collect', _srpMoney(s.receivables), `Sent and overdue invoices · ${_srpMoney(s.overdue_total)} overdue`)}
+      ${stat('Items sold', _srpNum(s.items_sold), 'Units across POS sales')}
+    </div>`;
+}
+
+function _srpHighlightsHtml(d, hasAny) {
+  const s = d.summary, days = d.range.days, out = [];
+  if (!hasAny) {
+    out.push({ icon: 'fa-inbox', html: 'Nothing was recorded for these filters. Try a longer period or another branch.' });
+  } else {
+    if (s.revenue_change_pct !== null) {
+      const up = s.revenue_change_pct >= 0;
+      out.push({ tone: up ? 'good' : 'bad', icon: up ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
+        html: `Revenue is <b>${up ? 'up' : 'down'} ${Math.abs(s.revenue_change_pct)}%</b> on the previous ${_srpPlural(days, 'day')}.` });
+    }
+    const peak = _srpHeatPeak(d.heatmap);
+    if (peak) {
+      out.push({ icon: 'fa-clock', html: days === 1
+        ? `Busiest hour was <b>${_srpHour(peak.h)} – ${_srpHour((peak.h + 1) % 24)}</b>.`
+        : `Busiest time is <b>${SRP_DAYS_LONG[peak.d]} ${_srpHour(peak.h)}</b>.` });
+    }
+    const best = d.top_products[0];
+    if (best) out.push({ icon: 'fa-trophy', html: `Best seller: <b>${escHtml(best.name)}</b> (${_srpNum(best.qty)} sold).` });
+    const cat = (d.by_category || []).find(c => c.label !== 'Uncategorised');
+    if (cat) out.push({ icon: 'fa-layer-group', html: `Top category: <b>${escHtml(cat.label)}</b> — ${cat.share}% of POS item sales.` });
+    if (s.return_rate >= 5) {
+      out.push({ tone: 'warn', icon: 'fa-rotate-left', html: `Returns are <b>${s.return_rate}%</b> of revenue — see the Returns tab.` });
+    }
+    if (s.overdue_total > 0) {
+      out.push({ tone: 'bad', icon: 'fa-triangle-exclamation',
+        html: `<b>${_srpPlural(s.invoices.overdue_count, 'invoice')}</b> overdue — ${_srpMoney(s.overdue_total)} to chase.` });
+    }
+    if (s.quotations.open_count > 0) {
+      out.push({ tone: 'warn', icon: 'fa-hourglass-half',
+        html: `<b>${_srpPlural(s.quotations.open_count, 'quotation')}</b> worth ${_srpMoney(s.quotations.open_total)} awaiting a decision.` });
+    }
+    if (s.credit_outstanding > 0) {
+      out.push({ tone: 'warn', icon: 'fa-hand-holding-dollar', html: `<b>${_srpMoney(s.credit_outstanding)}</b> in POS credit not yet collected.` });
+    }
+    if (s.pos_total > 0 && s.gross_profit < 0) {
+      out.push({ tone: 'bad', icon: 'fa-circle-exclamation', html: `POS margin is <b>${s.gross_margin}%</b> — check cost and selling prices.` });
+    }
+  }
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">Highlights</div></div>
+      <ul class="srp-highlights">${out.slice(0, 7).map(i =>
+        `<li class="${i.tone || ''}"><i class="fa ${i.icon}"></i><span>${i.html}</span></li>`).join('')}</ul>
+    </div>`;
+}
+
+function _srpChartCardHtml() {
+  const seg = [['revenue', 'Revenue'], ['count', 'Transactions']];
+  const groups = [['auto', 'Auto'], ['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly']];
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head">
+        <div class="srp-card-title">Sales trend</div>
+        <div class="srp-seg">${seg.map(([k, l]) =>
+          `<button class="${_srp.chart === k ? 'active' : ''}" data-srp-chart="${k}">${l}</button>`).join('')}</div>
+        <select class="srp-mini-select" id="srp-group" title="Group by">${groups.map(([k, l]) =>
+          `<option value="${k}"${_srp.group === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      </div>
+      <div id="srp-chart-area"></div>
+    </div>`;
+}
+
+function _srpChartSeries() {
+  const t = _srp.data.trend;
+  if (t.labels.length < 2) {
+    // A single day has one bucket — show that day's POS sales hour by hour instead
+    const hours = Array.from({ length: 24 }, (_, h) => _srp.data.heatmap.reduce((a, row) => a + (row[h] || 0), 0));
+    return { hourly: true, labels: hours.map((_, h) => _srpHour(h)), series: [{ label: 'POS sales by hour', color: '#3b82f6', values: hours }] };
+  }
+  if (_srp.chart === 'count') return { labels: t.labels, series: [{ label: 'POS transactions', color: '#3b82f6', values: t.transactions, count: true }] };
+  return { labels: t.labels, series: [
+    { label: 'POS sales',     color: '#3b82f6', values: t.pos },
+    { label: 'Paid invoices', color: '#22c55e', values: t.invoices },
+    { label: 'Returns',       color: '#ef4444', values: t.returns },
+  ] };
+}
+
+function _srpDrawChart() {
+  const area = $('#srp-chart-area');
+  if (!area || !_srp.data) return;
+  const { labels, series, hourly } = _srpChartSeries();
+  const sum = vals => vals.reduce((a, v) => a + (Number(v) || 0), 0);
+
+  if (!series.some(s => s.values.some(v => v > 0))) {
+    area.innerHTML = '<div class="srp-chart-empty">Nothing to chart for this period</div>';
+    return;
+  }
+  area.innerHTML = `
+    <canvas id="srp-canvas" class="srp-canvas"></canvas>
+    <div class="srp-legend">
+      ${series.map(s => `<span><i style="background:${s.color}"></i>${escHtml(s.label)} <b>${s.count ? _srpNum(sum(s.values)) : _srpMoney(sum(s.values))}</b></span>`).join('')}
+      ${hourly ? '<span class="srp-muted">One day selected — showing sales by hour</span>' : ''}
+    </div>`;
+  _expDrawMultiLine('srp-canvas', labels, series);
+}
+
+function _srpRow({ name, note = '', value, sub = '', pct = 0, attrs = '', active = false, dot = '' }) {
+  const w = pct > 0 ? Math.max(pct, 1.5) : 0;
+  return `
+    <div class="srp-row${attrs ? ' clickable' : ''}${active ? ' active' : ''}" ${attrs}>
+      <div class="srp-row-name">${dot ? `<i class="srp-dot" style="background:${dot}"></i>` : ''}<span>${escHtml(name)}</span>${note ? `<small>${escHtml(note)}</small>` : ''}</div>
+      <div class="srp-row-val">${value}${sub ? `<small>${sub}</small>` : ''}</div>
+      <div class="srp-row-bar"><i style="width:${w.toFixed(1)}%"></i></div>
+    </div>`;
+}
+
+function _srpListCard(title, rows, { attrsFor = null, activeKey = null, countLabel = 'sale', noteFor = null, hint = '', limit = 8 } = {}) {
+  const max  = Math.max(...rows.map(r => r.total), 0.01);
+  const body = rows.length
+    ? rows.slice(0, limit).map(r => _srpRow({
+        name: r.label, note: noteFor ? noteFor(r) : _srpPlural(r.count, countLabel),
+        value: _srpMoney(r.total), sub: `${r.share}%`, pct: r.total / max * 100,
+        attrs: attrsFor ? attrsFor(r) : '', active: activeKey !== null && r.key === activeKey,
+      })).join('')
+    : '<div class="srp-empty">No data for this period</div>';
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">${title}</div></div>
+      ${body}
+      ${hint ? `<div class="srp-hint">${hint}</div>` : ''}
+    </div>`;
+}
+
+function _srpSourcesHtml(d) {
+  const rows     = d.by_source;
+  const revenue  = rows.filter(r => r.key === 'pos' || r.key === 'invoices').reduce((a, r) => a + r.total, 0);
+  const max      = Math.max(...rows.map(r => r.total), 0.01);
+  const list = rows.map(r => {
+    const isRevenue = r.key === 'pos' || r.key === 'invoices';
+    return _srpRow({
+      name: r.label, note: _srpNum(r.count), dot: SRP_SOURCES[r.key].color,
+      value: _srpMoney(r.total),
+      sub: isRevenue ? (revenue > 0 ? `${(r.total / revenue * 100).toFixed(1)}%` : '—') : 'reference',
+      pct: r.total / max * 100,
+      attrs: `data-srp-source="${r.key}" title="View these transactions"`,
+    });
+  }).join('');
+  return `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">Income sources</div></div>
+      ${list}
+      <div class="srp-hint">Revenue is POS sales plus paid invoices. Accepted quotes and completed orders count once they're invoiced and paid.</div>
+    </div>`;
+}
+
+function _srpPipelineHtml(d) {
+  const s = d.summary, q = s.quotations, inv = s.invoices, so = s.sales_orders;
+  const row = (source, status, label, count, amount = null) => `
+    <div class="srp-status" data-srp-source="${source}" data-srp-status="${status}" title="View these transactions">
+      <span class="srp-pill ${SRP_TONE[status] || ''}">${label}</span>
+      <span class="srp-muted">${_srpNum(count)}</span>
+      <b>${amount !== null ? _srpMoney(amount) : ''}</b>
+    </div>`;
+  const card = (title, big, sub, rows) => `
+    <div class="srp-card">
+      <div class="srp-card-head"><div class="srp-card-title">${title}</div></div>
+      ${d.filters.pos_only ? '<div class="srp-empty">Not available while a counter is selected</div>' : `
+        <div class="srp-big">${big}</div>
+        <div class="srp-big-sub">${sub}</div>
+        <div class="srp-status-list">${rows}</div>`}
+    </div>`;
+
+  return [
+    card('Quotations', _srpMoney(q.accepted_total),
+      `won${q.win_rate !== null ? ` · <b>${q.win_rate}%</b> win rate` : ''} · ${_srpPlural(q.count, 'quote')}`,
+      row('quotations', 'accepted', 'Accepted', q.accepted_count, q.accepted_total)
+      + row('quotations', 'open', 'Open', q.open_count, q.open_total)
+      + row('quotations', 'rejected', 'Rejected', q.rejected_count)
+      + row('quotations', 'expired', 'Expired', q.expired_count)),
+    card('Invoices', _srpMoney(s.invoices_paid_total),
+      `collected · ${_srpMoney(s.receivables)} still to collect`,
+      row('invoices', 'paid', 'Paid', inv.paid_count, s.invoices_paid_total)
+      + row('invoices', 'sent', 'Sent', inv.sent_count, s.receivables - s.overdue_total)
+      + row('invoices', 'overdue', 'Overdue', inv.overdue_count, s.overdue_total)
+      + row('invoices', 'draft', 'Draft', inv.draft_count)),
+    card('Sales orders', _srpMoney(so.completed_total),
+      `completed · ${_srpMoney(so.open_total)} in progress`,
+      row('sales_orders', 'completed', 'Completed', so.completed_count, so.completed_total)
+      + row('sales_orders', 'open', 'Open', so.open_count, so.open_total)
+      + row('sales_orders', 'cancelled', 'Cancelled', so.cancelled_count)),
+  ].join('');
+}
+
+function _srpHeatPeak(hm) {
+  let peak = null;
+  (hm || []).forEach((row, d) => row.forEach((v, h) => { if (v > 0 && (!peak || v > peak.v)) peak = { v, d, h }; }));
+  return peak;
+}
+
+function _srpHeatmapHtml(hm) {
+  const peak = _srpHeatPeak(hm);
+  const head = '<div class="srp-card-head"><div class="srp-card-title">When you sell</div><span class="srp-muted">POS sales by day and hour</span></div>';
+  if (!peak) return `<div class="srp-card srp-mt">${head}<div class="srp-empty">No POS sales to show</div></div>`;
+
+  const hourLbl = h => (h % 3 === 0 ? (h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`) : '');
+  let html = '<div></div>' + Array.from({ length: 24 }, (_, h) => `<div class="srp-heat-hour">${hourLbl(h)}</div>`).join('');
+  hm.forEach((row, d) => {
+    html += `<div class="srp-heat-day">${SRP_DAYS[d]}</div>`;
+    row.forEach((v, h) => {
+      const bg = v > 0 ? `background:rgba(59,130,246,${(0.12 + 0.88 * v / peak.v).toFixed(3)})` : '';
+      html += `<div class="srp-heat-cell" style="${bg}" title="${SRP_DAYS_LONG[d]} ${_srpHour(h)} · ${escHtml(_srpMoney(v))}"></div>`;
+    });
+  });
+  return `
+    <div class="srp-card srp-mt">${head}
+      <div class="srp-heat">${html}</div>
+      <div class="srp-hint">Busiest: <b>${SRP_DAYS_LONG[peak.d]} ${_srpHour(peak.h)}</b> · ${_srpMoney(peak.v)}</div>
+    </div>`;
+}
+
+function _srpTopProductsHtml(products, s = null) {
+  const head = `<div class="srp-card-head"><div class="srp-card-title">Top products</div>${s
+    ? `<span class="srp-muted">${_srpPlural(s.products_sold, 'product')} sold on POS · ${_srpNum(s.items_sold)} units</span>` : ''}</div>`;
+  if (!products.length) return `<div class="srp-card">${head}<div class="srp-empty">No products sold in this period</div></div>`;
+  return `
+    <div class="srp-card">${head}
+      <div class="srp-table-wrap">
+        <table class="srp-table">
+          <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Avg price</th><th class="num">Revenue</th><th class="num">Share</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+          <tbody>${products.map((p, i) => `
+            <tr>
+              <td><span class="srp-rank">${i + 1}</span>${escHtml(p.name)}</td>
+              <td class="num">${_srpNum(p.qty)}</td>
+              <td class="num srp-muted">${_srpMoney(p.avg_price ?? 0)}</td>
+              <td class="num">${_srpMoney(p.revenue)}</td>
+              <td class="num srp-muted">${p.share ?? 0}%</td>
+              <td class="num">${p.profit === null || p.profit === undefined ? '<span class="srp-muted">—</span>' : `<span class="${p.profit < 0 ? 'srp-neg' : ''}">${_srpMoney(p.profit)}</span>`}</td>
+              <td class="num">${_srpMarginPill(p.margin)}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="srp-hint">Profit and margin use POS cost prices — items sold only on invoices show —.</div>
+    </div>`;
+}
+
+function _srpTxnCardHtml() {
+  return `
+    <div class="srp-card">
+      <div class="srp-txn-toolbar">
+        <div class="srp-seg" id="srp-src-tabs"></div>
+        <select class="srp-mini-select" id="srp-txn-status" title="Status"></select>
+        <div class="srp-search"><i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="srp-txn-q" placeholder="Search number or customer" value="${escHtml(_srp.txn.q)}">
+        </div>
+      </div>
+      <div id="srp-txn-body"></div>
+    </div>`;
+}
+
+function _srpRenderTxnControls() {
+  const tabs = $('#srp-src-tabs');
+  if (!tabs) return;
+  const posOnly = _srp.data?.filters?.pos_only;
+  const items = [['all', 'All'], ...Object.entries(SRP_SOURCES).map(([k, v]) => [k, v.label])]
+    .filter(([k]) => !posOnly || k === 'all' || k === 'pos');
+  tabs.innerHTML = items.map(([k, label]) =>
+    `<button class="${_srp.txn.source === k ? 'active' : ''}" data-srp-source="${k}" data-srp-tab-src="1">${label}</button>`).join('');
+
+  const statuses = _srp.txn.source === 'all'
+    ? [...new Set(Object.values(SRP_STATUSES).flat())]
+    : (SRP_STATUSES[_srp.txn.source] || []);
+  const sel = $('#srp-txn-status');
+  sel.innerHTML = '<option value="">All statuses</option>' + statuses.map(st => `<option value="${st}">${_srpCap(st)}</option>`).join('');
+  sel.value = _srp.txn.status;
+}
+
+function _srpRenderTxn() {
+  const t = _srp.data.transactions;
+  const count = $('#srp-tab-count');
+  if (count) count.textContent = _srpNum(t.total);
+
+  const body = $('#srp-txn-body');
+  if (!body) return;
+  _srpRenderTxnControls();
+  body.classList.remove('srp-dim');
+
+  if (!t.data.length) {
+    body.innerHTML = '<div class="srp-empty">No transactions match these filters</div>';
+    return;
+  }
+
+  const first = (t.page - 1) * t.per_page + 1;
+  const last  = first + t.data.length - 1;
+  body.innerHTML = `
+    <div class="srp-table-wrap">
+      <table class="srp-table">
+        <thead><tr><th>Number</th><th>Type</th><th>Date</th><th>Customer</th><th>Branch</th><th>Status</th><th>Payment</th><th class="num">Total</th></tr></thead>
+        <tbody>${t.data.map(r => {
+          const src = SRP_SOURCES[r.type] || { one: r.type, color: '#9ca3af' };
+          return `<tr class="clickable" data-srp-open="${r.type}:${r.id}" title="Open ${escHtml(src.one.toLowerCase())}">
+            <td><b>${escHtml(r.number)}</b></td>
+            <td><span class="srp-type"><i class="srp-dot" style="background:${src.color}"></i>${src.one}</span></td>
+            <td class="srp-muted">${escHtml(r.occurred_at || '')}</td>
+            <td>${r.customer ? escHtml(r.customer) : `<span class="srp-muted">${r.type === 'pos' ? 'Walk-in' : '—'}</span>`}</td>
+            <td class="srp-muted">${r.branch ? escHtml(r.branch) : 'Main'}</td>
+            <td><span class="srp-pill ${SRP_TONE[r.status] || ''}">${escHtml(_srpCap(r.status))}</span></td>
+            <td class="srp-muted">${r.payment ? escHtml(_srpPayLabel(r.payment)) : '—'}</td>
+            <td class="num"><b>${_srpMoney(r.total)}</b></td>
+          </tr>`;
+        }).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="srp-pager">
+      <span class="srp-muted">${_srpNum(first)}–${_srpNum(last)} of ${_srpNum(t.total)}</span>
+      <div>
+        <button class="srp-icon-btn" data-srp-page="${t.page - 1}" ${t.page <= 1 ? 'disabled' : ''} title="Previous page"><i class="fa fa-chevron-left"></i></button>
+        <span class="srp-muted">Page ${t.page} of ${t.last_page}</span>
+        <button class="srp-icon-btn" data-srp-page="${t.page + 1}" ${t.page >= t.last_page ? 'disabled' : ''} title="Next page"><i class="fa fa-chevron-right"></i></button>
+      </div>
+    </div>`;
+}
+
+/**
+ * Opens the record's Sales-tab detail screen in a popup over the report, so the
+ * user stays on Finance. The detail element is borrowed (moved into the popup)
+ * and put back on close.
+ */
+function _srpOpenRecord(type, id) {
+  const routes = {
+    pos:          { detail: '#sal-detail-view',  open: _salSelectSale },
+    invoices:     { detail: '#sinv-detail-view', open: _invOpenDetail, form: '#sinv-form-view', view: 'invoices' },
+    quotations:   { detail: '#qt-detail-view',   open: _qtOpenDetail,  form: '#qt-form-view',   view: 'quotes' },
+    sales_orders: { detail: '#so-detail-view',   open: _soOpenDetail,  form: '#so-form-view',   view: 'orders' },
+  };
+  const r  = routes[type];
+  const el = r && $(r.detail);
+  if (!el || !id) return;
+  _srpCloseRecord();
+
+  // Opening a detail hides its sibling list view — remember them to restore later
+  const home     = { parent: el.parentNode, next: el.nextSibling };
+  const siblings = [...el.parentNode.children].filter(c => c !== el).map(c => [c, c.style.display]);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'srp-rec-overlay';
+  overlay.innerHTML = '<div class="srp-rec-modal"><button class="srp-rec-close" title="Close"><i class="fa fa-xmark"></i></button></div>';
+  const modal = overlay.firstElementChild;
+  modal.appendChild(el);
+  document.body.appendChild(overlay);
+
+  // An action inside the detail (delete, void, back, edit…) hides it — close the popup then
+  const observer = new MutationObserver(() => { if (el.style.display === 'none') _srpCloseRecord(); });
+
+  _srp.recPopup = { el, home, siblings, overlay, observer, form: r.form, view: r.view };
+  r.open(id);
+  el.style.display = 'flex';
+  observer.observe(el, { attributes: true, attributeFilter: ['style'] });
+
+  overlay.addEventListener('mousedown', e => { if (e.target === overlay) _srpCloseRecord(); });
+  overlay.tabIndex = -1;
+  overlay.addEventListener('keydown', e => { if (e.key === 'Escape') _srpCloseRecord(); });
+  overlay.focus();
+  modal.querySelector('.srp-rec-close').addEventListener('click', () => _srpCloseRecord());
+}
+
+function _srpCloseRecord() {
+  const p = _srp.recPopup;
+  if (!p) return;
+  _srp.recPopup = null;
+  p.observer.disconnect();
+  p.el.style.display = 'none';
+  p.home.parent.insertBefore(p.el, p.home.next);
+  p.overlay.remove();
+
+  // "Edit" switched to the record's form — continue on the Sales tab
+  const form = p.form && $(p.form);
+  if (form && form.style.display !== 'none') {
+    const parent = $(`#sal-${p.view}-view`);
+    activateTab('sales');
+    _sal.view = p.view;
+    $$('.sal-view-btn').forEach(b => b.classList.toggle('active', b.dataset.salView === p.view));
+    $$('.sal-txn-ctrl').forEach(c => c.style.display = 'none');
+    [...parent.parentNode.children].forEach(c => {
+      if (/^sal-.+-view$/.test(c.id)) c.style.display = c === parent ? 'flex' : 'none';
+    });
+    p.siblings.forEach(([c]) => { if (c !== form) c.style.display = 'none'; });
+    return;
+  }
+  p.siblings.forEach(([c, d]) => { c.style.display = d; });
+  loadSalesReport({ txnOnly: true });
+}
+
+// ── Export (CSV / PDF) ───────────────────────────────────────────────────────
+async function _srpExport(kind) {
+  $('#srp-export-menu').hidden = true;
+  const btn = $('#srp-export-btn');
+  const old = btn.innerHTML;
+  btn.disabled  = true;
+  btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Preparing ${kind.toUpperCase()}…`;
+  try {
+    const res = await API.salesReport(_srpParams({ export: 1, page: 1 }));
+    if (res.status !== 200 || !res.body?.data) { toast(res.body?.message || 'Export failed', 'error'); return; }
+    const data = res.body.data;
+    const name = `sales-report-${_srp.from}_to_${_srp.to}`;
+
+    if (kind === 'csv') {
+      const { data: rows, total } = data.transactions;
+      if (!rows.length) { toast('Nothing to export for these filters', 'info'); return; }
+      const cell  = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const lines = [
+        ['Type', 'Number', 'Date', 'Customer', 'Branch / Warehouse', 'Status', 'Payment', 'Total'].join(','),
+        ...rows.map(r => [SRP_SOURCES[r.type]?.one || r.type, r.number, r.occurred_at, r.customer || '', r.branch || 'Main / unassigned',
+          _srpCap(r.status), r.payment ? _srpPayLabel(r.payment) : '', Number(r.total).toFixed(2)].map(cell).join(',')),
+      ];
+      // BOM so Excel opens non-ASCII customer names correctly
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `${name}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      if (total > rows.length) toast(`Exported the latest ${rows.length} of ${total} records — narrow the period for the rest`, 'info');
+      return;
+    }
+
+    if (!window.electronAPI?.saveHtmlPdf) { toast('PDF export needs the latest desktop app — please update.', 'error'); return; }
+    const out = await window.electronAPI.saveHtmlPdf({ html: _srpPdfHtml(data), filename: `${name}.pdf` });
+    if (out?.success) toast('PDF report saved', 'success');
+    else if (!out?.canceled) toast(out?.error || 'PDF export failed', 'error');
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = old;
+  }
+}
+
+const SRP_PDF_TXN_LIMIT = 2000;
+
+function _srpShort(v) {
+  const a = Math.abs(v);
+  return a >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : a >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v));
+}
+
+/** Simple bar chart of revenue per period for the PDF (inline SVG — no canvas / theme issues). */
+function _srpPdfChartSvg(d) {
+  let labels = d.trend.labels, vals = d.trend.revenue;
+  if (labels.length < 2) {
+    vals   = Array.from({ length: 24 }, (_, h) => d.heatmap.reduce((a, row) => a + (row[h] || 0), 0));
+    labels = vals.map((_, h) => _srpHour(h));
+  }
+  const max = Math.max(...vals, 0);
+  if (max <= 0) return '';
+  const W = 720, H = 170, pl = 46, pr = 6, pt = 8, pb = 22;
+  const cw = W - pl - pr, ch = H - pt - pb, n = vals.length, bw = cw / n;
+  let svg = '';
+  for (let i = 0; i <= 4; i++) {
+    const y = pt + ch - ch * i / 4;
+    svg += `<line x1="${pl}" x2="${W - pr}" y1="${y}" y2="${y}" stroke="#eef0f3"/>`
+      + `<text x="${pl - 6}" y="${y + 3}" text-anchor="end" font-size="8" fill="#9ca3af">${_srpShort(max * i / 4)}</text>`;
+  }
+  vals.forEach((v, i) => {
+    const h = v / max * ch;
+    svg += `<rect x="${(pl + i * bw + bw * 0.18).toFixed(1)}" y="${(pt + ch - h).toFixed(1)}" width="${(bw * 0.64).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5" fill="#3b82f6"/>`;
+  });
+  const step = Math.max(1, Math.ceil(n / 10));
+  labels.forEach((l, i) => {
+    if (i % step) return;
+    svg += `<text x="${(pl + i * bw + bw / 2).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="8" fill="#9ca3af">${escHtml(l)}</text>`;
+  });
+  return `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
+}
+
+function _srpPdfHtml(d) {
+  const s = d.summary, r = d.range, e = escHtml, m = _srpMoney;
+  const names = _srpScopeNames(d);
+  const biz   = state._bizName || $('#sel-business')?.selectedOptions?.[0]?.text || 'Business';
+  const delta = p => p === null ? '' : `<span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% vs previous period</span>`;
+
+  const table = (title, cols, rows, note = '') => !rows.length ? '' : `
+    <section>
+      <h2>${title}</h2>
+      <table>
+        <thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.t}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(row => `<tr>${row.map((v, i) => `<td class="${cols[i].num ? 'num' : ''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+      ${note ? `<p class="note">${note}</p>` : ''}
+    </section>`;
+  const shareRows = list => list.map(x => [e(x.label), _srpNum(x.count), m(x.total), `${x.share}%`]);
+  const shareCols = [{ t: 'Name' }, { t: 'Count', num: true }, { t: 'Total', num: true }, { t: 'Share', num: true }];
+
+  const txns    = d.transactions.data.slice(0, SRP_PDF_TXN_LIMIT);
+  const txnNote = d.transactions.total > txns.length
+    ? `Showing the latest ${txns.length} of ${d.transactions.total} records. Export CSV or narrow the period for the full list.` : '';
+  const txnFilter = [_srp.txn.source !== 'all' ? SRP_SOURCES[_srp.txn.source]?.label : '', _srp.txn.status ? _srpCap(_srp.txn.status) : '', _srp.txn.q ? `“${e(_srp.txn.q)}”` : '']
+    .filter(Boolean).join(' · ');
+
+  const q = s.quotations, inv = s.invoices, so = s.sales_orders;
+  const chart = _srpPdfChartSvg(d);
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Sales report</title><style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 10.5px; margin: 0; }
+    header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1f2937; padding-bottom: 10px; margin-bottom: 14px; }
+    h1 { font-size: 20px; margin: 0 0 2px; }
+    .biz { font-size: 12px; font-weight: 600; color: #4b5563; }
+    .meta { text-align: right; color: #6b7280; line-height: 1.6; }
+    .meta b { color: #1f2937; }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
+    .kpi { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px; }
+    .kpi .l { font-size: 8.5px; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; font-weight: 600; }
+    .kpi .v { font-size: 15px; font-weight: 700; margin: 3px 0 2px; }
+    .kpi .f { font-size: 8.5px; color: #6b7280; }
+    .up { color: #16a34a; } .down { color: #dc2626; }
+    .stats { display: grid; grid-template-columns: repeat(7, 1fr); border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 14px; }
+    .stats div { padding: 6px 8px; border-left: 1px solid #e5e7eb; }
+    .stats div:first-child { border-left: none; }
+    .stats span { display: block; font-size: 8px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .stats b { font-size: 10px; }
+    section { margin-bottom: 14px; break-inside: avoid; }
+    .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: #374151; margin: 0 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e5e7eb; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; color: #6b7280; font-weight: 600; padding: 4px 6px; border-bottom: 1px solid #d1d5db; }
+    td { padding: 4px 6px; border-bottom: 1px solid #f1f3f5; }
+    tr { break-inside: avoid; }
+    thead { display: table-header-group; }
+    .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .note { color: #9ca3af; font-size: 8.5px; margin: 5px 0 0; }
+    .txns { break-inside: auto; }
+  </style></head><body>
+    <header>
+      <div><h1>Sales report</h1><div class="biz">${e(biz)}</div></div>
+      <div class="meta">
+        <div><b>${_srpFmtDate(r.from)} – ${_srpFmtDate(r.to)}</b> (${_srpPlural(r.days, 'day')})</div>
+        <div>${e(names.branch)}${names.counter ? ` · ${e(names.counter)}` : ''}</div>
+        <div>Generated ${new Date().toLocaleString()}</div>
+      </div>
+    </header>
+
+    <div class="kpis">
+      <div class="kpi"><div class="l">Revenue</div><div class="v">${m(s.revenue)}</div><div class="f">${delta(s.revenue_change_pct)}</div></div>
+      <div class="kpi"><div class="l">Transactions</div><div class="v">${_srpNum(s.transactions)}</div><div class="f">${delta(s.transactions_change_pct)}</div></div>
+      <div class="kpi"><div class="l">Average sale</div><div class="v">${m(s.avg_ticket)}</div><div class="f">${_srpNum(s.pos_count)} POS · ${_srpNum(s.invoices_paid_count)} invoices</div></div>
+      <div class="kpi"><div class="l">Gross profit (POS)</div><div class="v">${m(s.gross_profit)}</div><div class="f">${s.gross_margin}% margin</div></div>
+    </div>
+    <div class="stats">
+      <div><span>Net sales</span><b>${m(s.net_sales)}</b></div>
+      <div><span>Returns</span><b>${m(s.returns_total)}</b></div>
+      <div><span>Discounts</span><b>${m(s.discounts)}</b></div>
+      <div><span>Voided</span><b>${m(s.void_total)}</b></div>
+      <div><span>Unpaid credit</span><b>${m(s.credit_outstanding)}</b></div>
+      <div><span>To collect</span><b>${m(s.receivables)}</b></div>
+      <div><span>Items sold</span><b>${_srpNum(s.items_sold)}</b></div>
+    </div>
+
+    ${chart ? `<section><h2>Revenue trend</h2>${chart}</section>` : ''}
+
+    <div class="cols">
+      ${table('Sales & profit summary', [{ t: 'Line' }, { t: 'Amount', num: true }], [
+        ['Gross sales', m(s.gross_sales)],
+        [`Less discounts (${s.discount_rate}%)`, `− ${m(s.discounts)}`],
+        ['<b>Revenue</b>', `<b>${m(s.revenue)}</b>`],
+        [`Less returns (${s.return_rate}%)`, `− ${m(s.returns_total)}`],
+        ['<b>Net sales</b>', `<b>${m(s.net_sales)}</b>`],
+        ['POS sales', m(s.pos_total)],
+        ['Less cost of goods sold', `− ${m(s.cogs)}`],
+        [`<b>Gross profit</b> (${s.gross_margin}% margin)`, `<b>${m(s.gross_profit)}</b>`],
+      ], 'Cost prices are recorded on POS sales only, so profit covers POS sales.')}
+      ${table('Key figures', [{ t: 'Measure' }, { t: 'Value', num: true }], [
+        ['Average revenue per day', m(s.avg_daily_revenue)],
+        ['Days with sales', `${_srpNum(s.active_days)} of ${_srpNum(r.days)}`],
+        ['Best day', s.best_day ? `${_srpFmtDate(s.best_day.date)} · ${m(s.best_day.total)}` : '—'],
+        ['Largest POS sale', m(s.largest_sale)],
+        ['Items per POS sale', _srpNum(s.avg_items_per_sale)],
+        ['Discounted sales', _srpNum(s.discounted_count)],
+        ['Customers who bought', `${_srpNum(s.unique_customers)} (${_srpNum(s.new_customers)} new)`],
+        ['Walk-in POS sales', _srpNum(s.walkin_count)],
+      ])}
+    </div>
+
+    <div class="cols">
+      ${table('Income sources', [{ t: 'Source' }, { t: 'Count', num: true }, { t: 'Total', num: true }],
+        d.by_source.map(x => [e(x.label), _srpNum(x.count), m(x.total)]),
+        'Revenue = POS sales + paid invoices. Quotes and orders shown for reference.')}
+      ${d.filters.pos_only ? '' : table('Quotations, invoices & orders', [{ t: 'Document' }, { t: 'Status' }, { t: 'Count', num: true }, { t: 'Value', num: true }], [
+        ['Quotations', 'Accepted', _srpNum(q.accepted_count), m(q.accepted_total)],
+        ['Quotations', 'Open', _srpNum(q.open_count), m(q.open_total)],
+        ['Quotations', 'Rejected / expired', _srpNum(q.rejected_count + q.expired_count), ''],
+        ['Invoices', 'Paid', _srpNum(inv.paid_count), m(s.invoices_paid_total)],
+        ['Invoices', 'Sent / overdue', _srpNum(inv.sent_count + inv.overdue_count), m(s.receivables)],
+        ['Sales orders', 'Completed', _srpNum(so.completed_count), m(so.completed_total)],
+        ['Sales orders', 'Open', _srpNum(so.open_count), m(so.open_total)],
+      ], q.win_rate !== null ? `Quotation win rate: ${q.win_rate}%` : '')}
+      ${table('Branches & warehouses', shareCols, shareRows(d.by_branch))}
+      ${table('Payment methods', shareCols, shareRows(d.by_payment))}
+      ${table('Top customers', shareCols, shareRows(d.top_customers))}
+      ${table('Cashiers', shareCols, shareRows(d.by_cashier))}
+      ${table('Counters', shareCols, shareRows(d.by_counter))}
+      ${table('Sales channels', shareCols, shareRows(d.by_channel || []))}
+      ${table('Sales by day of week', [{ t: 'Day' }, { t: 'Sales', num: true }, { t: 'Total', num: true }],
+        (d.heatmap || []).some(row => row.some(v => v > 0))
+          ? d.heatmap.map((row, i) => [SRP_DAYS_LONG[i], _srpNum((d.heatmap_counts?.[i] || []).reduce((a, v) => a + v, 0)), m(row.reduce((a, v) => a + v, 0))])
+          : [], 'POS sales only.')}
+      ${table('Return reasons', shareCols, shareRows(d.returns?.by_reason || []))}
+      ${table('Most returned products', [{ t: 'Product' }, { t: 'Returns', num: true }, { t: 'Qty', num: true }, { t: 'Refunded', num: true }],
+        (d.returns?.products || []).map(p => [e(p.name), _srpNum(p.returns), _srpNum(p.qty), m(p.total)]))}
+    </div>
+
+    ${table('Top products', [{ t: 'Product' }, { t: 'Qty', num: true }, { t: 'Avg price', num: true }, { t: 'Revenue', num: true }, { t: 'Share', num: true }, { t: 'Profit', num: true }, { t: 'Margin', num: true }],
+      d.top_products.map(p => [e(p.name), _srpNum(p.qty), m(p.avg_price ?? 0), m(p.revenue), `${p.share ?? 0}%`,
+        p.profit === null || p.profit === undefined ? '—' : m(p.profit), p.margin === null ? '—' : `${p.margin}%`]),
+      'Profit and margin use POS cost prices.')}
+    ${table('Sales by category (POS)', [{ t: 'Category' }, { t: 'Products', num: true }, { t: 'Qty', num: true }, { t: 'Revenue', num: true }, { t: 'Share', num: true }, { t: 'Profit', num: true }, { t: 'Margin', num: true }],
+      (d.by_category || []).map(c => [e(c.label), _srpNum(c.products), _srpNum(c.qty), m(c.total), `${c.share}%`,
+        c.margin === null ? '—' : m(c.profit), c.margin === null ? '—' : `${c.margin}%`]))}
+    ${d.trend.labels.length > 1 ? table('Breakdown by period', [{ t: 'Period' }, { t: 'POS sales', num: true }, { t: 'POS revenue', num: true }, { t: 'Paid invoices', num: true }, { t: 'Returns', num: true }, { t: 'Net', num: true }],
+      d.trend.labels.map((l, i) => [e(l), _srpNum(d.trend.transactions[i]), m(d.trend.pos[i]), m(d.trend.invoices[i]), m(d.trend.returns[i]),
+        m(d.trend.pos[i] + d.trend.invoices[i] - d.trend.returns[i])])) : ''}
+
+    <section class="txns">
+      <h2>Transactions (${_srpNum(d.transactions.total)})${txnFilter ? ` — ${txnFilter}` : ''}</h2>
+      ${txns.length ? `<table>
+        <thead><tr><th>Number</th><th>Type</th><th>Date</th><th>Customer</th><th>Branch</th><th>Status</th><th>Payment</th><th class="num">Total</th></tr></thead>
+        <tbody>${txns.map(t => `<tr>
+          <td>${e(t.number)}</td><td>${SRP_SOURCES[t.type]?.one || e(t.type)}</td><td>${e(t.occurred_at || '')}</td>
+          <td>${e(t.customer || (t.type === 'pos' ? 'Walk-in' : '—'))}</td><td>${e(t.branch || 'Main')}</td>
+          <td>${e(_srpCap(t.status))}</td><td>${t.payment ? e(_srpPayLabel(t.payment)) : '—'}</td><td class="num">${m(t.total)}</td>
+        </tr>`).join('')}</tbody>
+      </table>` : '<p class="note">No transactions for these filters.</p>'}
+      ${txnNote ? `<p class="note">${txnNote}</p>` : ''}
+    </section>
+  </body></html>`;
+}
+
+// ── Events ───────────────────────────────────────────────────────────────────
+// Filter bar (static markup in index.html)
+$('#srp-period')?.addEventListener('change', e => {
+  _srpSetPreset(e.target.value);
+  if (e.target.value === 'custom') { $('#srp-from').focus(); return; } // dates already set — edit them
+  _srpReload();
+});
+// Editing either date switches the period to "Custom range…"
+['#srp-from', '#srp-to'].forEach(sel => $(sel)?.addEventListener('change', () => {
+  let f = $('#srp-from').value, t = $('#srp-to').value;
+  if (!f || !t) return;
+  if (f > t) { [f, t] = [t, f]; $('#srp-from').value = f; $('#srp-to').value = t; }
+  if (f === _srp.from && t === _srp.to) return;
+  _srp.from = f; _srp.to = t;
+  _srp.preset = 'custom';
+  $('#srp-period').value = 'custom';
+  _srpReload();
+}));
+$('#srp-branch')?.addEventListener('change',  e => { _srp.branch = e.target.value; _srp.counter = ''; _srpReload(); });
+$('#srp-counter')?.addEventListener('change', e => { _srp.counter = e.target.value; _srpReload(); });
+$('#srp-refresh')?.addEventListener('click', () => loadSalesReport());
+$('#srp-export-btn')?.addEventListener('click', e => {
+  e.stopPropagation();
+  $('#srp-export-menu').hidden = !$('#srp-export-menu').hidden;
+});
+$('#srp-export-menu')?.addEventListener('click', e => {
+  const item = e.target.closest('[data-srp-export]');
+  if (item) _srpExport(item.dataset.srpExport);
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.srp-menu-wrap') && $('#srp-export-menu')) $('#srp-export-menu').hidden = true;
+});
+$('#srp-scope')?.addEventListener('click', e => {
+  if (e.target.id !== 'srp-clear') return;
+  Object.assign(_srp, { branch: '', counter: '', group: 'auto' });
+  _srp.txn = { source: 'all', status: '', q: '', page: 1 };
+  _srpSetPreset('30d');
+  loadSalesReport();
+});
+
+// Report body (re-rendered on every load) — delegated
+$('#srp-body')?.addEventListener('click', e => {
+  const tab = e.target.closest('[data-srp-tab]');
+  if (tab) { _srp.tab = tab.dataset.srpTab; _srpRenderTab(); return; }
+
+  const chart = e.target.closest('[data-srp-chart]');
+  if (chart) {
+    _srp.chart = chart.dataset.srpChart;
+    chart.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === chart));
+    _srpDrawChart();
+    return;
+  }
+
+  const src = e.target.closest('[data-srp-source]');
+  if (src) {
+    _srp.txn.source = src.dataset.srpSource;
+    _srp.txn.status = src.dataset.srpStatus ?? '';
+    _srp.txn.page   = 1;
+    if (_srp.tab !== 'transactions') { _srp.tab = 'transactions'; _srpRenderTab(); }
+    $('#srp-tabs')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    loadSalesReport({ txnOnly: true });
+    return;
+  }
+
+  const branch = e.target.closest('[data-srp-branch]');
+  if (branch) {
+    _srp.branch  = _srp.branch === branch.dataset.srpBranch ? '' : branch.dataset.srpBranch;
+    _srp.counter = '';
+    _srpReload();
+    return;
+  }
+
+  const counter = e.target.closest('[data-srp-counter]');
+  if (counter) {
+    _srp.counter = _srp.counter === counter.dataset.srpCounter ? '' : counter.dataset.srpCounter;
+    _srpReload();
+    return;
+  }
+
+  const page = e.target.closest('[data-srp-page]');
+  if (page && !page.disabled) {
+    _srp.txn.page = Number(page.dataset.srpPage) || 1;
+    loadSalesReport({ txnOnly: true });
+    return;
+  }
+
+  const open = e.target.closest('[data-srp-open]');
+  if (open) {
+    const [type, id] = open.dataset.srpOpen.split(':');
+    _srpOpenRecord(type, Number(id));
+  }
+});
+$('#srp-body')?.addEventListener('change', e => {
+  if (e.target.id === 'srp-group') { _srp.group = e.target.value; loadSalesReport(); return; }
+  if (e.target.id !== 'srp-txn-status') return;
+  _srp.txn.status = e.target.value;
+  _srp.txn.page   = 1;
+  loadSalesReport({ txnOnly: true });
+});
+$('#srp-body')?.addEventListener('input', e => {
+  if (e.target.id !== 'srp-txn-q') return;
+  clearTimeout(_srp.searchTimer);
+  _srp.searchTimer = setTimeout(() => {
+    _srp.txn.q    = e.target.value.trim();
+    _srp.txn.page = 1;
+    loadSalesReport({ txnOnly: true });
+  }, 350);
+});
+window.addEventListener('resize', () => {
+  if (!_srp.data || $('#sales-report-view')?.style.display === 'none') return;
+  clearTimeout(_srp.resizeTimer);
+  _srp.resizeTimer = setTimeout(_srpDrawChart, 150);
 });
 
 // ── Rental Panel ─────────────────────────────────────────────────────────────

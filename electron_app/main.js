@@ -755,6 +755,50 @@ ipcMain.handle('preview-receipt-pdf', async (_e, opts = {}) => {
   }
 });
 
+// Renders a self-contained HTML report (e.g. Finance → Sales Reports) to an A4 PDF,
+// asks where to save it, then opens it in the default PDF viewer.
+ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
+  const { html = '', filename = 'report.pdf', landscape = false } = opts;
+  const os      = require('os');
+  const tmpHtml = path.join(os.tmpdir(), `zeebroo-report-${Date.now()}.html`);
+
+  const renderWin = new BrowserWindow({
+    width: 1000, height: 1400, show: false, skipTaskbar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, javascript: false },
+  });
+  try {
+    // A file instead of a data: URL — reports with many transaction rows get large
+    fs.writeFileSync(tmpHtml, html, 'utf8');
+    await renderWin.loadFile(tmpHtml);
+
+    const pdf = await renderWin.webContents.printToPDF({
+      pageSize: 'A4',
+      landscape: !!landscape,
+      printBackground: true,
+      margins: { top: 0.45, bottom: 0.55, left: 0.45, right: 0.45 },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: '<div style="font-size:8px;color:#9ca3af;width:100%;text-align:center;font-family:Segoe UI,Arial,sans-serif">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
+    });
+
+    const parent = BrowserWindow.fromWebContents(e.sender) || mainWindow;
+    const { canceled, filePath } = await dialog.showSaveDialog(parent, {
+      defaultPath: filename,
+      filters: [{ name: 'PDF document', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    fs.writeFileSync(filePath, pdf);
+    shell.openPath(filePath);
+    return { success: true, path: filePath };
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!renderWin.isDestroyed()) renderWin.destroy();
+    try { fs.unlinkSync(tmpHtml); } catch (_) {}
+  }
+});
+
 // ── API proxy (avoids CORS in renderer) ──────────────────────────────────
 const https = require('https');
 const http  = require('http');

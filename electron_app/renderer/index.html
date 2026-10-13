@@ -5360,6 +5360,60 @@
         <button class="fin-subnav-btn" data-fin="modifications"><i class="fa fa-screwdriver-wrench"></i> Modifications</button>
         <button class="fin-subnav-btn" data-fin="investments"><i class="fa fa-chart-line"></i> Investments</button>
         <button class="fin-subnav-btn" data-fin="budget"><i class="fa fa-table-cells"></i> Budget</button>
+        <button class="fin-subnav-btn" data-fin="sales"><i class="fa fa-chart-column"></i> Sales Reports</button>
+      </div>
+
+      <!-- ── Sales Reports view ── -->
+      <div id="sales-report-view" class="fin-view" style="display:none">
+        <div class="srp-bar">
+          <div class="srp-bar-row">
+            <div class="srp-filters">
+              <div class="srp-control">
+                <i class="fa fa-calendar"></i>
+                <select id="srp-period" title="Period">
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="7d">Last 7 days</option>
+                  <option value="30d" selected>Last 30 days</option>
+                  <option value="mtd">This month</option>
+                  <option value="lastmonth">Last month</option>
+                  <option value="qtd">This quarter</option>
+                  <option value="ytd">This year</option>
+                  <option value="12m">Last 12 months</option>
+                  <option value="custom">Custom range…</option>
+                </select>
+              </div>
+              <div class="srp-control srp-custom" id="srp-custom" title="Pick any start and end date">
+                <span class="srp-to">From</span>
+                <input type="date" id="srp-from" title="From">
+                <span class="srp-to">to</span>
+                <input type="date" id="srp-to" title="To">
+              </div>
+              <div class="srp-control" id="srp-branch-wrap">
+                <i class="fa fa-warehouse"></i>
+                <select id="srp-branch" title="Branch / Warehouse"><option value="">All branches &amp; warehouses</option></select>
+              </div>
+              <div class="srp-control" id="srp-counter-wrap">
+                <i class="fa fa-cash-register"></i>
+                <select id="srp-counter" title="Counter"><option value="">All counters</option></select>
+              </div>
+            </div>
+            <div class="srp-actions">
+              <button class="srp-icon-btn" id="srp-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
+              <div class="srp-menu-wrap">
+                <button class="srp-primary" id="srp-export-btn"><i class="fa fa-download"></i> Export <i class="fa fa-chevron-down srp-caret"></i></button>
+                <div class="srp-menu" id="srp-export-menu" hidden>
+                  <button data-srp-export="pdf"><i class="fa fa-file-pdf"></i><span>PDF report<small>Summary, breakdowns &amp; transactions</small></span></button>
+                  <button data-srp-export="csv"><i class="fa fa-file-csv"></i><span>CSV for Excel<small>Transactions for these filters</small></span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="srp-scope" id="srp-scope"></div>
+        </div>
+        <div class="srp-body" id="srp-body">
+          <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading sales report…</div>
+        </div>
       </div>
 
       <!-- ── Finance flow overview ── -->
