@@ -4012,7 +4012,8 @@ function _invpResetView() {
   if (!bg) return;
   const w = bg.clientWidth, h = bg.clientHeight;
   if (!w || !h) return;
-  const pw = _invpLastGeom.wPx, ph = _invpLastGeom.hPx || INV_THERMAL_PREVIEW_H;
+  const pw = _invpLastGeom.wPx;
+  const ph = parseFloat($('#invp-scaler')?.style.height) || _invpLastGeom.hPx || INV_THERMAL_PREVIEW_H;
   _invpFitSc = Math.min((w - 40) / pw, (h - 40) / ph);
   _invpZoom  = 1;
   _invpPanX  = (w - pw * _invpFitSc) / 2;
@@ -4057,6 +4058,7 @@ async function showInvoicePreviewModal(inv) {
   const scaler = document.getElementById('invp-scaler');
   if (scaler) { scaler.style.width = geom.wPx + 'px'; scaler.style.height = pageH + 'px'; }
   if (frame)  { frame.style.width  = geom.wPx + 'px'; frame.style.height  = pageH + 'px'; }
+  if (frame)  _invFitFrameToContent(frame, scaler, pageH, geom.thermal ? 0 : pageH, () => _invpResetView());
 
   // Show immediately without letterhead so the modal opens instantly
   if (frame) frame.srcdoc = _invBuildActualDoc(inv, ic, state.currency || '');
@@ -26547,7 +26549,8 @@ function _isetupGetCfg() {
   return {
     template:    c.invoice_template    || 'classic',
     color:       c.invoice_color       || '',
-    printer:     c.invoice_printer     || 'laser_a4',
+    // Thermal printer types were removed; legacy saved values fall back to A4.
+    printer:     (c.invoice_printer || '').startsWith('thermal_') ? 'laser_a4' : (c.invoice_printer || 'laser_a4'),
     paper:       c.invoice_paper       || 'a4',
     orientation: c.invoice_orientation || 'portrait',
     mgTop:       c.invoice_mg_top      ?? 20,
@@ -26577,6 +26580,28 @@ const INV_PAPER_MM = {
 const INV_MM_PX = 96 / 25.4;
 // Fallback preview height (px) for thermal roll paper, which has no fixed length.
 const INV_THERMAL_PREVIEW_H = 1400;
+
+// Grows a preview iframe (and its scaler) to the rendered content height so
+// content that spills past one page (e.g. a full invoice on A5) isn't clipped,
+// and marks where each printed page breaks with a dashed line.
+function _invFitFrameToContent(frame, scaler, pageH, breakEvery, onFit) {
+  frame.onload = () => {
+    let h = pageH;
+    try { h = Math.max(pageH, frame.contentDocument.documentElement.scrollHeight); } catch (_) {}
+    frame.style.height = h + 'px';
+    if (scaler) {
+      scaler.style.height = h + 'px';
+      scaler.querySelectorAll('.inv-page-break').forEach(el => el.remove());
+      for (let y = breakEvery; breakEvery > 0 && y < h; y += breakEvery) {
+        const m = document.createElement('div');
+        m.className = 'inv-page-break';
+        m.style.cssText = `position:absolute;left:0;right:0;top:${y}px;border-top:2px dashed #94a3b8;pointer-events:none;z-index:1`;
+        scaler.appendChild(m);
+      }
+    }
+    if (onFit) onFit(h);
+  };
+}
 
 // Resolves the effective page geometry (mm + px) from printer/paper/orientation.
 // Thermal printers use their fixed roll width with an unbounded (auto) length —
@@ -26617,7 +26642,11 @@ function _isetupLhHtml(dataUrl, contentHeight, logoPos, geom, mg) {
   if (!dataUrl) return { banner: '', corner: '' };
   const pageW  = geom.wPx;
   const pageH  = geom.hPx || Math.round(pageW * 1123 / 794);
-  const stripH = contentHeight > 0 ? Math.ceil(contentHeight) + 6 : 150;
+  // contentHeight is measured on the 794px-wide letterhead canvas, but the
+  // image is drawn at pageW — scale the strip so smaller papers (A5) don't
+  // reveal the blank area below the letterhead header.
+  const lhScale = pageW / 794;
+  const stripH = Math.ceil((contentHeight > 0 ? contentHeight + 6 : 150) * lhScale);
   if (logoPos === 'top-left' || logoPos === 'top-right') {
     const side   = logoPos === 'top-left' ? 'left' : 'right';
     const inset  = side === 'left' ? mg.left : mg.right;
@@ -26633,6 +26662,13 @@ function _isetupLhHtml(dataUrl, contentHeight, logoPos, geom, mg) {
     banner: `<div style="width:${pageW}px;height:${stripH}px;overflow:hidden;position:relative;"><img src="${dataUrl}" style="position:absolute;top:0;left:0;width:${pageW}px;height:${pageH}px;display:block;pointer-events:none;object-fit:fill;image-rendering:auto;" alt=""></div>`,
     corner: '',
   };
+}
+
+// A full-width letterhead banner already occupies the top of the page, so the
+// configured top margin would only add a blank gap between the banner and the
+// invoice content (very noticeable on A5). Keep just a small gap under it.
+function _isetupMgUnderBanner(mg) {
+  return { ...mg, top: Math.min(mg.top, 6) };
 }
 
 function _isetupBuildPreviewDoc(tpl, mg, cur) {
@@ -27091,7 +27127,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 // invoice fields (invoice_number, customer_name, items, totals, etc.)
 function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const tpl  = _isetupResolveTpl(ic.template, ic.color);
-  const mg   = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
+  let   mg   = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
   const a    = tpl.accent;
   const biz  = escHtml(state.receiptSettings?.business_name        || 'Your Business');
   const addr = escHtml(state.receiptSettings?.receipt_address_line || '');
@@ -27235,6 +27271,7 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const lh      = _isetupLhHtml(lhUrl, lhCh, ic.logoPos, geom, mg);
   const lhLayer = lh.banner;
   const lhCorner= lh.corner;
+  if (lhLayer) mg = _isetupMgUnderBanner(mg);
   const bodyPos   = '';
   const pgStack   = '';
   // A full-width letterhead banner already carries the business name/logo,
@@ -27629,7 +27666,8 @@ function _isetupResetView() {
   if (!bg) return;
   const w = bg.clientWidth, h = bg.clientHeight;
   if (!w || !h) return;
-  const pw = _isetupLastGeom.wPx, ph = _isetupLastGeom.hPx || INV_THERMAL_PREVIEW_H;
+  const pw = _isetupLastGeom.wPx;
+  const ph = parseFloat($('#isetup-prev-scaler')?.style.height) || _isetupLastGeom.hPx || INV_THERMAL_PREVIEW_H;
   _isetupFitSc = Math.min((w - 40) / pw, (h - 40) / ph);
   _isetupZoom  = 1;
   _isetupPanX  = (w - pw * _isetupFitSc) / 2;
@@ -27676,12 +27714,13 @@ function _isetupUpdatePreview() {
     const lh = _isetupLhHtml(_isetupLhDataUrl.dataUrl, _isetupLhDataUrl.contentHeight, live.logoPos, geom, mg);
     lhLayer = lh.banner; lhCorner = lh.corner;
   }
-  iframe.srcdoc = _isetupBuildPreviewDoc(tpl, mg, state.currency || '');
+  iframe.srcdoc = _isetupBuildPreviewDoc(tpl, lhLayer ? _isetupMgUnderBanner(mg) : mg, state.currency || '');
 
   const pageH  = geom.hPx || INV_THERMAL_PREVIEW_H;
   const scaler = $('#isetup-prev-scaler');
   if (scaler) { scaler.style.width = geomW + 'px'; scaler.style.height = pageH + 'px'; }
   iframe.style.width = geomW + 'px'; iframe.style.height = pageH + 'px';
+  _invFitFrameToContent(iframe, scaler, pageH, geom.thermal ? 0 : pageH, () => _isetupResetView());
 
   // Always reset so normal preview-builder calls remain unaffected
   lhLayer = ''; lhCorner = ''; hdrCss = ''; bodyPos = ''; pgStack = '';
