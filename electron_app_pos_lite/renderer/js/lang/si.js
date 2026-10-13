@@ -218,6 +218,8 @@ window.I18N_DICTS = window.I18N_DICTS || {};
     "Out of stock": "තොග අවසන්",
     "{n} left": "{n} ඉතිරියි",
     "No products found.": "භාණ්ඩ හමු නොවීය.",
+    "No product found for \"{code}\"": "\"{code}\" සඳහා භාණ්ඩයක් හමු නොවීය",
+    "{name} is out of stock": "{name} තොගයේ නැත",
     "Could not load products ({reason}).": "භාණ්ඩ පූරණය කළ නොහැකි විය ({reason}).",
     "No more stock available for this item.": "මෙම අයිතමය සඳහා තවත් තොග නොමැත.",
     "Checkout failed.": "විකිණීම අසාර්ථක විය.",

@@ -182,6 +182,7 @@ document.querySelectorAll('.mode-tab').forEach((btn) => {
     btn.classList.add('active');
     currentMode = btn.dataset.mode;
     loadProducts(searchInput.value.trim());
+    focusSearch();
   });
 });
 
@@ -439,10 +440,14 @@ function renderProducts() {
   });
 }
 
+let loadProductsSeq = 0;
 async function loadProducts(query = '') {
+  const seq = ++loadProductsSeq;
   grid.innerHTML = `<div class="loading-state">${t('Loading products…')}</div>`;
   const filter = currentMode === 'rental' ? 'rental' : currentMode === 'dynamic' ? 'dynamic' : null;
   const res = await API.products(query, { filter, categoryId: currentCategoryId || null });
+  // A newer request (e.g. the reset after a barcode scan) superseded this one
+  if (seq !== loadProductsSeq) return;
   if (res.status !== 200) {
     grid.innerHTML = `<div class="empty-state">${t('Could not load products ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
     return;
@@ -451,10 +456,81 @@ async function loadProducts(query = '') {
   renderProducts();
 }
 
+// ── Barcode scan: exact product SKU or batch SKU (e.g. 32423-011) ───────
+let scanIdleTimer = null;
+
+function findScanMatch(code) {
+  const lower = code.toLowerCase();
+  return products.find((p) =>
+    (p.sku && p.sku.toLowerCase() === lower) ||
+    (p.layers || []).some((l) => (l.batch_sku || '').toLowerCase() === lower)
+  ) || null;
+}
+
+function clearSearchAfterScan() {
+  clearTimeout(searchDebounce);
+  clearTimeout(scanIdleTimer);
+  searchInput.value = '';
+  loadProducts('');
+}
+
+// Returns true when the code resolved to a product and was routed to the cart.
+async function addByScan(code, { remote = true } = {}) {
+  if (!code) return false;
+  let product = findScanMatch(code);
+  if (!product && remote) {
+    const res = await API.productBySku(code);
+    const card = res.status === 200 ? (res.body?.data || null) : null;
+    if (card && card.id) {
+      product = products.find((p) => p.id === card.id) || card;
+      if (!products.includes(product)) products.push(product);
+    }
+  }
+  if (!product) return false;
+  if (Number(product.stock_quantity) <= 0 && !product.is_rental && !product.is_dynamic_pricing) {
+    showToast(t('{name} is out of stock', { name: product.name }), 'error');
+    clearSearchAfterScan();
+    return true;
+  }
+  routeAddToCart(product.id);
+  clearSearchAfterScan();
+  return true;
+}
+
 searchInput.addEventListener('input', () => {
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => loadProducts(searchInput.value.trim()), 300);
+  // Scanners without an Enter suffix: add an exact match once typing pauses.
+  // Waiting avoids adding SKU "32423" while "32423-011" is still being typed.
+  clearTimeout(scanIdleTimer);
+  const q = searchInput.value.trim();
+  if (q) {
+    scanIdleTimer = setTimeout(() => {
+      if (searchInput.value.trim() === q) addByScan(q, { remote: false });
+    }, 250);
+  }
 });
+
+searchInput.addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  clearTimeout(scanIdleTimer);
+  const q = searchInput.value.trim();
+  if (!q) return;
+  if (await addByScan(q)) return;
+  // No exact code — add the single search hit if there is exactly one
+  clearTimeout(searchDebounce);
+  await loadProducts(q);
+  if (products.length === 1) { routeAddToCart(products[0].id); clearSearchAfterScan(); }
+  else if (!products.length) showToast(t('No product found for "{code}"', { code: q }), 'error');
+});
+
+// Keep the search box focused so barcode scans always land there
+function focusSearch() {
+  setTimeout(() => {
+    if (!isAnyPosModalOpen() && searchInput.offsetParent !== null) searchInput.focus();
+  }, 60);
+}
 
 // ── Add-to-cart routing (plain product vs. rental vs. dynamic pricing) ──
 function routeAddToCart(productId) {
@@ -2608,8 +2684,16 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       openCheckoutModal();
       break;
-    default:
-      return;
+    default: {
+      // Barcode scanner capture: route stray typing (focus on a card/button/body) into the search
+      const el = document.activeElement;
+      const editable = el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable);
+      if (editable || mod || e.altKey || e.key.length !== 1) return;
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.value += e.key;
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
 });
 
@@ -2619,3 +2703,4 @@ loadCategories();
 loadProducts();
 _checkShiftOpen();
 renderCart();
+focusSearch();

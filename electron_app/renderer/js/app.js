@@ -514,7 +514,7 @@ function activateTab(tabName) {
   if (tabName !== 'rst-pos') _rstPosStopPoll();
 
   if (tabName === 'home')       loadHomeDashboard();
-  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); _maybePosSetupWizard(); }
+  if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); _maybePosSetupWizard(); _focusPosSearch(); }
   if (tabName === 'sales')      { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
   if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
   if (tabName === 'finance')    { switchFinView('flow'); }
@@ -22495,7 +22495,9 @@ $('#inv-tabs').addEventListener('click', e => {
 });
 
 // ── Products ───────────────────────────────────────────────────────────────
+let _loadProductsSeq = 0;
 async function loadProducts(search = '', catId = 0, page = 1) {
+  const seq = ++_loadProductsSeq;
   // Bail if the POS mode has since switched away from Products — a stale
   // in-flight request (e.g. from before switching to Services/Rental) must
   // not repaint and un-hide #product-grid out from under the active mode.
@@ -22520,6 +22522,8 @@ async function loadProducts(search = '', catId = 0, page = 1) {
     discountOnly: applyDiscount,
   });
   if (state.posMode !== 'products') return;
+  // A newer request (e.g. the reset after a barcode scan) superseded this one
+  if (seq !== _loadProductsSeq) return;
   if (res.status !== 200) {
     grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:40px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load products</div>`;
     setStatus('Error loading products');
@@ -22843,29 +22847,56 @@ function _findBySku(q) {
   return state.products.find(p => p.sku && p.sku.trim().toLowerCase() === lower) || null;
 }
 
+// After a scan/add: clear the search and restore the full product grid
+function _resetSearchAfterScan() {
+  $('#product-search').value = '';
+  state.searchQuery = '';
+  _ssClose();
+  clearTimeout(searchTimer);
+  clearTimeout(_scanIdleTimer);
+  loadProducts('', state.activeCategory);
+}
+
 // Try exact SKU match → add to cart and clear; returns true if matched
 function _trySkuAdd(q) {
   const match = _findBySku(q);
   if (!match) return false;
   _addToCartDirectly(match);
-  $('#product-search').value = '';
-  state.searchQuery = '';
-  _ssClose();
-  clearTimeout(searchTimer);
+  _resetSearchAfterScan();
   return true;
+}
+
+// Batch SKU (per stock layer barcode, e.g. 32423-011) contains the query
+function _hasBatchSku(p, lower, exact = false) {
+  return (p.layers || []).some(l => {
+    const b = (l.batch_sku || '').toLowerCase();
+    return b && (exact ? b === lower : b.includes(lower));
+  });
+}
+
+// Scanner without an Enter suffix: once typing pauses, add an exact SKU / batch SKU match.
+// Waiting avoids adding product "32423" while the scanner is still sending "32423-011".
+let _scanIdleTimer = null;
+function _scheduleScanAdd(q) {
+  clearTimeout(_scanIdleTimer);
+  if (!q) return;
+  _scanIdleTimer = setTimeout(async () => {
+    if ($('#product-search').value.trim() !== q) return;
+    if (_trySkuAdd(q)) return;
+    const lower = q.toLowerCase();
+    if (state.products.some(p => _hasBatchSku(p, lower, true))) await _tryBatchSkuApiAdd(q);
+  }, 250);
 }
 
 function _ssRender(q) {
   const box = $('#search-suggest');
   if (!q) { _ssClose(); return; }
 
-  // Exact SKU match → auto-add immediately, no dropdown (barcode scanner mode)
-  if (_trySkuAdd(q)) return;
-
   const lower = q.toLowerCase();
   const matches = state.products.filter(p =>
     p.name.toLowerCase().includes(lower) ||
-    (p.sku && p.sku.toLowerCase().includes(lower))
+    (p.sku && p.sku.toLowerCase().includes(lower)) ||
+    _hasBatchSku(p, lower)
   );
 
   if (!matches.length) {
@@ -22941,6 +22972,7 @@ $('#product-search').addEventListener('input', (e) => {
   const q = e.target.value;
   state.searchQuery = q;
   _ssRender(q.trim());
+  _scheduleScanAdd(q.trim());
   if (q.trim()) {
     searchTimer = setTimeout(() => loadProducts(state.searchQuery, state.activeCategory), 400);
   }
@@ -22954,7 +22986,7 @@ async function _tryBatchSkuApiAdd(q) {
   if (!p || !p.id) return false;
   if (p.is_dynamic_pricing) {
     await handleDynamicProductClick(p);
-    $('#product-search').value = ''; state.searchQuery = ''; _ssClose(); clearTimeout(searchTimer);
+    _resetSearchAfterScan();
     return true;
   }
   const layerId = p.matched_layer_id ?? null;
@@ -22975,7 +23007,7 @@ async function _tryBatchSkuApiAdd(q) {
       } else {
         const wty = await _askWarranty(cartItem.name);
         if (wty === null) {
-          $('#product-search').value = ''; state.searchQuery = ''; _ssClose(); clearTimeout(searchTimer);
+          _resetSearchAfterScan();
           return true;
         }
         cartItem.warrantyType = wty.type;
@@ -22984,10 +23016,7 @@ async function _tryBatchSkuApiAdd(q) {
     }
   }
   addToCart(cartItem);
-  $('#product-search').value = '';
-  state.searchQuery = '';
-  _ssClose();
-  clearTimeout(searchTimer);
+  _resetSearchAfterScan();
   return true;
 }
 
@@ -23009,6 +23038,7 @@ $('#product-search').addEventListener('keydown', async (e) => {
   }
   if (e.key === 'Enter') {
     e.preventDefault();
+    clearTimeout(_scanIdleTimer);
     // 1. Exact product-level SKU match in local state (fast path)
     if (q && _trySkuAdd(q)) return;
     // 2. Batch SKU API lookup (e.g. PRD-IIW3ZFGK-02 not in local state)
@@ -23083,6 +23113,7 @@ function switchPosMode(mode) {
     if (svcSection) svcSection.style.display = 'none';
     if (rentalSection) rentalSection.style.display = 'none';
     loadProducts(state.searchQuery, state.activeCategory);
+    _focusPosSearch();
   } else if (mode === 'services') {
     productEls.forEach(el => el && (el.style.display = 'none'));
     if (svcSection) { svcSection.style.display = 'flex'; svcSection.style.flexDirection = 'column'; }
@@ -23586,6 +23617,19 @@ function _noModalOpen() {
   return ![...$$('.modal-overlay')].some(m => m.style.display !== 'none') &&
          $('#pos-layer-picker')?.getAttribute('aria-hidden') !== 'false' &&
          $('#search-suggest')?.style.display === 'none';
+}
+
+// Keep the POS product search focused so barcode scanner input always lands there
+function _posSearchReady() {
+  const inp = $('#product-search');
+  return !!inp && _posIsActive() && state.posMode === 'products' &&
+         inp.offsetParent !== null && !$('#backstage')?.classList.contains('open') &&
+         ![...$$('.modal-overlay')].some(m => m.style.display !== 'none') &&
+         $('#pos-layer-picker')?.getAttribute('aria-hidden') !== 'false';
+}
+
+function _focusPosSearch() {
+  setTimeout(() => { if (_posSearchReady()) $('#product-search').focus(); }, 60);
 }
 
 // ── End product grid keyboard navigation ───────────────────────────────────
@@ -29660,6 +29704,17 @@ document.addEventListener('keydown', (e) => {
     }
   }
 
+  // ── Barcode scanner capture: route stray typing into the product search ──
+  const _editable = inInput || document.activeElement?.isContentEditable;
+  if (!_editable && !mod && !e.altKey && e.key.length === 1 && _posSearchReady()) {
+    e.preventDefault();
+    const inp = $('#product-search');
+    inp.focus();
+    inp.value += e.key;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
+
   // ── Product grid arrow-key navigation ────────────────────────────────────
   if (_posIsActive() && _noModalOpen() && !inInput) {
     const arrowKeys = ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'];
@@ -30310,7 +30365,9 @@ function addToCart(product) {
   }
   renderCart();
   renderPosTabBar();
-  // Focus qty input of the item just added/updated
+  // Products mode: keep the search focused so the next barcode scan lands there
+  // (qty stays editable by click or the Q shortcut). Other modes focus the qty input.
+  if (state.posMode === 'products') { _focusPosSearch(); return; }
   requestAnimationFrame(() => {
     const input = $(`#cart-items .ci-qty-input[data-key="${CSS.escape(key)}"]`);
     if (input) { input.focus(); input.select(); }
