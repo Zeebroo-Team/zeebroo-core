@@ -54,6 +54,7 @@ use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpensesBreakdownApiController;
 use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
+use Modules\Pos\Http\Controllers\Api\PosSalesReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosBranchManagementApiController;
@@ -217,6 +218,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get ('expenses/overview',  [PosExpensesOverviewApiController::class, 'show'])->name('expenses.overview');
     Route::get ('expenses/breakdown', [PosExpensesBreakdownApiController::class, 'show'])->name('expenses.breakdown');
     Route::get ('profit-report',      [PosProfitReportApiController::class,     'show'])->name('profit-report');
+    Route::get ('reports/sales',      [PosSalesReportApiController::class,      'show'])->name('reports.sales');
     Route::get ('payroll-overview',   [PosPayrollOverviewApiController::class,  'show'])->name('payroll-overview');
 
     Route::get  ('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');
@@ -420,6 +422,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::delete('rentals/{rental}', [PosRentalApiController::class, 'destroy'])->name('rentals.destroy');
 
     Route::get('finance/flow', [PosFinanceFlowApiController::class, 'index'])->name('finance.flow');
+    Route::get('finance/overview', [PosFinanceFlowApiController::class, 'overview'])->name('finance.overview');
 
     // Notifications — kept reachable even while subscription-locked, so the
     // desktop app can still show the overdue-payment notification itself.

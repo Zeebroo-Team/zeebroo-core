@@ -12,6 +12,7 @@ use Modules\Account\Services\BillService;
 use Modules\Account\Services\RentalService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Account\Services\LoanOverviewTooltipService;
+use Modules\Pos\Services\FinanceOverviewService;
 
 class PosFinanceFlowApiController extends Controller
 {
@@ -61,6 +62,7 @@ class PosFinanceFlowApiController extends Controller
                 'cadence'        => $b->isOneTime()
                     ? 'One-time'
                     : (Bill::recurringTypes()[$b->recurring_type] ?? $b->recurring_type),
+                'monthly'        => round($monthly, 2),
                 'overdue'        => $isOverdue,
                 'property_id'    => $b->property_id,
             ];
@@ -81,6 +83,7 @@ class PosFinanceFlowApiController extends Controller
             return [
                 'id'          => $l->id,
                 'name'        => $l->name ?: ($l->lender_name ?? 'Loan'),
+                'monthly'     => round($monthly, 2),
                 'monthly_fmt' => $summary['approx_monthly_formatted'],
                 'cadence'     => $summary['cadence_label'],
                 'overdue'     => false,
@@ -110,6 +113,7 @@ class PosFinanceFlowApiController extends Controller
                 'name'       => $r->property_type,
                 'cost_fmt'   => number_format((float) $r->recurring_cost, 2, '.', ','),
                 'cadence'    => $recurringTypes[$r->recurring_type] ?? $r->recurring_type,
+                'monthly'    => round($monthly, 2),
                 'overdue'    => $isOverdue,
             ];
         })->values();
@@ -131,9 +135,25 @@ class PosFinanceFlowApiController extends Controller
                 'rentals_overdue'     => $rentalsOverdue,
                 'rentals_monthly_fmt' => number_format($rentalsMonthly, 2, '.', ','),
                 'total_monthly_fmt'   => number_format($totalMonthly,   2, '.', ','),
+                'bills_monthly'       => round($billsMonthly,   2),
+                'loans_monthly'       => round($loansMonthly,   2),
+                'rentals_monthly'     => round($rentalsMonthly, 2),
+                'total_monthly'       => round($totalMonthly,   2),
                 'total_items'         => $bills->count() + $loans->count() + $rentals->count(),
             ],
         ]);
+    }
+
+    /** Finance → Overview tab. Logic lives in FinanceOverviewService. */
+    public function overview(Request $request, FinanceOverviewService $overview): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $member   = $this->resolveMember($request, $business);
+
+        // Sales figures follow the Sales Reports permission
+        $withSales = $member === null || $member->hasPermission('fin_btn_sales');
+
+        return response()->json($overview->build($business, $withSales));
     }
 
     private function billMonthlyEquiv(float $cost, string $type): float

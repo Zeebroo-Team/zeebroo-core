@@ -169,6 +169,13 @@ const API = (() => {
     // Finance — expenses / bills / profit
     expensesOverview: ()              => request('GET',    '/expenses/overview'),
     profitReport:     (period)        => request('GET',    `/profit-report?period=${period}`),
+    // Finance → Sales Reports: { date_from, date_to, branch_id ('' | id | 'none'), counter_id, group_by,
+    //   source, status, q, page, per_page, export }
+    salesReport:      (params)        => {
+      const p = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+      return request('GET', `/reports/sales?${p.toString()}`);
+    },
     payrollOverview:  ()              => request('GET',    '/payroll-overview'),
     createBill:   (body)              => request('POST',   '/expenses/bills', body),
     bills:        ()                  => request('GET',    '/expenses/bills'),
@@ -197,6 +204,7 @@ const API = (() => {
     billTargets:  ()                  => request('GET',  '/expenses/bill-assignment-targets'),
     // Finance — flow overview
     financeFlow:    ()         => request('GET', '/finance/flow'),
+    financeOverview: ()        => request('GET', '/finance/overview'),
 
     // Notifications
     notifications: (params) => {
