@@ -1254,6 +1254,7 @@
             <button class="sm-nav-item" type="button" data-sm-tab="branches"><i class="fa-solid fa-code-branch"></i><span>${t('Branches')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="receipt"><i class="fa-solid fa-receipt"></i><span>${t('Receipt Setting')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="invoice-setup"><i class="fa-solid fa-file-invoice"></i><span>${t('Invoice Setup')}</span></button>
+            <button class="sm-nav-item" type="button" data-sm-tab="printer"><i class="fa-solid fa-print"></i><span>${t('Printer')}</span></button>
           </nav>
           <div class="sm-content">
             <div class="sm-panel" id="sm-tab-business">
@@ -1404,6 +1405,56 @@
                 </div>
               </div>
             </div>
+            <div class="sm-panel" id="sm-tab-printer" style="display:none">
+              <div class="sm-section">
+                <div class="sm-section-label"><i class="fa-solid fa-print"></i> ${t('Thermal Printer')}</div>
+                <div class="sm-field-row">
+                  <label class="sm-field-label" for="sm-printer-name">${t('Printer')}</label>
+                  <div style="display:flex;gap:8px">
+                    <select id="sm-printer-name" class="sm-select" style="flex:1"></select>
+                    <button class="bm-btn bm-btn-outline" id="sm-printer-refresh" type="button" title="${t('Refresh printers')}"><i class="fa-solid fa-rotate"></i></button>
+                  </div>
+                  <span class="sm-hint">${t('Select your XP-80T or other thermal printer. It must be installed as a system printer first.')}</span>
+                </div>
+                <div class="sm-field-row">
+                  <label class="sm-field-label" for="sm-printer-mode">${t('Print Mode')}</label>
+                  <select id="sm-printer-mode" class="sm-select">
+                    <option value="escpos">${t('ESC/POS Direct — recommended for XP-80T & all thermal printers')}</option>
+                    <option value="html">${t('HTML Window — for document / laser printers')}</option>
+                  </select>
+                  <span class="sm-hint">${t('ESC/POS sends raw commands directly — no Windows driver rendering conflicts')}</span>
+                </div>
+                <div class="sm-field-row">
+                  <label class="sm-field-label" for="sm-printer-paper">${t('Paper Width')}</label>
+                  <select id="sm-printer-paper" class="sm-select">
+                    <option value="80">${t('80 mm — standard thermal roll (XP-80T)')}</option>
+                    <option value="58">${t('58 mm — small thermal roll')}</option>
+                  </select>
+                  <span class="sm-hint">${t('Must match the paper roll loaded in your printer')}</span>
+                </div>
+                <div class="sm-toggle-row">
+                  <div class="sm-toggle-info">
+                    <span class="sm-toggle-name">${t('Silent print')}</span>
+                    <span class="sm-toggle-desc">${t('Applies in HTML Window mode — ESC/POS always prints silently')}</span>
+                  </div>
+                  <label class="sm-switch"><input type="checkbox" id="sm-printer-silent" checked><span class="sm-switch-track"></span></label>
+                </div>
+                <div class="sm-toggle-row">
+                  <div class="sm-toggle-info">
+                    <span class="sm-toggle-name">${t('Show receipt preview after sale')}</span>
+                    <span class="sm-toggle-desc">${t('Turn off to print the bill automatically when a sale is completed (no preview popup). With no printer selected it goes to the Windows default printer.')}</span>
+                  </div>
+                  <label class="sm-switch"><input type="checkbox" id="sm-printer-preview" checked><span class="sm-switch-track"></span></label>
+                </div>
+              </div>
+              <div class="sm-section">
+                <div class="sm-section-label"><i class="fa-solid fa-circle-check"></i> ${t('Test Print')}</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="bm-btn bm-btn-outline" id="sm-printer-test" type="button"><i class="fa-solid fa-print"></i> ${t('Test Print')}</button>
+                </div>
+                <span class="sm-hint" id="sm-printer-status" style="display:block;margin-top:8px">${t('Prints a sample receipt with dummy products at the selected paper width.')}</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="sm-foot">
@@ -1445,7 +1496,121 @@
       el.querySelectorAll('.sm-panel').forEach((p) => { p.style.display = 'none'; });
       $(`sm-tab-${btn.dataset.smTab}`).style.display = '';
       if (btn.dataset.smTab === 'branches' && !brm.loaded) loadBranches();
+      if (btn.dataset.smTab === 'printer' && !prn.loaded) loadPrinterSettings();
     }));
+
+    // ── Printer tab — local (per device) config via main.js, not the server ──
+    const prn = { loaded: false };
+    const RP = window.ReceiptPrinter;
+
+    async function loadPrinterSettings() {
+      const statusEl = $('sm-printer-status');
+      statusEl.textContent = t('Loading printers…');
+      const [printers, cfg] = await Promise.all([
+        window.electronAPI.getPrinters(),
+        window.electronAPI.getPrinterConfig(),
+      ]).catch(() => [[], { name: '', silent: true, paperWidth: 80, mode: 'escpos', showPreview: true }]);
+
+      const sel = $('sm-printer-name');
+      sel.innerHTML = `<option value="">${esc(t('— No printer selected (preview before printing) —'))}</option>` +
+        printers.map((p) => `<option value="${esc(p.name)}"${p.name === cfg.name ? ' selected' : ''}>${esc(p.displayName)}${p.isDefault ? ` (${esc(t('default'))})` : ''}</option>`).join('');
+      if (!printers.length) sel.innerHTML += `<option disabled>${esc(t('No printers found — install your printer driver first'))}</option>`;
+      $('sm-printer-mode').value = cfg.mode === 'html' ? 'html' : 'escpos';
+      $('sm-printer-paper').value = String(cfg.paperWidth === 58 ? 58 : 80);
+      $('sm-printer-silent').checked = cfg.silent !== false;
+      $('sm-printer-preview').checked = cfg.showPreview !== false;
+      prn.loaded = true;
+      statusEl.textContent = printers.length
+        ? t('{count} printer(s) found', { count: printers.length })
+        : t('No printers found — install your XP-80T driver and reconnect USB');
+    }
+
+    function printerFormCfg() {
+      return {
+        name: $('sm-printer-name').value || '',
+        mode: $('sm-printer-mode').value || 'escpos',
+        silent: $('sm-printer-silent').checked,
+        paperWidth: Number($('sm-printer-paper').value) === 58 ? 58 : 80,
+        showPreview: $('sm-printer-preview').checked,
+      };
+    }
+
+    // Only once the tab was opened — otherwise the empty fields would wipe the saved printer
+    async function savePrinterSettings() {
+      if (!prn.loaded) return;
+      await window.electronAPI.setPrinterConfig(printerFormCfg());
+    }
+
+    $('sm-printer-refresh').addEventListener('click', loadPrinterSettings);
+    $('sm-printer-name').addEventListener('change', (e) => {
+      if (RP.isVirtual(e.target.value)) {
+        $('sm-printer-status').textContent = t('"{name}" is a virtual printer — it saves a file and always asks for a file name. Receipts will use HTML mode for it. Select your XP-80T for real, automatic printing.', { name: e.target.value });
+      }
+    });
+
+    // Test Print — a sample receipt with dummy products at the chosen width,
+    // using the form's current (even unsaved) printer choices.
+    $('sm-printer-test').addEventListener('click', async () => {
+      const cfg = printerFormCfg();
+      const cur = ($('sm-currency').value || 'LKR').trim().toUpperCase() || 'LKR';
+      const before = $('sm-currpos-before').checked;
+      const fmt = (n) => { const a = Number(n).toFixed(2); return before ? `${cur} ${a}` : `${a} ${cur}`; };
+      const biz = $('sm-biz-name').value.trim() || 'Zeebroo POS Lite';
+      const items = [
+        { name: 'Wireless Mouse', qty: 2, price: 1250, total: 2500, discount: 0 },
+        { name: 'USB-C Charging Cable 1m (Braided)', qty: 1, price: 850, total: 850, discount: 0 },
+        { name: 'A4 Paper Ream 500 Sheets', qty: 3, price: 1650, total: 4950, discount: 0 },
+        { name: 'Notebook A5 Ruled', qty: 4, price: 500, total: 1500, discount: 500 },
+        { name: 'Ballpoint Pen Blue', qty: 10, price: 45, total: 450, discount: 0 },
+      ];
+      const subtotal = 10250, discount = 250, total = 10000, tendered = 10500, change = 500;
+      const now = new Date().toLocaleString();
+      const note = `${t('Test print')} · ${cfg.name || t('No printer (preview)')} · ${cfg.paperWidth}mm`;
+
+      const rows = items.map((it) => `<tr>
+          <td><div class="rd-item-name">${esc(it.name)}</div></td>
+          <td class="rd-center-col">${it.qty}</td>
+          <td class="rd-right rd-col-price">${esc(fmt(it.price))}</td>
+          <td class="rd-center-col rd-col-disc${it.discount ? ' rd-discount' : ''}">${it.discount ? '25%' : '—'}</td>
+          <td class="rd-right"><strong>${esc(fmt(it.total))}</strong></td>
+        </tr>`).join('');
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TEST-0001</title><style>${RP.docStyles(cfg.paperWidth)}</style></head><body>
+        <div class="rd-center"><div class="rd-business">${esc(biz)}</div><div class="rd-meta" style="font-style:italic">${esc(t('TEST PRINT'))}</div></div>
+        <hr>
+        <div class="rd-row"><span>${t('Receipt #')}</span><strong>TEST-0001</strong></div>
+        <div class="rd-row"><span>${t('Date & Time')}</span><strong>${esc(now)}</strong></div>
+        <div class="rd-row"><span>${t('Payment')}</span><strong>${t('Cash')}</strong></div>
+        <div class="rd-row"><span>${t('Customer')}</span><strong>${t('Walk-in Customer')}</strong></div>
+        <hr>
+        <table>
+          <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right rd-col-price">${t('Price')}</th><th class="rd-center-col rd-col-disc">${t('Disc')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <hr>
+        <div class="rd-row"><span>${t('Subtotal')}</span><span>${esc(fmt(subtotal))}</span></div>
+        <div class="rd-row"><span>${t('Discount')}</span><span>&minus;${esc(fmt(discount))}</span></div>
+        <div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(fmt(total))}</span></div>
+        <div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(fmt(tendered))}</span></div>
+        <div class="rd-row"><span>${t('Change')}</span><span>${esc(fmt(change))}</span></div>
+        <hr><div class="rd-note">${esc(note)}</div>
+        <hr><div class="rd-footer">${t('Thank you for your purchase!')}</div>
+      </body></html>`;
+
+      const escpos = {
+        businessName: biz, header: 'TEST PRINT', footer: 'Thank you for your purchase!',
+        currency: cur, currencyPosition: before ? 'before' : 'after',
+        saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
+        items, subtotal, discount, total, tendered, change, paymentMethod: 'Cash', notes: note,
+      };
+
+      const btn = $('sm-printer-test');
+      btn.disabled = true;
+      const res = await RP.print({ html, escpos, cfg });
+      btn.disabled = false;
+      $('sm-printer-status').textContent = res.ok
+        ? (cfg.name ? t('Test page sent to "{name}"', { name: cfg.name }) : t('Preview opened — use its Print button'))
+        : res.message;
+    });
 
     function brmFmtDate(str) {
       if (!str) return '—';
@@ -1642,6 +1807,9 @@
       btn.disabled = true;
       btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
       $('sm-alert').style.display = 'none';
+
+      // Printer config is local to this device — saved independently of the server settings
+      await savePrinterSettings().catch(() => showAlert(t('Could not save printer settings.')));
 
       const payload = {
         business_name: $('sm-biz-name').value.trim(),
@@ -3410,4 +3578,95 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   }
 
   renderIdentity();
+})();
+
+// ── Receipt printer (Settings → Printer) ──────────────────────────────────
+// Shared by the Settings → Printer tab (Test Print) and the POS sale-completed
+// receipt (js/pos.js). Mirrors the full desktop app's printer flow
+// (electron_app/renderer/js/app.js): ESC/POS raw bytes for thermal printers,
+// silent HTML print otherwise, and a true-size PDF preview when no printer is
+// selected. The printer config is per device (local config.json via main.js).
+(function () {
+  // Virtual "printers" (Print to PDF, XPS, OneNote, Fax) can't interpret raw
+  // ESC/POS bytes — they'd save an empty/corrupt file — and always pop a
+  // Windows save dialog, so they must go through the HTML path.
+  function isVirtual(name) {
+    return /pdf|xps|onenote|fax/i.test(String(name || ''));
+  }
+
+  // Thermal receipt document CSS. The body is the printable width (paper minus
+  // the 4mm @page margins each side) — a body as wide as the paper overflows.
+  function docStyles(paperWidth) {
+    const widthMm = paperWidth === 58 ? 58 : 80;
+    const narrow = widthMm === 58;
+    return `
+    @page { size: ${widthMm}mm auto; margin: 4mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Courier New', monospace; font-size: ${narrow ? 10 : 12}px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm - 8}mm; }
+    .rd-center { text-align:center; }
+    .rd-business { font-weight:bold; font-size:${narrow ? 12 : 13}px; }
+    .rd-meta { font-size:10px; margin:1px 0; }
+    hr { border:none; border-top:1px dashed #000; margin:8px 0; }
+    table { width:100%; border-collapse:collapse; font-size:${narrow ? 9 : 10}px; margin:6px 0; }
+    th { text-align:left; font-size:9px; padding:2px 2px 4px; border-bottom:1px solid #000; }
+    td { padding:3px 2px; vertical-align:top; }
+    .rd-item-name { font-weight:bold; font-size:${narrow ? 10 : 11}px; word-break:break-word; }
+    .rd-item-sub { font-size:9px; color:#555; margin-top:1px; }
+    .rd-right { text-align:right; }
+    .rd-center-col { text-align:center; }
+    .rd-row { display:flex; justify-content:space-between; margin:2px 0; font-size:${narrow ? 10 : 11}px; }
+    .rd-total { font-weight:bold; font-size:${narrow ? 12 : 13}px; border-top:1px solid #000; padding-top:4px; margin-top:4px; }
+    .rd-footer { text-align:center; font-size:10px; margin-top:6px; }
+    .rd-note { font-size:9px; padding:1px 0 4px; }
+    .rd-warranty { color:#0369a1; }
+    .rd-rental { color:#0f766e; }
+    .rd-discount { color:#b45309; }
+    ${narrow ? '.rd-col-price, .rd-col-disc { display:none; }' : ''}
+  `;
+  }
+
+  // On-screen preview width for the receipt modal (≈ mm at 96dpi)
+  function previewWidthPx(paperWidth) {
+    return paperWidth === 58 ? 219 : 302;
+  }
+
+  // Print a receipt with the configured printer.
+  //   html   — complete HTML document (thermal layout)
+  //   escpos — flat receipt data for ESC/POS (optional; falls back to html)
+  //   auto   — no-preview checkout print: never open a window; with no printer
+  //            selected go silently to the Windows default printer.
+  // Returns { ok, message? } — the caller shows the message.
+  async function print({ html, escpos, cfg, auto = false }) {
+    cfg = cfg || await window.electronAPI.getPrinterConfig().catch(() => null) || {};
+    const paperWidth = cfg.paperWidth === 58 ? 58 : 80;
+
+    if (!cfg.name) {
+      if (!auto) {
+        const res = await window.electronAPI.previewReceiptPdf({ html, paperWidth });
+        return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Could not open print preview') };
+      }
+      const printers = await window.electronAPI.getPrinters().catch(() => []);
+      const def = printers.find((p) => p.isDefault);
+      if (!def || isVirtual(def.name)) {
+        return {
+          ok: false,
+          message: def
+            ? t('Bill not printed — default printer "{name}" is not a real printer. Select your receipt printer in Settings → Printer.', { name: def.displayName })
+            : t('Bill not printed — no default printer. Select your receipt printer in Settings → Printer.'),
+        };
+      }
+      const res = await window.electronAPI.printReceiptSilent({ html, name: '', silent: true });
+      return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
+    }
+
+    if (cfg.mode !== 'html' && escpos && !isVirtual(cfg.name)) {
+      const res = await window.electronAPI.printReceiptEscpos({ receipt: escpos, name: cfg.name, paperWidth });
+      return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
+    }
+
+    const res = await window.electronAPI.printReceiptSilent({ html, name: cfg.name, silent: cfg.silent !== false });
+    return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
+  }
+
+  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print };
 })();

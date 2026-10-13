@@ -11912,6 +11912,23 @@ body.dark .pc-modal-head {
 .rcpt-thank { text-align: center; font-size: 12px; font-weight: 700; margin: 10px 0 4px; }
 .rcpt-note { font-size: 10.5px; color: #555; margin: 6px 0; font-style: italic; white-space: pre-wrap; }
 .rcpt-customer { display: flex; justify-content: space-between; font-size: 10.5px; color: #444; margin: 2px 0; }
+/* 58 mm roll: 219px paper (≈58mm @96dpi), ≈48mm printable — price column dropped like the ESC/POS layout */
+.rcpt-paper[data-paper="58"] { width: 219px; padding: 16px 18px 24px; font-size: 10px; }
+.rcpt-paper[data-paper="58"] .rcpt-biz-name { font-size: 13px; }
+.rcpt-paper[data-paper="58"] .rcpt-logo-img { max-width: 100px; max-height: 48px; }
+.rcpt-paper[data-paper="58"] .rcpt-meta,
+.rcpt-paper[data-paper="58"] .rcpt-customer,
+.rcpt-paper[data-paper="58"] .rcpt-total-row { font-size: 9.5px; }
+.rcpt-paper[data-paper="58"] .rcpt-total-row.grand { font-size: 12px; }
+.rcpt-paper[data-paper="58"] .ih-price,
+.rcpt-paper[data-paper="58"] .ri-price,
+.rcpt-paper[data-paper="58"] .rid-per  { display: none; }
+.rcpt-paper[data-paper="58"] .rid-total { width: 60px; }
+.rcpt-paper[data-paper="58"] .ih-qty,
+.rcpt-paper[data-paper="58"] .ri-qty   { width: 24px; }
+.rcpt-paper[data-paper="58"] .ih-total,
+.rcpt-paper[data-paper="58"] .ri-total { width: 60px; }
+.rcpt-paper[data-paper="58"] .ri-name  { font-size: 10px; }
 /* Sinhala / Tamil: switch away from Courier New which lacks those glyphs */
 .rcpt-paper[data-lang="si"],
 .rcpt-paper[data-lang="ta"] {

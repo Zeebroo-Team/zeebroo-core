@@ -1567,8 +1567,8 @@ function renderBillHtml(data) {
     let row = `<tr>
       <td><div class="rd-item-name">${esc(it.name)}</div>${it.sku ? `<div class="rd-item-sub">${esc(it.sku)}</div>` : ''}</td>
       <td class="rd-center-col">${esc(fmtQty(it.qty))}</td>
-      <td class="rd-right">${esc(money(it.unit))}</td>
-      <td class="rd-center-col${it.discountPct > 0.05 ? ' rd-discount' : ''}">${it.discountPct > 0.05 ? esc(fmtPct(it.discountPct)) + '%' : '—'}</td>
+      <td class="rd-right rd-col-price">${esc(money(it.unit))}</td>
+      <td class="rd-center-col rd-col-disc${it.discountPct > 0.05 ? ' rd-discount' : ''}">${it.discountPct > 0.05 ? esc(fmtPct(it.discountPct)) + '%' : '—'}</td>
       <td class="rd-right"><strong>${esc(money(it.line))}</strong></td>
     </tr>`;
     if (it.warranty) row += `<tr><td colspan="5" class="rd-note rd-warranty">${esc(it.warranty)}</td></tr>`;
@@ -1611,7 +1611,7 @@ function renderBillHtml(data) {
     ${data.cashierName ? `<div class="rd-row"><span>${t('Cashier')}</span><strong>${esc(data.cashierName)}</strong></div>` : ''}
     <hr>
     <table>
-      <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right">${t('Price')}</th><th class="rd-center-col">${t('Disc')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
+      <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right rd-col-price">${t('Price')}</th><th class="rd-center-col rd-col-disc">${t('Disc')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <hr>
@@ -1622,35 +1622,49 @@ function renderBillHtml(data) {
   `;
 }
 
-function receiptDocStyles() {
-  const widthMm = posSettings.receipt_paper_width === '58' ? 58 : 80;
-  return `
-    @page { size: ${widthMm}mm auto; margin: 4mm; }
-    * { box-sizing: border-box; }
-    body { font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm}mm; }
-    .rd-center { text-align:center; }
-    .rd-business { font-weight:bold; font-size:13px; }
-    .rd-meta { font-size:10px; margin:1px 0; }
-    hr { border:none; border-top:1px dashed #000; margin:8px 0; }
-    table { width:100%; border-collapse:collapse; font-size:10px; margin:6px 0; }
-    th { text-align:left; font-size:9px; padding:2px 2px 4px; border-bottom:1px solid #000; }
-    td { padding:3px 2px; vertical-align:top; }
-    .rd-item-name { font-weight:bold; font-size:11px; }
-    .rd-item-sub { font-size:9px; color:#555; margin-top:1px; }
-    .rd-right { text-align:right; }
-    .rd-center-col { text-align:center; }
-    .rd-row { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; }
-    .rd-total { font-weight:bold; font-size:13px; border-top:1px solid #000; padding-top:4px; margin-top:4px; }
-    .rd-footer { text-align:center; font-size:10px; margin-top:6px; }
-    .rd-note { font-size:9px; padding:1px 0 4px; }
-    .rd-warranty { color:#0369a1; }
-    .rd-rental { color:#0f766e; }
-    .rd-discount { color:#b45309; }
-  `;
+// Paper width comes from Settings → Printer (local, per device — js/navbar.js ReceiptPrinter)
+function buildFullReceiptDocument(data, paperWidth = 80) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(data.saleNumber || '')}</title><style>${window.ReceiptPrinter.docStyles(paperWidth)}</style></head><body>${renderBillHtml(data)}</body></html>`;
 }
 
-function buildFullReceiptDocument(data) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(data.saleNumber || '')}</title><style>${receiptDocStyles()}</style></head><body>${renderBillHtml(data)}</body></html>`;
+// Flat receipt data for ESC/POS printing (main.js _escposBuffer)
+function buildEscposReceiptData(data) {
+  return {
+    businessName: posSettings.show_business_name !== false ? (posSettings.business_name || '') : '',
+    address: posSettings.show_business_address ? (posSettings.receipt_address_line || '') : '',
+    header: posSettings.receipt_header || '',
+    footer: posSettings.receipt_footer || t('Thank you for your purchase!'),
+    currency: (posSettings.currency || 'LKR').toUpperCase(),
+    currencyPosition: posSettings.currency_position === 'before' ? 'before' : 'after',
+    saleNumber: data.saleNumber || '',
+    date: data.soldAt || '',
+    customer: data.customerName || '',
+    cashier: data.cashierName || '',
+    items: data.items.map((it) => {
+      const gross = (Number(it.unit) || 0) * (Number(it.qty) || 0);
+      return {
+        name: it.name || '',
+        qty: Number(it.qty) || 0,
+        price: Number(it.unit) || 0,
+        total: Number(it.line) || 0,
+        discount: Math.max(0, Math.round((gross - (Number(it.line) || 0)) * 100) / 100), // unit is pre-discount
+      };
+    }),
+    subtotal: Number(data.subtotal) || 0,
+    discount: Number(data.discountAmount) || 0,
+    discountPct: data.discountPercent || '',
+    couponDiscount: data.couponDiscount,
+    couponCode: data.couponCode,
+    total: Number(data.total) || 0,
+    giftCardAmount: data.giftCardAmount,
+    giftCardCode: data.giftCardCode,
+    giftCardBalance: data.giftCardBalance,
+    paid: Number(data.amountPaid ?? data.total) || 0,
+    tendered: data.amountTendered != null ? Number(data.amountTendered) : null,
+    change: Number(data.changeAmount) || 0,
+    paymentMethod: data.paymentLabel || '',
+    notes: data.notes || '',
+  };
 }
 
 // Builds the "Invoice" mode document using the SAME 5 real templates (Classic /
@@ -1739,9 +1753,13 @@ function renderInvoicePreview(built) {
   receiptPreviewEl.querySelector('iframe').srcdoc = built.html;
 }
 
-function showReceiptModal(sale) {
+// afterSale: called from checkout — honours Settings → Printer "Show receipt
+// preview after sale"; when that is off the bill prints straight away, no popup.
+async function showReceiptModal(sale, { afterSale = false } = {}) {
   const mode = posSettings.receipt_mode === 'invoice' ? 'invoice' : 'bill';
   const data = buildReceiptData(sale);
+  const printerCfg = await window.electronAPI.getPrinterConfig().catch(() => null) || {};
+  const paperWidth = printerCfg.paperWidth === 58 ? 58 : 80;
   receiptSaleNumberEl.textContent = sale.sale_number || '';
 
   const built = mode === 'invoice' ? buildInvoiceDocument(data) : null;
@@ -1749,8 +1767,17 @@ function showReceiptModal(sale) {
     renderInvoicePreview(built);
     currentReceiptDoc = { mode: 'invoice', data, html: built.html };
   } else {
-    receiptPreviewEl.innerHTML = `<div class="receipt-doc receipt-doc--bill">${renderBillHtml(data)}</div>`;
-    currentReceiptDoc = { mode: 'bill', data, html: buildFullReceiptDocument(data) };
+    receiptPreviewEl.innerHTML = `<div class="receipt-doc receipt-doc--bill" data-paper="${paperWidth}" style="max-width:${window.ReceiptPrinter.previewWidthPx(paperWidth)}px">${renderBillHtml(data)}</div>`;
+    currentReceiptDoc = { mode: 'bill', data, html: buildFullReceiptDocument(data, paperWidth) };
+
+    if (afterSale && printerCfg.showPreview === false) {
+      const res = await window.ReceiptPrinter.print({
+        html: currentReceiptDoc.html, escpos: buildEscposReceiptData(data), cfg: printerCfg, auto: true,
+      });
+      if (!res.ok) showToast(res.message, 'error');
+      currentReceiptDoc = null;
+      return;
+    }
   }
   receiptModal.classList.add('show');
 }
@@ -1764,7 +1791,15 @@ receiptPrintBtn.addEventListener('click', async () => {
   if (!currentReceiptDoc) return;
   receiptPrintBtn.disabled = true;
   try {
-    await window.electronAPI.printHtml(currentReceiptDoc.html);
+    if (currentReceiptDoc.mode === 'bill') {
+      // Thermal bill → configured printer (ESC/POS / silent), or true-size PDF preview when none is set
+      const res = await window.ReceiptPrinter.print({
+        html: currentReceiptDoc.html, escpos: buildEscposReceiptData(currentReceiptDoc.data),
+      });
+      if (!res.ok) showToast(res.message, 'error');
+    } else {
+      await window.electronAPI.printHtml(currentReceiptDoc.html); // A4/A5 invoice → system print dialog
+    }
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -2176,7 +2211,7 @@ checkoutCompleteBtn.addEventListener('click', async () => {
     clearCustomerSelection();
     loadProducts(searchInput.value.trim()); // refresh stock counts
     closeCheckoutModal();
-    showReceiptModal(sale);
+    await showReceiptModal(sale, { afterSale: true });
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
