@@ -415,6 +415,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::delete('rentals/{rental}', [PosRentalApiController::class, 'destroy'])->name('rentals.destroy');
 
     Route::get('finance/flow', [PosFinanceFlowApiController::class, 'index'])->name('finance.flow');
+    Route::get('finance/overview', [PosFinanceFlowApiController::class, 'overview'])->name('finance.overview');
 
     // Notifications — kept reachable even while subscription-locked, so the
     // desktop app can still show the overdue-payment notification itself.

@@ -5352,7 +5352,8 @@
 
       <!-- Finance sub-nav -->
       <div class="fin-subnav">
-        <button class="fin-subnav-btn active" data-fin="flow"><i class="fa fa-diagram-project"></i> Overview</button>
+        <button class="fin-subnav-btn active" data-fin="overview"><i class="fa fa-house"></i> Overview</button>
+        <button class="fin-subnav-btn" data-fin="flow"><i class="fa fa-diagram-project"></i> Financial Flow Chart</button>
         <button class="fin-subnav-btn" data-fin="bills"><i class="fa fa-file-invoice-dollar"></i> Bills</button>
         <button class="fin-subnav-btn" data-fin="loans"><i class="fa fa-hand-holding-dollar"></i> Loans</button>
         <button class="fin-subnav-btn" data-fin="rentals"><i class="fa fa-house"></i> Rentals</button>
@@ -5413,6 +5414,195 @@
         </div>
         <div class="srp-body" id="srp-body">
           <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading sales report…</div>
+        </div>
+      </div>
+
+      <!-- ── Finance overview: summary, shortcuts & user guide ── -->
+      <div id="finance-overview-view" class="fin-view" style="display:none">
+        <div class="pm-welcome-card">
+          <div class="pm-welcome-icon"><i class="fa fa-sack-dollar"></i></div>
+          <div class="pm-welcome-body">
+            <div class="pm-welcome-title">Welcome to Finance</div>
+            <div class="pm-welcome-desc" id="fov-sub">Everything that costs or earns your business money, in one place. Track bills, loans and rentals, keep a register of properties, modifications and investments, plan with budgets, and see what you sold in Sales Reports.</div>
+            <div class="pm-welcome-actions">
+              <button class="svc-form-btn svc-form-btn--primary" id="fov-create-bill"><i class="fa fa-plus"></i> Create Bill</button>
+              <button class="pm-welcome-secondary-btn" data-fov-goto="flow"><i class="fa fa-diagram-project"></i> Financial Flow Chart</button>
+              <button class="pm-welcome-secondary-btn" data-fov-goto="sales"><i class="fa fa-chart-column"></i> Sales Reports</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="pm-stats-row" id="fov-kpis"></div>
+
+        <div class="fov-insights">
+          <div class="fov-panel" id="fov-trend-panel">
+            <div class="fov-panel-head">
+              <div class="fov-panel-title"><i class="fa fa-chart-column"></i><span>POS Sales — Last 6 Months</span></div>
+              <span class="fov-panel-meta" id="fov-today"></span>
+            </div>
+            <div class="fov-trend" id="fov-trend"></div>
+          </div>
+          <div class="fov-panel" id="fov-outflow-panel">
+            <div class="fov-panel-head">
+              <div class="fov-panel-title"><i class="fa fa-chart-pie"></i><span>Where the Money Goes</span></div>
+              <span class="fov-panel-meta">Approx. per month</span>
+            </div>
+            <div id="fov-outflow"></div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pm-ov-section-head">
+            <div class="pm-ov-section-head-left"><i class="fa fa-triangle-exclamation"></i><span>Needs Attention</span><span class="fov-count" id="fov-attn-count"></span></div>
+          </div>
+          <div class="fov-attention" id="fov-attention"></div>
+        </div>
+
+        <div>
+          <div class="pm-ov-section-head">
+            <div class="pm-ov-section-head-left"><i class="fa fa-grip"></i><span>Finance Sections</span></div>
+            <button class="pm-ov-viewall-btn" id="fov-refresh"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+          </div>
+          <div class="fov-sections" id="fov-sections">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading summary…</div>
+          </div>
+        </div>
+
+        <div>
+          <div class="pm-ov-section-head"><div class="pm-ov-section-head-left"><i class="fa fa-book-open"></i><span>User Guide</span></div></div>
+            <div class="fov-guide">
+
+              <details class="fov-guide-item" open>
+                <summary><i class="fa fa-flag-checkered"></i><span>Getting started</span></summary>
+                <div class="fov-guide-body">
+                  <p>Set Finance up once and it keeps track of what is due for you. A good order is:</p>
+                  <ol>
+                    <li><b>Properties</b> — add the shops, offices, land and warehouses you own or lease. Bills, rentals and modifications can then be linked to them.</li>
+                    <li><b>Bills</b> — add regular costs such as electricity, water, internet, insurance and subscriptions.</li>
+                    <li><b>Loans</b> and <b>Rentals</b> — add what you borrow and what you rent, with their repayment cadence.</li>
+                    <li><b>Investments</b> and <b>Budget</b> — record capital you put in, and plan what you expect to spend.</li>
+                    <li>Come back to this <b>Overview</b> daily: the <i>Needs attention</i> list shows anything overdue or expiring.</li>
+                  </ol>
+                  <p class="fov-note">Amounts per day or per year are converted to an approximate monthly figure (day × 30, year ÷ 12) so everything can be compared.</p>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-file-invoice-dollar"></i><span>Bills</span></summary>
+                <div class="fov-guide-body">
+                  <p><b>Create a bill</b></p>
+                  <ol>
+                    <li>Click <b>Create Bill</b>, enter a name and choose a category (choose <i>Other</i> to type your own).</li>
+                    <li>Choose <b>Recurring</b> (per day, month or year, plus the year the agreement is valid until) or <b>One-time</b> with a due date.</li>
+                    <li>Enter the amount, or tick <i>amount varies by usage</i> for meter-based bills — you enter the actual charge when paying.</li>
+                    <li>Optional: first instalment due date, a debit account, <i>allow split payment</i>, and a reminder a set number of days before it is due.</li>
+                    <li>Optional: assign it to a branch, department, property, employee, modification or rental so it appears on that record.</li>
+                  </ol>
+                  <p><b>Pay a bill</b></p>
+                  <ol>
+                    <li>Open the bill and click <b>Pay</b> on the period you are paying.</li>
+                    <li>Choose <i>Full</i>, <i>Partial</i> (enter the amount) or <i>Split</i> (pay from two or more accounts).</li>
+                    <li>Every payment is listed on the bill's <b>Transaction details</b> tab. Past periods left unpaid show as <span class="fov-tag fov-tag--bad">Overdue</span>.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-hand-holding-dollar"></i><span>Loans</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Click <b>Add Loan</b> and enter the facility name, lender bank and borrowed amount.</li>
+                    <li>Set the interest type and rate, the recurring cadence and the estimated number of periods.</li>
+                    <li>Enter the first instalment due date and, if known, the loan ending date.</li>
+                    <li>Pick the account repayments are deducted from and how many days before to remind you.</li>
+                    <li>The loan's <b>Installment schedule</b> tab lists every repayment and whether it is paid.</li>
+                  </ol>
+                  <p class="fov-note">A loan counts as active until its ending date. The Loans tab totals the principal and approximate monthly outflow of active loans.</p>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-house"></i><span>Rentals</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Click <b>Add Rental</b>, choose the property type and purpose, and enter any key money paid.</li>
+                    <li>Add the owner's contact and bank details so you know where to pay.</li>
+                    <li>Enter the recurring cost, how often it recurs, the first instalment due date and the year the agreement is valid until.</li>
+                    <li>The <b>Billing schedule</b> tab shows each period; pay from there. <b>Linked bills</b> lists bills assigned to this rental.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-building"></i><span>Properties</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Click <b>Add Property</b> and enter the property name, asset type (building, land, shop, vehicle, machinery…) and asset cost.</li>
+                    <li>If it has an agreement or licence that ends, tick <i>This asset has an expiry date</i> and enter the expiry date.</li>
+                    <li>Properties expiring within 60 days appear under <i>Needs attention</i> on this page.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-screwdriver-wrench"></i><span>Modifications</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Use Modifications for renovations, repairs and fit-outs. Click <b>Add Modification</b>.</li>
+                    <li>Enter a name, what it is assigned to, the estimated cost, the renovation or work type, a reference and the duration.</li>
+                    <li>Assign bills to the modification to see its real cost on the <b>Linked bills</b> tab.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-chart-line"></i><span>Investments</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Click <b>Add Investment</b> and enter the plan name, type, provider and policy or reference number.</li>
+                    <li>Set the payment pattern, contribution amount, billing cadence, first payment date and the year to schedule through.</li>
+                    <li>Optional: maturity date, expected return, target amount and a reminder.</li>
+                    <li>Record each payment; the <b>Contribution details</b> tab shows progress towards the target.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-table-cells"></i><span>Budget</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Click <b>Add Budget</b> and enter a name, a type (monthly or yearly) and a start date. The end date is set for you.</li>
+                    <li>Every budget starts with the standard categories; enter the planned amount for each.</li>
+                    <li>Click <b>Log actual spend</b> to record what you spent by category, month and amount, with a note, and compare planned against actual.</li>
+                    <li>Click <b>Activate Budget</b> to make it the one you are currently working to.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-chart-column"></i><span>Sales Reports</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Pick a period — today, last 7 or 30 days, this month, quarter or year — or a custom From / To range.</li>
+                    <li>Narrow by branch / warehouse and by counter (a counter limits the report to POS sales).</li>
+                    <li>Use the tabs: Overview, Breakdown, Products &amp; categories, Customers, Returns, By period and Transactions.</li>
+                    <li>Click <b>Export</b> for a PDF report or a CSV to open in Excel.</li>
+                  </ol>
+                </div>
+              </details>
+
+              <details class="fov-guide-item">
+                <summary><i class="fa fa-diagram-project"></i><span>Financial Flow Chart</span></summary>
+                <div class="fov-guide-body">
+                  <ol>
+                    <li>Bills, loans and rentals sit on the left and flow into <b>Expenses</b>, which shows the approximate monthly total.</li>
+                    <li>Income sources — POS sales, quotations, invoices and credit recovery — sit on the right.</li>
+                    <li>Overdue items are outlined in red. Click any box to open that record or report.</li>
+                  </ol>
+                </div>
+              </details>
+
+            </div>
         </div>
       </div>
 

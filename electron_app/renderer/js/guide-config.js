@@ -1172,16 +1172,32 @@ window.GUIDE_CONFIG = {
     /* ── Finance Overview ────────────────────────────────────────────── */
     {
       "id": "fin_overview",
-      "intent_patterns": ["finance overview", "financial overview", "finance flow",
+      "intent_patterns": ["finance overview", "financial overview", "finance summary",
                           "go to finance", "open finance", "view finance",
-                          "how to view finance", "i want to see finance overview"],
+                          "how to view finance", "i want to see finance overview",
+                          "finance user guide", "finance manual"],
       "reply": "Opening the Finance Overview!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='finance']",    "wait": 500 },
+        { "type": "walk_click",   "selector": ".fin-subnav-btn[data-fin='overview']", "wait": 600 },
+        { "type": "wait_visible", "selector": "#finance-overview-view" },
+        { "type": "walk_to",      "selector": "#fov-sections" },
+        { "type": "bubble",       "text": "The Finance Overview summarises every Finance section with shortcuts to each one, plus a step-by-step user guide below.", "wait": 4500 }
+      ]
+    },
+
+    /* ── Financial Flow Chart ────────────────────────────────────────── */
+    {
+      "id": "fin_flow_chart",
+      "intent_patterns": ["finance flow", "financial flow chart", "flow chart",
+                          "finance diagram", "money flow"],
+      "reply": "Opening the Financial Flow Chart!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='finance']",    "wait": 500 },
         { "type": "walk_click",   "selector": ".fin-subnav-btn[data-fin='flow']", "wait": 600 },
         { "type": "wait_visible", "selector": "#finance-flow-view" },
         { "type": "walk_to",      "selector": "#finance-flow-view" },
-        { "type": "bubble",       "text": "The Finance Overview shows a live flow diagram of all your financial commitments — bills, loans, rentals, and properties — in one view.", "wait": 4500 }
+        { "type": "bubble",       "text": "The Financial Flow Chart shows a live diagram of all your financial commitments — bills, loans, rentals, and properties — in one view.", "wait": 4500 }
       ]
     },
 

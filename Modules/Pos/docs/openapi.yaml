@@ -2255,14 +2255,100 @@ paths:
                 type: object
                 properties:
                   business_name: { type: string }
-                  bills:         { type: array, items: { type: object } }
-                  loans:         { type: array, items: { type: object } }
-                  rentals:       { type: array, items: { type: object } }
+                  bills:         { type: array, items: { type: object }, description: Each item includes a numeric `monthly` equivalent }
+                  loans:         { type: array, items: { type: object }, description: Each item includes a numeric `monthly` equivalent }
+                  rentals:       { type: array, items: { type: object }, description: Each item includes a numeric `monthly` equivalent }
                   summary:
                     type: object
                     properties:
                       total_monthly_fmt: { type: string }
                       total_items:       { type: integer }
+                      bills_monthly:     { type: number, description: Approx. monthly equivalent (one-time bills count as 0) }
+                      loans_monthly:     { type: number }
+                      rentals_monthly:   { type: number }
+                      total_monthly:     { type: number }
+
+  /finance/overview:
+    get:
+      tags: [Finance flow]
+      summary: Finance Overview tab — headline figures per section and month-to-date POS sales
+      description: |
+        Bills / loans / rentals monthly totals and overdue items come from /finance/flow.
+        `sales` is null when the member lacks the `fin_btn_sales` permission;
+        `change_pct` compares with the same days of last month (null when last month is 0).
+      responses:
+        '200':
+          description: Finance overview data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  loans:
+                    type: object
+                    properties:
+                      count:               { type: integer }
+                      active_count:        { type: integer }
+                      total_principal_fmt: { type: string }
+                  properties:
+                    type: object
+                    properties:
+                      count:          { type: integer }
+                      total_cost_fmt: { type: string }
+                      expiring_count: { type: integer, description: Expiring within 60 days or already expired }
+                      expiring:
+                        type: array
+                        description: Up to 5, soonest first
+                        items:
+                          type: object
+                          properties:
+                            id:          { type: integer }
+                            name:        { type: string }
+                            expire_date: { type: string, format: date }
+                            expired:     { type: boolean }
+                  modifications:
+                    type: object
+                    properties:
+                      count:          { type: integer }
+                      total_cost_fmt: { type: string }
+                  investments:
+                    type: object
+                    properties:
+                      count:              { type: integer }
+                      active_count:       { type: integer }
+                      overdue_count:      { type: integer }
+                      total_invested_fmt: { type: string }
+                  budgets:
+                    type: object
+                    properties:
+                      count:        { type: integer }
+                      active_count: { type: integer }
+                  sales:
+                    type: object
+                    nullable: true
+                    properties:
+                      from:           { type: string, format: date }
+                      to:             { type: string, format: date }
+                      count:          { type: integer }
+                      total:          { type: number }
+                      total_fmt:      { type: string }
+                      average_fmt:    { type: string }
+                      prev_total_fmt: { type: string }
+                      change_pct:     { type: number, nullable: true }
+                      today_count:     { type: integer }
+                      today_total_fmt: { type: string }
+                      trend:
+                        type: array
+                        description: Last 6 calendar months, oldest first; the last entry is the current month to date
+                        items:
+                          type: object
+                          properties:
+                            month:     { type: string, example: '2026-10' }
+                            label:     { type: string, example: Oct }
+                            count:     { type: integer }
+                            total:     { type: number }
+                            total_fmt: { type: string }
+                            partial:   { type: boolean }
 
   # ─────────────────────────── SALES REPORTS ───────────────────────────
 

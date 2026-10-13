@@ -247,6 +247,7 @@ const _sbSubItems = {
     { view:'barcodes',       icon:'fa-barcode',              label:'Barcodes' },
   ],
   finance: [
+    { view:'overview',       icon:'fa-house',                label:'Overview' },
     { view:'flow',           icon:'fa-diagram-project',      label:'Flow' },
     { view:'bills',          icon:'fa-file-invoice-dollar',  label:'Bills' },
     { view:'loans',          icon:'fa-money-bill-trend-up',  label:'Loans' },
@@ -518,7 +519,7 @@ function activateTab(tabName) {
   if (tabName === 'pos')        { _checkCashDrawerOpening(); _loadPosRibbonStats(); _maybePosSetupWizard(); _focusPosSearch(); }
   if (tabName === 'sales')      { _sal.all = []; _salSwitchView(_sal.view || 'transactions'); }
   if (tabName === 'inventory')  { if (typeof switchInvView === 'function') switchInvView('products'); else loadInventory(); }
-  if (tabName === 'finance')    { switchFinView('flow'); }
+  if (tabName === 'finance')    { switchFinView('overview'); }
   if (tabName === 'hr')         { switchHrView('employees'); }
   if (tabName === 'services')   { switchSvcView('requests'); }
   if (tabName === 'design')     { _dsAllData = []; switchDesignView('studio'); }
@@ -6011,7 +6012,7 @@ function applyFeatureVisibility() {
   });
   if (!fin_any) {
     const activeFin = $('#panel-finance .fin-subnav-btn.active');
-    if (activeFin && billFinViews.includes(activeFin.dataset.fin)) switchFinView('flow');
+    if (activeFin && billFinViews.includes(activeFin.dataset.fin)) switchFinView('overview');
   }
 
   // ── Finance ribbon groups ──
@@ -6310,7 +6311,7 @@ function applyFeatureVisibility() {
     if (finGrps[1]) finGrps[1].style.display = (mp('fin_btn_rentals')||mp('fin_btn_properties')) ? '' : 'none';
     if (finGrps[2]) finGrps[2].style.display = (mp('fin_btn_profit')||mp('fin_btn_sales')) ? '' : 'none'; }
   // ── Finance panel: sub-nav tab gating with fallback ──
-  { const _finTabPerms = { flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), investments: mp('fin_tab_investments'), budget: mp('fin_tab_budget'), sales: mp('fin_btn_sales') };
+  { const _finTabPerms = { overview: true, flow: mp('fin_tab_flow'), bills: mp('fin_tab_bills'), loans: mp('fin_tab_loans'), rentals: mp('fin_tab_rentals'), properties: mp('fin_tab_properties'), modifications: mp('fin_tab_modifications'), investments: mp('fin_tab_investments'), budget: mp('fin_tab_budget'), sales: mp('fin_btn_sales') };
     $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(b => { b.style.display = _finTabPerms[b.dataset.fin] ? '' : 'none'; });
     const _finActive = $('#panel-finance .fin-subnav-btn.active');
     if (_finActive && !_finTabPerms[_finActive.dataset.fin]) {
@@ -25300,7 +25301,7 @@ function _bizSwRefreshAll() {
       break;
     }
     case 'finance': {
-      const finView = $('#panel-finance .fin-subnav-btn.active')?.dataset.fin || 'flow';
+      const finView = $('#panel-finance .fin-subnav-btn.active')?.dataset.fin || 'overview';
       switchFinView(finView);
       break;
     }
@@ -32904,6 +32905,227 @@ async function submitBillForm() {
 }
 
 // ── Finance sub-nav (Bills ↔ Loans) ────────────────────────────────────────
+// ── Finance Overview (summary, section shortcuts, user guide) ─────────────────
+// Data: GET /finance/flow (bills / loans / rentals totals + overdue items) and
+// GET /finance/overview (per-section figures + month-to-date POS sales;
+// PosFinanceFlowApiController@overview → FinanceOverviewService).
+let _fovSeq = 0;
+
+/** A section shortcut is only shown when its sub-nav tab is (feature + permission gating). */
+const _fovTabVisible = view => {
+  const b = $(`#panel-finance .fin-subnav-btn[data-fin="${view}"]`);
+  return !!b && b.style.display !== 'none';
+};
+const _fovPlural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const _fovDate   = ymd => {
+  const [y, m, d] = String(ymd).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+async function loadFinanceOverview() {
+  const seq = ++_fovSeq;
+  $('#fov-sections').innerHTML = `<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading summary…</div>`;
+  $('#fov-attention').innerHTML = '';
+  $('#fov-attn-count').textContent = '';
+  $('#fov-create-bill').style.display = _fovTabVisible('bills') ? '' : 'none';
+
+  const [flowRes, ovRes] = await Promise.all([API.financeFlow(), API.financeOverview()]);
+  if (seq !== _fovSeq) return;
+
+  const flow = flowRes.status === 200 ? flowRes.body : null;
+  const ov   = ovRes.status === 200 ? ovRes.body : null;
+  if (!flow && !ov) {
+    $('#fov-kpis').innerHTML = '';
+    $('#fov-sections').innerHTML = `<div class="finance-loading" style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load the finance summary.</div>`;
+    return;
+  }
+
+  const s = flow?.summary || {};
+  const o = ov || {};
+  const sales = o.sales || null;
+  const dash  = '—';
+
+  // ── Needs attention: overdue bills / rentals, overdue investment plans, expiring properties
+  const attn = [];
+  if (_fovTabVisible('bills')) (flow?.bills || []).filter(b => b.overdue).forEach(b =>
+    attn.push({ view: 'bills', icon: 'fa-file-invoice-dollar', title: b.name, meta: `Bill · ${b.amount_fmt} · ${b.cadence}`, tag: 'Overdue', tone: 'bad' }));
+  if (_fovTabVisible('rentals')) (flow?.rentals || []).filter(r => r.overdue).forEach(r =>
+    attn.push({ view: 'rentals', icon: 'fa-house', title: r.name, meta: `Rental · ${r.cost_fmt} · ${r.cadence}`, tag: 'Overdue', tone: 'bad' }));
+  if (_fovTabVisible('investments') && o.investments?.overdue_count)
+    attn.push({ view: 'investments', icon: 'fa-chart-line', title: _fovPlural(o.investments.overdue_count, 'investment plan'), meta: 'Contributions past their due date', tag: 'Overdue', tone: 'bad' });
+  if (_fovTabVisible('properties')) (o.properties?.expiring || []).forEach(p =>
+    attn.push({ view: 'properties', icon: 'fa-building', title: p.name, meta: `Property · ${p.expired ? 'expired' : 'expires'} ${_fovDate(p.expire_date)}`, tag: p.expired ? 'Expired' : 'Expiring', tone: p.expired ? 'bad' : 'warn' }));
+  const moreProps = (o.properties?.expiring_count || 0) - (o.properties?.expiring?.length || 0);
+  if (_fovTabVisible('properties') && moreProps > 0)
+    attn.push({ view: 'properties', icon: 'fa-building', title: `${_fovPlural(moreProps, 'more property', 'more properties')}`, meta: 'Expiring within 60 days', tag: 'Expiring', tone: 'warn' });
+
+  // ── Stat tiles
+  const change = sales?.change_pct;
+  const down   = change !== null && change !== undefined && change < 0;
+  const tiles = [
+    { key: 'total', icon: 'fa-arrow-trend-down', label: 'Approx. monthly outflow', value: s.total_monthly_fmt ?? dash,
+      sub: flow ? `across ${_fovPlural(s.total_items || 0, 'cost item')}` : '' },
+    { key: attn.length ? 'overdue' : 'active', icon: attn.length ? 'fa-triangle-exclamation' : 'fa-circle-check',
+      label: 'Needs attention', value: String(attn.length), sub: attn.length ? 'Overdue or expiring items' : 'Nothing overdue' },
+    sales && { key: 'completed', icon: 'fa-cash-register', label: 'POS sales this month', value: sales.total_fmt,
+      sub: `${_fovPlural(sales.count, 'sale')} · avg ${sales.average_fmt}` },
+    sales && { key: down ? 'overdue' : 'on_hold', icon: down ? 'fa-arrow-down' : 'fa-arrow-up', label: 'vs. same days last month',
+      value: change === null ? dash : `${change > 0 ? '+' : ''}${change}%`, sub: `Last month: ${sales.prev_total_fmt}` },
+  ].filter(Boolean);
+  $('#fov-kpis').innerHTML = tiles.map(t => `
+    <div class="pm-stat-tile pm-stat-tile--${t.key}">
+      <div class="pm-stat-tile-icon"><i class="fa ${t.icon}"></i></div>
+      <div>
+        <div class="pm-stat-tile-value">${escHtml(t.value)}</div>
+        <div class="pm-stat-tile-label">${escHtml(t.label)}</div>
+        ${t.sub ? `<div class="fov-tile-sub">${escHtml(t.sub)}</div>` : ''}
+      </div>
+    </div>`).join('');
+
+  _fovRenderTrend(sales, flow ? Number(s.total_monthly) || 0 : null);
+  _fovRenderOutflow(flow);
+  $('.fov-insights').style.display =
+    $('#fov-trend-panel').style.display === 'none' && $('#fov-outflow-panel').style.display === 'none' ? 'none' : '';
+
+  // ── Section cards: icon, purpose, key figures
+  const L = o.loans || {}, P = o.properties || {}, M = o.modifications || {}, I = o.investments || {}, B = o.budgets || {};
+  const cards = [
+    { view: 'flow', icon: 'fa-diagram-project', color: '#2563eb', title: 'Financial Flow Chart', desc: 'See every cost and income source on one map.',
+      figs: flow ? [[_fovPlural(s.total_items || 0, 'cost item'), 'mapped']] : [] },
+    { view: 'bills', icon: 'fa-file-invoice-dollar', color: '#0891b2', title: 'Bills', desc: 'Recurring and one-time bills, payments and reminders.',
+      figs: flow ? [[s.bills_monthly_fmt, 'per month'], [_fovPlural(s.bills_count || 0, 'bill'), 'recorded']] : [], alert: s.bills_overdue },
+    { view: 'loans', icon: 'fa-hand-holding-dollar', color: '#7c3aed', title: 'Loans', desc: 'Borrowings and their installment schedules.',
+      figs: [[s.loans_monthly_fmt ?? dash, 'per month'], [L.total_principal_fmt ?? dash, `principal · ${L.active_count ?? 0} active`]] },
+    { view: 'rentals', icon: 'fa-house', color: '#ea580c', title: 'Rentals', desc: 'Rented premises and equipment with billing schedules.',
+      figs: flow ? [[s.rentals_monthly_fmt, 'per month'], [_fovPlural(s.rentals_count || 0, 'rental'), 'recorded']] : [], alert: s.rentals_overdue },
+    { view: 'properties', icon: 'fa-building', color: '#0d9488', title: 'Properties', desc: 'Places and assets you own or lease.',
+      figs: [[P.total_cost_fmt ?? dash, 'asset cost'], [_fovPlural(P.count || 0, 'property', 'properties'), 'registered']],
+      warn: P.expiring_count ? `${P.expiring_count} expiring` : '' },
+    { view: 'modifications', icon: 'fa-screwdriver-wrench', color: '#b45309', title: 'Modifications', desc: 'Renovations and fit-outs with their linked costs.',
+      figs: [[M.total_cost_fmt ?? dash, 'estimated cost'], [_fovPlural(M.count || 0, 'modification'), 'recorded']] },
+    { view: 'investments', icon: 'fa-chart-line', color: '#16a34a', title: 'Investments', desc: 'Capital invested in the business and contributions.',
+      figs: [[I.total_invested_fmt ?? dash, 'invested'], [_fovPlural(I.count || 0, 'plan'), `${I.active_count || 0} active`]], alert: I.overdue_count },
+    { view: 'budget', icon: 'fa-table-cells', color: '#db2777', title: 'Budget', desc: 'Plan spending and compare it with actuals.',
+      figs: [[_fovPlural(B.count || 0, 'budget'), B.active_count ? `${B.active_count} active` : 'none active']] },
+    { view: 'sales', icon: 'fa-chart-column', color: '#4f46e5', title: 'Sales Reports', desc: 'Income by period, branch and counter; export PDF / CSV.',
+      figs: sales ? [[sales.total_fmt, 'this month'], [_fovPlural(sales.count, 'sale'), `avg ${sales.average_fmt}`]] : [] },
+  ].filter(c => _fovTabVisible(c.view));
+
+  $('#fov-sections').innerHTML = cards.length === 0
+    ? `<div class="finance-loading"><i class="fa fa-lock"></i> You don't have access to any Finance sections.</div>`
+    : cards.map(c => `
+    <button class="fov-card" data-fov-goto="${c.view}" style="--fov-color:${c.color}">
+      <div class="fov-card-top">
+        <span class="fov-card-icon"><i class="fa ${c.icon}"></i></span>
+        ${c.alert ? `<span class="fov-tag fov-tag--bad">${c.alert} overdue</span>` : c.warn ? `<span class="fov-tag fov-tag--warn">${escHtml(c.warn)}</span>` : ''}
+      </div>
+      <div class="fov-card-title">${escHtml(c.title)}</div>
+      <div class="fov-card-desc">${escHtml(c.desc)}</div>
+      ${c.figs.length ? `<div class="fov-card-figs">${c.figs.map(([v, l]) => `
+        <div class="fov-card-fig"><b>${escHtml(String(v))}</b><small>${escHtml(l || '')}</small></div>`).join('')}</div>` : ''}
+      <div class="fov-card-foot"><span class="fov-card-open">Open <i class="fa fa-arrow-right"></i></span></div>
+    </button>`).join('');
+
+  // ── Needs attention cards
+  $('#fov-attn-count').textContent = attn.length ? String(attn.length) : '';
+  $('#fov-attention').innerHTML = attn.length === 0
+    ? `<div class="fov-allclear"><i class="fa fa-circle-check"></i> All clear — nothing overdue or expiring.</div>`
+    : attn.map(a => `
+    <button class="pm-tip-card fov-attn-card" data-fov-goto="${a.view}">
+      <div class="pm-tip-icon fov-attn-icon--${a.tone}"><i class="fa ${a.icon}"></i></div>
+      <div class="pm-tip-body">
+        <div class="pm-tip-title">${escHtml(a.title)} <span class="fov-tag fov-tag--${a.tone}">${escHtml(a.tag)}</span></div>
+        <div class="pm-tip-desc">${escHtml(a.meta)}</div>
+      </div>
+    </button>`).join('');
+}
+
+const _fovCompact = n => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+
+/** Monthly POS sales bars, with the approx. monthly outflow as a dashed reference line. */
+function _fovRenderTrend(sales, outflow) {
+  const panel = $('#fov-trend-panel');
+  const trend = sales?.trend || [];
+  panel.style.display = trend.length ? '' : 'none';
+  if (!trend.length) return;
+
+  $('#fov-today').textContent = `Today: ${sales.today_total_fmt} · ${_fovPlural(sales.today_count || 0, 'sale')}`;
+
+  const max = Math.max(...trend.map(t => t.total), outflow || 0);
+  if (max <= 0) {
+    $('#fov-trend').innerHTML = `<div class="fov-empty"><i class="fa fa-chart-column"></i> No POS sales in the last ${trend.length} months.</div>`;
+    return;
+  }
+  const pct  = v => Math.max(0, Math.min(100, v / max * 100));
+  const line = outflow > 0
+    ? `<div class="fov-trend-ref" style="bottom:${pct(outflow)}%"><span>Monthly outflow ${_fovCompact(outflow)}</span></div>` : '';
+
+  $('#fov-trend').innerHTML = `
+    <div class="fov-trend-plot">
+      ${line}
+      ${trend.map(t => `
+        <div class="fov-trend-col" tabindex="0">
+          <div class="fov-trend-tip"><b>${escHtml(t.total_fmt)}</b>${escHtml(_fovPlural(t.count, 'sale'))}${t.partial ? ' · month to date' : ''}</div>
+          ${t.partial ? `<span class="fov-trend-val">${escHtml(_fovCompact(t.total))}</span>` : ''}
+          <div class="fov-trend-bar${t.partial ? ' fov-trend-bar--now' : ''}" style="height:${pct(t.total)}%"></div>
+        </div>`).join('')}
+    </div>
+    <div class="fov-trend-axis">${trend.map(t => `<span>${escHtml(t.label)}</span>`).join('')}</div>`;
+}
+
+/** Monthly outflow split by bills / loans / rentals, plus the largest cost items. */
+function _fovRenderOutflow(flow) {
+  const panel = $('#fov-outflow-panel');
+  panel.style.display = flow ? '' : 'none';
+  if (!flow) return;
+
+  const s = flow.summary || {};
+  const parts = [
+    { view: 'bills',   label: 'Bills',   color: '#0891b2', value: Number(s.bills_monthly)   || 0 },
+    { view: 'loans',   label: 'Loans',   color: '#7c3aed', value: Number(s.loans_monthly)   || 0 },
+    { view: 'rentals', label: 'Rentals', color: '#ea580c', value: Number(s.rentals_monthly) || 0 },
+  ].filter(p => _fovTabVisible(p.view));
+  const total = parts.reduce((a, p) => a + p.value, 0);
+
+  if (total <= 0) {
+    $('#fov-outflow').innerHTML = `<div class="fov-empty"><i class="fa fa-chart-pie"></i> No recurring costs recorded yet.</div>`;
+    return;
+  }
+  const fmt = v => v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const share = v => Math.round(v / total * 100);
+
+  const items = [
+    ...(_fovTabVisible('bills')   ? (flow.bills   || []).map(b => ({ view: 'bills',   name: b.name, kind: 'Bill',   color: '#0891b2', monthly: Number(b.monthly) || 0 })) : []),
+    ...(_fovTabVisible('loans')   ? (flow.loans   || []).map(l => ({ view: 'loans',   name: l.name, kind: 'Loan',   color: '#7c3aed', monthly: Number(l.monthly) || 0 })) : []),
+    ...(_fovTabVisible('rentals') ? (flow.rentals || []).map(r => ({ view: 'rentals', name: r.name, kind: 'Rental', color: '#ea580c', monthly: Number(r.monthly) || 0 })) : []),
+  ].filter(i => i.monthly > 0).sort((a, b) => b.monthly - a.monthly).slice(0, 5);
+  const top = items[0]?.monthly || 1;
+
+  $('#fov-outflow').innerHTML = `
+    <div class="fov-split">${parts.filter(p => p.value > 0).map(p =>
+      `<span style="flex:${p.value};background:${p.color}" title="${escHtml(p.label)}: ${fmt(p.value)} (${share(p.value)}%)"></span>`).join('')}</div>
+    <div class="fov-split-legend">${parts.map(p => `
+      <button class="fov-split-row" data-fov-goto="${p.view}">
+        <i style="background:${p.color}"></i><span>${p.label}</span>
+        <b>${fmt(p.value)}</b><small>${share(p.value)}%</small>
+      </button>`).join('')}</div>
+    ${items.length ? `
+    <div class="fov-top-head">Largest cost items</div>
+    <div class="fov-top">${items.map(i => `
+      <button class="fov-top-row" data-fov-goto="${i.view}">
+        <span class="fov-top-name">${escHtml(i.name)}<small>${i.kind}</small></span>
+        <span class="fov-top-bar"><i style="width:${Math.max(3, i.monthly / top * 100)}%;background:${i.color}"></i></span>
+        <b>${fmt(i.monthly)}</b>
+      </button>`).join('')}</div>` : ''}`;
+}
+
+$('#finance-overview-view').addEventListener('click', e => {
+  const go = e.target.closest('[data-fov-goto]');
+  if (go) { switchFinView(go.dataset.fovGoto); return; }
+  if (e.target.closest('#fov-create-bill')) { switchFinView('bills'); openBillCreateModal(); return; }
+  if (e.target.closest('#fov-refresh')) loadFinanceOverview();
+});
+
 // ── Finance Flow Overview ─────────────────────────────────────────────────────
 
 async function loadFinanceFlow() {
@@ -33088,6 +33310,7 @@ function switchFinView(view) {
   $('#modification-detail-view').style.display   = 'none';
   $('#investment-detail-view').style.display     = 'none';
   $('#budget-detail-view').style.display         = 'none';
+  $('#finance-overview-view').style.display      = view === 'overview'      ? '' : 'none';
   $('#finance-flow-view').style.display          = view === 'flow'          ? '' : 'none';
   $('#finance-list-view').style.display          = view === 'bills'         ? '' : 'none';
   $('#loans-list-view').style.display            = view === 'loans'         ? '' : 'none';
@@ -33097,6 +33320,7 @@ function switchFinView(view) {
   $('#investments-list-view').style.display      = view === 'investments'   ? '' : 'none';
   $('#budget-list-view').style.display           = view === 'budget'        ? '' : 'none';
   $('#sales-report-view').style.display          = view === 'sales'         ? '' : 'none';
+  if (view === 'overview')      loadFinanceOverview();
   if (view === 'flow')          loadFinanceFlow();
   if (view === 'bills')         loadFinance();
   if (view === 'loans')         loadLoans();
@@ -46226,7 +46450,7 @@ async function submitDsCreate() {
       { key: 'fin_btn_sales',       label: 'Sales Reports',    desc: 'Ribbon Reports: Sales Reports button' },
     ]},
     { key: 'fin_panel', label: 'Finance · Panel', icon: 'fa-coins', color: '#4ade80', items: [
-      { key: 'fin_tab_flow',          label: 'Tab: Overview',      desc: 'Finance panel: Overview sub-nav tab' },
+      { key: 'fin_tab_flow',          label: 'Tab: Financial Flow Chart', desc: 'Finance panel: Financial Flow Chart sub-nav tab' },
       { key: 'fin_tab_bills',         label: 'Tab: Bills',         desc: 'Finance panel: Bills sub-nav tab' },
       { key: 'fin_tab_loans',         label: 'Tab: Loans',         desc: 'Finance panel: Loans sub-nav tab' },
       { key: 'fin_tab_rentals',       label: 'Tab: Rentals',       desc: 'Finance panel: Rentals sub-nav tab' },

@@ -204,6 +204,7 @@ const API = (() => {
     billTargets:  ()                  => request('GET',  '/expenses/bill-assignment-targets'),
     // Finance — flow overview
     financeFlow:    ()         => request('GET', '/finance/flow'),
+    financeOverview: ()        => request('GET', '/finance/overview'),
 
     // Notifications
     notifications: (params) => {
