@@ -11817,6 +11817,10 @@ body.dark .pc-modal-head {
   font-style: normal; font-size: 10.5px; color: var(--text-muted);
   text-transform: none; padding-right: 6px; flex-shrink: 0;
 }
+.rcpt-ed-logo-gap {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 8px; font-size: 12.5px; color: var(--text); cursor: text;
+}
 /* Mini receipt in the middle of the margin controls */
 .rcpt-ed-mg-paper {
   grid-area: paper; width: 46px; height: 60px; box-sizing: border-box;

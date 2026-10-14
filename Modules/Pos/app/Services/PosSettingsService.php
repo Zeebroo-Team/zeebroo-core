@@ -64,6 +64,11 @@ class PosSettingsService
 
     public const RECEIPT_MARGIN_MAX_MM = 20;
 
+    /** Gap in mm (0–20) between the receipt logo and the business name. */
+    public const KEY_RECEIPT_LOGO_GAP = 'pos.receipt_logo_gap';
+
+    public const RECEIPT_LOGO_GAP_DEFAULT_MM = 2;
+
     public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
 
     /** @var string `before` | `after` — where the currency code sits relative to the amount */
@@ -193,6 +198,7 @@ class PosSettingsService
             'receipt_margin_right'       => $this->receiptMargin($business, 'right'),
             'receipt_margin_bottom'      => $this->receiptMargin($business, 'bottom'),
             'receipt_margin_left'        => $this->receiptMargin($business, 'left'),
+            'receipt_logo_gap'           => $this->clampReceiptMargin($business->getSetting(self::KEY_RECEIPT_LOGO_GAP, self::RECEIPT_LOGO_GAP_DEFAULT_MM)),
             // Branch / warehouse
             'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
             'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
@@ -421,6 +427,10 @@ class PosSettingsService
             if (array_key_exists('receipt_margin_'.$side, $data)) {
                 $business->setSetting('pos.receipt_margin_'.$side, $this->clampReceiptMargin($data['receipt_margin_'.$side] ?? 0));
             }
+        }
+
+        if (array_key_exists('receipt_logo_gap', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_LOGO_GAP, $this->clampReceiptMargin($data['receipt_logo_gap'] ?? self::RECEIPT_LOGO_GAP_DEFAULT_MM));
         }
 
         if (array_key_exists('business_logo_url', $data)) {

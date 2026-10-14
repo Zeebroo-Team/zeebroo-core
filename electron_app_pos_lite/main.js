@@ -541,6 +541,16 @@ function _receiptMargins(m = {}) {
   return { top: v(m.top), right: v(m.right), bottom: v(m.bottom), left: v(m.left) };
 }
 
+// Printer's default code page is plain ASCII — swap common typographic characters
+// for ASCII look-alikes so they don't print as '?'.
+const _ESCPOS_ASCII = {
+  '—': '-', '–': '-', '−': '-', '‘': "'", '’': "'",
+  '“': '"', '”': '"', '•': '*', '…': '...', ' ': ' ', '×': 'x',
+};
+function _escposAscii(s) {
+  return String(s || '').replace(/[—–−‘’“”•… ×]/g, (ch) => _ESCPOS_ASCII[ch]);
+}
+
 // ESC/POS builder — pure Node.js, no native modules
 function _escposBuffer(receipt, paperWidth, margins = {}) {
   // Font A is 12 dots wide (1.5 mm at 203 dpi): 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
@@ -558,9 +568,9 @@ function _escposBuffer(receipt, paperWidth, margins = {}) {
   const buf = [];
   const push = (...b) => buf.push(...b);
   const text = (s) => {
-    for (const ch of String(s || '')) {
+    for (const ch of _escposAscii(s)) {
       const c = ch.charCodeAt(0);
-      buf.push(c < 128 ? c : 0x3F);  // non-ASCII → '?'
+      buf.push(c < 128 ? c : 0x3F);  // remaining non-ASCII → '?'
     }
   };
   const println = (s = '') => { text(' '.repeat(LPAD) + s); push(0x0A); };
