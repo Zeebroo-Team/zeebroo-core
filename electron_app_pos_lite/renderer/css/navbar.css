@@ -1330,7 +1330,96 @@ body:has(#sdb-bar) .ev-bar { bottom: 92px; }
 .rle-item-head { font-weight: 700; }
 .rle-paper-footer { text-align: center; margin-top: 10px; }
 
+/* Editor preview only: print margins (--rle-mg-*, set from JS) on top of the base padding */
+.rle-paper {
+  padding: calc(22px + var(--rle-mg-top, 0mm)) calc(18px + var(--rle-mg-right, 0mm))
+           calc(22px + var(--rle-mg-bottom, 0mm)) calc(18px + var(--rle-mg-left, 0mm));
+  transition: padding 0.12s;
+}
+
+/* Print margins: inputs laid out around a mini receipt (top above, left/right beside, bottom below) */
+.rle-mg-hint { margin-top: -6px; font-size: 12px; line-height: 1.45; color: var(--muted, #6b7280); }
+.rle-margins {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr);
+  grid-template-areas: "top top top" "left paper right" "bottom bottom bottom";
+  gap: 8px;
+  align-items: center;
+  justify-items: center;
+  padding: 14px 12px;
+  border: 1px solid var(--border, #e2e5eb);
+  border-radius: 12px;
+  background: #f8f9fc;
+}
+.rle-margin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--muted, #6b7280);
+  cursor: text;
+}
+.rle-margin--top    { grid-area: top; }
+.rle-margin--left   { grid-area: left; }
+.rle-margin--right  { grid-area: right; }
+.rle-margin--bottom { grid-area: bottom; }
+.rle-mg-field {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  max-width: 84px;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border, #e2e5eb);
+  border-radius: 9px;
+  background: #fff;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.rle-mg-field:focus-within { border-color: var(--rle-accent); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12); }
+.rle-mg-field input {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 6px 0 6px 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text, #1f2430);
+  text-align: center;
+  -moz-appearance: textfield;
+}
+.rle-mg-field input::-webkit-inner-spin-button,
+.rle-mg-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.rle-mg-field em { flex-shrink: 0; padding-right: 8px; font-style: normal; font-size: 10.5px; font-weight: 600; text-transform: none; color: var(--muted, #6b7280); }
+.rle-mg-paper {
+  grid-area: paper;
+  width: 46px;
+  height: 60px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px;
+  background: #fff;
+  border: 1px dashed var(--rle-accent);
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.rle-mg-paper i { display: block; height: 3px; border-radius: 2px; background: #cbd5e1; }
+.rle-mg-paper i:nth-child(2) { width: 70%; }
+.rle-mg-paper i:nth-child(4) { width: 55%; align-self: flex-end; }
+.rle-mg-reset { justify-content: center; }
+
 .rle-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 22px 22px; flex-shrink: 0; }
+.rle-foot .rle-test { margin-right: auto; }
 
 /* ── Invoice Setup window ─────────────────────────────────────────────── */
 /* 3-column layout ported from the full desktop app's Invoice Setup modal

@@ -11781,6 +11781,60 @@ body.dark .pc-modal-head {
 }
 .rcpt-ed-check input { accent-color: var(--accent); width: 14px; height: 14px; }
 .rcpt-ed-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+.rcpt-ed-hint { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+/* Margin inputs laid out around a mini receipt: top above, left/right beside, bottom below */
+.rcpt-ed-margins {
+  display: grid; grid-template-columns: minmax(0, 1fr) 48px minmax(0, 1fr); gap: 8px;
+  grid-template-areas: "top top top" "left paper right" "bottom bottom bottom";
+  align-items: center; justify-items: center;
+  padding: 12px 10px; margin: 2px 0;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface2);
+}
+.rcpt-ed-margin {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-size: 10.5px; font-weight: 600; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: .4px; cursor: text;
+  width: 100%; min-width: 0;
+}
+.rcpt-ed-margin--top    { grid-area: top; }
+.rcpt-ed-margin--left   { grid-area: left; }
+.rcpt-ed-margin--right  { grid-area: right; }
+.rcpt-ed-margin--bottom { grid-area: bottom; }
+.rcpt-ed-mg-field {
+  display: flex; align-items: center; width: 100%; max-width: 76px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 7px; background: var(--surface);
+  transition: border-color .12s;
+}
+.rcpt-ed-mg-field:focus-within { border-color: var(--accent); }
+.rcpt-ed-mg-field input {
+  width: 100%; min-width: 0; border: none; outline: none; background: transparent;
+  padding: 5px 0 5px 6px; font-size: 12.5px; font-weight: 600; color: var(--text);
+  text-align: center; font-family: inherit; -moz-appearance: textfield;
+}
+.rcpt-ed-mg-field input::-webkit-inner-spin-button,
+.rcpt-ed-mg-field input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.rcpt-ed-mg-field em {
+  font-style: normal; font-size: 10.5px; color: var(--text-muted);
+  text-transform: none; padding-right: 6px; flex-shrink: 0;
+}
+/* Mini receipt in the middle of the margin controls */
+.rcpt-ed-mg-paper {
+  grid-area: paper; width: 46px; height: 60px; box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: center; gap: 6px;
+  padding: 7px; background: #fff; border: 1px dashed var(--accent); border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
+}
+.rcpt-ed-mg-paper i { display: block; height: 3px; border-radius: 2px; background: #cbd5e1; }
+.rcpt-ed-mg-paper i:nth-child(2) { width: 70%; }
+.rcpt-ed-mg-paper i:nth-child(4) { width: 55%; align-self: flex-end; }
+.rcpt-btn-test {
+  padding: 7px 14px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--surface); color: var(--text); font-size: 12.5px; font-weight: 600;
+  cursor: pointer; display: flex; align-items: center; gap: 7px;
+  transition: all .12s;
+}
+.rcpt-btn-test:hover { background: var(--surface2); border-color: var(--accent); color: var(--accent); }
+.rcpt-btn-test:disabled { opacity: .55; cursor: not-allowed; }
 .rcpt-btn-edit {
   padding: 7px 14px; border: 1px solid var(--border); border-radius: 7px;
   background: var(--surface); color: var(--text-muted); font-size: 12.5px;
@@ -11929,6 +11983,16 @@ body.dark .pc-modal-head {
 .rcpt-paper[data-paper="58"] .ih-total,
 .rcpt-paper[data-paper="58"] .ri-total { width: 60px; }
 .rcpt-paper[data-paper="58"] .ri-name  { font-size: 10px; }
+/* Layout editor preview: print margins (--rcpt-mg-*, set from JS) on top of the base padding */
+#rcpt-ed-paper {
+  padding: calc(20px + var(--rcpt-mg-top, 0mm)) calc(16px + var(--rcpt-mg-right, 0mm))
+           calc(30px + var(--rcpt-mg-bottom, 0mm)) calc(16px + var(--rcpt-mg-left, 0mm));
+  transition: padding .12s;
+}
+#rcpt-ed-paper[data-paper="58"] {
+  padding: calc(16px + var(--rcpt-mg-top, 0mm)) calc(18px + var(--rcpt-mg-right, 0mm))
+           calc(24px + var(--rcpt-mg-bottom, 0mm)) calc(18px + var(--rcpt-mg-left, 0mm));
+}
 /* Sinhala / Tamil: switch away from Courier New which lacks those glyphs */
 .rcpt-paper[data-lang="si"],
 .rcpt-paper[data-lang="ta"] {

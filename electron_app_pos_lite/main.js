@@ -534,14 +534,26 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
   return true;
 });
 
+// User-set receipt margins (mm) from the Receipt Layout Editor — each side clamped to 0–20.
+const RECEIPT_MARGIN_MAX_MM = 20;
+function _receiptMargins(m = {}) {
+  const v = (x) => Math.min(RECEIPT_MARGIN_MAX_MM, Math.max(0, parseFloat(x) || 0));
+  return { top: v(m.top), right: v(m.right), bottom: v(m.bottom), left: v(m.left) };
+}
+
 // ESC/POS builder — pure Node.js, no native modules
-function _escposBuffer(receipt, paperWidth) {
-  // Font A is 12 dots wide: 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
-  const COL  = paperWidth === 58 ? 32 : 48;
-  const NAMW = paperWidth === 58 ? 16 : 24;  // item name column width
+function _escposBuffer(receipt, paperWidth, margins = {}) {
+  // Font A is 12 dots wide (1.5 mm at 203 dpi): 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
+  const MM_PER_COL = 1.5;
+  const DOTS_PER_MM = 8;
+  const mg   = _receiptMargins(margins);
+  const LPAD = Math.round(mg.left  / MM_PER_COL);  // left margin, in columns
+  const RPAD = Math.round(mg.right / MM_PER_COL);  // right margin, in columns
+  const COL  = Math.max(20, (paperWidth === 58 ? 32 : 48) - LPAD - RPAD);
   const QTYF = 4;                              // qty column
   const PRCF = paperWidth === 58 ?  0 : 10;  // price column (skipped on 58mm)
-  const TOTF = COL - NAMW - QTYF - PRCF;     // total column
+  const TOTF = paperWidth === 58 ? 12 : 10;  // total column
+  const NAMW = Math.max(6, COL - QTYF - PRCF - TOTF);  // item name column takes what's left
 
   const buf = [];
   const push = (...b) => buf.push(...b);
@@ -551,17 +563,20 @@ function _escposBuffer(receipt, paperWidth) {
       buf.push(c < 128 ? c : 0x3F);  // non-ASCII → '?'
     }
   };
-  const println = (s = '') => { text(s); push(0x0A); };
+  const println = (s = '') => { text(' '.repeat(LPAD) + s); push(0x0A); };
 
+  // Centering is done with spaces (ctr) inside the margin-reduced width, so the printer
+  // always stays left-aligned — ESC a 1 would re-centre the already padded line.
   const alignL  = () => push(0x1B, 0x61, 0x00);
-  const alignC  = () => push(0x1B, 0x61, 0x01);
+  const alignC  = alignL;
   const boldOn  = () => push(0x1B, 0x45, 0x01);
   const boldOff = () => push(0x1B, 0x45, 0x00);
   const feed    = (n = 1) => push(0x1B, 0x64, n);
+  const feedMm  = (mm) => { const d = Math.round(mm * DOTS_PER_MM); if (d > 0) push(0x1B, 0x4A, Math.min(255, d)); };
   const cut     = () => push(0x1D, 0x56, 0x42, 0x03);  // partial cut + 3-line feed
 
-  const line  = () => { text('-'.repeat(COL)); push(0x0A); };
-  const dline = () => { text('='.repeat(COL)); push(0x0A); };
+  const line  = () => println('-'.repeat(COL));
+  const dline = () => println('='.repeat(COL));
   const ctr   = (s) => {
     s = String(s || '').slice(0, COL);
     return ' '.repeat(Math.max(0, Math.floor((COL - s.length) / 2))) + s;
@@ -569,9 +584,8 @@ function _escposBuffer(receipt, paperWidth) {
   const rowLR = (left, right) => {
     left = String(left || ''); right = String(right || '');
     const gap = COL - left.length - right.length;
-    if (gap <= 0) text(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
-    else text(left + ' '.repeat(gap) + right);
-    push(0x0A);
+    if (gap <= 0) println(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
+    else println(left + ' '.repeat(gap) + right);
   };
   const money = (amount) => {
     const num = parseFloat(amount || 0).toFixed(2);
@@ -580,6 +594,7 @@ function _escposBuffer(receipt, paperWidth) {
   };
 
   push(0x1B, 0x40);  // ESC @ — initialize printer
+  feedMm(mg.top);
 
   if (receipt.businessName) { alignC(); boldOn(); println(ctr(receipt.businessName)); boldOff(); }
   if (receipt.address) {
@@ -641,6 +656,7 @@ function _escposBuffer(receipt, paperWidth) {
   println(ctr('[ ' + String(receipt.paymentMethod || 'CASH').toUpperCase() + ' ]'));
 
   feed(3);
+  feedMm(mg.bottom);
   cut();
   return Buffer.from(buf);
 }
@@ -719,10 +735,10 @@ public static class WP {
 }
 
 ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
-  const { receipt, name, paperWidth = 80 } = opts;
+  const { receipt, name, paperWidth = 80, margins = {} } = opts;
   if (!name) return { success: false, error: 'No printer specified' };
   try {
-    return await _sendRawToPrinter(name, _escposBuffer(receipt || {}, paperWidth));
+    return await _sendRawToPrinter(name, _escposBuffer(receipt || {}, paperWidth, margins));
   } catch (err) {
     return { success: false, error: err.message || String(err) };
   }
