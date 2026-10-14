@@ -2086,6 +2086,18 @@
               <label class="sm-switch"><input type="checkbox" id="rle-show-payment"><span class="sm-switch-track"></span></label>
             </div>
 
+            <div class="sm-section-label"><i class="fa-solid fa-expand"></i> ${t('Print margins (mm)')}</div>
+            <div class="rle-mg-hint">${t('Increase a side if your printer cuts it off or the bill prints off-centre.')}</div>
+            <div class="rle-margins">
+              ${[['top', 'Top'], ['left', 'Left'], ['right', 'Right'], ['bottom', 'Bottom']].map(([side, label]) => `
+              <label class="rle-margin rle-margin--${side}">
+                <span>${t(label)}</span>
+                <span class="rle-mg-field"><input type="number" id="rle-mg-${side}" min="0" max="20" step="0.5" value="0"><em>mm</em></span>
+              </label>`).join('')}
+              <div class="rle-mg-paper" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <button class="bm-btn bm-btn-outline rle-mg-reset" id="rle-mg-reset" type="button"><i class="fa-solid fa-rotate-left"></i> ${t('Reset margins')}</button>
+
             <div class="sm-section-label"><i class="fa-solid fa-language"></i> ${t('Print Language')}</div>
             <div class="rle-lang-row" id="rle-lang-row">
               ${RECEIPT_PRINT_LANGUAGES.map((l) => `<button class="rle-lang-btn" type="button" data-lang="${l.code}">${esc(l.label)}</button>`).join('')}
@@ -2098,6 +2110,7 @@
           </div>
         </div>
         <div class="rle-foot">
+          <button class="bm-btn bm-btn-outline rle-test" id="rle-test" type="button" title="${t('Print a sample bill with the current settings (not saved)')}"><i class="fa-solid fa-print"></i> ${t('Test print')}</button>
           <button class="bm-btn bm-btn-outline" id="rle-cancel" type="button">${t('Cancel')}</button>
           <button class="bm-btn bm-btn-primary" id="rle-save" type="button"><i class="fa-solid fa-floppy-disk"></i> ${t('Save layout')}</button>
         </div>
@@ -2227,10 +2240,92 @@
         ${showPayment ? `<div class="rle-kv"><span>${esc(L.paid)}</span><span>${money(subtotal)}</span></div>` : ''}
         ${footer ? `<div class="rle-paper-footer">${esc(footer)}</div>` : ''}
       `;
+      // Show the print margins on the sample paper (CSS adds them to the base padding)
+      const mg = currentMargins();
+      MARGIN_SIDES.forEach((side) => $('rle-paper').style.setProperty('--rle-mg-' + side, mg[side] + 'mm'));
     }
 
-    ['rle-address', 'rle-header', 'rle-footer'].forEach((id) => $(id).addEventListener('input', renderPreview));
+    const MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+    function currentMargins() {
+      return window.ReceiptPrinter.marginsFrom(Object.fromEntries(MARGIN_SIDES.map((side) => ['receipt_margin_' + side, $('rle-mg-' + side).value])));
+    }
+
+    ['rle-address', 'rle-header', 'rle-footer', ...MARGIN_SIDES.map((side) => 'rle-mg-' + side)].forEach((id) => $(id).addEventListener('input', renderPreview));
     ['rle-show-biz', 'rle-show-addr', 'rle-show-payment'].forEach((id) => $(id).addEventListener('change', renderPreview));
+    $('rle-mg-reset').addEventListener('click', () => {
+      MARGIN_SIDES.forEach((side) => { $('rle-mg-' + side).value = 0; });
+      renderPreview();
+    });
+
+    // Test print: a sample bill with the editor's current (unsaved) layout and margins,
+    // sent to the Settings → Printer printer — or the true-size PDF preview when none is set.
+    async function testPrint() {
+      const RP = window.ReceiptPrinter;
+      const btn = $('rle-test');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Printing…')}`;
+      try {
+        const cfg = await window.electronAPI.getPrinterConfig().catch(() => null) || {};
+        const L = RECEIPT_PREVIEW_STRINGS[state.lang] || RECEIPT_PREVIEW_STRINGS.en;
+        const biz = $('rle-show-biz').checked ? (state.businessName || t('Your Business')) : '';
+        const address = $('rle-show-addr').checked ? $('rle-address').value.trim() : '';
+        const header = $('rle-header').value.trim();
+        const footer = $('rle-footer').value.trim();
+        const showPayment = $('rle-show-payment').checked;
+        const now = new Date().toLocaleString();
+        const items = [
+          { name: 'Product One', qty: 2, price: 25, total: 50, discount: 0 },
+          { name: 'Product Two', qty: 1, price: 75, total: 75, discount: 0 },
+          { name: 'Product Three', qty: 3, price: 10, total: 30, discount: 0 },
+        ];
+        const total = items.reduce((sum, it) => sum + it.total, 0);
+
+        const rows = items.map((it) => `<tr>
+            <td><div class="rd-item-name">${esc(it.name)}</div></td>
+            <td class="rd-center-col">${it.qty}</td>
+            <td class="rd-right rd-col-price">${esc(money(it.price))}</td>
+            <td class="rd-center-col rd-col-disc">—</td>
+            <td class="rd-right"><strong>${esc(money(it.total))}</strong></td>
+          </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TEST-0001</title><style>${RP.docStyles(cfg.paperWidth === 58 ? 58 : 80)}</style></head><body>
+          <div class="rd-center">
+            ${state.logoUrl ? `<div><img src="${esc(state.logoUrl)}" alt="" style="max-width:64px;max-height:64px"></div>` : ''}
+            ${biz ? `<div class="rd-business">${esc(biz)}</div>` : ''}
+            ${address ? `<div class="rd-meta">${esc(address)}</div>` : ''}
+            ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
+          </div>
+          <hr>
+          <div class="rd-row"><span>${esc(L.receiptNo)}</span><strong>TEST-0001</strong></div>
+          <div class="rd-row"><span>${esc(L.date)}</span><strong>${esc(now)}</strong></div>
+          <div class="rd-row"><span>${esc(L.customer)}</span><strong>${esc(L.walkIn)}</strong></div>
+          <hr>
+          <table>
+            <thead><tr><th>${esc(L.item)}</th><th class="rd-center-col">${esc(L.qty)}</th><th class="rd-right rd-col-price">${esc(L.price)}</th><th class="rd-center-col rd-col-disc">${t('Disc')}</th><th class="rd-right">${esc(L.total)}</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <hr>
+          <div class="rd-row rd-total"><span>${esc(L.total)}</span><span>${esc(money(total))}</span></div>
+          ${showPayment ? `<div class="rd-row"><span>${esc(L.paid)}</span><span>${esc(money(total))}</span></div>` : ''}
+          ${footer ? `<hr><div class="rd-footer">${esc(footer)}</div>` : ''}
+        </body></html>`;
+
+        const escpos = {
+          businessName: biz, address, header, footer,
+          currency: state.currency, currencyPosition: state.currencyPosition,
+          saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
+          items, subtotal: total, discount: 0, total, paid: total, change: 0, paymentMethod: 'Cash',
+        };
+
+        const res = await RP.print({ html, escpos, cfg, margins: currentMargins() });
+        if (res.ok) showAlert(cfg.name ? t('Test bill sent to "{name}"', { name: cfg.name }) : t('Preview opened — use its Print button'), 'success');
+        else showAlert(res.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+    $('rle-test').addEventListener('click', testPrint);
 
     async function load() {
       const res = await API.settingsGet();
@@ -2251,6 +2346,8 @@
       $('rle-header').value = d.receipt_header || '';
       $('rle-footer').value = d.receipt_footer || '';
       $('rle-show-payment').checked = d.show_account_info !== false;
+      const mg = window.ReceiptPrinter.marginsFrom(d);
+      MARGIN_SIDES.forEach((side) => { $('rle-mg-' + side).value = mg[side]; });
       setLang(['en', 'si', 'ta'].includes(d.receipt_language) ? d.receipt_language : 'en');
     }
 
@@ -2271,6 +2368,8 @@
         show_account_info: $('rle-show-payment').checked,
         receipt_language: state.lang,
       };
+      const mg = currentMargins();
+      MARGIN_SIDES.forEach((side) => { payload['receipt_margin_' + side] = mg[side]; });
 
       const res = await API.settingsUpdate(payload);
       btn.disabled = false;
@@ -2280,6 +2379,7 @@
         showAlert(res.body?.message || t('Could not save the receipt layout.'));
         return;
       }
+      window.ReceiptPrinter.setSavedMargins(res.body?.data || payload);
       showAlert(t('Receipt layout saved.'), 'success');
     }
 
@@ -3630,15 +3730,50 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return paperWidth === 58 ? 219 : 302;
   }
 
+  // Print margins (mm, 0–20 per side) from the Receipt Layout Editor, stored in
+  // POS settings as receipt_margin_{top,right,bottom,left}. They only apply to
+  // printed output — on-screen receipt previews stay unpadded.
+  const MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+  function clampMargins(m = {}) {
+    const out = {};
+    MARGIN_SIDES.forEach((side) => { out[side] = Math.min(20, Math.max(0, parseFloat(m[side]) || 0)); });
+    return out;
+  }
+  function marginsFrom(settings = {}) {
+    return clampMargins(Object.fromEntries(MARGIN_SIDES.map((side) => [side, settings['receipt_margin_' + side]])));
+  }
+
+  let marginsCache = null;
+  async function savedMargins() {
+    if (!marginsCache) {
+      const res = await API.settingsGet().catch(() => null);
+      if (res?.status === 200) marginsCache = marginsFrom(res.body?.data || {});
+    }
+    return marginsCache || marginsFrom({});
+  }
+  // Called by the layout editor after a save so later prints use the new values.
+  function setSavedMargins(settings) { marginsCache = marginsFrom(settings); }
+
+  // Pad the receipt body by the margins (body has a fixed width + border-box,
+  // so left/right shift and narrow the content; top/bottom add blank paper).
+  function withMargins(html, mg) {
+    if (!MARGIN_SIDES.some((side) => mg[side] > 0)) return html;
+    const css = `<style>body{padding:${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm !important;}</style>`;
+    return html.includes('</head>') ? html.replace('</head>', css + '</head>') : css + html;
+  }
+
   // Print a receipt with the configured printer.
-  //   html   — complete HTML document (thermal layout)
-  //   escpos — flat receipt data for ESC/POS (optional; falls back to html)
-  //   auto   — no-preview checkout print: never open a window; with no printer
-  //            selected go silently to the Windows default printer.
+  //   html    — complete HTML document (thermal layout)
+  //   escpos  — flat receipt data for ESC/POS (optional; falls back to html)
+  //   auto    — no-preview checkout print: never open a window; with no printer
+  //             selected go silently to the Windows default printer.
+  //   margins — { top, right, bottom, left } mm; defaults to the saved layout's margins
   // Returns { ok, message? } — the caller shows the message.
-  async function print({ html, escpos, cfg, auto = false }) {
+  async function print({ html, escpos, cfg, auto = false, margins = null }) {
     cfg = cfg || await window.electronAPI.getPrinterConfig().catch(() => null) || {};
     const paperWidth = cfg.paperWidth === 58 ? 58 : 80;
+    const mg = margins ? clampMargins(margins) : await savedMargins();
+    html = withMargins(html, mg);
 
     if (!cfg.name) {
       if (!auto) {
@@ -3660,7 +3795,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     }
 
     if (cfg.mode !== 'html' && escpos && !isVirtual(cfg.name)) {
-      const res = await window.electronAPI.printReceiptEscpos({ receipt: escpos, name: cfg.name, paperWidth });
+      const res = await window.electronAPI.printReceiptEscpos({ receipt: escpos, name: cfg.name, paperWidth, margins: mg });
       return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
     }
 
@@ -3668,5 +3803,5 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
   }
 
-  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print };
+  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print, marginsFrom, setSavedMargins };
 })();

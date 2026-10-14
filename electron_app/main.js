@@ -354,14 +354,26 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
   return true;
 });
 
+// User-set receipt margins (mm) from the Receipt Layout Editor — each side clamped to 0–20.
+const RECEIPT_MARGIN_MAX_MM = 20;
+function _receiptMargins(m = {}) {
+  const v = (x) => Math.min(RECEIPT_MARGIN_MAX_MM, Math.max(0, parseFloat(x) || 0));
+  return { top: v(m.top), right: v(m.right), bottom: v(m.bottom), left: v(m.left) };
+}
+
 // ── ESC/POS builder — pure Node.js, no native modules ────────────────────────
-function _escposBuffer(receipt, paperWidth) {
-  // Font A is 12 dots wide: 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
-  const COL  = paperWidth === 58 ? 32 : 48;
-  const NAMW = paperWidth === 58 ? 16 : 24;  // item name column width
+function _escposBuffer(receipt, paperWidth, margins = {}) {
+  // Font A is 12 dots wide (1.5 mm at 203 dpi): 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
+  const MM_PER_COL = 1.5;
+  const DOTS_PER_MM = 8;
+  const mg   = _receiptMargins(margins);
+  const LPAD = Math.round(mg.left  / MM_PER_COL);  // left margin, in columns
+  const RPAD = Math.round(mg.right / MM_PER_COL);  // right margin, in columns
+  const COL  = Math.max(20, (paperWidth === 58 ? 32 : 48) - LPAD - RPAD);
   const QTYF = 4;                              // qty column
   const PRCF = paperWidth === 58 ?  0 : 10;  // price column (skipped on 58mm)
-  const TOTF = COL - NAMW - QTYF - PRCF;     // total column
+  const TOTF = paperWidth === 58 ? 12 : 10;  // total column
+  const NAMW = Math.max(6, COL - QTYF - PRCF - TOTF);  // item name column takes what's left
 
   const buf = [];
   const push    = (...b)  => buf.push(...b);
@@ -371,19 +383,22 @@ function _escposBuffer(receipt, paperWidth) {
       buf.push(c < 128 ? c : 0x3F);  // non-ASCII → '?'
     }
   };
-  const println = (s = '') => { text(s); push(0x0A); };
+  const println = (s = '') => { text(' '.repeat(LPAD) + s); push(0x0A); };
 
   // ESC/POS commands
+  // Centering is done with spaces (ctr) inside the margin-reduced width, so the printer
+  // always stays left-aligned — ESC a 1 would re-centre the already padded line.
   const alignL  = () => push(0x1B, 0x61, 0x00);
-  const alignC  = () => push(0x1B, 0x61, 0x01);
+  const alignC  = alignL;
   const boldOn  = () => push(0x1B, 0x45, 0x01);
   const boldOff = () => push(0x1B, 0x45, 0x00);
   const feed    = (n = 1) => push(0x1B, 0x64, n);
+  const feedMm  = (mm) => { const d = Math.round(mm * DOTS_PER_MM); if (d > 0) push(0x1B, 0x4A, Math.min(255, d)); };
   const cut     = ()       => push(0x1D, 0x56, 0x42, 0x03);  // partial cut + 3-line feed
 
   // Layout helpers
-  const line  = () => { text('-'.repeat(COL)); push(0x0A); };
-  const dline = () => { text('='.repeat(COL)); push(0x0A); };
+  const line  = () => println('-'.repeat(COL));
+  const dline = () => println('='.repeat(COL));
   const ctr   = (s) => {
     s = String(s || '').slice(0, COL);
     const pad = Math.max(0, Math.floor((COL - s.length) / 2));
@@ -394,15 +409,15 @@ function _escposBuffer(receipt, paperWidth) {
     right = String(right || '');
     const gap = COL - left.length - right.length;
     if (gap <= 0) {
-      text(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
+      println(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
     } else {
-      text(left + ' '.repeat(gap) + right);
+      println(left + ' '.repeat(gap) + right);
     }
-    push(0x0A);
   };
 
   // ── Build receipt ──────────────────────────────────────────────────────────
   push(0x1B, 0x40);  // ESC @ — initialize printer
+  feedMm(mg.top);
 
   // Header
   if (receipt.businessName) {
@@ -495,6 +510,7 @@ function _escposBuffer(receipt, paperWidth) {
   println(ctr('[ ' + String(receipt.paymentMethod || 'CASH').toUpperCase() + ' ]'));
 
   feed(3);
+  feedMm(mg.bottom);
   cut();
 
   return Buffer.from(buf);
@@ -578,10 +594,10 @@ public static class WP {
 }
 
 ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
-  const { receipt, name, paperWidth = 80 } = opts;
+  const { receipt, name, paperWidth = 80, margins = {} } = opts;
   if (!name) return { success: false, error: 'No printer name specified' };
   try {
-    const buffer = _escposBuffer(receipt, paperWidth);
+    const buffer = _escposBuffer(receipt, paperWidth, margins);
     return await _sendRawToPrinter(name, buffer);
   } catch (err) {
     return { success: false, error: err.message || String(err) };
@@ -594,9 +610,11 @@ const THERMAL_MARGIN_MM = 3;
 // Thermal heads print narrower than the roll: 80mm → 72mm (576 dots), 58mm → 48mm (384 dots).
 // Keep content inside that with a little slack for the driver's left offset, so the right edge isn't clipped.
 const THERMAL_SAFE_MM = { 80: 68, 58: 45 };
-function _thermalHtml(html, paperWidth) {
+function _thermalHtml(html, paperWidth, margins = {}) {
   const paperMm   = paperWidth === 58 ? 58 : 80;
   const contentMm = THERMAL_SAFE_MM[paperMm];
+  // User margins pad the safe area: top/bottom add blank paper, left/right shift and narrow the content
+  const mg        = _receiptMargins(margins);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -607,6 +625,7 @@ function _thermalHtml(html, paperWidth) {
   html { width:100%; background:#fff; }
   body {
     width:100%; max-width: ${contentMm}mm; margin:0 auto;
+    padding: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm;
     background: #fff; color: #000;
     font-family: 'Courier New', Courier, monospace;
     font-size: 10pt; line-height: 1.45;
@@ -657,10 +676,10 @@ function _thermalHtml(html, paperWidth) {
 }
 
 ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
-  const { html = '', name = '', silent = true, paperWidth = 80 } = opts;
+  const { html = '', name = '', silent = true, paperWidth = 80, margins = {} } = opts;
 
   return new Promise((resolve) => {
-    const fullHtml = _thermalHtml(html, paperWidth);
+    const fullHtml = _thermalHtml(html, paperWidth, margins);
 
     const thermalWin = new BrowserWindow({
       width: 400, height: 600,
@@ -715,7 +734,7 @@ ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
 // to a PDF at the exact roll width and open it in Chromium's PDF viewer, which
 // shows a true-size preview and has its own Print button.
 ipcMain.handle('preview-receipt-pdf', async (_e, opts = {}) => {
-  const { html = '', paperWidth = 80 } = opts;
+  const { html = '', paperWidth = 80, margins = {} } = opts;
   const os      = require('os');
   const paperMm = paperWidth === 58 ? 58 : 80;
   const MM_PER_IN = 25.4;
@@ -725,7 +744,7 @@ ipcMain.handle('preview-receipt-pdf', async (_e, opts = {}) => {
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
   });
   try {
-    await renderWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth)));
+    await renderWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth, margins)));
     await new Promise(r => setTimeout(r, 300));  // let images / fonts settle
 
     // Roll paper has no fixed length — size the page to the receipt's content height

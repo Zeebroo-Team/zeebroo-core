@@ -19609,6 +19609,7 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
       receipt:    _buildEscposReceiptData(testSale),
       name:       cfg.name,
       paperWidth: cfg.paperWidth,
+      margins:    _rcptMargins(),
     });
     if (res && !res.success) toast(res.error || 'ESC/POS print failed', 'error');
     else toast('ESC/POS test page sent to printer', 'success');
@@ -19623,11 +19624,12 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
         name:       cfg.name,
         silent:     cfg.silent,
         paperWidth: cfg.paperWidth,
+        margins:    _rcptMargins(),
       });
       if (res && !res.success) toast(res.error || 'Print failed', 'error');
       else toast('HTML test page sent to printer', 'success');
     } else {
-      const res = await window.electronAPI.previewReceiptPdf({ html: testHtml, paperWidth: cfg.paperWidth });
+      const res = await window.electronAPI.previewReceiptPdf({ html: testHtml, paperWidth: cfg.paperWidth, margins: _rcptMargins() });
       if (res && !res.success) toast(res.error || 'Could not open print preview', 'error');
     }
   }
@@ -29256,9 +29258,24 @@ $('#rcpt-close').addEventListener('click', () => { $('#receipt-modal').style.dis
 $('#receipt-modal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
+// Printed receipt margins (mm) set in the Receipt Layout Editor
+const RCPT_MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+function _rcptMargins(s = state.receiptSettings || {}) {
+  const out = {};
+  RCPT_MARGIN_SIDES.forEach(side => {
+    out[side] = Math.min(20, Math.max(0, parseFloat(s['receipt_margin_' + side]) || 0));
+  });
+  return out;
+}
+
+// Show print margins on an on-screen receipt paper (CSS adds them to the base padding)
+function _rcptApplyMarginVars(el, mg = _rcptMargins()) {
+  if (!el) return;
+  RCPT_MARGIN_SIDES.forEach(side => el.style.setProperty('--rcpt-mg-' + side, mg[side] + 'mm'));
+}
+
 // Build flat receipt data from _receiptSale for ESC/POS printing
-function _buildEscposReceiptData(sale) {
-  const s = state.receiptSettings || {};
+function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
   return {
     businessName:  state._bizName || '',
     address:       s.receipt_address_line || '',
@@ -29306,7 +29323,14 @@ function _isVirtualPrinter(name) {
 
 // Print _receiptSale using the configured printer (or the PDF preview when none is set).
 // auto: no-preview checkout print — with no printer set, go silently to the Windows default printer.
-async function _rcptPrint(cfg, { auto = false } = {}) {
+// sale / html / settings / margins: overrides used by the layout editor's test print.
+async function _rcptPrint(cfg, {
+  auto     = false,
+  sale     = _receiptSale,
+  html     = $('#receipt-printable')?.innerHTML || '',
+  settings = state.receiptSettings || {},
+  margins  = _rcptMargins(settings),
+} = {}) {
   if (auto && !cfg?.name) {
     // Virtual "printers" (Print to PDF, XPS, OneNote, Fax) always pop a Windows save dialog,
     // which defeats auto-print — skip them and tell the cashier to pick a real printer.
@@ -29317,43 +29341,48 @@ async function _rcptPrint(cfg, { auto = false } = {}) {
       return;
     }
     const res = await window.electronAPI.printReceiptThermal({
-      html:       $('#receipt-printable')?.innerHTML || '',
+      html,
       name:       '',   // empty → system default printer
       silent:     true,
       paperWidth: cfg?.paperWidth || 80,
+      margins,
     });
     if (res && !res.success) toast(res.error || 'Print failed — select a printer in Settings → Printer', 'error');
-    return;
+    return res;
   }
 
+  let res;
   if (cfg?.name && cfg?.mode !== 'html' && !_isVirtualPrinter(cfg.name)) {
     // ── ESC/POS direct — raw bytes, no GDI, no Windows driver conflict ──────
-    const res = await window.electronAPI.printReceiptEscpos({
-      receipt:    _buildEscposReceiptData(_receiptSale),
+    res = await window.electronAPI.printReceiptEscpos({
+      receipt:    _buildEscposReceiptData(sale, settings),
       name:       cfg.name,
       paperWidth: cfg.paperWidth || 80,
+      margins,
     });
     if (res && !res.success) toast(res.error || 'Print failed', 'error');
 
   } else if (cfg?.name) {
     // ── HTML window mode (document/laser printers) ───────────────────────────
-    const receiptHtml = $('#receipt-printable')?.innerHTML || '';
-    const res = await window.electronAPI.printReceiptThermal({
-      html:       receiptHtml,
+    res = await window.electronAPI.printReceiptThermal({
+      html,
       name:       cfg.name,
       silent:     cfg.silent !== false,
       paperWidth: cfg.paperWidth || 80,
+      margins,
     });
     if (res && !res.success) toast(res.error || 'Print failed', 'error');
 
   } else {
     // ── No printer configured — true-size PDF preview (has its own Print button) ─
-    const res = await window.electronAPI.previewReceiptPdf({
-      html:       $('#receipt-printable')?.innerHTML || '',
+    res = await window.electronAPI.previewReceiptPdf({
+      html,
       paperWidth: cfg?.paperWidth || 80,
+      margins,
     });
     if (res && !res.success) toast(res.error || 'Could not open print preview', 'error');
   }
+  return res;
 }
 
 $('#rcpt-print').addEventListener('click', async () => {
@@ -29544,6 +29573,15 @@ function _rcptEdLogoRender() {
   }
 }
 
+// Editor margin inputs → { receipt_margin_top: n, … } (clamped 0–20 mm)
+function _rcptEdMarginSettings() {
+  const out = {};
+  RCPT_MARGIN_SIDES.forEach(side => {
+    out['receipt_margin_' + side] = Math.min(20, Math.max(0, parseFloat($('#rcpt-ed-mg-' + side).value) || 0));
+  });
+  return out;
+}
+
 function _rcptEdOverrides() {
   return {
     receipt_language:      ($('input[name="rcpt-lang"]:checked') || {}).value || 'en',
@@ -29560,8 +29598,10 @@ function _rcptEdOverrides() {
 
 function _syncEditorPreview() {
   const result = buildReceiptHTML(_RCPT_SAMPLE, _rcptEdOverrides());
-  $('#rcpt-ed-paper').dataset.lang = result.lang;
-  $('#rcpt-ed-paper').innerHTML    = result.html;
+  const paper  = $('#rcpt-ed-paper');
+  paper.dataset.lang = result.lang;
+  paper.innerHTML    = result.html;
+  _rcptApplyMarginVars(paper, _rcptMargins(_rcptEdMarginSettings()));
 }
 
 function showReceiptEditor() {
@@ -29576,6 +29616,8 @@ function showReceiptEditor() {
   $('#rcpt-ed-footer').value         = s.receipt_footer        || 'Thank you for your purchase!';
   $('#rcpt-ed-show-cashier').checked = true;
   $('#rcpt-ed-show-acct').checked    = s.show_account_info !== false;
+  const mg = _rcptMargins(s);
+  RCPT_MARGIN_SIDES.forEach(side => { $('#rcpt-ed-mg-' + side).value = mg[side]; });
   _rcptLogoUrl = s.receipt_logo_url || '';
   _rcptEdLogoRender();
   _buildReceiptTemplates();
@@ -29602,8 +29644,34 @@ $('#rcpt-logo-remove').addEventListener('click', () => {
   _syncEditorPreview();
 });
 
-['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer'].forEach(id => {
+['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer',
+ 'rcpt-ed-mg-top', 'rcpt-ed-mg-right', 'rcpt-ed-mg-bottom', 'rcpt-ed-mg-left'].forEach(id => {
   $('#' + id).addEventListener('input', _syncEditorPreview);
+});
+$('#rcpt-ed-mg-reset').addEventListener('click', () => {
+  RCPT_MARGIN_SIDES.forEach(side => { $('#rcpt-ed-mg-' + side).value = 0; });
+  _syncEditorPreview();
+});
+
+// Test print: the sample bill with the editor's current (unsaved) layout and margins,
+// sent to the configured printer — or the true-size PDF preview when none is set.
+$('#rcpt-ed-test').addEventListener('click', async () => {
+  const btn = $('#rcpt-ed-test');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Printing…';
+  try {
+    const cfg      = await window.electronAPI.getPrinterConfig().catch(() => null);
+    const ov       = _rcptEdOverrides();
+    const settings = { ...(state.receiptSettings || {}), ...ov, ..._rcptEdMarginSettings() };
+    const sale     = { ..._RCPT_SAMPLE, sale_number: 'TEST-0001', sold_at: new Date().toISOString() };
+    const rcpt     = buildReceiptHTML(sale, ov);
+    const html     = `<div class="rcpt-paper" data-lang="${rcpt.lang}">${rcpt.html}</div>`;
+    const res      = await _rcptPrint(cfg, { sale, html, settings });
+    if (res?.success && cfg?.name) toast('Test bill sent to printer', 'success');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-print"></i> Test print';
+  }
 });
 ['rcpt-ed-show-biz', 'rcpt-ed-show-addr', 'rcpt-ed-show-cashier', 'rcpt-ed-show-acct',
  'rcpt-lang-en', 'rcpt-lang-si', 'rcpt-lang-ta'].forEach(id => {
@@ -29625,6 +29693,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
     receipt_footer:        ov.receipt_footer,
     show_account_info:     ov.show_account_info,
     receipt_logo_url:      ov.receipt_logo_url || null,
+    ..._rcptEdMarginSettings(),
   });
 
   btn.disabled = false;
@@ -29638,7 +29707,8 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
   // Sync into in-session state
   const saved = res.body?.data || {};
   ['receipt_language','show_business_name','show_business_address','receipt_address_line',
-   'receipt_header','receipt_footer','show_account_info','receipt_logo_url'].forEach(k => {
+   'receipt_header','receipt_footer','show_account_info','receipt_logo_url',
+   ...RCPT_MARGIN_SIDES.map(side => 'receipt_margin_' + side)].forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });
 

@@ -16447,6 +16447,7 @@
     <div class="rcpt-editor-toolbar">
       <span class="rcpt-toolbar-title"><i class="fa fa-pen-to-square"></i> Receipt Layout Editor</span>
       <div class="rcpt-toolbar-actions">
+        <button class="rcpt-btn-test" id="rcpt-ed-test" title="Print a sample bill with the current settings (not saved)"><i class="fa fa-print"></i> Test print</button>
         <button class="rcpt-btn-save" id="rcpt-ed-save"><i class="fa fa-floppy-disk"></i> Save layout</button>
         <button class="rcpt-btn-close" id="rcpt-ed-close"><i class="fa fa-xmark"></i> Close</button>
       </div>
@@ -16501,6 +16502,33 @@
             <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-cashier"> Cashier name</label>
             <label class="rcpt-ed-check"><input type="checkbox" id="rcpt-ed-show-acct"> Payment details</label>
           </div>
+        </div>
+
+        <hr class="rcpt-ed-divider">
+
+        <div class="rcpt-ed-section">
+          <div class="rcpt-ed-label"><i class="fa fa-expand"></i> Print margins (mm)</div>
+          <div class="rcpt-ed-hint">Increase a side if your printer cuts it off or the bill prints off-centre.</div>
+          <div class="rcpt-ed-margins">
+            <label class="rcpt-ed-margin rcpt-ed-margin--top">
+              <span>Top</span>
+              <span class="rcpt-ed-mg-field"><input type="number" id="rcpt-ed-mg-top" min="0" max="20" step="0.5" value="0"><em>mm</em></span>
+            </label>
+            <label class="rcpt-ed-margin rcpt-ed-margin--left">
+              <span>Left</span>
+              <span class="rcpt-ed-mg-field"><input type="number" id="rcpt-ed-mg-left" min="0" max="20" step="0.5" value="0"><em>mm</em></span>
+            </label>
+            <div class="rcpt-ed-mg-paper" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            <label class="rcpt-ed-margin rcpt-ed-margin--right">
+              <span>Right</span>
+              <span class="rcpt-ed-mg-field"><input type="number" id="rcpt-ed-mg-right" min="0" max="20" step="0.5" value="0"><em>mm</em></span>
+            </label>
+            <label class="rcpt-ed-margin rcpt-ed-margin--bottom">
+              <span>Bottom</span>
+              <span class="rcpt-ed-mg-field"><input type="number" id="rcpt-ed-mg-bottom" min="0" max="20" step="0.5" value="0"><em>mm</em></span>
+            </label>
+          </div>
+          <button type="button" class="rcpt-ed-logo-btn" id="rcpt-ed-mg-reset"><i class="fa fa-rotate-left"></i> Reset margins</button>
         </div>
 
         <hr class="rcpt-ed-divider">

@@ -59,6 +59,11 @@ class PosSettingsService
 
     public const KEY_RECEIPT_LOGO_URL = 'pos.receipt_logo_url';
 
+    /** Printed receipt margins in mm (0–20 each), for printers that clip or offset the bill. */
+    public const RECEIPT_MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+
+    public const RECEIPT_MARGIN_MAX_MM = 20;
+
     public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
 
     /** @var string `before` | `after` — where the currency code sits relative to the amount */
@@ -184,6 +189,10 @@ class PosSettingsService
                 $v = strtolower(trim((string) ($business->getSetting(self::KEY_RECEIPT_MODE, 'bill') ?: 'bill')));
                 return in_array($v, ['bill', 'invoice'], true) ? $v : 'bill';
             })(),
+            'receipt_margin_top'         => $this->receiptMargin($business, 'top'),
+            'receipt_margin_right'       => $this->receiptMargin($business, 'right'),
+            'receipt_margin_bottom'      => $this->receiptMargin($business, 'bottom'),
+            'receipt_margin_left'        => $this->receiptMargin($business, 'left'),
             // Branch / warehouse
             'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
             'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
@@ -240,6 +249,16 @@ class PosSettingsService
      *
      * @return list<string>
      */
+    private function receiptMargin(Business $business, string $side): float
+    {
+        return $this->clampReceiptMargin($business->getSetting('pos.receipt_margin_'.$side, 0));
+    }
+
+    private function clampReceiptMargin(mixed $value): float
+    {
+        return round(min(self::RECEIPT_MARGIN_MAX_MM, max(0, (float) $value)), 1);
+    }
+
     /** Current purchasing mode, falling back to the legacy purchase_order_enabled flag. */
     private function resolvePurchasingMode(Business $business): string
     {
@@ -396,6 +415,12 @@ class PosSettingsService
 
         if (array_key_exists('receipt_logo_url', $data)) {
             $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $data['receipt_logo_url'] ? trim((string) $data['receipt_logo_url']) : null);
+        }
+
+        foreach (self::RECEIPT_MARGIN_SIDES as $side) {
+            if (array_key_exists('receipt_margin_'.$side, $data)) {
+                $business->setSetting('pos.receipt_margin_'.$side, $this->clampReceiptMargin($data['receipt_margin_'.$side] ?? 0));
+            }
         }
 
         if (array_key_exists('business_logo_url', $data)) {
