@@ -29022,6 +29022,7 @@ function buildReceiptHTML(sale, overrides = {}) {
   const headerText   = 'receipt_header'         in overrides ? overrides.receipt_header         : (s.receipt_header  || '');
   const footerText   = 'receipt_footer'         in overrides ? overrides.receipt_footer         : (s.receipt_footer  || 'Thank you for your purchase!');
   const logoUrl      = 'receipt_logo_url'       in overrides ? overrides.receipt_logo_url       : (s.receipt_logo_url || '');
+  const logoGap      = _rcptLogoGap('receipt_logo_gap' in overrides ? overrides : s);
   const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || sale.customer_name || '');
   const noteText     = 'note'                   in overrides ? overrides.note                   : (sale.notes || '');
 
@@ -29100,7 +29101,7 @@ function buildReceiptHTML(sale, overrides = {}) {
   return {
     lang,
     html: `
-    ${logoUrl    ? `<div class="rcpt-logo-wrap"><img class="rcpt-logo-img" src="${escHtml(logoUrl)}" alt="Logo"></div>` : ''}
+    ${logoUrl    ? `<div class="rcpt-logo-wrap" style="margin-bottom:${logoGap}mm"><img class="rcpt-logo-img" src="${escHtml(logoUrl)}" alt="Logo"></div>` : ''}
     ${bizName    ? `<div class="rcpt-biz-name">${escHtml(bizName)}</div>` : ''}
     ${addrLines}
     ${headerText ? `<div class="rcpt-biz-sub">${escHtml(headerText)}</div>` : ''}
@@ -29260,6 +29261,11 @@ $('#receipt-modal').addEventListener('click', (e) => {
 });
 // Printed receipt margins (mm) set in the Receipt Layout Editor
 const RCPT_MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+// Gap between the receipt logo and the business name, in mm (0–20, default 2)
+function _rcptLogoGap(s = state.receiptSettings || {}) {
+  const v = parseFloat(s.receipt_logo_gap);
+  return Number.isFinite(v) ? Math.min(20, Math.max(0, v)) : 2;
+}
 function _rcptMargins(s = state.receiptSettings || {}) {
   const out = {};
   RCPT_MARGIN_SIDES.forEach(side => {
@@ -29278,6 +29284,8 @@ function _rcptApplyMarginVars(el, mg = _rcptMargins()) {
 function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
   return {
     businessName:  state._bizName || '',
+    logoUrl:       s.receipt_logo_url || '',
+    logoGap:       _rcptLogoGap(s),
     address:       s.receipt_address_line || '',
     header:        s.receipt_header || '',
     footer:        s.receipt_footer || 'Thank you for your purchase!',
@@ -29593,6 +29601,7 @@ function _rcptEdOverrides() {
     show_cashier:          $('#rcpt-ed-show-cashier').checked,
     show_account_info:     $('#rcpt-ed-show-acct').checked,
     receipt_logo_url:      _rcptLogoUrl,
+    receipt_logo_gap:      _rcptLogoGap({ receipt_logo_gap: $('#rcpt-ed-logo-gap').value }),
   };
 }
 
@@ -29619,6 +29628,7 @@ function showReceiptEditor() {
   const mg = _rcptMargins(s);
   RCPT_MARGIN_SIDES.forEach(side => { $('#rcpt-ed-mg-' + side).value = mg[side]; });
   _rcptLogoUrl = s.receipt_logo_url || '';
+  $('#rcpt-ed-logo-gap').value = _rcptLogoGap(s);
   _rcptEdLogoRender();
   _buildReceiptTemplates();
   _syncEditorPreview();
@@ -29644,7 +29654,7 @@ $('#rcpt-logo-remove').addEventListener('click', () => {
   _syncEditorPreview();
 });
 
-['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer',
+['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer', 'rcpt-ed-logo-gap',
  'rcpt-ed-mg-top', 'rcpt-ed-mg-right', 'rcpt-ed-mg-bottom', 'rcpt-ed-mg-left'].forEach(id => {
   $('#' + id).addEventListener('input', _syncEditorPreview);
 });
@@ -29693,6 +29703,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
     receipt_footer:        ov.receipt_footer,
     show_account_info:     ov.show_account_info,
     receipt_logo_url:      ov.receipt_logo_url || null,
+    receipt_logo_gap:      ov.receipt_logo_gap,
     ..._rcptEdMarginSettings(),
   });
 
@@ -29707,7 +29718,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
   // Sync into in-session state
   const saved = res.body?.data || {};
   ['receipt_language','show_business_name','show_business_address','receipt_address_line',
-   'receipt_header','receipt_footer','show_account_info','receipt_logo_url',
+   'receipt_header','receipt_footer','show_account_info','receipt_logo_url','receipt_logo_gap',
    ...RCPT_MARGIN_SIDES.map(side => 'receipt_margin_' + side)].forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });

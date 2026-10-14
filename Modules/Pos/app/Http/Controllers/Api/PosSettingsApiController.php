@@ -167,6 +167,7 @@ class PosSettingsApiController extends Controller
             'receipt_margin_right'        => ['nullable', 'numeric', 'min:0', 'max:20'],
             'receipt_margin_bottom'       => ['nullable', 'numeric', 'min:0', 'max:20'],
             'receipt_margin_left'         => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'receipt_logo_gap'            => ['nullable', 'numeric', 'min:0', 'max:20'],
             'business_logo_url'           => ['nullable', 'string', 'max:1000'],
             'receipt_header'              => ['nullable', 'string', 'max:200'],
             'receipt_footer'              => ['nullable', 'string', 'max:200'],
