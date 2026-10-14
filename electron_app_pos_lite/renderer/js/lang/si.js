@@ -1065,6 +1065,7 @@ window.I18N_DICTS = window.I18N_DICTS || {};
     "Printing…": "මුද්‍රණය වෙමින්…",
     "Test bill sent to \"{name}\"": "පරීක්ෂණ බිල්පත \"{name}\" වෙත යවන ලදී",
     "Receipt Logo": "රිසිට්පත් ලාංඡනය",
+    "Gap below logo": "ලාංඡනයට පහළින් ඇති පරතරය",
     "Business Info": "ව්‍යාපාර තොරතුරු",
     "Show business name": "ව්‍යාපාරයේ නම පෙන්වන්න",
     "Show address": "ලිපිනය පෙන්වන්න",

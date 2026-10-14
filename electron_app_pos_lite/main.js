@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, nativeImage } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 // ── Local config (token + selected business) ───────────────────────────────
@@ -551,8 +551,56 @@ function _escposAscii(s) {
   return String(s || '').replace(/[—–−‘’“”•… ×]/g, (ch) => _ESCPOS_ASCII[ch]);
 }
 
+// Receipt logo → 1-bit raster for ESC/POS (GS v 0), max ~26×13 mm at 203 dpi
+const LOGO_MAX_W_DOTS = 208;
+const LOGO_MAX_H_DOTS = 104;
+
+async function _loadLogoRaster(url) {
+  if (!url) return null;
+  try {
+    let buf;
+    if (url.startsWith('data:')) {
+      buf = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+    } else {
+      const abs = /^https?:\/\//i.test(url) ? url : new URL(url, API_BASE_URL).href;
+      const res = await fetch(abs);
+      if (!res.ok) return null;
+      buf = Buffer.from(await res.arrayBuffer());
+    }
+    let img = nativeImage.createFromBuffer(buf);  // PNG / JPEG
+    if (img.isEmpty()) return null;
+
+    const src   = img.getSize();
+    const scale = Math.min(1, LOGO_MAX_W_DOTS / src.width, LOGO_MAX_H_DOTS / src.height);
+    img = img.resize({
+      width:   Math.max(1, Math.round(src.width  * scale)),
+      height:  Math.max(1, Math.round(src.height * scale)),
+      quality: 'best',
+    });
+
+    const size = img.getSize();
+    const bgra = img.toBitmap();  // BGRA, row-major
+    if (bgra.length < size.width * size.height * 4) return null;
+
+    const bytesPerRow = Math.ceil(size.width / 8);
+    const bits = Buffer.alloc(bytesPerRow * size.height);
+    for (let y = 0; y < size.height; y++) {
+      for (let x = 0; x < size.width; x++) {
+        const i = (y * size.width + x) * 4;
+        const a = bgra[i + 3] / 255;
+        // Composite onto white paper, then threshold the luminance
+        const lum = (0.114 * bgra[i] + 0.587 * bgra[i + 1] + 0.299 * bgra[i + 2]) * a + 255 * (1 - a);
+        if (lum < 160) bits[y * bytesPerRow + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+    }
+    return { width: size.width, height: size.height, bytesPerRow, bits };
+  } catch (_) {
+    return null;  // a broken logo must never block the receipt
+  }
+}
+
 // ESC/POS builder — pure Node.js, no native modules
-function _escposBuffer(receipt, paperWidth, margins = {}) {
+function _escposBuffer(receipt, paperWidth, margins = {}, logo = null) {
   // Font A is 12 dots wide (1.5 mm at 203 dpi): 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
   const MM_PER_COL = 1.5;
   const DOTS_PER_MM = 8;
@@ -605,6 +653,24 @@ function _escposBuffer(receipt, paperWidth, margins = {}) {
 
   push(0x1B, 0x40);  // ESC @ — initialize printer
   feedMm(mg.top);
+
+  // Logo — centred inside the margins by left-padding each raster row with blank bytes,
+  // then the user's logo → business-name gap (mm)
+  if (logo) {
+    const headDots = paperWidth === 58 ? 384 : 576;
+    const areaL    = LPAD * 12;
+    const areaW    = headDots - LPAD * 12 - RPAD * 12;
+    const padBytes = Math.max(0, Math.floor((areaL + Math.max(0, (areaW - logo.width) / 2)) / 8));
+    const rowBytes = Math.min(Math.ceil(headDots / 8), padBytes + logo.bytesPerRow);
+    const copy     = rowBytes - padBytes;
+    push(0x1D, 0x76, 0x30, 0x00, rowBytes & 0xFF, rowBytes >> 8, logo.height & 0xFF, logo.height >> 8);
+    for (let y = 0; y < logo.height; y++) {
+      for (let p = 0; p < padBytes; p++) buf.push(0);
+      for (let b = 0; b < copy; b++) buf.push(logo.bits[y * logo.bytesPerRow + b]);
+    }
+    const gap = Math.min(20, Math.max(0, parseFloat(receipt.logoGap)));
+    feedMm(Number.isFinite(gap) ? gap : 2);
+  }
 
   if (receipt.businessName) { alignC(); boldOn(); println(ctr(receipt.businessName)); boldOff(); }
   if (receipt.address) {
@@ -748,7 +814,8 @@ ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
   const { receipt, name, paperWidth = 80, margins = {} } = opts;
   if (!name) return { success: false, error: 'No printer specified' };
   try {
-    return await _sendRawToPrinter(name, _escposBuffer(receipt || {}, paperWidth, margins));
+    const logo = await _loadLogoRaster(receipt?.logoUrl);
+    return await _sendRawToPrinter(name, _escposBuffer(receipt || {}, paperWidth, margins, logo));
   } catch (err) {
     return { success: false, error: err.message || String(err) };
   }
