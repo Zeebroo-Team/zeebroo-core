@@ -2048,6 +2048,10 @@
                   <button class="bm-btn bm-btn-outline sm-logo-remove" id="rle-logo-remove" type="button" title="${t('Remove logo')}" style="display:none"><i class="fa-solid fa-trash"></i></button>
                 </div>
               </div>
+              <label class="rle-logo-gap" for="rle-logo-gap">
+                <span>${t('Gap below logo')}</span>
+                <span class="rle-mg-field"><input type="number" id="rle-logo-gap" min="0" max="20" step="0.5" value="2"><em>mm</em></span>
+              </label>
             </div>
 
             <div class="sm-section-label"><i class="fa-solid fa-building"></i> ${t('Business Info')}</div>
@@ -2221,7 +2225,7 @@
         </div>`).join('');
 
       $('rle-paper').innerHTML = `
-        ${state.logoUrl ? `<div class="rle-paper-logo"><img src="${esc(state.logoUrl)}" alt=""></div>` : ''}
+        ${state.logoUrl ? `<div class="rle-paper-logo" style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt=""></div>` : ''}
         ${showBiz ? `<div class="rle-paper-biz">${esc(state.businessName || t('Your Business'))}</div>` : ''}
         ${showAddr && address ? `<div class="rle-paper-addr">${esc(address)}</div>` : ''}
         ${header ? `<div class="rle-paper-header">${esc(header)}</div>` : ''}
@@ -2250,7 +2254,11 @@
       return window.ReceiptPrinter.marginsFrom(Object.fromEntries(MARGIN_SIDES.map((side) => ['receipt_margin_' + side, $('rle-mg-' + side).value])));
     }
 
-    ['rle-address', 'rle-header', 'rle-footer', ...MARGIN_SIDES.map((side) => 'rle-mg-' + side)].forEach((id) => $(id).addEventListener('input', renderPreview));
+    function currentLogoGap() {
+      return window.ReceiptPrinter.logoGapFrom({ receipt_logo_gap: $('rle-logo-gap').value });
+    }
+
+    ['rle-address', 'rle-header', 'rle-footer', 'rle-logo-gap', ...MARGIN_SIDES.map((side) => 'rle-mg-' + side)].forEach((id) => $(id).addEventListener('input', renderPreview));
     ['rle-show-biz', 'rle-show-addr', 'rle-show-payment'].forEach((id) => $(id).addEventListener('change', renderPreview));
     $('rle-mg-reset').addEventListener('click', () => {
       MARGIN_SIDES.forEach((side) => { $('rle-mg-' + side).value = 0; });
@@ -2290,7 +2298,7 @@
           </tr>`).join('');
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TEST-0001</title><style>${RP.docStyles(cfg.paperWidth === 58 ? 58 : 80)}</style></head><body>
           <div class="rd-center">
-            ${state.logoUrl ? `<div><img src="${esc(state.logoUrl)}" alt="" style="max-width:64px;max-height:64px"></div>` : ''}
+            ${state.logoUrl ? `<div style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt="" style="max-width:64px;max-height:64px;display:block;margin:0 auto"></div>` : ''}
             ${biz ? `<div class="rd-business">${esc(biz)}</div>` : ''}
             ${address ? `<div class="rd-meta">${esc(address)}</div>` : ''}
             ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
@@ -2311,6 +2319,7 @@
         </body></html>`;
 
         const escpos = {
+          logoUrl: state.logoUrl, logoGap: currentLogoGap(),
           businessName: biz, address, header, footer,
           currency: state.currency, currencyPosition: state.currencyPosition,
           saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
@@ -2335,6 +2344,7 @@
       }
       const d = res.body?.data || {};
       state.logoUrl = d.receipt_logo_url || '';
+      $('rle-logo-gap').value = window.ReceiptPrinter.logoGapFrom(d);
       state.businessName = d.business_name || '';
       state.currency = (d.currency || 'LKR').toUpperCase();
       state.currencyPosition = d.currency_position === 'before' ? 'before' : 'after';
@@ -2360,6 +2370,7 @@
 
       const payload = {
         receipt_logo_url: state.logoUrl || '',
+        receipt_logo_gap: currentLogoGap(),
         show_business_name: $('rle-show-biz').checked,
         show_business_address: $('rle-show-addr').checked,
         receipt_address_line: $('rle-address').value.trim(),
@@ -3743,6 +3754,12 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return clampMargins(Object.fromEntries(MARGIN_SIDES.map((side) => [side, settings['receipt_margin_' + side]])));
   }
 
+  // Gap (mm, 0–20, default 2) between the receipt logo and the business name — receipt_logo_gap
+  function logoGapFrom(settings = {}) {
+    const v = parseFloat(settings.receipt_logo_gap);
+    return Number.isFinite(v) ? Math.min(20, Math.max(0, v)) : 2;
+  }
+
   let marginsCache = null;
   async function savedMargins() {
     if (!marginsCache) {
@@ -3803,5 +3820,5 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
   }
 
-  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print, marginsFrom, setSavedMargins };
+  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print, marginsFrom, logoGapFrom, setSavedMargins };
 })();
