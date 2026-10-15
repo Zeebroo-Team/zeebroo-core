@@ -701,7 +701,7 @@ function _escposBuffer(receipt, paperWidth, margins = {}, logo = null) {
   }
   line();
 
-  if (parseFloat(receipt.discount) > 0 || parseFloat(receipt.couponDiscount) > 0.005) rowLR('Subtotal:', money(receipt.subtotal));
+  rowLR('Subtotal:', money(receipt.subtotal));
   if (parseFloat(receipt.discount) > 0) {
     rowLR('Discount' + (receipt.discountPct ? ' (' + receipt.discountPct + '%)' : '') + ':', '-' + money(receipt.discount));
   }

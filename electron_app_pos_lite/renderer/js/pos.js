@@ -1578,10 +1578,7 @@ function renderBillHtml(data) {
     return row;
   }).join('');
 
-  let totals = '';
-  if (data.discountAmount > 0.001 || data.couponDiscount > 0.001) {
-    totals += `<div class="rd-row"><span>${tReceipt('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
-  }
+  let totals = `<div class="rd-row"><span>${tReceipt('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
     totals += `<div class="rd-row"><span>${tReceipt('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
@@ -1596,6 +1593,11 @@ function renderBillHtml(data) {
   }
   if (data.amountTendered != null) {
     totals += `<div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(money(data.amountTendered))}</span></div>`;
+  } else {
+    const paidVia = data.giftCardAmount > 0.001 ? Math.max(0, Number(data.total) - data.giftCardAmount) : (data.amountPaid ?? data.total);
+    totals += `<div class="rd-row"><span>${tReceipt('Paid')}${data.paymentLabel ? ` (${esc(data.paymentLabel)})` : ''}</span><span>${esc(money(paidVia))}</span></div>`;
+  }
+  if (data.amountTendered != null || Number(data.changeAmount) > 0.005) {
     totals += `<div class="rd-row"><span>${t('Change')}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
   }
 
