@@ -28979,7 +28979,7 @@ const _RCPT_LABELS = {
   si: {
     receiptNo: 'රිසිට් #', date: 'දිනය', customer: 'ගනුදෙනුකරු', cashier: 'කාෂියර්',
     item: 'භාණ්ඩය', qty: 'ප්‍රමාණය', price: 'මිල', lineTotal: 'එකතුව',
-    subtotal: 'උප එකතුව', discount: 'වට්ටම', grandTotal: 'මුළු එකතුව',
+    subtotal: 'එකතුව', discount: 'ඔබට ලැබුණු වාසිය', grandTotal: 'මුළු එකතුව',
     paid: 'ගෙවූ', change: 'ශේෂය',
   },
   ta: {

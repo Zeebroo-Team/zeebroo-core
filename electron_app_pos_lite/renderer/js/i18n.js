@@ -50,6 +50,13 @@
     return s;
   }
 
+  // Printed bills can word a few labels differently from the app UI:
+  // a dictionary may carry __receipt = { "Subtotal": "...", ... }
+  function tReceipt(key, params) {
+    const r = dict && dict.__receipt;
+    return r && Object.prototype.hasOwnProperty.call(r, key) ? r[key] : t(key, params);
+  }
+
   // ── Static DOM translation ─────────────────────────────────────────────
   const ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
   const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'TEXTAREA']);
@@ -153,4 +160,5 @@
     apply: translateStatic,
   };
   window.t = t;
+  window.tReceipt = tReceipt;
 })();

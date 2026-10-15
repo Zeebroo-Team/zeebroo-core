@@ -1689,6 +1689,13 @@ window.I18N_DICTS = window.I18N_DICTS || {};
     "Other": "වෙනත්",
     "Create \"{name}\"": "සාදන්න \"{name}\"",
 
+    // Printed bill wording (window.tReceipt) — differs from the app UI labels above.
+    __receipt: {
+      "Subtotal": "එකතුව",
+      "Discount": "ඔබට ලැබුණු වාසිය",
+      "Total": "මුළු එකතුව",
+    },
+
     // Electron's bundled ICU has no Sinhala data, so Intl can't name days/months —
     // js/i18n.js uses these for i18n.formatLongDate / formatShortDate.
     __dateNames: {

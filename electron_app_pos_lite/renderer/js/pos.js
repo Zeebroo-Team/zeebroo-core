@@ -1580,16 +1580,16 @@ function renderBillHtml(data) {
 
   let totals = '';
   if (data.discountAmount > 0.001 || data.couponDiscount > 0.001) {
-    totals += `<div class="rd-row"><span>${t('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
+    totals += `<div class="rd-row"><span>${tReceipt('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
   }
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
-    totals += `<div class="rd-row"><span>${t('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
+    totals += `<div class="rd-row"><span>${tReceipt('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
   }
   if (data.couponDiscount > 0.001) {
     totals += `<div class="rd-row"><span>${t('Coupon')}${data.couponCode ? ` ${esc(data.couponCode)}` : ''}</span><span>&minus;${esc(money(data.couponDiscount))}</span></div>`;
   }
-  totals += `<div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(money(data.total))}</span></div>`;
+  totals += `<div class="rd-row rd-total"><span>${tReceipt('Total')}</span><span>${esc(money(data.total))}</span></div>`;
   if (data.giftCardAmount > 0.001) {
     totals += `<div class="rd-row"><span>${t('Gift card')}${data.giftCardCode ? ` ${esc(data.giftCardCode)}` : ''}</span><span>&minus;${esc(money(data.giftCardAmount))}</span></div>`;
     if (data.giftCardBalance != null) totals += `<div class="rd-row"><span>${t('Gift card balance')}</span><span>${esc(money(data.giftCardBalance))}</span></div>`;
@@ -1706,10 +1706,10 @@ function buildInvoiceDocument(data) {
     total: esc(money(it.line)),
   }));
 
-  const totalsLines = [{ label: esc(t('Subtotal')), value: esc(money(data.subtotal)) }];
+  const totalsLines = [{ label: esc(tReceipt('Subtotal')), value: esc(money(data.subtotal)) }];
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
-    totalsLines.push({ label: esc(t('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
+    totalsLines.push({ label: esc(tReceipt('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
   }
   if (data.couponDiscount > 0.001) {
     totalsLines.push({ label: esc(`${t('Coupon')} ${data.couponCode}`.trim()), value: '−' + esc(money(data.couponDiscount)), color: '#ef4444' });
@@ -1738,7 +1738,7 @@ function buildInvoiceDocument(data) {
     billToLines: '',
     items,
     totalsLines,
-    grandLabel: esc(t('Total')),
+    grandLabel: esc(tReceipt('Total')),
     grandValue: esc(money(data.total)),
     notesHtml: data.notes ? esc(data.notes) : '',
     footerRight: '',
