@@ -1587,9 +1587,9 @@
           <tbody>${rows}</tbody>
         </table>
         <hr>
-        <div class="rd-row"><span>${t('Subtotal')}</span><span>${esc(fmt(subtotal))}</span></div>
-        <div class="rd-row"><span>${t('Discount')}</span><span>&minus;${esc(fmt(discount))}</span></div>
-        <div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(fmt(total))}</span></div>
+        <div class="rd-row"><span>${tReceipt('Subtotal')}</span><span>${esc(fmt(subtotal))}</span></div>
+        <div class="rd-row"><span>${tReceipt('Discount')}</span><span>&minus;${esc(fmt(discount))}</span></div>
+        <div class="rd-row rd-total"><span>${tReceipt('Total')}</span><span>${esc(fmt(total))}</span></div>
         <div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(fmt(tendered))}</span></div>
         <div class="rd-row"><span>${t('Change')}</span><span>${esc(fmt(change))}</span></div>
         <hr><div class="rd-note">${esc(note)}</div>
