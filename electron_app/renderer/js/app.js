@@ -479,7 +479,10 @@ function _renderRibbonFromJson(data) {
     const active = t.id === 'pos' ? ' active' : '';
     return `<div class="ribbon-tab${active}" data-tab="${t.id}">${t.label}</div>`;
   }).join('');
+  // Keep the feature-loading skeleton (see setFeaturesLoading) across rebuilds
+  const loadingEl = $('#ribbon-tabs-loading');
   tabsEl.innerHTML = tabsHtml;
+  if (loadingEl) tabsEl.prepend(loadingEl);
 
   // ── Build ribbon pages ──
   const pageMap = {};
@@ -5382,7 +5385,15 @@ async function init() {
   showLogin();
 }
 
+// While feature flags / member permissions load, the tab row shows a skeleton
+// and the real tabs stay hidden, so restricted tabs never flash on screen
+// before applyFeatureVisibility() runs.
+function setFeaturesLoading(on) {
+  $('#app-shell')?.classList.toggle('features-loading', !!on);
+}
+
 function showLogin() {
+  setFeaturesLoading(false);
   window.electronAPI.narrowAuth?.();
   state.cashierMode  = false;
   state.cashierInfo  = null;
@@ -6594,7 +6605,8 @@ function _syncStop() {
   if (_sync.timer) { clearInterval(_sync.timer); _sync.timer = null; }
 }
 
-function showApp() {
+async function showApp() {
+  setFeaturesLoading(true);
   window.electronAPI.expandWindow?.();
   $('#login-screen').style.display = 'none';
   $('#app-shell').style.display = 'flex';
@@ -6622,10 +6634,12 @@ function showApp() {
   _checkEmailVerifyAlert();
   // Load business + branch switchers
   _bizSwInit();
-  // Apply feature-based tab and backstage visibility
-  loadFeatures();
   // Load POS counters for ribbon dropdown
   loadCounters();
+  // Apply feature-based tab and backstage visibility. Tabs stay hidden behind
+  // the tab-row skeleton until this resolves (capped so a slow/offline server
+  // can't leave the tab row empty).
+  const featuresReady = loadFeatures().catch(() => {});
   // Apply the business's saved Display Theme setting (light/dark/inherit)
   API.settingsGet().then(res => {
     if (res.status === 200) applyDisplayTheme(res.body?.data?.display_theme ?? 'inherit');
@@ -6639,6 +6653,8 @@ function showApp() {
   if (!_notif.pollTimer) _notif.pollTimer = setInterval(refreshNotifBadge, 60000);
   // Silently check for a new desktop app version, once the app has settled
   setTimeout(() => _autoCheckForUpdate(), 4000);
+  await Promise.race([featuresReady, new Promise(r => setTimeout(r, 10000))]);
+  setFeaturesLoading(false);
 }
 
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
@@ -25246,6 +25262,15 @@ function _bizSwRenderBizList() {
 async function _bizSwSwitchBiz(bizId) {
   const biz = _bizSw.businesses.find(b => b.id === bizId);
   if (!biz) return;
+  setFeaturesLoading(true);
+  try {
+    await _bizSwApplyBiz(biz, bizId);
+  } finally {
+    setFeaturesLoading(false);
+  }
+}
+
+async function _bizSwApplyBiz(biz, bizId) {
   await window.electronAPI.setConfig({ business_id: bizId, branch_id: null });
   state.config   = await window.electronAPI.getConfig();
   state._bizName = biz.name;
