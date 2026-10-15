@@ -660,6 +660,21 @@ body.win-inactive .tl-max   { background: #d0d0d0; }
   -webkit-app-region: no-drag;
 }
 
+/* Tab-row skeleton while business features / permissions load — real tabs
+   stay hidden so restricted ones never flash before being removed. */
+#ribbon-tabs-loading { display: none; align-items: center; gap: 14px; padding: 0 12px; }
+#app-shell.features-loading #ribbon-tabs-loading { display: flex; }
+#app-shell.features-loading .ribbon-tab[data-tab],
+#app-shell.features-loading .sb-nav-item[data-tab] { display: none !important; }
+#ribbon-tabs-loading .rtl-pill {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface3) 25%, var(--surface2) 50%, var(--surface3) 75%);
+  background-size: 200% 100%;
+  animation: rtl-shimmer 1.2s ease-in-out infinite;
+}
+@keyframes rtl-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
 .ribbon-tab {
   padding: 0 16px;
   font-size: 12.5px;
