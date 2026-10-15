@@ -2002,10 +2002,13 @@
   // buttons visibly re-renders the preview (business text the user typed —
   // header/footer/address — is left as-is; only the receipt's own chrome changes).
   const RECEIPT_PREVIEW_STRINGS = {
-    en: { receiptNo: 'Receipt #', date: 'Date', customer: 'Customer', cashier: 'Cashier', walkIn: 'Walk-in Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', total: 'TOTAL', paid: 'Paid (Cash)' },
-    si: { receiptNo: 'රිසිට් #', date: 'දිනය', customer: 'පාරිභෝගිකයා', cashier: 'මුදල් අයකැමි', walkIn: 'සාමාන්‍ය පාරිභෝගිකයා', item: 'අයිතමය', qty: 'ගණන', price: 'මිල', total: 'එකතුව', paid: 'ගෙවූ මුදල' },
-    ta: { receiptNo: 'ரசீது #', date: 'தேதி', customer: 'வாடிக்கையாளர்', cashier: 'காசாளர்', walkIn: 'பொது வாடிக்கையாளர்', item: 'பொருள்', qty: 'எண்', price: 'விலை', total: 'மொத்தம்', paid: 'செலுத்தியது' },
+    en: { receiptNo: 'Receipt #', date: 'Date', customer: 'Customer', cashier: 'Cashier', walkIn: 'Walk-in Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', total: 'TOTAL', subtotal: 'Subtotal', discount: 'Discount', grandTotal: 'TOTAL', paid: 'Paid (Cash)', change: 'Change' },
+    si: { receiptNo: 'රිසිට් #', date: 'දිනය', customer: 'පාරිභෝගිකයා', cashier: 'මුදල් අයකැමි', walkIn: 'සාමාන්‍ය පාරිභෝගිකයා', item: 'අයිතමය', qty: 'ගණන', price: 'මිල', total: 'එකතුව', subtotal: 'එකතුව', discount: 'ඔබට ලැබුණු වාසිය', grandTotal: 'මුළු එකතුව', paid: 'ගෙවූ මුදල', change: 'ඉතිරි මුදල' },
+    ta: { receiptNo: 'ரசீது #', date: 'தேதி', customer: 'வாடிக்கையாளர்', cashier: 'காசாளர்', walkIn: 'பொது வாடிக்கையாளர்', item: 'பொருள்', qty: 'எண்', price: 'விலை', total: 'மொத்தம்', subtotal: 'கூட்டுத்தொகை', discount: 'தள்ளுபடி', grandTotal: 'மொத்தம்', paid: 'செலுத்தியது', change: 'மீதி' },
   };
+
+  // Sample bill figures shared by the layout editor's preview and its Test print
+  const RECEIPT_SAMPLE = { subtotal: 155, discountPct: 3, discount: 5, total: 150, paid: 160, change: 10 };
 
   function openReceiptLayoutWindow() {
     if ($('rle-backdrop')) return;
@@ -2214,7 +2217,7 @@
         ['Product Two', 1, 75, 75],
         ['Product Three', 3, 10, 30],
       ];
-      const subtotal = rows.reduce((sum, r) => sum + r[3], 0);
+      const S = RECEIPT_SAMPLE;
 
       const itemsHtml = rows.map(([name, qty, price, total]) => `
         <div class="rle-item-row">
@@ -2240,8 +2243,12 @@
         </div>
         ${itemsHtml}
         <div class="rle-paper-rule"></div>
-        <div class="rle-kv rle-kv-total"><span>${esc(L.total)}</span><span>${money(subtotal)}</span></div>
-        ${showPayment ? `<div class="rle-kv"><span>${esc(L.paid)}</span><span>${money(subtotal)}</span></div>` : ''}
+        <div class="rle-kv"><span>${esc(L.subtotal)}</span><span>${money(S.subtotal)}</span></div>
+        <div class="rle-kv"><span>${esc(L.discount)} (${S.discountPct}%)</span><span>-${money(S.discount)}</span></div>
+        <div class="rle-paper-rule rle-paper-rule-solid"></div>
+        <div class="rle-kv rle-kv-total"><span>${esc(L.grandTotal)}</span><span>${money(S.total)}</span></div>
+        ${showPayment ? `<div class="rle-kv"><span>${esc(L.paid)}</span><span>${money(S.paid)}</span></div>
+        <div class="rle-kv rle-kv-change"><span>${esc(L.change)}</span><span>${money(S.change)}</span></div>` : ''}
         ${footer ? `<div class="rle-paper-footer">${esc(footer)}</div>` : ''}
       `;
       // Show the print margins on the sample paper (CSS adds them to the base padding)
@@ -2287,7 +2294,7 @@
           { name: 'Product Two', qty: 1, price: 75, total: 75, discount: 0 },
           { name: 'Product Three', qty: 3, price: 10, total: 30, discount: 0 },
         ];
-        const total = items.reduce((sum, it) => sum + it.total, 0);
+        const S = RECEIPT_SAMPLE;
 
         const rows = items.map((it) => `<tr>
             <td><div class="rd-item-name">${esc(it.name)}</div></td>
@@ -2313,8 +2320,11 @@
             <tbody>${rows}</tbody>
           </table>
           <hr>
-          <div class="rd-row rd-total"><span>${esc(L.total)}</span><span>${esc(money(total))}</span></div>
-          ${showPayment ? `<div class="rd-row"><span>${esc(L.paid)}</span><span>${esc(money(total))}</span></div>` : ''}
+          <div class="rd-row"><span>${esc(L.subtotal)}</span><span>${esc(money(S.subtotal))}</span></div>
+          <div class="rd-row"><span>${esc(L.discount)} (${S.discountPct}%)</span><span>&minus;${esc(money(S.discount))}</span></div>
+          <div class="rd-row rd-total"><span>${esc(L.grandTotal)}</span><span>${esc(money(S.total))}</span></div>
+          ${showPayment ? `<div class="rd-row"><span>${esc(L.paid)}</span><span>${esc(money(S.paid))}</span></div>
+          <div class="rd-row"><span>${esc(L.change)}</span><span>${esc(money(S.change))}</span></div>` : ''}
           ${footer ? `<hr><div class="rd-footer">${esc(footer)}</div>` : ''}
         </body></html>`;
 
@@ -2323,7 +2333,8 @@
           businessName: biz, address, header, footer,
           currency: state.currency, currencyPosition: state.currencyPosition,
           saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
-          items, subtotal: total, discount: 0, total, paid: total, change: 0, paymentMethod: 'Cash',
+          items, subtotal: S.subtotal, discount: S.discount, discountPct: S.discountPct, total: S.total,
+          paid: showPayment ? S.paid : S.total, change: showPayment ? S.change : 0, paymentMethod: 'Cash',
         };
 
         const res = await RP.print({ html, escpos, cfg, margins: currentMargins() });

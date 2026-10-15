@@ -1694,6 +1694,7 @@ window.I18N_DICTS = window.I18N_DICTS || {};
       "Subtotal": "එකතුව",
       "Discount": "ඔබට ලැබුණු වාසිය",
       "Total": "මුළු එකතුව",
+      "Paid": "ගෙවූ",
     },
 
     // Electron's bundled ICU has no Sinhala data, so Intl can't name days/months —
