@@ -68,6 +68,7 @@ use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
 use Modules\Pos\Http\Controllers\Api\PosOfflineSaleApiController;
 use Modules\Pos\Http\Controllers\Api\PosOfflineRecordApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductSyncApiController;
+use Modules\Pos\Http\Controllers\Api\PosBackupApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
@@ -160,6 +161,19 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('online/invoice-setup', [PosInvoiceSetupApiController::class, 'show'])->name('online.invoice-setup.show');
     Route::put('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update'])->name('online.invoice-setup.update');
     Route::patch('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update']);
+
+    // Database Backup & Import (profile menu) — export selected sections / full business to a zip,
+    // and restore one through a chunked upload → validate → step-wise run flow with progress.
+    Route::get   ('backup/summary',                          [PosBackupApiController::class, 'summary'])->name('backup.summary');
+    Route::post  ('backup/exports',                          [PosBackupApiController::class, 'export'])->name('backup.exports.store');
+    Route::get   ('backup/exports/{token}/download',         [PosBackupApiController::class, 'download'])->where('token', '[a-z0-9]{40}')->name('backup.exports.download');
+    Route::post  ('backup/imports',                          [PosBackupApiController::class, 'startImport'])->name('backup.imports.store');
+    Route::get   ('backup/imports/{import}',                 [PosBackupApiController::class, 'showImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.show');
+    Route::delete('backup/imports/{import}',                 [PosBackupApiController::class, 'cancelImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.cancel');
+    Route::post  ('backup/imports/{import}/chunk',           [PosBackupApiController::class, 'uploadChunk'])->where('import', '[a-z0-9]{32}')->name('backup.imports.chunk');
+    Route::post  ('backup/imports/{import}/validate',        [PosBackupApiController::class, 'validateImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.validate');
+    Route::post  ('backup/imports/{import}/run',             [PosBackupApiController::class, 'runImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.run');
+    Route::get   ('backup/imports/{import}/safety-download', [PosBackupApiController::class, 'downloadSafety'])->where('import', '[a-z0-9]{32}')->name('backup.imports.safety');
 
     // Invoices
     Route::get   ('invoices',                          [PosInvoiceApiController::class, 'index']          )->name('invoices.index');

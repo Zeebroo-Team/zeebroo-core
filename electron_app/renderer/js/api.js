@@ -792,5 +792,17 @@ const API = (() => {
     devWebhookUpdate:          (id,body) => request('PATCH',  `/developers/webhooks/${id}`, body),
     devWebhookRegenerateSecret:(id)      => request('POST',   `/developers/webhooks/${id}/regenerate-secret`),
     devWebhookDelete:          (id)      => request('DELETE', `/developers/webhooks/${id}`),
+
+    // Database Backup & Import (PosBackupApiController). Export/validate can run for minutes,
+    // so they go through electronAPI.backupApi (long timeout); upload/download stream in main.js.
+    backupSummary:      ()         => request('GET',    '/backup/summary'),
+    backupExport:       (body)     => window.electronAPI.backupApi('POST', '/backup/exports', body),
+    backupExportPath:   (token, filename) => `/backup/exports/${token}/download?filename=${encodeURIComponent(filename || 'zeebroo-backup.zip')}`,
+    backupImportStart:  (filename, size) => request('POST', '/backup/imports', { filename, size }),
+    backupImport:       (id)       => request('GET',    `/backup/imports/${id}`),
+    backupImportCancel: (id)       => request('DELETE', `/backup/imports/${id}`),
+    backupImportValidate:(id)      => window.electronAPI.backupApi('POST', `/backup/imports/${id}/validate`),
+    backupImportRun:    (id)       => window.electronAPI.backupApi('POST', `/backup/imports/${id}/run`),
+    backupSafetyPath:   (id)       => `/backup/imports/${id}/safety-download`,
   };
 })();

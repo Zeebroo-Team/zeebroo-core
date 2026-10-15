@@ -37,6 +37,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
   readTextFile:    (filePath)           => ipcRenderer.invoke('read-text-file', filePath),
+
+  // Database Backup & Import (profile menu)
+  backupApi:       (method, path, body) => ipcRenderer.invoke('backup-api', { method, path, body }),
+  backupPickZip:   ()                   => ipcRenderer.invoke('backup-pick-zip'),
+  backupDownload:  (path, suggestedFilename) => ipcRenderer.invoke('backup-download', { path, suggestedFilename }),
+  backupUpload:    (opts)               => ipcRenderer.invoke('backup-upload', opts),
+  onBackupProgress: (cb) => {
+    const fn = (_e, p) => cb(p);
+    ipcRenderer.on('backup-transfer-progress', fn);
+    return () => ipcRenderer.removeListener('backup-transfer-progress', fn);
+  },
   checkForUpdate:   ()                    => ipcRenderer.invoke('check-for-update'),
   downloadUpdate:   (opts)               => ipcRenderer.invoke('download-update', opts),
   onDownloadProgress: (cb)              => ipcRenderer.on('download-progress', (_e, pct) => cb(pct)),

@@ -1117,6 +1117,134 @@ ipcMain.handle('read-text-file', async (_e, filePath) => {
   }
 });
 
+// ── Database Backup & Import ──────────────────────────────────────────────
+// Backup zips can be hundreds of MB, so they are streamed to/from disk here in
+// the main process (never buffered through IPC). Progress is pushed to the
+// renderer on 'backup-transfer-progress' as { kind, done, total }.
+function backupHeaders(extra) {
+  const headers = { Accept: 'application/json', ...extra };
+  if (config.token)       headers['Authorization'] = `Bearer ${config.token}`;
+  if (config.business_id) headers['X-Business-Id'] = String(config.business_id);
+  if (config.branch_id)   headers['X-Branch-Id']   = String(config.branch_id);
+  return headers;
+}
+
+function backupProgress(sender, kind, done, total) {
+  if (!sender.isDestroyed()) sender.send('backup-transfer-progress', { kind, done, total });
+}
+
+// JSON request with a long timeout — export and validate run for minutes on big businesses.
+ipcMain.handle('backup-api', async (_e, { method, path: p, body }) => {
+  try {
+    const url  = new URL(API_BASE_URL.replace(/\/$/, '') + p);
+    const lib  = url.protocol === 'https:' ? https : http;
+    const payload = body ? JSON.stringify(body) : null;
+    const headers = backupHeaders({ 'Content-Type': 'application/json' });
+    if (payload) headers['Content-Length'] = Buffer.byteLength(payload);
+    return await new Promise((resolve, reject) => {
+      const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method, headers, timeout: 15 * 60 * 1000 }, (res) => {
+        let data = '';
+        res.on('data', c => { data += c; });
+        res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(data) }); } catch (_) { resolve({ status: res.statusCode, body: data }); } });
+      });
+      req.on('timeout', () => req.destroy(new Error('The server took too long to respond.')));
+      req.on('error', reject);
+      if (payload) req.write(payload);
+      req.end();
+    });
+  } catch (err) {
+    return { status: 0, body: { message: err.message } };
+  }
+});
+
+ipcMain.handle('backup-pick-zip', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose a Zeebroo backup',
+    properties: ['openFile'],
+    filters: [{ name: 'Zeebroo backup (.zip)', extensions: ['zip'] }],
+  });
+  if (canceled || !filePaths[0]) return { canceled: true };
+  const st = fs.statSync(filePaths[0]);
+  return { canceled: false, path: filePaths[0], name: path.basename(filePaths[0]), size: st.size };
+});
+
+// Streams an API download straight to a file the user picks.
+ipcMain.handle('backup-download', async (e, { path: p, suggestedFilename }) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save backup',
+    defaultPath: suggestedFilename || 'zeebroo-backup.zip',
+    filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+  });
+  if (canceled || !filePath) return { status: 0, canceled: true };
+
+  try {
+    const url = new URL(API_BASE_URL.replace(/\/$/, '') + p);
+    const lib = url.protocol === 'https:' ? https : http;
+    return await new Promise((resolve) => {
+      const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method: 'GET', headers: backupHeaders({ Accept: 'application/zip, application/json' }), timeout: 15 * 60 * 1000 }, (res) => {
+        if (res.statusCode !== 200) {
+          let data = '';
+          res.on('data', c => { data += c; });
+          res.on('end', () => { let message = `Download failed (HTTP ${res.statusCode}).`; try { message = JSON.parse(data).message || message; } catch (_) {} resolve({ status: res.statusCode, message }); });
+          return;
+        }
+        const total = Number(res.headers['content-length'] || 0);
+        let done = 0;
+        const out = fs.createWriteStream(filePath);
+        res.on('data', (c) => { done += c.length; backupProgress(e.sender, 'download', done, total); });
+        res.pipe(out);
+        out.on('finish', () => resolve({ status: 200, savedPath: filePath, size: done }));
+        out.on('error', (err) => resolve({ status: 0, message: err.message }));
+      });
+      req.on('timeout', () => req.destroy(new Error('Download timed out.')));
+      req.on('error', (err) => { try { fs.unlinkSync(filePath); } catch (_) {} resolve({ status: 0, message: err.message }); });
+      req.end();
+    });
+  } catch (err) {
+    return { status: 0, message: err.message };
+  }
+});
+
+// Uploads a local zip to /backup/imports/{id}/chunk in sequential raw chunks.
+ipcMain.handle('backup-upload', async (e, { importId, filePath, chunkBytes, startIndex }) => {
+  const size  = fs.statSync(filePath).size;
+  const chunk = Math.max(256 * 1024, Math.min(Number(chunkBytes) || 4 * 1024 * 1024, 8 * 1024 * 1024));
+  const fd    = fs.openSync(filePath, 'r');
+  const base  = API_BASE_URL.replace(/\/$/, '');
+  let index   = Number(startIndex) || 0;
+  let offset  = index * chunk;
+  let last    = null;
+  try {
+    while (offset < size) {
+      const len = Math.min(chunk, size - offset);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, offset);
+      const url = new URL(`${base}/backup/imports/${importId}/chunk?index=${index}`);
+      const lib = url.protocol === 'https:' ? https : http;
+      last = await new Promise((resolve, reject) => {
+        const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method: 'POST', headers: backupHeaders({ 'Content-Type': 'application/octet-stream', 'Content-Length': len }), timeout: 5 * 60 * 1000 }, (res) => {
+          let data = '';
+          res.on('data', c => { data += c; });
+          res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(data) }); } catch (_) { resolve({ status: res.statusCode, body: data }); } });
+        });
+        req.on('timeout', () => req.destroy(new Error('Upload timed out.')));
+        req.on('error', reject);
+        req.write(buf);
+        req.end();
+      });
+      if (last.status !== 200) return last;
+      offset += len;
+      index++;
+      backupProgress(e.sender, 'upload', offset, size);
+    }
+    return last || { status: 0, body: { message: 'The file is empty.' } };
+  } catch (err) {
+    return { status: 0, body: { message: err.message } };
+  } finally {
+    fs.closeSync(fd);
+  }
+});
+
 // ── Design Studio editor window ───────────────────────────────────────────
 ipcMain.handle('open-editor', (_e, design) => {
   editorDesign = design;

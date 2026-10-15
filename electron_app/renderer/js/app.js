@@ -9337,6 +9337,524 @@ $('#tpm-about').addEventListener('click', () => {
   openAboutModal();
 });
 
+// ── Database Backup & Import (profile menu → PosBackupApiController) ─────────
+// Export: tick sections (or Full backup) → server builds a zip → streamed to disk.
+// Import: pick zip → chunked upload → server validates every row → user confirms →
+// the whole app is locked while /run is called step by step behind a progress bar.
+const _bk = {
+  tab: 'export', groups: [], limits: null,
+  busy: false, locked: false,
+  phase: 'idle',          // idle | uploading | validating | review | invalid | importing | done | failed | error
+  importState: null, file: null, error: '', lastExport: null,
+};
+
+$('#tpm-backup').addEventListener('click', () => { closeProfileMenu(); openBackupModal(); });
+$('#backup-modal-close').addEventListener('click', () => closeBackupModal());
+$('#backup-modal-overlay').addEventListener('click', e => { if (e.target === $('#backup-modal-overlay')) closeBackupModal(); });
+document.querySelectorAll('[data-bk-tab]').forEach(btn => btn.addEventListener('click', () => _bkTab(btn.dataset.bkTab)));
+$('#bk-full').addEventListener('change', _bkSyncSelection);
+$('#bk-select-all').addEventListener('click', () => _bkSetAll(true));
+$('#bk-select-none').addEventListener('click', () => _bkSetAll(false));
+
+function _bkBytes(n) {
+  n = Number(n || 0);
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  if (n < 1024 ** 3) return (n / 1024 / 1024).toFixed(1) + ' MB';
+  return (n / 1024 ** 3).toFixed(2) + ' GB';
+}
+const _bkNum = (n) => Number(n || 0).toLocaleString();
+const _bkSleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+async function openBackupModal() {
+  $('#backup-modal-overlay').style.display = 'flex';
+  if (!_bk.busy) {
+    $('#bk-export-status').style.display = 'none';
+    if (['done', 'failed', 'invalid', 'error'].includes(_bk.phase)) _bkResetImport();
+  }
+  _bkTab('export');
+  $('#bk-groups').innerHTML = '<div class="bk-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+
+  const res = await API.backupSummary();
+  if (res.status !== 200) {
+    $('#bk-groups').innerHTML = `<div class="bk-empty bk-bad"><i class="fa fa-circle-exclamation"></i> ${escHtml(res.body?.message || 'Could not load backup options.')}</div>`;
+    return;
+  }
+  _bk.groups = res.body.data.groups || [];
+  _bk.limits = res.body.data.limits || null;
+  _bkRenderGroups();
+
+  // An import interrupted mid-way (app closed, connection lost) resumes straight away.
+  const active = res.body.data.active_import;
+  if (active && !_bk.locked) {
+    _bk.importState = active;
+    _bkTab('import');
+    _bkRunImport();
+  }
+}
+
+function closeBackupModal() {
+  if (_bk.busy || _bk.locked) { toast('Please wait until the current backup operation finishes.', 'info'); return; }
+  $('#backup-modal-overlay').style.display = 'none';
+}
+
+function _bkTab(tab) {
+  if (_bk.busy && tab !== _bk.tab) return;
+  _bk.tab = tab;
+  document.querySelectorAll('[data-bk-tab]').forEach(b => {
+    b.classList.toggle('active', b.dataset.bkTab === tab);
+    b.disabled = _bk.busy && b.dataset.bkTab !== tab;
+  });
+  $('#bk-pane-export').style.display = tab === 'export' ? '' : 'none';
+  $('#bk-pane-import').style.display = tab === 'import' ? '' : 'none';
+  if (tab === 'import') _bkRenderImport();
+  _bkRenderFooter();
+}
+
+function _bkSetBusy(on) {
+  _bk.busy = on;
+  document.querySelectorAll('[data-bk-tab]').forEach(b => { b.disabled = on && b.dataset.bkTab !== _bk.tab; });
+  $('#backup-modal-close').disabled = on;
+  _bkRenderFooter();
+}
+
+// ── Export tab ──
+function _bkRenderGroups() {
+  const byKey = Object.fromEntries(_bk.groups.map(g => [g.key, g]));
+  const rows = _bk.groups.reduce((s, g) => s + (g.rows || 0), 0);
+  const media = byKey.media;
+  $('#bk-full-meta').textContent = `${_bkNum(rows)} records` + (media ? ` · ${_bkNum(media.files)} files (${_bkBytes(media.bytes)})` : '');
+
+  $('#bk-groups').innerHTML = _bk.groups.map(g => {
+    const count = g.files != null ? `${_bkNum(g.files)} files` : `${_bkNum(g.rows)} records`;
+    const req = (g.requires || []).map(k => byKey[k]?.label || k).join(', ');
+    const tip = g.description + (req ? ` (includes ${req})` : '');
+    return `
+      <label class="bk-group" title="${escHtml(tip)}">
+        <input type="checkbox" data-bk-group="${escHtml(g.key)}">
+        <i class="fa ${escHtml(g.icon)} bk-group-icon"></i>
+        <span class="bk-group-text">${escHtml(g.label)}</span>
+        <span class="bk-group-count">${count}</span>
+      </label>`;
+  }).join('') || '<div class="bk-empty">Nothing to back up yet.</div>';
+
+  $('#bk-groups').querySelectorAll('[data-bk-group]').forEach(cb => cb.addEventListener('change', () => {
+    _bkEnforceRequires(cb);
+    _bkSyncSelection();
+  }));
+  _bkSyncSelection();
+}
+
+// Product images live in "Images & Files", so ticking Products keeps that ticked too.
+function _bkEnforceRequires(changed) {
+  const boxes = [...document.querySelectorAll('[data-bk-group]')];
+  const box = (k) => boxes.find(b => b.dataset.bkGroup === k);
+  for (const g of _bk.groups) {
+    if (!box(g.key)?.checked) continue;
+    for (const req of g.requires || []) {
+      const r = box(req);
+      if (r && !r.checked) {
+        r.checked = true;
+        if (changed === r) toast(`${_bk.groups.find(x => x.key === req)?.label} is needed by ${g.label}.`, 'info');
+      }
+    }
+  }
+}
+
+function _bkSelected() {
+  return [...document.querySelectorAll('[data-bk-group]:checked')].map(i => i.dataset.bkGroup);
+}
+
+function _bkSetAll(on) {
+  document.querySelectorAll('[data-bk-group]').forEach(cb => { cb.checked = on; });
+  _bkSyncSelection();
+}
+
+function _bkSyncSelection() {
+  const full = $('#bk-full').checked;
+  $('#bk-groups').classList.toggle('is-disabled', full);
+  $('#bk-select-all').disabled = full;
+  $('#bk-select-none').disabled = full;
+  const n = _bkSelected().length;
+  $('#bk-sel-count').textContent = full ? 'Everything will be backed up' : `${n} of ${_bk.groups.length} selected`;
+  _bkRenderFooter();
+}
+
+function _bkExportStatus(html) {
+  const el = $('#bk-export-status');
+  el.innerHTML = html;
+  el.style.display = html ? '' : 'none';
+}
+
+async function _bkExport() {
+  const full = $('#bk-full').checked;
+  const groups = _bkSelected();
+  if (!full && !groups.length) return;
+
+  _bkSetBusy(true);
+  _bkExportStatus(`
+    <div class="bk-status-row"><i class="fa fa-spinner fa-spin" style="color:var(--accent)"></i> Preparing your backup on the server…</div>
+    <div class="bk-bar is-indeterminate"><div class="bk-bar-fill"></div></div>`);
+
+  let appVersion = '';
+  try { appVersion = await window.electronAPI.appVersion(); } catch (_) {}
+  const res = await API.backupExport(full ? { full: true, app_version: appVersion } : { groups, app_version: appVersion });
+  if (res.status !== 201) {
+    _bkSetBusy(false);
+    _bkExportStatus(`<div class="bk-status-row bk-bad"><i class="fa fa-circle-exclamation"></i> ${escHtml(res.body?.message || 'The backup could not be created.')}</div>`);
+    return;
+  }
+  _bk.lastExport = res.body.data;
+  await _bkSaveExport();
+  _bkSetBusy(false);
+}
+
+async function _bkSaveExport() {
+  const d = _bk.lastExport;
+  const info = `${_bkNum(d.rows)} records · ${_bkNum(d.files)} files · ${_bkBytes(d.size)}`;
+  _bkExportStatus(`
+    <div class="bk-status-row"><i class="fa fa-download" style="color:var(--accent)"></i> Backup ready (${info}). Choose where to save it…</div>
+    <div class="bk-bar"><div class="bk-bar-fill" id="bk-dl-fill"></div></div>`);
+
+  const off = window.electronAPI.onBackupProgress(p => {
+    if (p.kind !== 'download') return;
+    const fill = $('#bk-dl-fill');
+    if (fill) fill.style.width = (p.total ? Math.round(p.done / p.total * 100) : 100) + '%';
+  });
+  const dl = await window.electronAPI.backupDownload(API.backupExportPath(d.token, d.filename), d.filename);
+  off();
+
+  if (dl.canceled) {
+    _bkExportStatus(`<div class="bk-status-row bk-warn"><i class="fa fa-circle-info"></i> Save cancelled. <button class="bk-link" id="bk-save-again">Save the backup</button></div>`);
+  } else if (dl.status === 200) {
+    _bkExportStatus(`
+      <div class="bk-status-row bk-ok"><i class="fa fa-circle-check"></i> <span>Backup saved — ${info}</span></div>
+      <div class="bk-status-row" style="color:var(--text-muted);font-size:12px"><i class="fa fa-folder"></i> <span>${escHtml(dl.savedPath)}</span>
+        <button class="bk-link" id="bk-show-folder">Show in folder</button></div>`);
+    $('#bk-show-folder')?.addEventListener('click', () => window.electronAPI.showInFolder(dl.savedPath));
+  } else {
+    _bkExportStatus(`<div class="bk-status-row bk-bad"><i class="fa fa-circle-exclamation"></i> ${escHtml(dl.message || 'Saving the backup failed.')} <button class="bk-link" id="bk-save-again">Try again</button></div>`);
+  }
+  $('#bk-save-again')?.addEventListener('click', async () => { _bkSetBusy(true); await _bkSaveExport(); _bkSetBusy(false); });
+}
+
+// ── Import tab ──
+function _bkResetImport() {
+  _bk.phase = 'idle';
+  _bk.importState = null;
+  _bk.file = null;
+  _bk.error = '';
+}
+
+function _bkMsgList(items) {
+  return `<ul>${items.map(m => `<li>${escHtml(m)}</li>`).join('')}</ul>`;
+}
+
+function _bkRenderImport() {
+  const pane = $('#bk-pane-import');
+  const st = _bk.importState;
+  const rep = st?.report || {};
+  const f = _bk.file;
+
+  if (_bk.phase === 'idle') {
+    pane.innerHTML = `
+      <div class="bk-drop">
+        <i class="fa fa-file-zipper"></i>
+        <strong>Restore from a Zeebroo backup</strong>
+        <span>Choose a backup .zip exported from this app${_bk.limits ? ` (up to ${_bkBytes(_bk.limits.max_upload_bytes)})` : ''}.</span>
+        <button class="po-btn-primary" id="bk-pick" style="margin-top:6px"><i class="fa fa-folder-open"></i> Choose backup file</button>
+      </div>
+      <div class="bk-note"><i class="fa fa-shield-halved" style="color:var(--accent)"></i>
+        <div><strong>How importing works</strong>
+          <ul>
+            <li>The whole file is checked first (structure, checksums and every record). Nothing changes if any check fails.</li>
+            <li>Records in the backup are added, or update the matching records. Nothing is deleted.</li>
+            <li>A safety backup of your current data is taken automatically before anything is written.</li>
+            <li>Zeebroo is locked while the import runs, so no one can change data halfway through.</li>
+          </ul>
+        </div>
+      </div>`;
+    $('#bk-pick').addEventListener('click', _bkPickAndUpload);
+    return;
+  }
+
+  if (_bk.phase === 'uploading' || _bk.phase === 'validating') {
+    const uploading = _bk.phase === 'uploading';
+    pane.innerHTML = `
+      <div class="bk-status">
+        <div class="bk-status-row"><i class="fa fa-file-zipper" style="color:var(--accent)"></i>
+          <strong>${escHtml(f?.name || '')}</strong><span style="margin-left:auto;color:var(--text-muted)">${_bkBytes(f?.size)}</span></div>
+        <div class="bk-bar${uploading ? '' : ' is-indeterminate'}"><div class="bk-bar-fill" id="bk-up-fill"></div></div>
+        <div class="bk-status-row" style="color:var(--text-muted)" id="bk-up-label">
+          <i class="fa fa-spinner fa-spin"></i> ${uploading ? 'Uploading…' : 'Checking every record in the backup. This can take a while for large backups…'}
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (_bk.phase === 'error') {
+    pane.innerHTML = `<div class="bk-note bk-note--bad"><i class="fa fa-circle-exclamation bk-bad"></i><div>${escHtml(_bk.error)}</div></div>`;
+    return;
+  }
+
+  const b = rep.backup || {};
+  const meta = `
+    <div class="bk-meta">
+      <div class="bk-meta-item"><span>File</span><strong>${escHtml(st?.upload?.filename || f?.name || '')}</strong></div>
+      <div class="bk-meta-item"><span>From business</span><strong>${escHtml(b.business_name || '—')}</strong></div>
+      <div class="bk-meta-item"><span>Created</span><strong>${b.created_at ? escHtml(new Date(b.created_at).toLocaleString()) : '—'}</strong></div>
+      <div class="bk-meta-item"><span>Contents</span><strong>${_bkNum(rep.totals?.rows)} records · ${_bkNum(rep.totals?.files)} files</strong></div>
+    </div>`;
+  const sum = (rep.groups || []).length ? `
+    <div class="bk-section-title">What will be imported</div>
+    <div class="bk-sum">${rep.groups.map(g => `
+      <div class="bk-sum-item"><i class="fa ${escHtml(g.icon)}"></i> ${escHtml(g.label)}
+        <b>${g.files != null ? `${_bkNum(g.files)} files` : _bkNum(g.rows)}</b></div>`).join('')}
+    </div>` : '';
+  const warns = (rep.warnings || []).length
+    ? `<div class="bk-note bk-note--warn"><i class="fa fa-triangle-exclamation bk-warn"></i><div><strong>Please note</strong>${_bkMsgList(rep.warnings)}</div></div>` : '';
+
+  if (_bk.phase === 'invalid') {
+    pane.innerHTML = `
+      <div class="bk-note bk-note--bad"><i class="fa fa-circle-xmark bk-bad"></i>
+        <div><strong>This backup can't be imported. Nothing has been changed.</strong>${_bkMsgList(rep.errors || [])}</div></div>
+      ${rep.backup ? meta : ''}${warns}`;
+    return;
+  }
+
+  if (_bk.phase === 'review') {
+    pane.innerHTML = `
+      <div class="bk-note bk-note--ok"><i class="fa fa-circle-check bk-ok"></i>
+        <div><strong>Backup checked — ready to import.</strong> Every record passed validation.</div></div>
+      ${meta}${sum}${warns}
+      <div class="bk-note"><i class="fa fa-circle-info" style="color:var(--accent)"></i>
+        <div>Records in the backup will be added, or will replace the matching records in this business. A safety backup is taken first.
+        Zeebroo will be locked until the import finishes.</div></div>`;
+    return;
+  }
+
+  if (_bk.phase === 'done') {
+    const p = st?.progress || {};
+    pane.innerHTML = `
+      <div class="bk-note bk-note--ok"><i class="fa fa-circle-check bk-ok"></i>
+        <div><strong>Import complete.</strong> ${_bkNum(p.rows_done)} records and ${_bkNum(p.files_done)} files were restored.
+        Reload Zeebroo to see the imported data everywhere.</div></div>
+      ${meta}${sum}`;
+    return;
+  }
+
+  if (_bk.phase === 'failed') {
+    pane.innerHTML = `
+      <div class="bk-note bk-note--bad"><i class="fa fa-circle-xmark bk-bad"></i>
+        <div><strong>The import did not finish.</strong><br>${escHtml(st?.error || _bk.error || 'Unknown error.')}
+        ${st?.has_safety_backup ? '<br><br>Some records may already have been imported. To return to how things were before, download the safety backup and import it.' : ''}</div></div>
+      ${meta}`;
+  }
+}
+
+function _bkRenderFooter() {
+  const ft = $('#bk-footer');
+  const close = `<button class="po-btn-ghost" id="bk-ft-close"${_bk.busy ? ' disabled' : ''}><i class="fa fa-xmark"></i> Close</button>`;
+  let html = close;
+
+  if (_bk.tab === 'export') {
+    const can = !_bk.busy && ($('#bk-full').checked || _bkSelected().length > 0);
+    html += `<button class="po-btn-primary" id="bk-ft-export"${can ? '' : ' disabled'}>
+      ${_bk.busy ? '<i class="fa fa-spinner fa-spin"></i> Working…' : '<i class="fa fa-file-export"></i> Export backup (.zip)'}</button>`;
+  } else if (['invalid', 'error', 'failed'].includes(_bk.phase)) {
+    if (_bk.phase === 'failed' && _bk.importState?.has_safety_backup) {
+      html += `<button class="po-btn-outline" id="bk-ft-safety"><i class="fa fa-life-ring"></i> Download safety backup</button>`;
+    }
+    html += `<button class="po-btn-primary" id="bk-ft-again"><i class="fa fa-folder-open"></i> Choose another file</button>`;
+  } else if (_bk.phase === 'review') {
+    html = `<button class="po-btn-ghost" id="bk-ft-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+      <button class="po-btn-primary" id="bk-ft-start"><i class="fa fa-file-import"></i> Start import</button>`;
+  } else if (_bk.phase === 'done') {
+    html = `<button class="po-btn-ghost" id="bk-ft-close"><i class="fa fa-xmark"></i> Close</button>
+      <button class="po-btn-primary" id="bk-ft-reload"><i class="fa fa-rotate"></i> Reload Zeebroo</button>`;
+  }
+  ft.innerHTML = html;
+
+  $('#bk-ft-close')?.addEventListener('click', closeBackupModal);
+  $('#bk-ft-export')?.addEventListener('click', _bkExport);
+  $('#bk-ft-again')?.addEventListener('click', () => { _bkResetImport(); _bkPickAndUpload(); });
+  $('#bk-ft-start')?.addEventListener('click', _bkStartImport);
+  $('#bk-ft-reload')?.addEventListener('click', () => window.location.reload());
+  $('#bk-ft-cancel')?.addEventListener('click', async () => {
+    if (_bk.importState) await API.backupImportCancel(_bk.importState.id);
+    _bkResetImport();
+    _bkRenderImport();
+    _bkRenderFooter();
+  });
+  $('#bk-ft-safety')?.addEventListener('click', async () => {
+    const id = _bk.importState.id;
+    const dl = await window.electronAPI.backupDownload(API.backupSafetyPath(id), `zeebroo-safety-backup-${new Date().toISOString().slice(0, 10)}.zip`);
+    if (dl.status === 200) toast('Safety backup saved. Import it to roll back.', 'info');
+    else if (!dl.canceled) toast(dl.message || 'Could not download the safety backup.', 'error');
+  });
+}
+
+function _bkImportFail(message) {
+  _bk.phase = 'error';
+  _bk.error = message;
+  _bkSetBusy(false);
+  _bkRenderImport();
+  _bkRenderFooter();
+}
+
+async function _bkPickAndUpload() {
+  const f = await window.electronAPI.backupPickZip();
+  if (!f || f.canceled) { _bkRenderImport(); _bkRenderFooter(); return; }
+  if (_bk.limits && f.size > _bk.limits.max_upload_bytes) {
+    _bkImportFail(`This file is ${_bkBytes(f.size)}. The largest backup that can be imported is ${_bkBytes(_bk.limits.max_upload_bytes)}.`);
+    return;
+  }
+
+  _bk.file = f;
+  _bk.phase = 'uploading';
+  _bkSetBusy(true);
+  _bkRenderImport();
+
+  const start = await API.backupImportStart(f.name, f.size);
+  if (start.status !== 201) return _bkImportFail(start.body?.message || 'The server could not start the import.');
+  _bk.importState = start.body.data;
+
+  const off = window.electronAPI.onBackupProgress(p => {
+    if (p.kind !== 'upload') return;
+    const pct = p.total ? Math.round(p.done / p.total * 100) : 0;
+    const fill = $('#bk-up-fill');
+    if (fill) fill.style.width = pct + '%';
+    const lbl = $('#bk-up-label');
+    if (lbl) lbl.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Uploading… ${_bkBytes(p.done)} of ${_bkBytes(p.total)} (${pct}%)`;
+  });
+  const up = await window.electronAPI.backupUpload({
+    importId: _bk.importState.id,
+    filePath: f.path,
+    chunkBytes: _bk.limits?.chunk_bytes,
+    startIndex: 0,
+  });
+  off();
+  if (up.status !== 200) {
+    API.backupImportCancel(_bk.importState.id);
+    return _bkImportFail(up.body?.message || 'Uploading the backup failed. Check your connection and try again.');
+  }
+
+  _bk.phase = 'validating';
+  _bkRenderImport();
+  const v = await API.backupImportValidate(_bk.importState.id);
+  if (v.status !== 200) return _bkImportFail(v.body?.message || 'The backup could not be checked.');
+
+  _bk.importState = v.body.data;
+  _bk.phase = _bk.importState.status === 'validated' ? 'review' : 'invalid';
+  _bkSetBusy(false);
+  _bkRenderImport();
+}
+
+async function _bkStartImport() {
+  const rep = _bk.importState?.report || {};
+  const ok = await appConfirm({
+    title: 'Import this backup?',
+    message: `${_bkNum(rep.totals?.rows)} records and ${_bkNum(rep.totals?.files)} files will be added to this business, replacing matching records. `
+      + 'A safety backup is taken first. Zeebroo will be locked until the import finishes.',
+    confirmText: '<i class="fa fa-file-import"></i> Start import',
+    icon: 'fa-database',
+    danger: true,
+  });
+  if (ok) _bkRunImport();
+}
+
+async function _bkRunImport() {
+  _bk.phase = 'importing';
+  _bkLock(true);
+  _bkLockUpdate(_bk.importState?.progress);
+
+  let st = _bk.importState;
+  let netFails = 0;
+  for (;;) {
+    const r = await API.backupImportRun(st.id);
+    if (r.status !== 200) {
+      // Brief network drops: keep the lock and retry — the server keeps its place.
+      if (r.status === 0 && ++netFails <= 30) { await _bkSleep(2000); continue; }
+      st = { ...st, status: 'failed', error: r.body?.message || 'Lost connection to the server. Reopen Database Backup & Import to resume.' };
+      break;
+    }
+    netFails = 0;
+    st = r.body.data;
+    _bkLockUpdate(st.progress);
+    if (st.status !== 'importing' && st.status !== 'validated') break;
+    if (st.busy) await _bkSleep(1000);
+  }
+
+  _bk.importState = st;
+  _bk.phase = st.status === 'done' ? 'done' : 'failed';
+  if (st.status === 'done') { _bkReloadCountdown(st.progress); return; }   // stays locked until reload
+  _bkLock(false);
+  _bkSetBusy(false);
+  if ($('#backup-modal-overlay').style.display === 'none') $('#backup-modal-overlay').style.display = 'flex';
+  _bkTab('import');
+}
+
+// While the lock is up, swallow every key and refuse to close the window.
+function _bkBlockKeys(e) { e.preventDefault(); e.stopImmediatePropagation(); }
+function _bkBlockUnload(e) { e.preventDefault(); e.returnValue = ''; return ''; }
+
+function _bkLock(on) {
+  _bk.locked = on;
+  _bkSetBusy(on);
+  $('#bk-lock').style.display = on ? 'flex' : 'none';
+  if (on) {
+    document.activeElement?.blur?.();
+    window.addEventListener('keydown', _bkBlockKeys, true);
+    window.addEventListener('keyup', _bkBlockKeys, true);
+    window.addEventListener('beforeunload', _bkBlockUnload);
+  } else {
+    window.removeEventListener('keydown', _bkBlockKeys, true);
+    window.removeEventListener('keyup', _bkBlockKeys, true);
+    window.removeEventListener('beforeunload', _bkBlockUnload);
+  }
+}
+
+// Successful import: turn the lock card into a success message and reload the
+// app after a 5-second countdown so every screen picks up the imported data.
+function _bkReloadCountdown(p) {
+  const reload = () => {
+    clearInterval(timer);
+    window.removeEventListener('beforeunload', _bkBlockUnload);
+    window.location.reload();
+  };
+  let left = 5;
+  const tick = () => {
+    $('#bk-lock-label').textContent = `Reloading Zeebroo in ${left} second${left === 1 ? '' : 's'}…`;
+    $('#bk-lock-pct').textContent = `${left}s`;
+  };
+
+  $('#bk-lock .bk-lock-icon').innerHTML = '<i class="fa fa-circle-check bk-ok"></i>';
+  $('#bk-lock-title').textContent = 'Import complete';
+  $('#bk-lock .bk-lock-sub').textContent = `${_bkNum(p?.rows_done)} records`
+    + (p?.files_done ? ` and ${_bkNum(p.files_done)} files` : '') + ' were restored successfully.';
+  $('#bk-lock-fill').style.width = '100%';
+  $('#bk-lock-counts').textContent = '';
+  const btn = $('#bk-lock-reload');
+  btn.style.display = '';
+  btn.onclick = reload;
+  tick();
+
+  const timer = setInterval(() => {
+    left--;
+    if (left <= 0) return reload();
+    tick();
+  }, 1000);
+}
+
+function _bkLockUpdate(p) {
+  if (!p) return;
+  $('#bk-lock-fill').style.width = p.percent + '%';
+  $('#bk-lock-pct').textContent = p.percent + '%';
+  $('#bk-lock-label').textContent = p.label;
+  $('#bk-lock-counts').textContent = `${_bkNum(p.rows_done)} / ${_bkNum(p.rows_total)} records`
+    + (p.files_total ? ` · ${_bkNum(p.files_done)} / ${_bkNum(p.files_total)} files` : '');
+}
+
 async function openAboutModal() {
   const overlay = $('#about-modal-overlay');
   overlay.style.display = 'flex';

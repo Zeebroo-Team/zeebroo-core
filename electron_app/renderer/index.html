@@ -696,6 +696,9 @@
           <button class="tpm-item" id="tpm-developers">
             <i class="fa fa-code"></i> Developers
           </button>
+          <button class="tpm-item" id="tpm-backup">
+            <i class="fa fa-database"></i> Database Backup &amp; Import
+          </button>
 
           <div class="tpm-divider"></div>
 
@@ -17984,6 +17987,69 @@
       <button class="fm-detail-back" id="feat-mgmt-back"><i class="fa fa-arrow-left"></i> Back to all features</button>
       <div id="feat-mgmt-detail-body"></div>
     </div>
+  </div>
+</div>
+
+<!-- ── Database Backup & Import modal (PosBackupApiController) ─────────── -->
+<div id="backup-modal-overlay" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell bk-shell">
+    <div class="po-aim-header">
+      <i class="fa fa-database" style="color:var(--accent)"></i>
+      <span>Database Backup &amp; Import</span>
+      <button class="psm-close" id="backup-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bk-tabs" role="tablist">
+      <button class="bk-tab active" data-bk-tab="export" role="tab"><i class="fa fa-file-export"></i> Export</button>
+      <button class="bk-tab" data-bk-tab="import" role="tab"><i class="fa fa-file-import"></i> Import</button>
+    </div>
+
+    <div class="po-aim-body bk-body">
+      <!-- Export -->
+      <div class="bk-pane" id="bk-pane-export">
+        <label class="bk-full">
+          <input type="checkbox" id="bk-full">
+          <span class="bk-full-text">
+            <strong>Full backup <em>Recommended</em></strong>
+            <small>All data, images and files</small>
+          </span>
+          <span class="bk-full-meta" id="bk-full-meta"></span>
+        </label>
+
+        <div class="bk-toolbar">
+          <span class="bk-toolbar-title">Or pick sections</span>
+          <span class="bk-sel-count" id="bk-sel-count"></span>
+          <button class="bk-link" id="bk-select-all">Select all</button>
+          <button class="bk-link" id="bk-select-none">Clear</button>
+        </div>
+        <div class="bk-groups" id="bk-groups">
+          <div class="bk-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+        </div>
+        <div class="bk-status" id="bk-export-status" style="display:none"></div>
+      </div>
+
+      <!-- Import: filled by renderImportPane() in app.js -->
+      <div class="bk-pane" id="bk-pane-import" style="display:none"></div>
+    </div>
+
+    <div class="po-aim-footer" id="bk-footer"></div>
+  </div>
+</div>
+
+<!-- Full-screen lock while an import is being applied — the app can't be used until it ends -->
+<div id="bk-lock" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="bk-lock-title">
+  <div class="bk-lock-card">
+    <div class="bk-lock-icon"><i class="fa fa-database"></i></div>
+    <h3 id="bk-lock-title">Importing your data</h3>
+    <p class="bk-lock-sub">Please don't close Zeebroo or turn off this computer. The app is locked until the import finishes.</p>
+    <div class="bk-bar"><div class="bk-bar-fill" id="bk-lock-fill"></div></div>
+    <div class="bk-lock-row">
+      <span id="bk-lock-label">Starting…</span>
+      <strong id="bk-lock-pct">0%</strong>
+    </div>
+    <div class="bk-lock-counts" id="bk-lock-counts"></div>
+    <button class="po-btn-primary" id="bk-lock-reload" style="display:none;align-self:center;margin-top:4px">
+      <i class="fa fa-rotate"></i> Reload now
+    </button>
   </div>
 </div>
 
