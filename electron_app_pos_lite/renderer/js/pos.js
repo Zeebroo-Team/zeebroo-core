@@ -26,6 +26,15 @@ const apPriceInput = document.getElementById('ap-price');
 const apErrorEl = document.getElementById('ap-error');
 const apSaveBtn = document.getElementById('ap-save-btn');
 
+// Quick setup modal (price + opening stock for an unpriced product)
+const quickSetupModal = document.getElementById('quick-setup-modal');
+const qsNameEl = document.getElementById('qs-name');
+const qsPriceInput = document.getElementById('qs-price');
+const qsCostInput = document.getElementById('qs-cost');
+const qsStockInput = document.getElementById('qs-stock');
+const qsErrorEl = document.getElementById('qs-error');
+const qsSaveBtn = document.getElementById('qs-save-btn');
+
 // Customer select (lives inside the customer-picker modal)
 const customerPickerModal = document.getElementById('customer-picker-modal');
 const customerChipEl = document.getElementById('customer-chip');
@@ -347,6 +356,80 @@ async function saveAddProduct() {
 }
 apSaveBtn.addEventListener('click', saveAddProduct);
 
+// ── Quick setup: unpriced, unstocked product (e.g. from the SQL dump import) ──
+// Clicking it asks for a selling price + opening stock, saves, then adds it to the cart.
+function needsQuickSetup(p) {
+  return !p.is_dynamic_pricing && !p.is_bundle && !p.is_rental && !p.is_subscription
+    && (Number(p.unit_sell_price) || 0) <= 0
+    && (Number(p.stock_quantity) || 0) <= 0;
+}
+
+let quickSetupProduct = null;
+
+function openQuickSetupModal(product) {
+  quickSetupProduct = product;
+  qsNameEl.textContent = product.name;
+  qsPriceInput.value = '';
+  qsCostInput.value = '';
+  qsStockInput.value = '';
+  qsErrorEl.classList.remove('show');
+  quickSetupModal.classList.add('show');
+  qsPriceInput.focus();
+}
+function closeQuickSetupModal() {
+  quickSetupModal.classList.remove('show');
+  quickSetupProduct = null;
+  focusSearch();
+}
+
+async function saveQuickSetup() {
+  const product = quickSetupProduct;
+  if (!product) return;
+  const price = parseFloat(qsPriceInput.value);
+  const cost = parseFloat(qsCostInput.value);
+  const stock = parseFloat(qsStockInput.value);
+
+  qsErrorEl.classList.remove('show');
+  const fail = (msg, input) => {
+    qsErrorEl.textContent = msg;
+    qsErrorEl.classList.add('show');
+    input?.focus();
+  };
+  if (!(price > 0)) return fail(t('Enter a selling price greater than 0.'), qsPriceInput);
+  if (!(stock > 0)) return fail(t('Enter a starting stock greater than 0.'), qsStockInput);
+
+  qsSaveBtn.disabled = true;
+  try {
+    const res = await API.quickSetupProduct(product.id, {
+      unit_price: price,
+      cost_price: isNaN(cost) ? null : cost,
+      stock_quantity: stock,
+    });
+    if (res.status !== 200 || !res.body?.data) {
+      const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
+      return fail(t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not set up product.')));
+    }
+
+    const updated = res.body.data;
+    const idx = products.findIndex((p) => p.id === product.id);
+    if (idx >= 0) products[idx] = updated; else products.push(updated);
+    renderProducts();
+    // The grid was re-rendered — point the fly-to-cart animation at the new card
+    const newCard = grid.querySelector(`.product-card[data-id="${updated.id}"]`);
+    if (newCard && flySrc?.productId === updated.id) flySrc.card = newCard;
+
+    closeQuickSetupModal();
+    showToast(t('{name} is ready to sell.', { name: updated.name }), 'success');
+    if (!needsQuickSetup(updated)) routeAddToCart(updated.id);
+  } finally {
+    qsSaveBtn.disabled = false;
+  }
+}
+qsSaveBtn.addEventListener('click', saveQuickSetup);
+quickSetupModal.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveQuickSetup(); }
+});
+
 // ── Products ────────────────────────────────────────────────────────────
 function unitPrice(p) {
   return p.discounted_sell_price !== null && p.discounted_sell_price !== undefined
@@ -393,7 +476,11 @@ function renderProducts() {
   }
 
   grid.innerHTML = products.map((p) => {
-    const outOfStock = Number(p.stock_quantity) <= 0;
+    const needsSetup = needsQuickSetup(p);
+    const outOfStock = !needsSetup && Number(p.stock_quantity) <= 0;
+    const stockLabel = needsSetup
+      ? `<i class="fa-solid fa-tag"></i> ${t('Set price & stock')}`
+      : outOfStock ? t('Out of stock') : t('{n} left', { n: Math.floor(p.stock_quantity) });
     const thumb = p.image_url
       ? `<img src="${p.image_url}" alt="">`
       : '<i class="fa-solid fa-box"></i>';
@@ -420,14 +507,14 @@ function renderProducts() {
     const tagsRow = tags.length ? `<div class="product-tags">${tags.join('')}</div>` : '';
 
     return `
-      <div class="product-card ${outOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
+      <div class="product-card ${outOfStock ? 'out-of-stock' : ''} ${needsSetup ? 'needs-setup' : ''}" data-id="${p.id}">
         ${badge}
         <div class="product-thumb">${thumb}</div>
         <div class="product-name">${p.name}</div>
         ${tagsRow}
         <div class="product-meta">
           <span class="product-price">${priceLabel(p)}</span>
-          <span class="product-stock">${outOfStock ? t('Out of stock') : t('{n} left', { n: Math.floor(p.stock_quantity) })}</span>
+          <span class="product-stock">${stockLabel}</span>
         </div>
       </div>`;
   }).join('');
@@ -487,7 +574,7 @@ async function addByScan(code, { remote = true } = {}) {
     }
   }
   if (!product) return false;
-  if (Number(product.stock_quantity) <= 0 && !product.is_rental && !product.is_dynamic_pricing) {
+  if (Number(product.stock_quantity) <= 0 && !product.is_rental && !product.is_dynamic_pricing && !needsQuickSetup(product)) {
     showToast(t('{name} is out of stock', { name: product.name }), 'error');
     clearSearchAfterScan();
     return true;
@@ -536,6 +623,7 @@ function focusSearch() {
 function routeAddToCart(productId) {
   const product = products.find((p) => p.id === productId);
   if (!product) return;
+  if (needsQuickSetup(product)) return void openQuickSetupModal(product);
   if (product.is_rental) return void addRentalToCart(product);
   if (product.is_dynamic_pricing) return void addDynamicToCart(product);
   return addToCart(productId);
@@ -1199,6 +1287,7 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'dynamic-modal') closeDynamicModal();
     if (btn.dataset.close === 'receipt-modal') closeReceiptModal();
     if (btn.dataset.close === 'add-product-modal') closeAddProductModal();
+    if (btn.dataset.close === 'quick-setup-modal') closeQuickSetupModal();
     if (btn.dataset.close === 'customer-picker-modal') closeCustomerPickerModal();
     if (btn.dataset.close === 'checkout-modal') closeCheckoutModal();
     if (btn.dataset.close === 'refund-modal') closeRefundModal();
@@ -1207,12 +1296,13 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'password-confirm-modal') closePasswordConfirmModal();
   });
 });
-[rentalModal, dynamicModal, receiptModal, addProductModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
+[rentalModal, dynamicModal, receiptModal, addProductModal, quickSetupModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
   bg.addEventListener('click', (e) => {
     if (e.target !== bg) return;
     if (bg === rentalModal) closeRentalModal();
     else if (bg === dynamicModal) closeDynamicModal();
     else if (bg === addProductModal) closeAddProductModal();
+    else if (bg === quickSetupModal) closeQuickSetupModal();
     else if (bg === customerPickerModal) closeCustomerPickerModal();
     else if (bg === checkoutModal) closeCheckoutModal();
     else if (bg === refundModal) closeRefundModal();
@@ -1228,6 +1318,7 @@ document.addEventListener('keydown', (e) => {
   const couponCheck = document.getElementById('coupon-check-modal');
   if (couponCheck.classList.contains('show')) couponCheck.classList.remove('show');
   else if (giftCheck.classList.contains('show')) giftCheck.classList.remove('show');
+  else if (quickSetupModal.classList.contains('show')) closeQuickSetupModal();
   else if (rentalModal.classList.contains('show')) closeRentalModal();
   else if (dynamicModal.classList.contains('show')) closeDynamicModal();
   else if (customerPickerModal.classList.contains('show')) closeCustomerPickerModal();
@@ -2672,7 +2763,7 @@ async function loadSettings() {
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
   return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal,
-    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal,
+    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal, quickSetupModal,
     giftCheckModal, couponCheckModal]
     .some((m) => m.classList.contains('show'));
 }

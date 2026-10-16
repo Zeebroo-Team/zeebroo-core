@@ -23145,8 +23145,17 @@ function buildCategoryBar(categories, active) {
   updateScrollArrows('category-filter', 'cat-scroll-left', 'cat-scroll-right');
 }
 
+// A product with no price and no stock (e.g. fresh from the SQL dump import) —
+// clicking it in the POS asks for a selling price + opening stock instead of being blocked.
+function _needsQuickSetup(p) {
+  return !p.is_dynamic_pricing && !p.is_bundle && !p.is_rental && !p.is_subscription
+    && (parseFloat(p.unit_sell_price) || 0) <= 0
+    && (parseFloat(p.stock_quantity) || 0) <= 0;
+}
+
 function productCardHtml(p) {
-  const outOfStock    = (parseFloat(p.stock_quantity) || 0) <= 0;
+  const needsSetup    = _needsQuickSetup(p);
+  const outOfStock    = !needsSetup && (parseFloat(p.stock_quantity) || 0) <= 0;
   const effectivePrice = p.discounted_sell_price ?? p.unit_sell_price ?? 0;
   const origPrice     = p.discounted_sell_price !== null && p.discounted_sell_price !== undefined ? p.unit_sell_price : null;
   const discount      = p.discount ?? null;
@@ -23167,10 +23176,11 @@ function productCardHtml(p) {
 
   const metaParts = [];
   if (p.sku) metaParts.push(escHtml(p.sku));
-  if (p.stock_quantity != null) metaParts.push(`${p.stock_quantity} in stock`);
+  if (needsSetup) metaParts.push('<span class="p-setup-tag"><i class="fa fa-tag"></i> Tap to set price &amp; stock</span>');
+  else if (p.stock_quantity != null) metaParts.push(`${p.stock_quantity} in stock`);
   const campaignName = discount && discount.campaign_id ? discount.name : null;
 
-  return `<div class="product-card${outOfStock ? ' is-out' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku ?? '')}" data-price="${effectivePrice}" data-stock="${p.stock_quantity ?? ''}">
+  return `<div class="product-card${outOfStock ? ' is-out' : ''}${needsSetup ? ' needs-setup' : ''}" data-id="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku ?? '')}" data-price="${effectivePrice}" data-stock="${p.stock_quantity ?? ''}">
     ${p.image_url ? `<img src="${p.image_url}" alt="${escHtml(p.name)}" loading="lazy">` : `<div class="p-icon"><i class="fa fa-box"></i></div>`}
     <div class="p-name">${escHtml(p.name)}</div>
     ${metaParts.length ? `<div class="p-meta">${metaParts.join(' · ')}</div>` : ''}
@@ -30867,6 +30877,12 @@ function posPickStockLayer(product, layers) {
 }
 
 async function handleProductClick(p) {
+  // Unpriced, unstocked product — set it up first, then add it to the cart
+  if (_needsQuickSetup(p)) {
+    const ready = await openPosQuickSetup(p);
+    if (ready) await handleProductClick(ready);
+    return;
+  }
   // Dynamic-pricing products always ask for the amount first
   if (p.is_dynamic_pricing) { await handleDynamicProductClick(p); return; }
   const layers  = p.layers || [];
@@ -30975,6 +30991,75 @@ const _beep = new Audio('sounds/beep.wav');
 let _flySrc = null;
 let _flyInFlight = 0;
 let _flyPendingDiff = 0;
+
+// Ask for selling price + opening stock for an unpriced product, save it on the
+// server, refresh its grid card, and resolve with the updated product (or null).
+function openPosQuickSetup(p) {
+  return new Promise(resolve => {
+    const modal = $('#pqs-modal');
+    const price = $('#pqs-price'), cost = $('#pqs-cost'), stock = $('#pqs-stock');
+    const save  = $('#pqs-save');
+    $('#pqs-name').textContent = p.name;
+    price.value = ''; cost.value = ''; stock.value = '';
+    modal.style.display = 'flex';
+    setTimeout(() => price.focus(), 30);
+
+    const close = result => {
+      modal.style.display = 'none';
+      save.removeEventListener('click', submit);
+      modal.removeEventListener('keydown', onKey);
+      $('#pqs-close').removeEventListener('click', cancel);
+      $('#pqs-cancel').removeEventListener('click', cancel);
+      resolve(result);
+    };
+    const cancel = () => close(null);
+    const onKey  = e => {
+      if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      if (e.key === 'Enter')  { e.preventDefault(); submit(); }
+    };
+
+    async function submit() {
+      const unitPrice = parseFloat(price.value);
+      const qty       = parseFloat(stock.value);
+      if (!(unitPrice > 0)) { toast('Enter a selling price greater than 0', 'error'); price.focus(); return; }
+      if (!(qty > 0))       { toast('Enter a starting stock greater than 0', 'error'); stock.focus(); return; }
+
+      save.disabled = true;
+      const res = await API.quickSetupProduct(p.id, {
+        unit_price: unitPrice,
+        cost_price: cost.value !== '' ? parseFloat(cost.value) : null,
+        stock_quantity: qty,
+      });
+      save.disabled = false;
+
+      if (res.status !== 200 || !res.body?.data) {
+        const msg = Object.values(res.body?.errors || {}).flat().join(', ') || res.body?.message || 'Could not set up product';
+        toast(msg, 'error');
+        return;
+      }
+
+      const updated = res.body.data;
+      const idx = state.products.findIndex(pr => pr.id === p.id);
+      if (idx >= 0) state.products[idx] = updated;
+      const oldCard = $(`#product-grid .product-card[data-id="${p.id}"]`);
+      if (oldCard) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = productCardHtml(updated);
+        bindProductCardClicks(wrap);
+        const newCard = wrap.firstElementChild;
+        oldCard.replaceWith(newCard);
+        if (_flySrc?.productId === p.id) _flySrc.card = newCard;
+      }
+      toast(`${p.name} is ready to sell`, 'success');
+      close(_needsQuickSetup(updated) ? null : updated);
+    }
+
+    save.addEventListener('click', submit);
+    modal.addEventListener('keydown', onKey);
+    $('#pqs-close').addEventListener('click', cancel);
+    $('#pqs-cancel').addEventListener('click', cancel);
+  });
+}
 
 function _setFlySource(card) {
   _flySrc = { card, productId: Number(card.dataset.id), at: Date.now() };
@@ -61270,16 +61355,36 @@ init();
       if (colList && !tables[tName].columns.length) tables[tName].columns = colList;
 
       // Parse individual value rows
-      const rowRe = /\(([^)]*(?:'[^']*'[^)]*)*)\)/g;
-      let rm;
-      while ((rm = rowRe.exec(valueBlock)) !== null) {
-        const raw = rm[1];
-        const vals = splitSqlValues(raw);
-        tables[tName].rows.push(vals);
+      for (const raw of splitSqlRows(valueBlock)) {
+        tables[tName].rows.push(splitSqlValues(raw));
       }
     }
 
     return tables;
+  }
+
+  // Split "(…),(…)" into row bodies, ignoring parentheses inside quoted strings
+  // (e.g. 'Milk (Vanilla) 1L' or 'St.Clair\'S (Black)').
+  function splitSqlRows(block) {
+    const rows = [];
+    let cur = '', depth = 0, inStr = false, esc = false;
+    for (let i = 0; i < block.length; i++) {
+      const c = block[i];
+      if (depth > 0) cur += c;
+      if (esc) { esc = false; continue; }
+      if (inStr) {
+        if (c === '\\') esc = true;
+        else if (c === "'") inStr = false;
+        continue;
+      }
+      if (c === "'") { inStr = true; continue; }
+      if (c === '(') { if (depth === 0) cur = ''; depth++; continue; }
+      if (c === ')' && depth > 0) {
+        depth--;
+        if (depth === 0) rows.push(cur.slice(0, -1));
+      }
+    }
+    return rows;
   }
 
   function splitSqlValues(str) {
@@ -61460,11 +61565,14 @@ init();
     const colIdx = {};
     tbl.columns.forEach((c, i) => { colIdx[c] = i; });
     _dim.mapped = tbl.rows.map(row => {
-      const prod = { name:'', sku:null, unit_price:null, cost_price:null, wholesale_price:null, stock_quantity:0, description:null, model_no:null, size:null };
+      // unit_price is required by the API — dumps with only names (or blank prices) default to 0
+      const prod = { name:'', sku:null, unit_price:0, cost_price:null, wholesale_price:null, stock_quantity:0, description:null, model_no:null, size:null };
       for (const [col, field] of Object.entries(_dim.columnMap)) {
         if (!field) continue;
         const val = row[colIdx[col]] ?? '';
-        if (field === 'unit_price' || field === 'cost_price' || field === 'wholesale_price') {
+        if (field === 'unit_price') {
+          prod[field] = parseFloat(val) || 0;
+        } else if (field === 'cost_price' || field === 'wholesale_price') {
           prod[field] = parseFloat(val) || null;
         } else if (field === 'stock_quantity') {
           prod[field] = parseInt(val) || 0;

@@ -143,6 +143,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('online/products',        [PosProductApiController::class, 'store']  )->name('online.products.store');
     Route::post('online/products/import', [PosProductApiController::class, 'import'] )->name('online.products.import');
     Route::patch('online/products/{product}', [PosProductApiController::class, 'update'])->name('online.products.update');
+    Route::post('online/products/{product}/quick-setup', [PosProductApiController::class, 'quickSetup'])->name('online.products.quick-setup');
     Route::delete('online/products/{product}', [PosProductApiController::class, 'destroy'])->name('online.products.destroy');
     Route::get('online/file-manager', [PosFileManagerApiController::class, 'browse'])->name('online.file-manager.browse');
     Route::post('online/file-manager/upload', [PosFileManagerApiController::class, 'upload'])->name('online.file-manager.upload');

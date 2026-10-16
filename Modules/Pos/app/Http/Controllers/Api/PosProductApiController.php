@@ -276,6 +276,38 @@ class PosProductApiController extends Controller
         ]);
     }
 
+    /**
+     * Set the selling price and opening stock of an unpriced product from the POS
+     * grid (used for products brought in by the SQL dump import).
+     */
+    public function quickSetup(Request $request, Product $product): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        if (! $this->productService->productForBusiness($business, $product)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $branchId = $request->input('branch_id') ?? $request->query('branch') ?? $request->header('X-Branch-Id');
+        $input = $request->all();
+        $input['branch_id'] = is_numeric($branchId) ? (int) $branchId : null;
+
+        try {
+            $card = $this->quickCreate->setup($business, $product, $input);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => $e->getMessage() ?: 'Could not set up product.',
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Product ready to sell.',
+            'data'    => $card,
+        ]);
+    }
+
     public function destroy(Request $request, Product $product): JsonResponse
     {
         $business = $this->businessOrAbort($request);
