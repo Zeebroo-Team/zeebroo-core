@@ -100,9 +100,9 @@
         background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--muted);
         box-shadow:none;cursor:not-allowed;pointer-events:none;
     }
-    .plat-os-row{display:flex;gap:6px;margin-top:8px;}
+    .plat-os-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin-top:8px;}
     .plat-os-link{
-        flex:1;display:flex;align-items:center;justify-content:center;gap:5px;
+        display:flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;
         padding:6px 4px;border-radius:8px;border:1px solid var(--border);
         color:var(--muted);font-size:11px;font-weight:700;text-decoration:none;
         transition:border-color .16s,color .16s;
@@ -147,24 +147,28 @@
     @keyframes platAlertIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 </style>
 @php
-    $platOs = [
-        'windows' => ['label' => 'Windows', 'icon' => 'fa-brands fa-windows', 'url' => $latestDesktopRelease?->windows_url],
-        'macos'   => ['label' => 'macOS',   'icon' => 'fa-brands fa-apple',   'url' => $latestDesktopRelease?->macos_url],
-        'linux'   => ['label' => 'Linux',   'icon' => 'fa-brands fa-linux',   'url' => $latestDesktopRelease?->linux_url],
+    // 'macos' is the Apple Silicon build; Intel Macs get their own link (the script below switches to it when it can tell).
+    $platOsFor = fn ($release) => [
+        'windows'     => ['label' => 'Windows',             'short' => 'Windows',   'icon' => 'fa-brands fa-windows', 'title' => 'Windows (64-bit)',             'url' => $release?->windows_url],
+        'macos'       => ['label' => 'macOS (Apple chip)',  'short' => 'Mac M',     'icon' => 'fa-brands fa-apple',   'title' => 'macOS — Apple M1/M2/M3/M4',    'url' => $release?->macos_url],
+        'macos_intel' => ['label' => 'macOS (Intel)',       'short' => 'Mac Intel', 'icon' => 'fa-brands fa-apple',   'title' => 'macOS — Intel processor',     'url' => $release?->macos_intel_url],
+        'linux'       => ['label' => 'Linux',               'short' => 'Linux',     'icon' => 'fa-brands fa-linux',   'title' => 'Linux (AppImage)',             'url' => $release?->linux_url],
     ];
+    $platOs = $platOsFor($latestDesktopRelease);
+    // Visitor's OS first (a Mac falls back to the Intel build if only that one is published), else the first available
+    $platPickOs = function (array $os) use ($detectedOs) {
+        $prefer = $detectedOs ?? 'windows';
+        foreach ($prefer === 'macos' ? ['macos', 'macos_intel'] : [$prefer] as $key) {
+            if (!empty($os[$key]['url'])) return $key;
+        }
+        return collect($os)->filter(fn ($o) => $o['url'])->keys()->first();
+    };
     $platAnyDesktopUrl = collect($platOs)->pluck('url')->filter()->first();
-    $platDetectedOs = $platOs[$detectedOs ?? 'windows']['url'] ?? null ? ($detectedOs ?? 'windows') : null;
-    $platMainOsKey = $platDetectedOs ?? collect($platOs)->filter(fn ($os) => $os['url'])->keys()->first();
+    $platMainOsKey = $platPickOs($platOs);
     $platMainUrl = $platMainOsKey ? $platOs[$platMainOsKey]['url'] : null;
 
-    $liteOs = [
-        'windows' => ['label' => 'Windows', 'icon' => 'fa-brands fa-windows', 'url' => $latestLiteRelease?->windows_url],
-        'macos'   => ['label' => 'macOS',   'icon' => 'fa-brands fa-apple',   'url' => $latestLiteRelease?->macos_url],
-        'linux'   => ['label' => 'Linux',   'icon' => 'fa-brands fa-linux',   'url' => $latestLiteRelease?->linux_url],
-    ];
-    $liteMainOsKey = ($liteOs[$detectedOs ?? 'windows']['url'] ?? null)
-        ? ($detectedOs ?? 'windows')
-        : collect($liteOs)->filter(fn ($os) => $os['url'])->keys()->first();
+    $liteOs = $platOsFor($latestLiteRelease);
+    $liteMainOsKey = $platPickOs($liteOs);
     $liteMainUrl = $liteMainOsKey ? $liteOs[$liteMainOsKey]['url'] : null;
     $platPlanLabel = $currentPackage
         ? $currentPackage->name . ($currentPackage->is_free ? ' (Free Trial)' : ' plan')
@@ -229,12 +233,13 @@
                         <i class="fa fa-download" aria-hidden="true"></i>
                         <span id="platDesktopBtnLabel">Download for {{ $platOs[$platMainOsKey]['label'] }}</span>
                     </a>
-                    <div class="plat-os-row">
+                    <div class="plat-os-row" data-plat-row="platDesktopBtn">
                         @foreach($platOs as $osKey => $os)
                             <a href="{{ $os['url'] ?? '#' }}" target="_blank" rel="noopener"
                                class="plat-os-link{{ $osKey === $platMainOsKey ? ' is-active' : '' }}" data-plat-os="{{ $osKey }}"
+                               data-plat-label="{{ $os['label'] }}" title="{{ $os['title'] }}"
                                aria-disabled="{{ $os['url'] ? 'false' : 'true' }}">
-                                <i class="{{ $os['icon'] }}" aria-hidden="true"></i> {{ $os['label'] }}
+                                <i class="{{ $os['icon'] }}" aria-hidden="true"></i> {{ $os['short'] }}
                             </a>
                         @endforeach
                     </div>
@@ -279,16 +284,17 @@
                     </div>
                     <h3 class="plat-opt-title"><i class="fa fa-feather" aria-hidden="true"></i> POS Lite</h3>
                     <p class="plat-opt-desc">A lightweight POS for low-end devices — fast checkout, returns and day-end closing.</p>
-                    <a href="{{ $liteMainUrl }}" class="plat-btn plat-btn--outline" target="_blank" rel="noopener">
+                    <a href="{{ $liteMainUrl }}" class="plat-btn plat-btn--outline" id="platLiteBtn" target="_blank" rel="noopener">
                         <i class="fa fa-download" aria-hidden="true"></i>
-                        Download for {{ $liteOs[$liteMainOsKey]['label'] }}
+                        <span id="platLiteBtnLabel">Download for {{ $liteOs[$liteMainOsKey]['label'] }}</span>
                     </a>
-                    <div class="plat-os-row">
+                    <div class="plat-os-row" data-plat-row="platLiteBtn">
                         @foreach($liteOs as $osKey => $os)
                             <a href="{{ $os['url'] ?? '#' }}" target="_blank" rel="noopener"
-                               class="plat-os-link{{ $osKey === $liteMainOsKey ? ' is-active' : '' }}"
+                               class="plat-os-link{{ $osKey === $liteMainOsKey ? ' is-active' : '' }}" data-plat-os="{{ $osKey }}"
+                               data-plat-label="{{ $os['label'] }}" title="{{ $os['title'] }}"
                                aria-disabled="{{ $os['url'] ? 'false' : 'true' }}">
-                                <i class="{{ $os['icon'] }}" aria-hidden="true"></i> {{ $os['label'] }}
+                                <i class="{{ $os['icon'] }}" aria-hidden="true"></i> {{ $os['short'] }}
                             </a>
                         @endforeach
                     </div>
@@ -317,6 +323,43 @@
         el.textContent = part[0];
         var icon = document.getElementById('platGreetIcon');
         if (icon) icon.className = 'fa ' + part[1] + ' plat-greet-icon';
+    })();
+
+    (function () {
+        // Every Mac browser reports "Intel Mac OS X", so the server defaults Macs to the Apple chip build.
+        // Switch the main download buttons to the Intel build only on a positive Intel signal.
+        function useIntelBuild() {
+            document.querySelectorAll('[data-plat-row]').forEach(function (row) {
+                var btn = document.getElementById(row.getAttribute('data-plat-row'));
+                var current = row.querySelector('.plat-os-link.is-active');
+                var intel = row.querySelector('[data-plat-os="macos_intel"]');
+                if (!btn || !current || !intel || current.getAttribute('data-plat-os') !== 'macos'
+                    || intel.getAttribute('aria-disabled') === 'true') return;
+                btn.href = intel.href;
+                var label = document.getElementById(btn.id + 'Label');
+                if (label) label.textContent = 'Download for ' + intel.getAttribute('data-plat-label');
+                current.classList.remove('is-active');
+                intel.classList.add('is-active');
+            });
+        }
+
+        if (!/Macintosh|Mac OS X/.test(navigator.userAgent)) return;
+
+        // Chromium browsers expose the CPU architecture directly.
+        if (navigator.userAgentData && navigator.userAgentData.getHighEntropyValues) {
+            navigator.userAgentData.getHighEntropyValues(['architecture']).then(function (v) {
+                if (v.architecture === 'x86') useIntelBuild();
+            }).catch(function () {});
+            return;
+        }
+
+        // Others (Firefox): only Intel Macs have Intel / AMD GPUs. Safari masks this as "Apple GPU", so it stays on the default.
+        try {
+            var gl = document.createElement('canvas').getContext('webgl');
+            var ext = gl && gl.getExtension('WEBGL_debug_renderer_info');
+            var gpu = ext ? String(gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)) : '';
+            if (/Intel|AMD|Radeon/i.test(gpu)) useIntelBuild();
+        } catch (e) {}
     })();
 </script>
 @endsection

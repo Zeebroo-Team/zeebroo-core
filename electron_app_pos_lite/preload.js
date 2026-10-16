@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App updates (js/navbar.js "Check for updates") — latest Lite release from
   // /api/releases/latest?app=lite, installer download with % progress.
   platform: process.platform,
+  arch: process.arch, // 'arm64' on Apple Silicon, 'x64' on Intel Macs
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   downloadUpdate: (opts) => ipcRenderer.invoke('download-update', opts),
   onDownloadProgress: (cb) => {

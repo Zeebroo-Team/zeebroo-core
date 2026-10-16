@@ -86,8 +86,9 @@ class AppReleaseController extends Controller
             'is_latest'    => ['boolean'],
             'notes'        => ['nullable', 'string'],
             'windows_url'  => ['nullable', 'url', 'max:512'],
-            'macos_url'    => ['nullable', 'url', 'max:512'],
-            'linux_url'    => ['nullable', 'url', 'max:512'],
+            'macos_url'       => ['nullable', 'url', 'max:512'],
+            'macos_intel_url' => ['nullable', 'url', 'max:512'],
+            'linux_url'       => ['nullable', 'url', 'max:512'],
         ]);
 
         // Unchecked checkbox isn't submitted — treat as false so edits can un-mark latest
