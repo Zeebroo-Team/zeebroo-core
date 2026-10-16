@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Platform
   platform: process.platform,
+  arch:     process.arch, // 'arm64' on Apple Silicon, 'x64' on Intel Macs
 
   // Config
   getConfig: ()       => ipcRenderer.invoke('config-get'),

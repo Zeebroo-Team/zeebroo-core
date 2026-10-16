@@ -35,6 +35,15 @@ permissions:
 # ── Production API URL — injected into every build automatically ───────────
 env:
   API_BASE_URL: https://platform.zeebroo.com/api/v1/pos
+  # Labels each release asset with the admin-panel field it belongs in (used by the job summaries).
+  # macOS ships two zips: -arm64 (Apple Silicon) and -x64 (Intel) — each has its own field.
+  RELEASE_LINKS_JQ: >-
+    .[] | (.name | if endswith(".exe") then "Windows Download URL"
+      elif endswith("-arm64.zip") then "macOS (Apple Silicon) Download URL"
+      elif endswith("-x64.zip") then "macOS (Intel) Download URL"
+      elif endswith(".AppImage") then "Linux Download URL"
+      else "Other" end) as $field
+    | "- **\($field)** — `\(.name)`: \(.browser_download_url)"
 
 jobs:
   # ──────────────────────────────────────────────────────────
@@ -181,6 +190,7 @@ jobs:
         run: find release-assets -type f | sort
 
       - name: Publish GitHub Release
+        id: gh_release
         uses: softprops/action-gh-release@v2
         with:
           name: Zeebroo POS ${{ github.ref_name }}
@@ -196,6 +206,18 @@ jobs:
             release-assets/*.rpm
             release-assets/latest*.yml
             release-assets/latest*.yaml
+
+      # Download links to paste into Admin → Release Management → Zeebroo POS
+      - name: Write download links to job summary
+        env:
+          ASSETS: ${{ steps.gh_release.outputs.assets }}
+        run: |
+          {
+            echo "## Zeebroo POS ${GITHUB_REF_NAME}"
+            echo "Add these in **Admin → Release Management → Zeebroo POS → New Release** (version \`${GITHUB_REF_NAME#v}\`):"
+            echo
+            echo "$ASSETS" | jq -r "$RELEASE_LINKS_JQ"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ──────────────────────────────────────────────────────────
   #  Zeebroo POS Lite — build, three platforms in parallel
@@ -368,5 +390,5 @@ jobs:
             echo "## Zeebroo POS Lite ${GITHUB_REF_NAME#lite-}"
             echo "Add these in **Admin → Release Management → Zeebroo POS Lite → New Release** (version \`${GITHUB_REF_NAME#lite-v}\`):"
             echo
-            echo "$ASSETS" | jq -r '.[] | "- `\(.name)`: \(.browser_download_url)"'
+            echo "$ASSETS" | jq -r "$RELEASE_LINKS_JQ"
           } >> "$GITHUB_STEP_SUMMARY"

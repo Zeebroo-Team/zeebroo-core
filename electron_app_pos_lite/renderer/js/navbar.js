@@ -329,7 +329,9 @@
 
   function releaseDownloadUrl(release) {
     const p = window.electronAPI.platform;
-    return p === 'win32' ? release.windows_url : p === 'darwin' ? release.macos_url : release.linux_url;
+    // macos_url is the Apple Silicon build; Intel Macs need macos_intel_url (older releases only have macos_url)
+    const mac = window.electronAPI.arch === 'x64' ? release.macos_intel_url || release.macos_url : release.macos_url;
+    return p === 'win32' ? release.windows_url : p === 'darwin' ? mac : release.linux_url;
   }
 
   async function fetchLatestRelease() {

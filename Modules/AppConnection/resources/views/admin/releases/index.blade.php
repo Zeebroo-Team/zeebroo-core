@@ -218,7 +218,7 @@
 
             {{-- Download links --}}
             <td>
-              @if($release->windows_url || $release->macos_url || $release->linux_url)
+              @if($release->windows_url || $release->macos_url || $release->macos_intel_url || $release->linux_url)
                 <div class="arl-plat">
                   @if($release->windows_url)
                     <a href="{{ $release->windows_url }}" target="_blank" class="arl-plat-link" title="Windows">
@@ -226,8 +226,13 @@
                     </a>
                   @endif
                   @if($release->macos_url)
-                    <a href="{{ $release->macos_url }}" target="_blank" class="arl-plat-link" title="macOS">
-                      <i class="fa fa-brands fa-apple"></i> Mac
+                    <a href="{{ $release->macos_url }}" target="_blank" class="arl-plat-link" title="macOS — Apple Silicon (M1/M2/M3/M4)">
+                      <i class="fa fa-brands fa-apple"></i> Mac M-series
+                    </a>
+                  @endif
+                  @if($release->macos_intel_url)
+                    <a href="{{ $release->macos_intel_url }}" target="_blank" class="arl-plat-link" title="macOS — Intel">
+                      <i class="fa fa-brands fa-apple"></i> Mac Intel
                     </a>
                   @endif
                   @if($release->linux_url)
@@ -271,6 +276,7 @@
                         data-notes="{{ implode("\n", $release->notes ?? []) }}"
                         data-windows-url="{{ $release->windows_url }}"
                         data-macos-url="{{ $release->macos_url }}"
+                        data-macos-intel-url="{{ $release->macos_intel_url }}"
                         data-linux-url="{{ $release->linux_url }}">
                   <i class="fa fa-pen"></i> Edit
                 </button>
@@ -393,10 +399,19 @@
         </div>
 
         <div class="arl-field">
-          <label><i class="fa fa-brands fa-apple" style="width:14px;text-align:center"></i> macOS Download URL</label>
+          <label><i class="fa fa-brands fa-apple" style="width:14px;text-align:center"></i> macOS (Apple Silicon) Download URL</label>
           <input type="url" name="macos_url" id="arl-f-macos-url" value="{{ old('macos_url') }}"
                  placeholder="https://downloads.sourceforge.net/…/Zeebroo POS-5.0.0-arm64.zip">
+          <p class="arl-field-hint">The <strong>-arm64.zip</strong> build, for M1/M2/M3/M4 Macs.</p>
           @error('macos_url')<p class="arl-field-err">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="arl-field">
+          <label><i class="fa fa-brands fa-apple" style="width:14px;text-align:center"></i> macOS (Intel) Download URL</label>
+          <input type="url" name="macos_intel_url" id="arl-f-macos-intel-url" value="{{ old('macos_intel_url') }}"
+                 placeholder="https://downloads.sourceforge.net/…/Zeebroo POS-5.0.0-x64.zip">
+          <p class="arl-field-hint">The <strong>-x64.zip</strong> build, for Macs with an Intel processor.</p>
+          @error('macos_intel_url')<p class="arl-field-err">{{ $message }}</p>@enderror
         </div>
 
         <div class="arl-field">
@@ -444,6 +459,7 @@
   var notesEl       = document.getElementById('arl-f-notes');
   var windowsEl     = document.getElementById('arl-f-windows-url');
   var macosEl       = document.getElementById('arl-f-macos-url');
+  var macosIntelEl  = document.getElementById('arl-f-macos-intel-url');
   var linuxEl       = document.getElementById('arl-f-linux-url');
 
   function openModal() { modal.classList.add('is-open'); modal.scrollTop = 0; document.body.style.overflow = 'hidden'; }
@@ -468,6 +484,7 @@
     notesEl.value = '';
     windowsEl.value = '';
     macosEl.value = '';
+    macosIntelEl.value = '';
     linuxEl.value = '';
   }
 
@@ -508,6 +525,7 @@
       notesEl.value = btn.getAttribute('data-notes');
       windowsEl.value = btn.getAttribute('data-windows-url');
       macosEl.value = btn.getAttribute('data-macos-url');
+      macosIntelEl.value = btn.getAttribute('data-macos-intel-url');
       linuxEl.value = btn.getAttribute('data-linux-url');
 
       openModal();

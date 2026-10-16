@@ -42,7 +42,8 @@ html.pdl-open,html.pdl-open body{overflow:hidden;}
 .pdl-body{padding:24px 28px 28px;}
 .pdl-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 14px;display:flex;align-items:center;gap:6px;}
 .pdl-section-label::after{content:'';flex:1;height:1px;background:var(--border);}
-.pdl-platforms{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px;}
+.pdl-platforms{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:22px;}
+@media(max-width:640px){.pdl-platforms{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .pdl-platform{display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px 12px;border-radius:14px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 96%,var(--border) 4%);cursor:pointer;text-decoration:none;color:inherit;transition:all .18s ease;position:relative;}
 .pdl-platform:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 6%,var(--card));transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,.1);}
 .pdl-platform__icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;}
@@ -169,21 +170,41 @@ html.pdl-open,html.pdl-open body{overflow:hidden;}
                     </span>
                 @endif
 
-                {{-- macOS --}}
+                {{-- macOS — Apple Silicon (arm64) --}}
                 @if($latestRelease?->macos_url)
-                    <a href="{{ $latestRelease->macos_url }}" class="pdl-platform" aria-label="Download for macOS" target="_blank" rel="noopener">
+                    <a href="{{ $latestRelease->macos_url }}" class="pdl-platform" aria-label="Download for macOS (Apple Silicon)" target="_blank" rel="noopener">
                 @else
-                    <span class="pdl-platform" aria-label="macOS build not available" style="opacity:.5;pointer-events:none;">
+                    <span class="pdl-platform" aria-label="macOS Apple Silicon build not available" style="opacity:.5;pointer-events:none;">
                 @endif
                     <div class="pdl-platform__icon pdl-platform__icon--mac">
                         <i class="fa-brands fa-apple" aria-hidden="true"></i>
                     </div>
                     <span class="pdl-platform__name">macOS</span>
-                    <span class="pdl-platform__meta">macOS 12+<br>Apple Silicon &amp; Intel</span>
+                    <span class="pdl-platform__meta">macOS 12+<br>Apple M1 / M2 / M3 / M4</span>
                     <span class="pdl-platform__dl">
-                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->macos_url ? 'Download .dmg' : 'Not available' }}
+                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->macos_url ? 'Download .zip' : 'Not available' }}
                     </span>
                 @if($latestRelease?->macos_url)
+                    </a>
+                @else
+                    </span>
+                @endif
+
+                {{-- macOS — Intel (x64) --}}
+                @if($latestRelease?->macos_intel_url)
+                    <a href="{{ $latestRelease->macos_intel_url }}" class="pdl-platform" aria-label="Download for macOS (Intel)" target="_blank" rel="noopener">
+                @else
+                    <span class="pdl-platform" aria-label="macOS Intel build not available" style="opacity:.5;pointer-events:none;">
+                @endif
+                    <div class="pdl-platform__icon pdl-platform__icon--mac">
+                        <i class="fa-brands fa-apple" aria-hidden="true"></i>
+                    </div>
+                    <span class="pdl-platform__name">macOS Intel</span>
+                    <span class="pdl-platform__meta">macOS 12+<br>Intel processor</span>
+                    <span class="pdl-platform__dl">
+                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->macos_intel_url ? 'Download .zip' : 'Not available' }}
+                    </span>
+                @if($latestRelease?->macos_intel_url)
                     </a>
                 @else
                     </span>

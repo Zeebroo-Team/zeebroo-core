@@ -10768,8 +10768,9 @@ async function openUpdateModal(force = false) {
 
   const latest    = release.version;
   const hasUpdate = _semverGt(latest, current);
+  // macos_url is the Apple Silicon build; Intel Macs need macos_intel_url (older releases only have macos_url)
   const dlUrl     = platform === 'win32'  ? release.windows_url
-                  : platform === 'darwin' ? release.macos_url
+                  : platform === 'darwin' ? (window.electronAPI.arch === 'x64' ? release.macos_intel_url || release.macos_url : release.macos_url)
                   : release.linux_url;
 
   const notes = Array.isArray(release.notes) && release.notes.length
