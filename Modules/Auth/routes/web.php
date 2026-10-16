@@ -8,6 +8,7 @@ use Modules\Auth\Http\Controllers\AuthController;
 use Modules\Auth\Http\Controllers\EmailVerificationController;
 use Modules\Auth\Http\Controllers\EmployeeVerifyController;
 use Modules\Auth\Http\Controllers\GoogleAuthController;
+use Modules\Auth\Http\Controllers\ImpersonationController;
 use Modules\Auth\Http\Controllers\PasswordResetController;
 use Modules\Business\Http\Controllers\Admin\IndustryController;
 use Modules\Package\Http\Controllers\Admin\BusinessPackageController;
@@ -37,6 +38,9 @@ Route::middleware('guest')->group(function (): void {
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
+    // Outside the admin group: while impersonating, the signed-in user is not an admin.
+    Route::post('/impersonate/leave', [ImpersonationController::class, 'leave'])->name('impersonate.leave');
+
     // Sign-up email verification (opened from the "Verify your email" banner)
     Route::get('/verify-email', [EmailVerificationController::class, 'show'])->name('verification.notice');
     Route::post('/verify-email', [EmailVerificationController::class, 'verify'])->middleware('throttle:10,1')->name('verification.verify');
@@ -50,6 +54,7 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->grou
     Route::put('/users/{user}', [AdminUserController::class, 'update'])->name('users.update');
     Route::patch('/users/{user}/toggle-status', [AdminUserController::class, 'toggleStatus'])->name('users.toggle-status');
     Route::delete('/users/{user}', [AdminUserController::class, 'destroy'])->name('users.destroy');
+    Route::post('/users/{user}/impersonate', [ImpersonationController::class, 'start'])->name('users.impersonate');
 
     // App Releases
     Route::get('/releases', [AppReleaseController::class, 'index'])->name('releases.index');

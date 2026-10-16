@@ -15,6 +15,14 @@
 .ads-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
 .ads-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
 .ads-protected{font-size:11px;color:var(--muted);font-style:italic;}
+.ads-impersonate{margin:0 0 0 auto;}
+.ads-impersonate-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;border:1px solid var(--primary);
+    background:var(--primary);color:#fff;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
+.ads-impersonate-btn:hover{filter:brightness(.95);}
+.ads-impersonate-btn:disabled{opacity:.5;cursor:not-allowed;}
+.ads-msg{display:flex;align-items:center;gap:8px;margin:-8px 0 18px;padding:10px 14px;border-radius:10px;font-size:13px;
+    background:color-mix(in srgb,#22c55e 8%,var(--card));border:1px solid color-mix(in srgb,#22c55e 30%,var(--border));}
+.ads-msg--err{background:color-mix(in srgb,#ef4444 8%,var(--card));border-color:color-mix(in srgb,#ef4444 35%,var(--border));color:#dc2626;}
 .ads-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:22px;}
 @media(max-width:760px){.ads-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .ads-stat{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);}
@@ -128,7 +136,24 @@
                 @endif
             </p>
         </div>
+        @if((int) $user->id !== (int) auth()->id() && $roleName !== 'admin')
+            <form method="POST" action="{{ route('admin.users.impersonate', $user) }}" class="ads-impersonate"
+                  onsubmit="return confirm(@js(__('Log in as :name? You will see their dashboard exactly as they do. Use “Return to admin” to come back.', ['name' => $user->name])));">
+                @csrf
+                <button type="submit" class="ads-impersonate-btn" @disabled(! $user->is_active)
+                        title="{{ $user->is_active ? __('Open this user\'s dashboard to check for errors') : __('Account is disabled') }}">
+                    <i class="fa fa-user-secret"></i> Login as user
+                </button>
+            </form>
+        @endif
     </div>
+
+    @if(session('status'))
+        <div class="ads-msg"><i class="fa fa-circle-check" style="color:#22c55e;"></i> {{ session('status') }}</div>
+    @endif
+    @if($errors->any())
+        <div class="ads-msg ads-msg--err"><i class="fa fa-circle-exclamation"></i> {{ $errors->first() }}</div>
+    @endif
 
     @php
         $branchCount = $user->businesses->sum(fn ($b) => $b->branches->count());

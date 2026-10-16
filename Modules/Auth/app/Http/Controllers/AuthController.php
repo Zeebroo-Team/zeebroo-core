@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
 use Modules\Auth\Services\AuthService;
+use Modules\Auth\Services\ImpersonationService;
 use Modules\HRManagement\Models\Employee;
 
 class AuthController extends Controller
@@ -102,8 +103,15 @@ class AuthController extends Controller
         return redirect()->route('dashboard');
     }
 
-    public function logout(Request $request): RedirectResponse
+    public function logout(Request $request, ImpersonationService $impersonation): RedirectResponse
     {
+        // While an admin is impersonating, "Logout" returns them to their admin account
+        // instead of ending the whole session.
+        if ($impersonation->isImpersonating($request) && ($impersonated = $impersonation->stop($request))) {
+            return redirect()->route('admin.users.show', $impersonated)
+                ->with('status', __('Returned to your admin account.'));
+        }
+
         $this->authService->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
