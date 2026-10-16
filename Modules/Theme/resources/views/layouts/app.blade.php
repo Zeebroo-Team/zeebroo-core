@@ -1915,6 +1915,25 @@
             });
             </script>
         @endif
+        @if(session()->has(\Modules\Auth\Services\ImpersonationService::SESSION_KEY))
+            <style>
+                .imp-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:12px;
+                    max-width:calc(100vw - 32px);padding:9px 10px 9px 16px;border-radius:999px;background:#b45309;color:#fff;font-size:13px;
+                    box-shadow:0 8px 24px rgba(0,0,0,.25);}
+                .imp-bar__text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+                .imp-bar form{margin:0;flex-shrink:0;}
+                .imp-bar button{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;border:0;background:#fff;
+                    color:#b45309;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;}
+            </style>
+            <div class="imp-bar" role="status">
+                <i class="fa fa-user-secret" aria-hidden="true"></i>
+                <span class="imp-bar__text">Viewing as <b>{{ auth()->user()?->name }}</b></span>
+                <form method="POST" action="{{ route('impersonate.leave') }}">
+                    @csrf
+                    <button type="submit"><i class="fa fa-arrow-right-from-bracket" aria-hidden="true"></i> Return to admin</button>
+                </form>
+            </div>
+        @endif
         <div class="content-inner{{ $chatWorkspace ? ' content-inner--chat-workspace' : '' }}">
             @yield('content')
         </div>
