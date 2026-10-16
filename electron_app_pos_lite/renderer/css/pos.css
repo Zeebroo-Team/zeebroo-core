@@ -270,6 +270,9 @@ html, body {
 }
 .product-card:hover { border-color: var(--accent); box-shadow: 0 3px 10px rgba(79, 70, 229, 0.12); }
 .product-card.out-of-stock { opacity: 0.45; cursor: not-allowed; }
+.product-card.needs-setup { border-style: dashed; }
+.product-card.needs-setup .product-stock { color: var(--accent); font-weight: 600; }
+.qs-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 
 .product-thumb {
   width: 100%;

@@ -79,9 +79,18 @@ const API = (() => {
     createProduct: (payload) => request('POST', '/online/products', payload),
     importProducts: (rows) => request('POST', '/online/products/import', { rows }),
     updateProduct: (id, payload) => request('PATCH', `/online/products/${id}`, payload),
+    quickSetupProduct: (id, payload) => request('POST', `/online/products/${id}/quick-setup`, payload),
     deleteProduct: (id) => request('DELETE', `/online/products/${id}`),
     productSearch: (q, perPage) => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
     productStockHistory: (id) => request('GET', `/online/products/${id}/stock-history`),
+    updateLayerSellingPrice: (productId, layerId, price) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/selling-price`, { selling_unit_price: price }),
+    updateLayerWholesalePrice: (productId, layerId, price) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/wholesale-price`, { wholesale_unit_price: price }),
+    updateLayerCostPrice: (productId, layerId, cost) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/cost-price`, { unit_cost: cost }),
+    updateLayerBarcode: (productId, layerId, barcode) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/barcode`, { batch_sku: barcode }),
     productSalesChart: (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
 
     productCategories: (q, page, perPage) => {

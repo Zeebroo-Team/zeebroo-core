@@ -88,6 +88,7 @@ const API = (() => {
     createProduct: (body)              => request('POST',   '/online/products', body),
     importProducts:(rows)             => request('POST',   '/online/products/import', { rows }),
     updateProduct: (id, body)          => request('PATCH',  `/online/products/${id}`, body),
+    quickSetupProduct: (id, body)      => request('POST',   `/online/products/${id}/quick-setup`, body),
     deleteProduct: (id)                => request('DELETE', `/online/products/${id}`),
 
     // Invoices

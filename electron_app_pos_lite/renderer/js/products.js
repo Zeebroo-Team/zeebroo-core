@@ -1618,6 +1618,132 @@ async function openProductDetail(productId, productName) {
   renderProductDetail(p, stockHistory);
 }
 
+// ── Stock receive history (per-batch editable barcode / cost / selling / wholesale) ──
+// Each field maps to a PATCH /online/products/{id}/stock-layers/{layerId}/... endpoint.
+const STOCK_LAYER_FIELDS = {
+  barcode: { save: (pid, lid, v) => API.updateLayerBarcode(pid, lid, v), parse: (v) => String(v ?? '').trim() || null, errKey: 'batch_sku' },
+  cost: { save: (pid, lid, v) => API.updateLayerCostPrice(pid, lid, v), parse: (v) => (v === '' ? 0 : parseFloat(v)), errKey: 'unit_cost' },
+  sell: { save: (pid, lid, v) => API.updateLayerSellingPrice(pid, lid, v), parse: (v) => (v === '' ? null : parseFloat(v)), errKey: 'selling_unit_price' },
+  ws: { save: (pid, lid, v) => API.updateLayerWholesalePrice(pid, lid, v), parse: (v) => (v === '' ? null : parseFloat(v)), errKey: 'wholesale_unit_price' },
+};
+
+function renderStockReceiveHistory(stockHistory) {
+  if (!stockHistory.length) {
+    return `<div class="inv-section srh-section"><div class="inv-section-title"><i class="fa-solid fa-truck-ramp-box"></i> ${t('Stock Receive History')}</div>
+      <div class="inv-pane-empty" style="padding:20px 0"><i class="fa-solid fa-inbox"></i><p>${t('No stock receive records yet')}</p></div></div>`;
+  }
+  const fmtQty = (n) => (n % 1 === 0 ? n : n.toFixed(2));
+  const chip = (cls, icon, text) => (text ? `<span class="srh-ref-chip ${cls}"><i class="fa-solid ${icon}"></i> ${esc(text)}</span>` : '');
+  const field = (kind, h, { label, value, type = 'number', extraCls = '', title }) => `
+    <div class="srh-inline-field srh-inline-field--${kind}">
+      <span class="srh-inline-label">${label}</span>
+      <div class="srh-price-input-wrap">
+        <input type="${type}" class="srh-price-input ${extraCls}" data-field="${kind}" data-layer-id="${h.id}" value="${esc(value)}"
+          ${type === 'number' ? 'min="0" step="0.01" placeholder="0.00"' : `maxlength="150" placeholder="${esc(t('Barcode'))}"`}>
+        <button type="button" class="srh-price-btn srh-price-btn--${kind}" data-field="${kind}" data-layer-id="${h.id}" title="${esc(title)}"><i class="fa-solid fa-check"></i></button>
+      </div>
+      <span class="srh-price-status" data-field="${kind}" data-layer-id="${h.id}"></span>
+    </div>`;
+  const price = (v) => (v != null ? parseFloat(v).toFixed(2) : '');
+
+  const rows = stockHistory.map((h) => {
+    const src = h.source_type || (h.grn_number ? 'grn' : 'opening');
+    const date = h.received_at ? i18n.formatShortDate(new Date(h.received_at)) : '—';
+    const qtyIn = parseFloat(h.quantity_received || 0);
+    const qtyLeft = parseFloat(h.quantity_remaining || 0);
+    const pct = qtyIn > 0 ? Math.max(0, Math.min(100, (qtyLeft / qtyIn) * 100)) : 0;
+    const state = qtyLeft <= 0 ? 'depleted' : qtyLeft < qtyIn ? 'partial' : 'full';
+
+    let badge, refs;
+    if (src === 'opening') {
+      badge = `<span class="inv-src-badge inv-src-opening"><i class="fa-solid fa-box-open"></i> ${t('Opening Stock')}</span>`;
+      refs = '';
+    } else if (src === 'po') {
+      badge = `<span class="inv-src-badge inv-src-po"><i class="fa-solid fa-file-invoice"></i> ${t('Purchase Order')}</span>`;
+      refs = chip('srh-ref-po', 'fa-file-invoice', h.po_number) + chip('srh-ref-grn', 'fa-truck-ramp-box', h.grn_number) + chip('srh-ref-sup', 'fa-building-user', h.supplier_name);
+    } else if (src === 'transfer') {
+      badge = `<span class="inv-src-badge inv-src-transfer"><i class="fa-solid fa-right-left"></i> ${t('Stock Transfer')}</span>`;
+      refs = chip('srh-ref-grn', 'fa-hashtag', h.transfer_number) + chip('srh-ref-ref', 'fa-right-from-bracket', h.from_branch_name) + chip('srh-ref-sup', 'fa-user', h.transferred_by_name);
+    } else {
+      badge = `<span class="inv-src-badge inv-src-grn"><i class="fa-solid fa-truck-ramp-box"></i> ${t('Goods Receive')}</span>`;
+      refs = chip('srh-ref-grn', 'fa-hashtag', h.grn_number) + chip('srh-ref-ref', 'fa-tag', h.grn_reference) + chip('srh-ref-sup', 'fa-building-user', h.supplier_name);
+    }
+
+    return `<div class="srh-row">
+      <div class="srh-row-info">
+        ${badge}${refs}
+        <span class="srh-qty-pill srh-qty-${state}">
+          <span class="srh-qty-mini-bar"><span class="srh-qty-mini-fill srh-bar-${state}" style="width:${pct.toFixed(1)}%"></span></span>
+          ${fmtQty(qtyLeft)} / ${fmtQty(qtyIn)}
+        </span>
+        <span class="srh-date"><i class="fa-solid fa-calendar-day"></i> ${esc(date)}</span>
+      </div>
+      <div class="srh-row-prices">
+        ${field('barcode', h, { label: '<i class="fa-solid fa-barcode"></i>', value: h.batch_sku || '', type: 'text', extraCls: 'srh-barcode-input', title: t('Save barcode') })}
+        ${field('cost', h, { label: t('Cost'), value: price(h.unit_cost), title: t('Save cost price') })}
+        ${field('sell', h, { label: t('Selling'), value: price(h.selling_unit_price), title: t('Save selling price') })}
+        ${field('ws', h, { label: t('Wholesale'), value: price(h.wholesale_unit_price), title: t('Save wholesale price') })}
+      </div>
+    </div>`;
+  }).join('');
+
+  const n = stockHistory.length;
+  return `<div class="inv-section srh-section">
+    <div class="srh-section-header">
+      <span class="inv-section-title" style="margin:0"><i class="fa-solid fa-layer-group"></i> ${t('Stock Receive History')}</span>
+      <span class="srh-count-badge">${n === 1 ? t('1 batch') : t('{n} batches', { n })}</span>
+    </div>
+    <div class="srh-cards">${rows}</div>
+  </div>`;
+}
+
+async function saveStockLayerField(productId, kind, layerId) {
+  const pane = $('#inv-pane-stock');
+  const sel = `[data-field="${kind}"][data-layer-id="${layerId}"]`;
+  const input = pane.querySelector(`input${sel}`);
+  const btn = pane.querySelector(`button${sel}`);
+  const status = pane.querySelector(`.srh-price-status${sel}`);
+  const cfg = STOCK_LAYER_FIELDS[kind];
+  if (!input || !cfg || btn.disabled) return;
+
+  const val = cfg.parse(input.value);
+  if (typeof val === 'number' && (isNaN(val) || val < 0)) {
+    status.textContent = t('Invalid');
+    status.className = 'srh-price-status srh-status-err';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+  status.textContent = '';
+  const res = await cfg.save(productId, layerId, val);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa-solid fa-check"></i>';
+
+  if (res.status === 200) {
+    status.textContent = t('Saved');
+    status.className = 'srh-price-status srh-status-ok';
+    setTimeout(() => { status.textContent = ''; status.className = 'srh-price-status'; }, 2000);
+  } else {
+    status.textContent = res.body?.errors?.[cfg.errKey]?.[0] || res.body?.message || t('Error');
+    status.className = 'srh-price-status srh-status-err';
+  }
+}
+
+function bindStockLayerEditors(productId) {
+  const pane = $('#inv-pane-stock');
+  pane.querySelectorAll('button.srh-price-btn').forEach((btn) => {
+    btn.addEventListener('click', () => saveStockLayerField(productId, btn.dataset.field, btn.dataset.layerId));
+  });
+  pane.querySelectorAll('input.srh-price-input').forEach((input) => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      saveStockLayerField(productId, input.dataset.field, input.dataset.layerId);
+    });
+  });
+}
+
 function renderProductDetail(p, stockHistory = []) {
   _prodActiveData = p;
 
@@ -1735,6 +1861,8 @@ function renderProductDetail(p, stockHistory = []) {
   const stockRows = [
     [t('Available Stock'), displayStock !== '—' ? `<strong style="font-size:15px;color:var(--accent)">${Number(displayStock) % 1 === 0 ? Number(displayStock) : Number(displayStock).toFixed(3)}</strong>` : '—'],
     [t('Low Stock Alert'), p.low_stock_threshold ?? p.alert_quantity ?? '—'],
+    [t('Manage Stock'), p.manage_stock != null ? t(p.manage_stock ? 'Yes' : 'No') : '—'],
+    [t('Allow Backorder'), p.allow_backorder != null ? t(p.allow_backorder ? 'Yes' : 'No') : '—'],
   ].filter(([, v]) => v != null);
 
   const stockNum = stock != null ? Number(stock) : null;
@@ -1744,40 +1872,17 @@ function renderProductDetail(p, stockHistory = []) {
   const stockSummaryHtml = `
     <div class="inv-stock-summary">
       <div class="inv-stock-kpi${stockKpiClass}"><div class="inv-stock-kpi-val">${stockDisp}</div><div class="inv-stock-kpi-label">${t('Available Stock')}</div></div>
-      <div class="inv-stock-kpi inv-stock-kpi--blue"><div class="inv-stock-kpi-val">${totalReceived % 1 === 0 ? totalReceived : totalReceived.toFixed(3)}</div><div class="inv-stock-kpi-label">${t('Total Received')}</div></div>
-      <div class="inv-stock-kpi inv-stock-kpi--gray"><div class="inv-stock-kpi-val">${grnRemaining % 1 === 0 ? grnRemaining : grnRemaining.toFixed(3)}</div><div class="inv-stock-kpi-label">${t('Batches Remaining')}</div></div>
+      <div class="inv-stock-kpi inv-stock-kpi--blue"><div class="inv-stock-kpi-val">${totalReceived % 1 === 0 ? totalReceived : totalReceived.toFixed(3)}</div><div class="inv-stock-kpi-label">${t('Total Received (GRN)')}</div></div>
+      <div class="inv-stock-kpi inv-stock-kpi--gray"><div class="inv-stock-kpi-val">${grnRemaining % 1 === 0 ? grnRemaining : grnRemaining.toFixed(3)}</div><div class="inv-stock-kpi-label">${t('GRN Remaining')}</div></div>
     </div>`;
-
-  const batchHistoryHtml = stockHistory.length
-    ? `<div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-layer-group"></i> ${t('Stock Receive History ({n})', { n: stockHistory.length })}</div>
-        ${stockHistory.map((h) => {
-          const src = h.source_type || (h.grn_number ? 'grn' : 'opening');
-          const srcLabel = t(src === 'opening' ? 'Opening Stock' : src === 'po' ? 'Purchase Order' : src === 'transfer' ? 'Stock Transfer' : 'Goods Receive');
-          const date = h.received_at ? i18n.formatShortDate(new Date(h.received_at)) : '—';
-          const qtyIn = parseFloat(h.quantity_received || 0);
-          const qtyLeft = parseFloat(h.quantity_remaining || 0);
-          const ref = [h.po_number, h.grn_number, h.transfer_number, h.supplier_name].filter(Boolean).join(' · ');
-          return `<div class="stock-batch-card">
-            <span class="stock-batch-src">${esc(srcLabel)}</span>
-            ${ref ? `<span class="stock-batch-ref">${esc(ref)}</span>` : ''}
-            <span class="stock-batch-date">${esc(date)}</span>
-            <div class="stock-batch-prices">
-              <span>${t('Qty:')} <b>${qtyLeft % 1 === 0 ? qtyLeft : qtyLeft.toFixed(2)}</b> / ${qtyIn % 1 === 0 ? qtyIn : qtyIn.toFixed(2)}</span>
-              ${h.unit_cost != null ? `<span>${t('Cost:')} <b>${money(h.unit_cost)}</b></span>` : ''}
-              ${h.selling_unit_price != null ? `<span>${t('Selling:')} <b>${money(h.selling_unit_price)}</b></span>` : ''}
-              ${h.wholesale_unit_price != null ? `<span>${t('Wholesale:')} <b>${money(h.wholesale_unit_price)}</b></span>` : ''}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>`
-    : '';
 
   $('#inv-pane-stock').innerHTML = `
     <div class="inv-section"><div class="inv-section-title"><i class="fa-solid fa-boxes-stacked"></i> ${t('Stock Information')}</div>
       <table class="inv-detail-table">${stockRows.map(([l, v]) => `<tr><td class="inv-dt-label">${esc(t(String(l)))}</td><td class="inv-dt-val">${v}</td></tr>`).join('')}</table>
     </div>
     ${stockHistory.length ? stockSummaryHtml : ''}
-    ${batchHistoryHtml}`;
+    ${renderStockReceiveHistory(stockHistory)}`;
+  bindStockLayerEditors(p.id);
 
   // ── Images tab ──
   $('#inv-pane-images').innerHTML = images.length
@@ -2423,16 +2528,36 @@ $('#cat-csv-import-btn')?.addEventListener('click', async () => {
       if (!tables[tName]) tables[tName] = { columns: colList || [], rows: [] };
       if (colList && !tables[tName].columns.length) tables[tName].columns = colList;
 
-      const rowRe = /\(([^)]*(?:'[^']*'[^)]*)*)\)/g;
-      let rm;
-      while ((rm = rowRe.exec(valueBlock)) !== null) {
-        const raw = rm[1];
-        const vals = splitSqlValues(raw);
-        tables[tName].rows.push(vals);
+      for (const raw of splitSqlRows(valueBlock)) {
+        tables[tName].rows.push(splitSqlValues(raw));
       }
     }
 
     return tables;
+  }
+
+  // Split "(…),(…)" into row bodies, ignoring parentheses inside quoted strings
+  // (e.g. 'Milk (Vanilla) 1L' or 'St.Clair\'S (Black)').
+  function splitSqlRows(block) {
+    const rows = [];
+    let cur = '', depth = 0, inStr = false, esc = false;
+    for (let i = 0; i < block.length; i++) {
+      const c = block[i];
+      if (depth > 0) cur += c;
+      if (esc) { esc = false; continue; }
+      if (inStr) {
+        if (c === '\\') esc = true;
+        else if (c === "'") inStr = false;
+        continue;
+      }
+      if (c === "'") { inStr = true; continue; }
+      if (c === '(') { if (depth === 0) cur = ''; depth++; continue; }
+      if (c === ')' && depth > 0) {
+        depth--;
+        if (depth === 0) rows.push(cur.slice(0, -1));
+      }
+    }
+    return rows;
   }
 
   function splitSqlValues(str) {
@@ -2595,11 +2720,14 @@ $('#cat-csv-import-btn')?.addEventListener('click', async () => {
     const colIdx = {};
     tbl.columns.forEach((c, i) => { colIdx[c] = i; });
     _dim.mapped = tbl.rows.map((row) => {
-      const prod = { name: '', sku: null, unit_price: null, cost_price: null, wholesale_price: null, stock_quantity: 0, description: null, model_no: null, size: null };
+      // unit_price is required by the API — dumps with only names (or blank prices) default to 0
+      const prod = { name: '', sku: null, unit_price: 0, cost_price: null, wholesale_price: null, stock_quantity: 0, description: null, model_no: null, size: null };
       for (const [col, field] of Object.entries(_dim.columnMap)) {
         if (!field) continue;
         const val = row[colIdx[col]] ?? '';
-        if (field === 'unit_price' || field === 'cost_price' || field === 'wholesale_price') {
+        if (field === 'unit_price') {
+          prod[field] = parseFloat(val) || 0;
+        } else if (field === 'cost_price' || field === 'wholesale_price') {
           prod[field] = parseFloat(val) || null;
         } else if (field === 'stock_quantity') {
           prod[field] = parseInt(val) || 0;
