@@ -220,9 +220,9 @@ html.pdl-open,html.pdl-open body{overflow:hidden;}
                         <i class="fa-brands fa-linux" aria-hidden="true"></i>
                     </div>
                     <span class="pdl-platform__name">Linux</span>
-                    <span class="pdl-platform__meta">Ubuntu / Debian<br>AppImage &amp; .deb</span>
+                    <span class="pdl-platform__meta">Most distros<br>AppImage (64-bit)</span>
                     <span class="pdl-platform__dl">
-                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->linux_url ? 'Download .deb' : 'Not available' }}
+                        <i class="fa fa-download" aria-hidden="true"></i> {{ $latestRelease?->linux_url ? 'Download .AppImage' : 'Not available' }}
                     </span>
                 @if($latestRelease?->linux_url)
                     </a>
