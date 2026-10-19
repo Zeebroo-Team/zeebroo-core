@@ -620,7 +620,7 @@ class AutomatedEmailService
             'release_version' => 'v'.ltrim($release->version, 'v'),
             'release_date' => $release->release_date?->format('d M Y') ?? now()->format('d M Y'),
             'release_notes' => $this->notesList((array) $release->notes),
-            'download_url' => $release->windows_url ?: ($release->macos_url ?: ($release->linux_url ?: route('home'))),
+            'download_url' => $release->windows_url ?: ($release->macos_url ?: ($release->macos_intel_url ?: ($release->linux_url ?: route('home')))),
         ];
     }
 
