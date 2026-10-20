@@ -333,6 +333,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('customers/{customer}/subscriptions', [PosSubscriptionApiController::class, 'forCustomer'])->name('customers.subscriptions.index');
     Route::get('customers/{customer}/warranties', [PosCustomerApiController::class, 'warranties'])->name('customers.warranties.index');
     Route::get('customers/{customer}/credit-sales', [PosCustomerApiController::class, 'creditSales'])->name('customers.credit-sales.index');
+    Route::post('customers/{customer}/credit-payments', [PosCustomerApiController::class, 'creditPayment'])->name('customers.credit-payments.store');
 
     Route::get('customer-categories', [PosCustomerCategoryApiController::class, 'index'])->name('customer-categories.index');
     Route::post('customer-categories', [PosCustomerCategoryApiController::class, 'store'])->name('customer-categories.store');

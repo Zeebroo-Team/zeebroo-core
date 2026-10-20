@@ -105,6 +105,30 @@ class Sale extends Model
         return $this->belongsTo(Customer::class, 'pos_customer_id');
     }
 
+    public function creditPayments(): HasMany
+    {
+        return $this->hasMany(CreditPayment::class, 'pos_sale_id');
+    }
+
+    /** Unpaid balance of a credit sale (0 for cash/card sales). */
+    public function creditDue(): float
+    {
+        if ($this->payment_method !== self::PAYMENT_CREDIT) {
+            return 0.0;
+        }
+
+        return max(round((float) $this->total - (float) $this->amount_paid, 2), 0.0);
+    }
+
+    /** A credit sale with money still owed whose due date has passed. */
+    public function isCreditOverdue(): bool
+    {
+        return $this->status === self::STATUS_COMPLETED
+            && $this->creditDue() > 0.005
+            && $this->credit_due_date !== null
+            && $this->credit_due_date->lt(now()->startOfDay());
+    }
+
     public function giftCard(): BelongsTo
     {
         return $this->belongsTo(GiftCard::class, 'pos_gift_card_id');

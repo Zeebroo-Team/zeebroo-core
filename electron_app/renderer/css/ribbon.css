@@ -5095,6 +5095,37 @@ body.dark .bs-sales-badge.voided    { color: #f87171; }
 .sal-tbl tr:last-child td { border-bottom: none; }
 .sal-tbl tbody tr { cursor: pointer; transition: background .1s; }
 .sal-tbl tbody tr:hover td { background: var(--surface2); }
+/* Credit sale past its payment due date with money still owed */
+.sal-tbl tbody tr.sal-row-overdue td { background: rgba(239,68,68,.08); }
+.sal-tbl tbody tr.sal-row-overdue:hover td { background: rgba(239,68,68,.14); }
+.sal-due-chip {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; background: rgba(245,158,11,.14); color: #b45309;
+}
+.sal-due-chip.overdue { background: rgba(239,68,68,.14); color: #dc2626; }
+.sal-pay-btn {
+  margin-left: 6px; padding: 3px 10px; border-radius: 6px; border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); font-size: 11.5px; font-weight: 700; cursor: pointer;
+  white-space: nowrap;
+}
+.sal-pay-btn:hover { background: var(--accent); color: #fff; }
+.pc-pay-all { margin: 0 4px 0 12px; }
+.sal-total-overdue, .sal-total-overdue .label { color: #dc2626 !important; }
+.sal-cp-list { display: flex; flex-direction: column; }
+.sal-cp-row {
+  display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 12.5px;
+}
+.sal-cp-row strong { color: #16a34a; }
+.credit-pay-info { margin-bottom: 12px; }
+.credit-pay-who { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.credit-pay-who span { color: var(--text-muted); font-weight: 600; }
+.credit-pay-due {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-radius: 8px; font-size: 12.5px;
+  background: rgba(245,158,11,.09); border: 1px solid rgba(245,158,11,.2); color: #b45309;
+}
+.credit-pay-due strong { font-size: 15px; }
 .sal-tbl .td-ref { font-weight: 700; color: var(--accent); white-space: nowrap; }
 .sal-tbl .td-muted { color: var(--text-muted); font-size: 12px; }
 .sal-tbl .td-amt { font-weight: 700; text-align: right; white-space: nowrap; }
@@ -6526,12 +6557,78 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
   font-size: 12px; font-weight: 700; color: #b45309;
   position: sticky; top: 0; z-index: 1;
 }
+.cm-credit-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 2px 0 10px; }
+.cm-credit-kpi {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 14px; border-radius: 10px; background: var(--surface2);
+  font-size: 11.5px; color: var(--text-muted);
+}
+.cm-credit-kpi strong { font-size: 16px; font-weight: 700; color: var(--text); }
+.cm-credit-kpi.is-due   { background: rgba(245,158,11,.08); }
+.cm-credit-kpi.is-avail { background: rgba(22,163,74,.08); }
+.cm-credit-kpi.is-avail.is-empty { background: rgba(220,38,38,.08); }
+.cm-credit-usage { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.cm-credit-usage small { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.cm-credit-usage-bar { flex: 1; height: 6px; border-radius: 6px; background: var(--surface2); overflow: hidden; }
+.cm-credit-usage-bar span { display: block; height: 100%; border-radius: 6px; background: #f59e0b; transition: width .3s; }
+.cm-credit-usage.is-high .cm-credit-usage-bar span { background: #dc2626; }
+.cm-credit-kpi.is-due strong { color: #b45309; }
+.cm-credit-kpi.is-avail strong { color: #16a34a; }
+.cm-credit-kpi.is-avail.is-empty strong { color: #dc2626; }
+.cm-credit-pay {
+  padding: 12px 14px; margin-bottom: 8px;
+  border: 1px solid var(--border-light); border-radius: 10px;
+}
+.cm-credit-pay-title {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+  font-size: 12.5px; font-weight: 600; color: var(--text);
+}
+.cm-credit-pay-title i { color: var(--accent); }
+.cm-credit-pay-row { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; }
+.cm-credit-pay-row > * { height: 32px; box-sizing: border-box; }
+.cm-credit-pay-amtwrap {
+  flex: 1 1 180px; max-width: 340px; min-width: 0; display: flex; align-items: center;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface, #fff);
+  transition: border-color .12s, box-shadow .12s;
+}
+.cm-credit-pay-amtwrap:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(78,142,247,.15); }
+.cm-credit-pay-cur { padding: 0 2px 0 10px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
+#cm-credit-pay-amt {
+  flex: 1; min-width: 0; height: 100%; border: none; outline: none; background: transparent;
+  padding: 0 6px; font-size: 13px; font-weight: 600; color: var(--text); font-family: inherit;
+}
+.cm-credit-pay-full {
+  margin-right: 4px; padding: 3px 8px; border: none; border-radius: 5px;
+  background: rgba(78,142,247,.1); color: var(--accent); font-size: 11px; font-weight: 600;
+  cursor: pointer; white-space: nowrap; transition: background .12s;
+}
+.cm-credit-pay-full:hover { background: rgba(78,142,247,.2); }
+.cm-credit-pay-methods {
+  display: flex; padding: 2px; gap: 2px; border-radius: 7px; background: var(--surface2);
+}
+.cm-credit-pay-method {
+  display: flex; align-items: center; gap: 5px; padding: 0 10px;
+  border: none; border-radius: 5px; background: transparent;
+  color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.cm-credit-pay-method:hover { color: var(--text); }
+.cm-credit-pay-method.is-active { background: var(--surface, #fff); color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+.cm-credit-pay-row .qap-btn-save {
+  white-space: nowrap; padding: 0 14px; gap: 6px; justify-content: center;
+  font-size: 12px; border-radius: 7px; box-shadow: none;
+}
+.cm-credit-avail { color: #16a34a; font-size: 12px; }
+.cm-credit-avail.is-empty { color: #dc2626; }
 .cm-dv-credit-row {
   display: flex; align-items: center; gap: 10px;
   padding: 8px 0; border-bottom: 1px solid var(--border-light); font-size: 12px;
 }
 .cm-dv-credit-row:last-child { border-bottom: none; }
+.cm-dv-credit-row.is-overdue { background: rgba(239,68,68,.08); padding-left: 8px; padding-right: 8px; border-radius: 6px; }
+.cm-dv-credit-row .cm-dv-sale-num { flex: 0 0 auto; min-width: 80px; }
 .cm-dv-credit-meta { font-size: 10.5px; color: var(--text-muted); flex: 1; }
+.cm-dv-credit-row .cm-dv-sale-amt { min-width: 70px; text-align: right; }
 .cm-dv-credit-badge {
   font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; white-space: nowrap;
 }
@@ -7562,6 +7659,18 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   background: #fff7ed; color: #c2410c; border: 1px solid rgba(194,65,12,.25);
 }
 #co-credit-section .co-amount-input { font-size: 14px; }
+.co-credit-limit-box {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 10px 12px; margin-bottom: 10px; border-radius: 8px; font-size: 12px;
+  background: var(--bg-subtle, rgba(59,130,246,.06)); border: 1px solid var(--border-light);
+  color: var(--text-muted);
+}
+.co-cl-row { display: flex; justify-content: space-between; align-items: center; }
+.co-cl-row strong { color: var(--text); font-weight: 700; }
+.co-cl-avail strong { color: #16a34a; }
+.co-credit-limit-box.is-over { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.35); }
+.co-credit-limit-box.is-over .co-cl-avail strong { color: #dc2626; }
+.co-cl-warn { margin-top: 4px; font-weight: 700; color: #dc2626; display: flex; gap: 6px; align-items: flex-start; }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    GENERIC MODALS

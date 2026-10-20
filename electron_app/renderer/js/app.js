@@ -1584,6 +1584,94 @@ async function loadSalesList() {
   _salApplyFilters();
 }
 
+// ── Receive credit payment (shared dialog) ──────────────────────────────────
+// opts: { customerId, customerName, due, saleId?, saleNumber?, onDone? }
+// With saleId the payment goes to that one bill; without it the server applies it
+// to the customer's oldest unpaid credit sales first.
+let _creditPayOpts = null;
+
+function openCreditPayment(opts) {
+  if (!opts?.customerId) { toast('This credit sale has no customer to collect from', 'error'); return; }
+  _creditPayOpts = opts;
+  const due = Number(opts.due) || 0;
+  $('#credit-pay-info').innerHTML = `
+    <div class="credit-pay-who">${escHtml(opts.customerName || 'Customer')}${opts.saleNumber ? ` · <span>${escHtml(opts.saleNumber)}</span>` : ''}</div>
+    <div class="credit-pay-due"><span>${opts.saleId ? 'Due on this sale' : 'Total outstanding'}</span><strong>${escHtml(formatMoney(due))}</strong></div>`;
+  $('#credit-pay-amount').value = '';
+  $('#credit-pay-method').value = 'cash';
+  $('#credit-pay-alert').style.display = 'none';
+  $('#credit-pay-modal').style.display = 'flex';
+  setTimeout(() => $('#credit-pay-amount')?.focus(), 50);
+}
+
+function _creditPayClose() {
+  $('#credit-pay-modal').style.display = 'none';
+  _creditPayOpts = null;
+}
+
+async function _creditPaySubmit() {
+  const opts = _creditPayOpts;
+  if (!opts) return;
+  const alertEl = $('#credit-pay-alert');
+  const due     = Number(opts.due) || 0;
+  const amount  = Number(($('#credit-pay-amount').value || '').trim());
+  const fail = msg => { alertEl.textContent = msg; alertEl.style.display = ''; $('#credit-pay-amount').focus(); };
+
+  if (!Number.isFinite(amount) || amount <= 0) return fail('Enter a payment amount.');
+  if (amount > due + 0.005) return fail(`Payment is more than the amount due (${formatMoney(due)}).`);
+
+  const btn = $('#credit-pay-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.customerCreditPayment(opts.customerId, {
+    amount,
+    payment_method: $('#credit-pay-method').value || 'cash',
+    pos_sale_id:    opts.saleId ?? undefined,
+  });
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Receive Payment';
+
+  if (res.status !== 200) return fail(res.body?.errors?.amount?.[0] || res.body?.message || 'Failed to record payment');
+
+  _creditPayClose();
+  toast(res.body?.message || 'Payment received', 'success');
+  opts.onDone?.(res.body?.data);
+}
+
+$('#credit-pay-close')?.addEventListener('click', _creditPayClose);
+$('#credit-pay-cancel')?.addEventListener('click', _creditPayClose);
+$('#credit-pay-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _creditPayClose(); });
+$('#credit-pay-save')?.addEventListener('click', _creditPaySubmit);
+$('#credit-pay-full')?.addEventListener('click', () => {
+  if (_creditPayOpts) $('#credit-pay-amount').value = (Number(_creditPayOpts.due) || 0).toFixed(2);
+});
+$('#credit-pay-amount')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); _creditPaySubmit(); }
+  if (e.key === 'Escape') _creditPayClose();
+});
+
+// Payment cell for a sale row: "credit" plus, while money is owed, the due and a Pay button.
+function _salPaymentCell(s, cur) {
+  const due = Number(s.due_amount) || 0;
+  if (s.payment_method !== 'credit' || due <= 0.005) return escHtml(s.payment_method || '—');
+  return `credit <span class="sal-due-chip${s.is_overdue ? ' overdue' : ''}">Due ${escHtml(formatMoney(due, {currency: cur}))}</span>
+    <button type="button" class="sal-pay-btn" data-sal-pay="${s.id}"><i class="fa fa-hand-holding-dollar"></i> Pay</button>`;
+}
+
+function _salWirePayButtons(wrap, list, onDone) {
+  wrap.querySelectorAll('[data-sal-pay]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation(); // don't open the sale detail
+      const s = list.find(x => x.id === Number(btn.dataset.salPay));
+      if (!s) return;
+      openCreditPayment({
+        customerId: s.pos_customer_id, customerName: s.customer_name,
+        saleId: s.id, saleNumber: s.sale_number, due: s.due_amount, onDone,
+      });
+    });
+  });
+}
+
 // ── Pending Credits ──────────────────────────────────────────────────────────
 let _pcAll = [];   // all customer groups from API
 let _pcSearch = '';
@@ -1663,11 +1751,15 @@ function _pcRender() {
       const dueDateHtml = s.credit_due_date
         ? `<span class="pc-due-date">${fmtDate(s.credit_due_date)}</span>${s.is_overdue ? '<span class="pc-overdue-tag"><i class="fa fa-triangle-exclamation"></i> Overdue</span>' : ''}`
         : '<span style="color:var(--text-muted)">—</span>';
+      const paid = Number(s.amount_paid) || 0;
       return `<tr class="${rowCls}">
         <td style="font-weight:700">${escHtml(s.sale_number || String(s.id))}</td>
         <td>${fmtTime(s.sold_at)}</td>
         <td>${dueDateHtml}</td>
-        <td style="text-align:right;font-weight:700">${formatMoney(s.total, {currency: cur})}</td>
+        <td style="text-align:right">${formatMoney(s.total, {currency: cur})}</td>
+        <td style="text-align:right;color:${paid > 0 ? '#16a34a' : 'var(--text-muted)'}">${paid > 0 ? formatMoney(paid, {currency: cur}) : '—'}</td>
+        <td style="text-align:right;font-weight:700">${formatMoney(s.due_amount ?? s.total, {currency: cur})}</td>
+        <td style="text-align:right">${g.customer_id ? `<button type="button" class="sal-pay-btn" data-pc-pay-sale="${gi}:${s.id}"><i class="fa fa-hand-holding-dollar"></i> Pay</button>` : ''}</td>
       </tr>`;
     }).join('');
 
@@ -1682,11 +1774,12 @@ function _pcRender() {
           <div class="pc-customer-total">${formatMoney(g.total_owed, {currency: cur})}</div>
           ${hasBadge ? `<div class="pc-overdue-badge"><i class="fa fa-triangle-exclamation"></i> Overdue ${formatMoney(g.overdue_amount, {currency: cur})}</div>` : ''}
         </div>
+        ${g.customer_id ? `<button type="button" class="sal-pay-btn pc-pay-all" data-pc-pay-cust="${gi}" title="Apply to the oldest bills first"><i class="fa fa-hand-holding-dollar"></i> Pay</button>` : ''}
         <i class="fa fa-chevron-down pc-customer-chevron"></i>
       </div>
       <div class="pc-sales-table-wrap">
         <table class="pc-sales-table">
-          <thead><tr><th>Sale #</th><th>Date</th><th>Due Date</th><th style="text-align:right">Amount</th></tr></thead>
+          <thead><tr><th>Sale #</th><th>Date</th><th>Due Date</th><th style="text-align:right">Total</th><th style="text-align:right">Paid</th><th style="text-align:right">Due</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
       </div>
@@ -1697,6 +1790,24 @@ function _pcRender() {
   body.querySelectorAll('.pc-customer-card').forEach(card => {
     card.querySelector('.pc-customer-hdr').addEventListener('click', () => {
       card.classList.toggle('expanded');
+    });
+  });
+
+  // Pay buttons — whole customer balance, or one bill
+  body.querySelectorAll('[data-pc-pay-cust]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const g = groups[Number(btn.dataset.pcPayCust)];
+      if (g) openCreditPayment({ customerId: g.customer_id, customerName: g.customer_name, due: g.total_owed, onDone: loadPendingCredits });
+    });
+  });
+  body.querySelectorAll('[data-pc-pay-sale]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const [gi, saleId] = btn.dataset.pcPaySale.split(':').map(Number);
+      const g = groups[gi];
+      const s = g?.sales.find(x => x.id === saleId);
+      if (s) openCreditPayment({ customerId: g.customer_id, customerName: g.customer_name, saleId: s.id, saleNumber: s.sale_number, due: s.due_amount, onDone: loadPendingCredits });
     });
   });
 }
@@ -1762,12 +1873,12 @@ function _salRenderList() {
       const lbl = s.status === 'voided' ? 'Voided' : 'Completed';
       const ch  = s.channel === 'online' ? 'online' : '';
       const chLbl = s.channel === 'online' ? 'Online' : 'POS';
-      return `<tr data-sal-id="${s.id}">
+      return `<tr data-sal-id="${s.id}"${s.is_overdue ? ' class="sal-row-overdue" title="Credit payment overdue"' : ''}>
         <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}</td>
         <td class="td-muted">${dt}</td>
         <td class="td-muted">${escHtml(s.customer_name || '—')}</td>
         <td><span class="sal-channel-chip ${ch}">${chLbl}</span></td>
-        <td class="td-muted">${escHtml(s.payment_method || '—')}</td>
+        <td class="td-muted">${_salPaymentCell(s, cur)}</td>
         <td><span class="bs-sales-badge ${cls}">${lbl}</span></td>
         <td class="td-amt">${formatMoney(parseFloat(s.total || 0), {currency: cur})}</td>
       </tr>`;
@@ -1778,6 +1889,7 @@ function _salRenderList() {
   $('#sal-table-wrap').querySelectorAll('tr[data-sal-id]').forEach(row => {
     row.addEventListener('click', () => _salSelectSale(Number(row.dataset.salId)));
   });
+  _salWirePayButtons($('#sal-table-wrap'), list, () => loadSalesList());
 }
 
 async function _salSelectSale(id) {
@@ -1841,8 +1953,18 @@ async function _salSelectSale(id) {
   if (giftAmt > 0) {
     totalsHTML += `<div class="sal-total-row"><span class="label">Gift card${sale.gift_card?.code ? ' (' + escHtml(sale.gift_card.code) + ')' : ''}</span><span>-${formatMoney(giftAmt, {currency: cur})}</span></div>`;
   }
-  totalsHTML += `
+  const isCreditSale = sale.payment_method === 'credit';
+  if (isCreditSale) {
+    // Credit: amount_paid = gift card + payments received later
+    const paidLater = Math.max(0, parseFloat(sale.amount_paid || 0) - giftAmt);
+    const dueAmt    = Number(sale.due_amount) || 0;
+    totalsHTML += `
+    <div class="sal-total-row"><span class="label">Paid</span><span style="color:#16a34a">${formatMoney(paidLater, {currency: cur})}</span></div>
+    <div class="sal-total-row${sale.is_overdue ? ' sal-total-overdue' : ''}"><span class="label">Balance due${sale.credit_due_date ? ` (due ${escHtml(sale.credit_due_date)})` : ''}</span><strong>${formatMoney(dueAmt, {currency: cur})}</strong></div>`;
+  } else {
+    totalsHTML += `
     <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${formatMoney(paidVia, {currency: cur})}</span></div>`;
+  }
   if (change > 0) {
     totalsHTML += `<div class="sal-total-row"><span class="label">Change</span><span>${formatMoney(change, {currency: cur})}</span></div>`;
   }
@@ -1879,7 +2001,31 @@ async function _salSelectSale(id) {
     </table>
 
     <div class="sal-section-title">Totals</div>
-    <div class="sal-totals">${totalsHTML}</div>`;
+    <div class="sal-totals">${totalsHTML}</div>
+    ${isCreditSale ? _salCreditPaymentsHtml(sale, cur) : ''}`;
+
+  $('#sal-detail-pay-btn')?.addEventListener('click', () => openCreditPayment({
+    customerId: sale.pos_customer_id, customerName: sale.customer_name,
+    saleId: sale.id, saleNumber: num, due: sale.due_amount,
+    onDone: () => _salSelectSale(sale.id),
+  }));
+}
+
+function _salCreditPaymentsHtml(sale, cur) {
+  const due  = Number(sale.due_amount) || 0;
+  const list = sale.credit_payments || [];
+  const rows = list.map(p => `
+    <div class="sal-cp-row">
+      <span>${p.paid_at ? new Date(p.paid_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</span>
+      <span class="td-muted">${escHtml((p.payment_method || '').toUpperCase())}${p.received_by ? ' · ' + escHtml(p.received_by) : ''}</span>
+      <strong>${formatMoney(p.amount, {currency: cur})}</strong>
+    </div>`).join('');
+  return `
+    <div class="sal-section-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Credit Payments</span>
+      ${due > 0.005 && sale.status !== 'voided' ? `<button type="button" class="sal-pay-btn" id="sal-detail-pay-btn"><i class="fa fa-hand-holding-dollar"></i> Receive Payment</button>` : ''}
+    </div>
+    <div class="sal-cp-list">${rows || '<div class="td-muted" style="padding:8px 0">No payments received yet.</div>'}</div>`;
 }
 
 function _salCloseDetail() {
@@ -2132,12 +2278,12 @@ function _salHistRenderTable(data) {
       const dt  = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
       const cls = s.status === 'voided' ? 'voided' : 'completed';
       const ch  = s.channel === 'online' ? 'online' : '';
-      return `<tr data-sal-id="${s.id}">
+      return `<tr data-sal-id="${s.id}"${s.is_overdue ? ' class="sal-row-overdue" title="Credit payment overdue"' : ''}>
         <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}</td>
         <td class="td-muted">${dt}</td>
         <td class="td-muted">${escHtml(s.customer_name || '—')}</td>
         <td><span class="sal-channel-chip ${ch}">${s.channel === 'online' ? 'Online' : 'POS'}</span></td>
-        <td class="td-muted">${escHtml(s.payment_method || '—')}</td>
+        <td class="td-muted">${_salPaymentCell(s, cur)}</td>
         <td><span class="bs-sales-badge ${cls}">${cls === 'voided' ? 'Voided' : 'Completed'}</span></td>
         <td class="td-amt">${formatMoney(parseFloat(s.total || 0), {currency: cur})}</td>
       </tr>`;
@@ -2150,6 +2296,7 @@ function _salHistRenderTable(data) {
       _salSelectSale(Number(row.dataset.salId));
     });
   });
+  _salWirePayButtons($('#sal-hist-table-wrap'), data, () => loadSalesHistory());
 }
 
 // Period buttons
@@ -9028,6 +9175,7 @@ const _notifIconMap = {
   property_expired:        { icon: 'fa-building',             cls: 'warning' },
   purchase_order_overdue:  { icon: 'fa-truck-fast',           cls: 'warning' },
   cheque_overdue:          { icon: 'fa-money-check-dollar',   cls: 'danger'  },
+  credit_sale_overdue:     { icon: 'fa-hand-holding-dollar',  cls: 'danger'  },
   purchase_order_received: { icon: 'fa-circle-check',         cls: 'success' },
   sale_large:              { icon: 'fa-sack-dollar',          cls: 'info'    },
   automation:              { icon: 'fa-bolt',                 cls: 'info'    },
@@ -9172,6 +9320,10 @@ function _notifNavigate(n) {
     case 'cheque_overdue':
       activateTab('inventory');
       switchInvView('cheques');
+      break;
+    case 'credit_sale_overdue':
+      activateTab('sales');
+      if (typeof _salSwitchView === 'function') _salSwitchView('credits');
       break;
     case 'sale_large':
       activateTab('sales');
@@ -24810,6 +24962,7 @@ async function _cmSelectCustomer(id) {
     { label: 'Email',    val: c.email },
     { label: 'Address',  val: c.address },
     { label: 'Notes',    val: c.notes },
+    { label: 'Credit Limit', val: _cmCreditLimitHtml(c), raw: true },
   ];
   $('#cm-dv-fields').innerHTML = fields.map(f => `
     <div class="cm-dv-field">
@@ -24835,6 +24988,16 @@ async function _cmSelectCustomer(id) {
   } else {
     history.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-receipt"></i> No sales yet</div>';
   }
+}
+
+// "1,000.00 · 400.00 available" — or "No limit (owes 250.00)" when the customer has no cap.
+function _cmCreditLimitHtml(c) {
+  const owed = Number(c.credit_outstanding) || 0;
+  if (c.credit_limit == null) {
+    return `<span style="color:var(--text-muted)">No limit${owed > 0 ? ` · owes ${escHtml(formatMoney(owed))}` : ''}</span>`;
+  }
+  const avail = Number(c.credit_available) || 0;
+  return `${escHtml(formatMoney(c.credit_limit))} <span class="cm-credit-avail${avail <= 0 ? ' is-empty' : ''}">· ${escHtml(formatMoney(avail))} available</span>`;
 }
 
 function _cmRenderRentalAlert(overdue) {
@@ -24903,27 +25066,60 @@ async function _cmLoadTabData(tab) {
     const res = await API.customerCreditSales(id);
     if (_cm.selectedId !== id) return;
     const list = res.status === 200 ? (res.body?.data ?? []) : [];
-    const totalDue = res.status === 200 ? (res.body?.meta?.total_due ?? 0) : 0;
+    const meta = res.status === 200 ? (res.body?.meta ?? {}) : {};
+    const totalDue = Number(meta.credit_outstanding ?? meta.total_due ?? 0);
+    const hasLimit = meta.credit_limit != null;
+    const usedPct = hasLimit && Number(meta.credit_limit) > 0
+      ? Math.min(100, Math.max(0, (totalDue / Number(meta.credit_limit)) * 100)) : 0;
+    const summary = `
+      <div class="cm-credit-kpis">
+        <div class="cm-credit-kpi"><span>Credit Limit</span><strong>${hasLimit ? escHtml(formatMoney(meta.credit_limit)) : 'No limit'}</strong></div>
+        <div class="cm-credit-kpi is-due"><span>Outstanding</span><strong>${escHtml(formatMoney(totalDue))}</strong></div>
+        <div class="cm-credit-kpi is-avail${hasLimit && Number(meta.credit_available) <= 0 ? ' is-empty' : ''}"><span>Available</span><strong>${hasLimit ? escHtml(formatMoney(meta.credit_available)) : '—'}</strong></div>
+      </div>
+      ${hasLimit ? `
+      <div class="cm-credit-usage${usedPct >= 90 ? ' is-high' : ''}">
+        <div class="cm-credit-usage-bar"><span style="width:${usedPct.toFixed(1)}%"></span></div>
+        <small>${usedPct.toFixed(0)}% of credit limit used</small>
+      </div>` : ''}
+      ${totalDue > 0.005 ? `
+      <div class="cm-credit-pay">
+        <div class="cm-credit-pay-title"><i class="fa fa-hand-holding-dollar"></i> Receive a payment</div>
+        <div class="cm-credit-pay-row">
+          <div class="cm-credit-pay-amtwrap">
+            <span class="cm-credit-pay-cur">${escHtml(state.currency || 'LKR')}</span>
+            <input type="text" inputmode="decimal" id="cm-credit-pay-amt" placeholder="0.00" autocomplete="off">
+            <button type="button" class="cm-credit-pay-full" id="cm-credit-pay-full" title="Fill the full outstanding amount">Pay full</button>
+          </div>
+          <div class="cm-credit-pay-methods" role="radiogroup" aria-label="Payment method">
+            <button type="button" class="cm-credit-pay-method is-active" data-method="cash"><i class="fa fa-money-bill-wave"></i> Cash</button>
+            <button type="button" class="cm-credit-pay-method" data-method="card"><i class="fa fa-credit-card"></i> Card</button>
+          </div>
+          <input type="hidden" id="cm-credit-pay-method" value="cash">
+          <button type="button" class="qap-btn-save" id="cm-credit-pay-btn"><i class="fa fa-check"></i> Receive Payment</button>
+        </div>
+      </div>` : ''}`;
     if (!list.length) {
-      panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-hand-holding-dollar"></i> No credit or due payments</div>';
+      panel.innerHTML = summary + '<div class="cm-dv-no-sales"><i class="fa fa-hand-holding-dollar"></i> No credit or due payments</div>';
       return;
     }
-    const summary = `<div class="cm-dv-credit-summary"><span>Total Due</span><span>${parseFloat(totalDue).toFixed(2)}</span></div>`;
     panel.innerHTML = summary + list.map(s => {
       const badge = s.is_paid
         ? `<span class="cm-dv-credit-badge cm-dv-credit-badge--paid">Paid</span>`
         : (s.is_overdue
           ? `<span class="cm-dv-credit-badge cm-dv-credit-badge--overdue">Overdue</span>`
           : `<span class="cm-dv-credit-badge cm-dv-credit-badge--due">Due</span>`);
-      const dueText = s.credit_due_date ? `Due ${s.credit_due_date}` : '';
+      const dueText  = s.credit_due_date ? `Due ${s.credit_due_date}` : '';
+      const paidText = Number(s.amount_paid) > 0 ? `Paid ${formatMoney(s.amount_paid)} of ${formatMoney(s.total)}` : `Total ${formatMoney(s.total)}`;
       return `
-      <div class="cm-dv-credit-row">
+      <div class="cm-dv-credit-row${s.is_overdue ? ' is-overdue' : ''}">
         <span class="cm-dv-sale-num">${escHtml(s.sale_number || `#${s.id}`)}</span>
-        <span class="cm-dv-credit-meta">${escHtml(s.sold_at || '')} ${dueText ? '· ' + escHtml(dueText) : ''}</span>
+        <span class="cm-dv-credit-meta">${escHtml(s.sold_at || '')}${dueText ? ' · ' + escHtml(dueText) : ''} · ${escHtml(paidText)}</span>
         ${badge}
         <span class="cm-dv-sale-amt">${parseFloat(s.due_amount || 0).toFixed(2)}</span>
       </div>`;
-    }).join('');
+    }).join('') + _cmCreditPaymentHistoryHtml(res.body?.payments || []);
+    _cmWireCreditPayment(id, totalDue);
 
   } else if (tab === 'rentals') {
     const panel = $('#cm-dv-panel-rentals');
@@ -24958,6 +25154,61 @@ async function _cmLoadTabData(tab) {
   }
 }
 
+function _cmCreditPaymentHistoryHtml(payments) {
+  if (!payments.length) return '';
+  return `<div class="cm-dv-history-title" style="margin-top:14px"><i class="fa fa-receipt"></i> Payment History</div>` +
+    payments.map(p => {
+      const when  = p.paid_at ? new Date(p.paid_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+      const bills = (p.sales || []).map(x => x.sale_number).filter(Boolean).join(', ');
+      return `
+      <div class="cm-dv-credit-row">
+        <span class="cm-dv-sale-num">${escHtml(when)}</span>
+        <span class="cm-dv-credit-meta">${escHtml((p.payment_method || '').toUpperCase())}${bills ? ' · ' + escHtml(bills) : ''}${p.received_by ? ' · ' + escHtml(p.received_by) : ''}</span>
+        <span class="cm-dv-credit-badge cm-dv-credit-badge--paid">Received</span>
+        <span class="cm-dv-sale-amt" style="color:#16a34a">${parseFloat(p.amount || 0).toFixed(2)}</span>
+      </div>`;
+    }).join('');
+}
+
+// Receive a payment against the customer's credit dues; the server applies it oldest sale first,
+// which frees the same amount of their credit limit for new credit sales.
+function _cmWireCreditPayment(id, totalDue) {
+  const amtEl = $('#cm-credit-pay-amt');
+  const btn   = $('#cm-credit-pay-btn');
+  if (!amtEl || !btn) return;
+
+  $('#cm-credit-pay-full')?.addEventListener('click', () => { amtEl.value = totalDue.toFixed(2); amtEl.focus(); });
+  document.querySelectorAll('.cm-credit-pay-method').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.cm-credit-pay-method').forEach(x => x.classList.toggle('is-active', x === b));
+    $('#cm-credit-pay-method').value = b.dataset.method;
+  }));
+
+  const submit = async () => {
+    const amount = Number(amtEl.value.trim());
+    if (!Number.isFinite(amount) || amount <= 0) { toast('Enter a payment amount', 'error'); amtEl.focus(); return; }
+    if (amount > totalDue + 0.005) { toast(`Payment is more than the outstanding due (${formatMoney(totalDue)})`, 'error'); amtEl.focus(); return; }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+    const res = await API.customerCreditPayment(id, { amount, payment_method: $('#cm-credit-pay-method')?.value || 'cash' });
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-check"></i> Receive Payment';
+
+    if (res.status !== 200) {
+      toast(res.body?.errors?.amount?.[0] || res.body?.message || 'Failed to record payment', 'error');
+      return;
+    }
+    toast(res.body?.message || 'Payment received', 'success');
+    if (_cm.selectedId !== id) return;
+    // Refresh header fields (available credit) and the credit list
+    await _cmSelectCustomer(id);
+    _cmSwitchTab('credit');
+  };
+
+  btn.addEventListener('click', submit);
+  amtEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+}
+
 function _cmShowDetail(show) {
   $('#cm-detail-empty').style.display = show ? 'none' : '';
   $('#cm-detail-view').style.display  = show ? 'flex' : 'none';
@@ -24980,6 +25231,8 @@ function _cmShowForm(show, customer = null) {
     const typeRadio = $(`input[name="cm-customer-type"][value="${custType}"]`);
     if (typeRadio) typeRadio.checked = true;
     _setCategoryComboValue('#cm-f-category-input', '#cm-f-category', customer?.customer_category_id ?? '');
+    const limitEl = $('#cm-f-credit-limit');
+    if (limitEl) limitEl.value = customer?.credit_limit != null ? Number(customer.credit_limit).toFixed(2) : '';
     _applyCustomerFieldRequirements();
     requestAnimationFrame(() => $('#cm-f-name').focus());
   }
@@ -24993,8 +25246,13 @@ async function _cmSave() {
   const notes         = $('#cm-f-notes').value.trim() || null;
   const customer_type = $('input[name="cm-customer-type"]:checked')?.value || 'retail';
   const customer_category_id = $('#cm-f-category')?.value || null;
+  const limitRaw      = ($('#cm-f-credit-limit')?.value || '').trim();
+  const credit_limit  = limitRaw === '' ? null : Number(limitRaw);
 
   if (!name) { toast('Name is required', 'error'); $('#cm-f-name').focus(); return; }
+  if (credit_limit !== null && (!Number.isFinite(credit_limit) || credit_limit < 0)) {
+    toast('Credit limit must be a positive amount, or empty for no limit', 'error'); $('#cm-f-credit-limit').focus(); return;
+  }
   if (_custCfg.requirePhone && !phone) { toast('Phone number is required', 'error'); $('#cm-f-phone').focus(); return; }
   if (_custCfg.requireEmail && !email) { toast('Email is required', 'error'); $('#cm-f-email').focus(); return; }
   if (_custCfg.requireAddress && !address) { toast('Address is required', 'error'); $('#cm-f-address').focus(); return; }
@@ -25002,7 +25260,7 @@ async function _cmSave() {
   const btn = $('#cm-form-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
-  const payload = { name, phone, email, address, notes, customer_type, customer_category_id };
+  const payload = { name, phone, email, address, notes, customer_type, customer_category_id, credit_limit };
   let res;
   if (_cm.editingId) {
     res = await API.updateCustomer(_cm.editingId, payload);
@@ -25112,7 +25370,7 @@ $('#cm-category-filter')?.addEventListener('change', e => {
   _cmLoadList();
 });
 
-['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes'].forEach(sel => {
+['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes','#cm-f-credit-limit'].forEach(sel => {
   $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter' && sel !== '#cm-f-notes') _cmSave(); if (e.key === 'Escape') $('#cm-form-cancel')?.click(); });
 });
 
@@ -31587,6 +31845,7 @@ let _coAmount   = ''; // numpad string
 let _coDiscType = 'pct'; // 'pct' | 'flat'
 let _coGift     = null;  // applied gift card { code, name, balance } — amount is derived from the total
 let _coCoupon   = null;  // applied coupon { code, name, discount_type, discount_value, remaining }
+let _coCredit   = { customerId: null, info: null }; // fresh credit figures for the assigned customer (cart copy may be stale)
 
 // Coupon discount on the bill after the order discount — mirrors Coupon::discountFor() on the server.
 function _coCouponDiscount(afterDisc = _coGetAfterDiscount()) {
@@ -31814,6 +32073,7 @@ function _coRefresh() {
     changeEl.textContent  = formatMoney(change);
     changeEl.className    = change >= 0 ? 'co-change-pos' : 'co-change-neg';
   }
+  _coSyncCreditLimit();
 }
 
 function _coNumpadKey(key) {
@@ -31865,6 +32125,7 @@ function openCheckout() {
   // Reset credit fields
   const creditDueDateEl = $('#co-credit-due-date');
   if (creditDueDateEl) creditDueDateEl.value = '';
+  _coCredit = { customerId: null, info: null }; // re-fetch the customer's available credit each checkout
   _coSyncPaymentSections();
 
   // Reset notes & alert
@@ -31916,6 +32177,56 @@ function _coSyncCreditNotice() {
   if (!notice) return;
   const tab = activeTab();
   notice.style.display = (_coGetMethod() === 'credit' && !tab?._customer) ? '' : 'none';
+  _coSyncCreditLimit();
+}
+
+// ── Checkout credit limit ──
+// The amount this sale would add to the customer's dues beyond their available credit (0 = fits / no limit).
+function _coCreditOverBy() {
+  const info = _coCredit.info;
+  if (!info || info.credit_limit == null) return 0;
+  const over = Math.round((_coGetDue() - Number(info.credit_available || 0)) * 100) / 100;
+  return over > 0.005 ? over : 0;
+}
+
+function _coSyncCreditLimit() {
+  const box = $('#co-credit-limit-box');
+  if (!box) return;
+  const cust = activeTab()?._customer;
+  if (_coGetMethod() !== 'credit' || !cust) { box.style.display = 'none'; return; }
+
+  if (_coCredit.customerId !== cust.id) {
+    _coCredit = { customerId: cust.id, info: null };
+    box.className = 'co-credit-limit-box';
+    box.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking credit limit…';
+    box.style.display = '';
+    API.customer(cust.id).then(res => {
+      if (_coCredit.customerId !== cust.id) return;
+      _coCredit.info = res.status === 200 ? res.body?.data : cust;
+      _coSyncCreditLimit();
+    });
+    return;
+  }
+  const info = _coCredit.info;
+  if (!info) return; // still loading
+
+  const owed = Number(info.credit_outstanding) || 0;
+  if (info.credit_limit == null) {
+    box.className = 'co-credit-limit-box';
+    box.innerHTML = `<div class="co-cl-row"><span>Credit limit</span><strong>No limit</strong></div>
+      <div class="co-cl-row"><span>Outstanding</span><strong>${escHtml(formatMoney(owed))}</strong></div>`;
+    box.style.display = '';
+    return;
+  }
+
+  const over = _coCreditOverBy();
+  box.className = 'co-credit-limit-box' + (over > 0 ? ' is-over' : '');
+  box.innerHTML = `
+    <div class="co-cl-row"><span>Credit limit</span><strong>${escHtml(formatMoney(info.credit_limit))}</strong></div>
+    <div class="co-cl-row"><span>Outstanding</span><strong>${escHtml(formatMoney(owed))}</strong></div>
+    <div class="co-cl-row co-cl-avail"><span>Available</span><strong>${escHtml(formatMoney(info.credit_available))}</strong></div>
+    ${over > 0 ? `<div class="co-cl-warn"><i class="fa fa-triangle-exclamation"></i> This sale (${escHtml(formatMoney(_coGetDue()))}) is ${escHtml(formatMoney(over))} over the available credit.</div>` : ''}`;
+  box.style.display = '';
 }
 
 // Payment method tabs
@@ -32166,6 +32477,7 @@ async function _coCustRender(q) {
     <div class="co-cust-dd-row" data-cid="${c.id}">
       <div class="co-cust-dd-name">${escHtml(c.name)}</div>
       ${c.phone ? `<div class="co-cust-dd-meta">${escHtml(c.phone)}</div>` : ''}
+      ${c.credit_limit != null ? `<div class="co-cust-dd-meta">Credit ${escHtml(formatMoney(c.credit_available))} of ${escHtml(formatMoney(c.credit_limit))} available</div>` : ''}
     </div>`).join('');
 
   const emptyRow = !list.length
@@ -32277,6 +32589,13 @@ $('#checkout-confirm').addEventListener('click', async () => {
     showAlert(alertEl, 'Credit payment requires a customer. Please assign a customer above.');
     _coSyncCreditNotice();
     setTimeout(() => $('#co-cust-trigger')?.focus(), 60);
+    return;
+  }
+
+  // Credit sale can't take the customer past their credit limit (the server checks this too)
+  if (method === 'credit' && _coCreditOverBy() > 0) {
+    const info = _coCredit.info;
+    showAlert(alertEl, `Credit limit exceeded for ${tab._customer.name}: available ${formatMoney(info.credit_available)}, this sale ${formatMoney(due)}. Reduce the bill, or receive a payment on their dues first (Customers → Credit / Due).`);
     return;
   }
 

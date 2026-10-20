@@ -144,11 +144,11 @@ class PosSaleApiController extends Controller
     public function pendingCredits(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $today    = now()->startOfDay();
 
         $sales = $business->sales()
             ->where('payment_method', Sale::PAYMENT_CREDIT)
             ->where('status', Sale::STATUS_COMPLETED)
+            ->whereRaw('total - amount_paid > 0.005')
             ->with('customer')
             ->orderBy('sold_at', 'desc')
             ->get();
@@ -156,22 +156,25 @@ class PosSaleApiController extends Controller
         // Group by customer (null customer → walk-in group)
         $groups = $sales->groupBy(fn ($s) => $s->pos_customer_id ?? 0);
 
-        $result = $groups->map(function ($group) use ($today) {
+        $result = $groups->map(function ($group) {
             $first       = $group->first();
-            $totalOwed   = round((float) $group->sum('total'), 2);
+            $totalOwed   = round((float) $group->sum(fn ($s) => (float) $s->total - (float) $s->amount_paid), 2);
             $overdueAmt  = 0.0;
             $hasOverdue  = false;
 
-            $salesArr = $group->map(function ($s) use ($today, &$overdueAmt, &$hasOverdue) {
-                $isOverdue = $s->credit_due_date !== null && $s->credit_due_date->lt($today);
+            $salesArr = $group->map(function ($s) use (&$overdueAmt, &$hasOverdue) {
+                $due       = $s->creditDue();
+                $isOverdue = $s->isCreditOverdue();
                 if ($isOverdue) {
-                    $overdueAmt += (float) $s->total;
+                    $overdueAmt += $due;
                     $hasOverdue  = true;
                 }
                 return [
                     'id'              => $s->id,
                     'sale_number'     => $s->sale_number,
                     'total'           => round((float) $s->total, 2),
+                    'amount_paid'     => round((float) $s->amount_paid, 2),
+                    'due_amount'      => $due,
                     'sold_at'         => $s->sold_at?->toIso8601String(),
                     'credit_due_date' => $s->credit_due_date?->format('Y-m-d'),
                     'is_overdue'      => $isOverdue,
