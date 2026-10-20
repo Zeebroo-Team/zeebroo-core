@@ -1001,7 +1001,14 @@ $('#prod-f-rental')?.addEventListener('change', function () {
 $('#prod-f-subscription')?.addEventListener('change', function () {
   if (!this.checked) { $('#prod-f-subscription-period').value = 'monthly'; $('#prod-f-subscription-free-trial').checked = false; }
 });
-$('#prod-f-dynamic-pricing')?.addEventListener('change', function () { if (!this.checked) $('#prod-f-dynamic-linked').checked = false; });
+$('#prod-f-dynamic-pricing')?.addEventListener('change', function () {
+  if (!this.checked) $('#prod-f-dynamic-linked').checked = false;
+  // Dynamic pricing already asks for the price — the two options are exclusive
+  else $('#prod-f-changeable-price').checked = false;
+});
+$('#prod-f-changeable-price')?.addEventListener('change', function () {
+  if (this.checked) { $('#prod-f-dynamic-pricing').checked = false; $('#prod-f-dynamic-linked').checked = false; }
+});
 
 // ── Delivery tab (dynamic partner cards from business settings) ────────
 function _prodRenderDeliveryTab(deliveryEnabled, enabledKeys, selectedMethods) {
@@ -1084,6 +1091,7 @@ async function _prodOpenModal(editId) {
   $('#prod-f-subscription-free-trial').checked = false;
   $('#prod-f-dynamic-pricing').checked = false;
   $('#prod-f-dynamic-linked').checked = false;
+  $('#prod-f-changeable-price').checked = false;
   $('#prod-f-item-tax').checked = false;
   $('#prod-f-item-discount').checked = false;
 
@@ -1171,6 +1179,7 @@ async function _prodOpenModal(editId) {
     $('#prod-f-subscription-free-trial').checked = !!p.subscription_free_trial;
     $('#prod-f-dynamic-pricing').checked = !!p.is_dynamic_pricing;
     $('#prod-f-dynamic-linked').checked = !!p.dynamic_price_qty_linked;
+    $('#prod-f-changeable-price').checked = !!p.is_changeable_price;
     $('#prod-f-item-tax').checked = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked = !!p.item_wise_discount;
 
@@ -1300,6 +1309,7 @@ async function _prodSave(andNew) {
     subscription_free_trial: $('#prod-f-subscription').checked ? $('#prod-f-subscription-free-trial').checked : false,
     is_dynamic_pricing: $('#prod-f-dynamic-pricing').checked,
     dynamic_price_qty_linked: $('#prod-f-dynamic-pricing').checked ? $('#prod-f-dynamic-linked').checked : false,
+    is_changeable_price: !$('#prod-f-dynamic-pricing').checked && $('#prod-f-changeable-price').checked,
     item_wise_tax: $('#prod-f-item-tax').checked,
     item_wise_discount: $('#prod-f-item-discount').checked,
   };
@@ -1382,6 +1392,7 @@ const _PROD_FIELD_MAP = [
   { id: 'rental', label: 'Rental', icon: 'fa-key', section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
   { id: 'subscription', label: 'Subscription', icon: 'fa-repeat', section: 'Advanced', getEl() { return document.getElementById('prod-f-subscription')?.closest('.prod-adv-card'); } },
   { id: 'dynamic-pricing', label: 'Dynamic Pricing', icon: 'fa-wand-magic-sparkles', section: 'Advanced', getEl() { return document.getElementById('prod-f-dynamic-pricing')?.closest('.prod-adv-card'); } },
+  { id: 'changeable-price', label: 'Changeable Selling Price', icon: 'fa-pen-to-square', section: 'Advanced', getEl() { return document.getElementById('prod-f-changeable-price')?.closest('.prod-adv-card'); } },
   { id: 'item-tax', label: 'Item Wise Tax', icon: 'fa-percent', section: 'Advanced', getEl() { return document.getElementById('prod-f-item-tax')?.closest('.prod-adv-card'); } },
   { id: 'item-discount', label: 'Item Wise Discount', icon: 'fa-tag', section: 'Advanced', getEl() { return document.getElementById('prod-f-item-discount')?.closest('.prod-adv-card'); } },
 ];
