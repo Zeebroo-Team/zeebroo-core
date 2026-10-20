@@ -347,6 +347,8 @@ $obSteps = [
 @push('auth-styles')
 <style>
 /* ─── Break auth layout constraints ─── */
+.auth-page{display:block!important;padding:0!important;}
+.auth-split{max-width:none!important;min-height:100vh!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;animation:none!important;}
 .auth-split__visual{display:none!important;}
 .auth-split__main{padding:0!important;align-items:stretch!important;background:#f5f5f4!important;}
 .auth-shell{max-width:none!important;width:100%!important;height:100vh!important;display:flex!important;position:relative!important;}

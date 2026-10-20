@@ -10,9 +10,9 @@
     </header>
     <div class="auth-body">
         @if(session('status'))
-            <p class="sub" style="color:#16a34a;"><i class="fa fa-circle-check" aria-hidden="true"></i> {{ session('status') }}</p>
+            <p class="sub" style="color:#1F9D63;"><i class="fa fa-circle-check" aria-hidden="true"></i> {{ session('status') }}</p>
         @endif
-        <p class="sub">{{ __('Use your email and password to access your dashboard.') }}</p>
+        <p class="sub sub--hint">{{ __('Use your email and password to access your dashboard.') }}</p>
         <form method="post" action="{{ route('login.submit') }}" autocomplete="on">
             @csrf
             <div class="field">
@@ -30,9 +30,9 @@
                     <input id="remember" type="checkbox" name="remember" value="1">
                     <label for="remember">{{ __('Remember this device') }}</label>
                 </span>
-                <a href="{{ route('password.request') }}" style="font-size:13px;">{{ __('Forgot password?') }}</a>
+                <a href="{{ route('password.request') }}" style="font-size:14px;">{{ __('Forgot password?') }}</a>
             </div>
-            <button type="submit" class="auth-btn">{{ __('Sign in') }}</button>
+            <button type="submit" class="auth-btn">{{ __('Sign in') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
         </form>
         @if(! empty($googleAuthConfigured))
             <div class="auth-divider" role="presentation"><span>{{ __('or') }}</span></div>
@@ -46,7 +46,8 @@
                 {{ __('Sign in with Google') }}
             </a>
         @endif
-        <div class="auth-alt-links" role="navigation" aria-label="{{ __('Other options') }}">
+        <div class="auth-alt-links auth-alt-links--switch" role="navigation" aria-label="{{ __('Other options') }}">
+            <span class="auth-alt-links--switch__prompt">{{ __('New to Zeebroo?') }}</span>
             <a href="{{ route('register') }}" class="auth-alt-pill" title="{{ __('Create a new workspace account') }}">
                 <i class="fa fa-user-plus" aria-hidden="true"></i><span>{{ __('Create account') }}</span>
             </a>

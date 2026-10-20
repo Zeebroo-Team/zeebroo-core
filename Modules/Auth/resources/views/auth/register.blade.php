@@ -49,7 +49,7 @@
                     <input id="password" name="password" type="password" required autocomplete="new-password">
                     <div class="error">@error('password'){{ $message }}@enderror</div>
                 </div>
-                <button type="button" class="auth-btn register-form__next" id="registerNextBtn">{{ __('Continue') }}</button>
+                <button type="button" class="auth-btn register-form__next" id="registerNextBtn">{{ __('Continue') }} <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
             </div>
 
             <div class="register-panel" id="registerPanel2" @if($initialStep !== 2) hidden @endif>
@@ -81,7 +81,8 @@
                 {{ __('Sign up with Google') }}
             </a>
         @endif
-        <div class="auth-alt-links" role="navigation" aria-label="{{ __('Other options') }}">
+        <div class="auth-alt-links auth-alt-links--switch" role="navigation" aria-label="{{ __('Other options') }}">
+            <span class="auth-alt-links--switch__prompt">{{ __('Already have an account?') }}</span>
             <a href="{{ route('login') }}" class="auth-alt-pill" title="{{ __('Sign in with an existing account') }}">
                 <i class="fa fa-right-to-bracket" aria-hidden="true"></i><span>{{ __('Sign in') }}</span>
             </a>
@@ -96,14 +97,14 @@
 
 @push('auth-styles')
     <style>
-        .register-steps{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:0;font-size:13px;color:var(--muted);font-weight:600;}
-        .register-steps__label strong{color:var(--text);font-weight:800;}
-        .register-steps__dots{display:flex;gap:8px;}
-        .register-steps__dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .2s ease,transform .2s ease;}
-        .register-steps__dot.is-active{background:var(--btn);transform:scale(1.15);}
+        .register-steps{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px;padding:0;font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+        .register-steps__label strong{color:var(--text);font-weight:600;}
+        .register-steps__dots{display:flex;gap:6px;}
+        .register-steps__dot{width:8px;height:8px;border-radius:999px;background:var(--paper-2);transition:width .4s var(--ease),background .3s;}
+        .register-steps__dot.is-active{width:24px;background:var(--zee);}
         .register-form__actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
-        .auth-btn--secondary{background:var(--card);color:var(--text);border-color:var(--border);}
-        .auth-btn--secondary:hover{background:var(--btn-hover);color:var(--btn-hover-text);border-color:var(--btn-hover);}
+        .auth-btn--secondary{background:transparent;color:var(--text);border-color:rgba(18,18,18,.22);}
+        .auth-btn--secondary:hover{background:var(--card);color:var(--text);border-color:var(--ink);}
     </style>
 @endpush
 
