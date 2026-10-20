@@ -411,6 +411,7 @@ class PosCatalogService
             'rental_needs_cleaning'        => (bool) $product->rental_needs_cleaning,
             'is_dynamic_pricing'           => (bool) $product->is_dynamic_pricing,
             'dynamic_price_qty_linked'     => (bool) $product->dynamic_price_qty_linked,
+            'is_changeable_price'          => (bool) $product->is_changeable_price,
         ];
     }
 

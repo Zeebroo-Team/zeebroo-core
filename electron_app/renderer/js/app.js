@@ -21139,6 +21139,7 @@ async function _prodOpenModal(editId) {
   $('#prod-f-subscription-free-trial').checked = false;
   $('#prod-f-dynamic-pricing').checked    = false;
   $('#prod-f-dynamic-linked').checked     = false;
+  $('#prod-f-changeable-price').checked   = false;
   $('#prod-f-item-tax').checked           = false;
   $('#prod-f-item-discount').checked      = false;
 
@@ -21214,6 +21215,7 @@ async function _prodOpenModal(editId) {
     $('#prod-f-subscription-free-trial').checked = !!p.subscription_free_trial;
     $('#prod-f-dynamic-pricing').checked    = !!p.is_dynamic_pricing;
     $('#prod-f-dynamic-linked').checked     = !!p.dynamic_price_qty_linked;
+    $('#prod-f-changeable-price').checked   = !!p.is_changeable_price;
     $('#prod-f-item-tax').checked           = !!p.item_wise_tax;
     $('#prod-f-item-discount').checked      = !!p.item_wise_discount;
 
@@ -21466,6 +21468,7 @@ async function _prodSave(andNew = false) {
     subscription_free_trial:       $('#prod-f-subscription').checked ? $('#prod-f-subscription-free-trial').checked : false,
     is_dynamic_pricing:            $('#prod-f-dynamic-pricing').checked,
     dynamic_price_qty_linked:      $('#prod-f-dynamic-pricing').checked ? $('#prod-f-dynamic-linked').checked : false,
+    is_changeable_price:           !$('#prod-f-dynamic-pricing').checked && $('#prod-f-changeable-price').checked,
     item_wise_tax:         $('#prod-f-item-tax').checked,
     item_wise_discount:    $('#prod-f-item-discount').checked,
   };
@@ -21604,6 +21607,7 @@ const _PROD_FIELD_MAP = [
   { id: 'rental',            label: 'Rental',             icon: 'fa-key',            section: 'Advanced', getEl() { return document.getElementById('prod-f-rental')?.closest('.prod-adv-card'); } },
   { id: 'subscription',      label: 'Subscription',       icon: 'fa-repeat',         section: 'Advanced', getEl() { return document.getElementById('prod-f-subscription')?.closest('.prod-adv-card'); } },
   { id: 'dynamic-pricing',   label: 'Dynamic Pricing',    icon: 'fa-wand-magic-sparkles', section: 'Advanced', getEl() { return document.getElementById('prod-f-dynamic-pricing')?.closest('.prod-adv-card'); } },
+  { id: 'changeable-price',  label: 'Changeable Selling Price', icon: 'fa-pen-to-square', section: 'Advanced', getEl() { return document.getElementById('prod-f-changeable-price')?.closest('.prod-adv-card'); } },
   { id: 'item-tax',          label: 'Item Wise Tax',     icon: 'fa-percent',        section: 'Advanced', getEl() { return document.getElementById('prod-f-item-tax')?.closest('.prod-adv-card'); } },
   { id: 'item-discount',     label: 'Item Wise Discount', icon: 'fa-tag',            section: 'Advanced', getEl() { return document.getElementById('prod-f-item-discount')?.closest('.prod-adv-card'); } },
 ];
@@ -21860,6 +21864,11 @@ $('#prod-f-subscription')?.addEventListener('change', function () {
 });
 $('#prod-f-dynamic-pricing')?.addEventListener('change', function () {
   if (!this.checked) $('#prod-f-dynamic-linked').checked = false;
+  // Dynamic pricing already asks for the price — the two options are exclusive
+  else $('#prod-f-changeable-price').checked = false;
+});
+$('#prod-f-changeable-price')?.addEventListener('change', function () {
+  if (this.checked) { $('#prod-f-dynamic-pricing').checked = false; $('#prod-f-dynamic-linked').checked = false; }
 });
 $('#prod-f-warranty-duration')?.addEventListener('input', _prodSyncWarrantyChips);
 $$('#prod-warranty-duration-row .warranty-chip').forEach(chip => {
@@ -23451,6 +23460,7 @@ async function _addToCartDirectly(p) {
       stock: p.stock_quantity != null ? parseFloat(p.stock_quantity) : null,
     };
   }
+  if (p.is_changeable_price && !(await _applyChangeablePrice(cartItem))) return;
   if (p.has_warranty) {
     const tab = activeTab();
     const key = cartItem.layerId != null ? `${cartItem.id}:${cartItem.layerId}` : `${cartItem.id}`;
@@ -23626,6 +23636,10 @@ async function _tryBatchSkuApiAdd(q) {
     ? parseFloat(matchedLayer.unit_sell_price)
     : parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
   const cartItem = { id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId };
+  if (p.is_changeable_price && !(await _applyChangeablePrice(cartItem))) {
+    _resetSearchAfterScan();
+    return true;
+  }
   if (p.has_warranty) {
     const tab = activeTab();
     const key = layerId != null ? `${p.id}:${layerId}` : `${p.id}`;
@@ -30649,6 +30663,21 @@ $('#pos-price-input').addEventListener('keydown', e => {
   if (e.key === 'Enter')  $('#pos-price-confirm').click();
   if (e.key === 'Escape') $('#pos-price-cancel').click();
 });
+
+// Changeable-price products: ask the cashier for the selling price (prefilled
+// with the catalog price) and pin it on the cart item. Resolves false on cancel.
+async function _applyChangeablePrice(cartItem) {
+  const price = await _askPrice(cartItem.name, Number(cartItem.price) || 0);
+  if (price === null) return false;
+  if (price <= 0) { toast('Enter a selling price greater than zero.', 'error'); return false; }
+  const p2 = round2(price);
+  cartItem.price           = p2;
+  cartItem._originalPrice  = p2;
+  cartItem._retailPrice    = p2;
+  cartItem._wholesalePrice = null;
+  cartItem._changeablePrice = true;
+  return true;
+}
 // ── End Price override prompt ──────────────────────────────────────────────
 
 // ── Warranty display helpers ────────────────────────────────────────────────
@@ -31047,8 +31076,11 @@ async function handleProductClick(p) {
     };
   }
 
-  // choose_price: ask for the unit price before adding
-  if (state.receiptSettings?.choose_price) {
+  // Changeable-price products: cashier confirms / edits the selling price first
+  if (p.is_changeable_price) {
+    if (!(await _applyChangeablePrice(cartItem))) return;
+  } else if (state.receiptSettings?.choose_price) {
+    // choose_price: ask for the unit price before adding
     const overridden = await _askPrice(cartItem.name, cartItem.price);
     if (overridden === null) return; // cancelled
     cartItem.price = overridden;
@@ -31235,6 +31267,8 @@ function addToCart(product) {
   _flyToCart(product.id);
   let key = product.layerId != null ? `${product.id}:${product.layerId}` : `${product.id}`;
   if (product._isRental) key += `:${product._rentalReturnDate || ''}`;
+  // Changeable-price items merge only with lines sold at the same price.
+  if (product._changeablePrice) key += `:cp:${product.price}`;
   // Each dynamic-price entry is its own line (e.g. two separate Rs 350 reloads).
   if (product._isDynamic) key = product._dynKey;
   const existing = tab.cart.find(i => i._key === key);
@@ -32307,7 +32341,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
         item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
         item_tax_rule:          i.itemTaxRule ?? undefined,
         rental_return_date:     i._isRental ? i._rentalReturnDate : undefined,
-        custom_unit_price:      (i._isDynamic && !i._dynLinked) ? i.price : undefined,
+        custom_unit_price:      ((i._isDynamic && !i._dynLinked) || i._changeablePrice) ? i.price : undefined,
       })),
       ...serviceItems.map(i => ({
         item_type:              'service',
@@ -32550,6 +32584,7 @@ $('#rb-barcode').addEventListener('click', async () => {
     ? parseFloat(matchedLayer.unit_sell_price)
     : parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? p.price ?? 0);
   const cartItem = { id: p.id, name: p.name, price, stock: p.layer_qty_remaining ?? p.stock_quantity ?? null, layerId };
+  if (p.is_changeable_price && !(await _applyChangeablePrice(cartItem))) return;
   if (p.has_warranty) {
     const tab = activeTab();
     const key = layerId != null ? `${p.id}:${layerId}` : `${p.id}`;

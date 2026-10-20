@@ -775,6 +775,10 @@ class SaleService
                 $customUnitPrice = $product->dynamic_price_qty_linked
                     ? 1.0
                     : ($row['custom_unit_price'] ?? null);
+            } elseif ($product->is_changeable_price && ! $product->is_rental && $row['custom_unit_price'] !== null) {
+                // Changeable-price products: the cashier confirmed / edited the
+                // selling price at the POS before adding the item to the cart.
+                $customUnitPrice = $row['custom_unit_price'];
             } elseif ($honourClientPrices && ! $product->is_rental && $row['custom_unit_price'] !== null) {
                 // Offline sale: keep the (already discounted) price the customer
                 // paid on the phone, even if the catalog price changed since.
