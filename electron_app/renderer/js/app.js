@@ -5394,6 +5394,7 @@ function setFeaturesLoading(on) {
 
 function showLogin() {
   setFeaturesLoading(false);
+  _featStopRetry();
   window.electronAPI.narrowAuth?.();
   state.cashierMode  = false;
   state.cashierInfo  = null;
@@ -6466,9 +6467,102 @@ function applyFeatureVisibility() {
   if (openBody) _buildSections(openBody, _bsOpenSections.filter(s => openFeat[s.title]?.[0] !== false));
 }
 
+// Feature/permission loading must fail CLOSED: a network error (status 0) or a
+// server error must never be read as "unrestricted", or a slow/offline start
+// would show every tab. On such failures we fall back to the last good result
+// for this business + login, and otherwise keep the tab skeleton up and retry.
+const _feat = { applied: false, retryTimer: null, retryDelay: 0, offlineToasted: false };
+const _FEAT_CACHE_KEY = 'zb_features_cache';
+
+function _featNetFail(res) {
+  const s = res?.status;
+  return !s || s >= 500 || s === 408 || s === 429;
+}
+
+function _featCacheTag() {
+  // Tie the cache to this business + this login, without storing the token itself
+  const tok = String(state.config?.token || '');
+  let h = 0;
+  for (let i = 0; i < tok.length; i++) h = (h * 31 + tok.charCodeAt(i)) | 0;
+  return `${state.config?.business_id || 0}:${h}`;
+}
+
+function _featCacheRead() {
+  try {
+    const c = JSON.parse(localStorage.getItem(_FEAT_CACHE_KEY) || 'null');
+    return c && c.tag === _featCacheTag() ? c : null;
+  } catch (_) { return null; }
+}
+
+function _featCacheWrite(featRes, meRes) {
+  try {
+    localStorage.setItem(_FEAT_CACHE_KEY, JSON.stringify({
+      tag:  _featCacheTag(),
+      feat: { status: featRes.status, body: { data: featRes.body?.data, allowed: featRes.body?.allowed } },
+      me:   { status: meRes.status,   body: { data: meRes.body?.data } },
+    }));
+  } catch (_) {}
+}
+
+function _featStopRetry() {
+  clearTimeout(_feat.retryTimer);
+  _feat.retryTimer = null;
+}
+
+function _featScheduleRetry() {
+  _featStopRetry();
+  _feat.retryDelay = Math.min(_feat.retryDelay ? _feat.retryDelay * 2 : 5000, 60000);
+  _feat.retryTimer = setTimeout(() => {
+    _feat.retryTimer = null;
+    if (state.config?.token) loadFeatures().catch(() => {});
+  }, _feat.retryDelay);
+}
+
+window.addEventListener('online', () => {
+  if (_feat.retryTimer && state.config?.token) {
+    _featStopRetry();
+    loadFeatures().catch(() => {});
+  }
+});
+
 async function loadFeatures() {
+  _featStopRetry();
   const [featRes, meRes] = await Promise.all([API.features(), API.memberMe()]);
 
+  if (_featNetFail(featRes) || _featNetFail(meRes)) {
+    _featScheduleRetry();
+    if (!_feat.offlineToasted) {
+      _feat.offlineToasted = true;
+      toast('Cannot reach the server — retrying…', 'warning');
+    }
+    const cached = _featCacheRead();
+    if (!cached) {
+      // Nothing trustworthy to show — keep tabs hidden behind the skeleton
+      _feat.applied = false;
+      setFeaturesLoading(true);
+      return false;
+    }
+    _applyFeatureResponses(cached.feat, cached.me);
+    return true;
+  }
+
+  _feat.retryDelay = 0;
+  _feat.offlineToasted = false;
+  _featCacheWrite(featRes, meRes);
+  _applyFeatureResponses(featRes, meRes);
+  return true;
+}
+
+function _applyFeatureResponses(featRes, meRes) {
+  _feat.applied = true;
+  try {
+    _applyFeatureResponsesInner(featRes, meRes);
+  } finally {
+    setFeaturesLoading(false);
+  }
+}
+
+function _applyFeatureResponsesInner(featRes, meRes) {
   if (featRes.status === 200) {
     state.features = new Set(featRes.body?.data || []);
     // Admin-controlled allow-list (package + per-business overrides). null = unrestricted.
@@ -6637,8 +6731,9 @@ async function showApp() {
   // Load POS counters for ribbon dropdown
   loadCounters();
   // Apply feature-based tab and backstage visibility. Tabs stay hidden behind
-  // the tab-row skeleton until this resolves (capped so a slow/offline server
-  // can't leave the tab row empty).
+  // the tab-row skeleton until real (or last-known cached) features apply —
+  // a slow/offline server must never reveal every tab. loadFeatures() clears
+  // the skeleton itself once applied, and keeps retrying while offline.
   const featuresReady = loadFeatures().catch(() => {});
   // Apply the business's saved Display Theme setting (light/dark/inherit)
   API.settingsGet().then(res => {
@@ -6653,8 +6748,7 @@ async function showApp() {
   if (!_notif.pollTimer) _notif.pollTimer = setInterval(refreshNotifBadge, 60000);
   // Silently check for a new desktop app version, once the app has settled
   setTimeout(() => _autoCheckForUpdate(), 4000);
-  await Promise.race([featuresReady, new Promise(r => setTimeout(r, 10000))]);
-  setFeaturesLoading(false);
+  await featuresReady;
 }
 
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
@@ -25795,7 +25889,8 @@ async function _bizSwSwitchBiz(bizId) {
   try {
     await _bizSwApplyBiz(biz, bizId);
   } finally {
-    setFeaturesLoading(false);
+    // Only reveal tabs once the new business's features actually applied
+    setFeaturesLoading(!_feat.applied);
   }
 }
 

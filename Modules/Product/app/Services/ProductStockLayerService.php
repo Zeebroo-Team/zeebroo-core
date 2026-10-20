@@ -14,17 +14,19 @@ class ProductStockLayerService
 {
     public function defaultSellingUnitPrice(Business $business, Product $product, float $unitCost): ?float
     {
+        // The product's own selling price always wins; the markup is only a fallback
+        // for products that have no selling price set.
+        if ($product->unit_price !== null && (float) $product->unit_price > 0) {
+            return round((float) $product->unit_price, 2);
+        }
+
         if ($unitCost <= 0) {
-            return $product->unit_price !== null ? round((float) $product->unit_price, 2) : null;
+            return null;
         }
 
         $markup = (float) get_settings('product.stock_selling_markup_percent', 25, $business);
         if ($markup > 0) {
             return round($unitCost * (1 + ($markup / 100)), 2);
-        }
-
-        if ($product->unit_price !== null && (float) $product->unit_price > $unitCost) {
-            return round((float) $product->unit_price, 2);
         }
 
         return round($unitCost, 2);
