@@ -52,6 +52,7 @@ class PosNotificationService
             $this->syncFinanceOverdueNotifications($business);
             $this->syncPurchaseOrderOverdueNotifications($business);
             $this->syncChequeOverdueNotifications($business);
+            $this->syncCreditSaleOverdueNotifications($business);
             $this->syncSubscriptionRenewalNotifications($business);
 
             return true;
@@ -620,6 +621,48 @@ class PosNotificationService
             (int) $business->id,
             PosNotification::TYPE_CHEQUE_OVERDUE,
             'cheque',
+            $overdue->pluck('id')->all(),
+        );
+    }
+
+    /** Credit ("pay later") sales still owing money after their payment due date. */
+    private function syncCreditSaleOverdueNotifications(Business $business): void
+    {
+        $overdue = Sale::query()
+            ->where('business_id', $business->id)
+            ->where('payment_method', Sale::PAYMENT_CREDIT)
+            ->where('status', Sale::STATUS_COMPLETED)
+            ->whereRaw('total - amount_paid > 0.005')
+            ->whereNotNull('credit_due_date')
+            ->whereDate('credit_due_date', '<', now()->startOfDay())
+            ->with('customer:id,name')
+            ->get(['id', 'branch_id', 'pos_customer_id', 'sale_number', 'total', 'amount_paid', 'credit_due_date']);
+
+        foreach ($overdue as $sale) {
+            $due = $sale->creditDue();
+            $who = $sale->customer?->name ?? 'a customer';
+
+            $this->upsert(
+                business: $business,
+                branchId: $sale->branch_id !== null ? (int) $sale->branch_id : null,
+                type: PosNotification::TYPE_CREDIT_SALE_OVERDUE,
+                referenceType: 'sale',
+                referenceId: (int) $sale->id,
+                title: 'Credit payment overdue',
+                message: "{$who} still owes ".number_format($due, 2)." on {$sale->sale_number} — due {$sale->credit_due_date->toFormattedDateString()}.",
+                payload: [
+                    'sale_id'     => $sale->id,
+                    'sale_number' => $sale->sale_number,
+                    'customer_id' => $sale->pos_customer_id,
+                    'due_amount'  => $due,
+                    'due_date'    => $sale->credit_due_date->toDateString(),
+                ],
+            );
+        }
+        $this->prune(
+            (int) $business->id,
+            PosNotification::TYPE_CREDIT_SALE_OVERDUE,
+            'sale',
             $overdue->pluck('id')->all(),
         );
     }

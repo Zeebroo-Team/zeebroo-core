@@ -230,6 +230,19 @@ class PosOnlineApiService
             'change_amount' => $sale->change_amount !== null ? round((float) $sale->change_amount, 2) : null,
             'notes' => $sale->notes,
             'customer_name' => $sale->customer?->name,
+            'pos_customer_id' => $sale->pos_customer_id !== null ? (int) $sale->pos_customer_id : null,
+            'due_amount' => $sale->status === Sale::STATUS_COMPLETED ? $sale->creditDue() : 0.0,
+            'credit_due_date' => $sale->credit_due_date?->format('Y-m-d'),
+            'is_overdue' => $sale->isCreditOverdue(),
+            'credit_payments' => $sale->payment_method === Sale::PAYMENT_CREDIT
+                ? $sale->creditPayments()->with('user:id,name')->orderBy('paid_at')->get()->map(fn ($p) => [
+                    'reference' => $p->reference,
+                    'amount' => round((float) $p->amount, 2),
+                    'payment_method' => $p->payment_method,
+                    'paid_at' => $p->paid_at?->toIso8601String(),
+                    'received_by' => $p->user?->name,
+                ])->values()->all()
+                : [],
             'sold_at' => $sale->sold_at?->toIso8601String(),
             'credit_account' => $sale->creditAccount ? [
                 'id' => (int) $sale->creditAccount->id,
@@ -281,6 +294,11 @@ class PosOnlineApiService
             'items_count' => (int) ($sale->items_count ?? $sale->items()->count()),
             'sold_at' => $sale->sold_at?->toIso8601String(),
             'customer_name' => $sale->customer?->name,
+            'pos_customer_id' => $sale->pos_customer_id !== null ? (int) $sale->pos_customer_id : null,
+            'amount_paid' => round((float) $sale->amount_paid, 2),
+            'due_amount' => $sale->status === Sale::STATUS_COMPLETED ? $sale->creditDue() : 0.0,
+            'credit_due_date' => $sale->credit_due_date?->format('Y-m-d'),
+            'is_overdue' => $sale->isCreditOverdue(),
         ])->values()->all();
     }
 

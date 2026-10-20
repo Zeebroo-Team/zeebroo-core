@@ -34,6 +34,7 @@ class SaleService
         private readonly ProductRentalService $rentals,
         private readonly GiftCardService $giftCards,
         private readonly CouponService $coupons,
+        private readonly CustomerCreditService $customerCredit,
     ) {
     }
 
@@ -541,6 +542,12 @@ class SaleService
                 }
             }
             $due = round(max(0, $total - $giftApplied), 2);
+
+            // The unpaid part of a credit sale counts against the customer's credit limit.
+            // Offline sales being replayed ($soldAt set) already happened, so they're not blocked.
+            if ($paymentMethod === Sale::PAYMENT_CREDIT && $customerId !== null && $soldAt === null && $due > self::MONEY_TOLERANCE) {
+                $this->customerCredit->assertWithinLimit($business, $customerId, $due);
+            }
 
             if ($paymentMethod === Sale::PAYMENT_CASH) {
                 $tendered = $amountTendered !== null

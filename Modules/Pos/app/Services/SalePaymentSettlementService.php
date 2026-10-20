@@ -27,6 +27,8 @@ class SalePaymentSettlementService
         ?int $creditAccountId,
         ?float $amount = null,
         string $paymentMethod = Sale::PAYMENT_CASH,
+        ?\Carbon\CarbonInterface $occurredAt = null,
+        string $settlementSource = 'pos_sale',
     ): ?LedgerTransaction {
         if ((int) $sale->business_id !== (int) $business->id) {
             abort(403);
@@ -49,7 +51,7 @@ class SalePaymentSettlementService
             ]);
         }
 
-        return DB::transaction(function () use ($sale, $business, $user, $creditAccountId, $payAmount, $paymentMethod) {
+        return DB::transaction(function () use ($sale, $business, $user, $creditAccountId, $payAmount, $paymentMethod, $occurredAt, $settlementSource) {
             $account = Account::query()
                 ->with('bankType')
                 ->whereKey($creditAccountId)
@@ -71,7 +73,7 @@ class SalePaymentSettlementService
                 'business_id' => $business->id,
                 'user_id' => $user->id,
                 'deduct_account_id' => $account->id,
-                'occurrence_date' => $sale->sold_at->toDateString(),
+                'occurrence_date' => ($occurredAt ?? $sale->sold_at)->toDateString(),
                 'period_number' => null,
                 'amount' => $payAmount,
                 'currency' => $currency !== '' ? $currency : null,
@@ -80,7 +82,7 @@ class SalePaymentSettlementService
                 'meta' => [
                     'payment_method' => $paymentMethod,
                     'sale_number' => $sale->sale_number,
-                    'settlement_source' => 'pos_sale',
+                    'settlement_source' => $settlementSource,
                     'direction' => 'income',
                 ],
             ]);
