@@ -53,6 +53,7 @@ class Product extends Model
         'item_wise_discount',
         'is_dynamic_pricing',
         'dynamic_price_qty_linked',
+        'is_changeable_price',
     ];
 
     protected function casts(): array
@@ -84,6 +85,7 @@ class Product extends Model
             'item_wise_discount'         => 'boolean',
             'is_dynamic_pricing'         => 'boolean',
             'dynamic_price_qty_linked'   => 'boolean',
+            'is_changeable_price'        => 'boolean',
         ];
     }
 

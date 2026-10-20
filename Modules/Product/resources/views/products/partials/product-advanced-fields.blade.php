@@ -191,6 +191,16 @@
 
             <div class="product-adv-toggle-tile product-adv-toggle-tile--simple">
                 <label class="product-adv-toggle-tile__head">
+                    <span class="product-adv-toggle-tile__text"><strong>Changeable selling price</strong><small>Cashier confirms or changes the selling price at POS before adding to cart</small></span>
+                    <span class="product-switch">
+                        <input type="checkbox" name="is_changeable_price" value="1" @checked($checked('is_changeable_price'))>
+                        <span class="product-switch-slider" aria-hidden="true"></span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="product-adv-toggle-tile product-adv-toggle-tile--simple">
+                <label class="product-adv-toggle-tile__head">
                     <span class="product-adv-toggle-tile__text"><strong>Item wise tax</strong><small>Tax is calculated per item, not on the order total</small></span>
                     <span class="product-switch">
                         <input type="checkbox" name="item_wise_tax" value="1" @checked($checked('item_wise_tax'))>

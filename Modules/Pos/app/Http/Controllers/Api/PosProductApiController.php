@@ -138,6 +138,7 @@ class PosProductApiController extends Controller
                 if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
                 if ($request->has('is_dynamic_pricing'))     $fill['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
                 if ($request->has('dynamic_price_qty_linked')) $fill['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
+                if ($request->has('is_changeable_price'))    $fill['is_changeable_price']  = $request->boolean('is_changeable_price');
                 if ($fill) $product->fill($fill)->save();
 
                 if ($request->has('product_category_ids')) {
@@ -231,6 +232,7 @@ class PosProductApiController extends Controller
             'item_wise_discount'        => 'boolean',
             'is_dynamic_pricing'        => 'boolean',
             'dynamic_price_qty_linked'  => 'boolean',
+            'is_changeable_price'       => 'boolean',
             'product_category_ids'      => 'nullable|array',
             'product_category_ids.*'    => 'integer',
             'product_brand_ids'         => 'nullable|array',
@@ -267,6 +269,7 @@ class PosProductApiController extends Controller
         if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');
         if ($request->has('is_dynamic_pricing'))     $data['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
         if ($request->has('dynamic_price_qty_linked')) $data['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
+        if ($request->has('is_changeable_price'))    $data['is_changeable_price']  = $request->boolean('is_changeable_price');
 
         $this->productService->update($product, $data);
 
