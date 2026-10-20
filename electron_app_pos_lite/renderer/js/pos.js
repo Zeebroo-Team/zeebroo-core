@@ -744,13 +744,22 @@ function popCartBadge(diff) {
   plus.addEventListener('animationend', () => plus.remove(), { once: true });
 }
 
-function addToCart(productId) {
+async function addToCart(productId) {
   const product = products.find((p) => p.id === productId);
   if (!product) return;
 
+  // Changeable-price products: cashier confirms / edits the selling price first
+  let changeablePrice = null;
+  if (product.is_changeable_price) {
+    const result = await pickDynamicPrice(product, { prefill: unitPrice(product) });
+    if (!result) return;
+    changeablePrice = Math.round(result.amount * 100) / 100;
+  }
+
   playBeep();
 
-  const cartKey = `p-${productId}`;
+  // Changeable-price items merge only with lines sold at the same price
+  const cartKey = changeablePrice != null ? `p-${productId}-cp-${changeablePrice}` : `p-${productId}`;
   const existing = cart.find((c) => c.cartKey === cartKey);
   if (existing) {
     if (existing.qty < product.stock_quantity) {
@@ -761,9 +770,9 @@ function addToCart(productId) {
     return;
   }
 
-  let price = unitPrice(product);
-  let customPrice = null;
-  if (posSettings.choose_price) {
+  let price = changeablePrice ?? unitPrice(product);
+  let customPrice = changeablePrice;
+  if (changeablePrice == null && posSettings.choose_price) {
     const input = window.prompt(t('Enter unit price for {name}:', { name: product.name }), price.toFixed(2));
     if (input === null) return; // cashier cancelled — don't add the item
     const parsed = parseFloat(input);
@@ -1265,18 +1274,19 @@ dynamicConfirmBtn.addEventListener('click', () => {
   resolve({ amount });
 });
 
-function pickDynamicPrice(product) {
+// Also used by changeable-price products, with the catalog price as `prefill`.
+function pickDynamicPrice(product, { prefill = null } = {}) {
   return new Promise((resolve) => {
     currentDynamicProduct = product;
     dynamicSubtitleEl.textContent = product.name || '';
     dynamicLabelEl.textContent = product.dynamic_price_qty_linked ? t('Amount') : t('Price');
-    dynamicAmountInput.value = '';
+    dynamicAmountInput.value = prefill != null ? Number(prefill).toFixed(2) : '';
     dynamicErrorEl.classList.remove('show');
     updateDynamicHint();
 
     pendingDynamicResolve = resolve;
     dynamicModal.classList.add('show');
-    setTimeout(() => dynamicAmountInput.focus(), 50);
+    setTimeout(() => { dynamicAmountInput.focus(); dynamicAmountInput.select(); }, 50);
   });
 }
 
