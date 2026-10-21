@@ -20306,6 +20306,7 @@ async function _psmLoadPrinterSettings() {
   }
   const modeEl = $('#psm-printer-mode');
   if (modeEl) modeEl.value = cfg.mode === 'html' ? 'html' : 'escpos';
+  _psmUpdateModeHint();
   const paper = $('#psm-printer-paper');
   if (paper) paper.value = String(cfg.paperWidth || 80);
   const silent = $('#psm-printer-silent');
@@ -20318,6 +20319,15 @@ async function _psmLoadPrinterSettings() {
     : 'No printers found — install your XP-80T driver and reconnect USB';
 }
 
+function _psmUpdateModeHint() {
+  const hint = $('#psm-printer-mode-hint');
+  if (!hint) return;
+  hint.textContent = $('#psm-printer-mode')?.value === 'html'
+    ? 'HTML Window prints through the Windows printer driver — uses the paper size set in the driver'
+    : 'ESC/POS sends raw commands directly — no Windows driver rendering conflicts';
+}
+
+$('#psm-printer-mode')?.addEventListener('change', _psmUpdateModeHint);
 $('#psm-printer-refresh')?.addEventListener('click', () => _psmLoadPrinterSettings());
 
 $('#psm-printer-name')?.addEventListener('change', (e) => {
@@ -20407,7 +20417,7 @@ $('#psm-printer-test')?.addEventListener('click', async () => {
         paperWidth: cfg.paperWidth,
         margins:    _rcptMargins(),
       });
-      if (res && !res.success) toast(res.error || 'Print failed', 'error');
+      if (res && !res.success) { if (!res.cancelled) toast(res.error || 'Print failed', 'error'); }
       else toast('HTML test page sent to printer', 'success');
     } else {
       const res = await window.electronAPI.previewReceiptPdf({ html: testHtml, paperWidth: cfg.paperWidth, margins: _rcptMargins() });
@@ -30300,7 +30310,7 @@ async function _rcptPrint(cfg, {
       paperWidth: cfg.paperWidth || 80,
       margins,
     });
-    if (res && !res.success) toast(res.error || 'Print failed', 'error');
+    if (res && !res.success && !res.cancelled) toast(res.error || 'Print failed', 'error');
 
   } else {
     // ── No printer configured — true-size PDF preview (has its own Print button) ─
