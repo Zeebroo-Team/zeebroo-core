@@ -1424,7 +1424,7 @@
                     <option value="escpos">${t('ESC/POS Direct — recommended for XP-80T & all thermal printers')}</option>
                     <option value="html">${t('HTML Window — for document / laser printers')}</option>
                   </select>
-                  <span class="sm-hint">${t('ESC/POS sends raw commands directly — no Windows driver rendering conflicts')}</span>
+                  <span class="sm-hint" id="sm-printer-mode-hint">${t('ESC/POS sends raw commands directly — no Windows driver rendering conflicts')}</span>
                 </div>
                 <div class="sm-field-row">
                   <label class="sm-field-label" for="sm-printer-paper">${t('Paper Width')}</label>
@@ -1518,6 +1518,7 @@
         printers.map((p) => `<option value="${esc(p.name)}"${p.name === cfg.name ? ' selected' : ''}>${esc(p.displayName)}${p.isDefault ? ` (${esc(t('default'))})` : ''}</option>`).join('');
       if (!printers.length) sel.innerHTML += `<option disabled>${esc(t('No printers found — install your printer driver first'))}</option>`;
       $('sm-printer-mode').value = cfg.mode === 'html' ? 'html' : 'escpos';
+      updateModeHint();
       $('sm-printer-paper').value = String(cfg.paperWidth === 58 ? 58 : 80);
       $('sm-printer-silent').checked = cfg.silent !== false;
       $('sm-printer-preview').checked = cfg.showPreview !== false;
@@ -1543,6 +1544,13 @@
       await window.electronAPI.setPrinterConfig(printerFormCfg());
     }
 
+    function updateModeHint() {
+      $('sm-printer-mode-hint').textContent = $('sm-printer-mode').value === 'html'
+        ? t('HTML Window prints through the Windows printer driver — uses the paper size set in the driver')
+        : t('ESC/POS sends raw commands directly — no Windows driver rendering conflicts');
+    }
+
+    $('sm-printer-mode').addEventListener('change', updateModeHint);
     $('sm-printer-refresh').addEventListener('click', loadPrinterSettings);
     $('sm-printer-name').addEventListener('change', (e) => {
       if (RP.isVirtual(e.target.value)) {
@@ -1609,6 +1617,7 @@
       btn.disabled = true;
       const res = await RP.print({ html, escpos, cfg });
       btn.disabled = false;
+      if (res.cancelled) return;
       $('sm-printer-status').textContent = res.ok
         ? (cfg.name ? t('Test page sent to "{name}"', { name: cfg.name }) : t('Preview opened — use its Print button'))
         : res.message;
@@ -2000,14 +2009,52 @@
     { code: 'ta', label: 'தமிழ்' },
   ];
 
-  // Fixed receipt labels per print language, so switching the Print Language
-  // buttons visibly re-renders the preview (business text the user typed —
-  // header/footer/address — is left as-is; only the receipt's own chrome changes).
-  const RECEIPT_PREVIEW_STRINGS = {
-    en: { receiptNo: 'Receipt #', date: 'Date', customer: 'Customer', cashier: 'Cashier', walkIn: 'Walk-in Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', total: 'TOTAL', subtotal: 'Subtotal', discount: 'Discount', grandTotal: 'TOTAL', paid: 'Paid (Cash)', change: 'Change' },
-    si: { receiptNo: 'රිසිට් #', date: 'දිනය', customer: 'පාරිභෝගිකයා', cashier: 'මුදල් අයකැමි', walkIn: 'සාමාන්‍ය පාරිභෝගිකයා', item: 'අයිතමය', qty: 'ගණන', price: 'මිල', total: 'එකතුව', subtotal: 'එකතුව', discount: 'ඔබට ලැබුණු වාසිය', grandTotal: 'මුළු එකතුව', paid: 'ගෙවූ මුදල', change: 'ඉතිරි මුදල' },
-    ta: { receiptNo: 'ரசீது #', date: 'தேதி', customer: 'வாடிக்கையாளர்', cashier: 'காசாளர்', walkIn: 'பொது வாடிக்கையாளர்', item: 'பொருள்', qty: 'எண்', price: 'விலை', total: 'மொத்தம்', subtotal: 'கூட்டுத்தொகை', discount: 'தள்ளுபடி', grandTotal: 'மொத்தம்', paid: 'செலுத்தியது', change: 'மீதி' },
+  // Printed-receipt labels per print language (POS setting `receipt_language`),
+  // independent of the app UI language. English text is the key, so English needs
+  // no table. Shared by the layout editor preview and the real sale bill (js/pos.js)
+  // so both always match. Business text the user typed — header/footer/address —
+  // is left as-is; only the receipt's own chrome changes.
+  const RECEIPT_STRINGS = {
+    si: {
+      'Receipt #': 'රිසිට් #', 'Date & Time': 'දිනය සහ වේලාව', 'Payment': 'ගෙවීම',
+      'Customer': 'පාරිභෝගිකයා', 'Cashier': 'මුදල් අයකැමි', 'Walk-in Customer': 'සාමාන්‍ය පාරිභෝගිකයා',
+      'Item': 'අයිතමය', 'Qty': 'ගණන', 'Price': 'මිල', 'Disc': 'වට්.', 'Amount': 'එකතුව',
+      'Subtotal': 'එකතුව', 'Discount': 'ඔබට ලැබුණු වාසිය', 'Coupon': 'කූපනය', 'Total': 'මුළු එකතුව',
+      'Gift card': 'තෑගි කාඩ්පත', 'Gift card balance': 'තෑගි කාඩ්පත් ශේෂය',
+      'Cash Received': 'ලැබුණු මුදල', 'Paid': 'ගෙවූ මුදල', 'Change': 'ඉතිරි මුදල', 'Notes': 'සටහන්',
+      'Thank you for your purchase!': 'ඔබේ මිලදී ගැනීමට ස්තුතියි!',
+      'Lifetime warranty': 'ජීවිත කාල වගකීම', 'Warranty until {date}': '{date} දක්වා වගකීම', 'Warranty': 'වගකීම',
+      'Return {date}': 'ආපසු {date}', 'Daily {rate}': 'දෛනික {rate}', 'Late {mult}× rate/day': 'ප්‍රමාද {mult}× ගාස්තුව/දිනට',
+      'Cash': 'මුදල්', 'Card': 'කාඩ්පත', 'Credit': 'ණය', 'Bank Transfer': 'බැංකු මාරුව',
+    },
+    ta: {
+      'Receipt #': 'ரசீது #', 'Date & Time': 'தேதி & நேரம்', 'Payment': 'கட்டணம்',
+      'Customer': 'வாடிக்கையாளர்', 'Cashier': 'காசாளர்', 'Walk-in Customer': 'பொது வாடிக்கையாளர்',
+      'Item': 'பொருள்', 'Qty': 'எண்', 'Price': 'விலை', 'Disc': 'தள்.', 'Amount': 'தொகை',
+      'Subtotal': 'கூட்டுத்தொகை', 'Discount': 'தள்ளுபடி', 'Coupon': 'கூப்பன்', 'Total': 'மொத்தம்',
+      'Gift card': 'பரிசு அட்டை', 'Gift card balance': 'பரிசு அட்டை மீதி',
+      'Cash Received': 'பெற்ற தொகை', 'Paid': 'செலுத்தியது', 'Change': 'மீதி', 'Notes': 'குறிப்புகள்',
+      'Thank you for your purchase!': 'உங்கள் கொள்முதலுக்கு நன்றி!',
+      'Lifetime warranty': 'வாழ்நாள் உத்தரவாதம்', 'Warranty until {date}': '{date} வரை உத்தரவாதம்', 'Warranty': 'உத்தரவாதம்',
+      'Return {date}': 'திருப்பித் தருதல் {date}', 'Daily {rate}': 'நாளொன்றுக்கு {rate}', 'Late {mult}× rate/day': 'தாமதம் {mult}× கட்டணம்/நாள்',
+      'Cash': 'ரொக்கம்', 'Card': 'அட்டை', 'Credit': 'கடன்', 'Bank Transfer': 'வங்கி பரிமாற்றம்',
+    },
   };
+
+  function receiptLangFrom(settings) {
+    const l = settings && settings.receipt_language;
+    return RECEIPT_PRINT_LANGUAGES.some((p) => p.code === l) ? l : 'en';
+  }
+
+  // receiptLabels('si')('Subtotal') -> 'එකතුව'; unknown keys print as given
+  function receiptLabels(lang) {
+    const dict = RECEIPT_STRINGS[lang] || {};
+    return (key, params) => {
+      let s = Object.prototype.hasOwnProperty.call(dict, key) ? dict[key] : key;
+      if (params) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m));
+      return s;
+    };
+  }
 
   // Sample bill figures shared by the layout editor's preview and its Test print
   const RECEIPT_SAMPLE = { subtotal: 155, discountPct: 3, discount: 5, total: 150, paid: 160, change: 10 };
@@ -2211,7 +2258,7 @@
       const header = $('rle-header').value.trim();
       const footer = $('rle-footer').value.trim();
       const showPayment = $('rle-show-payment').checked;
-      const L = RECEIPT_PREVIEW_STRINGS[state.lang] || RECEIPT_PREVIEW_STRINGS.en;
+      const L = receiptLabels(state.lang);
       const dateLocale = { en: 'en-US', si: 'si-LK', ta: 'ta-LK' }[state.lang] || undefined;
 
       const rows = [
@@ -2235,22 +2282,22 @@
         ${showAddr && address ? `<div class="rle-paper-addr">${esc(address)}</div>` : ''}
         ${header ? `<div class="rle-paper-header">${esc(header)}</div>` : ''}
         <div class="rle-paper-rule"></div>
-        <div class="rle-kv"><span>${esc(L.receiptNo)}</span><span>INV-0001</span></div>
-        <div class="rle-kv"><span>${esc(L.date)}</span><span>${new Date().toLocaleString(dateLocale, { dateStyle: 'short', timeStyle: 'short' })}</span></div>
-        <div class="rle-kv"><span>${esc(L.customer)}</span><span>${esc(L.walkIn)}</span></div>
-        <div class="rle-kv"><span>${esc(L.cashier)}</span><span>${esc(L.cashier)}</span></div>
+        <div class="rle-kv"><span>${esc(L('Receipt #'))}</span><span>INV-0001</span></div>
+        <div class="rle-kv"><span>${esc(L('Date & Time'))}</span><span>${new Date().toLocaleString(dateLocale, { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+        <div class="rle-kv"><span>${esc(L('Customer'))}</span><span>${esc(L('Walk-in Customer'))}</span></div>
+        <div class="rle-kv"><span>${esc(L('Cashier'))}</span><span>${esc(L('Cashier'))}</span></div>
         <div class="rle-paper-rule"></div>
         <div class="rle-item-row rle-item-head">
-          <span class="rle-item-name">${esc(L.item)}</span><span>${esc(L.qty)}</span><span>${esc(L.price)}</span><span>${esc(L.total)}</span>
+          <span class="rle-item-name">${esc(L('Item'))}</span><span>${esc(L('Qty'))}</span><span>${esc(L('Price'))}</span><span>${esc(L('Amount'))}</span>
         </div>
         ${itemsHtml}
         <div class="rle-paper-rule"></div>
-        <div class="rle-kv"><span>${esc(L.subtotal)}</span><span>${money(S.subtotal)}</span></div>
-        <div class="rle-kv"><span>${esc(L.discount)} (${S.discountPct}%)</span><span>-${money(S.discount)}</span></div>
+        <div class="rle-kv"><span>${esc(L('Subtotal'))}</span><span>${money(S.subtotal)}</span></div>
+        <div class="rle-kv"><span>${esc(L('Discount'))} (${S.discountPct}%)</span><span>-${money(S.discount)}</span></div>
         <div class="rle-paper-rule rle-paper-rule-solid"></div>
-        <div class="rle-kv rle-kv-total"><span>${esc(L.grandTotal)}</span><span>${money(S.total)}</span></div>
-        ${showPayment ? `<div class="rle-kv"><span>${esc(L.paid)}</span><span>${money(S.paid)}</span></div>
-        <div class="rle-kv rle-kv-change"><span>${esc(L.change)}</span><span>${money(S.change)}</span></div>` : ''}
+        <div class="rle-kv rle-kv-total"><span>${esc(L('Total'))}</span><span>${money(S.total)}</span></div>
+        ${showPayment ? `<div class="rle-kv"><span>${esc(L('Cash Received'))}</span><span>${money(S.paid)}</span></div>
+        <div class="rle-kv rle-kv-change"><span>${esc(L('Change'))}</span><span>${money(S.change)}</span></div>` : ''}
         ${footer ? `<div class="rle-paper-footer">${esc(footer)}</div>` : ''}
       `;
       // Show the print margins on the sample paper (CSS adds them to the base padding)
@@ -2284,7 +2331,7 @@
       btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Printing…')}`;
       try {
         const cfg = await window.electronAPI.getPrinterConfig().catch(() => null) || {};
-        const L = RECEIPT_PREVIEW_STRINGS[state.lang] || RECEIPT_PREVIEW_STRINGS.en;
+        const L = receiptLabels(state.lang);
         const biz = $('rle-show-biz').checked ? (state.businessName || t('Your Business')) : '';
         const address = $('rle-show-addr').checked ? $('rle-address').value.trim() : '';
         const header = $('rle-header').value.trim();
@@ -2313,20 +2360,20 @@
             ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
           </div>
           <hr>
-          <div class="rd-row"><span>${esc(L.receiptNo)}</span><strong>TEST-0001</strong></div>
-          <div class="rd-row"><span>${esc(L.date)}</span><strong>${esc(now)}</strong></div>
-          <div class="rd-row"><span>${esc(L.customer)}</span><strong>${esc(L.walkIn)}</strong></div>
+          <div class="rd-row"><span>${esc(L('Receipt #'))}</span><strong>TEST-0001</strong></div>
+          <div class="rd-row"><span>${esc(L('Date & Time'))}</span><strong>${esc(now)}</strong></div>
+          <div class="rd-row"><span>${esc(L('Customer'))}</span><strong>${esc(L('Walk-in Customer'))}</strong></div>
           <hr>
           <table>
-            <thead><tr><th>${esc(L.item)}</th><th class="rd-center-col">${esc(L.qty)}</th><th class="rd-right rd-col-price">${esc(L.price)}</th><th class="rd-center-col rd-col-disc">${t('Disc')}</th><th class="rd-right">${esc(L.total)}</th></tr></thead>
+            <thead><tr><th>${esc(L('Item'))}</th><th class="rd-center-col">${esc(L('Qty'))}</th><th class="rd-right rd-col-price">${esc(L('Price'))}</th><th class="rd-center-col rd-col-disc">${esc(L('Disc'))}</th><th class="rd-right">${esc(L('Amount'))}</th></tr></thead>
             <tbody>${rows}</tbody>
           </table>
           <hr>
-          <div class="rd-row"><span>${esc(L.subtotal)}</span><span>${esc(money(S.subtotal))}</span></div>
-          <div class="rd-row"><span>${esc(L.discount)} (${S.discountPct}%)</span><span>&minus;${esc(money(S.discount))}</span></div>
-          <div class="rd-row rd-total"><span>${esc(L.grandTotal)}</span><span>${esc(money(S.total))}</span></div>
-          ${showPayment ? `<div class="rd-row"><span>${esc(L.paid)}</span><span>${esc(money(S.paid))}</span></div>
-          <div class="rd-row"><span>${esc(L.change)}</span><span>${esc(money(S.change))}</span></div>` : ''}
+          <div class="rd-row"><span>${esc(L('Subtotal'))}</span><span>${esc(money(S.subtotal))}</span></div>
+          <div class="rd-row"><span>${esc(L('Discount'))} (${S.discountPct}%)</span><span>&minus;${esc(money(S.discount))}</span></div>
+          <div class="rd-row rd-total"><span>${esc(L('Total'))}</span><span>${esc(money(S.total))}</span></div>
+          ${showPayment ? `<div class="rd-row"><span>${esc(L('Cash Received'))}</span><span>${esc(money(S.paid))}</span></div>
+          <div class="rd-row"><span>${esc(L('Change'))}</span><span>${esc(money(S.change))}</span></div>` : ''}
           ${footer ? `<hr><div class="rd-footer">${esc(footer)}</div>` : ''}
         </body></html>`;
 
@@ -2337,11 +2384,12 @@
           saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
           items, subtotal: S.subtotal, discount: S.discount, discountPct: S.discountPct, total: S.total,
           paid: showPayment ? S.paid : S.total, change: showPayment ? S.change : 0, paymentMethod: 'Cash',
+          lang: state.lang,
         };
 
         const res = await RP.print({ html, escpos, cfg, margins: currentMargins() });
         if (res.ok) showAlert(cfg.name ? t('Test bill sent to "{name}"', { name: cfg.name }) : t('Preview opened — use its Print button'), 'success');
-        else showAlert(res.message);
+        else if (!res.cancelled) showAlert(res.message);
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalHtml;
@@ -2404,6 +2452,8 @@
         return;
       }
       window.ReceiptPrinter.setSavedMargins(res.body?.data || payload);
+      // Let an open page (js/pos.js) use the new layout/print language without a reload
+      window.dispatchEvent(new CustomEvent('receipt-layout-saved', { detail: { ...payload, ...(res.body?.data || {}) } }));
       showAlert(t('Receipt layout saved.'), 'success');
     }
 
@@ -2414,6 +2464,7 @@
   }
 
   window.openReceiptLayoutWindow = openReceiptLayoutWindow;
+  window.ReceiptLabels = { forLang: receiptLabels, langFrom: receiptLangFrom };
 
   // ── Invoice Setup window ────────────────────────────────────────────────
   // Mirrors the full desktop app's Invoice Setup screen (electron_app
@@ -3726,7 +3777,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return `
     @page { size: ${widthMm}mm auto; margin: 4mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Courier New', monospace; font-size: ${narrow ? 10 : 12}px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm - 8}mm; }
+    body { font-family: 'Courier New', 'Nirmala UI', 'Iskoola Pota', 'Latha', 'Noto Sans Sinhala', 'Noto Sans Tamil', monospace; font-size: ${narrow ? 10 : 12}px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm - 8}mm; }
     .rd-center { text-align:center; }
     .rd-business { font-weight:bold; font-size:${narrow ? 12 : 13}px; }
     .rd-meta { font-size:10px; margin:1px 0; }
@@ -3784,12 +3835,28 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   // Called by the layout editor after a save so later prints use the new values.
   function setSavedMargins(settings) { marginsCache = marginsFrom(settings); }
 
-  // Pad the receipt body by the margins (body has a fixed width + border-box,
-  // so left/right shift and narrow the content; top/bottom add blank paper).
-  function withMargins(html, mg) {
+  // Pad the receipt body by the margins (body has a fixed width + border-box).
+  //   preview (PDF) — every side pads inside the fixed width, so the receipt stays on the page.
+  //   direct (printer) — the left margin shifts the receipt (the body widens by it) and the
+  //     right margin narrows it. Thermal drivers' "Paper Reduction" trims blank paper at the
+  //     top / bottom of the page, which would swallow a blank top/bottom margin, so those are
+  //     spacers ending in a centred 0.5 mm dot: the driver sees printed content and keeps the feed.
+  function withMargins(html, mg, { direct = false, paperWidth = 80 } = {}) {
     if (!MARGIN_SIDES.some((side) => mg[side] > 0)) return html;
-    const css = `<style>body{padding:${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm !important;}</style>`;
-    return html.includes('</head>') ? html.replace('</head>', css + '</head>') : css + html;
+    if (!direct) {
+      const css = `<style>body{padding:${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm !important;}</style>`;
+      return html.includes('</head>') ? html.replace('</head>', css + '</head>') : css + html;
+    }
+    const bodyMm = (paperWidth === 58 ? 58 : 80) - 8 + mg.left;  // docStyles body width + left shift
+    const css = `<style>body{padding:0 ${mg.right}mm 0 ${mg.left}mm !important;width:${bodyMm}mm !important;}
+      .rd-mg-spacer{position:relative;}
+      .rd-mg-spacer::after{content:'';position:absolute;left:50%;width:0.5mm;height:0;border-top:0.5mm solid #000;}
+      .rd-mg-spacer.top::after{top:0;} .rd-mg-spacer.bottom::after{bottom:0;}</style>`;
+    const top    = mg.top    ? `<div class="rd-mg-spacer top" style="height:${mg.top}mm"></div>` : '';
+    const bottom = mg.bottom ? `<div class="rd-mg-spacer bottom" style="height:${mg.bottom}mm"></div>` : '';
+    html = html.includes('</head>') ? html.replace('</head>', css + '</head>') : css + html;
+    html = /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, (m) => m + top) : top + html;
+    return html.includes('</body>') ? html.replace('</body>', bottom + '</body>') : html + bottom;
   }
 
   // Print a receipt with the configured printer.
@@ -3798,16 +3865,17 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
   //   auto    — no-preview checkout print: never open a window; with no printer
   //             selected go silently to the Windows default printer.
   //   margins — { top, right, bottom, left } mm; defaults to the saved layout's margins
-  // Returns { ok, message? } — the caller shows the message.
+  // Returns { ok, cancelled?, message? } — the caller shows the message (not when cancelled).
   async function print({ html, escpos, cfg, auto = false, margins = null }) {
     cfg = cfg || await window.electronAPI.getPrinterConfig().catch(() => null) || {};
     const paperWidth = cfg.paperWidth === 58 ? 58 : 80;
     const mg = margins ? clampMargins(margins) : await savedMargins();
-    html = withMargins(html, mg);
+    const previewHtml = withMargins(html, mg);
+    html = withMargins(html, mg, { direct: true, paperWidth });
 
     if (!cfg.name) {
       if (!auto) {
-        const res = await window.electronAPI.previewReceiptPdf({ html, paperWidth });
+        const res = await window.electronAPI.previewReceiptPdf({ html: previewHtml, paperWidth });
         return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Could not open print preview') };
       }
       const printers = await window.electronAPI.getPrinters().catch(() => []);
@@ -3824,12 +3892,16 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
       return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
     }
 
-    if (cfg.mode !== 'html' && escpos && !isVirtual(cfg.name)) {
+    // ESC/POS text mode only prints ASCII (Sinhala/Tamil would come out as '?'), so
+    // non-English receipts go through the printer's Windows driver as HTML instead.
+    const asciiOnly = !escpos?.lang || escpos.lang === 'en';
+    if (cfg.mode !== 'html' && escpos && asciiOnly && !isVirtual(cfg.name)) {
       const res = await window.electronAPI.printReceiptEscpos({ receipt: escpos, name: cfg.name, paperWidth, margins: mg });
       return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
     }
 
     const res = await window.electronAPI.printReceiptSilent({ html, name: cfg.name, silent: cfg.silent !== false });
+    if (res?.cancelled) return { ok: false, cancelled: true, message: '' };
     return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
   }
 

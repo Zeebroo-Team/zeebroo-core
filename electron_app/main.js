@@ -685,11 +685,21 @@ const THERMAL_MARGIN_MM = 3;
 // Thermal heads print narrower than the roll: 80mm → 72mm (576 dots), 58mm → 48mm (384 dots).
 // Keep content inside that with a little slack for the driver's left offset, so the right edge isn't clipped.
 const THERMAL_SAFE_MM = { 80: 68, 58: 45 };
-function _thermalHtml(html, paperWidth, margins = {}) {
+// Left-aligned direct print starts at the print head's left edge, so it can use the full head width.
+const THERMAL_HEAD_MM = { 80: 72, 58: 48 };
+// leftAlign: pin the receipt to the page's left edge instead of centring it. Used for
+// direct printing — the driver's page may be wider than the roll (A4 / Letter default),
+// and a centred receipt would then land outside the print head's area.
+function _thermalHtml(html, paperWidth, margins = {}, { leftAlign = false } = {}) {
   const paperMm   = paperWidth === 58 ? 58 : 80;
-  const contentMm = THERMAL_SAFE_MM[paperMm];
+  const contentMm = (leftAlign ? THERMAL_HEAD_MM : THERMAL_SAFE_MM)[paperMm];
   // User margins pad the safe area: top/bottom add blank paper, left/right shift and narrow the content
   const mg        = _receiptMargins(margins);
+  // Direct print: thermal drivers' "Paper Reduction" trims blank paper at the top / bottom
+  // of the page, which would swallow a blank top/bottom margin. Build those margins as
+  // spacers ending in a 0.5 mm dot so the driver sees printed content and keeps the feed.
+  const vSpacers  = leftAlign;
+  const padV      = (v) => (vSpacers ? 0 : v);
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -699,14 +709,16 @@ function _thermalHtml(html, paperWidth, margins = {}) {
   * { margin:0; padding:0; box-sizing:border-box; }
   html { width:100%; background:#fff; }
   body {
-    width:100%; max-width: ${contentMm}mm; margin:0 auto;
-    padding: ${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm;
+    width:100%; margin:${leftAlign ? '0' : '0 auto'};
+    /* Left-aligned: the left margin shifts the receipt over the print head; the right margin narrows it */
+    max-width: ${leftAlign ? contentMm + mg.left : contentMm}mm;
+    padding: ${padV(mg.top)}mm ${mg.right}mm ${padV(mg.bottom)}mm ${mg.left}mm;
     background: #fff; color: #000;
     font-family: 'Courier New', Courier, monospace;
     font-size: 10pt; line-height: 1.45;
     overflow-wrap:anywhere;
   }
-  @page { size: ${paperMm}mm auto; margin: 0; }
+  @page { margin: 0; }
   .rcpt-paper { width:100%; }
   .rcpt-logo-wrap    { text-align:center; margin-bottom:8px; }
   .rcpt-logo-img     { max-width:100px; max-height:48px; object-fit:contain; display:block; margin:0 auto; }
@@ -744,64 +756,82 @@ function _thermalHtml(html, paperWidth, margins = {}) {
   html, body { font-size:9pt; }
   .ih-price, .ri-price, .rid-per { display:none; }
   .ih-qty, .ri-qty { width:22px; }` : ''}
+  .mg-spacer { position:relative; }
+  /* Centred — a dot at the left edge can fall outside the print head and be trimmed as blank */
+  .mg-spacer::after { content:''; position:absolute; left:50%; width:0.5mm; height:0; border-top:0.5mm solid #000; }
+  .mg-spacer.top::after    { top:0; }
+  .mg-spacer.bottom::after { bottom:0; }
 </style>
 </head>
-<body>${html}</body>
+<body>${vSpacers && mg.top ? `<div class="mg-spacer top" style="height:${mg.top}mm"></div>` : ''}${html}${vSpacers && mg.bottom ? `<div class="mg-spacer bottom" style="height:${mg.bottom}mm"></div>` : ''}</body>
 </html>`;
 }
 
-ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
+// Wait (max 3 s) for the receipt's images (logo) to load, then return the
+// rendered receipt height in px (body, not documentElement — the latter is never
+// shorter than the hidden window).
+function _thermalContentHeightPx(win) {
+  return win.webContents.executeJavaScript(`
+    Promise.race([
+      Promise.all([...document.images].map(img => img.complete ? null
+        : new Promise(r => { img.onload = img.onerror = r; }))),
+      new Promise(r => setTimeout(r, 3000)),
+    ]).then(() => document.fonts ? document.fonts.ready : null)
+      .then(() => Math.ceil(document.body.getBoundingClientRect().height))
+  `);
+}
+
+ipcMain.handle('print-receipt-thermal', async (_e, opts = {}) => {
   const { html = '', name = '', silent = true, paperWidth = 80, margins = {} } = opts;
 
-  return new Promise((resolve) => {
-    const fullHtml = _thermalHtml(html, paperWidth, margins);
-
-    const thermalWin = new BrowserWindow({
-      width: 400, height: 600,
-      show: false,
-      skipTaskbar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-      },
-    });
-
-    let resolved = false;
-    const done = (result) => {
-      if (resolved) return;
-      resolved = true;
-      if (!thermalWin.isDestroyed()) thermalWin.destroy();
-      resolve(result);
-    };
-
-    // 15-second guard — destroy and resolve if the driver hangs
-    const guard = setTimeout(() => done({ success: false, error: 'Print timeout' }), 15000);
-
-    thermalWin.webContents.once('did-finish-load', () => {
-      // 500 ms for fonts / images to settle before the print job starts
-      setTimeout(() => {
-        const printOpts = {
-          silent,
-          printBackground: false,
-          // 'printableArea' is accepted by every Windows driver; 'none' causes errors
-          margins: { marginType: 'printableArea' },
-        };
-        if (name) printOpts.deviceName = name;
-        thermalWin.webContents.print(printOpts, (success, failureReason) => {
-          clearTimeout(guard);
-          done({ success, error: failureReason || null });
-        });
-      }, 500);
-    });
-
-    thermalWin.once('closed', () => {
-      clearTimeout(guard);
-      done({ success: false, error: 'Window closed before print completed' });
-    });
-
-    thermalWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fullHtml));
+  const thermalWin = new BrowserWindow({
+    width: 400, height: 600,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
   });
+
+  try {
+    await thermalWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth, margins, { leftAlign: true })));
+    await _thermalContentHeightPx(thermalWin);  // wait for the logo / fonts before printing
+
+    // No pageSize — print on the driver's own paper. Thermal drivers (e.g. EPSON
+    // TM-T81III) don't accept a custom paper length; Chromium then centres the smaller
+    // page on the driver's paper, leaving a big top gap and clipping the left edge.
+    // The receipt is left-aligned (above) so it sits under the print head on any page width.
+    const printOpts = {
+      silent,
+      printBackground: false,
+      // 'printableArea' is accepted by every Windows driver; 'none' causes errors
+      margins: { marginType: 'printableArea' },
+    };
+    if (name) printOpts.deviceName = name;
+
+    return await new Promise((resolve) => {
+      // Guard only silent jobs against a hung driver — with the system dialog open the
+      // cashier may take as long as they like, and destroying the window would kill it.
+      const guard = silent
+        ? setTimeout(() => resolve({ success: false, error: 'Print timeout — printer not responding' }), 20000)
+        : null;
+      thermalWin.webContents.print(printOpts, (success, failureReason) => {
+        if (guard) clearTimeout(guard);
+        resolve({
+          success,
+          error: success ? null
+            : (failureReason === 'cancelled' ? 'Print cancelled' : (failureReason || 'Print failed')),
+          cancelled: failureReason === 'cancelled',
+        });
+      });
+    });
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!thermalWin.isDestroyed()) thermalWin.destroy();
+  }
 });
 
 // Windows' system print dialog can't preview Electron pages ("This app doesn't
@@ -820,11 +850,8 @@ ipcMain.handle('preview-receipt-pdf', async (_e, opts = {}) => {
   });
   try {
     await renderWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth, margins)));
-    await new Promise(r => setTimeout(r, 300));  // let images / fonts settle
-
     // Roll paper has no fixed length — size the page to the receipt's content height
-    // (body, not documentElement — the latter is never shorter than the 600px window)
-    const contentPx = await renderWin.webContents.executeJavaScript('Math.ceil(document.body.getBoundingClientRect().height)');
+    const contentPx = await _thermalContentHeightPx(renderWin);
     const heightMm  = (contentPx * MM_PER_IN / 96) + THERMAL_MARGIN_MM * 2 + 2;
     const marginIn  = THERMAL_MARGIN_MM / MM_PER_IN;
 

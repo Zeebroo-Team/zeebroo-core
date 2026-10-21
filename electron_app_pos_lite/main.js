@@ -823,31 +823,54 @@ ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
 
 // Print a complete HTML receipt document straight to a printer (no dialog when
 // silent). Empty name → the Windows default printer.
-ipcMain.handle('print-receipt-silent', (_e, opts = {}) => {
-  const { html = '', name = '', silent = true } = opts;
-  return new Promise((resolve) => {
-    const win = new BrowserWindow({ width: 400, height: 600, show: false, skipTaskbar: true, webPreferences: { sandbox: true } });
-    let resolved = false;
-    const done = (result) => {
-      if (resolved) return;
-      resolved = true;
-      if (!win.isDestroyed()) win.destroy();
-      resolve(result);
-    };
-    const guard = setTimeout(() => done({ success: false, error: 'Print timeout' }), 15000);
+// Wait (max 3 s) for the receipt's images (logo) and fonts to load, then return the
+// rendered receipt height in px (body, not documentElement — the latter is never
+// shorter than the hidden window).
+function _receiptContentHeightPx(win) {
+  return win.webContents.executeJavaScript(`
+    Promise.race([
+      Promise.all([...document.images].map(img => img.complete ? null
+        : new Promise(r => { img.onload = img.onerror = r; }))),
+      new Promise(r => setTimeout(r, 3000)),
+    ]).then(() => document.fonts ? document.fonts.ready : null)
+      .then(() => Math.ceil(document.body.getBoundingClientRect().height))
+  `);
+}
 
-    win.webContents.once('did-finish-load', () => {
-      setTimeout(() => {  // let fonts / images settle
-        const printOpts = { silent, printBackground: true, margins: { marginType: 'printableArea' } };
-        if (name) printOpts.deviceName = name;
-        win.webContents.print(printOpts, (success, failureReason) => {
-          clearTimeout(guard);
-          done({ success, error: failureReason || null });
+ipcMain.handle('print-receipt-silent', async (_e, opts = {}) => {
+  const { html = '', name = '', silent = true } = opts;
+  const win = new BrowserWindow({ width: 400, height: 600, show: false, skipTaskbar: true, webPreferences: { sandbox: true } });
+  try {
+    await win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    await _receiptContentHeightPx(win);  // wait for the logo / fonts before printing
+
+    // No pageSize — print on the driver's own paper. Thermal drivers (e.g. EPSON
+    // TM-T81III) don't accept a custom paper length; Chromium then centres the smaller
+    // page on the driver's paper, leaving a big top gap and clipping the left edge.
+    const printOpts = { silent, printBackground: true, margins: { marginType: 'printableArea' } };
+    if (name) printOpts.deviceName = name;
+
+    return await new Promise((resolve) => {
+      // Guard only silent jobs against a hung driver — with the system dialog open the
+      // cashier may take as long as they like, and destroying the window would kill it.
+      const guard = silent
+        ? setTimeout(() => resolve({ success: false, error: 'Print timeout — printer not responding' }), 20000)
+        : null;
+      win.webContents.print(printOpts, (success, failureReason) => {
+        if (guard) clearTimeout(guard);
+        resolve({
+          success,
+          error: success ? null
+            : (failureReason === 'cancelled' ? 'Print cancelled' : (failureReason || 'Print failed')),
+          cancelled: failureReason === 'cancelled',
         });
-      }, 400);
+      });
     });
-    win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
-  });
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
 });
 
 // Windows' system print dialog can't preview Electron pages ("This app doesn't
@@ -864,10 +887,9 @@ ipcMain.handle('preview-receipt-pdf', async (e, opts = {}) => {
   const renderWin = new BrowserWindow({ width: 400, height: 600, show: false, skipTaskbar: true, webPreferences: { sandbox: true } });
   try {
     await renderWin.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
-    await new Promise((r) => setTimeout(r, 300));
 
     // Roll paper has no fixed length — size the page to the receipt's content height
-    const contentPx = await renderWin.webContents.executeJavaScript('Math.ceil(document.body.getBoundingClientRect().height)');
+    const contentPx = await _receiptContentHeightPx(renderWin);
     const heightMm = (contentPx * MM_PER_IN / 96) + MARGIN_MM * 2 + 2;
     const marginIn = MARGIN_MM / MM_PER_IN;
 

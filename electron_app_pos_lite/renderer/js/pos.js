@@ -150,6 +150,8 @@ let cart = []; // { cartKey, product_id, name, price, customPrice, qty, stock, i
 let paymentMethod = 'cash';
 let searchDebounce = null;
 let posSettings = {}; // POS/Sale settings from the General tab (Settings → General)
+// Receipt Layout Editor saved (js/navbar.js) — next receipt uses the new layout/language
+window.addEventListener('receipt-layout-saved', (e) => { posSettings = { ...posSettings, ...e.detail }; });
 let posInvoiceSetup = {}; // Template/paper/margins/accent color from Settings → Invoice Setup
 
 let currentMode = 'products'; // 'products' | 'rental' | 'dynamic'
@@ -1594,16 +1596,26 @@ function fmtQty(n) {
   return (Number(n) || 0).toFixed(3).replace(/\.?0+$/, '');
 }
 
-function warrantyLabel(item) {
-  if (!item.warranty_type) return null;
-  if (item.warranty_type === 'lifetime') return t('Lifetime warranty');
-  return item.warranty_expires_at ? t('Warranty until {date}', { date: item.warranty_expires_at }) : t('Warranty');
+// Printed-receipt labels follow the Receipt Layout Editor's print language
+// (POS setting receipt_language), not the app UI language — js/navbar.js ReceiptLabels.
+function receiptLang() {
+  return window.ReceiptLabels ? window.ReceiptLabels.langFrom(posSettings) : 'en';
 }
 
-function rentalLabel(item) {
+function receiptT() {
+  return window.ReceiptLabels ? window.ReceiptLabels.forLang(receiptLang()) : tReceipt;
+}
+
+function warrantyLabel(item, rt) {
+  if (!item.warranty_type) return null;
+  if (item.warranty_type === 'lifetime') return rt('Lifetime warranty');
+  return item.warranty_expires_at ? rt('Warranty until {date}', { date: item.warranty_expires_at }) : rt('Warranty');
+}
+
+function rentalLabel(item, rt) {
   if (!item.rental_return_date) return null;
-  let s = t('Return {date}', { date: item.rental_return_date }) + ' · ' + t('Daily {rate}', { rate: money(item.rental_daily_rate) });
-  if (item.rental_late_fee_multiplier > 0) s += ' · ' + t('Late {mult}× rate/day', { mult: item.rental_late_fee_multiplier });
+  let s = rt('Return {date}', { date: item.rental_return_date }) + ' · ' + rt('Daily {rate}', { rate: money(item.rental_daily_rate) });
+  if (item.rental_late_fee_multiplier > 0) s += ' · ' + rt('Late {mult}× rate/day', { mult: item.rental_late_fee_multiplier });
   return s;
 }
 
@@ -1622,12 +1634,13 @@ function fmtPct(pct) {
 }
 
 function buildReceiptData(sale) {
+  const rt = receiptT();
   const soldAtDate = sale.sold_at ? new Date(sale.sold_at) : null;
   return {
     saleNumber: sale.sale_number,
     soldAt: soldAtDate ? soldAtDate.toLocaleString() : '',
     soldAtDate: soldAtDate ? soldAtDate.toLocaleDateString() : '',
-    paymentLabel: sale.payment_method_label || sale.payment_method,
+    paymentLabel: rt(sale.payment_method_label || sale.payment_method || ''),
     customerName: sale.customer_name || '',
     cashierName: sale.cashier?.name || '',
     notes: sale.notes || '',
@@ -1650,19 +1663,20 @@ function buildReceiptData(sale) {
       unit: it.unit_sell_price,
       line: it.line_total,
       discountPct: itemDiscountPctFromSale(it),
-      warranty: warrantyLabel(it),
-      rental: rentalLabel(it),
+      warranty: warrantyLabel(it, rt),
+      rental: rentalLabel(it, rt),
     })),
   };
 }
 
 function renderBillHtml(data) {
+  const rt = receiptT();
   const showName = posSettings.show_business_name !== false;
   const showAddr = !!posSettings.show_business_address;
   const businessName = posSettings.business_name || '';
   const addr = posSettings.receipt_address_line || '';
   const header = posSettings.receipt_header || '';
-  const footer = posSettings.receipt_footer || t('Thank you for your purchase!');
+  const footer = posSettings.receipt_footer || rt('Thank you for your purchase!');
   const logoUrl = posSettings.receipt_logo_url || '';
   const logoGap = window.ReceiptPrinter.logoGapFrom(posSettings);
 
@@ -1679,27 +1693,27 @@ function renderBillHtml(data) {
     return row;
   }).join('');
 
-  let totals = `<div class="rd-row"><span>${tReceipt('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
+  let totals = `<div class="rd-row"><span>${esc(rt('Subtotal'))}</span><span>${esc(money(data.subtotal))}</span></div>`;
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
-    totals += `<div class="rd-row"><span>${tReceipt('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Discount'))}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
   }
   if (data.couponDiscount > 0.001) {
-    totals += `<div class="rd-row"><span>${t('Coupon')}${data.couponCode ? ` ${esc(data.couponCode)}` : ''}</span><span>&minus;${esc(money(data.couponDiscount))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Coupon'))}${data.couponCode ? ` ${esc(data.couponCode)}` : ''}</span><span>&minus;${esc(money(data.couponDiscount))}</span></div>`;
   }
-  totals += `<div class="rd-row rd-total"><span>${tReceipt('Total')}</span><span>${esc(money(data.total))}</span></div>`;
+  totals += `<div class="rd-row rd-total"><span>${esc(rt('Total'))}</span><span>${esc(money(data.total))}</span></div>`;
   if (data.giftCardAmount > 0.001) {
-    totals += `<div class="rd-row"><span>${t('Gift card')}${data.giftCardCode ? ` ${esc(data.giftCardCode)}` : ''}</span><span>&minus;${esc(money(data.giftCardAmount))}</span></div>`;
-    if (data.giftCardBalance != null) totals += `<div class="rd-row"><span>${t('Gift card balance')}</span><span>${esc(money(data.giftCardBalance))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Gift card'))}${data.giftCardCode ? ` ${esc(data.giftCardCode)}` : ''}</span><span>&minus;${esc(money(data.giftCardAmount))}</span></div>`;
+    if (data.giftCardBalance != null) totals += `<div class="rd-row"><span>${esc(rt('Gift card balance'))}</span><span>${esc(money(data.giftCardBalance))}</span></div>`;
   }
   if (data.amountTendered != null) {
-    totals += `<div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(money(data.amountTendered))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Cash Received'))}</span><span>${esc(money(data.amountTendered))}</span></div>`;
   } else {
     const paidVia = data.giftCardAmount > 0.001 ? Math.max(0, Number(data.total) - data.giftCardAmount) : (data.amountPaid ?? data.total);
-    totals += `<div class="rd-row"><span>${tReceipt('Paid')}${data.paymentLabel ? ` (${esc(data.paymentLabel)})` : ''}</span><span>${esc(money(paidVia))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Paid'))}${data.paymentLabel ? ` (${esc(data.paymentLabel)})` : ''}</span><span>${esc(money(paidVia))}</span></div>`;
   }
   if (data.amountTendered != null || Number(data.changeAmount) > 0.005) {
-    totals += `<div class="rd-row"><span>${t('Change')}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Change'))}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
   }
 
   return `
@@ -1710,19 +1724,19 @@ function renderBillHtml(data) {
       ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
     </div>
     <hr>
-    <div class="rd-row"><span>${t('Receipt #')}</span><strong>${esc(data.saleNumber)}</strong></div>
-    <div class="rd-row"><span>${t('Date & Time')}</span><strong>${esc(data.soldAt)}</strong></div>
-    <div class="rd-row"><span>${t('Payment')}</span><strong>${esc(data.paymentLabel)}</strong></div>
-    ${data.customerName ? `<div class="rd-row"><span>${t('Customer')}</span><strong>${esc(data.customerName)}</strong></div>` : ''}
-    ${data.cashierName ? `<div class="rd-row"><span>${t('Cashier')}</span><strong>${esc(data.cashierName)}</strong></div>` : ''}
+    <div class="rd-row"><span>${esc(rt('Receipt #'))}</span><strong>${esc(data.saleNumber)}</strong></div>
+    <div class="rd-row"><span>${esc(rt('Date & Time'))}</span><strong>${esc(data.soldAt)}</strong></div>
+    <div class="rd-row"><span>${esc(rt('Payment'))}</span><strong>${esc(data.paymentLabel)}</strong></div>
+    ${data.customerName ? `<div class="rd-row"><span>${esc(rt('Customer'))}</span><strong>${esc(data.customerName)}</strong></div>` : ''}
+    ${data.cashierName ? `<div class="rd-row"><span>${esc(rt('Cashier'))}</span><strong>${esc(data.cashierName)}</strong></div>` : ''}
     <hr>
     <table>
-      <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right rd-col-price">${t('Price')}</th><th class="rd-center-col rd-col-disc">${t('Disc')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
+      <thead><tr><th>${esc(rt('Item'))}</th><th class="rd-center-col">${esc(rt('Qty'))}</th><th class="rd-right rd-col-price">${esc(rt('Price'))}</th><th class="rd-center-col rd-col-disc">${esc(rt('Disc'))}</th><th class="rd-right">${esc(rt('Amount'))}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <hr>
     ${totals}
-    ${data.notes ? `<hr><div class="rd-note">${t('Notes')}: ${esc(data.notes)}</div>` : ''}
+    ${data.notes ? `<hr><div class="rd-note">${esc(rt('Notes'))}: ${esc(data.notes)}</div>` : ''}
     <hr>
     <div class="rd-footer">${esc(footer)}</div>
   `;
@@ -1741,7 +1755,8 @@ function buildEscposReceiptData(data) {
     businessName: posSettings.show_business_name !== false ? (posSettings.business_name || '') : '',
     address: posSettings.show_business_address ? (posSettings.receipt_address_line || '') : '',
     header: posSettings.receipt_header || '',
-    footer: posSettings.receipt_footer || t('Thank you for your purchase!'),
+    footer: posSettings.receipt_footer || 'Thank you for your purchase!',
+    lang: receiptLang(),
     currency: (posSettings.currency || 'LKR').toUpperCase(),
     currencyPosition: posSettings.currency_position === 'before' ? 'before' : 'after',
     saleNumber: data.saleNumber || '',
@@ -1904,7 +1919,7 @@ receiptPrintBtn.addEventListener('click', async () => {
       const res = await window.ReceiptPrinter.print({
         html: currentReceiptDoc.html, escpos: buildEscposReceiptData(currentReceiptDoc.data),
       });
-      if (!res.ok) showToast(res.message, 'error');
+      if (!res.ok && !res.cancelled) showToast(res.message, 'error');
     } else {
       await window.electronAPI.printHtml(currentReceiptDoc.html); // A4/A5 invoice → system print dialog
     }
