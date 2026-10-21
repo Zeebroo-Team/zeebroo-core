@@ -41873,6 +41873,13 @@ $('#rb-attendance').addEventListener('click',  () => { activateTab('hr'); switch
 
 let hrEmployees = [];
 
+// Prefix an already-formatted amount with the business currency (respects position setting)
+function _hrMoney(fmt) {
+  const cur = state.currency;
+  if (!cur) return fmt;
+  return currencyPosition() === 'before' ? `${cur} ${fmt}` : `${fmt} ${cur}`;
+}
+
 async function loadEmployees(search) {
   const area   = $('#emp-cards-area');
   const footer = $('#emp-footer-text');
@@ -41936,7 +41943,7 @@ function buildEmployeeCard(e) {
             ${meta ? `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)">${meta}</span>` : ''}
           </div>
         </div>
-        ${e.basic_salary_fmt ? `<span style="font-size:13px;font-weight:700;color:var(--accent);margin-left:auto;white-space:nowrap">$${escHtml(e.basic_salary_fmt)}</span>` : ''}
+        ${e.basic_salary_fmt ? `<span style="font-size:13px;font-weight:700;color:var(--accent);margin-left:auto;white-space:nowrap">${escHtml(_hrMoney(e.basic_salary_fmt))}</span>` : ''}
       </div>
     </div>`;
 }
@@ -41972,7 +41979,7 @@ async function openEmployeeDetailPage(emp) {
       ${empDetailRow('Employment Type', emp.type_label || '—')}
       ${empDetailRow('Department', emp.department || '—')}
       ${empDetailRow('Job Title', emp.job_title || '—')}
-      ${empDetailRow('Basic Salary', emp.basic_salary_fmt ? '$' + emp.basic_salary_fmt : '—')}
+      ${empDetailRow('Basic Salary', emp.basic_salary_fmt ? _hrMoney(emp.basic_salary_fmt) : '—')}
       ${empDetailRow('Date of Joining', emp.date_of_joining || '—')}
       ${empDetailRow('Phone', emp.phone_number || '—')}
     </div>`;
@@ -42331,7 +42338,7 @@ async function submitEmpCreate() {
 
 let _payrollCycles = [];
 let _currentPayrollCycle = null;
-let __payrollRecomputeTarget = null;
+let _payrollRecomputeTarget = null;
 
 const PAYROLL_STATUS_BADGE = {
   draft:     'inv-badge-amber',
@@ -42778,15 +42785,24 @@ async function loadPayrollSalarySheet(cycleId) {
   }).join('');
 
   const trs = rows.map(row => {
+    const values = row.values || {};
     const cells = columns.map((col, i) => {
-      const val     = row[col.key];
-      const isNum   = typeof val === 'number';
-      const align   = i === 0 ? 'left' : 'right';
-      const display = (val === null || val === undefined) ? '—'
-        : isNum ? val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      const align = i === 0 ? 'left' : 'right';
+      if (col.kind === 'employee') {
+        const sub = row.employee_id ? `<div style="font-size:11px;color:var(--text-muted)">${escHtml(row.employee_id)}</div>` : '';
+        return `<td class="inv-row" style="text-align:${align}"><div style="font-weight:600">${escHtml(row.employee_name || '—')}</div>${sub}</td>`;
+      }
+      const val     = col.kind === 'money' ? values[col.key] : row[col.key];
+      const num     = typeof val === 'number' ? val : (val !== null && val !== undefined && val !== '' && !isNaN(val) ? Number(val) : null);
+      const isNum   = col.kind === 'money' && num !== null;
+      const display = (val === null || val === undefined || val === '') ? '—'
+        : isNum ? num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : escHtml(String(val));
-      const bold = isNum && col.key && (col.key.includes('net') || col.key.includes('total')) ? 'font-weight:700;color:var(--accent)' : '';
-      return `<td class="inv-row" style="text-align:${align};${bold}">${display}</td>`;
+      const isVar = col.src && col.src.t === 'variance';
+      let style = '';
+      if (isNum && isVar && num !== 0) style = `color:${num > 0 ? '#16a34a' : '#dc2626'}`;
+      if (isNum && col.emphasize) style = isVar ? `${style};font-weight:700` : 'font-weight:700;color:var(--accent)';
+      return `<td class="inv-row" style="text-align:${align};white-space:nowrap;${style}">${display}</td>`;
     }).join('');
     return `<tr class="inv-row">${cells}</tr>`;
   }).join('');
@@ -42842,7 +42858,7 @@ function openPayrollPaymentModal(cycle) {
     (res.body?.data || res.body || []).forEach(acc => {
       const opt = document.createElement('option');
       opt.value = acc.id;
-      opt.textContent = acc.name + (acc.balance_fmt ? ' (' + acc.balance_fmt + ')' : '');
+      opt.textContent = acc.label || acc.account_name || acc.name || ('Account #' + acc.id);
       accountSel.appendChild(opt);
     });
   });
