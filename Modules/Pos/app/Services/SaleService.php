@@ -45,7 +45,18 @@ class SaleService
     {
         $query = $business->sales()
             ->with(['user', 'creditAccount', 'branch', 'customer'])
-            ->withCount('items');
+            ->withCount('items')
+            // Cost of goods per sale (items with no unit_cost count as zero
+            // and are flagged via items_missing_cost) for list-level profit.
+            ->addSelect([
+                'items_cost' => SaleItem::query()
+                    ->selectRaw('COALESCE(SUM(unit_cost * quantity), 0)')
+                    ->whereColumn('pos_sale_items.pos_sale_id', 'pos_sales.id'),
+                'items_missing_cost' => SaleItem::query()
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('pos_sale_items.pos_sale_id', 'pos_sales.id')
+                    ->whereNull('unit_cost'),
+            ]);
 
         $term = trim((string) $search);
         if ($term !== '') {

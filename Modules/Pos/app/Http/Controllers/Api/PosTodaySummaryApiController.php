@@ -117,6 +117,32 @@ class PosTodaySummaryApiController extends Controller
         $cogs        = round((float) $allItems->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity), 2);
         $grossProfit = round($revenue - $cogs, 2);
 
+        // Per-sale profit breakdown (newest first). Items with no recorded
+        // unit_cost count as zero cost and flag the sale so the UI can warn.
+        $profitSales = $sales
+            ->sortByDesc('sold_at')
+            ->values()
+            ->map(function ($s) {
+                $total  = round((float) $s->total, 2);
+                $cost   = round((float) $s->items->sum(fn ($i) => (float) $i->unit_cost * (float) $i->quantity), 2);
+                $profit = round($total - $cost, 2);
+
+                return [
+                    'id'             => $s->id,
+                    'sale_number'    => $s->sale_number,
+                    'sold_at'        => $s->sold_at?->toIso8601String(),
+                    'customer_name'  => $s->customer?->name,
+                    'payment_method' => $s->payment_method,
+                    'items_count'    => $s->items->count(),
+                    'total'          => $total,
+                    'cost'           => $cost,
+                    'profit'         => $profit,
+                    'margin'         => $total > 0 ? round(($profit / $total) * 100, 1) : 0.0,
+                    'missing_cost'   => $s->items->contains(fn ($i) => $i->unit_cost === null),
+                ];
+            })
+            ->all();
+
         $mapSale = fn ($s) => [
             'id'              => $s->id,
             'sale_number'     => $s->sale_number,
@@ -143,6 +169,7 @@ class PosTodaySummaryApiController extends Controller
                 'sales' => [
                     'count'        => $sales->count(),
                     'revenue'      => $revenue,
+                    'cogs'         => $cogs,
                     'gross_profit' => $grossProfit,
                     'items_sold'   => (int) $allItems->sum('quantity'),
                     'by_method'    => $byMethod,
@@ -158,6 +185,7 @@ class PosTodaySummaryApiController extends Controller
                 'top_services'     => $topServices,
                 'recent_sales'     => $recentSales,
                 'sales_by_method'  => $salesByMethod,
+                'profit_sales'     => $profitSales,
             ],
         ]);
     }

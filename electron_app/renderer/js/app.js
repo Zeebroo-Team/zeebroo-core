@@ -1834,6 +1834,9 @@ function _salRenderList() {
   // KPI bar
   const completed = list.filter(s => s.status !== 'voided');
   const revenue   = completed.reduce((n, s) => n + parseFloat(s.total || 0), 0);
+  const profit    = completed.reduce((n, s) => n + parseFloat(s.profit || 0), 0);
+  const margin    = revenue > 0 ? (profit / revenue) * 100 : 0;
+  const anyMissingCost = completed.some(s => s.missing_cost || s.profit == null);
   const kpiBar    = $('#sal-kpi-bar');
   if (list.length) {
     kpiBar.style.display = '';
@@ -1849,6 +1852,14 @@ function _salRenderList() {
       <div class="sal-kpi-item">
         <span class="sal-kpi-label">Revenue</span>
         <span class="sal-kpi-val accent">${formatMoney(revenue, {currency: cur})}</span>
+      </div>
+      <div class="sal-kpi-item">
+        <span class="sal-kpi-label">Profit${anyMissingCost ? ' <i class="fa fa-triangle-exclamation sal-profit-warn" title="Some items have no cost price recorded — their cost is counted as zero"></i>' : ''}</span>
+        <span class="sal-kpi-val ${profit < 0 ? 'sal-profit-neg' : 'sal-profit-pos'}">${formatMoney(profit, {currency: cur})}</span>
+      </div>
+      <div class="sal-kpi-item">
+        <span class="sal-kpi-label">Margin</span>
+        <span class="sal-kpi-val ${profit < 0 ? 'sal-profit-neg' : 'sal-profit-pos'}">${margin.toFixed(1)}%</span>
       </div>`;
   } else {
     kpiBar.style.display = 'none';
@@ -1864,7 +1875,7 @@ function _salRenderList() {
 
   $('#sal-table-wrap').innerHTML = `<table class="sal-tbl">
     <thead><tr>
-      <th>Sale #</th><th>Date / Time</th><th>Customer</th><th>Channel</th><th>Payment</th><th>Status</th><th style="text-align:right">Total</th>
+      <th>Sale #</th><th>Date / Time</th><th>Customer</th><th>Channel</th><th>Payment</th><th>Status</th><th style="text-align:right">Total</th><th style="text-align:right">Profit</th>
     </tr></thead>
     <tbody>
     ${list.map(s => {
@@ -1881,6 +1892,7 @@ function _salRenderList() {
         <td class="td-muted">${_salPaymentCell(s, cur)}</td>
         <td><span class="bs-sales-badge ${cls}">${lbl}</span></td>
         <td class="td-amt">${formatMoney(parseFloat(s.total || 0), {currency: cur})}</td>
+        ${_salProfitCell(s, cur)}
       </tr>`;
     }).join('')}
     </tbody>
@@ -1890,6 +1902,15 @@ function _salRenderList() {
     row.addEventListener('click', () => _salSelectSale(Number(row.dataset.salId)));
   });
   _salWirePayButtons($('#sal-table-wrap'), list, () => loadSalesList());
+}
+
+function _salProfitCell(s, cur) {
+  if (s.profit == null || s.status === 'voided') return '<td class="td-amt td-muted">—</td>';
+  const p    = parseFloat(s.profit);
+  const tot  = parseFloat(s.total || 0);
+  const tip  = `Cost ${formatMoney(parseFloat(s.cost || 0), {currency: cur})}${tot > 0 ? ` · Margin ${((p / tot) * 100).toFixed(1)}%` : ''}`;
+  const warn = s.missing_cost ? ' <i class="fa fa-triangle-exclamation sal-profit-warn" title="Some items have no cost price recorded"></i>' : '';
+  return `<td class="td-amt ${p < 0 ? 'sal-profit-neg' : 'sal-profit-pos'}" title="${escHtml(tip)}">${formatMoney(p, {currency: cur})}${warn}</td>`;
 }
 
 async function _salSelectSale(id) {
@@ -1920,17 +1941,34 @@ async function _salSelectSale(id) {
     ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
     : '—';
 
+  // Cost / profit — items with no recorded unit_cost count as zero cost and get flagged
+  const warnIcon = '<i class="fa fa-triangle-exclamation sal-profit-warn" title="No cost price recorded — counted as zero"></i>';
+  let costTotal = 0, missingCost = false;
+
   const itemsRows = (sale.items || []).map(i => {
     const wtyBadge = i.warranty_type
       ? `<br><span class="warranty-badge"><i class="fa fa-shield-halved"></i> ${escHtml(_warrantyLabel(i.warranty_type, i.warranty_expires_at, i.warranty_days))}</span>`
       : '';
+    const qty      = parseFloat(i.quantity || 0);
+    const hasCost  = i.unit_cost !== null && i.unit_cost !== undefined;
+    const lineCost = hasCost ? parseFloat(i.unit_cost) * qty : 0;
+    const lineProf = parseFloat(i.line_total || 0) - lineCost;
+    costTotal += lineCost;
+    if (!hasCost) missingCost = true;
     return `<tr>
     <td>${escHtml(i.product_name || '—')}${wtyBadge}</td>
-    <td class="td-r">${parseFloat(i.quantity) % 1 === 0 ? parseInt(i.quantity) : parseFloat(i.quantity).toFixed(2)}</td>
+    <td class="td-r">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</td>
     <td class="td-r">${formatMoney(parseFloat(i.unit_sell_price || 0), {currency: cur})}</td>
+    <td class="td-r td-muted">${hasCost ? formatMoney(parseFloat(i.unit_cost), {currency: cur}) : '—'}${hasCost ? '' : ' ' + warnIcon}</td>
     <td class="td-r"><strong>${formatMoney(parseFloat(i.line_total || 0), {currency: cur})}</strong></td>
+    <td class="td-r ${lineProf < 0 ? 'sal-profit-neg' : 'sal-profit-pos'}"><strong>${formatMoney(lineProf, {currency: cur})}</strong></td>
   </tr>`;
   }).join('');
+
+  const saleTotal  = parseFloat(sale.total || 0);
+  const saleProfit = saleTotal - costTotal;
+  const saleMargin = saleTotal > 0 ? (saleProfit / saleTotal) * 100 : 0;
+  const profCls    = saleProfit < 0 ? 'sal-profit-neg' : 'sal-profit-pos';
 
   const discount = parseFloat(sale.discount_amount || 0);
   const change   = parseFloat(sale.change_amount || 0);
@@ -1996,12 +2034,20 @@ async function _salSelectSale(id) {
 
     <div class="sal-section-title">Items</div>
     <table class="sal-items-tbl">
-      <thead><tr><th>Product</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Total</th></tr></thead>
+      <thead><tr><th>Product</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Unit Cost</th><th class="td-r">Total</th><th class="td-r">Profit</th></tr></thead>
       <tbody>${itemsRows}</tbody>
     </table>
 
     <div class="sal-section-title">Totals</div>
     <div class="sal-totals">${totalsHTML}</div>
+
+    ${isVoided ? '' : `<div class="sal-section-title">Profit</div>
+    <div class="sal-totals">
+      <div class="sal-total-row"><span class="label">Sale Total</span><span>${formatMoney(saleTotal, {currency: cur})}</span></div>
+      <div class="sal-total-row"><span class="label">Cost${missingCost ? ' ' + warnIcon : ''}</span><span>-${formatMoney(costTotal, {currency: cur})}</span></div>
+      <div class="sal-total-row grand"><span class="label">Profit</span><span class="${profCls}">${formatMoney(saleProfit, {currency: cur})}</span></div>
+      <div class="sal-total-row"><span class="label">Margin</span><span class="${profCls}">${saleMargin.toFixed(1)}%</span></div>
+    </div>`}
     ${isCreditSale ? _salCreditPaymentsHtml(sale, cur) : ''}`;
 
   $('#sal-detail-pay-btn')?.addEventListener('click', () => openCreditPayment({
@@ -12420,6 +12466,53 @@ async function loadTodaySummary() {
     }).join('');
   };
 
+  // ── Profit (per-sale total / cost / profit) ──
+  const renderProfit = () => {
+    const list    = d.profit_sales || [];
+    const revenue = parseFloat(sales.revenue || 0);
+    const cogs    = parseFloat(sales.cogs ?? (revenue - parseFloat(sales.gross_profit || 0)));
+    const profit  = revenue - cogs;
+    const margin  = revenue > 0 ? (profit / revenue) * 100 : 0;
+    const pCls    = v => v < 0 ? 'neg' : 'pos';
+
+    const rows = !list.length
+      ? '<div class="tds-empty-hint">No sales recorded today</div>'
+      : `<div class="tds-prf-table">
+          <div class="tds-prf-head">
+            <span>Sale</span><span>Customer</span><span class="r">Sale Total</span><span class="r">Cost</span><span class="r">Profit</span><span class="r">Margin</span>
+          </div>
+          ${list.map(s => {
+            const time = s.sold_at ? new Date(s.sold_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+            return `
+            <div class="tds-prf-row" data-tds-sale-id="${s.id}" title="View sale details">
+              <span class="tds-prf-sale">
+                <strong>${escHtml(s.sale_number || '#' + s.id)}</strong>
+                <small>${time} · ${s.items_count} item${s.items_count !== 1 ? 's' : ''}</small>
+              </span>
+              <span class="tds-prf-cust">${escHtml(s.customer_name || 'Walk-in')}</span>
+              <span class="r">${formatMoney(s.total, {currency: cur})}</span>
+              <span class="r tds-prf-cost">${formatMoney(s.cost, {currency: cur})}${s.missing_cost ? ' <i class="fa fa-triangle-exclamation tds-prf-warn" title="Some items have no cost price recorded"></i>' : ''}</span>
+              <span class="r tds-prf-val ${pCls(s.profit)}">${formatMoney(s.profit, {currency: cur})}</span>
+              <span class="r tds-prf-margin ${pCls(s.profit)}">${Number(s.margin).toFixed(1)}%</span>
+            </div>`;
+          }).join('')}
+        </div>`;
+
+    return `
+      <div class="tds-recent-section tds-profit-section">
+        <div class="tds-section-title"><i class="fa fa-sack-dollar"></i> Profit Today
+          <span class="tds-req-badges"><span class="tds-req-badge" style="background:rgba(59,130,246,.15);color:#3b82f6">${list.length} sale${list.length !== 1 ? 's' : ''}</span></span>
+        </div>
+        <div class="tds-prf-sum">
+          <div class="tds-prf-sum-card"><span class="lbl">Sales Total</span><span class="val">${formatMoney(revenue, {currency: cur})}</span></div>
+          <div class="tds-prf-sum-card"><span class="lbl">Cost</span><span class="val">${formatMoney(cogs, {currency: cur})}</span></div>
+          <div class="tds-prf-sum-card ${pCls(profit)}"><span class="lbl">Profit</span><span class="val">${formatMoney(profit, {currency: cur})}</span></div>
+          <div class="tds-prf-sum-card ${pCls(profit)}"><span class="lbl">Margin</span><span class="val">${margin.toFixed(1)}%</span></div>
+        </div>
+        ${rows}
+      </div>`;
+  };
+
   body.innerHTML = `
     ${kpiHtml}
     <div class="tds-chart-section">
@@ -12432,6 +12525,7 @@ async function loadTodaySummary() {
         <canvas id="tds-chart-cnt" class="tds-chart-canvas"></canvas>
       </div>
     </div>
+    ${renderProfit()}
     ${svcHasFeature ? `<div class="tds-mid-row"><div class="tds-col tds-col-svc-full">${svcColHtml}</div></div>` : ''}
     <div class="tds-mid-row">
       <div class="tds-col">
@@ -12448,11 +12542,118 @@ async function loadTodaySummary() {
       ${renderRecent()}
     </div>`;
 
+  body.querySelectorAll('[data-tds-sale-id]').forEach(row => {
+    row.addEventListener('click', () => _tdsOpenSaleProfit(Number(row.dataset.tdsSaleId)));
+  });
+
   // ── Draw line charts after DOM inserted ──
   requestAnimationFrame(() => {
     _tdsDrawChart('tds-chart-rev', activeHours.map(h => h.revenue), '#22c55e', 'Revenue');
     _tdsDrawChart('tds-chart-cnt', activeHours.map(h => h.count),   '#3b82f6', 'Sales');
   });
+}
+
+// Full sale detail modal with per-line cost / profit (opened from Profit Today).
+async function _tdsOpenSaleProfit(id) {
+  const cur = state.currency || '';
+  const fm  = v => formatMoney(parseFloat(v || 0), {currency: cur});
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal tds-prf-modal" style="width:820px;max-width:calc(100vw - 32px)">
+      <h3><i class="fa fa-receipt"></i> <span id="tds-prf-m-title">Loading…</span></h3>
+      <div id="tds-prf-m-body" style="max-height:68vh;overflow-y:auto">
+        <div class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+      </div>
+      <div class="modal-footer"><button class="btn-secondary" id="tds-prf-m-close">Close</button></div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  overlay.querySelector('#tds-prf-m-close').addEventListener('click', close);
+  overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+
+  const res = await API.sale(id);
+  const bodyEl = overlay.querySelector('#tds-prf-m-body');
+  if (!bodyEl) return;
+  if (res.status !== 200) {
+    bodyEl.innerHTML = '<div class="inv-loading" style="color:#ef4444"><i class="fa fa-triangle-exclamation"></i> Failed to load sale</div>';
+    return;
+  }
+  const sale = res.body?.data || res.body;
+  const num  = sale.sale_number || String(sale.id);
+  overlay.querySelector('#tds-prf-m-title').textContent = `Sale #${num}`;
+
+  const items = sale.items || [];
+  let totalCost = 0, missingCost = false;
+  const qtyFmt = q => parseFloat(q) % 1 === 0 ? parseInt(q) : parseFloat(q).toFixed(2);
+  const pCls   = v => v < 0 ? 'neg' : 'pos';
+
+  const itemRows = items.map(i => {
+    const qty      = parseFloat(i.quantity || 0);
+    const lineTot  = parseFloat(i.line_total || 0);
+    const hasCost  = i.unit_cost !== null && i.unit_cost !== undefined;
+    const lineCost = hasCost ? parseFloat(i.unit_cost) * qty : 0;
+    const lineProf = lineTot - lineCost;
+    if (!hasCost) missingCost = true;
+    totalCost += lineCost;
+    return `<tr>
+      <td>${escHtml(i.product_name || '—')}${i.sku ? `<br><small class="td-muted">${escHtml(i.sku)}</small>` : ''}</td>
+      <td class="td-r">${qtyFmt(qty)}</td>
+      <td class="td-r">${fm(i.unit_sell_price)}</td>
+      <td class="td-r">${hasCost ? fm(i.unit_cost) : '<span class="td-muted" title="No cost price recorded">—</span>'}</td>
+      <td class="td-r">${fm(lineTot)}</td>
+      <td class="td-r">${fm(lineCost)}</td>
+      <td class="td-r tds-prf-val ${pCls(lineProf)}"><strong>${fm(lineProf)}</strong></td>
+    </tr>`;
+  }).join('');
+
+  const total    = parseFloat(sale.total || 0);
+  const profit   = total - totalCost;
+  const margin   = total > 0 ? (profit / total) * 100 : 0;
+  const discount = parseFloat(sale.discount_amount || 0);
+  const coupon   = parseFloat(sale.coupon_discount || 0);
+  const change   = parseFloat(sale.change_amount || 0);
+  const isVoided = sale.status === 'voided';
+  const dateStr  = sale.sold_at ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  const meta = (lbl, val) => `<div class="sal-detail-meta-item"><span class="sal-detail-meta-label">${lbl}</span><span class="sal-detail-meta-val">${val}</span></div>`;
+
+  bodyEl.innerHTML = `
+    ${isVoided ? '<div class="sal-void-notice"><i class="fa fa-ban"></i> This sale has been voided</div>' : ''}
+    <div class="sal-detail-meta">
+      ${meta('Sale #', escHtml(num))}
+      ${meta('Date', dateStr)}
+      ${meta('Customer', escHtml(sale.customer_name || 'Walk-in'))}
+      ${sale.cashier?.name ? meta('Cashier', escHtml(sale.cashier.name)) : ''}
+      ${meta('Payment', escHtml(sale.payment_method_label || sale.payment_method || '—'))}
+      ${meta('Status', `<span class="bs-sales-badge ${isVoided ? 'voided' : 'completed'}">${isVoided ? 'Voided' : 'Completed'}</span>`)}
+    </div>
+
+    <div class="tds-prf-sum" style="margin:12px 0">
+      <div class="tds-prf-sum-card"><span class="lbl">Sale Total</span><span class="val">${fm(total)}</span></div>
+      <div class="tds-prf-sum-card"><span class="lbl">Cost</span><span class="val">${fm(totalCost)}</span></div>
+      <div class="tds-prf-sum-card ${pCls(profit)}"><span class="lbl">Profit</span><span class="val">${fm(profit)}</span></div>
+      <div class="tds-prf-sum-card ${pCls(profit)}"><span class="lbl">Margin</span><span class="val">${margin.toFixed(1)}%</span></div>
+    </div>
+    ${missingCost ? '<div class="tds-prf-note"><i class="fa fa-triangle-exclamation"></i> Some items have no cost price recorded; they are counted as zero cost.</div>' : ''}
+
+    <div class="sal-section-title">Items</div>
+    <table class="sal-items-tbl">
+      <thead><tr><th>Product</th><th class="td-r">Qty</th><th class="td-r">Unit Price</th><th class="td-r">Unit Cost</th><th class="td-r">Line Total</th><th class="td-r">Line Cost</th><th class="td-r">Profit</th></tr></thead>
+      <tbody>${itemRows || '<tr><td colspan="7" class="td-muted" style="text-align:center">No items</td></tr>'}</tbody>
+    </table>
+
+    <div class="sal-totals" style="margin-top:12px">
+      <div class="sal-total-row"><span class="label">Subtotal</span><span>${fm(sale.subtotal)}</span></div>
+      ${discount > 0 ? `<div class="sal-total-row"><span class="label">Discount</span><span>-${fm(discount)}</span></div>` : ''}
+      ${coupon > 0 ? `<div class="sal-total-row"><span class="label">Coupon${sale.coupon?.code ? ' (' + escHtml(sale.coupon.code) + ')' : ''}</span><span>-${fm(coupon)}</span></div>` : ''}
+      <div class="sal-total-row grand"><span class="label">Total</span><span>${fm(total)}</span></div>
+      <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${fm(sale.amount_paid ?? total)}</span></div>
+      ${change > 0 ? `<div class="sal-total-row"><span class="label">Change</span><span>${fm(change)}</span></div>` : ''}
+      ${sale.payment_method === 'credit' ? `<div class="sal-total-row"><span class="label">Balance due</span><strong>${fm(sale.due_amount)}</strong></div>` : ''}
+    </div>
+    ${sale.notes ? `<div class="sal-section-title">Notes</div><div style="font-size:12px;color:var(--text)">${escHtml(sale.notes)}</div>` : ''}`;
 }
 
 $('#tds-refresh')?.addEventListener('click', loadTodaySummary);
@@ -13221,18 +13422,34 @@ async function _homeActivityLoad() {
   const rows = (res.body?.data || []).slice(0, 50);
   if (!rows.length) { list.innerHTML = '<div class="inv-loading">No recent activity</div>'; return; }
   list.innerHTML = rows.map(s => {
-    const total = parseFloat(s.total || 0).toFixed(2);
-    const dt    = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
-    const ref   = s.sale_number || `#${s.id}`;
-    return `<div class="home-act-row">
+    const total  = parseFloat(s.total || 0).toFixed(2);
+    const dt     = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+    const ref    = s.sale_number || `#${s.id}`;
+    const voided = s.status === 'voided';
+    let profitHtml = '';
+    if (voided) {
+      profitHtml = '<div class="home-act-profit voided">Voided</div>';
+    } else if (s.profit !== null && s.profit !== undefined) {
+      const p = parseFloat(s.profit);
+      profitHtml = `<div class="home-act-profit ${p < 0 ? 'neg' : 'pos'}" title="Cost ${parseFloat(s.cost || 0).toFixed(2)}">
+        Profit ${p.toFixed(2)}${s.missing_cost ? ' <i class="fa fa-triangle-exclamation" title="Some items have no cost price recorded"></i>' : ''}
+      </div>`;
+    }
+    return `<div class="home-act-row clickable" data-act-sale-id="${s.id}" title="View sale details">
       <div class="home-act-icon sale"><i class="fa fa-cart-shopping"></i></div>
       <div class="home-act-info">
         <div class="home-act-label">Sale ${escHtml(ref)}</div>
-        <div class="home-act-meta">${dt}</div>
+        <div class="home-act-meta">${dt}${s.customer_name ? ' · ' + escHtml(s.customer_name) : ''}</div>
       </div>
-      <div class="home-act-amt">${total}</div>
+      <div class="home-act-amts">
+        <div class="home-act-amt">${total}</div>
+        ${profitHtml}
+      </div>
     </div>`;
   }).join('');
+  list.querySelectorAll('[data-act-sale-id]').forEach(row => {
+    row.addEventListener('click', () => _tdsOpenSaleProfit(Number(row.dataset.actSaleId)));
+  });
 }
 
 $('#home-act-refresh')?.addEventListener('click', _homeActivityLoad);
