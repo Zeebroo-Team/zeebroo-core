@@ -14,7 +14,7 @@ class JobTitle extends Model
 
     protected $table = 'hr_job_titles';
 
-    protected $fillable = ['name', 'portal_features'];
+    protected $fillable = ['name', 'portal_features', 'leave_policy_id'];
 
     protected $casts = ['portal_features' => 'array'];
 
@@ -31,6 +31,12 @@ class JobTitle extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    /** Leave rule for everyone in this position; null falls back to the business default rule. */
+    public function leavePolicy(): BelongsTo
+    {
+        return $this->belongsTo(LeavePolicy::class, 'leave_policy_id');
     }
 
     public function employees(): HasMany

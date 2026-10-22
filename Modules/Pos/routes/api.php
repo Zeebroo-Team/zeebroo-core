@@ -398,6 +398,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'index'])->name('hr.employees.index');
     Route::post('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'store'])->name('hr.employees.store');
     Route::get('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'show'])->name('hr.employees.show');
+    Route::get('hr/employees/{employee}/leave', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeLeaveApiController::class, 'show'])->name('hr.employees.leave');
     Route::get('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'index'])->name('hr.departments.index');
     Route::post('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'store'])->name('hr.departments.store');
     Route::delete('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'destroy'])->name('hr.departments.destroy');
@@ -408,8 +409,21 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'index'])->name('hr.allowance-types.index');
     Route::post('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'store'])->name('hr.allowance-types.store');
     Route::delete('hr/allowance-types/{allowanceType}', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'destroy'])->name('hr.allowance-types.destroy');
+    Route::get('hr/leave-requests', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'index'])->name('hr.leave-requests.index');
+    Route::post('hr/leave-requests/preview', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'preview'])->name('hr.leave-requests.preview');
+    Route::post('hr/leave-requests', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'store'])->name('hr.leave-requests.store');
+    Route::patch('hr/leave-requests/{leaveRequest}/status', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'updateStatus'])->name('hr.leave-requests.status');
+    Route::delete('hr/leave-requests/{leaveRequest}', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'destroy'])->name('hr.leave-requests.destroy');
+    Route::get('hr/leave-policies',[\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'index'])->name('hr.leave-policies.index');
+    Route::post('hr/leave-policies', [\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'store'])->name('hr.leave-policies.store');
+    Route::put('hr/leave-policies/{leavePolicy}', [\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'update'])->name('hr.leave-policies.update');
+    Route::delete('hr/leave-policies/{leavePolicy}', [\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'destroy'])->name('hr.leave-policies.destroy');
+    Route::get('hr/settings',[\Modules\Pos\Http\Controllers\Api\PosHrSettingsApiController::class, 'show'])->name('hr.settings.show');
+    Route::put('hr/settings', [\Modules\Pos\Http\Controllers\Api\PosHrSettingsApiController::class, 'update'])->name('hr.settings.update');
     Route::get('hr/attendance', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'index'])->name('hr.attendance.index');
-    Route::post('hr/attendance/import', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'import'])->name('hr.attendance.import');
+    Route::get('hr/attendance/gaps', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'gaps'])->name('hr.attendance.gaps');
+    Route::post('hr/attendance/gaps/resolve', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'resolveGaps'])->name('hr.attendance.gaps.resolve');
+    Route::post('hr/attendance/import',[\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'import'])->name('hr.attendance.import');
 
     Route::get('hr/payroll/rule-sets',                                     [\Modules\Pos\Http\Controllers\Api\PosHrPayrollRuleSetApiController::class, 'index'])->name('hr.payroll.rule-sets.index');
     Route::post('hr/payroll/rule-sets',                                    [\Modules\Pos\Http\Controllers\Api\PosHrPayrollRuleSetApiController::class, 'store'])->name('hr.payroll.rule-sets.store');

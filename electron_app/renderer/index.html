@@ -6136,6 +6136,7 @@
         <button class="fin-subnav-btn"         data-hr="payroll"><i class="fa fa-money-check-dollar"></i> Payroll</button>
         <button class="fin-subnav-btn"         data-hr="rule-sets"><i class="fa fa-sliders"></i> Rule Sets</button>
         <button class="fin-subnav-btn"         data-hr="allowance-types"><i class="fa fa-coins"></i> Allowance Types</button>
+        <button class="fin-subnav-btn"         data-hr="leave-rules"><i class="fa fa-umbrella-beach"></i> Leave Rules</button>
         <button class="fin-subnav-btn"         data-hr="positions"><i class="fa fa-id-badge"></i> Positions</button>
         <button class="fin-subnav-btn"         data-hr="attendance"><i class="fa fa-clock"></i> Attendance</button>
       </div>
@@ -6188,7 +6189,7 @@
       </div>
 
       <!-- ── Employee detail view ── -->
-      <div id="employee-detail-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div id="employee-detail-view" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:var(--surface)">
 
         <div class="inv-detail-header">
           <button class="inv-back-btn" id="emp-back-btn">
@@ -6212,11 +6213,15 @@
         <div class="inv-tabs">
           <button class="inv-tab active" data-tab="emp-overview"><i class="fa fa-id-card"></i> Overview</button>
           <button class="inv-tab"        data-tab="emp-personal"><i class="fa fa-user"></i> Personal</button>
+          <button class="inv-tab"        data-tab="emp-leave"><i class="fa fa-umbrella-beach"></i> Leave</button>
+          <button class="inv-tab"        data-tab="emp-attendance"><i class="fa fa-clock"></i> Attendance</button>
         </div>
 
-        <div class="inv-tab-body" style="flex:1;overflow-y:auto">
+        <div class="inv-tab-body" style="flex:1;overflow-y:auto;background:var(--surface)">
           <div class="inv-tab-pane active" id="emp-pane-overview"></div>
           <div class="inv-tab-pane"        id="emp-pane-personal"></div>
+          <div class="inv-tab-pane"        id="emp-pane-leave"></div>
+          <div class="inv-tab-pane"        id="emp-pane-attendance"></div>
         </div>
 
       </div>
@@ -6281,6 +6286,40 @@
         <div class="finance-footer"><span id="at-footer-text"></span></div>
       </div>
 
+      <!-- ── Leave Rules view ── -->
+      <div id="leave-rules-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+
+        <div class="finance-toolbar">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="lr-search" placeholder="Search leave rules…">
+          </div>
+          <button class="finance-create-btn" id="lr-add-btn">
+            <i class="fa fa-plus"></i> Add Leave Rule
+          </button>
+        </div>
+
+        <div class="lm-stats-bar">
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-umbrella-beach"></i> Leave Rules</span>
+            <span class="lm-stat-val" id="lr-total-count">—</span>
+          </div>
+          <div class="lm-stat-sep"></div>
+          <div class="lm-stat-item">
+            <span class="lm-stat-label"><i class="fa fa-star"></i> Default Rule</span>
+            <span class="lm-stat-val" id="lr-default-name">—</span>
+          </div>
+        </div>
+
+        <div class="finance-cards-wrap">
+          <div class="finance-cards-area" id="lr-cards-area">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading leave rules…</div>
+          </div>
+        </div>
+
+        <div class="finance-footer"><span id="lr-footer-text"></span></div>
+      </div>
+
       <!-- ── Positions view ── -->
       <div id="positions-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
 
@@ -6313,30 +6352,132 @@
       <!-- ── Attendance view ── -->
       <div id="attendance-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
 
-        <div class="finance-toolbar">
-          <div class="finance-search-wrap">
-            <i class="fa fa-magnifying-glass"></i>
-            <input type="text" id="att-search" placeholder="Search by employee name or ID…">
-          </div>
-          <button class="finance-create-btn" id="att-import-btn">
-            <i class="fa fa-file-arrow-up"></i> Upload CSV
-          </button>
-        </div>
-
-        <div class="lm-stats-bar">
-          <div class="lm-stat-item">
-            <span class="lm-stat-label"><i class="fa fa-clock"></i> Records</span>
-            <span class="lm-stat-val" id="att-total-count">—</span>
+        <div class="att-header">
+          <div class="att-mode-switch" role="tablist">
+            <button class="att-mode-btn active" data-att-mode="records"><i class="fa fa-user-clock"></i> Records</button>
+            <button class="att-mode-btn" data-att-mode="leave"><i class="fa fa-umbrella-beach"></i> Leave <span class="att-mode-badge" id="att-leave-pending-badge" style="display:none"></span></button>
           </div>
         </div>
 
-        <div class="finance-cards-wrap">
-          <div class="finance-cards-area" id="att-cards-area">
-            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</div>
+        <!-- Records (check-in / check-out) -->
+        <div id="att-records-pane" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+
+          <!-- Period: navigator · presets · custom range -->
+          <div class="att-range-bar">
+            <div class="att-period">
+              <button class="att-nav-btn" id="att-range-prev" title="Previous period"><i class="fa fa-chevron-left"></i></button>
+              <div class="att-range-label" id="att-range-label">—</div>
+              <button class="att-nav-btn" id="att-range-next" title="Next period"><i class="fa fa-chevron-right"></i></button>
+            </div>
+            <div class="att-presets" role="tablist">
+              <button class="att-preset" data-att-preset="today">Today</button>
+              <button class="att-preset" data-att-preset="yesterday">Yesterday</button>
+              <button class="att-preset" data-att-preset="week">This week</button>
+              <button class="att-preset active" data-att-preset="month">This month</button>
+              <button class="att-preset" data-att-preset="last_month">Last month</button>
+            </div>
+            <div class="att-custom-range" title="Custom date range">
+              <i class="fa fa-calendar"></i>
+              <input type="date" id="att-from" class="att-date">
+              <span>to</span>
+              <input type="date" id="att-to" class="att-date">
+            </div>
+            <div class="att-actions">
+              <button class="att-btn" id="att-export-btn" title="Export the current view to CSV">
+                <i class="fa fa-file-export"></i> Export
+              </button>
+              <button class="att-btn" id="att-gaps-btn" title="Find employees with no attendance on a work day">
+                <i class="fa fa-user-xmark"></i> Check missing
+              </button>
+              <button class="att-btn primary" id="att-import-btn">
+                <i class="fa fa-file-arrow-up"></i> Upload CSV
+              </button>
+            </div>
+          </div>
+
+          <div class="att-scroll">
+            <!-- KPIs (click a card to filter) -->
+            <div class="att-kpis" id="att-kpis"></div>
+
+            <div class="att-table-card">
+              <!-- Filters -->
+              <div class="att-toolbar">
+                <button class="att-btn att-back" id="att-back-btn" style="display:none" title="Back to all employees">
+                  <i class="fa fa-arrow-left"></i> Back
+                </button>
+                <div class="att-search">
+                  <i class="fa fa-magnifying-glass"></i>
+                  <input type="text" id="att-search" placeholder="Search employee name or ID…">
+                </div>
+                <select id="att-dept" class="att-select" title="Department">
+                  <option value="">All departments</option>
+                </select>
+                <div class="att-view-toggle" role="tablist">
+                  <button class="att-view-btn active" data-att-view="list" title="Daily records"><i class="fa fa-list"></i> Daily</button>
+                  <button class="att-view-btn" data-att-view="employees" title="Summary per employee"><i class="fa fa-users"></i> By employee</button>
+                </div>
+              </div>
+
+              <!-- Status filter chips -->
+              <div class="att-chips" id="att-chips"></div>
+
+              <div class="att-table-wrap" id="att-cards-area">
+                <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</div>
+              </div>
+
+              <div class="att-table-foot"><span id="att-footer-text"></span></div>
+            </div>
           </div>
         </div>
 
-        <div class="finance-footer"><span id="att-footer-text"></span></div>
+        <!-- Attendance record detail drawer -->
+        <div class="att-drawer-backdrop" id="att-drawer-backdrop"></div>
+        <aside class="att-drawer" id="att-drawer" aria-hidden="true">
+          <div class="att-drawer-head">
+            <div id="att-drawer-title"></div>
+            <button class="att-nav-btn" id="att-drawer-close" title="Close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="att-drawer-body" id="att-drawer-body"></div>
+        </aside>
+
+        <!-- Leave (give leave, approve / reject) -->
+        <div id="att-leave-pane" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+          <div class="finance-toolbar">
+            <div class="finance-search-wrap">
+              <i class="fa fa-magnifying-glass"></i>
+              <input type="text" id="lv-search" placeholder="Search by employee name or ID…">
+            </div>
+            <div class="lv-status-filter">
+              <button class="lv-status-btn active" data-lv-status="">All</button>
+              <button class="lv-status-btn" data-lv-status="pending">Pending</button>
+              <button class="lv-status-btn" data-lv-status="approved">Approved</button>
+              <button class="lv-status-btn" data-lv-status="rejected">Rejected</button>
+            </div>
+            <button class="finance-create-btn" id="lv-give-btn">
+              <i class="fa fa-plus"></i> Give Leave
+            </button>
+          </div>
+
+          <div class="lm-stats-bar">
+            <div class="lm-stat-item">
+              <span class="lm-stat-label"><i class="fa fa-clock"></i> Pending Approval</span>
+              <span class="lm-stat-val" id="lv-pending-count">—</span>
+            </div>
+            <div class="lm-stat-sep"></div>
+            <div class="lm-stat-item">
+              <span class="lm-stat-label"><i class="fa fa-umbrella-beach"></i> On Leave Today</span>
+              <span class="lm-stat-val" id="lv-today-count">—</span>
+            </div>
+          </div>
+
+          <div class="finance-cards-wrap">
+            <div class="finance-cards-area" id="lv-cards-area">
+              <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading leave…</div>
+            </div>
+          </div>
+
+          <div class="finance-footer"><span id="lv-footer-text"></span></div>
+        </div>
       </div>
 
       <!-- ── Payroll list view ── -->
@@ -12149,6 +12290,303 @@
   </div>
 </div>
 
+<!-- ── Missing Attendance Modal (Attendance → Check Missing / after CSV import) ── -->
+<div class="modal-overlay" id="ag-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:860px;width:96vw">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-user-xmark"></i> Missing Attendance</h3>
+      <button class="bill-modal-close" id="ag-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+     <div class="bill-section" style="padding-bottom:20px">
+      <p class="bf-hint" style="margin:0 0 10px">Working days where an employee has <strong>no attendance record and no leave</strong>. Choose what each day should be — paid leave is deducted from the employee's balance.</p>
+      <div class="ag-filters">
+        <div class="bf-group" style="margin:0">
+          <label class="bf-label">FROM</label>
+          <input type="date" id="ag-from" class="bf-input">
+        </div>
+        <div class="bf-group" style="margin:0">
+          <label class="bf-label">TO</label>
+          <input type="date" id="ag-to" class="bf-input">
+        </div>
+        <div class="bf-group" style="margin:0;flex:1">
+          <label class="bf-label">EMPLOYEE</label>
+          <input type="text" id="ag-search" class="bf-input" placeholder="Name or ID (optional)">
+        </div>
+        <button class="finance-create-btn" id="ag-find-btn" style="align-self:flex-end"><i class="fa fa-magnifying-glass"></i> Find</button>
+      </div>
+
+      <div id="ag-bulk" class="ag-bulk" style="display:none">
+        <span id="ag-count"></span>
+        <label>Set all to
+          <select id="ag-bulk-action" class="bf-input" style="width:auto;display:inline-block;margin-left:6px">
+            <option value="">— choose —</option>
+            <option value="suggested">Suggested</option>
+            <option value="casual">Casual leave</option>
+            <option value="annual">Annual leave</option>
+            <option value="unpaid">Unpaid leave</option>
+            <option value="absent">Absent</option>
+            <option value="skip">Skip</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="ag-results" class="ag-results"></div>
+     </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="ag-apply-btn" disabled><i class="fa fa-check"></i> Apply</button>
+      <label class="gl-override" style="margin:0 0 0 12px"><input type="checkbox" id="ag-override"> Allow even if balance runs out</label>
+      <button class="btn-secondary" id="ag-modal-cancel" style="margin-left:auto">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Give Leave Modal (employee Leave tab + Attendance → Leave) ────── -->
+<div class="modal-overlay" id="gl-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:560px">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-umbrella-beach"></i> Give Leave</h3>
+      <button class="bill-modal-close" id="gl-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+      <div id="gl-modal-alert" class="alert alert-error" style="display:none;margin:0 0 4px"></div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#0d9488;--sb:#ccfbf1"><i class="fa fa-user"></i></div>
+          <span class="bsec-title">Employee</span>
+        </div>
+        <div class="bf-group" id="gl-employee-wrap">
+          <label class="bf-label">EMPLOYEE <span class="bf-req">*</span></label>
+          <div class="gl-emp-combo">
+            <i class="fa fa-search gl-emp-icon"></i>
+            <input type="text" id="gl-employee" class="bf-input" placeholder="Search employee by name or ID…" autocomplete="off">
+            <button type="button" id="gl-employee-clear" class="gl-emp-clear" title="Clear" style="display:none"><i class="fa fa-times"></i></button>
+            <div id="gl-employee-list" class="gl-emp-list" style="display:none"></div>
+          </div>
+        </div>
+        <div id="gl-employee-fixed" class="gl-employee-fixed" style="display:none"></div>
+        <div id="gl-rule-hint" class="bf-hint" style="margin-top:6px"></div>
+      </div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#0284c7;--sb:#e0f2fe"><i class="fa fa-calendar-days"></i></div>
+          <span class="bsec-title">Leave</span>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">TYPE <span class="bf-req">*</span></label>
+          <div class="gl-chips" id="gl-type-chips">
+            <button type="button" class="gl-chip active" data-type="annual">Annual</button>
+            <button type="button" class="gl-chip" data-type="casual">Casual</button>
+            <button type="button" class="gl-chip" data-type="sick">Sick</button>
+            <button type="button" class="gl-chip" data-type="short">Short Leave</button>
+            <button type="button" class="gl-chip" data-type="unpaid">Unpaid</button>
+            <button type="button" class="gl-chip" data-type="other">Other</button>
+          </div>
+        </div>
+
+        <!-- Day-based leave -->
+        <div id="gl-day-fields">
+          <div class="bf-group" id="gl-duration-wrap">
+            <label class="bf-label">DURATION</label>
+            <div class="gl-chips">
+              <button type="button" class="gl-chip active" data-duration="full">Full day(s)</button>
+              <button type="button" class="gl-chip" data-duration="half">Half day</button>
+            </div>
+          </div>
+          <div class="bf-row-2" id="gl-range-row">
+            <div class="bf-group">
+              <label class="bf-label">FROM <span class="bf-req">*</span></label>
+              <input type="date" id="gl-from" class="bf-input">
+            </div>
+            <div class="bf-group">
+              <label class="bf-label">TO <span class="bf-req">*</span></label>
+              <input type="date" id="gl-to" class="bf-input">
+            </div>
+          </div>
+          <div class="bf-row-2" id="gl-half-row" style="display:none">
+            <div class="bf-group">
+              <label class="bf-label">DATE <span class="bf-req">*</span></label>
+              <input type="date" id="gl-half-date" class="bf-input">
+            </div>
+            <div class="bf-group">
+              <label class="bf-label">WHICH HALF</label>
+              <select id="gl-half-period" class="bf-input">
+                <option value="am">Morning (first half)</option>
+                <option value="pm">Afternoon (second half)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Short leave -->
+        <div id="gl-short-fields" style="display:none">
+          <div class="bf-row-2">
+            <div class="bf-group">
+              <label class="bf-label">DATE <span class="bf-req">*</span></label>
+              <input type="date" id="gl-short-date" class="bf-input">
+            </div>
+            <div class="bf-group">
+              <label class="bf-label">STARTS AT <span class="bf-req">*</span></label>
+              <input type="time" id="gl-short-start" class="bf-input" value="08:30">
+            </div>
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">LENGTH <span class="bf-req">*</span></label>
+            <select id="gl-short-minutes" class="bf-input"></select>
+          </div>
+        </div>
+
+        <div class="bf-group">
+          <label class="bf-label">REASON / NOTE <span class="bf-optional">optional</span></label>
+          <textarea id="gl-note" class="bf-input bf-textarea" rows="2" maxlength="2000" placeholder="e.g. Family function, medical appointment"></textarea>
+        </div>
+
+        <div class="bf-group" style="margin-bottom:0">
+          <label class="bf-label">STATUS</label>
+          <div class="gl-chips">
+            <button type="button" class="gl-chip active" data-status="approved"><i class="fa fa-circle-check"></i> Approve now</button>
+            <button type="button" class="gl-chip" data-status="pending"><i class="fa fa-clock"></i> Save as pending</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live summary from the server: days charged, balance left, rule problems -->
+      <div style="padding:0 24px 16px">
+        <div id="gl-summary" class="gl-summary" style="display:none"></div>
+        <label id="gl-override-wrap" class="gl-override" style="display:none">
+          <input type="checkbox" id="gl-override"> Allow anyway (override the warnings above)
+        </label>
+      </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="gl-modal-save"><i class="fa fa-check"></i> Give Leave</button>
+      <button class="btn-secondary" id="gl-modal-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Leave Rule: Create / Edit Modal ───────────────────────────────── -->
+<div class="modal-overlay" id="lr-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:560px">
+    <div class="bill-modal-header">
+      <h3 id="lr-modal-title"><i class="fa fa-umbrella-beach"></i> New Leave Rule</h3>
+      <button class="bill-modal-close" id="lr-modal-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+      <div id="lr-modal-alert" class="alert alert-error" style="display:none;margin:0 0 4px"></div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#0d9488;--sb:#ccfbf1"><i class="fa fa-umbrella-beach"></i></div>
+          <span class="bsec-title">Rule</span>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">NAME <span class="bf-req">*</span></label>
+          <input type="text" id="lr-name" class="bf-input" placeholder="e.g. Permanent Staff, Probation, Part Time" maxlength="100">
+        </div>
+        <div class="bf-group" id="lr-presets-wrap">
+          <label class="bf-label">QUICK START <span class="bf-optional">optional</span></label>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button type="button" class="btn-secondary lr-preset" data-preset="shop-office" style="padding:5px 10px;font-size:12px">Shop &amp; Office Act (14 / 7 / 2 short)</button>
+            <button type="button" class="btn-secondary lr-preset" data-preset="probation" style="padding:5px 10px;font-size:12px">Probation (0 / 7)</button>
+            <button type="button" class="btn-secondary lr-preset" data-preset="part-time" style="padding:5px 10px;font-size:12px">Part Time (7 / 4)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#0284c7;--sb:#e0f2fe"><i class="fa fa-calendar-days"></i></div>
+          <span class="bsec-title">Yearly Entitlement (days)</span>
+        </div>
+        <div class="bf-row-2">
+          <div class="bf-group">
+            <label class="bf-label">ANNUAL LEAVE <span class="bf-req">*</span></label>
+            <input type="number" id="lr-annual" class="bf-input" min="0" max="365" step="1" value="14">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">CASUAL LEAVE <span class="bf-req">*</span></label>
+            <input type="number" id="lr-casual" class="bf-input" min="0" max="365" step="1" value="7">
+          </div>
+        </div>
+        <div class="bf-row-2">
+          <div class="bf-group">
+            <label class="bf-label">SICK / MEDICAL LEAVE <span class="bf-optional">optional</span></label>
+            <input type="number" id="lr-sick" class="bf-input" min="0" max="365" step="1" placeholder="Not tracked">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">ELIGIBLE AFTER (MONTHS)</label>
+            <input type="number" id="lr-eligible" class="bf-input" min="0" max="24" step="1" value="0">
+            <p class="bf-hint">Probation before leave can be taken. 0 = from day one.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#7c3aed;--sb:#ede9fe"><i class="fa fa-hourglass-half"></i></div>
+          <span class="bsec-title">Short Leave <span class="bf-optional">optional</span></span>
+        </div>
+        <div class="bf-check-block">
+          <label class="bf-check-label">
+            <input type="checkbox" id="lr-short-enabled">
+            <div class="bf-check-text">
+              <span class="bf-check-title">ALLOW SHORT LEAVE</span>
+              <span class="bf-check-desc">A few hours off (late arrival / early leave) that doesn't use a full leave day.</span>
+            </div>
+          </label>
+        </div>
+        <div class="bf-row-2" id="lr-short-fields" style="display:none">
+          <div class="bf-group">
+            <label class="bf-label">SHORT LEAVES PER MONTH <span class="bf-req">*</span></label>
+            <input type="number" id="lr-short-count" class="bf-input" min="1" max="31" step="1" value="2">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">MAX LENGTH (MINUTES) <span class="bf-req">*</span></label>
+            <input type="number" id="lr-short-minutes" class="bf-input" min="15" max="480" step="15" value="90">
+          </div>
+        </div>
+      </div>
+
+      <div class="bill-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#64748b;--sb:#f1f5f9"><i class="fa fa-sliders"></i></div>
+          <span class="bsec-title">More Options</span>
+        </div>
+        <div class="bf-check-block">
+          <label class="bf-check-label">
+            <input type="checkbox" id="lr-half-day" checked>
+            <div class="bf-check-text">
+              <span class="bf-check-title">ALLOW HALF-DAY LEAVE</span>
+              <span class="bf-check-desc">Employees can take 0.5 day of annual or casual leave.</span>
+            </div>
+          </label>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">CARRY FORWARD MAX (DAYS) <span class="bf-optional">optional</span></label>
+          <input type="number" id="lr-carry" class="bf-input" min="0" max="365" step="1" placeholder="No carry forward">
+          <p class="bf-hint">Unused annual leave that can move to next year. Leave empty to reset every year.</p>
+        </div>
+        <div class="bf-group">
+          <label class="bf-label">NOTES <span class="bf-optional">optional</span></label>
+          <textarea id="lr-notes" class="bf-input bf-textarea" rows="2" maxlength="1000" placeholder="e.g. Applies to permanent staff after confirmation"></textarea>
+        </div>
+        <div class="bf-group" style="display:flex;align-items:center;gap:10px;margin-bottom:0">
+          <input type="checkbox" id="lr-default" style="width:16px;height:16px;accent-color:var(--accent)">
+          <label for="lr-default" class="bf-label" style="margin:0;cursor:pointer">Set as default leave rule</label>
+        </div>
+      </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="lr-modal-save"><i class="fa fa-plus"></i> Create</button>
+      <button class="btn-secondary" id="lr-modal-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Position: Create Modal ────────────────────────────────────────── -->
 <div class="modal-overlay" id="pos-create-modal" style="display:none">
   <div class="modal bill-modal-inner" style="max-width:420px">
@@ -12167,6 +12605,13 @@
           <label class="bf-label">NAME <span class="bf-req">*</span></label>
           <input type="text" id="pos-modal-name" class="bf-input" placeholder="e.g. Senior Accountant, Cashier" maxlength="255">
           <p class="bf-hint">Examples: Senior Accountant, Cashier, Branch Manager, Sales Associate.</p>
+        </div>
+        <div class="bf-group" style="margin-bottom:0">
+          <label class="bf-label">LEAVE RULE</label>
+          <select id="pos-modal-leave-policy" class="bf-input">
+            <option value="">Use default leave rule</option>
+          </select>
+          <p class="bf-hint">Annual, casual and short leave for everyone in this position. Manage rules in the <strong>Leave Rules</strong> tab.</p>
         </div>
       </div>
     </div>
@@ -12234,6 +12679,13 @@
       <div class="csv-result-errors" id="att-csv-result-errors" style="display:none">
         <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
         <div class="csv-result-errors-list" id="att-csv-result-errors-list"></div>
+      </div>
+      <div class="ag-cta" id="att-csv-gap-cta" style="display:none">
+        <div>
+          <div class="ag-cta-title"><i class="fa fa-user-xmark"></i> Some employees may not be in this file</div>
+          <div class="ag-cta-desc" id="att-csv-gap-cta-desc"></div>
+        </div>
+        <button class="eod-settle-btn" id="att-csv-gap-btn"><i class="fa fa-magnifying-glass"></i> Check Missing Attendance</button>
       </div>
       <div class="csv-import-footer">
         <button class="psm-btn-cancel" id="att-csv-done-btn">Done</button>
@@ -12501,8 +12953,8 @@
       <button class="bill-modal-close" id="payroll-recompute-modal-close"><i class="fa fa-xmark"></i></button>
     </div>
     <div class="bill-modal-body">
-      <div id="payroll-recompute-alert" class="alert alert-error" style="display:none;margin:0 0 8px"></div>
-      <div style="margin-bottom:10px;font-size:14px;color:var(--text-muted)" id="pr-employee-label"></div>
+      <div id="payroll-recompute-alert" class="alert alert-error" style="display:none;margin:16px 24px 0"></div>
+      <div style="padding:16px 24px 14px;font-size:15px;font-weight:600;color:var(--text-primary, inherit);border-bottom:1px solid var(--border-light)" id="pr-employee-label"></div>
 
       <div class="bill-section">
         <div class="bsec-hdr"><i class="fa fa-clock"></i> Overtime</div>
@@ -14809,6 +15261,9 @@
         <button class="psm-nav-item" data-tab="roles">
           <i class="fa fa-shield-halved"></i><span>Roles</span>
         </button>
+        <button class="psm-nav-item psm-nav-item--hr-only" data-tab="hr" style="display:none">
+          <i class="fa fa-people-group"></i><span>HR</span>
+        </button>
         <button class="psm-nav-item psm-nav-item--mail-only" data-tab="mail">
           <i class="fa fa-envelope"></i><span>Mail</span>
         </button>
@@ -15387,6 +15842,35 @@
           </div>
 
         </div><!-- /psm-tab-mail -->
+
+        <!-- HR panel (visible only when the Human Resources feature is enabled) -->
+        <div class="psm-panel" id="psm-tab-hr" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-calendar-week"></i> Working Schedule</div>
+            <p class="psm-hint" style="margin:0 0 12px">Set the standard working hours for each day. Turn a day off for weekends or non-working days.</p>
+
+            <div class="psm-hr-sched">
+              <div class="psm-hr-sched-head">
+                <span>Day</span><span>Work start</span><span>Work end</span><span>Breaks</span><span>Working hours</span>
+              </div>
+              <div id="psm-hr-sched-rows"></div>
+            </div>
+
+            <div class="psm-hr-sched-foot">
+              <button type="button" class="psm-btn-cancel" id="psm-hr-copy-mon"><i class="fa fa-copy"></i> Copy Monday to all working days</button>
+              <span class="psm-hr-week-total">Weekly total: <strong id="psm-hr-week-total">0h</strong></span>
+            </div>
+            <div id="psm-hr-sched-error" class="psm-hint" style="display:none;color:#ef4444"></div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-mug-hot"></i> Break Periods</div>
+            <p class="psm-hint" style="margin:0 0 12px">Breaks inside the working day. Lunch is built in; add your own (e.g. Tea time) and switch any break on or off. Pick the days each break applies to.</p>
+            <div class="psm-hr-brk-list" id="psm-hr-brk-rows"></div>
+            <button type="button" class="psm-btn-cancel" id="psm-hr-brk-add" style="margin-top:10px"><i class="fa fa-plus"></i> Add break</button>
+            <div id="psm-hr-brk-error" class="psm-hint" style="display:none;color:#ef4444"></div>
+          </div>
+        </div><!-- /psm-tab-hr -->
 
         <!-- Counters panel -->
         <div class="psm-panel" id="psm-tab-counters" style="display:none">
