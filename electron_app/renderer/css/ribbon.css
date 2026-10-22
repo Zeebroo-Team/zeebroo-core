@@ -5077,6 +5077,9 @@ body.dark .bs-sales-badge.voided    { color: #f87171; }
 .sal-kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
 .sal-kpi-val   { font-size: 22px; font-weight: 800; color: var(--text); }
 .sal-kpi-val.accent { color: var(--accent); }
+.sal-profit-pos { color: #16a34a !important; }
+.sal-profit-neg { color: #ef4444 !important; }
+.sal-profit-warn { color: #f59e0b; font-size: 11px; margin-left: 4px; }
 
 /* Sales table */
 .sal-table-wrap { flex: 1; overflow-y: auto; }
@@ -7039,6 +7042,13 @@ body.dark .kpi-pill-purple { background: #3b0764; color: #c4b5fd; border-color: 
 .home-act-label { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-act-meta  { font-size: 11px; color: var(--text-muted); }
 .home-act-amt   { font-size: 12px; font-weight: 700; color: var(--text); flex-shrink: 0; }
+.home-act-row.clickable { cursor: pointer; }
+.home-act-amts  { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.home-act-profit { font-size: 11px; font-weight: 600; }
+.home-act-profit.pos { color: #16a34a; }
+.home-act-profit.neg { color: #ef4444; }
+.home-act-profit.voided { color: var(--text-muted); font-style: italic; }
+.home-act-profit .fa-triangle-exclamation { color: #f59e0b; font-size: 10px; }
 
 /* ── Home Orders View (hov) ─────────────────────────────────────────────── */
 #home-view-orders { background: var(--bg); padding: 10px; }
@@ -16602,6 +16612,30 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .tds-sale-total{ font-size:13px; font-weight:700; color:var(--text); font-variant-numeric:tabular-nums; flex-shrink:0; }
 
 .tds-empty-hint { font-size:12px; color:var(--text-muted); padding:8px 0; text-align:center; }
+
+/* Profit Today */
+.tds-prf-sum { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin:4px 0 10px; }
+.tds-prf-sum-card { background:var(--surface); border:1px solid var(--border-light); border-radius:8px; padding:8px 12px; display:flex; flex-direction:column; gap:2px; }
+.tds-prf-sum-card .lbl { font-size:10px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; }
+.tds-prf-sum-card .val { font-size:16px; font-weight:800; color:var(--text); font-variant-numeric:tabular-nums; }
+.tds-prf-sum-card.pos .val { color:#16a34a; }
+.tds-prf-sum-card.neg .val { color:#ef4444; }
+.tds-prf-table { display:flex; flex-direction:column; max-height:340px; overflow-y:auto; }
+.tds-prf-head, .tds-prf-row { display:grid; grid-template-columns:1.4fr 1.2fr 1fr 1fr 1fr .7fr; gap:10px; align-items:center; padding:7px 8px; }
+.tds-prf-head { font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--surface2); z-index:1; }
+.tds-prf-row { font-size:12px; color:var(--text); border-bottom:1px solid var(--border-light); cursor:pointer; border-radius:6px; font-variant-numeric:tabular-nums; }
+.tds-prf-row:last-child { border-bottom:none; }
+.tds-prf-row:hover { background:rgba(59,130,246,.08); }
+.tds-prf-head .r, .tds-prf-row .r { text-align:right; }
+.tds-prf-sale { display:flex; flex-direction:column; min-width:0; }
+.tds-prf-sale small { font-size:11px; color:var(--text-muted); }
+.tds-prf-cust { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text-muted); }
+.tds-prf-cost { color:var(--text-muted); }
+.tds-prf-warn { color:#f59e0b; font-size:10px; }
+.tds-prf-val.pos, .tds-prf-margin.pos { color:#16a34a; font-weight:700; }
+.tds-prf-val.neg, .tds-prf-margin.neg { color:#ef4444; font-weight:700; }
+.tds-prf-note { font-size:12px; color:#b45309; background:rgba(245,158,11,.1); border:1px solid rgba(245,158,11,.3); border-radius:6px; padding:6px 10px; margin-bottom:10px; }
+@media (max-width: 900px) { .tds-prf-sum { grid-template-columns:repeat(2, 1fr); } }
 
 /* ── Expenses View ──────────────────────────────────────────────────────── */
 #home-view-expenses { background: var(--bg); padding: 10px; }
