@@ -133,6 +133,10 @@ class PosHrPayrollCycleApiController extends Controller
             return response()->json(['message' => 'Cycle not found.'], 404);
         }
 
+        if ($cycle->isFinalized()) {
+            return response()->json(['message' => 'Cannot delete a finalized cycle.'], 422);
+        }
+
         if ($cycle->ledgerTransactions()->exists()) {
             return response()->json(['message' => 'Cannot delete a cycle that has a recorded payment.'], 422);
         }
@@ -245,6 +249,10 @@ class PosHrPayrollCycleApiController extends Controller
 
     private function formatCycle(PayrollCycle $c): array
     {
+        // withSum('items', 'net_pay') exposes `items_sum_net_pay`; fall back to loaded items (show/compute).
+        $netPay = (float) ($c->items_sum_net_pay
+            ?? ($c->relationLoaded('items') ? $c->items->sum('net_pay') : 0));
+
         return [
             'id'                => $c->id,
             'name'              => $c->name,
@@ -261,8 +269,8 @@ class PosHrPayrollCycleApiController extends Controller
             'computed_at'       => $c->computed_at?->format('Y-m-d H:i'),
             'finalized_at'      => $c->finalized_at?->format('Y-m-d H:i'),
             'items_count'       => (int) ($c->items_count ?? $c->items?->count() ?? 0),
-            'total_net_pay'     => (float) ($c->items_net_pay_sum ?? 0),
-            'total_net_pay_fmt' => number_format((float) ($c->items_net_pay_sum ?? 0), 2, '.', ','),
+            'total_net_pay'     => $netPay,
+            'total_net_pay_fmt' => number_format($netPay, 2, '.', ','),
         ];
     }
 

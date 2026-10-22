@@ -42633,7 +42633,9 @@ function buildPayrollCycleCard(c) {
     <div class="lm-stats-row">
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">NET PAY</span>
-        <span class="lm-balance">${escHtml(c.currency || 'LKR')} ${escHtml(c.total_net_pay_fmt || '0.00')}</span>
+        <span class="lm-stat-block-val" style="color:#16a34a">${escHtml(currencyPosition() === 'before'
+          ? `${c.currency || 'LKR'} ${c.total_net_pay_fmt || '0.00'}`
+          : `${c.total_net_pay_fmt || '0.00'} ${c.currency || 'LKR'}`)}</span>
       </div>
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">PERIOD</span>
@@ -42737,7 +42739,7 @@ async function loadPayrollCycleDetail(cycleId) {
       </div>
       <div class="lm-stat-block">
         <span class="lm-stat-block-label">NET PAY</span>
-        <span class="lm-balance">${fmtP(s.net_pay_fmt || '0.00')}</span>
+        <span class="lm-stat-block-val" style="color:#16a34a">${fmtP(s.net_pay_fmt || '0.00')}</span>
       </div>
     </div>
     <div class="lm-stats-row">
@@ -42805,7 +42807,7 @@ async function loadPayrollCycleDetail(cycleId) {
       </div>`;
   }
 
-  if (!isPaid) {
+  if (!isFinalized && !isPaid) {
     actionsHtml += `
       <div class="inv-section" style="margin-top:14px">
         <div class="inv-section-title" style="color:#dc2626"><i class="fa fa-trash"></i> Delete cycle</div>
