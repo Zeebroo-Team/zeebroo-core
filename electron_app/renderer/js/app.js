@@ -263,7 +263,8 @@ const _sbSubItems = {
     { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
     { view:'rule-sets',      icon:'fa-list-check',           label:'Rule Sets' },
     { view:'allowance-types',icon:'fa-coins',                label:'Allowances' },
-    { view:'positions',      icon:'fa-id-badge',             label:'Positions' },
+    { view:'leave-rules',    icon:'fa-umbrella-beach',       label:'Leave Rules' },
+    { view:'positions',     icon:'fa-id-badge',             label:'Positions' },
     { view:'attendance',     icon:'fa-clock',                label:'Attendance' },
   ],
   services: [
@@ -29393,7 +29394,14 @@ async function openPosSettings() {
   // Mail tab holds live SMTP credentials/test-send — only show it when the Mail feature is installed
   const mailNavItem = $('.psm-nav-item--mail-only');
   if (mailNavItem) mailNavItem.style.display = hasFeature('mail') ? '' : 'none';
+  // HR tab (working schedule, custom fields) — only when the Human Resources feature is installed
+  const hrOn = hasFeature('human_resources');
+  const hrNavItem = $('.psm-nav-item--hr-only');
+  if (hrNavItem) hrNavItem.style.display = hrOn ? '' : 'none';
   psmShowTab('business');
+
+  _psmHrLoaded = false;
+  if (hrOn) _psmLoadHrSettings();
 
   const [sRes, aRes, bRes] = await Promise.all([API.settingsGet(), API.accounts(), API.branches()]);
 
@@ -29757,10 +29765,264 @@ $('#psm-mail-verify-btn')?.addEventListener('click', async () => {
   msg.style.display = 'inline';
 });
 
+// ── Settings → HR tab: working schedule + break periods ────────────────────
+const _PSM_HR_DAYS = [
+  ['mon', 'Monday'], ['tue', 'Tuesday'], ['wed', 'Wednesday'], ['thu', 'Thursday'],
+  ['fri', 'Friday'], ['sat', 'Saturday'], ['sun', 'Sunday'],
+];
+let _psmHrLoaded = false; // only save HR settings if they were loaded (never overwrite with blanks)
+let _psmHrBreaks = [];    // [{ key, name, enabled, start, end, days: ['mon', …] }] — lunch is always first
+
+function _psmHrMinutes(t) {
+  if (!/^\d{2}:\d{2}$/.test(t || '')) return null;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+}
+
+function _psmHrFmtHours(mins) {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  if (!h) return `${m}m`;
+  return m ? `${h}h ${m}m` : `${h}h`;
+}
+
+async function _psmLoadHrSettings() {
+  $('#psm-hr-sched-rows').innerHTML = '<div class="psm-hint" style="padding:10px 12px;margin:0">Loading…</div>';
+  $('#psm-hr-brk-rows').innerHTML = '';
+  const res = await API.hrSettings();
+  if (res.status !== 200) {
+    $('#psm-hr-sched-rows').innerHTML = '<div class="psm-hint" style="padding:10px 12px;margin:0;color:#ef4444">Failed to load HR settings.</div>';
+    return;
+  }
+  const d = res.body?.data ?? {};
+  _psmHrBreaks = Array.isArray(d.breaks) ? d.breaks.map(b => ({ ...b, days: [...(b.days || [])] })) : [];
+  _psmHrRenderSchedule(d.work_schedule || {});
+  _psmHrRenderBreaks();
+  _psmHrLoaded = true;
+}
+
+function _psmHrRenderSchedule(schedule) {
+  $('#psm-hr-sched-rows').innerHTML = _PSM_HR_DAYS.map(([key, label]) => {
+    const d = schedule[key] || {};
+    const on = !!d.enabled;
+    const inp = (field) => `<input type="time" class="psm-input" data-hr-day="${key}" data-hr-field="${field}" value="${escHtml(d[field] || '')}">`;
+    return `
+      <div class="psm-hr-day${on ? '' : ' psm-hr-day--off'}" id="psm-hr-day-${key}">
+        <div class="psm-hr-day-name">
+          <label class="psm-switch"><input type="checkbox" data-hr-day="${key}" data-hr-field="enabled"${on ? ' checked' : ''}><span class="psm-switch-track"></span></label>
+          ${label}
+        </div>
+        ${inp('start')}${inp('end')}
+        <span class="psm-hr-day-breaks" id="psm-hr-day-breaks-${key}"></span>
+        <span class="psm-hr-day-hours" id="psm-hr-day-hours-${key}"></span>
+      </div>`;
+  }).join('');
+  _psmHrRecalc();
+}
+
+function _psmHrRenderBreaks() {
+  $('#psm-hr-brk-rows').innerHTML = _psmHrBreaks.map((b, i) => {
+    const isLunch = b.key === 'lunch';
+    const nameCell = isLunch
+      ? `<div class="psm-hr-brk-name-fixed"><i class="fa fa-utensils"></i> Lunch break</div>`
+      : `<input type="text" class="psm-input" data-hr-brk="${i}" data-hr-brk-field="name" placeholder="Break name, e.g. Tea time" maxlength="60" value="${escHtml(b.name || '')}">`;
+    const days = _PSM_HR_DAYS.map(([k, l]) =>
+      `<button type="button" class="psm-hr-brk-day${(b.days || []).includes(k) ? ' on' : ''}" data-hr-brk="${i}" data-hr-brk-day="${k}" title="${l}">${l[0]}</button>`
+    ).join('');
+    return `
+      <div class="psm-hr-brk${b.enabled ? '' : ' psm-hr-brk--off'}" id="psm-hr-brk-${i}">
+        <label class="psm-switch" title="Enable / disable"><input type="checkbox" data-hr-brk="${i}" data-hr-brk-field="enabled"${b.enabled ? ' checked' : ''}><span class="psm-switch-track"></span></label>
+        ${nameCell}
+        <input type="time" class="psm-input" data-hr-brk="${i}" data-hr-brk-field="start" value="${escHtml(b.start || '')}" title="From">
+        <input type="time" class="psm-input" data-hr-brk="${i}" data-hr-brk-field="end" value="${escHtml(b.end || '')}" title="To">
+        <span class="psm-hr-brk-dur" id="psm-hr-brk-dur-${i}"></span>
+        <div class="psm-hr-brk-days">${days}</div>
+        <button type="button" class="psm-btn-cancel psm-hr-brk-rm" data-hr-brk-rm="${i}" title="Remove break"${isLunch ? ' disabled' : ''}><i class="fa fa-trash"></i></button>
+      </div>`;
+  }).join('');
+  _psmHrRecalc();
+}
+
+function _psmHrReadSchedule() {
+  const out = {};
+  _PSM_HR_DAYS.forEach(([key]) => {
+    const get = (f) => $(`[data-hr-day="${key}"][data-hr-field="${f}"]`);
+    out[key] = {
+      enabled: !!get('enabled')?.checked,
+      start:   get('start')?.value || null,
+      end:     get('end')?.value || null,
+    };
+  });
+  return out;
+}
+
+function _psmHrBreakError(b) {
+  if (b.key !== 'lunch' && !(b.name || '').trim()) return 'Break name is required';
+  if (!b.enabled) return '';
+  const label = b.key === 'lunch' ? 'Lunch break' : b.name.trim();
+  const s = _psmHrMinutes(b.start), e = _psmHrMinutes(b.end);
+  if (s === null || e === null) return `${label}: start and end time are required`;
+  if (e <= s) return `${label}: end time must be after start time`;
+  if (!(b.days || []).length) return `${label}: pick at least one day`;
+  return '';
+}
+
+// Returns an error message for a working day (hours or its breaks), or '' when valid / day off
+function _psmHrDayError(key, d) {
+  if (!d.enabled) return '';
+  const s = _psmHrMinutes(d.start), e = _psmHrMinutes(d.end);
+  if (s === null || e === null) return 'start and end time are required';
+  if (e <= s) return 'end time must be after start time';
+  const active = _psmHrBreaks
+    .filter(b => !_psmHrBreakError(b) && b.enabled && b.days.includes(key))
+    .sort((a, b) => _psmHrMinutes(a.start) - _psmHrMinutes(b.start));
+  for (let i = 0; i < active.length; i++) {
+    const b = active[i];
+    const name = b.key === 'lunch' ? 'Lunch break' : b.name.trim();
+    if (_psmHrMinutes(b.start) < s || _psmHrMinutes(b.end) > e) return `${name} (${b.start}–${b.end}) is outside working hours`;
+    if (i > 0 && _psmHrMinutes(b.start) < _psmHrMinutes(active[i - 1].end)) {
+      const prev = active[i - 1].key === 'lunch' ? 'Lunch break' : active[i - 1].name.trim();
+      return `${prev} and ${name} overlap`;
+    }
+  }
+  return '';
+}
+
+function _psmHrRecalc() {
+  const schedule = _psmHrReadSchedule();
+
+  _psmHrBreaks.forEach((b, i) => {
+    $(`#psm-hr-brk-${i}`)?.classList.toggle('psm-hr-brk--invalid', !!_psmHrBreakError(b));
+    const dur = $(`#psm-hr-brk-dur-${i}`);
+    if (!dur) return;
+    const s = _psmHrMinutes(b.start), e = _psmHrMinutes(b.end);
+    dur.textContent = (s !== null && e !== null && e > s) ? _psmHrFmtHours(e - s) : '—';
+  });
+
+  let weekMins = 0;
+  _PSM_HR_DAYS.forEach(([key]) => {
+    const d = schedule[key];
+    const row = $(`#psm-hr-day-${key}`);
+    const hoursCell = $(`#psm-hr-day-hours-${key}`);
+    const breaksCell = $(`#psm-hr-day-breaks-${key}`);
+    const err = _psmHrDayError(key, d);
+    row?.classList.toggle('psm-hr-day--off', !d.enabled);
+    row?.classList.toggle('psm-hr-day--invalid', !!err);
+    if (row) row.title = err;
+    if (!hoursCell || !breaksCell) return;
+    if (!d.enabled) { hoursCell.textContent = 'Off'; breaksCell.textContent = '—'; return; }
+    const active = _psmHrBreaks.filter(b => !_psmHrBreakError(b) && b.enabled && b.days.includes(key));
+    const brkMins = active.reduce((sum, b) => sum + _psmHrMinutes(b.end) - _psmHrMinutes(b.start), 0);
+    breaksCell.textContent = active.length ? _psmHrFmtHours(brkMins) : 'None';
+    if (err) { hoursCell.textContent = '—'; return; }
+    const mins = _psmHrMinutes(d.end) - _psmHrMinutes(d.start) - brkMins;
+    weekMins += mins;
+    hoursCell.textContent = _psmHrFmtHours(mins);
+  });
+  $('#psm-hr-week-total').textContent = _psmHrFmtHours(weekMins);
+}
+
+$('#psm-hr-sched-rows').addEventListener('input', _psmHrRecalc);
+$('#psm-hr-sched-rows').addEventListener('change', _psmHrRecalc);
+
+$('#psm-hr-copy-mon').addEventListener('click', () => {
+  const schedule = _psmHrReadSchedule();
+  const mon = schedule.mon;
+  _PSM_HR_DAYS.forEach(([key]) => {
+    if (key === 'mon' || !schedule[key].enabled) return;
+    schedule[key] = { ...mon, enabled: true };
+  });
+  _psmHrRenderSchedule(schedule);
+});
+
+$('#psm-hr-brk-rows').addEventListener('input', (e) => {
+  const el = e.target.closest('[data-hr-brk-field]');
+  if (!el) return;
+  const b = _psmHrBreaks[+el.dataset.hrBrk];
+  if (!b) return;
+  const field = el.dataset.hrBrkField;
+  if (field === 'enabled') {
+    b.enabled = el.checked;
+    $(`#psm-hr-brk-${el.dataset.hrBrk}`)?.classList.toggle('psm-hr-brk--off', !b.enabled);
+  } else {
+    b[field] = el.value;
+  }
+  _psmHrRecalc();
+});
+$('#psm-hr-brk-rows').addEventListener('click', (e) => {
+  const dayBtn = e.target.closest('[data-hr-brk-day]');
+  if (dayBtn) {
+    const b = _psmHrBreaks[+dayBtn.dataset.hrBrk];
+    if (!b) return;
+    const k = dayBtn.dataset.hrBrkDay;
+    b.days = b.days.includes(k) ? b.days.filter(x => x !== k) : [...b.days, k];
+    dayBtn.classList.toggle('on', b.days.includes(k));
+    _psmHrRecalc();
+    return;
+  }
+  const rm = e.target.closest('[data-hr-brk-rm]');
+  if (rm && !rm.disabled) {
+    _psmHrBreaks.splice(+rm.dataset.hrBrkRm, 1);
+    _psmHrRenderBreaks();
+  }
+});
+$('#psm-hr-brk-add').addEventListener('click', () => {
+  if (_psmHrBreaks.length >= 20) { toast('Maximum 20 breaks', 'error'); return; }
+  // Default the new break to the days that are currently working days
+  const schedule = _psmHrReadSchedule();
+  const days = _PSM_HR_DAYS.map(([k]) => k).filter(k => schedule[k].enabled);
+  _psmHrBreaks.push({ key: '', name: '', enabled: true, start: '', end: '', days });
+  _psmHrRenderBreaks();
+  const names = $$('#psm-hr-brk-rows [data-hr-brk-field="name"]');
+  names[names.length - 1]?.focus();
+});
+
+// Validates and saves the HR tab. Returns true when there was nothing to save or it saved OK.
+async function _psmSaveHrSettings() {
+  if (!hasFeature('human_resources') || !_psmHrLoaded) return true;
+
+  const schedErr = $('#psm-hr-sched-error');
+  const brkErr = $('#psm-hr-brk-error');
+  schedErr.style.display = 'none';
+  brkErr.style.display = 'none';
+  const fail = (el, msg) => { el.textContent = msg; el.style.display = 'block'; psmShowTab('hr'); return false; };
+
+  const badBreak = _psmHrBreaks.map(_psmHrBreakError).find(Boolean);
+  if (badBreak) return fail(brkErr, badBreak + '.');
+
+  const seen = new Set();
+  const dup = _psmHrBreaks.find(b => { const k = (b.key === 'lunch' ? 'lunch break' : (b.name || '').trim().toLowerCase()); if (seen.has(k)) return true; seen.add(k); return false; });
+  if (dup) return fail(brkErr, `Duplicate break name "${dup.name.trim()}".`);
+
+  const schedule = _psmHrReadSchedule();
+  const dayLabel = Object.fromEntries(_PSM_HR_DAYS);
+  const badDay = _PSM_HR_DAYS.map(([k]) => k).find(k => _psmHrDayError(k, schedule[k]));
+  if (badDay) return fail(schedErr, `${dayLabel[badDay]}: ${_psmHrDayError(badDay, schedule[badDay])}.`);
+
+  const breaks = _psmHrBreaks.map(b => ({
+    key: b.key || null, name: (b.name || '').trim(), enabled: !!b.enabled,
+    start: b.start || null, end: b.end || null, days: b.days,
+  }));
+  const res = await API.hrSettingsUpdate({ work_schedule: schedule, breaks });
+  if (res.status !== 200) {
+    const errs = res.body?.errors ? Object.values(res.body.errors).flat() : [];
+    toast('Failed to save HR settings: ' + (errs[0] ?? res.body?.message ?? 'unknown error'), 'error');
+    psmShowTab('hr');
+    return false;
+  }
+  _psmHrBreaks = (res.body?.data?.breaks ?? breaks).map(b => ({ ...b, days: [...(b.days || [])] }));
+  return true;
+}
+
 $('#psm-save').addEventListener('click', async () => {
   const btn = $('#psm-save');
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  if (!(await _psmSaveHrSettings())) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save settings';
+    return;
+  }
 
   // Local printer config — independent of the server save below
   await _psmSavePrinterSettings().catch(() => toast('Failed to save printer settings', 'error'));
@@ -39176,6 +39438,7 @@ function switchHrView(view) {
   $('#rule-set-detail-view').style.display      = 'none';
   $('#template-page-view').style.display        = 'none';
   $('#allowance-types-view').style.display      = view === 'allowance-types' ? 'flex' : 'none';
+  $('#leave-rules-view').style.display          = view === 'leave-rules' ? 'flex' : 'none';
   $('#positions-view').style.display            = view === 'positions' ? 'flex' : 'none';
   $('#attendance-view').style.display           = view === 'attendance' ? 'flex' : 'none';
   if (view === 'employees')        loadEmployees();
@@ -39183,8 +39446,9 @@ function switchHrView(view) {
   if (view === 'payroll')          loadPayrollCycles();
   if (view === 'rule-sets')        loadRuleSets();
   if (view === 'allowance-types')  loadAllowanceTypes();
+  if (view === 'leave-rules')      loadLeaveRules();
   if (view === 'positions')        loadPositions();
-  if (view === 'attendance')       loadAttendance();
+  if (view === 'attendance')       switchAttMode(_attMode);
 }
 
 $$('#panel-hr .fin-subnav-btn[data-hr]').forEach(btn => {
@@ -42207,14 +42471,203 @@ async function openEmployeeDetailPage(emp) {
   $('#employee-detail-view .inv-tab[data-tab="emp-overview"]').classList.add('active');
   $('#emp-pane-overview').classList.add('active');
   $('#emp-pane-personal').innerHTML = '';
+  $('#emp-pane-leave').innerHTML = '';
+  $('#emp-pane-attendance').innerHTML = '';
 
-  // Lazy-load personal details
+  // Lazy-load personal details + leave + attendance (current month)
+  _empDetailCurrent = emp;
   loadEmployeePersonalTab(emp.id);
+  loadEmployeeLeaveTab(emp.id);
+  loadEmployeeAttendanceTab(emp);
+}
+
+// ── Employee detail: Leave tab ──────────────────────────────────────────────
+
+let _empDetailCurrent = null;
+const EMP_LEAVE_LABELS = { annual: 'Annual', casual: 'Casual', sick: 'Sick', unpaid: 'Unpaid', other: 'Other', short: 'Short leave' };
+const EMP_LEAVE_STATUS = {
+  approved: { color: '#16a34a', icon: 'fa-circle-check', label: 'Approved' },
+  pending:  { color: '#d97706', icon: 'fa-clock',        label: 'Pending' },
+  rejected: { color: '#dc2626', icon: 'fa-circle-xmark', label: 'Rejected' },
+};
+
+async function loadEmployeeLeaveTab(empId, year) {
+  const pane = $('#emp-pane-leave');
+  pane.innerHTML = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading leave…</p>';
+  const res = await API.employeeLeave(empId, year);
+  if (res.status !== 200) {
+    pane.innerHTML = '<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load leave details.</p>';
+    return;
+  }
+  const d = res.body.data || {};
+  pane.innerHTML = `
+    <div class="elv">
+      <div class="elv-head">
+        ${buildEmpLeaveRuleCard(d)}
+        <div class="elv-head-actions">
+          <div class="elv-year">
+            <button class="emp-leave-year" data-year="${d.year - 1}" title="Previous year"><i class="fa fa-chevron-left"></i></button>
+            <span>${d.year}</span>
+            <button class="emp-leave-year" data-year="${d.year + 1}" title="Next year"><i class="fa fa-chevron-right"></i></button>
+          </div>
+          <button class="finance-create-btn" id="emp-give-leave-btn"><i class="fa fa-plus"></i> Give Leave</button>
+        </div>
+      </div>
+      <div class="elv-balances">
+        ${(d.balances || []).filter(b => b.entitlement !== null || b.approved_days || b.pending_days).map(buildEmpLeaveBalanceCard).join('')}
+        ${d.short_leave ? buildEmpShortLeaveCard(d.short_leave) : ''}
+      </div>
+      <div class="elv-section-title">History</div>
+      ${buildEmpLeaveHistory(d.history || [])}
+    </div>`;
+
+  const reload = () => loadEmployeeLeaveTab(empId, d.year);
+  pane.querySelectorAll('.emp-leave-year').forEach(btn => {
+    btn.addEventListener('click', () => loadEmployeeLeaveTab(empId, parseInt(btn.dataset.year, 10)));
+  });
+  $('#emp-give-leave-btn').addEventListener('click', () => openGiveLeaveModal({
+    employee: { id: empId, name: _empDetailCurrent?.id === empId ? _empDetailCurrent.name : '' },
+    onSaved: reload,
+  }));
+  bindLeaveRowActions(pane, reload);
+}
+
+function buildEmpShortLeaveCard(s) {
+  const left = Math.max(0, s.allowed - s.used);
+  return `
+    <div class="elv-bal">
+      <div class="elv-bal-label"><span class="elv-dot" style="background:#7c3aed"></span>Short leave · this month</div>
+      <div class="elv-bal-value${left === 0 ? ' empty' : ''}">${left}<small>/ ${s.allowed}</small></div>
+      <div class="elv-bar"><div style="width:${s.allowed ? Math.min(100, (s.used / s.allowed) * 100) : 0}%;background:#7c3aed"></div></div>
+      <div class="elv-bal-meta">${s.used} used · max ${fmtLrMinutes(s.max_minutes)} each</div>
+    </div>`;
+}
+
+/** Number without a trailing ".0" (leave days can be halves). */
+function fmtLeaveNum(n) {
+  return Number.isInteger(+n) ? String(+n) : (+n).toFixed(1);
+}
+
+/** "2026-11-02 → 2026-11-06", "2026-11-10 · Morning half", "2026-11-11 · 08:30 · 1h". */
+function fmtLeaveWhen(r) {
+  if (r.leave_type === 'short') {
+    return `${r.starts_on} · ${r.short_leave_start || '—'} · ${fmtLrMinutes(r.short_leave_minutes || 0)}`;
+  }
+  if (r.is_half_day) return `${r.starts_on} · ${r.half_day_period === 'pm' ? 'Afternoon' : 'Morning'} half`;
+  return r.starts_on === r.ends_on ? r.starts_on : `${r.starts_on} → ${r.ends_on}`;
+}
+
+/** Approve / Reject / Delete buttons for a leave row. */
+function buildLeaveRowActions(r) {
+  return `
+    <div class="lv-act">
+      ${r.status === 'pending' ? `
+        <button class="lv-act-btn approve" data-lv-act="approved" data-id="${r.id}" title="Approve"><i class="fa fa-check"></i> Approve</button>
+        <button class="lv-act-btn reject" data-lv-act="rejected" data-id="${r.id}" title="Reject"><i class="fa fa-xmark"></i> Reject</button>` : ''}
+      <button class="lv-act-btn del" data-lv-act="delete" data-id="${r.id}" title="Delete"><i class="fa fa-trash"></i></button>
+    </div>`;
+}
+
+function bindLeaveRowActions(container, onDone) {
+  container.querySelectorAll('.lv-act-btn[data-lv-act]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id  = parseInt(btn.dataset.id, 10);
+      const act = btn.dataset.lvAct;
+      if (act === 'delete' && !confirm('Delete this leave record? The days go back to the employee\'s balance.')) return;
+      if (act === 'rejected' && !confirm('Reject this leave request?')) return;
+      btn.disabled = true;
+      const r = act === 'delete' ? await API.deleteLeave(id) : await API.decideLeave(id, act);
+      if (r.status === 200) {
+        toast(r.body?.message || 'Done.', 'success');
+        onDone();
+        refreshLeavePendingBadge();
+      } else {
+        toast(r.body?.errors ? Object.values(r.body.errors)[0][0] : (r.body?.message || 'Action failed.'), 'error');
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function buildEmpLeaveRuleCard(d) {
+  const p = d.policy;
+  if (!p) {
+    return `<div class="elv-rule"><div class="elv-rule-terms">No leave rule set up yet — using the system defaults. Create one in the <strong>Leave Rules</strong> tab.</div></div>`;
+  }
+  const source = d.policy_source === 'position'
+    ? `from position ${escHtml(d.position || '')}`
+    : 'business default';
+  const terms = [
+    `${p.annual_leave_days} annual`,
+    `${p.casual_leave_days} casual`,
+    p.sick_leave_days !== null ? `${p.sick_leave_days} sick` : '',
+    p.short_leave_enabled ? `${p.short_leaves_per_month} short/month (max ${fmtLrMinutes(p.short_leave_max_minutes)})` : '',
+    p.half_day_allowed ? 'half-day allowed' : '',
+    p.carry_forward_max_days ? `carry forward ${p.carry_forward_max_days} days` : 'no carry forward',
+  ].filter(Boolean).join(' · ');
+  const eligibility = d.eligible_now
+    ? ''
+    : `<div class="elv-rule-warn"><i class="fa fa-triangle-exclamation"></i> On probation — eligible from <strong>${escHtml(d.eligible_from)}</strong></div>`;
+  return `
+    <div class="elv-rule">
+      <div class="elv-rule-name">${escHtml(p.name)} <span>· ${source}</span></div>
+      <div class="elv-rule-terms">${terms}</div>
+      ${eligibility}
+    </div>`;
+}
+
+function buildEmpLeaveBalanceCard(b) {
+  const label = EMP_LEAVE_LABELS[b.type] || b.type;
+  const ent   = b.entitlement;
+  const pct   = (n) => ent ? Math.min(100, (n / ent) * 100) : 0;
+  const n     = fmtLeaveNum;
+  const main  = ent === null
+    ? `${n(b.approved_days)}<small>days taken</small>`
+    : `${n(b.remaining)}<small>/ ${n(ent)}</small>`;
+  const bar = ent === null ? '' : `
+    <div class="elv-bar">
+      <div style="width:${pct(b.approved_days)}%;background:${b.accent}"></div>
+      <div style="width:${pct(b.pending_days)}%;background:${b.accent};opacity:.35"></div>
+    </div>`;
+  const meta = [
+    `${n(b.approved_days)} taken`,
+    b.pending_days ? `${n(b.pending_days)} pending` : '',
+    b.carried_forward ? `incl. ${n(b.carried_forward)} carried` : '',
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="elv-bal">
+      <div class="elv-bal-label"><span class="elv-dot" style="background:${b.accent}"></span>${label} leave</div>
+      <div class="elv-bal-value${ent !== null && b.remaining === 0 ? ' empty' : ''}">${main}</div>
+      ${bar}
+      <div class="elv-bal-meta">${meta}</div>
+    </div>`;
+}
+
+function buildEmpLeaveHistory(rows) {
+  if (!rows.length) {
+    return `<div class="elv-empty">No leave taken this year.</div>`;
+  }
+  const body = rows.map(r => {
+    const st   = EMP_LEAVE_STATUS[r.status] || { color: '#64748b', label: r.status };
+    const days = r.leave_type === 'short' ? '' : `${fmtLeaveNum(r.days)} day${+r.days === 1 ? '' : 's'}`;
+    const sub  = [r.note ? escHtml(r.note) : '', r.decided_by ? `by ${escHtml(r.decided_by)}` : ''].filter(Boolean).join(' · ');
+    return `
+      <div class="elv-row">
+        <div class="elv-row-main">
+          <div class="elv-row-title">${escHtml(EMP_LEAVE_LABELS[r.leave_type] || r.leave_type)}${days ? ` <span>· ${days}</span>` : ''}</div>
+          <div class="elv-row-sub">${escHtml(fmtLeaveWhen(r))}${sub ? ` · ${sub}` : ''}</div>
+        </div>
+        <div class="elv-status" style="color:${st.color}"><span class="elv-dot" style="background:${st.color}"></span>${st.label}</div>
+        ${buildLeaveRowActions(r)}
+      </div>`;
+  }).join('');
+  return `<div class="elv-list">${body}</div>`;
 }
 
 function empDetailRow(label, value) {
   return `
-    <div style="background:var(--bg-card,var(--sidebar-bg));border-radius:8px;padding:14px 16px">
+    <div style="background:var(--surface);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px">
       <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${label}</div>
       <div style="font-size:15px;font-weight:600;color:var(--text)">${value}</div>
     </div>`;
@@ -42248,10 +42701,149 @@ $$('#employee-detail-view .inv-tab').forEach(tab => {
     $$('#employee-detail-view .inv-tab').forEach(t => t.classList.remove('active'));
     $$('#employee-detail-view .inv-tab-pane').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
-    const paneId = tab.dataset.tab === 'emp-overview' ? 'emp-pane-overview' : 'emp-pane-personal';
-    $('#' + paneId).classList.add('active');
+    $('#' + tab.dataset.tab.replace(/^emp-/, 'emp-pane-')).classList.add('active');
   });
 });
+
+// ── Employee detail: Attendance tab ─────────────────────────────────────────
+// Month calendar + KPIs + daily records for one employee. Reuses the Attendance
+// tab helpers (_att*, ATT_STATUS_STYLE, record drawer) and the same /hr/attendance report.
+
+let _empAttSeq = 0;
+
+async function loadEmployeeAttendanceTab(emp, month) {
+  const pane = $('#emp-pane-attendance');
+  const seq  = ++_empAttSeq;
+  const now  = new Date();
+  const m0   = month ? _attParse(month + '-01') : new Date(now.getFullYear(), now.getMonth(), 1);
+  const from = _attIso(m0);
+  const to   = _attIso(new Date(m0.getFullYear(), m0.getMonth() + 1, 0));
+  const ym   = from.slice(0, 7);
+  const shift = n => { const d = new Date(m0.getFullYear(), m0.getMonth() + n, 1); return _attIso(d).slice(0, 7); };
+
+  if (!pane.innerHTML) pane.innerHTML = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</p>';
+  else pane.style.opacity = '.55';
+
+  const res = await API.attendance({ from, to, employee: emp.id });
+  if (seq !== _empAttSeq) return;
+  pane.style.opacity = '';
+  if (res.status !== 200) {
+    pane.innerHTML = '<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load attendance.</p>';
+    return;
+  }
+
+  const d    = res.body;
+  const rows = d.data || [];
+  const e    = (d.employees || [])[0];
+  const c    = d.status_counts || {};
+  const monthLabel = m0.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const isCurrent  = ym === _attIso(now).slice(0, 7);
+
+  const rate = e?.attendance_rate;
+  const rc   = rate == null ? 'var(--text-muted)' : rate >= 95 ? '#16a34a' : rate >= 80 ? '#d97706' : '#dc2626';
+  const kpis = e ? [
+    _attKpi('fa-user-check',     '#16a34a', 'Present',      Number.isInteger(e.present_days) ? e.present_days : e.present_days.toFixed(1), e.half_days ? `incl. ${e.half_days} half day` : 'days worked'),
+    _attKpi('fa-umbrella-beach', '#0d9488', 'Leave',        e.paid_leave_days + e.unpaid_leave_days, `${e.paid_leave_days} paid · ${e.unpaid_leave_days} unpaid`),
+    _attKpi('fa-user-xmark',     '#dc2626', 'Absent',       e.absent_days, 'no pay'),
+    _attKpi('fa-clock',          '#d97706', 'Late',         `${e.late_count}×`, e.late_minutes ? `${_attFmtWorked(e.late_minutes)} total` : 'on time'),
+    _attKpi('fa-hourglass-half', '#0284c7', 'Hours Worked', _attFmtHours(e.worked_minutes), `avg ${_attFmtWorked(e.avg_worked_minutes || 0)} / day`),
+    _attKpi('fa-bolt',           '#7c3aed', 'Overtime',     _attFmtHours(e.overtime_minutes), `${c.overtime || 0} day${c.overtime === 1 ? '' : 's'}`),
+    _attKpi('fa-chart-simple',   rc,        'Attendance',   rate == null ? '—' : rate + '%', e.missing_checkout ? `${e.missing_checkout} missing check-out` : 'present + paid leave'),
+  ].join('') : '';
+
+  const jump = !rows.length && d.latest_date && d.latest_date.slice(0, 7) !== ym
+    ? `<button class="btn-secondary" id="emp-att-latest" style="margin-top:12px"><i class="fa fa-calendar-check"></i> Go to ${escHtml(_attParse(d.latest_date).toLocaleDateString(undefined, { month: 'long', year: 'numeric' }))}</button>` : '';
+
+  pane.innerHTML = `
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <button class="att-nav-btn" id="emp-att-prev" title="Previous month"><i class="fa fa-chevron-left"></i></button>
+        <div class="att-range-label" style="min-width:160px">${escHtml(monthLabel)}</div>
+        <button class="att-nav-btn" id="emp-att-next" title="Next month"><i class="fa fa-chevron-right"></i></button>
+        ${isCurrent ? '' : '<button class="att-preset" id="emp-att-today">This month</button>'}
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn-secondary" id="emp-att-open"><i class="fa fa-arrow-up-right-from-square"></i> Open in Attendance</button>
+        </div>
+      </div>
+      ${rows.length ? `<div class="att-kpis" style="padding:0">${kpis}</div>` : ''}
+      ${_empAttCalendar(m0, rows, d.work_days || [])}
+      ${rows.length ? `
+        <div style="font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em">Daily Records</div>
+        ${_empAttTable(rows)}`
+      : `<div class="att-empty" style="padding:20px 0">No attendance recorded for ${escHtml(monthLabel)}.${jump ? '<br>' + jump : ''}</div>`}
+    </div>`;
+
+  const go = mm => loadEmployeeAttendanceTab(emp, mm);
+  $('#emp-att-prev').addEventListener('click', () => go(shift(-1)));
+  $('#emp-att-next').addEventListener('click', () => go(shift(1)));
+  $('#emp-att-today')?.addEventListener('click', () => go());
+  $('#emp-att-latest')?.addEventListener('click', () => go(d.latest_date.slice(0, 7)));
+  $('#emp-att-open').addEventListener('click', () => attShowEmployee(emp.employee_id || emp.name, from, to));
+
+  const byId = new Map(rows.map(r => [String(r.id), r]));
+  pane.querySelectorAll('[data-att-id]').forEach(el => el.addEventListener('click', () => _attOpenDrawer(byId.get(el.dataset.attId))));
+}
+
+function _empAttCalendar(m0, rows, workDays) {
+  const byDate = new Map(rows.map(r => [r.work_date, r]));
+  const today  = _attIso(new Date());
+  const keys   = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  const last   = new Date(m0.getFullYear(), m0.getMonth() + 1, 0).getDate();
+  const lead   = (m0.getDay() + 6) % 7; // Monday-first grid
+
+  let cells = '';
+  for (let i = 0; i < lead; i++) cells += '<div class="eac-cell eac-pad"></div>';
+  for (let day = 1; day <= last; day++) {
+    const dt   = new Date(m0.getFullYear(), m0.getMonth(), day);
+    const iso  = _attIso(dt);
+    const r    = byDate.get(iso);
+    const work = workDays.includes(keys[dt.getDay()]);
+    if (r) {
+      const st = ATT_STATUS_STYLE[r.status] || { color: '#64748b', label: r.status };
+      const works = r.status === 'present' || r.status === 'half_day';
+      const dots = [
+        r.late_minutes > 0 ? `<span class="eac-dot" style="background:#d97706" title="Late ${_attFmtWorked(r.late_minutes)}"></span>` : '',
+        r.overtime_minutes > 0 ? `<span class="eac-dot" style="background:#7c3aed" title="Overtime ${_attFmtWorked(r.overtime_minutes)}"></span>` : '',
+        r.missing_checkout ? '<span class="eac-dot" style="background:#dc2626" title="No check-out"></span>' : '',
+      ].join('');
+      cells += `<div class="eac-cell eac-has${iso === today ? ' eac-today' : ''}" data-att-id="${r.id}" style="--eac-c:${st.color}" title="${escHtml(st.label)} — click for details">
+        <div class="eac-top"><span class="eac-num">${day}</span><span class="eac-dots">${dots}</span></div>
+        <div class="eac-status">${escHtml(st.label)}</div>
+        ${works ? `<div class="eac-time">${_attFmtTime(r.check_in_at)} – ${_attFmtTime(r.check_out_at)}</div><div class="eac-worked">${_attFmtWorked(r.worked_minutes)}</div>` : ''}
+      </div>`;
+    } else {
+      const missing = work && iso < today;
+      cells += `<div class="eac-cell${work ? '' : ' eac-off'}${missing ? ' eac-missing' : ''}${iso === today ? ' eac-today' : ''}">
+        <div class="eac-top"><span class="eac-num">${day}</span></div>
+        <div class="eac-status">${!work ? 'Day off' : missing ? 'No record' : ''}</div>
+      </div>`;
+    }
+  }
+
+  const legend = [['#16a34a', 'Present'], ['#0d9488', 'Paid leave'], ['#64748b', 'Unpaid leave'], ['#dc2626', 'Absent']]
+    .map(([c, l]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')
+    + '<span><b class="eac-dot" style="background:#d97706"></b>Late</span><span><b class="eac-dot" style="background:#7c3aed"></b>Overtime</span><span><b class="eac-dot" style="background:#dc2626"></b>No check-out</span>';
+
+  return `<div class="eac">
+    <div class="eac-grid">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => `<div class="eac-wd">${w}</div>`).join('')}${cells}</div>
+    <div class="eac-legend">${legend}</div>
+  </div>`;
+}
+
+function _empAttTable(rows) {
+  return `<table class="att-table"><thead><tr>
+    <th class="no-sort">Date</th><th class="no-sort">Status</th><th class="no-sort">Check in</th>
+    <th class="no-sort">Check out</th><th class="no-sort">Worked</th><th class="no-sort">Flags</th>
+  </tr></thead><tbody>${rows.map(r => `
+    <tr class="att-row" data-att-id="${r.id}">
+      <td class="num"><b>${escHtml(_attParse(r.work_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))}</b><div class="att-emp-sub">${escHtml(r.weekday || '')}</div></td>
+      <td>${_attStatusPill(r)}</td>
+      <td class="att-time">${_attFmtTime(r.check_in_at)}${r.scheduled_start && r.check_in_at ? `<small>sched. ${_attFmtSched(r.scheduled_start)}</small>` : ''}</td>
+      <td class="att-time">${_attFmtTime(r.check_out_at)}${r.scheduled_end && r.check_out_at ? `<small>sched. ${_attFmtSched(r.scheduled_end)}</small>` : ''}</td>
+      <td class="num">${_attWorkedCell(r)}</td>
+      <td>${_attFlags(r)}</td>
+    </tr>`).join('')}</tbody></table>`;
+}
 
 // ── Departments list ────────────────────────────────────────────────────────
 
@@ -43964,6 +44556,220 @@ async function submitAtCreate() {
   }
 }
 
+// ── HR Leave Rules ──────────────────────────────────────────────────────────
+
+let _leaveRules = [];
+let _lrEditingId = null;
+
+const LR_PRESETS = {
+  'shop-office': { annual: 14, casual: 7, sick: '',  short: true,  shortCount: 2, shortMin: 90, halfDay: true, eligible: 0 },
+  'probation':   { annual: 0,  casual: 7, sick: '',  short: true,  shortCount: 2, shortMin: 90, halfDay: true, eligible: 0 },
+  'part-time':   { annual: 7,  casual: 4, sick: '',  short: false, shortCount: 2, shortMin: 90, halfDay: true, eligible: 0 },
+};
+
+function fmtLrMinutes(m) {
+  const h = Math.floor(m / 60), r = m % 60;
+  return h && r ? `${h}h ${r}m` : h ? `${h}h` : `${r}m`;
+}
+
+async function loadLeaveRules(search) {
+  const area   = $('#lr-cards-area');
+  const footer = $('#lr-footer-text');
+  area.innerHTML = '<p style="color:var(--text-muted);padding:20px 0"><i class="fa fa-spinner fa-spin"></i> Loading leave rules…</p>';
+
+  const res = await API.leavePolicies();
+  if (res.status !== 200) {
+    area.innerHTML = '<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load leave rules.</p>';
+    return;
+  }
+
+  _leaveRules = res.body.data || [];
+
+  const q = (search ?? $('#lr-search').value).toLowerCase().trim();
+  const filtered = q ? _leaveRules.filter(r => r.name.toLowerCase().includes(q)) : _leaveRules;
+
+  $('#lr-total-count').textContent  = _leaveRules.length;
+  $('#lr-default-name').textContent = _leaveRules.find(r => r.is_default)?.name || '—';
+
+  if (!filtered.length) {
+    area.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0"><i class="fa fa-umbrella-beach" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>${_leaveRules.length ? 'No leave rules match your search.' : 'No leave rules yet. Click <strong>Add Leave Rule</strong> to define annual, casual and short leave.'}</p>`;
+    footer.textContent = '0 leave rules';
+    return;
+  }
+
+  area.innerHTML = filtered.map(r => buildLeaveRuleCard(r)).join('');
+  footer.textContent = `${filtered.length} leave rule${filtered.length !== 1 ? 's' : ''}`;
+
+  area.querySelectorAll('.lr-edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const rule = _leaveRules.find(r => r.id === parseInt(btn.dataset.id, 10));
+      if (rule) openLrModal(rule);
+    });
+  });
+
+  area.querySelectorAll('.lr-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const id   = parseInt(btn.dataset.id, 10);
+      const name = btn.dataset.name;
+      if (!confirm(`Delete leave rule "${name}"? This cannot be undone.`)) return;
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+      const r = await API.deleteLeavePolicy(id);
+      if (r.status === 200) {
+        toast('Leave rule deleted.', 'success');
+        await loadLeaveRules();
+      } else {
+        toast(r.body?.message || 'Failed to delete.', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa fa-trash"></i>';
+      }
+    });
+  });
+}
+
+function buildLeaveRuleCard(r) {
+  const pill = (bg, fg, text) => `<span class="lm-pill" style="background:${bg};color:${fg}">${text}</span>`;
+  const pills = [
+    r.is_default ? pill('#fef3c718', '#d97706', '<i class="fa fa-star"></i> Default') : '',
+    pill('#ccfbf118', '#0d9488', `${r.annual_leave_days} annual`),
+    pill('#e0f2fe18', '#0284c7', `${r.casual_leave_days} casual`),
+    r.sick_leave_days !== null ? pill('#ffe4e618', '#e11d48', `${r.sick_leave_days} sick`) : '',
+    r.short_leave_enabled ? pill('#ede9fe18', '#7c3aed', `${r.short_leaves_per_month} short/month · ${fmtLrMinutes(r.short_leave_max_minutes)}`) : '',
+    r.half_day_allowed ? pill('#f1f5f918', '#64748b', 'Half-day') : '',
+    r.carry_forward_max_days ? pill('#f1f5f918', '#64748b', `Carry ${r.carry_forward_max_days}d`) : '',
+    r.eligible_after_months ? pill('#f1f5f918', '#64748b', `After ${r.eligible_after_months} mo`) : '',
+  ].join('');
+
+  return `
+    <div class="lm-card" style="cursor:default">
+      <div class="lm-card-header">
+        <div class="lm-card-icon" style="background:#ccfbf120;color:#0d9488"><i class="fa fa-umbrella-beach"></i></div>
+        <div class="lm-card-title-wrap">
+          <span class="lm-card-name">${escHtml(r.name)}</span>
+          <div class="lm-card-pills">${pills}</div>
+        </div>
+        <button class="lm-remove-btn lr-edit-btn" data-id="${r.id}" title="Edit leave rule" style="margin-right:4px"><i class="fa fa-pen"></i></button>
+        <button class="lm-remove-btn lr-delete-btn" data-id="${r.id}" data-name="${escHtml(r.name)}" title="Delete leave rule"><i class="fa fa-trash"></i></button>
+      </div>
+    </div>`;
+}
+
+$('#lr-search').addEventListener('input', e => loadLeaveRules(e.target.value));
+$('#lr-add-btn').addEventListener('click', () => openLrModal(null));
+
+// ── Leave Rule: Create / Edit Modal ─────────────────────────────────────────
+
+function syncLrShortFields() {
+  $('#lr-short-fields').style.display = $('#lr-short-enabled').checked ? '' : 'none';
+}
+
+function fillLrForm(v) {
+  $('#lr-annual').value          = v.annual;
+  $('#lr-casual').value          = v.casual;
+  $('#lr-sick').value            = v.sick ?? '';
+  $('#lr-eligible').value        = v.eligible ?? 0;
+  $('#lr-short-enabled').checked = !!v.short;
+  $('#lr-short-count').value     = v.shortCount ?? 2;
+  $('#lr-short-minutes').value   = v.shortMin ?? 90;
+  $('#lr-half-day').checked      = v.halfDay !== false;
+  syncLrShortFields();
+}
+
+function openLrModal(rule) {
+  _lrEditingId = rule ? rule.id : null;
+  $('#lr-modal-title').innerHTML = `<i class="fa fa-umbrella-beach"></i> ${rule ? 'Edit' : 'New'} Leave Rule`;
+  $('#lr-modal-save').innerHTML  = rule ? '<i class="fa fa-check"></i> Save' : '<i class="fa fa-plus"></i> Create';
+  $('#lr-presets-wrap').style.display = rule ? 'none' : '';
+  $('#lr-name').value  = rule?.name || '';
+  $('#lr-carry').value = rule?.carry_forward_max_days ?? '';
+  $('#lr-notes').value = rule?.notes || '';
+  // A brand-new business's first rule always becomes the default, so pre-tick it.
+  $('#lr-default').checked  = rule ? rule.is_default : !_leaveRules.length;
+  $('#lr-default').disabled = !!rule?.is_default;
+  fillLrForm(rule ? {
+    annual: rule.annual_leave_days, casual: rule.casual_leave_days, sick: rule.sick_leave_days,
+    eligible: rule.eligible_after_months, short: rule.short_leave_enabled,
+    shortCount: rule.short_leaves_per_month, shortMin: rule.short_leave_max_minutes, halfDay: rule.half_day_allowed,
+  } : LR_PRESETS['shop-office']);
+  showLrError('');
+  $('#lr-modal').style.display = '';
+  setTimeout(() => $('#lr-name').focus(), 60);
+}
+
+function closeLrModal() {
+  _lrEditingId = null;
+  $('#lr-modal').style.display = 'none';
+}
+
+function showLrError(msg) {
+  const el = $('#lr-modal-alert');
+  el.textContent = msg;
+  el.style.display = msg ? '' : 'none';
+  if (msg) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('#lr-modal-close').addEventListener('click', closeLrModal);
+$('#lr-modal-cancel').addEventListener('click', closeLrModal);
+$('#lr-modal').addEventListener('click', e => { if (e.target === $('#lr-modal')) closeLrModal(); });
+$('#lr-short-enabled').addEventListener('change', syncLrShortFields);
+$('#lr-name').addEventListener('keydown', e => { if (e.key === 'Enter') submitLrModal(); });
+$('#lr-modal-save').addEventListener('click', submitLrModal);
+$$('#lr-modal .lr-preset').forEach(btn => {
+  btn.addEventListener('click', () => {
+    fillLrForm(LR_PRESETS[btn.dataset.preset]);
+    if (!$('#lr-name').value.trim()) $('#lr-name').value = btn.textContent.replace(/\s*\(.*\)$/, '');
+  });
+});
+
+async function submitLrModal() {
+  const intOrNull = (sel) => { const v = $(sel).value.trim(); return v === '' ? null : parseInt(v, 10); };
+  const shortOn = $('#lr-short-enabled').checked;
+  const body = {
+    name:                    $('#lr-name').value.trim(),
+    annual_leave_days:       intOrNull('#lr-annual'),
+    casual_leave_days:       intOrNull('#lr-casual'),
+    sick_leave_days:         intOrNull('#lr-sick'),
+    eligible_after_months:   intOrNull('#lr-eligible') ?? 0,
+    short_leave_enabled:     shortOn,
+    short_leaves_per_month:  shortOn ? intOrNull('#lr-short-count') : null,
+    short_leave_max_minutes: shortOn ? intOrNull('#lr-short-minutes') : null,
+    half_day_allowed:        $('#lr-half-day').checked,
+    carry_forward_max_days:  intOrNull('#lr-carry'),
+    is_default:              $('#lr-default').checked,
+    notes:                   $('#lr-notes').value.trim() || null,
+  };
+
+  if (!body.name)                     { showLrError('Rule name is required.'); return; }
+  if (body.annual_leave_days === null) { showLrError('Annual leave days are required.'); return; }
+  if (body.casual_leave_days === null) { showLrError('Casual leave days are required.'); return; }
+  if (shortOn && (!body.short_leaves_per_month || !body.short_leave_max_minutes)) {
+    showLrError('Enter short leaves per month and the maximum length.'); return;
+  }
+
+  const btn = $('#lr-modal-save');
+  const editingId = _lrEditingId;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = editingId
+    ? await API.updateLeavePolicy(editingId, body)
+    : await API.createLeavePolicy(body);
+
+  btn.disabled = false;
+  btn.innerHTML = editingId ? '<i class="fa fa-check"></i> Save' : '<i class="fa fa-plus"></i> Create';
+
+  if (res.status === 201 || res.status === 200) {
+    closeLrModal();
+    toast(editingId ? 'Leave rule updated.' : 'Leave rule created.', 'success');
+    await loadLeaveRules();
+  } else {
+    const errs = res.body?.errors;
+    showLrError(errs ? Object.values(errs)[0]?.[0] : res.body?.message || 'Failed to save leave rule.');
+  }
+}
+
 // ── HR Positions (job titles) ───────────────────────────────────────────────
 
 let _positions = [];
@@ -43998,9 +44804,8 @@ async function loadPositions(search) {
   area.querySelectorAll('.pos-edit-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const id   = parseInt(btn.dataset.id, 10);
-      const name = btn.dataset.name;
-      openPosEditModal(id, name);
+      const pos = _positions.find(p => p.id === parseInt(btn.dataset.id, 10));
+      if (pos) openPosEditModal(pos);
     });
   });
 
@@ -44035,6 +44840,7 @@ function buildPositionCard(p) {
           <span class="lm-card-name">${escHtml(p.name)}</span>
           <div class="lm-card-pills">
             <span class="lm-pill" style="background:#dbeafe18;color:#2563eb">${p.employees_count || 0} employee${(p.employees_count || 0) !== 1 ? 's' : ''}</span>
+            <span class="lm-pill" style="background:#ccfbf118;color:#0d9488"><i class="fa fa-umbrella-beach"></i> ${p.leave_policy_name ? escHtml(p.leave_policy_name) : 'Default leave rule'}</span>
           </div>
         </div>
         <button class="lm-remove-btn pos-edit-btn" data-id="${p.id}" data-name="${escHtml(p.name)}" title="Edit position" style="margin-right:4px"><i class="fa fa-pen"></i></button>
@@ -44052,21 +44858,37 @@ $('#pos-add-btn').addEventListener('click', openPosCreateModal);
 
 let _posEditingId = null;
 
+/** Fill the Leave Rule dropdown from the server, then select `selectedId` (null = default rule). */
+async function fillPosLeavePolicySelect(selectedId) {
+  const sel = $('#pos-modal-leave-policy');
+  sel.innerHTML = '<option value="">Use default leave rule</option>';
+  sel.disabled = true;
+  const res = await API.leavePolicies();
+  const rules = res.status === 200 ? (res.body.data || []) : [];
+  const def = rules.find(r => r.is_default);
+  if (def) sel.options[0].textContent = `Use default leave rule (${def.name})`;
+  rules.forEach(r => sel.add(new Option(r.name, r.id)));
+  sel.value = selectedId ? String(selectedId) : '';
+  sel.disabled = false;
+}
+
 function openPosCreateModal() {
   _posEditingId = null;
   $('#pos-create-modal-title').innerHTML = '<i class="fa fa-id-badge"></i> New Position';
   $('#pos-create-modal-save').innerHTML = '<i class="fa fa-plus"></i> Create';
   $('#pos-modal-name').value = '';
+  fillPosLeavePolicySelect(null);
   showPosError('');
   $('#pos-create-modal').style.display = '';
   setTimeout(() => $('#pos-modal-name').focus(), 60);
 }
 
-function openPosEditModal(id, name) {
-  _posEditingId = id;
+function openPosEditModal(pos) {
+  _posEditingId = pos.id;
   $('#pos-create-modal-title').innerHTML = '<i class="fa fa-id-badge"></i> Edit Position';
   $('#pos-create-modal-save').innerHTML = '<i class="fa fa-check"></i> Save';
-  $('#pos-modal-name').value = name;
+  $('#pos-modal-name').value = pos.name;
+  fillPosLeavePolicySelect(pos.leave_policy_id);
   showPosError('');
   $('#pos-create-modal').style.display = '';
   setTimeout(() => $('#pos-modal-name').focus(), 60);
@@ -44098,9 +44920,11 @@ async function submitPosCreate() {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  const leavePolicyId = $('#pos-modal-leave-policy').value;
+  const body = { name, leave_policy_id: leavePolicyId ? parseInt(leavePolicyId, 10) : null };
   const res = editingId
-    ? await API.updatePosition(editingId, { name })
-    : await API.createPosition({ name });
+    ? await API.updatePosition(editingId, body)
+    : await API.createPosition(body);
 
   btn.disabled = false;
   btn.innerHTML = editingId ? '<i class="fa fa-check"></i> Save' : '<i class="fa fa-plus"></i> Create';
@@ -44117,66 +44941,972 @@ async function submitPosCreate() {
 
 // ── HR Attendance ────────────────────────────────────────────────────────────
 
-let _attendanceRecords = [];
+const _att = {
+  from: '', to: '', preset: 'month',
+  status: '', dept: '', view: 'list',
+  sort: { key: 'work_date', dir: 'desc' },
+  data: null, seq: 0, deptsLoaded: false, searchTimer: null,
+  backView: '', // view to return to when "Back" leaves a single-employee drill-down
+};
 
-async function loadAttendance(search) {
-  const area   = $('#att-cards-area');
-  const footer = $('#att-footer-text');
-  area.innerHTML = '<p style="color:var(--text-muted);padding:20px 0"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</p>';
+const ATT_STATUS_STYLE = {
+  present:      { color: '#16a34a', icon: 'fa-user-check',     label: 'Present' },
+  half_day:     { color: '#0284c7', icon: 'fa-circle-half-stroke', label: 'Half day' },
+  paid_leave:   { color: '#0d9488', icon: 'fa-umbrella-beach', label: 'Paid leave' },
+  unpaid_leave: { color: '#64748b', icon: 'fa-umbrella-beach', label: 'Unpaid leave' },
+  absent:       { color: '#dc2626', icon: 'fa-user-xmark',     label: 'Absent' },
+  holiday:      { color: '#7c3aed', icon: 'fa-calendar-day',   label: 'Holiday' },
+  weekend:      { color: '#64748b', icon: 'fa-calendar',       label: 'Weekend' },
+};
 
-  const res = await API.attendance(search);
+const ATT_CHIPS = [
+  { key: '',             label: 'All',          color: 'var(--accent)' },
+  { key: 'present',      label: 'Present',      color: '#16a34a' },
+  { key: 'half_day',     label: 'Half day',     color: '#0284c7' },
+  { key: 'late',         label: 'Late',         color: '#d97706', icon: 'fa-clock' },
+  { key: 'early',        label: 'Left early',   color: '#ea580c', icon: 'fa-person-walking-arrow-right' },
+  { key: 'missing_out',  label: 'No check-out', color: '#dc2626', icon: 'fa-triangle-exclamation' },
+  { key: 'overtime',     label: 'Overtime',     color: '#7c3aed', icon: 'fa-bolt' },
+  { key: 'leave',        label: 'On leave',     color: '#0d9488' },
+  { key: 'absent',       label: 'Absent',       color: '#dc2626' },
+  { key: 'holiday',      label: 'Holiday',      color: '#7c3aed', hideEmpty: true },
+  { key: 'weekend',      label: 'Weekend',      color: '#64748b', hideEmpty: true },
+];
+
+const _attIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const _attParse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+
+function _attPresetRange(preset) {
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  switch (preset) {
+    case 'today':      return [d, d];
+    case 'yesterday':  { const y = new Date(d); y.setDate(d.getDate() - 1); return [y, y]; }
+    case 'week':       { const s = new Date(d); s.setDate(d.getDate() - ((d.getDay() + 6) % 7)); const e = new Date(s); e.setDate(s.getDate() + 6); return [s, e]; }
+    case 'last_month': return [new Date(d.getFullYear(), d.getMonth() - 1, 1), new Date(d.getFullYear(), d.getMonth(), 0)];
+    default:           return [new Date(d.getFullYear(), d.getMonth(), 1), new Date(d.getFullYear(), d.getMonth() + 1, 0)];
+  }
+}
+
+function _attIsFullMonth(from, to) {
+  const f = _attParse(from), t = _attParse(to);
+  return f.getDate() === 1 && f.getMonth() === t.getMonth() && f.getFullYear() === t.getFullYear()
+    && new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate() === t.getDate();
+}
+
+function _attRangeLabel(from, to) {
+  const f = _attParse(from), t = _attParse(to);
+  if (from === to) return f.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  if (_attIsFullMonth(from, to)) return f.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const sameYear = f.getFullYear() === t.getFullYear();
+  return `${f.toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) })} – ${t.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+function attSetRange(from, to, preset = '') {
+  if (from > to) [from, to] = [to, from];
+  _att.from = from; _att.to = to; _att.preset = preset;
+  $('#att-from').value = from;
+  $('#att-to').value   = to;
+  $('#att-range-label').textContent = _attRangeLabel(from, to);
+  $$('#att-records-pane .att-preset').forEach(b => b.classList.toggle('active', b.dataset.attPreset === preset));
+  loadAttendance();
+}
+
+function _attShiftRange(dir) {
+  if (!_att.from) return;
+  if (_attIsFullMonth(_att.from, _att.to)) {
+    const f = _attParse(_att.from);
+    const s = new Date(f.getFullYear(), f.getMonth() + dir, 1);
+    return attSetRange(_attIso(s), _attIso(new Date(s.getFullYear(), s.getMonth() + 1, 0)));
+  }
+  const days = Math.round((_attParse(_att.to) - _attParse(_att.from)) / 86400000) + 1;
+  const f = _attParse(_att.from); f.setDate(f.getDate() + dir * days);
+  const t = _attParse(_att.to);   t.setDate(t.getDate() + dir * days);
+  attSetRange(_attIso(f), _attIso(t));
+}
+
+async function loadAttendance() {
+  if (!_att.from) { const [f, t] = _attPresetRange(_att.preset || 'month'); return attSetRange(_attIso(f), _attIso(t), _att.preset || 'month'); }
+
+  const area = $('#att-cards-area');
+  const seq  = ++_att.seq;
+  if (!_att.data) area.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading attendance…</div>';
+  else area.style.opacity = '.55';
+
+  const params = { from: _att.from, to: _att.to };
+  const q = $('#att-search').value.trim();
+  $('#att-back-btn').style.display = q ? '' : 'none';
+  if (q)           params.q = q;
+  if (_att.status) params.status = _att.status;
+  if (_att.dept)   params.department_id = _att.dept;
+
+  const res = await API.attendance(params);
+  if (seq !== _att.seq) return; // a newer request is in flight
+  area.style.opacity = '';
+
   if (res.status !== 200) {
-    area.innerHTML = '<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load attendance.</p>';
+    const msg = res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to load attendance.');
+    area.innerHTML = `<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}</p>`;
     return;
   }
 
-  _attendanceRecords = res.body.data || [];
-  $('#att-total-count').textContent = res.body.total_count ?? _attendanceRecords.length;
+  _att.data = res.body;
+  _attFillDepartments(res.body.departments || []);
+  _attRenderKpis();
+  _attRenderChips();
+  _attRenderBody();
+}
 
-  if (!_attendanceRecords.length) {
-    area.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0"><i class="fa fa-clock" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>${search ? 'No attendance records match your search.' : 'No attendance records yet. Click <strong>Upload CSV</strong> to import check-in / check-out logs.'}</p>`;
-    footer.textContent = '0 records';
-    return;
-  }
-
-  area.innerHTML = _attendanceRecords.map(r => buildAttendanceCard(r)).join('');
-  footer.textContent = `${_attendanceRecords.length} record${_attendanceRecords.length !== 1 ? 's' : ''}`;
+function _attFillDepartments(depts) {
+  if (_att.deptsLoaded) return;
+  _att.deptsLoaded = true;
+  $('#att-dept').innerHTML = '<option value="">All departments</option>'
+    + depts.map(d => `<option value="${d.id}">${escHtml(d.name)}</option>`).join('');
+  $('#att-dept').value = _att.dept;
 }
 
 function _attFmtTime(dt) {
   if (!dt) return '—';
   const d = new Date(dt.replace(' ', 'T'));
   if (isNaN(d.getTime())) return dt;
-  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 function _attFmtWorked(minutes) {
   if (minutes === null || minutes === undefined) return '—';
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
-  return `${h}h ${m}m`;
+  return h ? `${h}h ${String(m).padStart(2, '0')}m` : `${m}m`;
 }
 
-function buildAttendanceCard(r) {
+function _attFmtHours(minutes) {
+  const h = (minutes || 0) / 60;
+  return h >= 100 ? `${Math.round(h).toLocaleString()}h` : `${h.toFixed(1)}h`;
+}
+
+function _attFmtSched(hhmm) {
+  if (!hhmm) return '';
+  const [h, m] = hhmm.split(':').map(Number);
+  return new Date(2000, 0, 1, h, m).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+const _ATT_AVATAR_COLORS = ['#2563eb', '#0d9488', '#7c3aed', '#db2777', '#ea580c', '#0284c7', '#16a34a', '#9333ea'];
+function _attAvatar(name, key) {
+  const initials = String(name || '?').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+  const color = _ATT_AVATAR_COLORS[(Number(key) || 0) % _ATT_AVATAR_COLORS.length];
+  return `<span class="att-avatar" style="background:${color}">${escHtml(initials)}</span>`;
+}
+
+function _attEmpCell(r) {
+  const sub = [r.employee_id ? '#' + r.employee_id : '', r.department, r.job_title].filter(Boolean).map(escHtml).join(' · ');
+  return `<div class="att-emp">${_attAvatar(r.employee_name, r.employee_key)}<div><div class="att-emp-name">${escHtml(r.employee_name || 'Unknown')}</div><div class="att-emp-sub">${sub || '—'}</div></div></div>`;
+}
+
+function _attStatusPill(r) {
+  const st = ATT_STATUS_STYLE[r.status] || { color: '#64748b', icon: 'fa-circle', label: r.status };
+  const label = r.leave_type && EMP_LEAVE_LABELS?.[r.leave_type] && r.status.endsWith('leave')
+    ? `${st.label} · ${EMP_LEAVE_LABELS[r.leave_type]}` : st.label;
+  return `<span class="att-status" style="background:${st.color}18;color:${st.color}"><i class="fa ${st.icon}"></i> ${escHtml(label)}</span>`;
+}
+
+function _attFlags(r) {
+  const f = [];
+  if (r.late_minutes > 0)        f.push(`<span class="att-flag late" title="Checked in ${r.late_minutes} min after ${_attFmtSched(r.scheduled_start)}">Late ${_attFmtWorked(r.late_minutes)}</span>`);
+  if (r.early_leave_minutes > 0) f.push(`<span class="att-flag early" title="Checked out ${r.early_leave_minutes} min before ${_attFmtSched(r.scheduled_end)}">Early ${_attFmtWorked(r.early_leave_minutes)}</span>`);
+  if (r.overtime_minutes > 0)    f.push(`<span class="att-flag ot" title="Worked beyond scheduled hours">OT ${_attFmtWorked(r.overtime_minutes)}</span>`);
+  if (r.missing_checkout)        f.push('<span class="att-flag missing">No check-out</span>');
+  if (r.missing_checkin)         f.push('<span class="att-flag missing">No check-in</span>');
+  return f.length ? `<div class="att-flags">${f.join('')}</div>` : '<span class="att-muted">—</span>';
+}
+
+function _attWorkedCell(r) {
+  if (r.worked_minutes == null) return '<span class="att-muted">—</span>';
+  const pct = r.expected_minutes ? Math.min(100, Math.round(r.worked_minutes / r.expected_minutes * 100)) : 100;
+  const color = pct >= 100 ? '#16a34a' : pct >= 75 ? '#d97706' : '#dc2626';
+  const title = r.expected_minutes ? `${pct}% of scheduled ${_attFmtWorked(r.expected_minutes)}` : 'No schedule for this day';
+  return `<div title="${title}"><b>${_attFmtWorked(r.worked_minutes)}</b><div class="att-bar"><span style="width:${pct}%;background:${color}"></span></div></div>`;
+}
+
+/** KPI card. `opts.filter` makes it a button that filters the list by that status key; `opts.pct` draws a share meter. */
+function _attKpi(icon, color, label, val, sub = '', opts = {}) {
+  const tag    = opts.filter ? 'button' : 'div';
+  const active = opts.filter && _att.status === opts.filter;
+  const attrs  = opts.filter ? ` data-att-kpi="${opts.filter}" title="${active ? 'Clear filter' : `Show only ${label.toLowerCase()}`}"` : '';
+  const meter  = opts.pct != null ? `<div class="att-kpi-meter"><span style="width:${Math.max(0, Math.min(100, opts.pct))}%"></span></div>` : '';
+  return `<${tag} class="att-kpi${active ? ' active' : ''}" style="--kpi-c:${color}"${attrs}>
+    <div class="att-kpi-top"><span class="att-kpi-icon" style="background:${color}1a;color:${color}"><i class="fa ${icon}"></i></span><span class="att-kpi-label">${label}</span></div>
+    <div class="att-kpi-val">${val}</div>${sub ? `<div class="att-kpi-sub">${sub}</div>` : ''}${meter}</${tag}>`;
+}
+
+function _attRenderKpis() {
+  const s = _att.data.summary || {};
+  const c = _att.data.status_counts || {};
+  const leave   = (c.paid_leave || 0) + (c.unpaid_leave || 0);
+  const present = (c.present || 0) + (c.half_day || 0);
+  const total   = c.all || 0;
+  const pct     = n => (total ? n / total * 100 : 0);
+  const share   = n => (total ? `${Math.round(pct(n))}% of records` : '');
+  $('#att-kpis').innerHTML = [
+    _attKpi('fa-users',            '#2563eb', 'Employees',     s.employees || 0, `${s.days || 0} day${s.days === 1 ? '' : 's'} recorded`),
+    _attKpi('fa-user-check',       '#16a34a', 'Present',       present, c.half_day ? `incl. ${c.half_day} half day` : share(present), { filter: 'present', pct: pct(present) }),
+    _attKpi('fa-umbrella-beach',   '#0d9488', 'On leave',      leave, `${c.paid_leave || 0} paid · ${c.unpaid_leave || 0} unpaid`, { filter: 'leave', pct: pct(leave) }),
+    _attKpi('fa-user-xmark',       '#dc2626', 'Absent',        c.absent || 0, c.absent ? share(c.absent) : 'no absences', { filter: 'absent', pct: pct(c.absent || 0) }),
+    _attKpi('fa-clock',            '#d97706', 'Late arrivals', c.late || 0, s.late_minutes ? `${_attFmtWorked(s.late_minutes)} total` : `after ${_att.data.late_grace_minutes ?? 5} min grace`, { filter: 'late' }),
+    _attKpi('fa-triangle-exclamation', '#dc2626', 'No check-out', c.missing_out || 0, c.missing_out ? 'needs fixing' : 'all clear', { filter: 'missing_out' }),
+    _attKpi('fa-hourglass-half',   '#0284c7', 'Hours worked',  _attFmtHours(s.worked_minutes), `avg ${_attFmtWorked(s.avg_worked_minutes || 0)} / day`),
+    _attKpi('fa-bolt',             '#7c3aed', 'Overtime',      _attFmtHours(s.overtime_minutes), `${c.overtime || 0} record${c.overtime === 1 ? '' : 's'}`, { filter: 'overtime' }),
+  ].join('');
+  $$('#att-kpis [data-att-kpi]').forEach(b => b.addEventListener('click', () => {
+    const key = b.dataset.attKpi;
+    _att.status = _att.status === key ? '' : key;
+    if (_att.view !== 'list') _attSetView('list');
+    else loadAttendance();
+  }));
+}
+
+function _attRenderChips() {
+  const c = _att.data.status_counts || {};
+  const disabled = _att.view === 'employees';
+  $('#att-chips').innerHTML = ATT_CHIPS.map(ch => {
+    const n = ch.key ? (c[ch.key] || 0) : (c.all || 0);
+    if (ch.hideEmpty && !n && _att.status !== ch.key) return '';
+    const active = _att.status === ch.key;
+    return `<button class="att-chip${active ? ' active' : ''}" data-att-status="${ch.key}" style="--chip-c:${ch.color}" ${(!n && !active && ch.key) || disabled ? 'disabled' : ''}>
+      ${ch.icon ? `<i class="fa ${ch.icon}"></i>` : ''}${ch.label}<span class="att-chip-n">${n}</span></button>`;
+  }).join('');
+  $$('#att-chips .att-chip').forEach(b => b.addEventListener('click', () => {
+    _att.status = b.dataset.attStatus;
+    loadAttendance();
+  }));
+}
+
+function _attSortIcon(key) {
+  if (_att.sort.key !== key) return '<i class="fa fa-sort"></i>';
+  return `<i class="fa fa-sort-${_att.sort.dir === 'asc' ? 'up' : 'down'}"></i>`;
+}
+
+function _attSortVal(r, key) {
+  switch (key) {
+    case 'check_in':  return r.check_in_at ? r.check_in_at.slice(11) : '99';
+    case 'check_out': return r.check_out_at ? r.check_out_at.slice(11) : '99';
+    case 'employee_name': case 'status': case 'department': return String(r[key] || '').toLowerCase();
+    default: return r[key] ?? -1;
+  }
+}
+
+const _ATT_DAY_ORDER = { present: 0, half_day: 1, absent: 2, unpaid_leave: 3, paid_leave: 4, holiday: 5, weekend: 6 };
+
+function _attSorted(rows) {
+  const { key, dir } = _att.sort;
+  const m = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const va = _attSortVal(a, key), vb = _attSortVal(b, key);
+    if (va < vb) return -m;
+    if (va > vb) return m;
+    if (key !== 'work_date') return 0;
+    // Within a day: people who worked first, then leave / absent / off, then by name.
+    return (_ATT_DAY_ORDER[a.status] ?? 9) - (_ATT_DAY_ORDER[b.status] ?? 9)
+      || String(a.employee_name).localeCompare(String(b.employee_name));
+  });
+}
+
+function _attEmptyState() {
+  const d = _att.data;
+  const filtered = $('#att-search').value.trim() || _att.status || _att.dept;
+  const jump = !filtered && d.latest_date && (d.latest_date < _att.from || d.latest_date > _att.to)
+    ? `<br><button class="btn-secondary" id="att-jump-latest"><i class="fa fa-calendar-check"></i> Jump to latest records (${escHtml(d.latest_date)})</button>` : '';
+  return `<div class="att-empty"><i class="fa fa-clock big"></i>${filtered
+    ? 'No attendance matches these filters.'
+    : `No attendance recorded for ${escHtml(_attRangeLabel(_att.from, _att.to))}.${d.latest_date ? '' : ' Click <strong>Upload CSV</strong> to import check-in / check-out logs.'}`}${jump}</div>`;
+}
+
+function _attRenderBody() {
+  const area   = $('#att-cards-area');
+  const footer = $('#att-footer-text');
+  const d      = _att.data;
+
+  if (_att.view === 'employees') {
+    const emps = d.employees || [];
+    if (!emps.length) { area.innerHTML = _attEmptyState(); footer.textContent = '0 employees'; _attBindEmpty(); return; }
+    area.innerHTML = _attEmployeeTable(emps);
+    footer.textContent = `${emps.length} employee${emps.length === 1 ? '' : 's'} · ${_attRangeLabel(_att.from, _att.to)} — click a row to see their daily records`;
+    $$('#att-cards-area .att-row').forEach(tr => tr.addEventListener('click', () => {
+      _att.backView = 'employees';
+      $('#att-search').value = tr.dataset.code || tr.dataset.name;
+      _attSetView('list');
+    }));
+    return;
+  }
+
+  const rows = d.data || [];
+  if (!rows.length) { area.innerHTML = _attEmptyState(); footer.textContent = '0 records'; _attBindEmpty(); return; }
+
+  area.innerHTML = _attRecordTable(_attSorted(rows));
+  footer.textContent = d.total_count > rows.length
+    ? `Showing ${rows.length} of ${d.total_count} records — narrow the date range or filter to see the rest`
+    : `${d.total_count} record${d.total_count === 1 ? '' : 's'} · click a row for details`;
+
+  $$('#att-cards-area th[data-sort]').forEach(th => th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    const dir = _att.sort.key === key
+      ? (_att.sort.dir === 'desc' ? 'asc' : 'desc')
+      : (key === 'work_date' || key === 'worked_minutes' ? 'desc' : 'asc');
+    _att.sort = { key, dir };
+    _attRenderBody();
+  }));
+  const byId = new Map(rows.map(r => [String(r.id), r]));
+  $$('#att-cards-area .att-row').forEach(tr => tr.addEventListener('click', () => _attOpenDrawer(byId.get(tr.dataset.id))));
+}
+
+function _attBindEmpty() {
+  $('#att-jump-latest')?.addEventListener('click', () => {
+    const t = _attParse(_att.data.latest_date);
+    attSetRange(_attIso(new Date(t.getFullYear(), t.getMonth(), 1)), _attIso(new Date(t.getFullYear(), t.getMonth() + 1, 0)));
+  });
+}
+
+function _attRecordTable(rows) {
+  const grouped = _att.sort.key === 'work_date';
+  const th = (key, label, cls = '') => `<th data-sort="${key}"${cls ? ` class="${cls}"` : ''}>${label}${_attSortIcon(key)}</th>`;
+  let html = `<table class="att-table"><thead><tr>
+    ${th('employee_name', 'Employee', 'col-emp')}${grouped ? '' : th('work_date', 'Date')}${th('status', 'Status')}
+    ${th('check_in', 'Check in')}${th('check_out', 'Check out')}${th('worked_minutes', 'Worked')}<th class="no-sort">Flags</th>
+  </tr></thead><tbody>`;
+
+  let lastDate = null;
+  const cols = grouped ? 6 : 7;
+  for (const r of rows) {
+    if (grouped && r.work_date !== lastDate) {
+      lastDate = r.work_date;
+      html += _attDayHeader(r.work_date, rows.filter(x => x.work_date === r.work_date), cols);
+    }
+    const st  = ATT_STATUS_STYLE[r.status] || { color: '#64748b' };
+    const off = !r.check_in_at && !r.check_out_at && r.status !== 'present' && r.status !== 'half_day';
+    html += `<tr class="att-row${off ? ' is-off' : ''}" data-id="${r.id}" style="--row-c:${st.color}">
+      <td>${_attEmpCell(r)}</td>
+      ${grouped ? '' : `<td class="num">${escHtml(r.work_date)}<div class="att-emp-sub">${escHtml(r.weekday || '')}</div></td>`}
+      <td>${_attStatusPill(r)}</td>
+      ${off ? `<td colspan="4">${_attOffNote(r)}</td>` : `
+      <td class="att-time${r.late_minutes > 0 ? ' is-late' : ''}">${_attFmtTime(r.check_in_at)}${r.scheduled_start && r.check_in_at ? `<small>sched. ${_attFmtSched(r.scheduled_start)}</small>` : ''}</td>
+      <td class="att-time">${_attFmtTime(r.check_out_at)}${r.scheduled_end && r.check_out_at ? `<small>sched. ${_attFmtSched(r.scheduled_end)}</small>` : ''}</td>
+      <td class="num">${_attWorkedCell(r)}</td>
+      <td>${_attFlags(r)}</td>`}
+    </tr>`;
+  }
+  return html + '</tbody></table>';
+}
+
+/** One muted line in place of the empty time / worked / flag columns for leave, absent and off days. */
+function _attOffNote(r) {
+  const note = r.leave_note ? ` · “${escHtml(r.leave_note)}”` : '';
+  switch (r.status) {
+    case 'paid_leave':   return `<span class="att-offnote"><i class="fa fa-circle-check"></i>Approved leave — counted as paid${note}</span>`;
+    case 'unpaid_leave': return `<span class="att-offnote"><i class="fa fa-circle-minus"></i>Approved leave — unpaid${note}</span>`;
+    case 'absent':       return `<span class="att-offnote" style="color:#dc2626"><i class="fa fa-circle-exclamation"></i>No check-in on a scheduled work day</span>`;
+    case 'holiday':      return '<span class="att-offnote"><i class="fa fa-calendar-day"></i>Public holiday</span>';
+    case 'weekend':      return '<span class="att-offnote"><i class="fa fa-mug-hot"></i>Weekly day off</span>';
+    default:             return `<span class="att-offnote">${_attFlags(r)}</span>`;
+  }
+}
+
+function _attDayHeader(date, rows, cols) {
+  const n = k => rows.filter(r => r.status === k).length;
+  const present = n('present') + n('half_day');
+  const leave   = n('paid_leave') + n('unpaid_leave');
+  const absent  = n('absent');
+  const late    = rows.filter(r => r.late_minutes > 0).length;
+  const seg = [[present, '#16a34a', 'present'], [leave, '#0d9488', 'on leave'], [absent, '#dc2626', 'absent'], [late, '#d97706', 'late']];
+  const parts = seg.filter(([v]) => v).map(([v, c, l]) => `<span><i class="dot" style="background:${c}"></i><b>${v}</b> ${l}</span>`).join('');
+  const total = rows.length || 1;
+  const mix = seg.slice(0, 3).filter(([v]) => v).map(([v, c, l]) => `<span style="width:${v / total * 100}%;background:${c}" title="${v} ${l}"></span>`).join('');
+  const label = _attParse(date).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return `<tr class="att-day-row"><td colspan="${cols}"><div class="att-day-inner">
+    <span class="att-day-date"><i class="fa fa-calendar-day"></i>${escHtml(label)}</span>
+    <span class="att-day-meta">${parts}</span>
+    <span class="att-day-mix" title="${present} present · ${leave} on leave · ${absent} absent of ${rows.length}">${mix}</span>
+  </div></td></tr>`;
+}
+
+function _attEmployeeTable(emps) {
+  const fmtDays = v => (Number.isInteger(v) ? v : Number(v).toFixed(1));
+  return `<table class="att-table"><thead><tr>
+    <th class="no-sort">Employee</th><th class="no-sort">Present</th><th class="no-sort">Leave</th><th class="no-sort">Absent</th>
+    <th class="no-sort">Late</th><th class="no-sort">No check-out</th><th class="no-sort">Hours</th><th class="no-sort">Avg / day</th>
+    <th class="no-sort">Overtime</th><th class="no-sort">Attendance</th>
+  </tr></thead><tbody>${emps.map(e => {
+    const rate = e.attendance_rate;
+    const rc = rate == null ? 'var(--text-muted)' : rate >= 95 ? '#16a34a' : rate >= 80 ? '#d97706' : '#dc2626';
+    const leave = e.paid_leave_days + e.unpaid_leave_days;
+    return `<tr class="att-row" data-code="${escHtml(e.employee_id || '')}" data-name="${escHtml(e.employee_name || '')}" title="Show daily records">
+      <td>${_attEmpCell(e)}</td>
+      <td class="num"><b>${fmtDays(e.present_days)}</b>${e.half_days ? `<div class="att-emp-sub">${e.half_days} half</div>` : ''}</td>
+      <td class="num">${leave || '<span class="att-muted">0</span>'}${leave ? `<div class="att-emp-sub">${e.paid_leave_days} paid · ${e.unpaid_leave_days} unpaid</div>` : ''}</td>
+      <td class="num" style="${e.absent_days ? 'color:#dc2626;font-weight:700' : ''}">${e.absent_days}</td>
+      <td class="num">${e.late_count ? `<span class="att-flag late">${e.late_count}× · ${_attFmtWorked(e.late_minutes)}</span>` : '<span class="att-muted">0</span>'}</td>
+      <td class="num">${e.missing_checkout ? `<span class="att-flag missing">${e.missing_checkout}</span>` : '<span class="att-muted">0</span>'}</td>
+      <td class="num"><b>${_attFmtHours(e.worked_minutes)}</b></td>
+      <td class="num">${e.avg_worked_minutes ? _attFmtWorked(e.avg_worked_minutes) : '—'}</td>
+      <td class="num">${e.overtime_minutes ? `<span class="att-flag ot">${_attFmtWorked(e.overtime_minutes)}</span>` : '<span class="att-muted">—</span>'}</td>
+      <td class="num"><span class="att-rate" style="color:${rc}">${rate == null ? '—' : rate + '%'}</span>
+        <div class="att-bar"><span style="width:${rate || 0}%;background:${rc}"></span></div></td>
+    </tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function _attSetView(view) {
+  _att.view = view;
+  $$('#att-records-pane .att-view-btn').forEach(b => b.classList.toggle('active', b.dataset.attView === view));
+  if (view === 'employees') _att.status = '';
+  loadAttendance();
+}
+
+// ── Attendance record detail drawer ──
+
+function _attOpenDrawer(r) {
+  if (!r) return;
+  const st = ATT_STATUS_STYLE[r.status] || { color: '#64748b' };
+  $('#att-drawer-title').innerHTML = `${_attEmpCell(r)}<div style="margin-top:10px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${_attStatusPill(r)}
+    <span class="att-emp-sub"><i class="fa fa-calendar"></i> ${escHtml(_attParse(r.work_date).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))}</span></div>`;
+
+  const cell = (k, v, color) => `<div class="att-dcell"><div class="k">${k}</div><div class="v"${color ? ` style="color:${color}"` : ''}>${v}</div></div>`;
+  const works = r.status === 'present' || r.status === 'half_day';
+  let body = '';
+
+  if (works) {
+    body += `<div><div class="att-dsec-title">Time</div><div class="att-dgrid">
+      ${cell('Check in' + (r.scheduled_start ? ` · sched. ${_attFmtSched(r.scheduled_start)}` : ''), _attFmtTime(r.check_in_at), r.late_minutes ? '#d97706' : '')}
+      ${cell('Check out' + (r.scheduled_end ? ` · sched. ${_attFmtSched(r.scheduled_end)}` : ''), _attFmtTime(r.check_out_at), r.missing_checkout ? '#dc2626' : '')}
+      ${cell('Worked', _attFmtWorked(r.worked_minutes))}
+      ${cell('Scheduled', r.expected_minutes ? _attFmtWorked(r.expected_minutes) : 'Day off')}
+      ${cell('Late by', r.late_minutes ? _attFmtWorked(r.late_minutes) : '—', r.late_minutes ? '#d97706' : '')}
+      ${cell('Left early by', r.early_leave_minutes ? _attFmtWorked(r.early_leave_minutes) : '—', r.early_leave_minutes ? '#ea580c' : '')}
+      ${cell('Overtime', r.overtime_minutes ? _attFmtWorked(r.overtime_minutes) : '—', r.overtime_minutes ? '#7c3aed' : '')}
+      ${cell('Completion', r.expected_minutes && r.worked_minutes != null ? Math.round(r.worked_minutes / r.expected_minutes * 100) + '%' : '—')}
+    </div></div>`;
+    body += _attTimeline(r);
+    if (r.missing_checkout) body += `<div class="att-flag missing" style="padding:8px 10px;border-radius:8px;font-size:12px"><i class="fa fa-triangle-exclamation"></i> No check-out recorded — worked hours can't be calculated. Re-upload the CSV row with a check-out time to fix it.</div>`;
+  } else {
+    body += `<div class="att-dcell" style="border-left:3px solid ${st.color}"><div class="k">Status</div><div class="v">${escHtml(st.label || r.status)}</div>
+      ${r.leave_type ? `<div class="att-emp-sub" style="margin-top:4px">Leave type: ${escHtml(EMP_LEAVE_LABELS?.[r.leave_type] || r.leave_type)}</div>` : ''}
+      ${r.leave_note ? `<div class="att-emp-sub" style="margin-top:4px">“${escHtml(r.leave_note)}”</div>` : ''}</div>`;
+  }
+
+  const SOURCES = { csv_import: 'CSV import', excel_import: 'Excel import', manual: 'Manual entry', absence_check: 'Missing-attendance check', leave: 'Leave request', biometric: 'Biometric device' };
+  body += `<div><div class="att-dsec-title">Record</div><div class="att-dlist">
+    <div><span>Source</span><span>${escHtml(SOURCES[r.source] || r.source || '—')}</span></div>
+    <div><span>Recorded by</span><span>${escHtml(r.recorded_by || '—')}</span></div>
+    <div><span>Last updated</span><span>${escHtml(r.updated_at || '—')}</span></div>
+    ${r.notes ? `<div><span>Notes</span><span>${escHtml(r.notes)}</span></div>` : ''}
+  </div></div>
+  <button class="btn-secondary" id="att-drawer-emp"><i class="fa fa-user"></i> All records for ${escHtml(r.employee_name || 'this employee')}</button>`;
+
+  $('#att-drawer-body').innerHTML = body;
+  $('#att-drawer-emp').addEventListener('click', () => {
+    _attCloseDrawer();
+    attShowEmployee(r.employee_id || r.employee_name || '');
+  });
+  $('#att-drawer').classList.add('open');
+  $('#att-drawer').setAttribute('aria-hidden', 'false');
+  $('#att-drawer-backdrop').classList.add('open');
+}
+
+function _attTimeline(r) {
+  if (!r.check_in_at && !r.check_out_at) return '';
+  const toMin = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  const inM  = r.check_in_at  ? toMin(r.check_in_at.slice(11))  : null;
+  const outM = r.check_out_at ? toMin(r.check_out_at.slice(11)) : null;
+  const sS = r.scheduled_start ? toMin(r.scheduled_start) : null;
+  const sE = r.scheduled_end   ? toMin(r.scheduled_end)   : null;
+  const pts = [inM, outM, sS, sE].filter(v => v != null);
+  const lo = Math.max(0, Math.floor((Math.min(...pts) - 60) / 60) * 60);
+  const hi = Math.min(1440, Math.ceil((Math.max(...pts) + 60) / 60) * 60);
+  const pos = v => ((v - lo) / (hi - lo) * 100).toFixed(2);
+  const sched = sS != null && sE != null ? `<div class="sched" style="left:${pos(sS)}%;width:${pos(sE) - pos(sS)}%"></div>` : '';
+  const ws = inM ?? sS ?? lo, we = outM ?? (inM != null ? inM + 2 : hi);
+  const work = `<div class="work" style="left:${pos(ws)}%;width:${Math.max(1, pos(we) - pos(ws))}%;${outM == null ? 'background:repeating-linear-gradient(45deg,#dc2626,#dc2626 4px,#fca5a5 4px,#fca5a5 8px)' : ''}"></div>`;
+  const hh = m => _attFmtSched(`${String(Math.floor(m / 60) % 24).padStart(2, '0')}:00`);
+  return `<div><div class="att-dsec-title">Day timeline <span style="text-transform:none;font-weight:500">— green: worked · dashed: scheduled</span></div>
+    <div class="att-timeline">${sched}${work}</div>
+    <div class="att-timeline-axis"><span>${hh(lo)}</span><span>${hh(Math.round((lo + hi) / 120) * 60)}</span><span>${hh(hi)}</span></div></div>`;
+}
+
+/** Open HR → Attendance → Records filtered to one employee (optionally to a date range). */
+function attShowEmployee(search, from, to) {
+  $('#att-search').value = search || '';
+  _att.status = '';
+  _att.view   = 'list';
+  $$('#att-records-pane .att-view-btn').forEach(b => b.classList.toggle('active', b.dataset.attView === 'list'));
+  if (from && to) {
+    _att.from = from; _att.to = to; _att.preset = '';
+    $('#att-from').value = from;
+    $('#att-to').value   = to;
+    $('#att-range-label').textContent = _attRangeLabel(from, to);
+    $$('#att-records-pane .att-preset').forEach(b => b.classList.remove('active'));
+  }
+  _attMode = 'records';
+  activateTab('hr');
+  switchHrView('attendance');
+}
+
+// The drawer is opened from the Attendance tab and from an employee's profile, so it lives on <body>.
+['#att-drawer-backdrop', '#att-drawer'].forEach(sel => { const el = $(sel); if (el) document.body.appendChild(el); });
+
+function _attCloseDrawer() {
+  $('#att-drawer').classList.remove('open');
+  $('#att-drawer').setAttribute('aria-hidden', 'true');
+  $('#att-drawer-backdrop').classList.remove('open');
+}
+
+// ── Attendance export (current view → CSV) ──
+
+function _attExportCsv() {
+  if (!_att.data) return;
+  const esc = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  let header, lines;
+  if (_att.view === 'employees') {
+    header = ['Employee ID', 'Name', 'Department', 'Present days', 'Half days', 'Paid leave', 'Unpaid leave', 'Absent', 'Late (times)', 'Late (min)', 'No check-out', 'Worked (h)', 'Avg per day (h)', 'Overtime (h)', 'Attendance %'];
+    lines = (_att.data.employees || []).map(e => [e.employee_id, e.employee_name, e.department, e.present_days, e.half_days, e.paid_leave_days, e.unpaid_leave_days, e.absent_days, e.late_count, e.late_minutes, e.missing_checkout, (e.worked_minutes / 60).toFixed(2), (e.avg_worked_minutes / 60).toFixed(2), (e.overtime_minutes / 60).toFixed(2), e.attendance_rate ?? '']);
+  } else {
+    header = ['Date', 'Employee ID', 'Name', 'Department', 'Status', 'Check in', 'Check out', 'Worked (min)', 'Scheduled (min)', 'Late (min)', 'Left early (min)', 'Overtime (min)', 'No check-out', 'Source'];
+    lines = _attSorted(_att.data.data || []).map(r => [r.work_date, r.employee_id, r.employee_name, r.department, ATT_STATUS_STYLE[r.status]?.label || r.status, r.check_in_at, r.check_out_at, r.worked_minutes, r.expected_minutes, r.late_minutes, r.early_leave_minutes, r.overtime_minutes, r.missing_checkout ? 'yes' : '', r.source]);
+  }
+  if (!lines.length) { toast('Nothing to export for this range.', 'error'); return; }
+  const csv  = [header, ...lines].map(row => row.map(esc).join(',')).join('\n');
+  const url  = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `attendance-${_att.view === 'employees' ? 'summary' : 'records'}-${_att.from}_to_${_att.to}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+$('#att-search')?.addEventListener('input', () => { clearTimeout(_att.searchTimer); _att.searchTimer = setTimeout(loadAttendance, 250); });
+$('#att-dept')?.addEventListener('change', e => { _att.dept = e.target.value; loadAttendance(); });
+$('#att-back-btn')?.addEventListener('click', () => {
+  // Leave the single-employee drill-down and return to the view we came from.
+  $('#att-search').value = '';
+  _att.status = '';
+  const view = _att.backView || _att.view;
+  _att.backView = '';
+  if (view !== _att.view) _attSetView(view);
+  else loadAttendance();
+});
+$$('#att-records-pane .att-view-btn').forEach(b => b.addEventListener('click', () => _attSetView(b.dataset.attView)));
+$$('#att-records-pane .att-preset').forEach(b => b.addEventListener('click', () => {
+  const [f, t] = _attPresetRange(b.dataset.attPreset);
+  attSetRange(_attIso(f), _attIso(t), b.dataset.attPreset);
+}));
+$('#att-range-prev')?.addEventListener('click', () => _attShiftRange(-1));
+$('#att-range-next')?.addEventListener('click', () => _attShiftRange(1));
+$('#att-from')?.addEventListener('change', e => { if (e.target.value) attSetRange(e.target.value, $('#att-to').value || e.target.value); });
+$('#att-to')?.addEventListener('change',   e => { if (e.target.value) attSetRange($('#att-from').value || e.target.value, e.target.value); });
+$('#att-export-btn')?.addEventListener('click', _attExportCsv);
+$('#att-drawer-close')?.addEventListener('click', _attCloseDrawer);
+$('#att-drawer-backdrop')?.addEventListener('click', _attCloseDrawer);
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('#att-drawer')?.classList.contains('open')) _attCloseDrawer(); });
+$('#att-import-btn')?.addEventListener('click', _attCsvOpenModal);
+
+// ── Attendance: Records | Leave switch ──────────────────────────────────────
+
+let _attMode = 'records';
+
+function switchAttMode(mode) {
+  _attMode = mode;
+  $$('#attendance-view .att-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.attMode === mode));
+  $('#att-records-pane').style.display = mode === 'records' ? 'flex' : 'none';
+  $('#att-leave-pane').style.display   = mode === 'leave'   ? 'flex' : 'none';
+  if (mode === 'records') { loadAttendance($('#att-search').value); refreshLeavePendingBadge(); }
+  else loadLeaveList();
+}
+
+$$('#attendance-view .att-mode-btn').forEach(b => b.addEventListener('click', () => switchAttMode(b.dataset.attMode)));
+
+function setLeavePendingBadge(n) {
+  const badge = $('#att-leave-pending-badge');
+  badge.textContent = n;
+  badge.style.display = n ? '' : 'none';
+}
+
+async function refreshLeavePendingBadge() {
+  const r = await API.leaveRequests({ status: 'pending' });
+  if (r.status === 200) setLeavePendingBadge(r.body.counts?.pending || 0);
+}
+
+// ── Attendance → Leave list ─────────────────────────────────────────────────
+
+let _lvStatus = '';
+let _lvSeq = 0;
+
+async function loadLeaveList() {
+  const area   = $('#lv-cards-area');
+  const footer = $('#lv-footer-text');
+  const seq    = ++_lvSeq;
+  area.innerHTML = '<p style="color:var(--text-muted);padding:20px 0"><i class="fa fa-spinner fa-spin"></i> Loading leave…</p>';
+
+  const params = {};
+  if (_lvStatus) params.status = _lvStatus;
+  const q = $('#lv-search').value.trim();
+  if (q) params.q = q;
+
+  const res = await API.leaveRequests(params);
+  if (seq !== _lvSeq) return; // a newer search/filter is in flight
+  if (res.status !== 200) {
+    area.innerHTML = '<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load leave.</p>';
+    return;
+  }
+
+  const rows = res.body.data || [];
+  const counts = res.body.counts || {};
+  $('#lv-pending-count').textContent = counts.pending ?? '—';
+  $('#lv-today-count').textContent   = counts.on_leave_today ?? '—';
+  setLeavePendingBadge(counts.pending || 0);
+
+  if (!rows.length) {
+    area.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:40px 0"><i class="fa fa-umbrella-beach" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>${q || _lvStatus ? 'No leave matches this filter.' : 'No leave recorded yet. Click <strong>Give Leave</strong> to record one.'}</p>`;
+    footer.textContent = '0 leave records';
+    return;
+  }
+
+  area.innerHTML = rows.map(buildLeaveListCard).join('');
+  footer.textContent = `${rows.length} leave record${rows.length !== 1 ? 's' : ''}`;
+  bindLeaveRowActions(area, loadLeaveList);
+}
+
+function buildLeaveListCard(r) {
+  const st     = EMP_LEAVE_STATUS[r.status] || { color: '#64748b', icon: 'fa-circle', label: r.status };
+  const accent = r.leave_type === 'short' ? '#7c3aed' : ({ annual: '#0d9488', casual: '#0284c7', sick: '#e11d48', unpaid: '#64748b', other: '#7c3aed' }[r.leave_type] || '#64748b');
+  const days   = r.leave_type === 'short' ? '' : `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text)">${fmtLeaveNum(r.days)} day${+r.days === 1 ? '' : 's'}</span>`;
   return `
     <div class="lm-card" style="cursor:default">
       <div class="lm-card-header">
-        <div class="lm-card-icon" style="background:#dbeafe20;color:#2563eb"><i class="fa fa-user-clock"></i></div>
+        <div class="lm-card-icon" style="background:${accent}20;color:${accent}"><i class="fa ${r.leave_type === 'short' ? 'fa-hourglass-half' : 'fa-umbrella-beach'}"></i></div>
         <div class="lm-card-title-wrap">
-          <span class="lm-card-name">${escHtml(r.employee_name || 'Unknown')} <span style="color:var(--text-muted);font-weight:400">#${escHtml(r.employee_id || '—')}</span></span>
+          <span class="lm-card-name">${escHtml(r.employee_name || 'Unknown')} <span style="color:var(--text-muted);font-weight:400">${r.employee_code ? '#' + escHtml(r.employee_code) : ''}</span></span>
           <div class="lm-card-pills">
-            <span class="lm-pill" style="background:#dbeafe18;color:#2563eb"><i class="fa fa-right-to-bracket"></i> In: ${_attFmtTime(r.check_in_at)}</span>
-            <span class="lm-pill" style="background:#fef3c718;color:#d97706"><i class="fa fa-right-from-bracket"></i> Out: ${_attFmtTime(r.check_out_at)}</span>
-            <span class="lm-pill" style="background:#dcfce718;color:#16a34a"><i class="fa fa-hourglass-half"></i> ${_attFmtWorked(r.worked_minutes)}</span>
+            <span class="lm-pill" style="background:${accent}18;color:${accent}">${escHtml(EMP_LEAVE_LABELS[r.leave_type] || r.leave_type)}</span>
+            <span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)"><i class="fa fa-calendar"></i> ${escHtml(fmtLeaveWhen(r))}</span>
+            ${days}
+            <span class="lm-pill" style="background:${st.color}18;color:${st.color}"><i class="fa ${st.icon}"></i> ${st.label}${r.decided_by ? ' · ' + escHtml(r.decided_by) : ''}</span>
+            ${r.note ? `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)" title="${escHtml(r.note)}"><i class="fa fa-note-sticky"></i> ${escHtml(r.note.length > 40 ? r.note.slice(0, 40) + '…' : r.note)}</span>` : ''}
           </div>
         </div>
-        <span style="font-size:11px;color:var(--text-muted);white-space:nowrap">${escHtml(r.work_date || '')}</span>
+        ${buildLeaveRowActions(r)}
       </div>
     </div>`;
 }
 
-$('#att-search')?.addEventListener('input', e => loadAttendance(e.target.value));
-$('#att-import-btn')?.addEventListener('click', _attCsvOpenModal);
+let _lvSearchTimer = null;
+$('#lv-search').addEventListener('input', () => { clearTimeout(_lvSearchTimer); _lvSearchTimer = setTimeout(loadLeaveList, 250); });
+$$('#att-leave-pane .lv-status-btn').forEach(b => b.addEventListener('click', () => {
+  _lvStatus = b.dataset.lvStatus;
+  $$('#att-leave-pane .lv-status-btn').forEach(x => x.classList.toggle('active', x === b));
+  loadLeaveList();
+}));
+$('#lv-give-btn').addEventListener('click', () => openGiveLeaveModal({ onSaved: loadLeaveList }));
+
+// ── Give Leave modal (shared by employee Leave tab and Attendance → Leave) ──
+
+const _gl = { empId: null, type: 'annual', duration: 'full', status: 'approved', policy: null, onSaved: null, seq: 0, timer: null };
+
+function glToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+async function openGiveLeaveModal({ employee = null, onSaved = null } = {}) {
+  Object.assign(_gl, { empId: null, type: 'annual', duration: 'full', status: 'approved', policy: null, onSaved });
+  const today = glToday();
+  ['#gl-from', '#gl-to', '#gl-half-date', '#gl-short-date'].forEach(s => { $(s).value = today; });
+  $('#gl-short-start').value = '08:30';
+  $('#gl-half-period').value = 'am';
+  $('#gl-note').value = '';
+  $('#gl-override').checked = false;
+  $('#gl-rule-hint').innerHTML = '';
+  glShowAlert('');
+  glSetChip('#gl-type-chips', 'type', 'annual');
+  glSetChip('#gl-modal', 'duration', 'full');
+  glSetChip('#gl-modal', 'status', 'approved');
+  glRenderSummary(null);
+
+  if (employee) {
+    $('#gl-employee-wrap').style.display = 'none';
+    $('#gl-employee-fixed').style.display = '';
+    $('#gl-employee-fixed').textContent = employee.name || `Employee #${employee.id}`;
+    $('#gl-modal').style.display = '';
+    await glSelectEmployee(employee.id);
+  } else {
+    $('#gl-employee-wrap').style.display = '';
+    $('#gl-employee-fixed').style.display = 'none';
+    const input = $('#gl-employee');
+    _glEmps = [];
+    input.value = '';
+    input.placeholder = 'Loading employees…';
+    $('#gl-employee-clear').style.display = 'none';
+    glCloseEmpList();
+    $('#gl-modal').style.display = '';
+    const res = await API.employees();
+    _glEmps = res.status === 200 ? (res.body.data || []) : [];
+    input.placeholder = 'Search employee by name or ID…';
+    glApplyPolicy();
+  }
+}
+
+// Searchable employee picker
+let _glEmps = [];
+let _glEmpMatches = [];
+let _glEmpActive = -1;
+
+function glEmpLabel(e) {
+  return `${e.name}${e.employee_id ? ' (#' + e.employee_id + ')' : ''}`;
+}
+
+function glRenderEmpList() {
+  const q = $('#gl-employee').value.trim().toLowerCase();
+  _glEmpMatches = _glEmps.filter(e =>
+    !q || (e.name || '').toLowerCase().includes(q) || String(e.employee_id ?? '').toLowerCase().includes(q) || String(e.id) === q
+  ).slice(0, 100);
+  _glEmpActive = _glEmpMatches.length ? 0 : -1;
+  const list = $('#gl-employee-list');
+  list.innerHTML = _glEmpMatches.length
+    ? _glEmpMatches.map((e, i) => `<div class="gl-emp-opt${i === _glEmpActive ? ' active' : ''}${e.id === _gl.empId ? ' selected' : ''}" data-idx="${i}">
+        <span>${escHtml(e.name)}</span>${e.employee_id ? `<small>#${escHtml(e.employee_id)}</small>` : ''}</div>`).join('')
+    : `<div class="gl-emp-empty">${_glEmps.length ? 'No matching employees' : 'No employees found'}</div>`;
+  list.style.display = '';
+}
+
+function glHighlightEmp(idx) {
+  _glEmpActive = idx;
+  $$('#gl-employee-list .gl-emp-opt').forEach((o, i) => o.classList.toggle('active', i === idx));
+  $(`#gl-employee-list .gl-emp-opt[data-idx="${idx}"]`)?.scrollIntoView({ block: 'nearest' });
+}
+
+function glCloseEmpList() {
+  $('#gl-employee-list').style.display = 'none';
+}
+
+function glPickEmp(emp) {
+  $('#gl-employee').value = emp ? glEmpLabel(emp) : '';
+  $('#gl-employee-clear').style.display = emp ? '' : 'none';
+  glCloseEmpList();
+  glSelectEmployee(emp ? emp.id : null);
+}
+
+function closeGiveLeaveModal() {
+  clearTimeout(_gl.timer);
+  _gl.seq++;
+  $('#gl-modal').style.display = 'none';
+}
+
+/** Load the employee's rule so half-day / short-leave options match what the server will accept. */
+async function glSelectEmployee(id) {
+  _gl.empId = id || null;
+  _gl.policy = null;
+  $('#gl-rule-hint').innerHTML = '';
+  if (!id) { glApplyPolicy(); glRenderSummary(null); return; }
+
+  const res = await API.employeeLeave(id);
+  if (_gl.empId !== id) return;
+  const d = res.status === 200 ? res.body.data : null;
+  _gl.policy = d?.policy || null;
+  if (d) {
+    const left = (t) => d.balances?.find(b => b.type === t);
+    const bits = ['annual', 'casual'].map(t => left(t)?.remaining != null ? `${fmtLeaveNum(left(t).remaining)} ${t} left` : '').filter(Boolean);
+    if (d.short_leave) bits.push(`short leave ${d.short_leave.used}/${d.short_leave.allowed} this month`);
+    $('#gl-rule-hint').innerHTML = `<i class="fa fa-umbrella-beach"></i> ${d.policy ? `Rule: <strong>${escHtml(d.policy.name)}</strong>` : 'No leave rule'}${bits.length ? ' · ' + bits.join(' · ') : ''}`;
+  }
+  glApplyPolicy();
+  glSchedulePreview();
+}
+
+function glApplyPolicy() {
+  const p = _gl.policy;
+  const shortOk = !!p?.short_leave_enabled;
+  const halfOk  = (!p || p.half_day_allowed) && ['annual', 'casual', 'sick'].includes(_gl.type);
+  $('#gl-type-chips .gl-chip[data-type="short"]').disabled = !shortOk;
+  $('#gl-modal .gl-chip[data-duration="half"]').disabled = !halfOk;
+  if (!shortOk && _gl.type === 'short') { _gl.type = 'annual'; glSetChip('#gl-type-chips', 'type', 'annual'); }
+  if (!halfOk && _gl.duration === 'half') { _gl.duration = 'full'; glSetChip('#gl-modal', 'duration', 'full'); }
+
+  const max = p?.short_leave_max_minutes || 90;
+  const sel = $('#gl-short-minutes');
+  const prev = parseInt(sel.value, 10);
+  sel.innerHTML = '';
+  for (let m = 15; m <= max; m += 15) sel.add(new Option(fmtLrMinutes(m), m));
+  sel.value = String(prev && prev <= max ? prev : Math.min(60, max));
+
+  const isShort = _gl.type === 'short';
+  $('#gl-day-fields').style.display   = isShort ? 'none' : '';
+  $('#gl-short-fields').style.display = isShort ? '' : 'none';
+  $('#gl-range-row').style.display    = _gl.duration === 'half' ? 'none' : '';
+  $('#gl-half-row').style.display     = _gl.duration === 'half' ? '' : 'none';
+}
+
+function glSetChip(scope, key, value) {
+  $$(`${scope} .gl-chip[data-${key}]`).forEach(c => c.classList.toggle('active', c.dataset[key] === value));
+}
+
+function glBody() {
+  const b = {
+    employee_id:    _gl.empId,
+    leave_type:     _gl.type,
+    note:           $('#gl-note').value.trim() || null,
+    status:         _gl.status,
+    allow_override: $('#gl-override').checked,
+  };
+  if (_gl.type === 'short') {
+    b.starts_on = $('#gl-short-date').value;
+    b.short_leave_start = $('#gl-short-start').value;
+    b.short_leave_minutes = parseInt($('#gl-short-minutes').value, 10);
+  } else if (_gl.duration === 'half') {
+    b.starts_on = b.ends_on = $('#gl-half-date').value;
+    b.is_half_day = true;
+    b.half_day_period = $('#gl-half-period').value;
+  } else {
+    b.starts_on = $('#gl-from').value;
+    b.ends_on = $('#gl-to').value;
+  }
+  return b;
+}
+
+function glSchedulePreview() {
+  clearTimeout(_gl.timer);
+  _gl.timer = setTimeout(glPreview, 250);
+}
+
+async function glPreview() {
+  const body = glBody();
+  if (!body.employee_id || !body.starts_on || (body.leave_type !== 'short' && !body.ends_on)) { glRenderSummary(null); return; }
+  const seq = ++_gl.seq;
+  const res = await API.previewLeave(body);
+  if (seq !== _gl.seq) return;
+  if (res.status === 200) glRenderSummary(res.body.data);
+  else if (res.status === 422) glRenderSummary({ errors: Object.fromEntries(Object.entries(res.body.errors || {}).map(([k, v]) => [k, v[0]])), warnings: {} });
+}
+
+/** Show days charged, balance after, and any rule problems; errors block saving, warnings need "Allow anyway". */
+function glRenderSummary(d) {
+  const box = $('#gl-summary');
+  const ov  = $('#gl-override-wrap');
+  if (!d) { box.style.display = 'none'; ov.style.display = 'none'; return; }
+
+  const errors   = Object.values(d.errors || {});
+  const warnings = Object.values(d.warnings || {});
+  let main = '';
+  if (_gl.type === 'short') {
+    const u = d.short_usage;
+    main = `Short leave · ${fmtLrMinutes(parseInt($('#gl-short-minutes').value, 10))} from ${escHtml($('#gl-short-start').value)}`
+      + (u ? ` · this will be ${u.used + 1} of ${u.allowed} this month` : '');
+  } else if (d.days !== undefined) {
+    main = `${fmtLeaveNum(d.days)} working day${d.days === 1 ? '' : 's'}`;
+    if (d.remaining !== null && d.remaining !== undefined) {
+      main += ` · balance after: ${fmtLeaveNum(Math.max(0, d.remaining - d.days))} of ${fmtLeaveNum(d.remaining)} left`;
+    }
+  }
+  box.innerHTML = (main ? `<div class="gl-summary-main"><i class="fa fa-calculator"></i> ${main}</div>` : '')
+    + errors.map(m => `<div class="gl-summary-line err"><i class="fa fa-circle-xmark"></i><span>${escHtml(m)}</span></div>`).join('')
+    + warnings.map(m => `<div class="gl-summary-line warn"><i class="fa fa-triangle-exclamation"></i><span>${escHtml(m)}</span></div>`).join('');
+  box.style.display = '';
+  ov.style.display = warnings.length && !errors.length ? '' : 'none';
+  if (!warnings.length) $('#gl-override').checked = false;
+}
+
+function glShowAlert(msg) {
+  const el = $('#gl-modal-alert');
+  el.textContent = msg;
+  el.style.display = msg ? '' : 'none';
+}
+
+async function submitGiveLeave() {
+  const body = glBody();
+  if (!body.employee_id) { glShowAlert('Choose an employee.'); return; }
+  glShowAlert('');
+
+  const btn = $('#gl-modal-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.createLeave(body);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-check"></i> Give Leave';
+
+  if (res.status === 201) {
+    const onSaved = _gl.onSaved;
+    closeGiveLeaveModal();
+    toast(res.body?.message || 'Leave recorded.', 'success');
+    onSaved?.();
+    refreshLeavePendingBadge();
+  } else if (res.status === 422 && res.body?.errors) {
+    const errs = Object.fromEntries(Object.entries(res.body.errors).map(([k, v]) => [k, v[0]]));
+    const soft = ['balance', 'probation', 'short_leave_limit'];
+    glRenderSummary({
+      errors:   Object.fromEntries(Object.entries(errs).filter(([k]) => !soft.includes(k))),
+      warnings: Object.fromEntries(Object.entries(errs).filter(([k]) => soft.includes(k))),
+    });
+  } else {
+    glShowAlert(res.body?.message || 'Failed to save leave.');
+  }
+}
+
+$('#gl-modal-close').addEventListener('click', closeGiveLeaveModal);
+$('#gl-modal-cancel').addEventListener('click', closeGiveLeaveModal);
+$('#gl-modal').addEventListener('click', e => { if (e.target === $('#gl-modal')) closeGiveLeaveModal(); });
+$('#gl-modal-save').addEventListener('click', submitGiveLeave);
+$('#gl-employee').addEventListener('focus', e => { e.target.select(); glRenderEmpList(); });
+$('#gl-employee').addEventListener('input', e => {
+  $('#gl-employee-clear').style.display = e.target.value ? '' : 'none';
+  if (_gl.empId) glSelectEmployee(null); // typing again clears the previous pick
+  glRenderEmpList();
+});
+$('#gl-employee').addEventListener('keydown', e => {
+  const open = $('#gl-employee-list').style.display !== 'none';
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) return glRenderEmpList();
+    if (!_glEmpMatches.length) return;
+    const n = _glEmpMatches.length;
+    glHighlightEmp((_glEmpActive + (e.key === 'ArrowDown' ? 1 : -1) + n) % n);
+  } else if (e.key === 'Enter') {
+    if (open && _glEmpActive >= 0) { e.preventDefault(); glPickEmp(_glEmpMatches[_glEmpActive]); }
+  } else if (e.key === 'Escape' && open) {
+    e.stopPropagation();
+    glCloseEmpList();
+  }
+});
+$('#gl-employee').addEventListener('blur', () => setTimeout(() => {
+  glCloseEmpList();
+  // Restore the chosen employee's label if the user typed something and left without picking
+  const cur = _glEmps.find(x => x.id === _gl.empId);
+  if (cur) $('#gl-employee').value = glEmpLabel(cur);
+}, 150));
+$('#gl-employee-list').addEventListener('mousedown', e => {
+  const opt = e.target.closest('.gl-emp-opt');
+  if (!opt) return;
+  e.preventDefault();
+  glPickEmp(_glEmpMatches[parseInt(opt.dataset.idx, 10)]);
+});
+$('#gl-employee-clear').addEventListener('click', () => { glPickEmp(null); $('#gl-employee').focus(); });
+$$('#gl-type-chips .gl-chip').forEach(c => c.addEventListener('click', () => {
+  _gl.type = c.dataset.type;
+  glSetChip('#gl-type-chips', 'type', _gl.type);
+  glApplyPolicy();
+  glSchedulePreview();
+}));
+$$('#gl-modal .gl-chip[data-duration]').forEach(c => c.addEventListener('click', () => {
+  _gl.duration = c.dataset.duration;
+  glSetChip('#gl-modal', 'duration', _gl.duration);
+  if (_gl.duration === 'half') $('#gl-half-date').value = $('#gl-from').value;
+  glApplyPolicy();
+  glSchedulePreview();
+}));
+$$('#gl-modal .gl-chip[data-status]').forEach(c => c.addEventListener('click', () => {
+  _gl.status = c.dataset.status;
+  glSetChip('#gl-modal', 'status', _gl.status);
+}));
+$('#gl-from').addEventListener('change', () => {
+  if (!$('#gl-to').value || $('#gl-to').value < $('#gl-from').value) $('#gl-to').value = $('#gl-from').value;
+  glSchedulePreview();
+});
+['#gl-to', '#gl-half-date', '#gl-half-period', '#gl-short-date', '#gl-short-start', '#gl-short-minutes']
+  .forEach(s => $(s).addEventListener('change', glSchedulePreview));
 
 // ── Attendance: CSV Import ──────────────────────────────────────────────────
 const _ATT_CSV_SAMPLE = [
@@ -44374,8 +46104,169 @@ $('#att-csv-import-btn')?.addEventListener('click', async () => {
     errWrap.style.display = 'none';
   }
 
+  // Offer the missing-attendance check for exactly the imported dates.
+  const cta = $('#att-csv-gap-cta');
+  if (imported > 0 && res.body.date_from) {
+    _attCsvImportedRange = { from: res.body.date_from, to: res.body.date_to };
+    $('#att-csv-gap-cta-desc').textContent = res.body.date_from === res.body.date_to
+      ? `Find employees with no attendance on ${res.body.date_from} and mark them as leave or absent.`
+      : `Find employees with no attendance between ${res.body.date_from} and ${res.body.date_to} and mark them as leave or absent.`;
+    cta.style.display = '';
+  } else {
+    cta.style.display = 'none';
+  }
+
   _attCsvSetStep(3);
-  if (imported > 0) loadAttendance($('#att-search').value);
+  // Show the imported days so the new records are visible straight away.
+  if (imported > 0 && res.body.date_from) attSetRange(res.body.date_from, res.body.date_to);
+  else if (imported > 0) loadAttendance();
+});
+
+let _attCsvImportedRange = null;
+$('#att-csv-gap-btn')?.addEventListener('click', () => {
+  _attCsvCloseModal();
+  if (_attCsvImportedRange) openAttendanceGapsModal(_attCsvImportedRange.from, _attCsvImportedRange.to);
+});
+
+// ── Attendance: Missing attendance check ────────────────────────────────────
+
+const AG_ACTIONS = [
+  ['casual', 'Casual leave (deduct)'],
+  ['annual', 'Annual leave (deduct)'],
+  ['sick',   'Sick leave (deduct)'],
+  ['unpaid', 'Unpaid leave (no pay)'],
+  ['absent', 'Absent (no pay)'],
+  ['skip',   'Skip — decide later'],
+];
+let _agRows = [];
+
+function openAttendanceGapsModal(from, to) {
+  const today = glToday();
+  $('#ag-from').value = from || today.slice(0, 8) + '01';
+  $('#ag-to').value   = to || today;
+  $('#ag-search').value = '';
+  $('#ag-override').checked = false;
+  $('#ag-modal').style.display = '';
+  findAttendanceGaps();
+}
+
+function closeAttendanceGapsModal() {
+  $('#ag-modal').style.display = 'none';
+}
+
+async function findAttendanceGaps() {
+  const area = $('#ag-results');
+  const from = $('#ag-from').value, to = $('#ag-to').value;
+  $('#ag-bulk').style.display = 'none';
+  $('#ag-apply-btn').disabled = true;
+  if (!from || !to) { area.innerHTML = '<p class="bf-hint">Choose a date range.</p>'; return; }
+
+  area.innerHTML = '<p style="color:var(--text-muted);padding:16px 0"><i class="fa fa-spinner fa-spin"></i> Checking attendance…</p>';
+  const params = { from, to };
+  const q = $('#ag-search').value.trim();
+  if (q) params.q = q;
+  const res = await API.attendanceGaps(params);
+  if (res.status !== 200) {
+    const msg = res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to check attendance.');
+    area.innerHTML = `<p style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}</p>`;
+    return;
+  }
+
+  _agRows = res.body.data || [];
+  if (!_agRows.length) {
+    area.innerHTML = `<p style="color:var(--text-muted);text-align:center;padding:30px 0"><i class="fa fa-circle-check" style="font-size:30px;display:block;margin-bottom:10px;color:#16a34a;opacity:.7"></i>Everyone has attendance or leave for every working day in this range.</p>`;
+    return;
+  }
+
+  const total = res.body.total_days;
+  $('#ag-count').innerHTML = `<strong>${total}</strong> missing day${total !== 1 ? 's' : ''} for <strong>${_agRows.length}</strong> employee${_agRows.length !== 1 ? 's' : ''}`;
+  $('#ag-bulk').style.display = '';
+  $('#ag-bulk-action').value = '';
+  $('#ag-apply-btn').disabled = false;
+
+  area.innerHTML = _agRows.map((r, ri) => {
+    const bal = [
+      r.casual_left !== null ? `Casual ${fmtLeaveNum(r.casual_left)} left` : '',
+      r.annual_left !== null ? `Annual ${fmtLeaveNum(r.annual_left)} left` : '',
+      r.eligible_from && r.eligible_from > r.days[0].date ? `On probation until ${r.eligible_from}` : '',
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="ag-emp">
+        <div class="ag-emp-head">
+          <div>
+            <span class="ag-emp-name">${escHtml(r.employee_name || '—')}</span>
+            ${r.employee_code ? `<span class="ag-emp-meta"> #${escHtml(r.employee_code)}</span>` : ''}
+            <div class="ag-emp-meta">${r.policy_name ? 'Rule: ' + escHtml(r.policy_name) + ' · ' : ''}${bal}</div>
+          </div>
+          <span class="lm-pill" style="background:#fee2e2;color:#dc2626">${r.days.length} day${r.days.length !== 1 ? 's' : ''} missing</span>
+        </div>
+        ${r.days.map((d, di) => `
+          <div class="ag-day" data-ri="${ri}" data-di="${di}">
+            <span class="ag-day-date">${new Date(d.date + 'T00:00').toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}</span>
+            <select class="bf-input ag-action">
+              ${AG_ACTIONS.map(([v, l]) => `<option value="${v}"${v === d.suggested ? ' selected' : ''}>${l}${v === d.suggested ? ' ★' : ''}</option>`).join('')}
+            </select>
+          </div>`).join('')}
+      </div>`;
+  }).join('');
+}
+
+async function applyAttendanceGaps() {
+  const items = [];
+  $$('#ag-results .ag-day').forEach(el => {
+    const r = _agRows[+el.dataset.ri], d = r.days[+el.dataset.di];
+    const action = el.querySelector('.ag-action').value;
+    if (action !== 'skip') items.push({ employee_id: r.employee_id, date: d.date, action });
+  });
+  if (!items.length) { toast('Nothing to apply — every day is set to Skip.', 'error'); return; }
+
+  const btn = $('#ag-apply-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Applying…';
+  const res = await API.resolveAttendanceGaps(items, $('#ag-override').checked);
+  btn.innerHTML = '<i class="fa fa-check"></i> Apply';
+
+  if (res.status !== 200) {
+    btn.disabled = false;
+    toast(res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to apply.'), 'error');
+    return;
+  }
+
+  const { applied, errors } = res.body;
+  toast(`${applied} day${applied !== 1 ? 's' : ''} updated${errors.length ? `, ${errors.length} failed` : ''}.`, errors.length ? 'error' : 'success');
+  loadAttendance($('#att-search').value);
+  refreshLeavePendingBadge();
+
+  // Reload what's still missing, then show why the failed days weren't applied.
+  await findAttendanceGaps();
+  errors.forEach(e => {
+    $$('#ag-results .ag-day').forEach(el => {
+      const r = _agRows[+el.dataset.ri], d = r.days[+el.dataset.di];
+      if (r.employee_id === e.employee_id && d.date === e.date) {
+        el.insertAdjacentHTML('beforeend', `<div class="ag-day-err"><i class="fa fa-circle-xmark"></i> ${escHtml(e.message)}</div>`);
+      }
+    });
+  });
+}
+
+// Check the range currently shown on the Records list (capped at today — future days can't be missing).
+$('#att-gaps-btn')?.addEventListener('click', () => {
+  const today = glToday();
+  if (!_att.from || _att.from > today) return openAttendanceGapsModal();
+  openAttendanceGapsModal(_att.from, _att.to > today ? today : _att.to);
+});
+$('#ag-modal-close').addEventListener('click', closeAttendanceGapsModal);
+$('#ag-modal-cancel').addEventListener('click', closeAttendanceGapsModal);
+$('#ag-modal').addEventListener('click', e => { if (e.target === $('#ag-modal')) closeAttendanceGapsModal(); });
+$('#ag-find-btn').addEventListener('click', findAttendanceGaps);
+$('#ag-search').addEventListener('keydown', e => { if (e.key === 'Enter') findAttendanceGaps(); });
+$('#ag-apply-btn').addEventListener('click', applyAttendanceGaps);
+$('#ag-bulk-action').addEventListener('change', e => {
+  const v = e.target.value;
+  if (!v) return;
+  $$('#ag-results .ag-day').forEach(el => {
+    el.querySelector('.ag-action').value = v === 'suggested' ? _agRows[+el.dataset.ri].days[+el.dataset.di].suggested : v;
+  });
 });
 // ── End Attendance ───────────────────────────────────────────────────────────
 

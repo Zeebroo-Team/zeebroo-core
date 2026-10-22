@@ -262,6 +262,7 @@ const API = (() => {
     // HR
     employees:      ()     => request('GET',  '/hr/employees'),
     employee:       (id)   => request('GET',  `/hr/employees/${id}`),
+    employeeLeave:  (id, year) => request('GET', `/hr/employees/${id}/leave${year ? '?year=' + year : ''}`),
     createEmployee: (body) => request('POST', '/hr/employees', body),
     departments:      ()     => request('GET',    '/hr/departments'),
     createDepartment: (body) => request('POST',   '/hr/departments', body),
@@ -274,9 +275,28 @@ const API = (() => {
     updatePosition: (id, body) => request('PUT', `/hr/job-titles/${id}`, body),
     deletePosition: (id)   => request('DELETE', `/hr/job-titles/${id}`),
 
+    // HR — Leave requests (give leave, approve / reject)
+    leaveRequests:  (params = {}) => request('GET', '/hr/leave-requests' + (Object.keys(params).length ? '?' + new URLSearchParams(params) : '')),
+    previewLeave:   (body)        => request('POST',   '/hr/leave-requests/preview', body),
+    createLeave:    (body)        => request('POST',   '/hr/leave-requests', body),
+    decideLeave:    (id, status)  => request('PATCH',  `/hr/leave-requests/${id}/status`, { status }),
+    deleteLeave:    (id)          => request('DELETE', `/hr/leave-requests/${id}`),
+
+    // HR — Leave rules (annual / casual / sick / short leave entitlements)
+    leavePolicies:      ()         => request('GET',    '/hr/leave-policies'),
+    createLeavePolicy:  (body)     => request('POST',   '/hr/leave-policies', body),
+    updateLeavePolicy:  (id, body) => request('PUT',    `/hr/leave-policies/${id}`, body),
+    deleteLeavePolicy:  (id)       => request('DELETE', `/hr/leave-policies/${id}`),
+
+    // HR — Settings (working schedule + custom fields)
+    hrSettings:       ()      => request('GET',  '/hr/settings'),
+    hrSettingsUpdate: (body)  => request('PUT',  '/hr/settings', body),
+
     // HR — Attendance
-    attendance:       (q)     => request('GET',  `/hr/attendance${q ? '?q=' + encodeURIComponent(q) : ''}`),
+    attendance:      (params = {}) => request('GET', '/hr/attendance' + (Object.keys(params).length ? '?' + new URLSearchParams(params) : '')),
     importAttendance: (rows)  => request('POST', '/hr/attendance/import', { rows }),
+    attendanceGaps:   (params) => request('GET',  '/hr/attendance/gaps?' + new URLSearchParams(params)),
+    resolveAttendanceGaps: (items, allowOverride) => request('POST', '/hr/attendance/gaps/resolve', { items, allow_override: !!allowOverride }),
 
     // HR — Allowance types
     allowanceTypes:      ()     => request('GET',    '/hr/allowance-types'),

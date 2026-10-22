@@ -35,6 +35,7 @@ class AttendanceRecord extends Model
     protected $fillable = [
         'business_id',
         'employee_id',
+        'leave_request_id',
         'work_date',
         'status',
         'check_in_at',
@@ -63,6 +64,11 @@ class AttendanceRecord extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function leaveRequest(): BelongsTo
+    {
+        return $this->belongsTo(LeaveRequest::class);
     }
 
     public function recordedBy(): BelongsTo

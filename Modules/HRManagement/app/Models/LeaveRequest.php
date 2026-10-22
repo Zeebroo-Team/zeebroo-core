@@ -26,7 +26,7 @@ class LeaveRequest extends Model
         self::STATUS_REJECTED,
     ];
 
-    /** @var list<string> */
+    /** @var list<string> day-based leave types (balances, web form, payslip) */
     public const LEAVE_TYPES = [
         'annual',
         'casual',
@@ -35,15 +35,28 @@ class LeaveRequest extends Model
         'other',
     ];
 
+    /** A few hours off on one day (short_leave_start + short_leave_minutes); never charged as days. */
+    public const TYPE_SHORT = 'short';
+
+    /** Types that may be taken as a half day. */
+    public const HALF_DAY_TYPES = ['annual', 'casual', 'sick'];
+
     protected $fillable = [
         'business_id',
         'employee_id',
         'leave_type',
         'starts_on',
         'ends_on',
+        'days',
+        'is_half_day',
+        'half_day_period',
+        'short_leave_start',
+        'short_leave_minutes',
         'note',
         'status',
         'recorded_by_user_id',
+        'decided_by_user_id',
+        'decided_at',
     ];
 
     protected function casts(): array
@@ -51,7 +64,16 @@ class LeaveRequest extends Model
         return [
             'starts_on' => 'date',
             'ends_on' => 'date',
+            'days' => 'float',
+            'is_half_day' => 'boolean',
+            'short_leave_minutes' => 'integer',
+            'decided_at' => 'datetime',
         ];
+    }
+
+    public function isShort(): bool
+    {
+        return $this->leave_type === self::TYPE_SHORT;
     }
 
     public function business(): BelongsTo
@@ -67,6 +89,11 @@ class LeaveRequest extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by_user_id');
+    }
+
+    public function decidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'decided_by_user_id');
     }
 
     public function isPending(): bool
