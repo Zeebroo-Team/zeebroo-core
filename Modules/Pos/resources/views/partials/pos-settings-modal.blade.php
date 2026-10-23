@@ -275,10 +275,40 @@
                                 <option value="invoice" @selected(($posSettings['receipt_mode'] ?? 'bill') === 'invoice')>Invoice — create &amp; print a formal invoice after each sale</option>
                             </select>
                             <p style="margin:8px 0 0;font-size:11.5px;color:var(--muted);line-height:1.5;">
-                                Invoice mode uses the template configured under Sales &rarr; Invoice Setup.
+                                Invoice mode uses the template configured under Settings &rarr; Invoice Setup.
                             </p>
                         </div>
                     </div>
+                    @if(Route::has('settings.printer'))
+                    <div class="psm-section">
+                        <p class="psm-section__label"><i class="fa fa-print" aria-hidden="true"></i> Printer &amp; layout settings</p>
+                        <div class="psm-card">
+                            <a href="{{ route('settings.printer') }}" class="psm-row psm-link-row">
+                                <span class="psm-row__info">
+                                    <span class="psm-row__name">Printer</span>
+                                    <span class="psm-row__desc">Paper width, receipt preview after sale, test print</span>
+                                </span>
+                                <i class="fa fa-chevron-right" aria-hidden="true"></i>
+                            </a>
+                            <a href="{{ route('settings.receipt') }}" class="psm-row psm-row--border psm-link-row">
+                                <span class="psm-row__info">
+                                    <span class="psm-row__name">Receipt Setting</span>
+                                    <span class="psm-row__desc">Logo, address, margins and print language</span>
+                                </span>
+                                <i class="fa fa-chevron-right" aria-hidden="true"></i>
+                            </a>
+                            @if(Route::has('sales.invoice-setup.edit'))
+                            <a href="{{ route('sales.invoice-setup.edit') }}" class="psm-row psm-row--border psm-link-row">
+                                <span class="psm-row__info">
+                                    <span class="psm-row__name">Invoice Setup</span>
+                                    <span class="psm-row__desc">Template, paper size and margins for Invoice mode</span>
+                                </span>
+                                <i class="fa fa-chevron-right" aria-hidden="true"></i>
+                            </a>
+                            @endif
+                        </div>
+                    </div>
+                    @endif
                     <div class="psm-section">
                         <p class="psm-section__label"><i class="fa fa-receipt" aria-hidden="true"></i> Receipt layout</p>
                         <div class="psm-card" style="padding:20px 16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;">
@@ -377,6 +407,9 @@ html.pos-settings-modal-open,html.pos-settings-modal-open body{overflow:hidden;}
 .psm-select-wrap__icon{position:absolute;right:11px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--muted);pointer-events:none;}
 .psm-link{color:var(--primary);text-decoration:none;font-weight:600;}
 .psm-link:hover{text-decoration:underline;}
+.psm-link-row{text-decoration:none;color:var(--muted);}
+.psm-link-row:hover{background:color-mix(in srgb,var(--primary) 6%,transparent);}
+.psm-link-row > i{font-size:11px;}
 
 /* ── Theme toggle ───────────────────────────────────────────────── */
 .psm-theme-toggle{display:flex;gap:4px;background:color-mix(in srgb,var(--border) 50%,transparent);border-radius:10px;padding:3px;}

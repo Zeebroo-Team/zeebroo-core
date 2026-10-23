@@ -255,7 +255,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                             class="pos-online__item pos-online__item--service"
                             data-pos-service
                             data-service-id="{{ $svc['id'] }}"
-                            data-service-name="{{ e($svc['name']) }}"
+                            data-service-name="{{ $svc['name'] }}"
                             data-unit-price="{{ number_format((float) $svc['price'], 2, '.', '') }}"
                         >
                             <div class="pos-online__item__ph"><i class="fa fa-wrench" aria-hidden="true"></i></div>
@@ -276,8 +276,8 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
                             class="pos-online__item @if($outOfStock) is-out @endif"
                             data-pos-product
                             data-product-id="{{ $product['id'] }}"
-                            data-product-name="{{ e($product['name']) }}"
-                            data-product-sku="{{ e($product['sku'] ?? '') }}"
+                            data-product-name="{{ $product['name'] }}"
+                            data-product-sku="{{ $product['sku'] ?? '' }}"
                             data-unit-price="{{ $posCardEffectivePrice !== null ? number_format((float) $posCardEffectivePrice, 2, '.', '') : '0' }}"
                             data-stock="{{ $formatQty((float) $product['stock_quantity']) }}"
                             data-product-layers='@json($product['layers'] ?? [])'

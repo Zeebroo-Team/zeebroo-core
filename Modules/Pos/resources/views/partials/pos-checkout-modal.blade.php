@@ -80,7 +80,7 @@
             {{-- RIGHT — Payment + notes + numpad + submit --}}
             <div class="pco-right">
                 {{-- Payment method --}}
-                @include('pos::partials.pos-payment-field', ['defaultDepositAccountId' => $defaultDepositAccountId])
+                @include('pos::partials.pos-payment-field', ['defaultDepositAccountId' => $defaultDepositAccountId, 'customerPickerExternal' => $customerPickerExternal ?? false])
 
                 {{-- Notes --}}
                 <div class="pco-right__notes">

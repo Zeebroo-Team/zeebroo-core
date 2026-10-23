@@ -61,7 +61,9 @@ class DashboardController extends Controller
             return null;
         }
 
-        $business = $user->businesses()->latest()->first();
+        // Must resolve the same business platformChoice() marks as shown,
+        // otherwise a user with several businesses loops back here forever.
+        $business = Business::currentForNavbar($user);
         if (!$business instanceof Business) {
             return null;
         }

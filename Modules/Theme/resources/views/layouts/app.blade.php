@@ -1110,6 +1110,13 @@
                     @if(Route::has('mail.settings.edit'))
                         <a href="{{ route('mail.settings.edit') }}" class="{{ request()->routeIs('mail.settings.*') ? 'active' : '' }}"><i class="fa fa-envelope"></i><span>Mail Settings</span></a>
                     @endif
+                    @if($posFeatureOn && Route::has('settings.printer'))
+                        <a href="{{ route('settings.printer') }}" class="{{ request()->routeIs('settings.printer*') ? 'active' : '' }}"><i class="fa fa-print"></i><span>Printer</span></a>
+                        <a href="{{ route('settings.receipt') }}" class="{{ request()->routeIs('settings.receipt*') ? 'active' : '' }}"><i class="fa fa-receipt"></i><span>Receipt Setting</span></a>
+                    @endif
+                    @if(($posFeatureOn || $salesFeatureOn) && Route::has('sales.invoice-setup.edit'))
+                        <a href="{{ route('sales.invoice-setup.edit') }}" class="{{ request()->routeIs('sales.invoice-setup.*') ? 'active' : '' }}"><i class="fa fa-file-invoice"></i><span>Invoice Setup</span></a>
+                    @endif
                     @if(Route::has('app-connection.index'))
                         <a href="{{ route('app-connection.index') }}" class="{{ request()->routeIs('app-connection.*') ? 'active' : '' }}"><i class="fa fa-plug"></i><span>App connections</span></a>
                     @endif
