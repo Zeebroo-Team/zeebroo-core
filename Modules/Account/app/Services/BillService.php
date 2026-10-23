@@ -23,6 +23,59 @@ class BillService
             ->get();
     }
 
+    /** Bills assigned to one employee, with what the totals and cards need. */
+    public function listForEmployee(Business $business, int $employeeId): Collection
+    {
+        return Bill::query()
+            ->with(['employee', 'ledgerTransactions', 'deductAccount.bank'])
+            ->where('business_id', $business->id)
+            ->where('employee_id', $employeeId)
+            ->orderBy('name')
+            ->get();
+    }
+
+    /** Bills assigned to one department (Assign to: Department), with what the totals and cards need. */
+    public function listForDepartment(Business $business, int $departmentId): Collection
+    {
+        return Bill::query()
+            ->with(['department', 'ledgerTransactions', 'deductAccount.bank'])
+            ->where('business_id', $business->id)
+            ->where('department_id', $departmentId)
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Money owed on a bill so far: one-time bills count their full amount; recurring bills
+     * count each period due on or before today, plus any future period already paid into.
+     *
+     * @return array{billed: float, paid: float, outstanding: float, overdue: float}
+     */
+    public function billTotalsToDate(Bill $bill, ?Carbon $asOf = null): array
+    {
+        $today = ($asOf ?? Carbon::today())->copy()->startOfDay();
+        $billed = $outstanding = $overdue = 0.0;
+
+        foreach ($this->billBillingScheduleWithPaymentStatus($bill, $today) as $row) {
+            $counts = $bill->isOneTime() || $row['due']->lte($today) || $row['paid_total'] >= self::MONEY_TOLERANCE;
+            if (! $counts) {
+                continue;
+            }
+            $billed += (float) $row['amount'];
+            $outstanding += (float) $row['outstanding'];
+            if ($row['past_due_unpaid']) {
+                $overdue += (float) $row['outstanding'];
+            }
+        }
+
+        return [
+            'billed'      => round($billed, 2),
+            'paid'        => round((float) $bill->ledgerTransactions->sum('amount'), 2),
+            'outstanding' => round($outstanding, 2),
+            'overdue'     => round($overdue, 2),
+        ];
+    }
+
     public function create(User $user, Business $business, array $data): Bill
     {
         $data['user_id'] = $user->id;
@@ -474,6 +527,13 @@ class BillService
      *
      * @return BaseCollection<int, Carbon>
      */
+    /** First scheduled billing date that is not fully paid, or null when none remain / no anchor date. */
+    public function billNextUnpaidDueDate(Bill $bill): ?Carbon
+    {
+        return $this->billScheduledBillingDates($bill)
+            ->first(fn (Carbon $due) => ! $this->billPeriodFullyPaidAtDate($bill, $due));
+    }
+
     public function billScheduledBillingDates(Bill $bill): BaseCollection
     {
         $anchor = $bill->due_date ?? $bill->first_installment_due_date;

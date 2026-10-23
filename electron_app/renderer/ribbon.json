@@ -270,7 +270,8 @@
           "items": [
             { "type": "lg", "id": "rb-hr-payroll",        "icon": "fa-money-bill-wave",    "label": "Payroll" },
             { "type": "lg", "id": "rb-positions",         "icon": "fa-briefcase",          "label": "Positions" },
-            { "type": "lg", "id": "rb-attendance",        "icon": "fa-calendar-check",     "label": "Attendance" }
+            { "type": "lg", "id": "rb-attendance",        "icon": "fa-calendar-check",     "label": "Attendance" },
+            { "type": "lg", "id": "rb-leave-rules",       "icon": "fa-umbrella-beach",     "label": "Leave Rules" }
           ]
         }
       ]

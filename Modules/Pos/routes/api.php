@@ -398,10 +398,15 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'index'])->name('hr.employees.index');
     Route::post('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'store'])->name('hr.employees.store');
     Route::get('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'show'])->name('hr.employees.show');
-    Route::get('hr/employees/{employee}/leave', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeLeaveApiController::class, 'show'])->name('hr.employees.leave');
+    Route::get('hr/employees/{employee}/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'forEmployee'])->name('hr.employees.bills');
+    Route::get('hr/employees/{employee}/leave',[\Modules\Pos\Http\Controllers\Api\PosHrEmployeeLeaveApiController::class, 'show'])->name('hr.employees.leave');
     Route::get('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'index'])->name('hr.departments.index');
     Route::post('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'store'])->name('hr.departments.store');
-    Route::delete('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'destroy'])->name('hr.departments.destroy');
+    Route::get('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'show'])->name('hr.departments.show');
+    Route::patch('hr/departments/{department}/salary-range', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'updateSalaryRange'])->name('hr.departments.salary-range');
+    Route::patch('hr/departments/{department}/leadership', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'updateLeadership'])->name('hr.departments.leadership');
+    Route::get('hr/departments/{department}/bills',[\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'forDepartment'])->name('hr.departments.bills');
+    Route::delete('hr/departments/{department}',[\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'destroy'])->name('hr.departments.destroy');
     Route::get('hr/job-titles', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'index'])->name('hr.job-titles.index');
     Route::post('hr/job-titles', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'store'])->name('hr.job-titles.store');
     Route::put('hr/job-titles/{jobTitle}', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'update'])->name('hr.job-titles.update');

@@ -1260,6 +1260,9 @@
             <button class="ribbon-btn-lg" id="rb-attendance">
               <i class="fa fa-clock"></i>Attendance
             </button>
+            <button class="ribbon-btn-lg" id="rb-leave-rules">
+              <i class="fa fa-umbrella-beach"></i>Leave Rules
+            </button>
           </div>
           <div class="ribbon-group-label">Compensation</div>
         </div>
@@ -6136,7 +6139,6 @@
         <button class="fin-subnav-btn"         data-hr="payroll"><i class="fa fa-money-check-dollar"></i> Payroll</button>
         <button class="fin-subnav-btn"         data-hr="rule-sets"><i class="fa fa-sliders"></i> Rule Sets</button>
         <button class="fin-subnav-btn"         data-hr="allowance-types"><i class="fa fa-coins"></i> Allowance Types</button>
-        <button class="fin-subnav-btn"         data-hr="leave-rules"><i class="fa fa-umbrella-beach"></i> Leave Rules</button>
         <button class="fin-subnav-btn"         data-hr="positions"><i class="fa fa-id-badge"></i> Positions</button>
         <button class="fin-subnav-btn"         data-hr="attendance"><i class="fa fa-clock"></i> Attendance</button>
       </div>
@@ -6215,6 +6217,7 @@
           <button class="inv-tab"        data-tab="emp-personal"><i class="fa fa-user"></i> Personal</button>
           <button class="inv-tab"        data-tab="emp-leave"><i class="fa fa-umbrella-beach"></i> Leave</button>
           <button class="inv-tab"        data-tab="emp-attendance"><i class="fa fa-clock"></i> Attendance</button>
+          <button class="inv-tab"        data-tab="emp-bills"><i class="fa fa-file-invoice-dollar"></i> Bills</button>
         </div>
 
         <div class="inv-tab-body" style="flex:1;overflow-y:auto;background:var(--surface)">
@@ -6222,6 +6225,7 @@
           <div class="inv-tab-pane"        id="emp-pane-personal"></div>
           <div class="inv-tab-pane"        id="emp-pane-leave"></div>
           <div class="inv-tab-pane"        id="emp-pane-attendance"></div>
+          <div class="inv-tab-pane"        id="emp-pane-bills"></div>
         </div>
 
       </div>
@@ -6255,6 +6259,46 @@
         </div>
 
         <div class="finance-footer"><span id="dept-footer-text"></span></div>
+      </div>
+
+      <!-- ── Department detail view ── -->
+      <div id="department-detail-view" style="display:none;flex-direction:column;flex:1;overflow:hidden;background:var(--surface)">
+
+        <div class="inv-detail-header">
+          <button class="inv-back-btn" id="dept-back-btn">
+            <i class="fa fa-arrow-left"></i> Departments
+          </button>
+          <span class="inv-detail-breadcrumb" id="dept-detail-breadcrumb">Department Detail</span>
+        </div>
+
+        <div class="inv-hero">
+          <div class="inv-hero-img">
+            <div class="inv-thumb-ph inv-thumb-lg" style="color:#9c6ef7"><i class="fa fa-sitemap"></i></div>
+          </div>
+          <div class="inv-hero-info">
+            <div class="inv-hero-name"   id="dept-detail-name">—</div>
+            <div class="inv-hero-meta"   id="dept-detail-meta"></div>
+            <div class="inv-hero-badges" id="dept-detail-badges"></div>
+          </div>
+        </div>
+
+        <!-- tabs -->
+        <div class="inv-tabs">
+          <button class="inv-tab active" data-tab="dept-overview"><i class="fa fa-id-card"></i> Overview</button>
+          <button class="inv-tab"        data-tab="dept-employees"><i class="fa fa-users"></i> Employees</button>
+          <button class="inv-tab"        data-tab="dept-salary"><i class="fa fa-money-bill-wave"></i> Salary Range</button>
+          <button class="inv-tab"        data-tab="dept-bills"><i class="fa fa-file-invoice-dollar"></i> Bills</button>
+          <button class="inv-tab"        data-tab="dept-payroll"><i class="fa fa-money-check-dollar"></i> Payroll</button>
+        </div>
+
+        <div class="inv-tab-body" style="flex:1;overflow-y:auto;background:var(--surface)">
+          <div class="inv-tab-pane active" id="dept-pane-overview"></div>
+          <div class="inv-tab-pane"        id="dept-pane-employees"></div>
+          <div class="inv-tab-pane"        id="dept-pane-salary"></div>
+          <div class="inv-tab-pane"        id="dept-pane-bills"></div>
+          <div class="inv-tab-pane"        id="dept-pane-payroll"></div>
+        </div>
+
       </div>
 
       <!-- ── Allowance Types view ── -->
@@ -12261,6 +12305,76 @@
   </div>
 </div>
 
+<!-- ── Department: Edit Head / Co-head Modal ────────────────────────── -->
+<div class="modal-overlay" id="dept-lead-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:440px">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-user-tie"></i> <span id="dept-lead-title">Edit Head</span></h3>
+      <button class="bill-modal-close" id="dept-lead-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+      <div id="dept-lead-alert" class="alert alert-error" style="display:none;margin:0 0 4px"></div>
+      <div class="bill-section">
+        <div class="bf-group">
+          <label class="bf-label" id="dept-lead-label">HEAD</label>
+          <select id="dept-lead-select" class="bf-input"></select>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:8px 0 0">
+          Pick from this department's employees. Head and co-head must be different people.
+        </p>
+      </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="dept-lead-save"><i class="fa fa-floppy-disk"></i> Save</button>
+      <button class="btn-secondary" id="dept-lead-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Department: Edit Salary Range Modal ──────────────────────────── -->
+<div class="modal-overlay" id="dept-sr-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:440px">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-money-bill-wave"></i> Edit Salary Range</h3>
+      <button class="bill-modal-close" id="dept-sr-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+      <div id="dept-sr-alert" class="alert alert-error" style="display:none;margin:0 0 4px"></div>
+      <div class="bill-section">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="bf-group">
+            <label class="bf-label">MINIMUM</label>
+            <input type="number" min="0" step="0.01" id="dept-sr-min" class="bf-input" placeholder="No minimum">
+          </div>
+          <div class="bf-group">
+            <label class="bf-label">MAXIMUM</label>
+            <input type="number" min="0" step="0.01" id="dept-sr-max" class="bf-input" placeholder="No maximum">
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:8px 0 0">
+          Monthly basic salary band for this department — indicative only. Leave a field empty for no limit.
+        </p>
+      </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="dept-sr-save"><i class="fa fa-floppy-disk"></i> Save</button>
+      <button class="btn-secondary" id="dept-sr-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Employee Profile Popup ───────────────────────────────────────── -->
+<div class="modal-overlay" id="emp-profile-modal" style="display:none">
+  <div class="epp">
+    <button class="epp-x" id="emp-profile-close" title="Close"><i class="fa fa-xmark"></i></button>
+    <div class="epp-scroll" id="emp-profile-body"></div>
+    <div class="epp-foot">
+      <button class="epp-link" id="emp-profile-cancel">Close</button>
+      <button class="epp-btn" id="emp-profile-open">Open full profile <i class="fa fa-arrow-right"></i></button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Payroll: Create Rule Set Modal ───────────────────────────────── -->
 <!-- ── Allowance Type: Create Modal ─────────────────────────────────── -->
 <div class="modal-overlay" id="at-create-modal" style="display:none">
@@ -13257,7 +13371,7 @@
 </div>
 
 <div class="modal-overlay" id="bill-detail-modal" style="display:none">
-  <div class="modal bill-modal-inner" style="max-height:80vh;overflow-y:auto">
+  <div class="modal bill-modal-inner" style="width:780px;max-height:85vh">
     <div class="bill-modal-header">
       <h3 id="bdm-title"><i class="fa fa-file-invoice-dollar"></i> Bill Details</h3>
       <button class="bill-modal-close" id="bill-detail-close"><i class="fa fa-xmark"></i></button>

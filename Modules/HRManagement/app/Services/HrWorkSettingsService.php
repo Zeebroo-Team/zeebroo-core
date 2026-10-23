@@ -63,6 +63,65 @@ class HrWorkSettingsService
         return $this->get($business);
     }
 
+    /**
+     * Working days and net working minutes (breaks excluded) per week, from the saved schedule.
+     *
+     * @return array{days: int, minutes: int}
+     */
+    public function weeklyTotals(Business $business): array
+    {
+        $settings = $this->get($business);
+        $days     = 0;
+        $minutes  = 0;
+
+        foreach (self::DAYS as $day) {
+            $d = $settings['work_schedule'][$day];
+            if (! $d['enabled'] || $d['start'] === null || $d['end'] === null || $d['end'] <= $d['start']) {
+                continue;
+            }
+
+            $mins = $this->toMinutes($d['end']) - $this->toMinutes($d['start']);
+            foreach ($settings['breaks'] as $b) {
+                if (! empty($b['enabled']) && in_array($day, $b['days'] ?? [], true)
+                    && $this->timeOrNull($b['start'] ?? null) && $this->timeOrNull($b['end'] ?? null)) {
+                    $mins -= max(0, $this->toMinutes($b['end']) - $this->toMinutes($b['start']));
+                }
+            }
+
+            $days++;
+            $minutes += max(0, $mins);
+        }
+
+        return ['days' => $days, 'minutes' => $minutes];
+    }
+
+    /**
+     * Average daily and hourly rate for a monthly salary, using 52 weeks / 12 months
+     * and the business working schedule. Null when the schedule has no working time.
+     *
+     * @return array{working_days_per_week: int, working_minutes_per_week: int, daily_rate: ?float, hourly_rate: ?float}
+     */
+    public function salaryRates(array $weeklyTotals, ?float $monthlySalary): array
+    {
+        $weeksPerMonth = 52 / 12;
+        $daysPerMonth  = $weeklyTotals['days'] * $weeksPerMonth;
+        $hoursPerMonth = $weeklyTotals['minutes'] / 60 * $weeksPerMonth;
+
+        return [
+            'working_days_per_week'    => $weeklyTotals['days'],
+            'working_minutes_per_week' => $weeklyTotals['minutes'],
+            'daily_rate'  => $monthlySalary !== null && $daysPerMonth > 0 ? round($monthlySalary / $daysPerMonth, 2) : null,
+            'hourly_rate' => $monthlySalary !== null && $hoursPerMonth > 0 ? round($monthlySalary / $hoursPerMonth, 2) : null,
+        ];
+    }
+
+    private function toMinutes(string $time): int
+    {
+        [$h, $m] = array_map('intval', explode(':', $time));
+
+        return $h * 60 + $m;
+    }
+
     /** @return array<string, array{enabled: bool, start: ?string, end: ?string}> */
     public function defaultSchedule(): array
     {
