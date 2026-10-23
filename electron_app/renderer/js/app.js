@@ -29654,10 +29654,13 @@ $('#psm-mail-provider')?.addEventListener('change', function () {
   _psmMailProviderToggle(this.value);
 });
 
+let _psmMailLoaded = false;
+
 async function loadMailSettings() {
   const res = await API.mailSettingsGet();
   if (res.status !== 200) return;
   const s = res.body?.data ?? {};
+  _psmMailLoaded = true;
 
   $('#psm-mail-from-name').value          = s.from_name    ?? '';
   $('#psm-mail-from-address').value       = s.from_address ?? '';
@@ -29677,11 +29680,13 @@ async function loadMailSettings() {
   _psmMailProviderToggle(s.provider ?? 'platform');
 }
 
-$('#psm-mail-save')?.addEventListener('click', async () => {
-  const btn = $('#psm-mail-save');
+// Saves the Mail tab. Shared by the tab's own button and the footer "Save settings" —
+// otherwise a password typed here and saved via the footer is silently dropped.
+// Returns true when there was nothing to save or it saved OK.
+async function _psmSaveMailSettings() {
+  if (!_psmMailLoaded) return true;  // tab never opened — fields are empty, don't wipe saved settings
+
   const msg = $('#psm-mail-save-msg');
-  btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
   msg.style.display = 'none';
 
   const payload = {
@@ -29702,14 +29707,13 @@ $('#psm-mail-save')?.addEventListener('click', async () => {
 
   const res = await API.mailSettingsSave(payload);
 
-  btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save mail settings';
-
   if (res.status !== 200) {
-    msg.textContent = res.body?.message ?? 'Save failed.';
+    const errs = res.body?.errors ? Object.values(res.body.errors).flat() : [];
+    msg.textContent = errs[0] ?? res.body?.message ?? 'Save failed.';
     msg.style.color = 'var(--danger, #e74c3c)';
     msg.style.display = 'inline';
-    return;
+    psmShowTab('mail');
+    return false;
   }
 
   msg.textContent = 'Saved!';
@@ -29719,6 +29723,16 @@ $('#psm-mail-save')?.addEventListener('click', async () => {
 
   // refresh hints (password/key now saved)
   await loadMailSettings();
+  return true;
+}
+
+$('#psm-mail-save')?.addEventListener('click', async () => {
+  const btn = $('#psm-mail-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  await _psmSaveMailSettings();
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save mail settings';
 });
 
 $('#psm-mail-test-btn')?.addEventListener('click', async () => {
@@ -30018,7 +30032,7 @@ $('#psm-save').addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
-  if (!(await _psmSaveHrSettings())) {
+  if (!(await _psmSaveHrSettings()) || !(await _psmSaveMailSettings())) {
     btn.disabled = false;
     btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save settings';
     return;
