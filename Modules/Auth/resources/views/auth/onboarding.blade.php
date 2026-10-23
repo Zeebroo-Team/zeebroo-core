@@ -14,6 +14,7 @@ $obFeatures = [
     ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'desc' => 'Design, schedule and track marketing campaigns'],
     ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'desc' => 'Build trigger-based workflows and automated email sequences'],
     ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'desc' => 'API access, webhooks and developer tools for integrations'],
+    ['key' => 'ecommerce',            'label' => 'E-Commerce',           'icon' => 'fa-store',              'desc' => 'Online store website, web orders and delivery tracking', 'requires' => ['product_management']],
 ];
 
 $obSteps = [

@@ -35,6 +35,7 @@ class BusinessController extends Controller
         'automation_editor',
         'bill_management',
         'developers',
+        'ecommerce',
         'human_resources',
         'mail',
         'point_of_sale',

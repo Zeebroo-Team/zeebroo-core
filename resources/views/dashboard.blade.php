@@ -39,7 +39,7 @@
         : null;
 
     $wizFeatureItems = [
-        ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'account-management.png',        'desc' => 'Track bank accounts, income, expenses and ledgers',             'required' => true,
+        ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'accounting.jpeg',               'desc' => 'Track bank accounts, income, expenses and ledgers',             'required' => true,
             'fullDesc'   => 'The financial backbone of your SociBiz workspace. Track all your bank and cash accounts, record income and expenses with full ledger support, monitor loan repayments, manage rental cash flows, and view detailed transaction histories across your entire business.',
             'highlights' => ['Bank and cash account tracking', 'Income and expense ledger', 'Loan and rental management', 'Full transaction history and reports'],
         ],
@@ -47,11 +47,11 @@
             'fullDesc'   => 'Stay on top of every recurring obligation. Track utility bills, subscriptions and service contracts with automated due-date reminders. View upcoming and overdue payments at a glance to keep your cash flow healthy.',
             'highlights' => ['Recurring bill tracking', 'Due date and overdue alerts', 'Bill category organisation', 'Cash flow visibility'],
         ],
-        ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'human-resource-management.png', 'desc' => 'Payroll, leave, attendance and employee management',
+        ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'hr-management.jpeg',            'desc' => 'Payroll, leave, attendance and employee management',
             'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips — all in one place.',
             'highlights' => ['Employee profiles and records', 'Attendance and leave tracking', 'Payroll processing and payslips', 'Department and role management'],
         ],
-        ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.svg',        'desc' => 'Product catalogue, pricing, variants and categories',
+        ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.png',        'desc' => 'Product catalogue, pricing, variants and categories',
             'fullDesc'   => 'Build and maintain a professional product catalogue. Organise products into categories, set pricing and variants, attach images and specifications, manage bundles, and keep your listings consistent across all sales channels.',
             'highlights' => ['Product catalogue and categories', 'Pricing, variants and bundles', 'Product images and specifications', 'Multi-channel listing consistency'],
         ],
@@ -59,7 +59,7 @@
             'fullDesc'   => 'Keep your inventory accurate and up to date. Set reorder thresholds, record stock-in and stock-out movements, track stock across multiple warehouse branches, and get notified before items run out.',
             'highlights' => ['Real-time inventory levels', 'Stock-in and stock-out movements', 'Multi-warehouse tracking', 'Low-stock alerts and reorder points'],
         ],
-        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'point-of-sale.png',             'desc' => 'Counter sales, receipts, daily float and cashier shifts',
+        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'pos.jpeg',                      'desc' => 'Counter sales, receipts, daily float and cashier shifts',
             'fullDesc'   => 'Run fast, reliable counter sales from any device. Process payments, print or email receipts, manage daily float, track cashier shifts, and keep a complete record of every transaction. Requires Product and Stock Management.',
             'highlights' => ['Counter sales and receipts', 'Multiple payment methods', 'Daily float and cashier shifts', 'Full sales history and void management'],
         ],
@@ -67,17 +67,21 @@
             'fullDesc'   => 'Deliver and track services alongside your products. Build a service catalogue with pricing, manage customer requests from intake to completion, assign staff to jobs, and sell services directly through the POS terminal.',
             'highlights' => ['Service catalogue and pricing', 'Customer request management', 'Staff assignment and job tracking', 'Sell services via POS'],
         ],
-        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'social-media-campaign.png',     'desc' => 'Design, schedule and track marketing campaigns',
+        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'graphic-design.jpeg',           'desc' => 'Design, schedule and track marketing campaigns',
             'fullDesc'   => 'Plan and execute marketing campaigns without leaving SociBiz. Design campaign briefs, set targets and budgets, schedule content across platforms, and measure performance results to keep refining your strategy.',
             'highlights' => ['Campaign planning and briefs', 'Budget and target setting', 'Content scheduling', 'Performance tracking and analytics'],
         ],
-        ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'image' => 'automation-editor.svg',         'desc' => 'Build trigger-based workflows and automated email sequences',
+        ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'image' => 'automation-flow.png',           'desc' => 'Build trigger-based workflows and automated email sequences',
             'fullDesc'   => 'Design powerful automations without writing code. Create trigger-based workflows that fire when customers act, deals move, or schedules run. Send automated emails, update records, and chain multi-step actions to save hours of manual work every week.',
             'highlights' => ['Visual drag-and-drop workflow builder', 'Trigger on events, schedules or CRM changes', 'Automated email and notification sequences', 'Multi-step conditional action chains'],
         ],
-        ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'image' => 'developers.svg',                'desc' => 'API access, webhooks and developer tools for integrations',
+        ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'image' => 'developer.png',                 'desc' => 'API access, webhooks and developer tools for integrations',
             'fullDesc'   => 'Connect SociBiz to your own systems and third-party apps. Generate API keys with scoped permissions, set up webhooks that push real-time events to any endpoint, browse the interactive API reference, and manage OAuth applications for your team.',
             'highlights' => ['REST API with scoped API keys', 'Webhook delivery for real-time events', 'Interactive API reference and sandbox', 'OAuth application management'],
+        ],
+        ['key' => 'ecommerce',            'label' => 'E-Commerce',           'icon' => 'fa-store',              'image' => 'ecommerce.webp',                'desc' => 'Online store website, web orders and delivery tracking',
+            'fullDesc'   => 'Sell online with your own store website. Publish products straight from your catalogue, set online prices and sale prices, configure shipping and payment options, and manage every web order from pending to delivered — all from the desktop E-Commerce tab.',
+            'highlights' => ['Ready-made online store website', 'Publish catalogue products with web prices', 'Cash on delivery and bank transfer checkout', 'Web order and delivery tracking'],
         ],
     ];
 @endphp
@@ -587,8 +591,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-card--locked{cursor:default;}
         .wiz-feat-card--locked:hover{box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 28%,transparent);}
         /* Image area */
-        .wiz-feat-img-wrap{position:relative;width:100%;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
-        .wiz-feat-img{width:100%;height:auto;display:block;object-fit:contain;transition:transform .35s ease;}
+        .wiz-feat-img-wrap{position:relative;width:100%;aspect-ratio:16/10;flex-shrink:0;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
+        .wiz-feat-img{width:100%;height:100%;display:block;object-fit:cover;object-position:center;transition:transform .35s ease;}
         .wiz-feat-card:hover .wiz-feat-img{transform:scale(1.04);}
         .wiz-feat-img-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.22));}
         /* Check circle */
@@ -606,9 +610,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-badge{flex-shrink:0;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 6px;border-radius:999px;white-space:nowrap;background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--primary);}
         .wiz-feat-card--required .wiz-feat-badge{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
         .wiz-feat-card:not(.wiz-feat-card--on) .wiz-feat-badge{background:color-mix(in srgb,var(--muted) 13%,transparent);color:var(--muted);}
-        .wiz-feat-desc{font-size:10.5px;color:var(--muted);line-height:1.4;margin:0;}
+        .wiz-feat-desc{font-size:10.5px;color:var(--muted);line-height:1.4;margin:0;min-height:2.8em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
         .wiz-feat-detail-btn{
-            display:inline-flex;align-items:center;gap:4px;margin-top:5px;padding:3px 8px;
+            display:inline-flex;align-items:center;gap:4px;margin-top:auto;padding:3px 8px;
             font-size:10px;font-weight:650;border-radius:6px;border:1px solid var(--border);
             background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--muted);
             cursor:pointer;font-family:inherit;line-height:1.2;transition:.15s ease;
@@ -932,7 +936,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             'healthcare'              => ['account_management', 'point_of_sale', 'bill_management', 'human_resources', 'product_management', 'service_management'],
                             'finance'                 => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
                             'creative_media'          => ['account_management', 'social_media_campaign', 'bill_management', 'human_resources', 'service_management'],
-                            'ecommerce'               => ['account_management', 'point_of_sale', 'product_management', 'stock_management', 'social_media_campaign', 'bill_management', 'human_resources'],
+                            'ecommerce'               => ['account_management', 'ecommerce', 'point_of_sale', 'product_management', 'stock_management', 'social_media_campaign', 'bill_management', 'human_resources'],
                             'manufacturing'           => ['account_management', 'product_management', 'stock_management', 'bill_management', 'human_resources', 'point_of_sale'],
                             'real_estate'             => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
                             'nonprofit'               => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
@@ -1001,6 +1005,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     'point_of_sale'         => 'POS',
                                     'service_management'    => 'Services',
                                     'social_media_campaign' => 'Campaigns',
+                                    'ecommerce'             => 'E-Commerce',
                                 ];
                             @endphp
                             <div class="wiz-cat-search-wrap">
