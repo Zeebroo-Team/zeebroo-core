@@ -11,6 +11,7 @@ return [
         'bill_management'      => 'Bill Management',
         'crm'                  => 'CRM',
         'developers'           => 'Developer Tools',
+        'ecommerce'            => 'E-Commerce',
         'event_management'     => 'Event Management',
         'human_resources'      => 'Human Resources',
         'mail'                 => 'Mail',

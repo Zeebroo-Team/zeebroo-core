@@ -745,6 +745,29 @@ const API = (() => {
     pmTaskAssign:          (id, ids)   => request('PATCH',  `/pm/tasks/${id}/assignees`, { assignee_ids: ids }),
     pmMilestoneDelete:     (id)        => request('DELETE', `/pm/milestones/${id}`),
 
+    // E-Commerce (online store) — Modules/Ecommerce/routes/api.php
+    ecomDashboard:         ()          => request('GET',    '/ecom/dashboard'),
+    ecomStore:             ()          => request('GET',    '/ecom/store'),
+    ecomStoreUpdate:       (body)      => request('PATCH',  '/ecom/store', body),
+    ecomListings:          (q, state)  => request('GET',    `/ecom/listings?q=${encodeURIComponent(q||'')}&state=${encodeURIComponent(state||'')}`),
+    ecomListingCandidates: (q)         => request('GET',    `/ecom/listings/candidates?q=${encodeURIComponent(q||'')}`),
+    ecomListingsAdd:       (ids)       => request('POST',   '/ecom/listings', { product_ids: ids }),
+    ecomListingUpdate:     (id, body)  => request('PATCH',  `/ecom/listings/${id}`, body),
+    ecomListingDelete:     (id)        => request('DELETE', `/ecom/listings/${id}`),
+    ecomOrders:            (q, status, page) => request('GET', `/ecom/orders?q=${encodeURIComponent(q||'')}&status=${encodeURIComponent(status||'')}&page=${page||1}`),
+    ecomOrder:             (id)        => request('GET',    `/ecom/orders/${id}`),
+    ecomOrderUpdate:       (id, body)  => request('PATCH',  `/ecom/orders/${id}`, body),
+    ecomGateways:          ()          => request('GET',    '/ecom/payment-gateways'),
+    ecomGatewayUpdate:     (key, body) => request('PATCH',  `/ecom/payment-gateways/${key}`, body),
+    ecomTemplates:         ()          => request('GET',    '/ecom/templates'),
+    ecomSlides:            ()          => request('GET',    '/ecom/slides'),
+    ecomSlideCreate:       (body)      => request('POST',   '/ecom/slides', body),
+    ecomSlideUpdate:       (id, body)  => request('PATCH',  `/ecom/slides/${id}`, body),
+    ecomSlideDelete:       (id)        => request('DELETE', `/ecom/slides/${id}`),
+    ecomSlidesReorder:     (ids)       => request('POST',   '/ecom/slides/reorder', { ids }),
+    // Store logo / banner / slide images upload through the existing File Manager endpoint (multipart "files[]").
+    ecomImageUploadPath:   '/online/file-manager/upload',
+
     // Brand Management
     brands:       (q)          => request('GET',    `/brand-mgmt/brands?q=${encodeURIComponent(q||'')}`),
     brandCreate:  (body)       => request('POST',   '/brand-mgmt/brands', body),

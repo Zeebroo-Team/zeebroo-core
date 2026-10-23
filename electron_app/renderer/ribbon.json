@@ -17,7 +17,8 @@
     { "id": "automations", "label": "Automations",     "icon": "fa-bolt",               "hasSub": false },
     { "id": "projects",    "label": "Project Management", "icon": "fa-diagram-project",    "hasSub": true  },
     { "id": "my-projects", "label": "My Projects",     "icon": "fa-user-check",         "hasSub": true  },
-    { "id": "event-mgmt",  "label": "Event",           "icon": "fa-tag",                "hasSub": false }
+    { "id": "event-mgmt",  "label": "Event",           "icon": "fa-tag",                "hasSub": false },
+    { "id": "ecommerce",   "label": "E-Commerce",      "icon": "fa-store",              "hasSub": true  }
   ],
 
   "pages": [
@@ -647,6 +648,66 @@
           "label": "Actions",
           "items": [
             { "type": "lg", "id": "rb-brd-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
+          ]
+        }
+      ]
+    },
+
+    {
+      "tab": "ecommerce",
+      "groups": [
+        {
+          "label": "Overview",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-dashboard",    "icon": "fa-chart-line",         "label": "Store\nDashboard", "primary": true }
+          ]
+        },
+        {
+          "label": "Orders",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-orders",       "icon": "fa-bag-shopping",       "label": "Web\nOrders" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-ecom-orders-pending", "icon": "fa-hourglass-half", "label": "Pending" },
+              { "type": "sm", "id": "rb-ecom-orders-shipped", "icon": "fa-truck-fast",     "label": "Shipped" }
+            ]}
+          ]
+        },
+        {
+          "label": "Online Products",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-products",     "icon": "fa-boxes-stacked",      "label": "Online\nProducts" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-ecom-add-products", "icon": "fa-plus",             "label": "Add Products",   "primary": true }
+            ]}
+          ]
+        },
+        {
+          "label": "Website",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-settings",     "icon": "fa-sliders",            "label": "Store\nSettings" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-ecom-visit",       "icon": "fa-arrow-up-right-from-square", "label": "View Website" },
+              { "type": "sm", "id": "rb-ecom-copy-link",   "icon": "fa-link",              "label": "Copy Link" }
+            ]}
+          ]
+        },
+        {
+          "label": "Design",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-template",     "icon": "fa-swatchbook",         "label": "Website\nTemplate" },
+            { "type": "lg", "id": "rb-ecom-slider",       "icon": "fa-images",             "label": "Homepage\nSlider" }
+          ]
+        },
+        {
+          "label": "Payments",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-payments",     "icon": "fa-credit-card",        "label": "Payment\nGateways" }
+          ]
+        },
+        {
+          "label": "Actions",
+          "items": [
+            { "type": "lg", "id": "rb-ecom-refresh",      "icon": "fa-rotate",             "label": "Refresh" }
           ]
         }
       ]

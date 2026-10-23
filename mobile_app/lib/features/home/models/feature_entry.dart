@@ -83,6 +83,13 @@ class FeatureCatalog {
       activeIcon: Icons.badge_rounded,
     ),
     FeatureEntry(
+      key: 'ecommerce',
+      label: 'E-Commerce',
+      description: 'Online store website and web orders.',
+      icon: Icons.shopping_bag_outlined,
+      activeIcon: Icons.shopping_bag_rounded,
+    ),
+    FeatureEntry(
       key: 'event_management',
       label: 'Events',
       description: 'Plan and manage bookings and events.',

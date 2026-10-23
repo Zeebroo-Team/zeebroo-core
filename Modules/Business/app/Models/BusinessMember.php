@@ -393,6 +393,15 @@ class BusinessMember extends Model
                     ['key' => 'event_access', 'label' => 'Access Event Management', 'desc' => 'View and manage event bookings and schedules'],
                 ],
             ],
+            [
+                'key'   => 'ecommerce',
+                'label' => 'E-Commerce',
+                'icon'  => 'fa-store',
+                'color' => '#7c3aed',
+                'items' => [
+                    ['key' => 'ecom_access', 'label' => 'Manage Online Store', 'desc' => 'E-Commerce tab: website settings, online products and web orders'],
+                ],
+            ],
         ];
     }
 

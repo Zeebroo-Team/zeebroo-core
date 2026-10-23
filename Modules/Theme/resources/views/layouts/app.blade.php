@@ -2119,11 +2119,11 @@
     $bfmAllowedKeys = $navBusiness->effectiveFeatureKeys();
 
     $bfmDefs = [
-        ['key' => 'account_management', 'category' => 'finance', 'name' => 'Account Management', 'img' => asset('features/account-management.png'), 'color' => '#4e8ef7', 'desc' => 'Financial accounts & bank management', 'locked' => true, 'long' => [
+        ['key' => 'account_management', 'category' => 'finance', 'name' => 'Account Management', 'img' => asset('features/accounting.jpeg'), 'color' => '#4e8ef7', 'desc' => 'Financial accounts & bank management', 'locked' => true, 'long' => [
             'Track ledgers, bank accounts, and financial movements across your business from one place. Every sale, bill, and payroll run posts here automatically, so your books stay current without manual entry.',
             'This module powers the numbers behind every other feature, so it is always included and cannot be turned off.',
         ]],
-        ['key' => 'point_of_sale', 'category' => 'sales', 'name' => 'Point of Sale', 'img' => asset('features/point-of-sale.png'), 'color' => '#4caf7d', 'desc' => 'Cashier checkout interface & quick sales', 'long' => [
+        ['key' => 'point_of_sale', 'category' => 'sales', 'name' => 'Point of Sale', 'img' => asset('features/pos.jpeg'), 'color' => '#4caf7d', 'desc' => 'Cashier checkout interface & quick sales', 'long' => [
             'A fast, touch-friendly checkout screen for ringing up sales, applying discounts, and taking payments. Barcode scanning, quick-add favorites, and split payments are all one tap away.',
             'Every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
             'Needs Stock Management and Product Management enabled. Point of Sale and Restaurant cover the same checkout role, so only one of the two can be enabled at a time.',
@@ -2144,7 +2144,7 @@
             'Record bills, loans, and recurring expenses, and track what is due, paid, and overdue at a glance.',
             'Everything posts to your accounts automatically, so your expense picture in Account Management is always up to date.',
         ]],
-        ['key' => 'human_resources', 'category' => 'hr', 'name' => 'Human Resources', 'img' => asset('features/human-resource-management.png'), 'color' => '#f7a54e', 'desc' => 'Employees, departments & payroll', 'long' => [
+        ['key' => 'human_resources', 'category' => 'hr', 'name' => 'Human Resources', 'img' => asset('features/hr-management.jpeg'), 'color' => '#f7a54e', 'desc' => 'Employees, departments & payroll', 'long' => [
             'Manage employees, departments, and attendance, and run payroll without leaving the app.',
             'Employee records, attendance logs, and payroll history stay linked for quick lookups.',
         ]],
@@ -2152,7 +2152,7 @@
             'Sell service-bound products — repairs, installations, consultations — and schedule the jobs that come with them.',
             'Works alongside Point of Sale, so a service can be sold at the counter just like a physical product.',
         ]],
-        ['key' => 'social_media_campaign', 'category' => 'marketing', 'name' => 'Social Media Campaign', 'img' => asset('features/social-media-campaign.png'), 'color' => '#e040fb', 'desc' => 'Design studio & marketing assets', 'long' => [
+        ['key' => 'social_media_campaign', 'category' => 'marketing', 'name' => 'Social Media Campaign', 'img' => asset('features/graphic-design.jpeg'), 'color' => '#e040fb', 'desc' => 'Design studio & marketing assets', 'long' => [
             'A built-in design studio for creating social posts, flyers, and other marketing assets — no separate design software required.',
             'Start from a template or a blank canvas, drop in your logo and product photos, and export the result ready to post or print.',
         ]],
@@ -2183,6 +2183,10 @@
         ['key' => 'event_management', 'category' => 'marketing', 'name' => 'Event Management', 'img' => asset('features/event-management.png'), 'color' => '#0ea5e9', 'desc' => 'Brands, jobs, reporters, officers & salary sheets', 'long' => [
             'Run an event or advertising agency workflow — manage client brands, the jobs booked for them, and the staff assigned to cover each one.',
             "Salary sheets tie the work back to payroll, so agency-specific staffing and pay don't have to be shoehorned into a generic HR setup.",
+        ]],
+        ['key' => 'ecommerce', 'category' => 'sales', 'name' => 'E-Commerce', 'img' => asset('features/ecommerce.webp'), 'color' => '#7c3aed', 'desc' => 'Online store website, web orders & delivery', 'long' => [
+            'Launch your own online store website in minutes — publish products from your catalog, set web prices and sales, and take orders 24/7 with cash on delivery or bank transfer.',
+            'Manage everything from the desktop E-Commerce tab: store branding, shipping rules, online products and the full order lifecycle from pending to delivered.',
         ]],
     ];
 @endphp

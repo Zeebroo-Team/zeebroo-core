@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="css/ribbon-customize.css">
 <link rel="stylesheet" href="css/home-subnav-customize.css">
 <link rel="stylesheet" href="css/reactflow.css">
+<link rel="stylesheet" href="css/ecommerce.css">
 <style>
 /* ── Mail: thread list ─────────────────────────────────────────────── */
 .mail-thread-list{display:flex;flex-direction:column;gap:0;border:1px solid var(--border,#e5e7eb);border-radius:10px;overflow:hidden}
@@ -760,6 +761,7 @@
         <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Project Management</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="my-projects"><i class="fa fa-user-check"></i><span>My Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
+        <div class="sb-nav-item has-sub" data-tab="ecommerce" title="E-Commerce"><i class="fa fa-store"></i><span>E-Commerce</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
       </nav>
       <div id="sidebar-bottom">
         <button id="sidebar-file-btn"><i class="fa fa-bars"></i><span>Menu</span></button>
@@ -801,6 +803,7 @@
         <div class="ribbon-tab" data-tab="projects">Project Management</div>
         <div class="ribbon-tab" data-tab="my-projects">My Projects</div>
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
+        <div class="ribbon-tab" data-tab="ecommerce">E-Commerce</div>
       </div>
       <div class="rb-notif-wrap" id="rb-notif-wrap">
         <button class="rb-notif-btn" id="rb-notif-btn" title="Notifications">
@@ -1822,6 +1825,64 @@
         </div>
 
       </div><!-- /event-mgmt page -->
+
+      <!-- ── E-Commerce page (fallback when ribbon.json is unavailable) ── -->
+      <div class="ribbon-page" data-page="ecommerce">
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg primary" id="rb-ecom-dashboard"><i class="fa fa-chart-line"></i>Store<br>Dashboard</button>
+          </div>
+          <div class="ribbon-group-label">Overview</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ecom-orders"><i class="fa fa-bag-shopping"></i>Web<br>Orders</button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-ecom-orders-pending"><i class="fa fa-hourglass-half"></i>Pending</button>
+              <button class="ribbon-btn-sm" id="rb-ecom-orders-shipped"><i class="fa fa-truck-fast"></i>Shipped</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Orders</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ecom-products"><i class="fa fa-boxes-stacked"></i>Online<br>Products</button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm primary" id="rb-ecom-add-products"><i class="fa fa-plus"></i>Add Products</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Online Products</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ecom-settings"><i class="fa fa-sliders"></i>Store<br>Settings</button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-ecom-visit"><i class="fa fa-arrow-up-right-from-square"></i>View Website</button>
+              <button class="ribbon-btn-sm" id="rb-ecom-copy-link"><i class="fa fa-link"></i>Copy Link</button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Website</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ecom-template"><i class="fa fa-swatchbook"></i>Website<br>Template</button>
+            <button class="ribbon-btn-lg" id="rb-ecom-slider"><i class="fa fa-images"></i>Homepage<br>Slider</button>
+          </div>
+          <div class="ribbon-group-label">Design</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ecom-payments"><i class="fa fa-credit-card"></i>Payment<br>Gateways</button>
+          </div>
+          <div class="ribbon-group-label">Payments</div>
+        </div>
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-ecom-refresh"><i class="fa fa-rotate"></i>Refresh</button>
+          </div>
+          <div class="ribbon-group-label">Actions</div>
+        </div>
+      </div><!-- /ecommerce page -->
 
 
     </div><!-- /ribbon-body -->
@@ -10255,6 +10316,274 @@
 
     </div><!-- /panel-event-mgmt -->
 
+    <!-- ── E-Commerce Panel (online store back office) ─────────────────── -->
+    <div class="content-panel" id="panel-ecommerce" style="flex-direction:column">
+
+      <!-- Sub-nav -->
+      <div class="fin-subnav">
+        <button class="fin-subnav-btn active" data-ecomview="dashboard"><i class="fa fa-chart-line"></i> Dashboard</button>
+        <button class="fin-subnav-btn"        data-ecomview="orders"><i class="fa fa-bag-shopping"></i> Web Orders <span class="ecom-pill" id="ecom-pending-badge" style="display:none;padding:0 6px;margin-left:4px">0</span></button>
+        <button class="fin-subnav-btn"        data-ecomview="products"><i class="fa fa-boxes-stacked"></i> Online Products</button>
+        <button class="fin-subnav-btn"        data-ecomview="settings"><i class="fa fa-sliders"></i> Store Settings</button>
+        <button class="fin-subnav-btn"        data-ecomview="template"><i class="fa fa-swatchbook"></i> Template</button>
+        <button class="fin-subnav-btn"        data-ecomview="slider"><i class="fa fa-images"></i> Slider</button>
+        <button class="fin-subnav-btn"        data-ecomview="payments"><i class="fa fa-credit-card"></i> Payments</button>
+        <div class="ecom-subnav-right">
+          <span class="ecom-pill" id="ecom-status-pill"><i class="fa fa-circle" style="font-size:7px"></i> Offline</span>
+          <button class="svc-form-btn" id="ecom-visit-btn" style="padding:4px 10px;font-size:12px"><i class="fa fa-arrow-up-right-from-square"></i> View Website</button>
+        </div>
+      </div>
+
+      <!-- ── Dashboard view ── -->
+      <div class="ecom-view active" id="ecom-dashboard-view">
+        <div class="ecom-scroll">
+          <div class="ecom-hero">
+            <div class="ecom-hero-txt">
+              <h2 id="ecom-hero-name">Your online store</h2>
+              <p id="ecom-hero-tagline">Sell your catalog products on your own website and manage every web order from here.</p>
+              <div class="ecom-hero-url" id="ecom-hero-url"></div>
+              <div class="ecom-hero-actions">
+                <button class="svc-form-btn svc-form-btn--primary" id="ecom-hero-publish" style="padding:6px 14px;font-size:12px"><i class="fa fa-rocket"></i> Publish Store</button>
+                <button class="svc-form-btn" id="ecom-hero-products" style="padding:6px 14px;font-size:12px"><i class="fa fa-plus"></i> Add Products</button>
+                <button class="svc-form-btn" id="ecom-hero-settings" style="padding:6px 14px;font-size:12px"><i class="fa fa-sliders"></i> Customize</button>
+                <button class="svc-form-btn" id="ecom-hero-copy" style="padding:6px 14px;font-size:12px"><i class="fa fa-link"></i> Copy Link</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="ecom-kpis">
+            <div class="ecom-kpi"><div class="ecom-kpi-label"><i class="fa fa-coins"></i> Revenue (30 days)</div><div class="ecom-kpi-value" id="ecom-kpi-rev30">—</div></div>
+            <div class="ecom-kpi"><div class="ecom-kpi-label"><i class="fa fa-sack-dollar"></i> Total Revenue</div><div class="ecom-kpi-value" id="ecom-kpi-rev">—</div></div>
+            <div class="ecom-kpi"><div class="ecom-kpi-label"><i class="fa fa-bag-shopping"></i> Orders Today</div><div class="ecom-kpi-value" id="ecom-kpi-today">—</div></div>
+            <div class="ecom-kpi"><div class="ecom-kpi-label"><i class="fa fa-hourglass-half"></i> Pending Orders</div><div class="ecom-kpi-value" id="ecom-kpi-pending">—</div></div>
+            <div class="ecom-kpi"><div class="ecom-kpi-label"><i class="fa fa-boxes-stacked"></i> Products Online</div><div class="ecom-kpi-value" id="ecom-kpi-listed">—</div></div>
+          </div>
+
+          <div class="ecom-row">
+            <div class="ecom-card">
+              <div class="ecom-card-title"><i class="fa fa-chart-column" style="color:var(--accent)"></i> Web revenue — last 30 days <small id="ecom-chart-sum"></small></div>
+              <div class="ecom-chart" id="ecom-chart"><div class="ecom-tip" id="ecom-tip"></div></div>
+              <div class="ecom-chart-axis"><span id="ecom-axis-start"></span><span id="ecom-axis-end"></span></div>
+            </div>
+            <div class="ecom-card">
+              <div class="ecom-card-title"><i class="fa fa-list-check" style="color:var(--accent)"></i> Orders by status</div>
+              <div class="ecom-status-list" id="ecom-status-list"></div>
+            </div>
+          </div>
+
+          <div class="ecom-row">
+            <div class="ecom-card">
+              <div class="ecom-card-title"><i class="fa fa-clock-rotate-left" style="color:var(--accent)"></i> Recent web orders <small><a href="#" id="ecom-see-orders">View all</a></small></div>
+              <table class="crm-table">
+                <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Placed</th><th style="text-align:right">Total</th></tr></thead>
+                <tbody id="ecom-recent-body"><tr><td colspan="5" class="ecom-empty">Loading…</td></tr></tbody>
+              </table>
+            </div>
+            <div class="ecom-card">
+              <div class="ecom-card-title"><i class="fa fa-trophy" style="color:var(--accent)"></i> Top products</div>
+              <div class="ecom-status-list" id="ecom-top-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Orders view ── -->
+      <div class="ecom-view" id="ecom-orders-view">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0;flex-wrap:wrap">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="ecom-ord-search" placeholder="Search order no, customer, phone…" autocomplete="off">
+          </div>
+          <div class="ecom-chips" id="ecom-ord-chips">
+            <button class="ecom-chip active" data-status="">All</button>
+            <button class="ecom-chip" data-status="pending">Pending</button>
+            <button class="ecom-chip" data-status="confirmed">Confirmed</button>
+            <button class="ecom-chip" data-status="processing">Processing</button>
+            <button class="ecom-chip" data-status="shipped">Shipped</button>
+            <button class="ecom-chip" data-status="delivered">Delivered</button>
+            <button class="ecom-chip" data-status="cancelled">Cancelled</button>
+          </div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table">
+            <thead>
+              <tr>
+                <th>Order No</th><th>Customer</th><th>Phone</th><th>Items</th><th>Payment</th><th>Status</th><th>Placed</th>
+                <th style="text-align:right">Total</th><th style="width:60px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ecom-ord-body"><tr><td colspan="9" class="ecom-empty">Loading…</td></tr></tbody>
+          </table>
+          <div class="ecom-pager" id="ecom-ord-pager"></div>
+        </div>
+      </div>
+
+      <!-- ── Online products view ── -->
+      <div class="ecom-view" id="ecom-products-view">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div class="finance-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="ecom-lst-search" placeholder="Search online products…" autocomplete="off">
+          </div>
+          <select id="ecom-lst-state" class="po-field-input" style="width:auto;padding:5px 8px;font-size:12px">
+            <option value="">All</option>
+            <option value="published">Visible on website</option>
+            <option value="hidden">Hidden</option>
+            <option value="featured">Featured</option>
+          </select>
+          <button class="svc-form-btn svc-form-btn--primary" id="ecom-lst-add" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0">
+            <i class="fa fa-plus"></i> Add Products
+          </button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 10px 10px">
+          <table class="crm-table">
+            <thead>
+              <tr>
+                <th style="width:48px"></th><th>Product</th><th>SKU</th><th style="text-align:right">Catalog Price</th>
+                <th style="text-align:right">Web Price</th><th style="text-align:right">Stock</th>
+                <th style="text-align:center">Visible</th><th style="text-align:center">Featured</th>
+                <th style="width:90px;text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ecom-lst-body"><tr><td colspan="9" class="ecom-empty">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ── Store settings view ── -->
+      <div class="ecom-view" id="ecom-settings-view">
+        <div class="ecom-scroll">
+          <div class="ecom-settings">
+            <div class="ecom-section">
+              <h3><i class="fa fa-globe"></i> Website</h3>
+              <div class="ecom-grid2">
+                <label class="ecom-check full"><span class="ecom-switch"><input type="checkbox" id="ecom-s-published"><span></span></span> <strong>Store is live</strong> — customers can browse and place orders</label>
+                <div class="po-field"><label class="po-field-label">Store Name <span class="po-required">*</span></label><input type="text" id="ecom-s-name" class="po-field-input" maxlength="150"></div>
+                <div class="po-field"><label class="po-field-label">Web Address <span class="po-required">*</span></label>
+                  <div class="ecom-slug"><span id="ecom-s-slug-prefix">/shop/</span><input type="text" id="ecom-s-slug" class="po-field-input" maxlength="70" placeholder="my-store"></div>
+                </div>
+                <div class="po-field full"><label class="po-field-label">Tagline</label><input type="text" id="ecom-s-tagline" class="po-field-input" maxlength="200" placeholder="Fresh products, delivered to your door"></div>
+                <div class="po-field full"><label class="po-field-label">About the Store</label><textarea id="ecom-s-about" class="po-field-input" rows="3" maxlength="5000" style="resize:vertical"></textarea></div>
+                <div class="po-field"><label class="po-field-label">Announcement Bar</label><input type="text" id="ecom-s-announcement" class="po-field-input" maxlength="255" placeholder="Free delivery this weekend!"></div>
+                <div class="po-field"><label class="po-field-label">Theme Colour</label><div class="ecom-color"><input type="color" id="ecom-s-color"><code id="ecom-s-color-hex">#7c3aed</code></div></div>
+              </div>
+            </div>
+
+            <div class="ecom-section">
+              <h3><i class="fa fa-image"></i> Branding</h3>
+              <div class="ecom-grid2">
+                <div class="po-field"><label class="po-field-label">Logo</label>
+                  <div class="ecom-img-pick"><div class="prev" id="ecom-s-logo-prev"><i class="fa fa-image"></i></div>
+                    <div style="display:flex;flex-direction:column;gap:6px"><button class="svc-form-btn" id="ecom-s-logo-up" style="padding:4px 10px;font-size:12px"><i class="fa fa-upload"></i> Upload</button><button class="svc-form-btn" id="ecom-s-logo-clear" style="padding:4px 10px;font-size:12px"><i class="fa fa-xmark"></i> Remove</button></div>
+                  </div>
+                </div>
+                <div class="po-field"><label class="po-field-label">Banner</label>
+                  <div class="ecom-img-pick"><div class="prev wide" id="ecom-s-banner-prev"><i class="fa fa-panorama"></i></div>
+                    <div style="display:flex;flex-direction:column;gap:6px"><button class="svc-form-btn" id="ecom-s-banner-up" style="padding:4px 10px;font-size:12px"><i class="fa fa-upload"></i> Upload</button><button class="svc-form-btn" id="ecom-s-banner-clear" style="padding:4px 10px;font-size:12px"><i class="fa fa-xmark"></i> Remove</button></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="ecom-section">
+              <h3><i class="fa fa-address-card"></i> Contact</h3>
+              <div class="ecom-grid2">
+                <div class="po-field"><label class="po-field-label">Email</label><input type="email" id="ecom-s-email" class="po-field-input" maxlength="150"></div>
+                <div class="po-field"><label class="po-field-label">Phone</label><input type="text" id="ecom-s-phone" class="po-field-input" maxlength="40"></div>
+                <div class="po-field full"><label class="po-field-label">Address</label><input type="text" id="ecom-s-address" class="po-field-input" maxlength="500"></div>
+              </div>
+            </div>
+
+            <div class="ecom-section">
+              <h3><i class="fa fa-truck-fast"></i> Checkout &amp; Shipping</h3>
+              <div class="ecom-grid2">
+                <div class="po-field"><label class="po-field-label">Currency (ISO code)</label><input type="text" id="ecom-s-currency" class="po-field-input" maxlength="10" placeholder="LKR" style="text-transform:uppercase"></div>
+                <div class="po-field"><label class="po-field-label">Minimum Order Amount</label><input type="number" id="ecom-s-min" class="po-field-input" min="0" step="0.01" placeholder="None"></div>
+                <div class="po-field"><label class="po-field-label">Flat Shipping Fee</label><input type="number" id="ecom-s-ship" class="po-field-input" min="0" step="0.01" value="0"></div>
+                <div class="po-field"><label class="po-field-label">Free Shipping Over</label><input type="number" id="ecom-s-free" class="po-field-input" min="0" step="0.01" placeholder="Never"></div>
+                <div class="full" style="font-size:12px;color:var(--text-muted)"><i class="fa fa-circle-info"></i> Payment methods (cash on delivery, bank transfer, Stripe, PayHere) are set up under <a href="#" data-ecom-goto="payments">Payment Gateways</a>.</div>
+              </div>
+            </div>
+
+            <div class="ecom-section">
+              <h3><i class="fa fa-magnifying-glass-chart"></i> Search &amp; Social</h3>
+              <div class="ecom-grid2">
+                <div class="po-field full"><label class="po-field-label">SEO Title</label><input type="text" id="ecom-s-seo-title" class="po-field-input" maxlength="160"></div>
+                <div class="po-field full"><label class="po-field-label">SEO Description</label><textarea id="ecom-s-seo-desc" class="po-field-input" rows="2" maxlength="320" style="resize:vertical"></textarea></div>
+                <div class="po-field"><label class="po-field-label"><i class="fa-brands fa-facebook"></i> Facebook URL</label><input type="url" id="ecom-s-fb" class="po-field-input" maxlength="300"></div>
+                <div class="po-field"><label class="po-field-label"><i class="fa-brands fa-instagram"></i> Instagram URL</label><input type="url" id="ecom-s-ig" class="po-field-input" maxlength="300"></div>
+                <div class="po-field"><label class="po-field-label"><i class="fa-brands fa-tiktok"></i> TikTok URL</label><input type="url" id="ecom-s-tt" class="po-field-input" maxlength="300"></div>
+                <div class="po-field"><label class="po-field-label"><i class="fa-brands fa-youtube"></i> YouTube URL</label><input type="url" id="ecom-s-yt" class="po-field-input" maxlength="300"></div>
+              </div>
+            </div>
+
+            <div class="ecom-save-bar">
+              <div id="ecom-s-alert" class="svc-form-alert" style="display:none"></div>
+              <button class="po-btn-primary" id="ecom-s-save"><i class="fa fa-floppy-disk"></i> Save Store Settings</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Website template view ── -->
+      <div class="ecom-view" id="ecom-template-view">
+        <div class="ecom-scroll">
+          <div class="ecom-settings" style="max-width:1100px">
+            <div class="ecom-section">
+              <h3><i class="fa fa-swatchbook"></i> Website Template <small style="font-weight:500;color:var(--text-muted);margin-left:auto">Pick a design for your online store. Products, slider and settings carry over.</small></h3>
+              <div class="ecom-tpl-grid" id="ecom-tpl-grid"><div class="ecom-empty">Loading…</div></div>
+            </div>
+            <div class="ecom-section">
+              <h3><i class="fa fa-palette"></i> Brand Colour</h3>
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+                <input type="color" id="ecom-tpl-color" class="po-field-input" style="width:60px;height:34px;padding:2px">
+                <div class="ecom-swatches" id="ecom-tpl-swatches"></div>
+              </div>
+            </div>
+            <div class="ecom-save-bar">
+              <div id="ecom-tpl-alert" class="svc-form-alert" style="display:none"></div>
+              <button class="svc-form-btn" id="ecom-tpl-preview" style="padding:6px 14px;font-size:12px"><i class="fa fa-arrow-up-right-from-square"></i> Preview Website</button>
+              <button class="po-btn-primary" id="ecom-tpl-save"><i class="fa fa-check"></i> Apply Template</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Homepage slider view ── -->
+      <div class="ecom-view" id="ecom-slider-view">
+        <div class="finance-toolbar" style="gap:8px;flex-shrink:0">
+          <div style="font-size:12px;color:var(--text-muted)"><i class="fa fa-circle-info"></i> Slides rotate every 5 seconds at the top of your store. Recommended image size 1600 × 600 px. Up to 10 slides.</div>
+          <button class="svc-form-btn svc-form-btn--primary" id="ecom-sld-add" style="margin-left:auto;padding:5px 14px;font-size:12px;flex-shrink:0"><i class="fa fa-plus"></i> Add Slide</button>
+        </div>
+        <div class="ecom-scroll" style="padding-top:4px">
+          <div class="ecom-slide-list" id="ecom-sld-list"><div class="ecom-empty">Loading…</div></div>
+        </div>
+      </div>
+
+      <!-- ── Payment gateways view ── -->
+      <div class="ecom-view" id="ecom-payments-view">
+        <div class="ecom-scroll">
+          <div class="ecom-settings">
+            <div class="ecom-section">
+              <h3><i class="fa fa-hand-holding-dollar"></i> Offline payments</h3>
+              <div class="ecom-grid2">
+                <label class="ecom-check"><span class="ecom-switch"><input type="checkbox" id="ecom-pay-cod"><span></span></span> <strong>Cash on delivery</strong></label>
+                <label class="ecom-check"><span class="ecom-switch"><input type="checkbox" id="ecom-pay-bank"><span></span></span> <strong>Bank transfer</strong></label>
+                <div class="po-field full" id="ecom-pay-bank-wrap"><label class="po-field-label">Bank Transfer Details (shown after checkout)</label><textarea id="ecom-pay-bank-details" class="po-field-input" rows="3" maxlength="2000" placeholder="Bank, account name, account number, branch…" style="resize:vertical"></textarea></div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:10px;align-items:center;margin-top:10px">
+                <div id="ecom-pay-offline-alert" class="svc-form-alert" style="display:none"></div>
+                <button class="po-btn-primary" id="ecom-pay-offline-save"><i class="fa fa-floppy-disk"></i> Save</button>
+              </div>
+            </div>
+            <div id="ecom-pay-currency-warn" class="ecom-warn" style="display:none"></div>
+            <div id="ecom-pay-gateways"><div class="ecom-empty">Loading…</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /panel-ecommerce -->
+
     <!-- ── Users Panel ────────────────────────────────────────────────── -->
 
   </div><!-- /content -->
@@ -10383,6 +10712,125 @@
   </div>
 
   <!-- ── Brand Management Modal ── -->
+  <!-- ── E-Commerce: web order detail ── -->
+  <div class="modal-overlay" id="ecom-order-modal" style="display:none">
+    <div class="po-aim-shell" style="width:720px;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-bag-shopping" style="color:var(--accent)"></i>
+        <span id="ecom-om-title">Order</span>
+        <button class="psm-close" id="ecom-om-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px;overflow-y:auto">
+        <div id="ecom-om-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="ecom-grid2" id="ecom-om-customer"></div>
+        <table class="crm-table">
+          <thead><tr><th>Item</th><th>SKU</th><th class="ecom-num">Price</th><th class="ecom-num">Qty</th><th class="ecom-num">Total</th></tr></thead>
+          <tbody id="ecom-om-items"></tbody>
+        </table>
+        <div id="ecom-om-totals" style="align-self:flex-end;min-width:240px;font-size:12px"></div>
+        <div class="ecom-grid2">
+          <div class="po-field"><label class="po-field-label">Order Status</label>
+            <select id="ecom-om-status" class="po-field-input">
+              <option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="processing">Processing</option>
+              <option value="shipped">Shipped</option><option value="delivered">Delivered</option><option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="po-field"><label class="po-field-label">Payment Status</label>
+            <select id="ecom-om-pay" class="po-field-input">
+              <option value="unpaid">Unpaid</option><option value="paid">Paid</option><option value="refunded">Refunded</option>
+            </select>
+          </div>
+          <div class="po-field"><label class="po-field-label">Tracking Number</label><input type="text" id="ecom-om-tracking" class="po-field-input" maxlength="80"></div>
+          <div class="po-field"><label class="po-field-label">Internal Note</label><input type="text" id="ecom-om-note" class="po-field-input" maxlength="2000" placeholder="Only visible to your team"></div>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ecom-om-cancel"><i class="fa fa-xmark"></i> Close</button>
+        <button class="po-btn-primary" id="ecom-om-save"><i class="fa fa-floppy-disk"></i> Update Order</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── E-Commerce: add catalog products to the store ── -->
+  <div class="modal-overlay" id="ecom-add-modal" style="display:none">
+    <div class="po-aim-shell" style="width:600px">
+      <div class="po-aim-header">
+        <i class="fa fa-plus" style="color:var(--accent)"></i>
+        <span>Add Products to Website</span>
+        <button class="psm-close" id="ecom-add-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:10px">
+        <div class="finance-search-wrap" style="max-width:none">
+          <i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="ecom-add-search" placeholder="Search catalog products…" autocomplete="off">
+        </div>
+        <label class="ecom-check"><input type="checkbox" id="ecom-add-all"> Select all shown</label>
+        <div class="ecom-pick-list" id="ecom-add-list"><div class="ecom-empty">Loading…</div></div>
+        <div id="ecom-add-alert" class="svc-form-alert" style="display:none"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ecom-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ecom-add-save" disabled><i class="fa fa-cloud-arrow-up"></i> Publish 0 Products</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── E-Commerce: add / edit a homepage slide ── -->
+  <div class="modal-overlay" id="ecom-sld-modal" style="display:none">
+    <div class="po-aim-shell" style="width:600px">
+      <div class="po-aim-header">
+        <i class="fa fa-images" style="color:var(--accent)"></i>
+        <span id="ecom-sm-title">Add Slide</span>
+        <button class="psm-close" id="ecom-sm-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="ecom-sm-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="ecom-sm-id">
+        <div class="ecom-slide-prev" id="ecom-sm-prev"><div class="ecom-slide-prev-txt"><b id="ecom-sm-prev-title"></b><span id="ecom-sm-prev-sub"></span></div><i class="fa fa-image" id="ecom-sm-prev-ph"></i></div>
+        <div style="display:flex;gap:8px"><button class="svc-form-btn" id="ecom-sm-upload" style="padding:5px 12px;font-size:12px"><i class="fa fa-upload"></i> Upload Image <span class="po-required">*</span></button></div>
+        <div class="ecom-grid2">
+          <div class="po-field full"><label class="po-field-label">Title</label><input type="text" id="ecom-sm-title-in" class="po-field-input" maxlength="150" placeholder="Summer Sale"></div>
+          <div class="po-field full"><label class="po-field-label">Subtitle</label><input type="text" id="ecom-sm-sub" class="po-field-input" maxlength="255" placeholder="Up to 40% off selected items"></div>
+          <div class="po-field"><label class="po-field-label">Button Text</label><input type="text" id="ecom-sm-btn" class="po-field-input" maxlength="40" placeholder="Shop now"></div>
+          <div class="po-field"><label class="po-field-label">Button Link</label><input type="url" id="ecom-sm-link" class="po-field-input" maxlength="500" placeholder="https://… (blank = products)"></div>
+          <label class="ecom-check"><span class="ecom-switch"><input type="checkbox" id="ecom-sm-active" checked><span></span></span> Show on website</label>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ecom-sm-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ecom-sm-save"><i class="fa fa-floppy-disk"></i> Save Slide</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── E-Commerce: edit an online product listing ── -->
+  <div class="modal-overlay" id="ecom-lst-modal" style="display:none">
+    <div class="po-aim-shell" style="width:540px">
+      <div class="po-aim-header">
+        <i class="fa fa-pen" style="color:var(--accent)"></i>
+        <span>Edit Online Product</span>
+        <button class="psm-close" id="ecom-lm-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
+        <div id="ecom-lm-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="ecom-lm-id">
+        <div style="font-size:12px;color:var(--text-muted)" id="ecom-lm-product"></div>
+        <div class="ecom-grid2">
+          <div class="po-field full"><label class="po-field-label">Website Title</label><input type="text" id="ecom-lm-title" class="po-field-input" maxlength="200" placeholder="Defaults to product name"></div>
+          <div class="po-field"><label class="po-field-label">Web Price</label><input type="number" id="ecom-lm-price" class="po-field-input" min="0" step="0.01" placeholder="Catalog price"></div>
+          <div class="po-field"><label class="po-field-label">Compare-at Price (was)</label><input type="number" id="ecom-lm-compare" class="po-field-input" min="0" step="0.01" placeholder="None"></div>
+          <div class="po-field full"><label class="po-field-label">Website Description</label><textarea id="ecom-lm-desc" class="po-field-input" rows="4" maxlength="5000" placeholder="Defaults to product description" style="resize:vertical"></textarea></div>
+          <label class="ecom-check"><span class="ecom-switch"><input type="checkbox" id="ecom-lm-published"><span></span></span> Visible on website</label>
+          <label class="ecom-check"><span class="ecom-switch"><input type="checkbox" id="ecom-lm-featured"><span></span></span> Featured</label>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="ecom-lm-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="ecom-lm-save"><i class="fa fa-floppy-disk"></i> Save</button>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay" id="brd-modal" style="display:none">
     <div class="po-aim-shell" style="width:520px">
       <div class="po-aim-header">
@@ -20614,6 +21062,7 @@
 })();
 </script>
 <script src="js/app.js"></script>
+<script src="js/ecommerce.js"></script>
 <script src="js/ribbon-customize.js"></script>
 <script src="js/home-subnav-customize.js"></script>
 <script src="js/guide-config.js"></script>

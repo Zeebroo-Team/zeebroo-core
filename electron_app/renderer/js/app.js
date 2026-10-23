@@ -310,6 +310,15 @@ const _sbSubItems = {
     { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
     { view:'achievements',   icon:'fa-trophy',               label:'My Achievements' },
   ],
+  ecommerce: [
+    { view:'dashboard',      icon:'fa-chart-line',           label:'Dashboard' },
+    { view:'orders',         icon:'fa-bag-shopping',         label:'Web Orders' },
+    { view:'products',       icon:'fa-boxes-stacked',        label:'Online Products' },
+    { view:'settings',       icon:'fa-sliders',              label:'Store Settings' },
+    { view:'template',       icon:'fa-swatchbook',           label:'Website Template' },
+    { view:'slider',         icon:'fa-images',               label:'Homepage Slider' },
+    { view:'payments',       icon:'fa-credit-card',          label:'Payment Gateways' },
+  ],
 };
 
 function _buildSidebarSubNavs() {
@@ -368,6 +377,7 @@ function _sbNavSubSwitch(tab, view) {
   else if (tab === 'crm')        window.switchCrmView?.(view);
   else if (tab === 'projects')   window.switchPmView?.(view);
   else if (tab === 'my-projects') window.switchMpView?.(view);
+  else if (tab === 'ecommerce')  window.switchEcomView?.(view);
   _sbSubActivate(tab, view);
 }
 
@@ -518,7 +528,7 @@ function activateTab(tabName) {
   $$('.ribbon-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabName));
   $$('.ribbon-page').forEach(p => p.classList.toggle('active', p.dataset.page === tabName));
 
-  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'my-projects': 'panel-my-projects', 'event-mgmt': 'panel-event-mgmt' };
+  const panelMap = { home: 'panel-home', pos: 'panel-pos', sales: 'panel-sales', inventory: 'panel-inventory', finance: 'panel-finance', hr: 'panel-hr', services: 'panel-services', design: 'panel-design', restaurant: 'panel-restaurant', 'rst-pos': 'panel-rst-pos', mail: 'panel-mail', crm: 'panel-crm', automations: 'panel-automations', projects: 'panel-projects', 'my-projects': 'panel-my-projects', 'event-mgmt': 'panel-event-mgmt', ecommerce: 'panel-ecommerce' };
   $$('.content-panel').forEach(p => p.classList.remove('active'));
   const target = $('#' + (panelMap[tabName] || 'panel-pos'));
   if (target) target.classList.add('active');
@@ -542,6 +552,7 @@ function activateTab(tabName) {
   if (tabName === 'projects')    { switchPmView('overview'); }
   if (tabName === 'my-projects') { window.switchMpView?.(window._mp?.view || 'overview', { refresh: true }); }
   if (tabName === 'event-mgmt') { switchEvtView('brands'); }
+  if (tabName === 'ecommerce')  { window.switchEcomView?.(window.Ecom?.view() || 'dashboard'); }
   _syncSidebarActive(tabName);
   _sbNavExpand(tabName);
 }
@@ -5723,12 +5734,15 @@ const _obFeatureDefs = [
   { key: 'automation_editor',    img: 'img/features/Automation_flow.png',              name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
   { key: 'event_management',     img: 'img/features/Marketer’s Campaign.png',          name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets', color: '#0ea5e9' },
   { key: 'developers',           img: 'img/features/Developer.png',                   name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
+  { key: 'ecommerce',            img: 'img/features/Zebroo E-Commerce Dashboard Workspace.webp', name: 'E-Commerce', desc: 'Online store website, web orders & delivery', color: '#7c3aed' },
 ];
 
 // Industries that switch to restaurant POS mode
 const _RST_CATS = new Set(['restaurant', 'bar']);
 // Industries where service_management is pre-selected
 const _SVC_CATS = new Set(['healthcare', 'professional_services', 'creative_media', 'education']);
+// Industries where the ecommerce (online store) feature is pre-selected
+const _ECOM_CATS = new Set(['ecommerce', 'local_retail']);
 
 function _obBuildCatGrid(cats) {
   const grid = $('#ob-cat-grid');
@@ -5756,6 +5770,11 @@ function _obBuildCatGrid(cats) {
         _obFeatureSet.add('service_management');
       } else {
         _obFeatureSet.delete('service_management');
+      }
+      if (_ECOM_CATS.has(_obSelectedCat)) {
+        _obFeatureSet.add('ecommerce');
+      } else {
+        _obFeatureSet.delete('ecommerce');
       }
     });
   });
@@ -6108,6 +6127,7 @@ function applyFeatureVisibility() {
   const pm_manage    = bf('project_management') && mp('projects_access');    // Projects tab (manage all)
   const pm_mine      = bf('project_management') && mp('projects_assigned');  // My Projects tab (assigned only)
   const evt_enabled  = bf('event_management') && mp('event_access');
+  const ecom_enabled = bf('ecommerce') && mp('ecom_access');
 
   // ── Cashier mode: POS-only ──
   if (state.cashierMode) {
@@ -6147,6 +6167,7 @@ function applyFeatureVisibility() {
     projects:     pm_manage,
     'my-projects': pm_mine,
     'event-mgmt': evt_enabled,
+    ecommerce:    ecom_enabled,
     users:        isAdminOrOwner,
   };
   // Cache so activateTab() can guard against opening a hidden tab directly
@@ -6219,6 +6240,7 @@ function applyFeatureVisibility() {
   if (!mail_any && _activeTab() === 'mail')     activateTab('home');
   if (!crm_any   && _activeTab() === 'crm')        activateTab('home');
   if (!evt_enabled && _activeTab() === 'event-mgmt') activateTab('home');
+  if (!ecom_enabled && _activeTab() === 'ecommerce') activateTab('home');
   if (!pm_manage && _activeTab() === 'projects') activateTab(pm_mine ? 'my-projects' : 'home');
   if (!pm_mine && _activeTab() === 'my-projects') activateTab('home');
 
@@ -11305,6 +11327,10 @@ const _featDefs = [
       'Run an event or advertising agency workflow — manage client brands, the jobs booked for them, and the reporters and officers assigned to cover each one.',
       'Salary sheets tie the work back to payroll, so agency-specific staffing and pay structures don\'t have to be shoehorned into a generic HR setup.',
     ], icon: 'fa-tag',            color: '#0ea5e9', price: 'Free' },
+  { key: 'ecommerce',           category: 'sales',         name: 'E-Commerce',            img: 'img/features/Zebroo E-Commerce Dashboard Workspace.webp', desc: 'Online store website, web orders & delivery', longDesc: [
+      'Launch your own online store website in minutes — publish products straight from your catalog, set web-only prices and sale prices, and take orders around the clock with cash on delivery or bank transfer.',
+      'The E-Commerce tab is your store back office: a sales dashboard, store branding and shipping rules, online product listings, and the full web-order lifecycle from pending to delivered — all in sync with Product Management.',
+    ], icon: 'fa-store',          color: '#7c3aed', price: 'Free' },
 ];
 
 const _FM_MUTUAL_EXCL = { restaurant: 'point_of_sale', point_of_sale: 'restaurant' };
@@ -50997,6 +51023,9 @@ async function submitDsCreate() {
     { key: 'event', label: 'Event', icon: 'fa-calendar-days', color: '#d946ef', items: [
       { key: 'event_access', label: 'Access Event Management', desc: 'View and manage event bookings and schedules' },
     ]},
+    { key: 'ecommerce', label: 'E-Commerce', icon: 'fa-store', color: '#7c3aed', items: [
+      { key: 'ecom_access', label: 'Manage Online Store', desc: 'E-Commerce tab: website settings, online products and web orders' },
+    ]},
   ];
 
   // Tab structure: which accordion groups belong to each app-section tab
@@ -51015,6 +51044,7 @@ async function submitDsCreate() {
     { key: 'automations',label: 'Automations',icon: 'fa-robot',              groups: ['automations'] },
     { key: 'projects',   label: 'Project Management', icon: 'fa-diagram-project', groups: ['projects'] },
     { key: 'event',      label: 'Event',      icon: 'fa-calendar-days',      groups: ['event'] },
+    { key: 'ecommerce',  label: 'E-Commerce', icon: 'fa-store',              groups: ['ecommerce'] },
   ];
 
   let PERM_GROUPS = PERM_GROUPS_DEFAULT.slice();  // never starts empty
