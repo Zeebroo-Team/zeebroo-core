@@ -39,6 +39,16 @@ class PosProductQuickCreateService
             ? (int) $validated['branch_id']
             : null;
 
+        // Opening stock can be spread across several branches (e.g. CSV import):
+        // each listed branch receives the full opening quantity as its own layer,
+        // while the product itself stays shared (null) so every branch lists it.
+        $stockBranchIds = array_values(array_unique(array_map('intval', $validated['branch_ids'] ?? [])));
+        if ($stockBranchIds !== []) {
+            $branchId = null;
+        } else {
+            $stockBranchIds = [$branchId];
+        }
+
         $data = $this->catalogOptions->normalizeProductCatalogFields($business, [
             'name' => $validated['name'],
             'sku' => $validated['sku'] ?? null,
@@ -57,19 +67,25 @@ class PosProductQuickCreateService
             $data['branch_id'] = $branchId;
         }
 
-        $product = $this->productService->create($business, $data);
+        $product = DB::transaction(function () use ($business, $data, $openingStock, $costPrice, $unitPrice, $wholesalePrice, $stockBranchIds) {
+            $product = $this->productService->create($business, $data);
 
-        if ($openingStock > 0) {
-            $this->stockLayers->createManualLayer(
-                $business,
-                $product,
-                $openingStock,
-                $costPrice,      // unit cost (what was paid to acquire)
-                $unitPrice,      // selling price per unit
-                $wholesalePrice, // wholesale price per unit
-                $branchId,       // stock layer is scoped to this branch
-            );
-        }
+            if ($openingStock > 0) {
+                foreach ($stockBranchIds as $layerBranchId) {
+                    $this->stockLayers->createManualLayer(
+                        $business,
+                        $product,
+                        $openingStock,
+                        $costPrice,      // unit cost (what was paid to acquire)
+                        $unitPrice,      // selling price per unit
+                        $wholesalePrice, // wholesale price per unit
+                        $layerBranchId,  // stock layer is scoped to this branch
+                    );
+                }
+            }
+
+            return $product;
+        });
 
         return $this->posCatalog->productCardForProduct($product->fresh([
             'productUnit',
@@ -147,6 +163,11 @@ class PosProductQuickCreateService
             ],
             'branch_id' => [
                 'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
+            'branch_ids' => ['nullable', 'array'],
+            'branch_ids.*' => [
                 'integer',
                 Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
             ],

@@ -86,7 +86,7 @@ const API = (() => {
     backfillBatchSkus: (productId)    => request('POST', `/online/products/${productId}/backfill-batch-skus`),
     checkout:     (body)              => request('POST', '/online/checkout', body),
     createProduct: (body)              => request('POST',   '/online/products', body),
-    importProducts:(rows)             => request('POST',   '/online/products/import', { rows }),
+    importProducts:(rows, branchIds = []) => request('POST', '/online/products/import', { rows, branch_ids: branchIds }),
     updateProduct: (id, body)          => request('PATCH',  `/online/products/${id}`, body),
     quickSetupProduct: (id, body)      => request('POST',   `/online/products/${id}/quick-setup`, body),
     deleteProduct: (id)                => request('DELETE', `/online/products/${id}`),

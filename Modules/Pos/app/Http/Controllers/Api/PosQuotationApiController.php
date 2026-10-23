@@ -183,6 +183,7 @@ class PosQuotationApiController extends Controller
     {
         return $request->validate([
             'customer_id'             => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'branch_id'               => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'reference'               => ['nullable', 'string', 'max:120'],
             'quote_date'              => ['required', 'date'],
             'expiry_date'             => ['nullable', 'date'],

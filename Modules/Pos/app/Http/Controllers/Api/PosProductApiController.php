@@ -339,9 +339,16 @@ class PosProductApiController extends Controller
             'rows.*.category'       => ['nullable', 'string', 'max:255'],
             'rows.*.brand'          => ['nullable', 'string', 'max:255'],
             'rows.*.description'    => ['nullable', 'string', 'max:5000'],
+            // Branches that receive each row's opening stock (the full quantity per branch).
+            'branch_ids'            => ['nullable', 'array'],
+            'branch_ids.*'          => [
+                'integer',
+                \Illuminate\Validation\Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
         ]);
 
         $rows       = $request->input('rows');
+        $branchIds  = array_values(array_unique(array_map('intval', (array) $request->input('branch_ids', []))));
         $imported   = 0;
         $skipped    = 0;
         $errors     = [];
@@ -355,6 +362,7 @@ class PosProductApiController extends Controller
                     'sku'            => $row['sku'] ?? null,
                     'unit_price'     => (float) $row['unit_price'],
                     'stock_quantity' => isset($row['stock_quantity']) ? (float) $row['stock_quantity'] : 0,
+                    'branch_ids'     => $branchIds,
                 ]);
 
 
