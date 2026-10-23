@@ -35,85 +35,122 @@
     $receiptFooterText       = (string) (($posSettings ?? [])['receipt_footer'] ?? '') ?: 'Thank you for your purchase!';
     $receiptPaperWidth       = (string) (($posSettings ?? [])['receipt_paper_width'] ?? '80');
     $receiptPaperWidth       = in_array($receiptPaperWidth, ['58', '80'], true) ? $receiptPaperWidth : '80';
+    // Settings → Receipt Setting (shared with POS Lite): logo, address line, margins, print language
+    $receiptLogoUrl          = (string) (($posSettings ?? [])['receipt_logo_url'] ?? '');
+    $receiptLogoGap          = (float) (($posSettings ?? [])['receipt_logo_gap'] ?? 2);
+    $receiptAddressLine      = (string) (($posSettings ?? [])['receipt_address_line'] ?? '') ?: (string) ($business->address ?? '');
+    $receiptLanguage         = (string) (($posSettings ?? [])['receipt_language'] ?? 'en');
+    $receiptMargins          = collect(['top', 'right', 'bottom', 'left'])
+        ->mapWithKeys(fn ($side) => [$side => (float) (($posSettings ?? [])['receipt_margin_'.$side] ?? 0)])
+        ->all();
+
+    // Same shape as POS Lite's buildReceiptData() (electron_app_pos_lite/renderer/js/pos.js) so
+    // pos::partials.pos-lite-receipt-renderer prints the identical bill. Labels follow the print language.
+    $rt = fn (string $key, array $params = []) => \Modules\Pos\Support\ReceiptLabels::t($receiptLanguage, $key, $params);
+    $receiptCurrency = strtoupper((string) ($currency ?? ''));
+    $receiptCurrencyPosition = (($posSettings ?? [])['currency_position'] ?? 'after') === 'before' ? 'before' : 'after';
+    $receiptMoney = function ($n) use ($receiptCurrency, $receiptCurrencyPosition): string {
+        $v = number_format((float) $n, 2, '.', '');
+        if ($receiptCurrency === '') {
+            return $v;
+        }
+        return $receiptCurrencyPosition === 'before' ? $receiptCurrency.' '.$v : $v.' '.$receiptCurrency;
+    };
+    $receiptWarranty = function ($item) use ($rt): ?string {
+        if (! $item->warranty_type) {
+            return null;
+        }
+        if ($item->warranty_type === 'lifetime') {
+            return $rt('Lifetime warranty');
+        }
+        $exp = $item->warranty_expires_at?->format('M j, Y');
+        return $exp ? $rt('Warranty until {date}', ['date' => $exp]) : $rt('Warranty');
+    };
+    $receiptRental = function ($item) use ($rt, $receiptMoney): ?string {
+        $rental = $item->productRental;
+        if (! $rental || ! $rental->due_at) {
+            return null;
+        }
+        $s = $rt('Return {date}', ['date' => $rental->due_at->format('M j, Y')])
+            .' · '.$rt('Daily {rate}', ['rate' => $receiptMoney($rental->daily_rate)]);
+        if ((float) $rental->late_fee_multiplier > 0) {
+            $s .= ' · '.$rt('Late {mult}× rate/day', ['mult' => rtrim(rtrim(number_format((float) $rental->late_fee_multiplier, 2, '.', ''), '0'), '.')]);
+        }
+        return $s;
+    };
 
     $saleCompletionData = [
         'saleId' => $completedSale->id,
-        'businessName' => $business->name,
-        'businessPhone' => $business->phone ?? '',
-        'businessEmail' => $business->email ?? '',
-        'businessAddress' => $business->address ?? '',
-        'showBusinessName' => $showBusinessName,
-        'showBusinessAddress' => $showBusinessAddress,
-        'receiptHeader' => $receiptHeaderText,
-        'receiptFooter' => $receiptFooterText,
         'paperWidth' => (int) $receiptPaperWidth,
-        'saleNumber' => $completedSale->sale_number,
-        'soldAt' => $completedSale->sold_at?->format('M j, Y g:i A') ?? '',
-        'soldAtIso' => $completedSale->sold_at?->toIso8601String() ?? '',
-        'customerName' => $completedSale->customer?->name ?? '',
-        'customerPhone' => $completedSale->customer?->phone ?? '',
-        'payment' => $completedSale->paymentMethodLabel(),
-        'account' => $showAccountInfo ? ($completedSale->creditAccount?->deductOptionLabel() ?? '') : '',
-        'channel' => $completedSale->channelLabel(),
-        'currency' => trim($currencyLabel),
-        'subtotal' => number_format($subtotal, 2, '.', ''),
-        'discountPercent' => $discountPercent > 0 ? number_format($discountPercent, 2, '.', '') : '',
-        'discountAmount' => $discountAmount > 0 ? number_format($discountAmount, 2, '.', '') : '',
-        'total' => number_format((float) $completedSale->total, 2, '.', ''),
-        'amountPaid' => number_format((float) $completedSale->amount_paid, 2, '.', ''),
-        'amountTendered' => $completedSale->amount_tendered !== null
-            ? number_format((float) $completedSale->amount_tendered, 2, '.', '')
-            : '',
-        'changeAmount' => $completedSale->change_amount !== null
-            ? number_format((float) $completedSale->change_amount, 2, '.', '')
-            : '',
-        'notes' => $completedSale->notes ?? '',
-        'items' => $completedSale->items->map(fn ($item) => [
-            'id' => $item->id,
-            'name' => $item->product_name,
-            'sku' => $item->sku ?? '',
-            'qty' => $formatQty((float) $item->quantity),
-            'unit' => number_format((float) $item->unit_sell_price, 2, '.', ''),
-            'line' => number_format((float) $item->line_total, 2, '.', ''),
-            'discount' => (float) ($item->discount_amount ?? 0) > 0.001
-                ? number_format((float) $item->discount_amount, 2, '.', '')
-                : '',
-            'original_unit' => (float) ($item->discount_amount ?? 0) > 0.001
-                ? number_format((float) $item->unit_sell_price + (float) $item->discount_amount, 2, '.', '')
-                : '',
-            'discount_line' => (float) ($item->discount_amount ?? 0) > 0.001
-                ? number_format((float) $item->quantity * (float) $item->discount_amount, 2, '.', '')
-                : '',
-            'is_service' => $item->service_item_id !== null,
-            'bound_products' => ($showServiceBoundProducts && $item->serviceItem)
-                ? $item->serviceItem->products->map(fn ($bp) => [
-                    'name' => $bp->name,
-                    'sku'  => $bp->sku ?? '',
-                    'qty'  => $formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3)),
-                ])->all()
-                : [],
-            'warranty' => $warrantyLabel($item),
-            'rental' => $item->productRental ? [
-                'returnDate' => optional($item->productRental->due_at)->format('M j, Y'),
-                'dailyRate' => number_format((float) $item->productRental->daily_rate, 2, '.', ''),
-                'lateFeeMultiplier' => (float) $item->productRental->late_fee_multiplier,
-            ] : null,
-            'subscription' => $item->subscription ? [
-                'period' => ucfirst((string) $item->subscription->recurring_period),
-                'nextBillingAt' => optional($item->subscription->next_billing_at)->format('M j, Y'),
-            ] : null,
-            'custom_requirement_values' => $item->custom_requirement_values ?: [],
-        ])->values()->all(),
-        'showServiceBoundProducts' => $showServiceBoundProducts,
-        'productDiscountTotal' => (function () use ($completedSale) {
-            $total = $completedSale->items->sum(fn ($i) => round((float) $i->quantity * (float) ($i->discount_amount ?? 0), 2));
-            return $total > 0.001 ? number_format($total, 2, '.', '') : '';
-        })(),
+        'currency' => $receiptCurrency,
+        'currencyPosition' => $receiptCurrencyPosition,
+        'labels' => \Modules\Pos\Support\ReceiptLabels::for($receiptLanguage),
+        'margins' => $receiptMargins,
+        'settings' => [
+            'showName' => $showBusinessName,
+            'showAddr' => $showBusinessAddress,
+            'businessName' => $business->name,
+            'address' => $receiptAddressLine,
+            'header' => $receiptHeaderText,
+            'footer' => (string) (($posSettings ?? [])['receipt_footer'] ?? ''),
+            'logoUrl' => $receiptLogoUrl,
+            'logoGap' => $receiptLogoGap,
+        ],
+        'receipt' => [
+            'saleNumber' => $completedSale->sale_number,
+            'soldAtIso' => $completedSale->sold_at?->toIso8601String() ?? '',
+            'paymentLabel' => $rt($completedSale->paymentMethodLabel()),
+            'customerName' => $completedSale->customer?->name ?? '',
+            'cashierName' => $completedSale->user?->name ?? '',
+            'notes' => $completedSale->notes ?? '',
+            'subtotal' => $subtotal,
+            'discountPercent' => $discountPercent > 0 ? rtrim(rtrim(number_format($discountPercent, 2, '.', ''), '0'), '.') : '',
+            'discountAmount' => $discountAmount,
+            'couponDiscount' => (float) ($completedSale->coupon_discount ?? 0),
+            'couponCode' => $completedSale->coupon?->code ?? '',
+            'total' => (float) $completedSale->total,
+            'amountPaid' => (float) $completedSale->amount_paid,
+            'amountTendered' => $completedSale->amount_tendered !== null ? (float) $completedSale->amount_tendered : null,
+            'changeAmount' => (float) ($completedSale->change_amount ?? 0),
+            'giftCardAmount' => (float) ($completedSale->gift_card_amount ?? 0),
+            'giftCardCode' => $completedSale->giftCard?->code ?? '',
+            'giftCardBalance' => $completedSale->giftCard ? (float) $completedSale->giftCard->balance : null,
+            'items' => $completedSale->items->map(function ($item) use ($showServiceBoundProducts, $formatQty, $receiptWarranty, $receiptRental) {
+                $perUnitDiscount = (float) ($item->discount_amount ?? 0);
+                $original = (float) $item->unit_sell_price + $perUnitDiscount;
+
+                // Web-only line details Lite doesn't have — printed as small notes under the line
+                $extras = [];
+                if ($showServiceBoundProducts && $item->serviceItem) {
+                    foreach ($item->serviceItem->products as $bp) {
+                        $extras[] = '↳ '.$bp->name.($bp->sku ? ' ('.$bp->sku.')' : '').' × '.$formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3));
+                    }
+                }
+                if ($item->subscription) {
+                    $extras[] = ucfirst((string) $item->subscription->recurring_period).' subscription · Next billing '.optional($item->subscription->next_billing_at)->format('M j, Y');
+                }
+                foreach (($item->custom_requirement_values ?: []) as $creq) {
+                    $extras[] = ($creq['label'] ?? '').': '.($creq['value'] ?? '');
+                }
+
+                return [
+                    'name' => $item->product_name,
+                    'sku' => $item->sku ?? '',
+                    'qty' => (float) $item->quantity,
+                    'unit' => (float) $item->unit_sell_price,
+                    'line' => (float) $item->line_total,
+                    'discountPct' => $perUnitDiscount > 0.001 && $original > 0 ? $perUnitDiscount / $original * 100 : 0,
+                    'warranty' => $receiptWarranty($item),
+                    'rental' => $receiptRental($item),
+                    'extras' => $extras,
+                ];
+            })->values()->all(),
+        ],
     ];
 @endphp
 
 <div id="pos-sale-completed-modal" class="pos-sale-completed-modal is-open" role="dialog" aria-modal="true" aria-labelledby="pos-completed-title" aria-hidden="false"
-     data-pos-completion="{{ e(json_encode($saleCompletionData)) }}">
+     data-pos-completion="{{ json_encode($saleCompletionData) }}">
     <div class="pos-sale-completed-modal__backdrop" data-pos-completed-close tabindex="-1" aria-label="Close"></div>
 
     <div class="pos-sale-completed-modal__panel">
@@ -143,222 +180,9 @@
 
             {{-- Tab: Receipt Preview --}}
             <div class="pos-sale-completed-modal__tab-content is-active" data-pos-tab-content="receipt">
-                <div class="pos-thermal-receipt-preview">
-                    <div class="pos-thermal-receipt-header">
-                        @if($showBusinessName)
-                            <div class="pos-thermal-receipt-business">{{ $business->name }}</div>
-                        @endif
-                        @if($showBusinessAddress && filled($business->address))
-                            <div class="pos-thermal-receipt-meta">{{ $business->address }}</div>
-                        @endif
-                        @if(filled($business->phone))
-                            <div class="pos-thermal-receipt-meta">{{ $business->phone }}</div>
-                        @endif
-                        @if(filled($receiptHeaderText))
-                            <div class="pos-thermal-receipt-meta" style="font-style:italic;margin-top:4px;">{{ $receiptHeaderText }}</div>
-                        @endif
-                    </div>
-
-                    <div class="pos-thermal-receipt-divider"></div>
-
-                    <div class="pos-thermal-receipt-info">
-                        <div class="pos-thermal-receipt-row">
-                            <span>Receipt #</span>
-                            <strong>{{ $completedSale->sale_number }}</strong>
-                        </div>
-                        <div class="pos-thermal-receipt-row">
-                            <span>Date & Time</span>
-                            <strong>{{ $completedSale->sold_at?->format('M j, Y g:i A') ?? '-' }}</strong>
-                        </div>
-                        <div class="pos-thermal-receipt-row">
-                            <span>Payment</span>
-                            <strong>{{ $completedSale->paymentMethodLabel() }}</strong>
-                        </div>
-                        @if($completedSale->customer)
-                            <div class="pos-thermal-receipt-row">
-                                <span>Customer</span>
-                                <strong>{{ $completedSale->customer->name }}{{ filled($completedSale->customer->phone) ? ' · '.$completedSale->customer->phone : '' }}</strong>
-                            </div>
-                        @endif
-                        @if($showAccountInfo && $completedSale->creditAccount)
-                            <div class="pos-thermal-receipt-row">
-                                <span>Account</span>
-                                <strong>{{ $completedSale->creditAccount->deductOptionLabel() }}</strong>
-                            </div>
-                        @endif
-                    </div>
-
-                    <div class="pos-thermal-receipt-divider"></div>
-
-                    {{-- Items table --}}
-                    <table class="pos-thermal-receipt-items">
-                        <thead>
-                            <tr>
-                                <th>Item</th>
-                                <th>Qty</th>
-                                <th>Price</th>
-                                <th>Amount</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($completedSale->items as $item)
-                                @php
-                                    $itemDisc = (float) ($item->discount_amount ?? 0);
-                                    $isServiceItem = $item->service_item_id !== null;
-                                    $boundProds = ($showServiceBoundProducts && $isServiceItem && $item->serviceItem)
-                                        ? $item->serviceItem->products : collect();
-                                @endphp
-                                <tr>
-                                    <td>
-                                        <div class="pos-thermal-item-name">
-                                            {{ $item->product_name }}
-                                            @if($isServiceItem)
-                                                <span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:#ede9fe;color:#7c3aed;margin-left:3px;">Svc</span>
-                                            @endif
-                                        </div>
-                                        @if(filled($item->sku))
-                                            <div class="pos-thermal-item-sku">{{ $item->sku }}</div>
-                                        @endif
-                                        @if($item->selling_unit_label)
-                                            <div class="pos-thermal-item-sku">per {{ $item->selling_unit_label }}</div>
-                                        @endif
-                                    </td>
-                                    <td class="pos-thermal-col-center">{{ $formatQty((float) $item->quantity) }}</td>
-                                    <td class="pos-thermal-col-right">
-                                        @if($itemDisc > 0.001)
-                                            <del style="font-size:9px;color:#999;">{{ number_format((float) $item->unit_sell_price + $itemDisc, 2) }}</del>
-                                            <div>{{ number_format((float) $item->unit_sell_price, 2) }}{{ $currencyLabel }}</div>
-                                        @else
-                                            {{ number_format((float) $item->unit_sell_price, 2) }}{{ $currencyLabel }}
-                                        @endif
-                                    </td>
-                                    <td class="pos-thermal-col-right"><strong>{{ number_format((float) $item->line_total, 2) }}{{ $currencyLabel }}</strong></td>
-                                </tr>
-                                @if($itemDisc > 0.001)
-                                    <tr class="pos-thermal-discount-row">
-                                        <td colspan="3" style="font-size:9px;color:#d97706;padding:0 2px 4px;line-height:1.3;">
-                                            &nbsp;&nbsp;↳ Discount −{{ number_format($itemDisc, 2) }}{{ $currencyLabel }} / unit
-                                        </td>
-                                        <td class="pos-thermal-col-right" style="font-size:9px;color:#d97706;padding:0 2px 4px;">
-                                            −{{ number_format((float) $item->quantity * $itemDisc, 2) }}{{ $currencyLabel }}
-                                        </td>
-                                    </tr>
-                                @endif
-                                @foreach($boundProds as $bp)
-                                    <tr style="background:#f5f3ff;">
-                                        <td colspan="2" style="padding:2px 2px 2px 12px;font-size:9px;color:#7c3aed;">
-                                            &#8627; {{ $bp->name }}@if($bp->sku) ({{ $bp->sku }})@endif
-                                        </td>
-                                        <td class="pos-thermal-col-center" style="font-size:9px;color:#7c3aed;">
-                                            {{ $formatQty(round((float) $bp->pivot->qty * (float) $item->quantity, 3)) }}
-                                        </td>
-                                        <td></td>
-                                    </tr>
-                                @endforeach
-                                @if($warrantyLabel($item))
-                                    <tr>
-                                        <td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">
-                                            &#128737; {{ $warrantyLabel($item) }}
-                                        </td>
-                                    </tr>
-                                @endif
-                                @if($item->productRental)
-                                    <tr>
-                                        <td colspan="4" style="font-size:9px;color:#0f766e;padding:0 2px 4px;">
-                                            &#128197; Return {{ optional($item->productRental->due_at)->format('M j, Y') }}
-                                            · Daily {{ number_format((float) $item->productRental->daily_rate, 2) }}{{ $currencyLabel }}
-                                            @if((float) $item->productRental->late_fee_multiplier > 0)
-                                                · Late {{ number_format((float) $item->productRental->late_fee_multiplier, 2) }}&times; rate/day
-                                            @endif
-                                        </td>
-                                    </tr>
-                                @endif
-                                @if($item->subscription)
-                                    <tr>
-                                        <td colspan="4" style="font-size:9px;color:#7c3aed;padding:0 2px 4px;">
-                                            &#128257; {{ ucfirst((string) $item->subscription->recurring_period) }} subscription
-                                            · Next billing {{ optional($item->subscription->next_billing_at)->format('M j, Y') }}
-                                        </td>
-                                    </tr>
-                                @endif
-                                @if(!empty($item->custom_requirement_values))
-                                    @foreach($item->custom_requirement_values as $creq)
-                                        <tr>
-                                            <td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">
-                                                &#8627; {{ $creq['label'] ?? '' }}: {{ $creq['value'] ?? '' }}
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                @endif
-                            @endforeach
-                        </tbody>
-                    </table>
-
-                    <div class="pos-thermal-receipt-divider"></div>
-
-                    {{-- Totals --}}
-                    @php
-                        $productDiscTotal = $completedSale->items->sum(fn ($i) => round((float) $i->quantity * (float) ($i->discount_amount ?? 0), 2));
-                        $hasProductDisc   = $productDiscTotal > 0.001;
-                    @endphp
-                    <div class="pos-thermal-receipt-totals">
-                        @if($hasProductDisc || $discountAmount > 0.001 || $subtotal > (float) $completedSale->total + 0.001)
-                            <div class="pos-thermal-total-row">
-                                <span>Subtotal</span>
-                                <span>{{ number_format($subtotal, 2) }}{{ $currencyLabel }}</span>
-                            </div>
-                            @if($hasProductDisc)
-                                <div class="pos-thermal-total-row" style="color:#d97706;">
-                                    <span>Product discounts</span>
-                                    <span>−{{ number_format($productDiscTotal, 2) }}{{ $currencyLabel }}</span>
-                                </div>
-                            @endif
-                            @if($discountAmount > 0.001)
-                                <div class="pos-thermal-total-row">
-                                    <span>Discount{{ $discountPercentLabel }}</span>
-                                    <span>−{{ number_format($discountAmount, 2) }}{{ $currencyLabel }}</span>
-                                </div>
-                            @endif
-                        @endif
-
-                        <div class="pos-thermal-total-final">
-                            <span>Total</span>
-                            <strong>{{ number_format((float) $completedSale->total, 2) }}{{ $currencyLabel }}</strong>
-                        </div>
-
-                        @if($completedSale->payment_method === \Modules\Pos\Models\Sale::PAYMENT_CASH && $completedSale->amount_tendered !== null)
-                            <div class="pos-thermal-total-row">
-                                <span>Cash Received</span>
-                                <span>{{ number_format((float) $completedSale->amount_tendered, 2) }}{{ $currencyLabel }}</span>
-                            </div>
-                            <div class="pos-thermal-total-row">
-                                <span>Change</span>
-                                <span>{{ number_format((float) ($completedSale->change_amount ?? 0), 2) }}{{ $currencyLabel }}</span>
-                            </div>
-                        @endif
-
-                        @php $totalSaved = $productDiscTotal + $discountAmount; @endphp
-                        @if($totalSaved > 0.001)
-                            <div class="pos-thermal-savings-banner">
-                                <i class="fa fa-tag"></i>
-                                You saved {{ number_format($totalSaved, 2) }}{{ $currencyLabel }} on this purchase!
-                            </div>
-                        @endif
-                    </div>
-
-                    @if(filled($completedSale->notes))
-                        <div class="pos-thermal-receipt-divider"></div>
-                        <div class="pos-thermal-receipt-notes">
-                            <strong>Notes:</strong> {{ $completedSale->notes }}
-                        </div>
-                    @endif
-
-                    <div class="pos-thermal-receipt-divider"></div>
-
-                    <div class="pos-thermal-receipt-footer">
-                        <div>{{ $receiptFooterText }}</div>
-                        <div class="pos-thermal-footer-meta">{{ $completedSale->channelLabel() }}</div>
-                    </div>
+                {{-- Same document that prints (POS Lite bill layout) — filled by the script below --}}
+                <div class="pos-thermal-receipt-preview" data-paper="{{ $receiptPaperWidth }}">
+                    <iframe id="pos-completed-receipt-frame" title="Receipt preview" scrolling="no"></iframe>
                 </div>
             </div>
 
@@ -702,15 +526,21 @@
 
 /* Thermal Receipt Styles */
 .pos-thermal-receipt-preview {
-    font-family: 'Courier New', monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    background: #fff;
-    color: #000;
-    padding: 16px;
-    border: 1px solid var(--border);
+    display: flex;
+    justify-content: center;
+    padding: 12px;
     border-radius: 8px;
+    background: color-mix(in srgb, var(--card) 90%, var(--border) 10%);
+}
+
+.pos-thermal-receipt-preview iframe {
+    display: block;
     max-width: 100%;
+    height: 400px;
+    border: 0;
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
 }
 
 .pos-thermal-receipt-header {
@@ -956,6 +786,7 @@
 </style>
 
 {{-- ── JavaScript ─────────────────────────────────── --}}
+@include('pos::partials.pos-lite-receipt-renderer')
 @once
 <script>
 (function () {
@@ -1026,128 +857,45 @@
         }
     });
 
-    // Thermal printer layout
+    // POS Lite bill layout (pos::partials.pos-lite-receipt-renderer). Lite formats the sale
+    // time with the device locale, so do the same here.
+    function receiptData() {
+        const r = Object.assign({}, completionData.receipt || {});
+        r.soldAt = r.soldAtIso ? new Date(r.soldAtIso).toLocaleString() : '';
+        return r;
+    }
+
     function buildThermalPrintHtml() {
-        const cur = completionData.currency ? ' ' + completionData.currency : '';
-        const pageWidth = completionData.paperWidth === 58 ? 58 : 80; // mm
-
-        let itemRows = '';
-        (completionData.items || []).forEach(item => {
-            const name = escHtml(item.name);
-            const svcBadge = item.is_service ? '<span style="font-size:8px;font-weight:700;padding:1px 4px;border-radius:3px;background:#ede9fe;color:#7c3aed;margin-left:3px;">Svc</span>' : '';
-            const sku = item.sku ? '<div style="font-size:8px;color:#666;margin:1px 0 0;">' + escHtml(item.sku) + '</div>' : '';
-            const unitPriceHtml = item.original_unit
-                ? '<del style="font-size:9px;color:#999;">' + escHtml(item.original_unit) + escHtml(cur) + '</del> ' + escHtml(item.unit) + escHtml(cur)
-                : escHtml(item.unit) + escHtml(cur);
-            itemRows += '<tr>'
-                + '<td style="padding:3px 0;"><strong>' + name + '</strong>' + svcBadge + sku + '</td>'
-                + '<td style="padding:3px 0;text-align:center;width:60px;">' + escHtml(item.qty) + '</td>'
-                + '<td style="padding:3px 0;text-align:right;width:80px;">' + unitPriceHtml + '</td>'
-                + '<td style="padding:3px 0;text-align:right;width:70px;font-weight:600;">' + escHtml(item.line) + escHtml(cur) + '</td>'
-                + '</tr>';
-            if (item.discount) {
-                itemRows += '<tr>'
-                    + '<td colspan="3" style="padding:0 0 4px;font-size:9px;color:#d97706;line-height:1.3;">'
-                    + '&nbsp;&nbsp;&#x21b3; Discount &minus;' + escHtml(item.discount) + escHtml(cur) + ' / unit'
-                    + '</td>'
-                    + '<td style="padding:0 0 4px;text-align:right;font-size:9px;color:#d97706;">&minus;' + escHtml(item.discount_line) + escHtml(cur) + '</td>'
-                    + '</tr>';
-            }
-            (item.bound_products || []).forEach(function (bp) {
-                itemRows += '<tr style="background:#f5f3ff;">'
-                    + '<td colspan="2" style="padding:2px 2px 2px 12px;font-size:9px;color:#7c3aed;">&#8627; ' + escHtml(bp.name) + (bp.sku ? ' (' + escHtml(bp.sku) + ')' : '') + '</td>'
-                    + '<td style="padding:2px 0;text-align:center;font-size:9px;color:#7c3aed;">' + escHtml(bp.qty) + '</td>'
-                    + '<td></td>'
-                    + '</tr>';
-            });
-            if (item.warranty) {
-                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">&#128737; ' + escHtml(item.warranty) + '</td></tr>';
-            }
-            if (item.rental) {
-                var rentalParts = ['Return ' + escHtml(item.rental.returnDate), 'Daily ' + escHtml(item.rental.dailyRate) + escHtml(cur)];
-                if (item.rental.lateFeeMultiplier > 0) rentalParts.push('Late ' + escHtml(String(item.rental.lateFeeMultiplier)) + '&times; rate/day');
-                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#0f766e;padding:0 2px 4px;">&#128197; ' + rentalParts.join(' &middot; ') + '</td></tr>';
-            }
-            if (item.subscription) {
-                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#7c3aed;padding:0 2px 4px;">&#128257; ' + escHtml(item.subscription.period) + ' subscription &middot; Next billing ' + escHtml(item.subscription.nextBillingAt) + '</td></tr>';
-            }
-            (item.custom_requirement_values || []).forEach(function (creq) {
-                itemRows += '<tr><td colspan="4" style="font-size:9px;color:#6b7280;padding:0 2px 4px;">&#8627; ' + escHtml(creq.label) + ': ' + escHtml(creq.value) + '</td></tr>';
-            });
+        return window.PosLiteReceipt.buildDocument(receiptData(), {
+            settings: completionData.settings || {},
+            labels: completionData.labels || {},
+            money: window.PosLiteReceipt.moneyFormatter(completionData.currency, completionData.currencyPosition),
+            paperWidth: completionData.paperWidth,
+            margins: completionData.margins,
         });
+    }
 
-        const hasProductDisc = completionData.productDiscountTotal && parseFloat(completionData.productDiscountTotal) > 0;
-        let totalsHtml = '';
-        if (hasProductDisc || completionData.discountAmount) {
-            totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Subtotal</span><span>' + escHtml(completionData.subtotal) + escHtml(cur) + '</span></div>';
-            if (hasProductDisc) {
-                totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;color:#d97706;"><span>Product discounts</span><span>&minus;' + escHtml(completionData.productDiscountTotal) + escHtml(cur) + '</span></div>';
-            }
-            if (completionData.discountAmount) {
-                const discLabel = completionData.discountPercent ? ' (' + escHtml(completionData.discountPercent) + '%)' : '';
-                totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Discount' + discLabel + '</span><span>&minus;' + escHtml(completionData.discountAmount) + escHtml(cur) + '</span></div>';
-            }
-        }
-        totalsHtml += '<div style="display:flex;justify-content:space-between;margin:6px 0 0;padding-top:4px;border-top:2px solid #000;font-size:13px;font-weight:bold;"><span>Total</span><span>' + escHtml(completionData.total) + escHtml(cur) + '</span></div>';
-
-        if (completionData.amountTendered) {
-            totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Cash Received</span><span>' + escHtml(completionData.amountTendered) + escHtml(cur) + '</span></div>';
-            totalsHtml += '<div style="display:flex;justify-content:space-between;margin:2px 0;font-size:11px;"><span>Change</span><span>' + escHtml(completionData.changeAmount) + escHtml(cur) + '</span></div>';
-        }
-
-        // "You saved" banner
-        const totalSaved = (parseFloat(completionData.productDiscountTotal || '0') + parseFloat(completionData.discountAmount || '0'));
-        if (totalSaved > 0) {
-            const savedFormatted = totalSaved.toFixed(2);
-            totalsHtml += '<div style="margin-top:8px;padding:5px 8px;border:1px dashed #f59e0b;border-radius:4px;font-size:10px;font-weight:700;color:#b45309;text-align:center;">'
-                + '&#127991; You saved ' + savedFormatted + escHtml(cur) + ' on this purchase!'
-                + '</div>';
-        }
-
-        const businessInfo = (completionData.showBusinessAddress && completionData.businessAddress ? completionData.businessAddress + '<br>' : '')
-            + (completionData.businessPhone ? completionData.businessPhone + '<br>' : '')
-            + (completionData.businessEmail ? completionData.businessEmail : '');
-        const headerTextHtml = completionData.receiptHeader
-            ? '<div style="text-align:center;font-style:italic;margin-top:4px;">' + escHtml(completionData.receiptHeader) + '</div>'
-            : '';
-
-        return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>' + escHtml(completionData.saleNumber || 'Receipt') + '</title>'
-            + '<style>'
-            + 'body { font-family: "Courier New", monospace; margin: 0; padding: 12mm; width: ' + pageWidth + 'mm; max-width: ' + pageWidth + 'mm; font-size: 12px; line-height: 1.4; color: #000; background: #fff; }'
-            + 'h1 { margin: 0 0 2px; font-size: 13px; font-weight: bold; text-align: center; }'
-            + '.meta { margin: 0 0 8px; font-size: 10px; text-align: center; line-height: 1.3; }'
-            + 'hr { border: none; border-top: 1px solid #000; margin: 6px 0; }'
-            + 'table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 11px; }'
-            + 'th { font-size: 9px; font-weight: bold; text-align: left; padding: 2px 0 4px; border-bottom: 1px solid #000; }'
-            + 'td { padding: 3px 0; }'
-            + '.totals { margin: 8px 0; }'
-            + '.footer { text-align: center; font-size: 10px; margin-top: 8px; }'
-            + '.timestamp { font-size: 9px; color: #666; }'
-            + '@media print { body { margin: 0; padding: 0; width: ' + pageWidth + 'mm; max-width: ' + pageWidth + 'mm; } }'
-            + '</style></head><body>'
-            + (completionData.showBusinessName ? '<h1>' + escHtml(completionData.businessName) + '</h1>' : '')
-            + '<div class="meta">'
-            + (businessInfo ? '<div>' + businessInfo + '</div>' : '')
-            + headerTextHtml
-            + '<div style="margin-top:4px;">' + escHtml(completionData.saleNumber) + ' · ' + escHtml(completionData.soldAt) + '</div>'
-            + '<div>' + escHtml(completionData.payment) + (completionData.account ? ' · ' + escHtml(completionData.account) : '') + '</div>'
-            + (completionData.customerName ? '<div>Customer: ' + escHtml(completionData.customerName) + (completionData.customerPhone ? ' · ' + escHtml(completionData.customerPhone) : '') + '</div>' : '')
-            + '</div>'
-            + '<hr>'
-            + '<table>'
-            + '<thead><tr><th>Item</th><th style="text-align:center;width:60px;">Qty</th><th style="text-align:right;width:70px;">Price</th><th style="text-align:right;width:70px;">Amount</th></tr></thead>'
-            + '<tbody>' + itemRows + '</tbody>'
-            + '</table>'
-            + '<hr>'
-            + '<div class="totals">' + totalsHtml + '</div>'
-            + '<hr>'
-            + (completionData.notes ? '<div style="font-size:10px;margin:6px 0;"><strong>Notes:</strong> ' + escHtml(completionData.notes) + '</div><hr>' : '')
-            + '<div class="footer">'
-            + '<div>' + escHtml(completionData.receiptFooter || 'Thank you for your purchase!') + '</div>'
-            + '<div style="margin-top:4px;">' + escHtml(completionData.channel) + '</div>'
-            + '<div class="timestamp">Printed: ' + new Date().toLocaleString() + '</div>'
-            + '</div>'
-            + '</body></html>';
+    // On-screen preview: the print document without margins (Lite previews stay unpadded)
+    function renderPreview() {
+        const frame = document.getElementById('pos-completed-receipt-frame');
+        if (!frame || !window.PosLiteReceipt) return;
+        frame.style.width = window.PosLiteReceipt.previewWidthPx(completionData.paperWidth) + 'px';
+        frame.addEventListener('load', function fit() {
+            const doc = frame.contentDocument;
+            if (!doc) return;
+            doc.body.style.width = 'auto';
+            doc.body.style.padding = '10px';
+            const resize = () => { frame.style.height = doc.documentElement.scrollHeight + 'px'; };
+            resize();
+            doc.querySelectorAll('img').forEach(img => img.addEventListener('load', resize));
+        });
+        frame.srcdoc = window.PosLiteReceipt.buildDocument(receiptData(), {
+            settings: completionData.settings || {},
+            labels: completionData.labels || {},
+            money: window.PosLiteReceipt.moneyFormatter(completionData.currency, completionData.currencyPosition),
+            paperWidth: completionData.paperWidth,
+            margins: {},
+        });
     }
 
     function escHtml(s) {
@@ -1189,16 +937,61 @@
             setTimeout(handlePrintComplete, 1000);
         }
 
+        // A receipt logo needs a moment to load before the dialog snapshots the page
         setTimeout(() => {
+            window.PosLiteReceipt.fitPageToContent(w.document, completionData.paperWidth);
             w.print();
-        }, 150);
+        }, (completionData.settings || {}).logoUrl ? 400 : 150);
+    }
+
+    // Settings → Printer "Show receipt preview after sale" (per browser, like POS Lite's per-device printer config)
+    function showPreviewAfterSale() {
+        try {
+            return (JSON.parse(localStorage.getItem('zeebroo.pos.printer') || '{}') || {}).showPreview !== false;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    // No-preview mode: print straight away through a hidden iframe (a popup opened
+    // without a click would be blocked) and leave the POS ready for the next sale.
+    function printWithoutPreview() {
+        modal.classList.remove('is-open');
+        modal.style.display = 'none';
+        document.documentElement.classList.remove('pos-sale-completed-modal-open');
+
+        const frame = document.createElement('iframe');
+        frame.setAttribute('aria-hidden', 'true');
+        frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+        document.body.appendChild(frame);
+        const doc = frame.contentWindow.document;
+        doc.open();
+        doc.write(buildThermalPrintHtml());
+        doc.close();
+
+        setTimeout(() => {
+            try {
+                window.PosLiteReceipt.fitPageToContent(frame.contentWindow.document, completionData.paperWidth);
+                frame.contentWindow.focus();
+                frame.contentWindow.print();
+            } catch (e) {}
+            setTimeout(() => frame.remove(), 1000);
+            document.dispatchEvent(new CustomEvent('pos-clear-cart-and-reset', {
+                detail: { completedSaleId: completionData.saleId }
+            }));
+        }, (completionData.settings || {}).logoUrl ? 400 : 150);
     }
 
     // Event listeners
     document.getElementById('pos-completed-btn-print-thermal')?.addEventListener('click', openPrintWindow);
 
     setupTabs();
-    document.documentElement.classList.add('pos-sale-completed-modal-open');
+    renderPreview();
+    if (showPreviewAfterSale()) {
+        document.documentElement.classList.add('pos-sale-completed-modal-open');
+    } else {
+        printWithoutPreview();
+    }
 })();
 </script>
 @endonce

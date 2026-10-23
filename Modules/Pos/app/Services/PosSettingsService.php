@@ -587,6 +587,43 @@ class PosSettingsService
         return $url;
     }
 
+    /**
+     * Stores an uploaded receipt logo (web Settings → Receipt Setting) and returns its public URL.
+     * Served through the CORS-safe media proxy so POS Lite / Flutter clients can load it too.
+     */
+    public function uploadReceiptLogo(Business $business, UploadedFile $file): string
+    {
+        $oldUrl = (string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: '');
+
+        $path = $file->store('receipt-logos/'.$business->id, 'public');
+        $url  = route('api.media.business-file', ['business' => $business->id, 'path' => $path]);
+        $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $url);
+
+        $this->deleteStoredReceiptLogo($oldUrl, $business->id);
+
+        return $url;
+    }
+
+    /** Clears the receipt logo, deleting the file when it was one we uploaded. */
+    public function removeReceiptLogo(Business $business): void
+    {
+        $oldUrl = (string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: '');
+        $business->setSetting(self::KEY_RECEIPT_LOGO_URL, null);
+        $this->deleteStoredReceiptLogo($oldUrl, $business->id);
+    }
+
+    private function deleteStoredReceiptLogo(string $url, int $businessId): void
+    {
+        if ($url === '' || ! preg_match('#/receipt-logos/'.$businessId.'/([A-Za-z0-9._-]+)$#', $url, $m)) {
+            return;
+        }
+
+        $path = 'receipt-logos/'.$businessId.'/'.$m[1];
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+    }
+
     /** Maps a previously-uploaded logo URL back to its storage path, or null if it wasn't one we stored. */
     private function businessLogoPathFromUrl(string $url, int $businessId): ?string
     {

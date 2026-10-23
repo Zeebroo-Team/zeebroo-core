@@ -69,149 +69,206 @@
     ];
 @endphp
 <style>
-.pos-page{max-width:100%;margin:0;}
-.pos-layout{flex:1;min-height:calc(100vh - 220px);}
-.pos-page:not(.pos-page--walking) .pos-three-panel__center{border:none;background:transparent;overflow:visible;}
-.pos-register__sale-panel,.pos-register__catalog{display:flex;flex-direction:column;min-height:0;}
-.pos-register__catalog-body{flex:1;min-height:0;display:flex;flex-direction:column;}
-.pos-register__sale-head{padding:10px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);}
-.pos-register__sale-head h2{margin:0;font-size:14px;font-weight:800;}
-.pos-register__sale-body{flex:1;min-height:0;overflow:auto;padding:10px 12px 8px;}
-.pos-register__browse{padding:10px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);}
-.pos-register__browse-title{margin:0 0 8px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
-.pos-page:not(.pos-page--walking) .pos-register__catalog{overflow:visible;border:none;background:transparent;}
-.pos-page:not(.pos-page--walking) .pos-register__sale-panel{border:1px solid var(--border);border-radius:12px;}
-.pos-page:not(.pos-page--walking) .pos-register__browse{border:1px solid var(--border);border-radius:12px 12px 0 0;border-bottom:0;}
-.pos-page:not(.pos-page--walking) .pos-register__catalog .pos-panel__body{border:1px solid var(--border);border-top:0;border-radius:0 0 12px 12px;background:var(--card);}
-.pos-panel{border:1px solid var(--border);border-radius:12px;background:var(--card);overflow:hidden;}
-.pos-panel__head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);}
-.pos-panel__head h2{margin:0;font-size:14px;font-weight:800;}
-.pos-panel__body{padding:12px;}
-.pos-fixed-cart > .pos-panel__body{padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:0;}
-.pos-search{display:flex;gap:8px;flex-wrap:wrap;}
-.pos-search input{flex:1 1 180px;min-width:0;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
-.pos-search button,.pos-btn{padding:8px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--text);cursor:pointer;}
-.pos-search button:hover,.pos-btn:hover{border-color:color-mix(in srgb,var(--primary) 40%,var(--border));}
+/* ── Register: compact, full-height layout ───────────────────────── */
+.pos-reg{--reg-sale-w:clamp(320px,27vw,420px);--reg-pay-w:clamp(280px,21vw,340px);--reg-ctl-h:34px;max-width:100%;margin:0;}
+.pos-reg > .pcat-page-card{padding:10px!important;}
+.pos-page:not(.pos-page--walking) .pos-page__scroll{display:contents;}
+body.pos-walking-active .pos-page__scroll{padding:0;}
+
+/* Toolbar */
+.pos-page__top{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:6px;width:100%;box-sizing:border-box;min-width:0;margin:0 0 8px!important;}
+body.pos-walking-active .pos-reg .pos-page__top{width:auto;}
+.pos-page__top-search{flex:1 1 auto;min-width:0;margin:0;}
+.pos-page__top-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:4px;flex-shrink:0;}
+.pos-search{display:flex;gap:6px;flex-wrap:nowrap;position:relative;}
+.pos-search input{flex:1 1 auto;min-width:80px;box-sizing:border-box;height:var(--reg-ctl-h);padding:0 10px 0 32px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+.pos-search__icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:12px;pointer-events:none;}
+.pos-search input:focus,.pos-scan-row input:focus{outline:none;border-color:color-mix(in srgb,var(--primary) 60%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent);}
+.pos-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:var(--reg-ctl-h);min-width:var(--reg-ctl-h);box-sizing:border-box;padding:0 10px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--text);cursor:pointer;text-decoration:none;}
+.pos-btn:hover{border-color:color-mix(in srgb,var(--primary) 40%,var(--border));}
 .pos-btn--primary{border-color:color-mix(in srgb,var(--primary) 50%,var(--border));background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--text);}
 .pos-btn--primary:disabled,.pos-btn--primary.is-pay-blocked{opacity:.55;cursor:not-allowed;}
-.pos-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;}
-.pos-product{border:1px solid var(--border);border-radius:10px;padding:10px;background:color-mix(in srgb,var(--card) 96%,transparent);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:6px;transition:border-color .15s ease,transform .15s ease;position:relative;}
-.pos-product:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));transform:translateY(-1px);}
-.pos-product[disabled],.pos-product.is-disabled{opacity:.55;cursor:not-allowed;transform:none;}
-.pos-product__img{width:100%;aspect-ratio:1/1;border-radius:8px;object-fit:cover;background:color-mix(in srgb,var(--border) 35%,transparent);}
-.pos-product__placeholder{width:100%;aspect-ratio:1/1;border-radius:8px;display:grid;place-items:center;background:color-mix(in srgb,var(--border) 35%,transparent);color:var(--muted);font-size:22px;}
-.pos-product__placeholder--service{color:color-mix(in srgb,#8b5cf6 70%,var(--muted));background:color-mix(in srgb,#8b5cf6 12%,transparent);}
-.pos-product__name{font-size:13px;font-weight:700;color:var(--text);line-height:1.3;}
-.pos-product__meta{font-size:11px;color:var(--muted);line-height:1.35;}
-.pos-product__price{font-size:13px;font-weight:800;color:var(--text);}
-.pos-product__price-was{font-size:11px;color:var(--muted);text-decoration:line-through;font-weight:600;margin-right:2px;}
-.pos-product__discount-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px;background:color-mix(in srgb,#f59e0b 18%,transparent);color:#b45309;border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);vertical-align:middle;line-height:1.4;margin-left:2px;}
-.pos-product__campaign-tag{display:inline-block;align-self:flex-start;font-size:9px;font-weight:700;padding:2px 6px;border-radius:999px;background:color-mix(in srgb,#8b5cf6 16%,transparent);color:#7c3aed;border:1px solid color-mix(in srgb,#8b5cf6 35%,transparent);}
-.pos-svc-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,#8b5cf6 14%,transparent);color:#8b5cf6;border:1px solid color-mix(in srgb,#8b5cf6 30%,transparent);}
-.pos-cart-list{display:flex;flex-direction:column;gap:8px;}
-.pos-register__sale-panel .pos-cart-list{min-height:80px;}
-.pos-cart-empty{margin:0;padding:18px 12px;text-align:center;color:var(--muted);font-size:13px;border:1px dashed var(--border);border-radius:10px;}
-.pos-cart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card) 96%,transparent);}
-.pos-cart-row__name{font-size:13px;font-weight:700;color:var(--text);}
-.pos-cart-row__sub{font-size:11px;color:var(--muted);margin-top:2px;}
-.pos-cart-row__controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
-.pos-cart-row__controls input{width:72px;box-sizing:border-box;padding:6px 8px;font-size:12px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--text);text-align:center;}
-.pos-cart-row__remove{width:28px;height:28px;padding:0;border:1px solid color-mix(in srgb,#ef4444 40%,var(--border));border-radius:7px;background:transparent;color:#f87171;cursor:pointer;font-size:14px;line-height:1;}
-.pos-totals{border-top:1px solid var(--border);padding-top:10px;display:grid;gap:6px;margin-bottom:12px;}
-.pos-totals__row{display:flex;justify-content:space-between;gap:10px;font-size:13px;}
-.pos-totals__row--grand{font-size:16px;font-weight:800;color:var(--text);}
-.pos-field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px;}
-.pos-field select,.pos-field input,.pos-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
-.pos-field select{cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:30px;}
-.pos-field textarea{min-height:56px;resize:vertical;font-family:inherit;}
-.pos-checkout-grid{display:grid;gap:10px;}
-.pos-banner{margin:0 0 12px;padding:10px 12px;border-radius:10px;border:1px solid var(--border);font-size:13px;}
-.pos-banner--ok{border-color:color-mix(in srgb,#22c55e 45%,var(--border));background:color-mix(in srgb,#22c55e 10%,transparent);}
-.pos-banner--err{border-color:color-mix(in srgb,#f87171 45%,var(--border));background:color-mix(in srgb,#f87171 8%,transparent);}
-.pos-page:not(.pos-page--walking) .pos-page__scroll{display:contents;}
-body.pos-walking-active .pos-page__scroll{padding:10px;}
-.pos-page__top{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:8px;width:100%;min-width:0;}
-.pos-page__top-search{flex:1 1 auto;min-width:0;margin:0;}
-.pos-page__top-search .pos-search{flex-wrap:nowrap;}
-.pos-page__top-search .pos-search input{flex:1 1 auto;min-width:80px;}
-.pos-page__top-actions{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;flex-shrink:0;}
-body.pos-walking-active .pos-page__top-search .pos-search input{padding:6px 8px;font-size:12px;}
-body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px;font-size:10px;}
+.pos-scan-row{display:flex;gap:4px;flex-shrink:0;}
+.pos-scan-row input{box-sizing:border-box;height:var(--reg-ctl-h);padding:0 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);width:130px;}
+.pos-reg .pos-page__top-actions .pos-settings-btn,.pos-reg .pos-page__top-actions .pos-kbd-help-btn,.pos-reg .pos-page__top-actions .pos-fullscreen-btn{width:var(--reg-ctl-h);height:var(--reg-ctl-h);min-width:0;min-height:0;padding:0;font-size:13px;border-radius:8px;}
+.pos-reg .pos-rs-pill,.pos-reg .pos-rs-select{height:var(--reg-ctl-h);box-sizing:border-box;}
+.pos-reg .pos-walking-toggle{height:var(--reg-ctl-h);box-sizing:border-box;padding:0 10px;}
+.pos-reg__sep{width:1px;height:20px;background:var(--border);margin:0 2px;flex-shrink:0;}
 
-/* ── Stats strip ─────────────────────────────────────────────────── */
-.pos-stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
-.pos-stats__tile{flex:1 1 140px;min-width:120px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in srgb,var(--card) 96%,transparent);}
-.pos-stats__tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
-.pos-stats__tile-value{font-size:16px;font-weight:800;color:var(--text);margin-top:2px;}
-.pos-stats__tile-value--profit{color:#16a34a;}
+/* Hub nav: single scrollable row */
+.pos-reg .pcat-nav{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;gap:2px;margin:0 0 8px;font-size:12px;}
+.pos-reg .pcat-nav::-webkit-scrollbar{display:none;}
+.pos-reg .pcat-nav a{white-space:nowrap;flex-shrink:0;padding:4px 8px;}
 
-/* ── Session tabs ────────────────────────────────────────────────── */
-.pos-session-tabs{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
-.pos-session-tab{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--border);border-radius:8px;background:color-mix(in srgb,var(--card) 92%,transparent);overflow:hidden;}
-.pos-session-tab.is-active{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);}
-.pos-session-tab__label{padding:7px 10px;font-size:12px;font-weight:700;border:none;background:transparent;color:var(--text);cursor:pointer;}
-.pos-session-tab__count{display:inline-block;font-size:10px;font-weight:700;padding:0 5px;border-radius:999px;background:color-mix(in srgb,var(--primary) 20%,transparent);margin-left:4px;}
-.pos-session-tab__close{padding:6px 8px;border:none;border-left:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;}
-.pos-session-tab__close:hover{color:#f87171;}
-.pos-session-add{width:30px;height:30px;border-radius:8px;border:1px dashed var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;}
-.pos-session-add:hover{color:var(--text);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));}
+/* Grid: catalog | sale | (checkout) */
+.pos-reg .pos-three-panel{display:grid;grid-template-columns:minmax(0,1fr) var(--reg-sale-w) var(--reg-pay-w);grid-template-rows:minmax(0,1fr);gap:8px;height:var(--pos-reg-h,calc(100vh - 170px));min-height:460px;}
+.pos-reg--modal .pos-three-panel{grid-template-columns:minmax(0,1fr) var(--reg-sale-w);}
+.pos-reg .pos-register__catalog{order:1;}
+.pos-reg .pos-register__sale-panel{order:2;}
+.pos-reg .pos-fixed-cart{order:3;}
+.pos-reg .pos-three-panel > section,.pos-reg .pos-three-panel > aside{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;border:1px solid var(--border);border-radius:12px;background:var(--card);}
+body.pos-walking-active .pos-reg .pos-three-panel{grid-template-columns:minmax(0,1fr) var(--reg-sale-w) var(--reg-pay-w);gap:0;height:calc(100vh - var(--pos-walking-top-h,52px));max-height:none;min-height:0;}
+body.pos-walking-active .pos-reg--modal .pos-three-panel{grid-template-columns:minmax(0,1fr) var(--reg-sale-w);}
+body.pos-walking-active .pos-reg .pos-three-panel > section,body.pos-walking-active .pos-reg .pos-three-panel > aside{border-radius:0;border-top:0;border-bottom:0;border-left:0;}
+body.pos-walking-active .pos-reg--modal .pos-register__sale-panel,body.pos-walking-active .pos-reg .pos-fixed-cart{border-right:0;}
 
-/* ── Mode tabs ───────────────────────────────────────────────────── */
-.pos-mode-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;}
-.pos-mode-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 92%,transparent);color:var(--muted);text-decoration:none;}
-.pos-mode-tab.is-active{color:var(--text);border-color:color-mix(in srgb,var(--primary) 50%,var(--border));background:color-mix(in srgb,var(--primary) 14%,transparent);}
+/* Panel heads */
+.pos-reg__head{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--border);}
+.pos-reg__head h2{margin:0;font-size:13px;font-weight:800;}
+
+/* Catalog */
+.pos-reg-cat__head{flex-shrink:0;display:flex;flex-direction:column;gap:6px;padding:8px 10px 6px;border-bottom:1px solid var(--border);}
+.pos-reg-cat__row{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
+.pos-reg .pos-register__catalog .pos-panel__body{flex:1;min-height:0;overflow-y:auto;padding:10px;}
+.pos-mode-tabs{display:inline-flex;gap:2px;padding:2px;border-radius:9px;background:color-mix(in srgb,var(--border) 45%,transparent);overflow-x:auto;scrollbar-width:none;max-width:100%;}
+.pos-mode-tabs::-webkit-scrollbar{display:none;}
+.pos-mode-tab{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;font-size:12px;font-weight:700;border-radius:7px;color:var(--muted);text-decoration:none;white-space:nowrap;}
+.pos-mode-tab i{font-size:11px;}
 .pos-mode-tab:hover{color:var(--text);}
+.pos-mode-tab.is-active{color:var(--text);background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.08),0 0 0 1px color-mix(in srgb,var(--primary) 30%,transparent);}
 
-/* ── Category / quick-filter chips ───────────────────────────────── */
-.pos-chip-row{display:flex;align-items:center;gap:6px;overflow-x:auto;scrollbar-width:none;padding:2px 0 10px;}
+.pos-reg-stats{display:flex;align-items:center;gap:4px;flex-wrap:wrap;font-size:11px;color:var(--muted);}
+.pos-reg-stats__item{display:inline-flex;align-items:baseline;gap:5px;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--border) 30%,transparent);white-space:nowrap;}
+.pos-reg-stats__item strong{font-size:12px;font-weight:800;color:var(--text);}
+.pos-reg-stats__item--profit strong{color:#16a34a;}
+
+.pos-chip-row{display:flex;align-items:center;gap:4px;overflow-x:auto;scrollbar-width:none;}
 .pos-chip-row::-webkit-scrollbar{display:none;}
-.pos-chip{padding:6px 10px;font-size:11px;font-weight:700;border-radius:999px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 92%,transparent);color:var(--muted);text-decoration:none;white-space:nowrap;flex-shrink:0;}
+.pos-chip{padding:4px 10px;font-size:11px;font-weight:700;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--muted);text-decoration:none;white-space:nowrap;flex-shrink:0;}
 .pos-chip.is-active,.pos-chip:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));color:var(--text);background:color-mix(in srgb,var(--primary) 10%,transparent);}
 
-/* ── Campaign grouped view ───────────────────────────────────────── */
-.pos-campaign-group{margin-bottom:16px;}
-.pos-campaign-group__head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;}
-.pos-campaign-group__head h3{margin:0;font-size:13px;font-weight:800;color:var(--text);}
-.pos-campaign-group__more{font-size:11px;color:var(--muted);}
+/* Product grid */
+.pos-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:8px;}
+.pos-product{border:1px solid var(--border);border-radius:10px;padding:6px;background:var(--card);cursor:pointer;text-align:left;display:flex;flex-direction:column;gap:3px;transition:border-color .12s ease,box-shadow .12s ease;position:relative;min-width:0;}
+.pos-product:hover{border-color:color-mix(in srgb,var(--primary) 50%,var(--border));box-shadow:0 2px 10px rgba(0,0,0,.06);}
+.pos-product:active{transform:scale(.98);}
+.pos-product[disabled],.pos-product.is-disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+.pos-product__img,.pos-product__placeholder{width:100%;aspect-ratio:4/3;border-radius:7px;margin-bottom:3px;background:color-mix(in srgb,var(--border) 30%,transparent);}
+.pos-product__img{object-fit:contain;}
+.pos-product__placeholder{display:grid;place-items:center;color:var(--muted);font-size:20px;}
+.pos-product__placeholder--service{color:color-mix(in srgb,#8b5cf6 70%,var(--muted));background:color-mix(in srgb,#8b5cf6 12%,transparent);}
+.pos-product__name{font-size:12px;font-weight:700;color:var(--text);line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.pos-product__meta{font-size:10px;color:var(--muted);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pos-product__price{font-size:13px;font-weight:800;color:var(--text);margin-top:auto;}
+.pos-product__price-was{font-size:10px;color:var(--muted);text-decoration:line-through;font-weight:600;margin-right:2px;}
+.pos-product__discount-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 4px;border-radius:4px;background:color-mix(in srgb,#f59e0b 18%,transparent);color:#b45309;border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);vertical-align:middle;line-height:1.4;margin-left:2px;}
+.pos-product__campaign-tag{display:inline-block;align-self:flex-start;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:700;padding:1px 6px;border-radius:999px;background:color-mix(in srgb,#8b5cf6 16%,transparent);color:#7c3aed;border:1px solid color-mix(in srgb,#8b5cf6 35%,transparent);}
+.pos-svc-badge{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:color-mix(in srgb,#8b5cf6 14%,transparent);color:#8b5cf6;border:1px solid color-mix(in srgb,#8b5cf6 30%,transparent);}
 
-/* ── Pager ───────────────────────────────────────────────────────── */
-.pos-pager{display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 0 2px;}
-.pos-pager a,.pos-pager span{min-width:30px;text-align:center;padding:6px 8px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid var(--border);color:var(--text);text-decoration:none;}
+.pos-campaign-group{margin-bottom:14px;}
+.pos-campaign-group__head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.pos-campaign-group__head h3{margin:0;font-size:12px;font-weight:800;color:var(--text);}
+.pos-campaign-group__more{font-size:11px;color:var(--muted);}
+.pos-pager{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:4px;padding:10px 0 2px;}
+.pos-pager a,.pos-pager span{min-width:28px;text-align:center;padding:4px 8px;font-size:12px;font-weight:700;border-radius:7px;border:1px solid var(--border);color:var(--text);text-decoration:none;}
 .pos-pager a:hover{border-color:color-mix(in srgb,var(--primary) 45%,var(--border));}
 .pos-pager .is-current{background:color-mix(in srgb,var(--primary) 16%,transparent);border-color:color-mix(in srgb,var(--primary) 50%,var(--border));}
+.pos-reg-empty{margin:0;padding:24px 12px;text-align:center;font-size:13px;color:var(--muted);}
 
-/* ── SKU scan ────────────────────────────────────────────────────── */
-.pos-scan-row{display:flex;gap:6px;flex-shrink:0;}
-.pos-scan-row input{box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);width:130px;}
+/* Sale panel */
+.pos-session-tabs{display:flex;align-items:center;gap:4px;flex:1;min-width:0;overflow-x:auto;scrollbar-width:none;}
+.pos-session-tabs::-webkit-scrollbar{display:none;}
+.pos-session-tab{display:inline-flex;align-items:center;flex-shrink:0;border:1px solid var(--border);border-radius:7px;background:transparent;overflow:hidden;}
+.pos-session-tab.is-active{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);}
+.pos-session-tab__label{padding:4px 8px;font-size:12px;font-weight:700;border:none;background:transparent;color:var(--text);cursor:pointer;white-space:nowrap;}
+.pos-session-tab__count{display:inline-block;font-size:10px;font-weight:700;padding:0 5px;border-radius:999px;background:color-mix(in srgb,var(--primary) 22%,transparent);margin-left:4px;}
+.pos-session-tab__close{padding:4px 7px;border:none;border-left:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;}
+.pos-session-tab__close:hover{color:#f87171;}
+.pos-session-add{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;width:26px;height:26px;border-radius:7px;border:1px dashed var(--border);background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;}
+.pos-session-add:hover{color:var(--text);border-color:color-mix(in srgb,var(--primary) 45%,var(--border));}
+.pos-reg-iconbtn{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;gap:5px;height:26px;padding:0 8px;font-size:11px;font-weight:700;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);cursor:pointer;}
+.pos-reg-iconbtn--danger:hover:not(:disabled){color:#ef4444;border-color:color-mix(in srgb,#ef4444 45%,var(--border));background:color-mix(in srgb,#ef4444 8%,transparent);}
+.pos-reg-iconbtn:disabled{opacity:.4;cursor:not-allowed;}
+
+.pos-reg-customer{flex-shrink:0;padding:8px 10px;border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--border) 12%,transparent);}
+.pos-reg-customer .pos-customer-search-input{height:var(--reg-ctl-h);padding:0 10px 0 30px;}
+.pos-reg-customer .pos-customer-chip{margin:0;padding:0 10px;height:var(--reg-ctl-h);box-sizing:border-box;}
+.pos-reg-customer .pos-customer-quickadd{margin-top:8px;padding:10px;}
+
+.pos-register__sale-body{flex:1;min-height:0;overflow-y:auto;padding:0 10px;}
+.pos-cart-list{display:flex;flex-direction:column;}
+.pos-cart-empty{margin:auto 0;padding:40px 12px;text-align:center;color:var(--muted);font-size:13px;}
+.pos-cart-empty i{display:block;font-size:26px;margin-bottom:8px;opacity:.45;}
+.pos-cart-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px 2px;border:0;border-bottom:1px solid var(--border);border-radius:0;background:transparent;}
+.pos-reg.pos-shell--light .pos-cart-row,.pos-reg.pos-shell--dark .pos-cart-row{background:transparent;}
+.pos-cart-row.is-cart-selected{background:color-mix(in srgb,var(--primary) 8%,transparent)!important;box-shadow:inset 3px 0 0 var(--primary);}
+.pos-cart-row__name{font-size:13px;font-weight:700;color:var(--text);line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.pos-cart-row__sub{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.3;}
+.pos-cart-row__controls{display:flex;align-items:center;gap:6px;justify-content:flex-end;}
+.pos-qty{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:7px;overflow:hidden;}
+.pos-qty button{width:24px;height:28px;padding:0;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:14px;font-weight:700;line-height:1;}
+.pos-qty button:hover{color:var(--text);background:color-mix(in srgb,var(--primary) 10%,transparent);}
+.pos-cart-row__controls .pos-qty input{width:44px;height:28px;box-sizing:border-box;padding:0 2px;font-size:12px;font-weight:700;border:0;border-left:1px solid var(--border);border-right:1px solid var(--border);border-radius:0;background:transparent;color:var(--text);text-align:center;-moz-appearance:textfield;}
+.pos-qty input::-webkit-outer-spin-button,.pos-qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.pos-cart-row__total{min-width:96px;text-align:right;font-size:12px;font-weight:800;white-space:nowrap;}
+.pos-cart-row__remove{width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1;}
+.pos-cart-row__remove:hover{color:#ef4444;background:color-mix(in srgb,#ef4444 10%,transparent);}
+
+/* Checkout column + shared bits */
+.pos-reg .pos-fixed-cart > .pos-panel__body{flex:1;min-height:0;padding:0;overflow:hidden;display:flex;flex-direction:column;}
+.pos-reg .pos-checkout-form__scroll{padding:10px;}
+.pos-reg .pos-checkout-form__footer{padding:8px 10px 10px;}
+.pos-reg .pos-online__field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px;}
+.pos-reg .pos-online__field textarea{width:100%;box-sizing:border-box;min-height:40px;padding:6px 8px;font-size:12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);resize:vertical;font-family:inherit;}
+.pos-reg .pos-online__pay-btn{width:100%;padding:11px 14px;font-size:14px;font-weight:800;border-radius:10px;border:1px solid color-mix(in srgb,var(--primary) 50%,var(--border));background:color-mix(in srgb,var(--primary) 18%,transparent);color:var(--text);cursor:pointer;}
+.pos-reg .pos-online__pay-btn:disabled{opacity:.45;cursor:not-allowed;}
+.pos-reg .pos-pay-method{padding:7px 4px;font-size:11px;}
+.pos-reg .pos-numpad__key{min-height:36px;font-size:15px;}
+.pos-field label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:5px;}
+.pos-field select,.pos-field input,.pos-field textarea{width:100%;box-sizing:border-box;padding:8px 10px;font-size:13px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);}
+.pos-field textarea{min-height:56px;resize:vertical;font-family:inherit;}
+.pos-checkout-grid{display:grid;gap:10px;}
+.pos-banner{margin:0 0 8px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);font-size:13px;}
+.pos-banner--ok{border-color:color-mix(in srgb,#22c55e 45%,var(--border));background:color-mix(in srgb,#22c55e 10%,transparent);}
+.pos-banner--err{border-color:color-mix(in srgb,#f87171 45%,var(--border));background:color-mix(in srgb,#f87171 8%,transparent);}
+
+/* Responsive */
+@media (max-width:1180px){
+    .pos-reg .pos-scan-row input{width:100px;}
+    .pos-reg .pos-walking-toggle__text--full{display:none;}
+    .pos-reg .pos-walking-toggle__text--short{display:inline;}
+}
+@media (max-width:900px){
+    .pos-reg .pos-page__top{flex-wrap:wrap;}
+    .pos-reg .pos-page__top-search{flex-basis:100%;}
+    .pos-reg .pos-page__top-actions{flex-wrap:wrap;}
+    .pos-reg .pos-three-panel,.pos-reg--modal .pos-three-panel,body.pos-walking-active .pos-reg .pos-three-panel{grid-template-columns:minmax(0,1fr);grid-template-rows:none;height:auto;min-height:0;gap:8px;}
+    .pos-reg .pos-three-panel > section,.pos-reg .pos-three-panel > aside{grid-column:auto!important;grid-row:auto!important;max-height:none!important;border:1px solid var(--border)!important;border-radius:12px!important;}
+    .pos-reg .pos-register__catalog{height:62vh!important;}
+    .pos-reg .pos-register__sale-panel{max-height:70vh;}
+    body.pos-walking-active .pos-reg .pos-page__scroll{overflow-y:auto;padding:8px;}
+}
 </style>
 
-<div class="pos-shell pos-page @if($posWalkingCustomer) pos-page--walking @endif {{ $posShellClass }}">
-    <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
-        <div class="pcat-toolbar pos-page__top" style="margin-bottom:12px;">
+<div class="pos-shell pos-page pos-reg @if($posWalkingCustomer) pos-page--walking @endif @if($checkoutModalEnabled) pos-reg--modal @endif {{ $posShellClass }}">
+    <div class="pcat-page-card card" style="max-width:100%;">
+        <div class="pcat-toolbar pos-page__top">
             <form method="get" action="{{ route('pos.register') }}" class="pos-page__top-search pos-search" id="pos-register-search-form">
                 @if($mode !== 'products') <input type="hidden" name="mode" value="{{ $mode }}"> @endif
                 @if($categoryId) <input type="hidden" name="category" value="{{ $categoryId }}"> @endif
                 @if(filled($quickFilter)) <input type="hidden" name="filter" value="{{ $quickFilter }}"> @endif
                 @if($branchId) <input type="hidden" name="branch" value="{{ $branchId }}"> @endif
-                <input type="search" name="q" id="pos-register-search" value="{{ $search }}" placeholder="Search name or SKU…" autocomplete="off">
-                <button type="submit" aria-label="Search"><i class="fa fa-search"></i></button>
+                <i class="fa fa-search pos-search__icon" aria-hidden="true"></i>
+                <input type="search" name="q" id="pos-register-search" value="{{ $search }}" placeholder="Search products by name or SKU…  (Enter)" autocomplete="off" aria-label="Search products">
                 @if(filled($search))
-                    <a href="{{ route('pos.register', $registerParams(['q' => null])) }}" class="pos-btn" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;" title="Clear">×</a>
+                    <a href="{{ route('pos.register', $registerParams(['q' => null])) }}" class="pos-btn" title="Clear search" aria-label="Clear search">&times;</a>
                 @endif
             </form>
             <div class="pos-scan-row">
-                <input type="text" id="pos-sku-scan" placeholder="SKU / scan…" autocomplete="off" aria-label="SKU scanner">
+                <input type="text" id="pos-sku-scan" placeholder="Scan SKU…" autocomplete="off" aria-label="SKU scanner">
                 <button type="button" id="pos-sku-add" class="pos-btn" aria-label="Add SKU" title="Scan barcode (F3)"><i class="fa fa-barcode"></i></button>
             </div>
+            <span class="pos-reg__sep" aria-hidden="true"></span>
             <div class="pos-page__top-actions">
                 @include('pos::partials.pos-register-session-widget', ['currency' => $currency])
+                <span class="pos-reg__sep" aria-hidden="true"></span>
                 <button type="button" class="pos-btn" data-pos-add-product-open title="Add product" aria-label="Add product"><i class="fa fa-plus"></i></button>
                 <button type="button" class="pos-btn" id="posReturnModalOpen" title="Return / Refund" aria-label="Return / Refund"><i class="fa fa-rotate-left"></i></button>
                 @include('pos::partials.pos-settings-modal', ['posSettings' => $posSettings, 'accounts' => $accounts, 'hasAccounts' => $hasAccounts])
                 @include('pos::partials.pos-receipt-editor-modal', ['posSettings' => $posSettings, 'business' => $business, 'currency' => $currency])
                 @include('pos::partials.pos-keyboard-shortcuts')
                 @include('pos::partials.pos-fullscreen-button')
-                <a href="{{ route('dashboard') }}" class="pos-btn" title="Dashboard" aria-label="Dashboard" style="text-decoration:none;display:inline-flex;align-items:center;justify-content:center;"><i class="fa fa-house"></i></a>
+                <a href="{{ route('dashboard') }}" class="pos-btn" title="Dashboard" aria-label="Dashboard"><i class="fa fa-house"></i></a>
                 @include('pos::partials.walking-customer-toggle')
             </div>
         </div>
@@ -229,29 +286,6 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
             </div>
         @endif
 
-        <div class="pos-stats" aria-label="Today's summary">
-            <div class="pos-stats__tile">
-                <div class="pos-stats__tile-label">Sales today</div>
-                <div class="pos-stats__tile-value">{{ (int) ($today['count'] ?? 0) }} · {{ number_format((float) ($today['total'] ?? 0), 2) }}{{ filled($currency) ? ' '.$currency : '' }}</div>
-            </div>
-            <div class="pos-stats__tile">
-                <div class="pos-stats__tile-label">Gross profit</div>
-                <div class="pos-stats__tile-value pos-stats__tile-value--profit">{{ number_format((float) ($today['gross_profit'] ?? 0), 2) }}{{ filled($currency) ? ' '.$currency : '' }}</div>
-            </div>
-            <div class="pos-stats__tile">
-                <div class="pos-stats__tile-label">Cash balance</div>
-                <div class="pos-stats__tile-value" id="pos-stat-cash">—</div>
-            </div>
-            <div class="pos-stats__tile">
-                <div class="pos-stats__tile-label">Items sold</div>
-                <div class="pos-stats__tile-value">{{ (int) ($today['items_sold'] ?? 0) }}</div>
-            </div>
-        </div>
-
-        <div class="pos-session-tabs" id="pos-session-tabs">
-            <button type="button" class="pos-session-add" id="pos-session-add" title="New session" aria-label="New session">+</button>
-        </div>
-
         @if(empty($products) && empty($serviceItems) && empty($campaignGroups))
             <div class="pos-banner pos-banner--err" role="alert" data-pos-empty-products-banner>
                 No active products found.
@@ -260,29 +294,25 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
             </div>
         @endif
 
-        <div class="pos-layout pos-three-panel">
-            <aside class="pos-three-panel__left pos-panel pos-register__sale-panel" aria-label="Current sale">
-                <div class="pos-register__sale-head">
-                    <h2>Current sale</h2>
-                </div>
-                <div class="pos-register__sale-body">
-                    <div id="pos-cart-items" class="pos-cart-list">
-                        <p class="pos-cart-empty" id="pos-cart-empty">Tap a product to add it to the cart.</p>
-                    </div>
-                </div>
-                @include('pos::partials.pos-sale-clear-footer')
-            </aside>
-
-            <section class="pos-three-panel__center pos-panel pos-register__catalog" aria-label="Product catalog">
-                <div class="pos-register__catalog-body">
-                <div class="pos-panel__body">
-                    <div class="pos-mode-tabs" role="tablist" aria-label="Catalog mode">
-                        @foreach($modeTabs as $tabKey => $tab)
-                            <a href="{{ route('pos.register', $registerParams(['mode' => $tabKey, 'filter' => null, 'category' => null, 'page' => null])) }}"
-                               class="pos-mode-tab @if($mode === $tabKey) is-active @endif" role="tab" aria-selected="{{ $mode === $tabKey ? 'true' : 'false' }}">
-                                <i class="fa {{ $tab['icon'] }}" aria-hidden="true"></i> {{ $tab['label'] }}
-                            </a>
-                        @endforeach
+        <div class="pos-layout pos-three-panel" id="pos-register-layout">
+            {{-- Catalog --}}
+            <section class="pos-three-panel__center pos-register__catalog" aria-label="Product catalog">
+                <div class="pos-reg-cat__head">
+                    <div class="pos-reg-cat__row">
+                        <div class="pos-mode-tabs" role="tablist" aria-label="Catalog mode">
+                            @foreach($modeTabs as $tabKey => $tab)
+                                <a href="{{ route('pos.register', $registerParams(['mode' => $tabKey, 'filter' => null, 'category' => null, 'page' => null])) }}"
+                                   class="pos-mode-tab @if($mode === $tabKey) is-active @endif" role="tab" aria-selected="{{ $mode === $tabKey ? 'true' : 'false' }}">
+                                    <i class="fa {{ $tab['icon'] }}" aria-hidden="true"></i> {{ $tab['label'] }}
+                                </a>
+                            @endforeach
+                        </div>
+                        <div class="pos-reg-stats" aria-label="Today's summary">
+                            <span class="pos-reg-stats__item" title="Sales today">Today <strong>{{ (int) ($today['count'] ?? 0) }} · {{ number_format((float) ($today['total'] ?? 0), 2) }}</strong></span>
+                            <span class="pos-reg-stats__item pos-reg-stats__item--profit" title="Gross profit today">Profit <strong>{{ number_format((float) ($today['gross_profit'] ?? 0), 2) }}</strong></span>
+                            <span class="pos-reg-stats__item" title="Cash balance">Cash <strong id="pos-stat-cash">—</strong></span>
+                            <span class="pos-reg-stats__item" title="Items sold today">Items <strong>{{ (int) ($today['items_sold'] ?? 0) }}</strong></span>
+                        </div>
                     </div>
 
                     @if(in_array($mode, ['products', 'rental', 'dynamic'], true))
@@ -297,7 +327,9 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                             @endforeach
                         </div>
                     @endif
+                </div>
 
+                <div class="pos-panel__body">
                     <div id="pos-catalog-wrap">
                         @if($mode === 'campaign')
                             @forelse($campaignGroups as $group)
@@ -315,7 +347,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                                     </div>
                                 </div>
                             @empty
-                                <p class="muted" style="font-size:13px;">No active sale campaigns right now.</p>
+                                <p class="pos-reg-empty">No active sale campaigns right now.</p>
                             @endforelse
                         @elseif($mode === 'services')
                             <div class="pos-products" id="pos-products">
@@ -325,7 +357,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                                         class="pos-product"
                                         data-pos-service
                                         data-service-id="{{ $svc['id'] }}"
-                                        data-service-name="{{ e($svc['name']) }}"
+                                        data-service-name="{{ $svc['name'] }}"
                                         data-unit-price="{{ number_format((float) $svc['price'], 2, '.', '') }}"
                                         data-has-warranty="{{ !empty($svc['has_warranty']) ? '1' : '0' }}"
                                         data-custom-requirement-enabled="{{ !empty($svc['custom_requirement_enabled']) ? '1' : '0' }}"
@@ -338,7 +370,7 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                                         <span class="pos-product__price">{{ number_format((float) $svc['price'], 2) }}{{ filled($currency) ? ' '.$currency : '' }}</span>
                                     </button>
                                 @empty
-                                    <p class="muted" style="font-size:13px;">No active services found.</p>
+                                    <p class="pos-reg-empty">No active services found.</p>
                                 @endforelse
                             </div>
                         @else
@@ -346,8 +378,8 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                                 @forelse($products as $product)
                                     @include('pos::partials.pos-product-card', ['product' => $product, 'currency' => $currency, 'formatQty' => $formatQty])
                                 @empty
-                                    <p class="muted" style="font-size:13px;">
-                                        @if($mode === 'rental') No rental products found. @else No dynamic-priced products found. @endif
+                                    <p class="pos-reg-empty">
+                                        @if($mode === 'rental') No rental products found. @elseif($mode === 'dynamic') No dynamic-priced products found. @else No products found. @endif
                                     </p>
                                 @endforelse
                             </div>
@@ -366,13 +398,30 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                         @endif
                     </div>
                 </div>
+            </section>
+
+            {{-- Current sale: sessions, customer, cart, totals --}}
+            <aside class="pos-three-panel__left pos-register__sale-panel" aria-label="Current sale">
+                <div class="pos-reg__head">
+                    <div class="pos-session-tabs" id="pos-session-tabs">
+                        <button type="button" class="pos-session-add" id="pos-session-add" title="New sale session" aria-label="New sale session">+</button>
+                    </div>
+                    <button type="button" class="pos-reg-iconbtn pos-reg-iconbtn--danger" id="pos-clear-cart" title="Clear sale" disabled><i class="fa fa-trash-can" aria-hidden="true"></i> Clear</button>
+                </div>
+                <div class="pos-reg-customer">
+                    @include('pos::partials.pos-customer-picker', ['customerPickerLabel' => ''])
+                </div>
+                <div class="pos-register__sale-body">
+                    <div id="pos-cart-items" class="pos-cart-list">
+                        <p class="pos-cart-empty" id="pos-cart-empty"><i class="fa fa-basket-shopping" aria-hidden="true"></i>Cart is empty.<br>Tap a product or scan a barcode.</p>
+                    </div>
+                </div>
                 @include('pos::partials.pos-cart-totals-bar', [
                     'discountFieldEnabled' => $discountFieldEnabled,
                     'checkoutModalEnabled' => $checkoutModalEnabled,
                     'currency' => $currency,
                 ])
-                </div>
-            </section>
+            </aside>
 
             @if($checkoutModalEnabled)
                 @include('pos::partials.pos-checkout-modal', [
@@ -381,14 +430,15 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                     'channel'                => 'retail',
                     'discountFieldEnabled'   => $discountFieldEnabled,
                     'branchId'               => $branchId,
+                    'customerPickerExternal' => true,
                 ])
             @else
                 <section class="pos-three-panel__right pos-panel pos-fixed-cart" aria-label="Checkout">
-                    <div class="pos-panel__head">
-                        <h2>Checkout</h2>
+                    <div class="pos-reg__head">
+                        <h2>Payment</h2>
                     </div>
                     <div class="pos-panel__body">
-                        @include('pos::partials.pos-checkout-panel', ['defaultDepositAccountId' => $defaultDepositAccountId, 'currency' => $currency, 'channel' => 'retail', 'branchId' => $branchId])
+                        @include('pos::partials.pos-checkout-panel', ['defaultDepositAccountId' => $defaultDepositAccountId, 'currency' => $currency, 'channel' => 'retail', 'branchId' => $branchId, 'customerPickerExternal' => true])
                     </div>
                 </section>
             @endif
@@ -612,9 +662,13 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                     '<div class="pos-cart-row__sub"></div>' +
                 '</div>' +
                 '<div class="pos-cart-row__controls">' +
-                    '<input type="number" min="0.001" step="any" inputmode="decimal" data-qty aria-label="Quantity">' +
-                    '<strong data-line-total style="min-width:72px;text-align:right;font-size:12px;"></strong>' +
-                    '<button type="button" class="pos-cart-row__remove" data-remove aria-label="Remove">&times;</button>' +
+                    '<div class="pos-qty">' +
+                        '<button type="button" data-qty-step="-1" aria-label="Decrease quantity">&minus;</button>' +
+                        '<input type="number" min="0.001" step="any" inputmode="decimal" data-qty aria-label="Quantity">' +
+                        '<button type="button" data-qty-step="1" aria-label="Increase quantity">+</button>' +
+                    '</div>' +
+                    '<strong data-line-total class="pos-cart-row__total"></strong>' +
+                    '<button type="button" class="pos-cart-row__remove" data-remove aria-label="Remove" title="Remove">&times;</button>' +
                 '</div>';
 
             wrap.querySelector('.pos-cart-row__name').textContent = row.name;
@@ -759,6 +813,15 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
                 qtyHidden.value = String(qty * (row.sellingUnitFactor || 1.0));
                 renderCart();
                 renderSessionTabs();
+            });
+
+            wrap.querySelectorAll('[data-qty-step]').forEach(function (stepBtn) {
+                stepBtn.addEventListener('click', function () {
+                    const next = Math.round(((parseFloat(qtyInput.value) || 0) + parseFloat(stepBtn.dataset.qtyStep)) * 1000) / 1000;
+                    if (next < 1) return; // removal stays explicit via the × button
+                    qtyInput.value = String(next);
+                    qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+                });
             });
 
             wrap.querySelector('[data-remove]').addEventListener('click', function () {
@@ -1046,6 +1109,28 @@ body.pos-walking-active .pos-page__top-search .pos-search button{padding:6px 8px
     renderSessionTabs();
     renderCart();
     document.getElementById('pos-register-search')?.focus();
+
+    // Fit the register grid to the remaining viewport height inside the app shell,
+    // so catalog and cart scroll internally instead of the whole page.
+    // Walking-customer mode is sized by the theme CSS instead.
+    function fitRegisterHeight() {
+        const layout = document.getElementById('pos-register-layout');
+        if (!layout || document.body.classList.contains('pos-walking-active')) return;
+        if (window.innerWidth <= 900) {
+            layout.style.removeProperty('--pos-reg-h');
+            return;
+        }
+        const top = layout.getBoundingClientRect().top + window.scrollY;
+        let h = Math.max(460, Math.floor(window.innerHeight - top - 16));
+        layout.style.setProperty('--pos-reg-h', h + 'px');
+        const overflow = document.documentElement.scrollHeight - window.innerHeight;
+        if (overflow > 0 && h - overflow >= 460) {
+            layout.style.setProperty('--pos-reg-h', (h - overflow) + 'px');
+        }
+    }
+    fitRegisterHeight();
+    window.addEventListener('resize', fitRegisterHeight);
+    window.addEventListener('load', fitRegisterHeight);
 
     // Cash-balance stat tile — driven by the drawer-status fetch the
     // register-session widget already performs (avoids a second fetch).

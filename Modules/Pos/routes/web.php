@@ -14,6 +14,7 @@ use Modules\Pos\Http\Controllers\CustomerController;
 use Modules\Pos\Http\Controllers\EndOfDayController;
 use Modules\Pos\Http\Controllers\NotificationController;
 use Modules\Pos\Http\Controllers\PosController;
+use Modules\Pos\Http\Controllers\PosPrintSettingsController;
 use Modules\Pos\Http\Controllers\PosProductController;
 use Modules\Pos\Http\Controllers\SaleController;
 use Modules\Pos\Http\Controllers\StockAuditController;
@@ -29,6 +30,11 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos/register', [PosController::class, 'register'])->name('pos.register');
     Route::post('/pos/walking-customer', [PosController::class, 'toggleWalkingCustomer'])->name('pos.walking-customer.toggle');
     Route::post('/pos/settings', [PosController::class, 'saveSettings'])->name('pos.settings.save');
+    // Settings → Printer / Receipt Setting (same POS settings as POS Lite's Settings window)
+    Route::get('/settings/printer', [PosPrintSettingsController::class, 'printer'])->name('settings.printer');
+    Route::post('/settings/printer', [PosPrintSettingsController::class, 'updatePrinter'])->name('settings.printer.update');
+    Route::get('/settings/receipt', [PosPrintSettingsController::class, 'receipt'])->name('settings.receipt');
+    Route::post('/settings/receipt', [PosPrintSettingsController::class, 'updateReceipt'])->name('settings.receipt.update');
     Route::post('/pos/checkout', [PosController::class, 'checkout'])->name('pos.checkout');
     Route::post('/pos/products', [PosProductController::class, 'store'])->name('pos.products.store');
 
