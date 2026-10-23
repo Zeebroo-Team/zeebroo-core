@@ -42741,14 +42741,16 @@ async function loadEmployeeAttendanceTab(emp, month) {
 
   const rate = e?.attendance_rate;
   const rc   = rate == null ? 'var(--text-muted)' : rate >= 95 ? '#16a34a' : rate >= 80 ? '#d97706' : '#dc2626';
+  const stat = (label, val, tip = '', color = '') =>
+    `<div class="eas-item" title="${escHtml(tip)}"><span>${label}</span><b${color ? ` style="color:${color}"` : ''}>${val}</b></div>`;
   const kpis = e ? [
-    _attKpi('fa-user-check',     '#16a34a', 'Present',      Number.isInteger(e.present_days) ? e.present_days : e.present_days.toFixed(1), e.half_days ? `incl. ${e.half_days} half day` : 'days worked'),
-    _attKpi('fa-umbrella-beach', '#0d9488', 'Leave',        e.paid_leave_days + e.unpaid_leave_days, `${e.paid_leave_days} paid · ${e.unpaid_leave_days} unpaid`),
-    _attKpi('fa-user-xmark',     '#dc2626', 'Absent',       e.absent_days, 'no pay'),
-    _attKpi('fa-clock',          '#d97706', 'Late',         `${e.late_count}×`, e.late_minutes ? `${_attFmtWorked(e.late_minutes)} total` : 'on time'),
-    _attKpi('fa-hourglass-half', '#0284c7', 'Hours Worked', _attFmtHours(e.worked_minutes), `avg ${_attFmtWorked(e.avg_worked_minutes || 0)} / day`),
-    _attKpi('fa-bolt',           '#7c3aed', 'Overtime',     _attFmtHours(e.overtime_minutes), `${c.overtime || 0} day${c.overtime === 1 ? '' : 's'}`),
-    _attKpi('fa-chart-simple',   rc,        'Attendance',   rate == null ? '—' : rate + '%', e.missing_checkout ? `${e.missing_checkout} missing check-out` : 'present + paid leave'),
+    stat('Present',    Number.isInteger(e.present_days) ? e.present_days : e.present_days.toFixed(1), e.half_days ? `incl. ${e.half_days} half day` : 'days worked'),
+    stat('Leave',      e.paid_leave_days + e.unpaid_leave_days, `${e.paid_leave_days} paid · ${e.unpaid_leave_days} unpaid`),
+    stat('Absent',     e.absent_days, 'no pay', e.absent_days ? '#dc2626' : ''),
+    stat('Late',       e.late_count, e.late_minutes ? `${_attFmtWorked(e.late_minutes)} total` : 'on time', e.late_count ? '#d97706' : ''),
+    stat('Hours',      _attFmtHours(e.worked_minutes), `avg ${_attFmtWorked(e.avg_worked_minutes || 0)} / day`),
+    stat('Overtime',   _attFmtHours(e.overtime_minutes), `${c.overtime || 0} day${c.overtime === 1 ? '' : 's'}`),
+    stat('Attendance', rate == null ? '—' : rate + '%', e.missing_checkout ? `${e.missing_checkout} missing check-out` : 'present + paid leave', rc),
   ].join('') : '';
 
   const jump = !rows.length && d.latest_date && d.latest_date.slice(0, 7) !== ym
@@ -42765,7 +42767,7 @@ async function loadEmployeeAttendanceTab(emp, month) {
           <button class="btn-secondary" id="emp-att-open"><i class="fa fa-arrow-up-right-from-square"></i> Open in Attendance</button>
         </div>
       </div>
-      ${rows.length ? `<div class="att-kpis" style="padding:0">${kpis}</div>` : ''}
+      ${rows.length ? `<div class="eas">${kpis}</div>` : ''}
       ${_empAttCalendar(m0, rows, d.work_days || [])}
       ${rows.length ? `
         <div style="font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.05em">Daily Records</div>
@@ -42806,16 +42808,15 @@ function _empAttCalendar(m0, rows, workDays) {
         r.overtime_minutes > 0 ? `<span class="eac-dot" style="background:#7c3aed" title="Overtime ${_attFmtWorked(r.overtime_minutes)}"></span>` : '',
         r.missing_checkout ? '<span class="eac-dot" style="background:#dc2626" title="No check-out"></span>' : '',
       ].join('');
-      cells += `<div class="eac-cell eac-has${iso === today ? ' eac-today' : ''}" data-att-id="${r.id}" style="--eac-c:${st.color}" title="${escHtml(st.label)} — click for details">
+      const tip  = works ? `${st.label} · ${_attFmtTime(r.check_in_at)} – ${_attFmtTime(r.check_out_at)}` : st.label;
+      cells += `<div class="eac-cell eac-has${iso === today ? ' eac-today' : ''}" data-att-id="${r.id}" style="--eac-c:${st.color}" title="${escHtml(tip)} — click for details">
         <div class="eac-top"><span class="eac-num">${day}</span><span class="eac-dots">${dots}</span></div>
-        <div class="eac-status">${escHtml(st.label)}</div>
-        ${works ? `<div class="eac-time">${_attFmtTime(r.check_in_at)} – ${_attFmtTime(r.check_out_at)}</div><div class="eac-worked">${_attFmtWorked(r.worked_minutes)}</div>` : ''}
+        <div class="eac-status">${works ? _attFmtWorked(r.worked_minutes) : escHtml(st.label)}</div>
       </div>`;
     } else {
       const missing = work && iso < today;
-      cells += `<div class="eac-cell${work ? '' : ' eac-off'}${missing ? ' eac-missing' : ''}${iso === today ? ' eac-today' : ''}">
+      cells += `<div class="eac-cell${work ? '' : ' eac-off'}${missing ? ' eac-missing' : ''}${iso === today ? ' eac-today' : ''}"${missing ? ' title="No record"' : ''}>
         <div class="eac-top"><span class="eac-num">${day}</span></div>
-        <div class="eac-status">${!work ? 'Day off' : missing ? 'No record' : ''}</div>
       </div>`;
     }
   }
