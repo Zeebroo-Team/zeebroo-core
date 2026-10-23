@@ -93,7 +93,7 @@ class HomeOverviewService
                 'icon'  => 'fa-cart-shopping',
                 'color' => 'blue',
                 'cards' => [
-                    ['label' => 'Open POS', 'desc' => 'Start ringing up a sale at the register.', 'icon' => 'fa-cash-register', 'route' => 'pos.online'],
+                    ['label' => 'Open POS', 'desc' => 'Start ringing up a sale at the register.', 'icon' => 'fa-cash-register', 'route' => 'pos.register'],
                     ['label' => "Today's Summary", 'desc' => "See today's sales count, revenue and top-selling items.", 'icon' => 'fa-sun', 'route' => 'home.index'],
                     ['label' => 'Orders', 'desc' => 'Browse the full history of sales and purchase orders.', 'icon' => 'fa-receipt', 'route' => 'pos.sales.index'],
                     ['label' => 'Recent Activity', 'desc' => 'A live feed of the latest transactions and changes.', 'icon' => 'fa-clock-rotate-left', 'route' => 'home.index'],

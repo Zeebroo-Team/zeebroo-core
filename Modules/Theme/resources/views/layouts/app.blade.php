@@ -465,7 +465,8 @@
 
         // POS — only visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
-        $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online') && $posFeatureOn;
+        // Online POS temporarily hidden — the POS register (pos.register) covers the same flow.
+        $showSidebarPosRegisterLink = false;
         $showSidebarPosTerminalLink = $navBusiness && Route::has('pos.register') && $posFeatureOn;
         $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index') && $posFeatureOn;
         $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day') && $posFeatureOn;

@@ -108,9 +108,10 @@ html.pdl-open,html.pdl-open body{overflow:hidden;}
     @endif
 
     <div class="pos-hub-grid">
-        <a href="{{ route('pos.online') }}" class="pos-hub-tile" @if(!$hasProducts) style="opacity:.65;pointer-events:none;" @endif>
-            <span class="pos-hub-tile__icon"><i class="fa fa-store" aria-hidden="true"></i></span>
-            <h3 class="pos-hub-tile__title">Online retail POS</h3>
+        {{-- Online POS temporarily hidden — tile opens the POS register instead. --}}
+        <a href="{{ route('pos.register') }}" class="pos-hub-tile" @if(!$hasProducts) style="opacity:.65;pointer-events:none;" @endif>
+            <span class="pos-hub-tile__icon"><i class="fa fa-cash-register" aria-hidden="true"></i></span>
+            <h3 class="pos-hub-tile__title">POS</h3>
             <p class="pos-hub-tile__desc">Full-screen terminal with categories, SKU scan, and quick checkout for retail & online sales.</p>
         </a>
         <a href="{{ route('pos.sales.index') }}" class="pos-hub-tile">
