@@ -182,7 +182,7 @@ class PosController extends Controller
             return redirect()->to($redirect);
         }
 
-        return redirect()->route('pos.online');
+        return redirect()->route('pos.register');
     }
 
     public function saveSettings(Request $request): RedirectResponse
@@ -226,7 +226,7 @@ class PosController extends Controller
             return redirect()->to($redirect)->with('status', 'POS settings saved.');
         }
 
-        return redirect()->route('pos.online')->with('status', 'POS settings saved.');
+        return redirect()->route('pos.register')->with('status', 'POS settings saved.');
     }
 
     private function terminal(
