@@ -701,17 +701,7 @@ body.pos-walking-active .pos-online__top-fields .pos-online__scan-row button{pad
 </script>
 
 @if($printInvoiceUrl ?? null)
-    <script>
-    (function () {
-        window.open(@json($printInvoiceUrl), '_blank');
-        var toast = document.createElement('div');
-        toast.textContent = @json(session('status') ?: 'Invoice created.');
-        toast.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:500;background:#16a34a;color:#fff;padding:10px 16px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25);';
-        document.body.appendChild(toast);
-        setTimeout(function () { toast.remove(); }, 4000);
-        document.dispatchEvent(new CustomEvent('pos-clear-cart-and-reset'));
-    })();
-    </script>
+    @include('pos::partials.pos-invoice-print-toast', ['printInvoiceUrl' => $printInvoiceUrl])
 @elseif($printSale)
     @include('pos::partials.pos-sale-completed-modal', ['completedSale' => $printSale, 'currency' => $currency, 'business' => $business, 'posSettings' => $posSettings])
 @endif

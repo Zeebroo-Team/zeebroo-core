@@ -66,7 +66,9 @@
         <p id="pos-pay-cash-hint" class="pos-pay-hint" hidden></p>
     </div>
 
-    <p id="pos-pay-card-hint" class="pos-pay-hint" @if($selectedPayment !== 'card') hidden @endif>
+    <p id="pos-pay-card-hint" class="pos-pay-hint" @if($selectedPayment !== 'card') hidden @endif
+       data-hint-account="Card payment is recorded to your default deposit account from POS settings."
+       data-hint-no-account="No default deposit account set — the sale will complete without a ledger entry. Set one in POS settings → Accounts.">
         Card payment is recorded to your default deposit account from POS settings.
     </p>
 
@@ -234,7 +236,10 @@ window.initPosPaymentField = function (options) {
             btn.classList.toggle('is-active', btn.dataset.posPayMethod === method);
         });
         if (cashPanel) cashPanel.hidden = method !== 'cash';
-        if (cardHintEl) cardHintEl.hidden = method !== 'card';
+        if (cardHintEl) {
+            cardHintEl.hidden = method !== 'card';
+            syncCardHint();
+        }
         if (creditPanelEl) creditPanelEl.hidden = method !== 'credit';
         if (method === 'cash') {
             setNumpadTarget(cashInput);
@@ -242,6 +247,13 @@ window.initPosPaymentField = function (options) {
         syncCashPanel();
         validateComplete();
         syncNumpadState(cartTotal > 0);
+    }
+
+    function syncCardHint() {
+        if (!cardHintEl) return;
+        const hasAccount = !!(creditAccountEl?.value);
+        cardHintEl.textContent = hasAccount ? cardHintEl.dataset.hintAccount : cardHintEl.dataset.hintNoAccount;
+        cardHintEl.classList.toggle('pos-pay-hint--err', !hasAccount);
     }
 
     function syncCashPanel() {
@@ -301,8 +313,6 @@ window.initPosPaymentField = function (options) {
         if (method === 'cash') {
             const tendered = parseFloat(cashInput?.value);
             canPay = Number.isFinite(tendered) && tendered + 0.001 >= cartTotal;
-        } else if (method === 'card') {
-            canPay = !!(creditAccountEl?.value);
         }
         completeBtn.disabled = !canPay;
         completeBtn.classList.toggle('is-pay-blocked', !canPay);
@@ -360,16 +370,13 @@ window.initPosPaymentField = function (options) {
                 return;
             }
         }
-        if (method === 'card' && !creditAccountEl?.value) {
-            e.preventDefault();
-            window.alert('Set a deposit account in POS settings before recording card payments.');
-        }
     });
 
     const settingsDeposit = document.getElementById('pos-settings-deposit');
     if (settingsDeposit && creditAccountEl) {
         settingsDeposit.addEventListener('change', function () {
             creditAccountEl.value = settingsDeposit.value || '';
+            syncCardHint();
             validateComplete(cartTotal > 0);
         });
     }
