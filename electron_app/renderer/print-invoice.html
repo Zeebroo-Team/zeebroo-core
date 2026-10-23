@@ -146,10 +146,15 @@ body {
   function render(data) {
     var title = document.getElementById('pi-title');
     var badge = document.getElementById('pi-badge');
-    if (title) title.textContent = data.number ? 'Invoice ' + data.number : 'Invoice';
+    // docLabel lets other documents (e.g. quotations) reuse this print window
+    var docLabel = data.docLabel || 'Invoice';
+    document.title = 'Print ' + docLabel;
+    if (title) title.textContent = data.number ? docLabel + ' ' + data.number : docLabel;
+    var printBtn = document.getElementById('pi-btn-print');
+    if (printBtn && printBtn.lastChild) printBtn.lastChild.textContent = ' Print ' + docLabel;
     if (badge && data.status) {
-      var bgMap  = { paid:'#dcfce7', overdue:'#fee2e2', draft:'#f1f5f9', sent:'#dbeafe', cancelled:'#fee2e2' };
-      var txtMap = { paid:'#15803d', overdue:'#dc2626', draft:'#64748b', sent:'#1d4ed8', cancelled:'#dc2626' };
+      var bgMap  = { paid:'#dcfce7', overdue:'#fee2e2', draft:'#f1f5f9', sent:'#dbeafe', cancelled:'#fee2e2', accepted:'#dcfce7', rejected:'#fee2e2', expired:'#fee2e2' };
+      var txtMap = { paid:'#15803d', overdue:'#dc2626', draft:'#64748b', sent:'#1d4ed8', cancelled:'#dc2626', accepted:'#15803d', rejected:'#dc2626', expired:'#dc2626' };
       badge.textContent      = data.statusLabel || data.status;
       badge.style.background = bgMap[data.status]  || '#f1f5f9';
       badge.style.color      = txtMap[data.status] || '#64748b';

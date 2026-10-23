@@ -433,11 +433,18 @@ function _buildRibbonItem(item) {
   }
   if (item.type === 'counter-select') {
     // Special element — counter selector in POS session group
-    return '<div class="ribbon-counter-wrap" id="rb-counter-wrap" style="display:none">'
+    // and, beneath it, the Quotation-mode switch (always visible)
+    return '<div class="ribbon-counter-col">'
+         + '<div class="ribbon-counter-wrap" id="rb-counter-wrap" style="display:none">'
          + '<label class="ribbon-counter-label"><i class="fa fa-cash-register"></i> Counter</label>'
          + '<select id="rb-counter-select" class="ribbon-counter-select">'
          + '<option value="">— None —</option>'
-         + '</select></div>';
+         + '</select></div>'
+         + '<button type="button" class="ribbon-quote-toggle" id="rb-quote-toggle" role="switch" aria-checked="false"'
+         + ' title="Quotation mode — checkout saves a quotation instead of recording a sale">'
+         + '<span class="rqt-track"><span class="rqt-thumb"></span></span>'
+         + '<span class="rqt-label"><i class="fa fa-file-signature"></i> Quotation</span>'
+         + '</button></div>';
   }
   return '';
 }
@@ -3069,9 +3076,28 @@ async function _fetchLetterhead() {
 }
 
 // ── Print (with optional letterhead) ─────────────────────────────────────
+// Quotations print through the same saved Invoice Setup (template, colour,
+// paper, margins, header layout, letterhead) as invoices — only the wording differs.
+function _qtToPrintDoc(q) {
+  return {
+    invoice_number:  q.quote_number,
+    issue_date:      q.quote_date,
+    due_date:        q.expiry_date,
+    customer_name:   q.customer_name,
+    status:          q.status,
+    status_label:    q.status_label,
+    notes:           q.notes,
+    subtotal:        q.subtotal,
+    discount_amount: q.discount_amount,
+    tax_amount:      q.tax_amount,
+    total:           q.total,
+    items:           q.items || [],
+    _docLabels: { doc: 'Quotation', due: 'Valid Until', dueShort: 'Valid until', total: 'Quote Total', amtDue: 'Quote Total' },
+  };
+}
+
 async function _qtPrint(q) {
-  const lhFull = await _fetchLetterhead();
-  await window.electronAPI.openQuotePrint({ quote: q, letterhead: lhFull, currency: state.currency, currencyPosition: currencyPosition() });
+  await _invPrint(_qtToPrintDoc(q));
 }
 
 // ── Form (Create / Edit) ──────────────────────────────────────────────────
@@ -4296,6 +4322,7 @@ async function _invPrint(inv) {
     number:      inv.invoice_number || '',
     status:      inv.status         || '',
     statusLabel: inv.status_label   || '',
+    docLabel:    inv._docLabels?.doc || 'Invoice',
     width:       geom.wPx,
     height:      geom.hPx || null,
   });
@@ -22305,6 +22332,7 @@ const _CSV_COL_MAP = {
 
 let _csvParsedRows = [];
 let _csvValidRows  = [];
+let _csvBranches   = null; // null = not loaded yet
 
 function _csvParseFile(text) {
   const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
@@ -22364,7 +22392,7 @@ function _csvParseLine(line) {
 }
 
 function _csvSetStep(n) {
-  [1, 2, 3].forEach(i => {
+  [1, 2, 3, 4].forEach(i => {
     const body = $(`#csv-step-${i}`);
     const ind  = $(`#csv-step-ind-${i}`);
     if (body) body.style.display = i === n ? 'flex' : 'none';
@@ -22413,13 +22441,56 @@ function _csvShowPreview(rows) {
   }).join('');
 
   $('#csv-import-count').textContent = valid.length;
-  $('#csv-import-btn').disabled = valid.length === 0;
+  $('#csv-next-btn').disabled = valid.length === 0;
   _csvSetStep(2);
+}
+
+// Step 3: pick the branch(es) that receive each row's stock quantity.
+async function _csvShowBranches() {
+  if (!_csvValidRows.length) return;
+  _csvSetStep(3);
+  const list = $('#csv-branch-list');
+
+  if (_csvBranches === null) {
+    list.innerHTML = '<div class="csv-branch-empty"><i class="fa fa-spinner fa-spin"></i> Loading branches…</div>';
+    const res = await API.branchesList();
+    _csvBranches = res.status === 200 && Array.isArray(res.body?.data) ? res.body.data : [];
+  }
+
+  if (!_csvBranches.length) {
+    list.innerHTML = '<div class="csv-branch-empty"><i class="fa fa-circle-info"></i> No branches set up — stock will be added without a branch.</div>';
+    $('#csv-branch-all').closest('label').style.display = 'none';
+    return;
+  }
+
+  $('#csv-branch-all').closest('label').style.display = '';
+  const curBranchId = state.config?.branch_id;
+  list.innerHTML = _csvBranches.map(b => {
+    const on = _csvBranches.length === 1 || b.id === curBranchId;
+    return `<label class="csv-branch-item${on ? ' checked' : ''}">
+      <input type="checkbox" class="csv-branch-cb" value="${b.id}"${on ? ' checked' : ''}>
+      <i class="fa fa-code-branch"></i> ${escHtml(b.name)}
+    </label>`;
+  }).join('');
+  _csvSyncBranchAll();
+}
+
+function _csvSelectedBranchIds() {
+  return [...document.querySelectorAll('#csv-branch-list .csv-branch-cb:checked')].map(cb => Number(cb.value));
+}
+
+function _csvSyncBranchAll() {
+  const cbs = document.querySelectorAll('#csv-branch-list .csv-branch-cb');
+  const n   = _csvSelectedBranchIds().length;
+  const all = $('#csv-branch-all');
+  all.checked       = cbs.length > 0 && n === cbs.length;
+  all.indeterminate = n > 0 && n < cbs.length;
 }
 
 function _csvReset() {
   _csvParsedRows = [];
   _csvValidRows  = [];
+  _csvBranches   = null;
   $('#csv-file-input').value = '';
   _csvSetStep(1);
 }
@@ -22473,13 +22544,31 @@ $('#csv-download-sample')?.addEventListener('click', _csvDownloadSample);
 $('#csv-import-close')?.addEventListener('click',  _csvCloseModal);
 $('#csv-import-modal')?.addEventListener('click',  e => { if (e.target === e.currentTarget) _csvCloseModal(); });
 $('#csv-back-btn')?.addEventListener('click',      _csvReset);
+$('#csv-next-btn')?.addEventListener('click',      _csvShowBranches);
+$('#csv-branch-back-btn')?.addEventListener('click', () => _csvSetStep(2));
+$('#csv-branch-list')?.addEventListener('change', e => {
+  if (!e.target.classList.contains('csv-branch-cb')) return;
+  e.target.closest('.csv-branch-item')?.classList.toggle('checked', e.target.checked);
+  _csvSyncBranchAll();
+});
+$('#csv-branch-all')?.addEventListener('change', e => {
+  document.querySelectorAll('#csv-branch-list .csv-branch-cb').forEach(cb => {
+    cb.checked = e.target.checked;
+    cb.closest('.csv-branch-item')?.classList.toggle('checked', cb.checked);
+  });
+  _csvSyncBranchAll();
+});
 $('#csv-done-btn')?.addEventListener('click',      _csvCloseModal);
 $('#csv-import-more-btn')?.addEventListener('click', _csvReset);
 $('#inv-import-csv-btn')?.addEventListener('click', _csvOpenModal);
 
 $('#csv-import-btn')?.addEventListener('click', async () => {
   if (!_csvValidRows.length) return;
+  const branchIds = _csvSelectedBranchIds();
+  if (_csvBranches?.length && !branchIds.length) { toast('Select at least one branch to add the stock to', 'error'); return; }
+
   const btn = $('#csv-import-btn');
+  const btnHtml = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
 
@@ -22494,9 +22583,9 @@ $('#csv-import-btn')?.addEventListener('click', async () => {
     description:     r.description || undefined,
   }));
 
-  const res = await API.importProducts(payload);
+  const res = await API.importProducts(payload, branchIds);
   btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Products';
+  btn.innerHTML = btnHtml;
 
   if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
 
@@ -22522,7 +22611,7 @@ $('#csv-import-btn')?.addEventListener('click', async () => {
     errWrap.style.display = 'none';
   }
 
-  _csvSetStep(3);
+  _csvSetStep(4);
   if (imported > 0) { invState.loaded = false; loadInventory(); }
 });
 // ── End CSV Product Import ─────────────────────────────────────────────────
@@ -28293,8 +28382,16 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const dueDate = escHtml(inv.due_date       || '—');
   const cust    = escHtml(inv.customer_name  || 'Walk-in Customer');
   const sLabel  = escHtml(inv.status_label   || inv.status || '');
-  const sColor  = ({ paid:'#15803d', overdue:'#ef4444', sent:'#0891b2', cancelled:'#ef4444' })[inv.status] || '#64748b';
-  const sColorDk= ({ paid:'#4ade80', overdue:'#f87171', sent:'#60a5fa', cancelled:'#f87171' })[inv.status] || '#94a3b8';
+  const sColor  = ({ paid:'#15803d', overdue:'#ef4444', sent:'#0891b2', cancelled:'#ef4444', accepted:'#15803d', rejected:'#ef4444', expired:'#ef4444' })[inv.status] || '#64748b';
+  const sColorDk= ({ paid:'#4ade80', overdue:'#f87171', sent:'#60a5fa', cancelled:'#f87171', accepted:'#4ade80', rejected:'#f87171', expired:'#f87171' })[inv.status] || '#94a3b8';
+  // Document wording — invoices by default; quotations pass their own via inv._docLabels
+  const L         = inv._docLabels || {};
+  const lblDoc    = escHtml(L.doc      || 'Invoice');
+  const lblDocUp  = lblDoc.toUpperCase();
+  const lblDue    = escHtml(L.due      || 'Due Date');
+  const lblDueSh  = escHtml(L.dueShort || 'Due');
+  const lblTotal  = escHtml(L.total    || 'Total Due');
+  const lblAmtDue = escHtml(L.amtDue   || 'Amount Due');
   const notesText = escHtml(inv.notes || 'Thank you for your business!');
   const sub  = fmt(inv.subtotal);
   const disc = parseFloat(inv.discount_amount || 0);
@@ -28465,12 +28562,12 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="sb">
   <div class="sb-biz">${biz}</div><div class="sb-addr">${addr}</div>
   <div class="sb-hr"></div>
-  <div class="sb-lbl">Invoice</div><div class="sb-num">${invNum}</div>
+  <div class="sb-lbl">${lblDoc}</div><div class="sb-num">${invNum}</div>
   <div class="sb-badge">● ${sLabel}</div>
   <div class="sb-row"><div class="sb-dk">Issue Date</div><div class="sb-dv">${issDate}</div></div>
-  <div class="sb-row"><div class="sb-dk">Due Date</div><div class="sb-dv">${dueDate}</div></div>
+  <div class="sb-row"><div class="sb-dk">${lblDue}</div><div class="sb-dv">${dueDate}</div></div>
   <div class="sb-hr" style="margin-top:12px"></div>
-  <div class="sb-row"><div class="sb-dk">Amount Due</div><div class="sb-amt">${money(tot)}</div></div>
+  <div class="sb-row"><div class="sb-dk">${lblAmtDue}</div><div class="sb-amt">${money(tot)}</div></div>
 </div>
 <div class="ct">
   <div class="bt"><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
@@ -28478,7 +28575,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
   <tbody>${rows(false)}</tbody></table>
   <div class="tot"><div class="ti">
     ${totRows}
-    <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
   </div></div>
 </div></div></body></html>`;
@@ -28515,12 +28612,12 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="banner">
   <div>${bizBlock}</div>
-  <div><div class="b-lbl">Invoice</div><div class="b-num">${invNum}</div></div>
+  <div><div class="b-lbl">${lblDoc}</div><div class="b-num">${invNum}</div></div>
 </div>
 <div class="body">
   <div class="cards">
     <div class="card"><div class="cl">Billed To</div><div class="cn">${cust}</div></div>
-    <div class="card"><div class="cl">Invoice Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; ${issDate}<br><b>Due Date</b> &nbsp;&nbsp; ${dueDate}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:${sColor};font-weight:700">${sLabel}</span></div></div>
+    <div class="card"><div class="cl">${lblDoc} Details</div><div class="ci" style="line-height:1.9"><b>Issue Date</b> &nbsp; ${issDate}<br><b>${lblDue}</b> &nbsp;&nbsp; ${dueDate}<br><b>Status</b> &nbsp;&nbsp;&nbsp;&nbsp; <span style="color:${sColor};font-weight:700">${sLabel}</span></div></div>
   </div>
   <table><thead><tr><th style="width:26px;text-align:center">#</th><th>Description</th><th class="r" style="width:50px">Qty</th><th class="r" style="width:100px">Unit Price</th>${extraTh}<th class="r" style="width:100px">Total</th></tr></thead>
   <tbody>${rows(false)}</tbody></table>
@@ -28528,7 +28625,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
     <div class="tc">
       ${totRows}
-      <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+      <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
     </div>
   </div>
@@ -28567,14 +28664,14 @@ td.n{color:#d1d5db;text-align:center;width:26px;font-style:italic}td.r{text-alig
 ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="top">
   <div>${bizBlock}</div>
-  <div><div class="inv-word">INVOICE</div><div class="inv-ref">${invNum} / ${issDate}</div></div>
+  <div><div class="inv-word">${lblDocUp}</div><div class="inv-ref">${invNum} / ${issDate}</div></div>
 </div>
 <div class="rule"></div>
 <div class="meta">
   <div><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
   <div class="dts">
     <div class="dr"><span class="dk">Issued</span><span class="dv">${issDate}</span></div>
-    <div class="dr"><span class="dk">Due</span><span class="dv">${dueDate}</span></div>
+    <div class="dr"><span class="dk">${lblDueSh}</span><span class="dv">${dueDate}</span></div>
     <div class="dr"><span class="dk">Status</span><span class="dv">${sLabel}</span></div>
   </div>
 </div>
@@ -28589,7 +28686,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
-<div class="ft">Invoice ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
+<div class="ft">${lblDoc} ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
 </div></body></html>`;
   }
 
@@ -28626,12 +28723,12 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="topbar">
   <div>${bizBlock}</div>
-  <div><div class="tb-il">Invoice</div><div class="tb-in">${invNum}</div></div>
+  <div><div class="tb-il">${lblDoc}</div><div class="tb-in">${invNum}</div></div>
 </div>
 <div class="grid4">
   <div class="bt-cell"><div class="gcl">Billed To</div><div style="font-size:14px;font-weight:800;margin-bottom:3px">${cust}</div></div>
   <div class="gc"><div class="gcl">Issue Date</div><div class="gcv">${issDate}</div></div>
-  <div class="gc"><div class="gcl">Due Date</div><div class="gcv">${dueDate}</div></div>
+  <div class="gc"><div class="gcl">${lblDue}</div><div class="gcv">${dueDate}</div></div>
   <div class="gc"><div class="gcl">Status</div><div class="gcv" style="color:${sColor}">${sLabel}</div></div>
   <div class="gc"><div class="gcl">Amount</div><div class="gcv" style="color:${a}">${money(tot)}</div></div>
 </div>
@@ -28641,7 +28738,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
   <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
   <div class="tc">
     ${totRows}
-    <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
   </div>
 </div>
@@ -28690,12 +28787,12 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="hdr">
   <div class="hdr-top">
     <div>${bizBlock}</div>
-    <div><div class="il">Invoice</div><div class="in">${invNum}</div></div>
+    <div><div class="il">${lblDoc}</div><div class="in">${invNum}</div></div>
   </div>
   <div class="hdr-rule"></div>
   <div class="hdr-meta">
     <div class="hm"><div class="hml">Issue Date</div><div class="hmv">${issDate}</div></div>
-    <div class="hm"><div class="hml">Due Date</div><div class="hmv">${dueDate}</div></div>
+    <div class="hm"><div class="hml">${lblDue}</div><div class="hmv">${dueDate}</div></div>
     <div class="hm"><div class="hml">Status</div><div class="hmv" style="color:${sColorDk}">${sLabel}</div></div>
   </div>
 </div>
@@ -28707,7 +28804,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
     <div>
       ${totRows}
-      <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+      <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
     </div>
   </div>
@@ -28749,13 +28846,13 @@ td.n{color:#94a3b8;text-align:center;width:26px}td.r{text-align:right}td.b{font-
 ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 <div class="top">
   <div>${bizBlock}</div>
-  <div><div class="it">Invoice</div><div class="in">${invNum} · ${issDate}</div></div>
+  <div><div class="it">${lblDoc}</div><div class="in">${invNum} · ${issDate}</div></div>
 </div>
 <div class="meta">
   <div><div class="btl">Billed To</div><div class="btn">${cust}</div></div>
   <div class="dts">
     <div class="dr"><span class="dk">Issue Date</span><span class="dv">${issDate}</span></div>
-    <div class="dr"><span class="dk">Due Date</span><span class="dv">${dueDate}</span></div>
+    <div class="dr"><span class="dk">${lblDue}</span><span class="dv">${dueDate}</span></div>
     <div class="dr"><span class="dk">Status</span><span class="dv" style="color:${sColor}">${sLabel}</span></div>
   </div>
 </div>
@@ -28765,7 +28862,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
   <div class="nb"><div class="nl">Notes</div><div class="nt">${notesText}</div></div>
   <div>
     ${totRows}
-    <div class="tr gr"><span>Total Due</span><span>${money(tot)}</span></div>
+    <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
   </div>
 </div>
@@ -32342,6 +32439,240 @@ $('#pos-to-quote')?.addEventListener('click', () => {
   });
 }());
 
+// ── POS Quotation mode ─────────────────────────────────────────────────────
+// When on, the POS checkout saves the cart as a quotation (Sales → Quotations)
+// instead of recording a sale. Deliberately not persisted — every app start is in sale mode.
+state.posQuoteMode = false;
+let _pqCheckoutHtml = { ribbon: null, cart: null };
+
+function _pqIsoDate(d) {
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+function _pqAddDays(iso, days) {
+  const d = iso ? new Date(iso + 'T00:00:00') : new Date();
+  d.setDate(d.getDate() + days);
+  return _pqIsoDate(d);
+}
+
+function setPosQuoteMode(on, { silent = false } = {}) {
+  on = !!on;
+  state.posQuoteMode = on;
+
+  const tgl = $('#rb-quote-toggle');
+  if (tgl) {
+    tgl.classList.toggle('on', on);
+    tgl.setAttribute('aria-checked', on ? 'true' : 'false');
+  }
+
+  const banner = $('#cart-quote-banner');
+  if (banner) banner.style.display = on ? 'flex' : 'none';
+
+  const rb = $('#rb-checkout');
+  if (rb) {
+    if (_pqCheckoutHtml.ribbon === null) _pqCheckoutHtml.ribbon = rb.innerHTML;
+    rb.innerHTML = on ? '<i class="fa fa-file-signature"></i>Save<br>Quote' : _pqCheckoutHtml.ribbon;
+    rb.classList.toggle('pq-on', on);
+  }
+  const cb = $('#checkout-btn');
+  if (cb) {
+    if (_pqCheckoutHtml.cart === null) _pqCheckoutHtml.cart = cb.innerHTML;
+    cb.innerHTML = on ? '<i class="fa fa-file-signature"></i>&nbsp; Save Quotation (F12)' : _pqCheckoutHtml.cart;
+    cb.classList.toggle('pq-on', on);
+  }
+
+  if (silent) return;
+  if (on) {
+    $('#pq-mode-alert').style.display = 'flex';
+    setTimeout(() => $('#pq-mode-alert-ok')?.focus(), 30);
+  } else {
+    toast('Quotation mode off — checkout records sales again', 'info');
+  }
+}
+
+document.addEventListener('click', e => {
+  if (e.target.closest('#rb-quote-toggle')) setPosQuoteMode(!state.posQuoteMode);
+});
+$('#cart-quote-banner-off')?.addEventListener('click', () => setPosQuoteMode(false));
+$('#pq-mode-alert-ok')?.addEventListener('click', () => { $('#pq-mode-alert').style.display = 'none'; });
+$('#pq-mode-alert')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+let _pqCustomersCache = null;
+
+// Cart line → quotation item. Unit price carries any per-line discount so the quote matches the cart.
+function _pqCartItems(tab) {
+  return tab.cart.map(i => {
+    const qty  = Number(i.qty) || 1;
+    const net  = _itemLineNet(i);
+    const unit = Math.round((net / qty) * 100) / 100;
+    const base = { description: i.name, quantity: qty, unit_price: unit };
+    if (i._type === 'service')              return { ...base, item_type: 'service', service_item_id: i.id };
+    if (i._isDynamic && !i._dynLinked)      return { ...base, item_type: 'custom' };
+    return { ...base, item_type: 'product', product_id: i.id };
+  });
+}
+
+function _pqRecalc() {
+  const tab = activeTab();
+  if (!tab) return;
+  const cur      = state.currency || '';
+  const subtotal = _pqCartItems(tab).reduce((s, i) => s + Math.round(i.unit_price * i.quantity * 100) / 100, 0);
+  const disc     = Math.min(subtotal, Math.max(0, parseFloat($('#pq-discount').value) || 0));
+  const tax      = Math.max(0, parseFloat($('#pq-tax').value) || 0);
+  $('#pq-subtotal').textContent      = formatMoney(subtotal, { currency: cur });
+  $('#pq-discount-show').textContent = '− ' + formatMoney(disc, { currency: cur });
+  $('#pq-tax-show').textContent      = formatMoney(tax, { currency: cur });
+  $('#pq-total').textContent         = formatMoney(Math.max(0, subtotal - disc + tax), { currency: cur });
+}
+
+function _pqSyncPresets() {
+  const date   = $('#pq-date').value;
+  const expiry = $('#pq-expiry').value;
+  $$('#pq-expiry-presets button').forEach(b => {
+    b.classList.toggle('active', !!date && expiry === _pqAddDays(date, parseInt(b.dataset.days)));
+  });
+}
+
+async function openPosQuoteModal() {
+  const tab = activeTab();
+  if (!tab || !tab.cart.length) { toast('Cart is empty', 'info'); return; }
+  const cur = state.currency || '';
+
+  $('#pq-alert').style.display = 'none';
+
+  // Items
+  $('#pq-rows').innerHTML = _pqCartItems(tab).map(i => {
+    const qtyStr = i.quantity % 1 === 0 ? i.quantity : i.quantity.toFixed(3).replace(/\.?0+$/, '');
+    const line   = Math.round(i.unit_price * i.quantity * 100) / 100;
+    return `<tr>
+      <td>${escHtml(i.description)}</td>
+      <td class="r">${qtyStr}</td>
+      <td class="r">${formatMoney(i.unit_price, { currency: cur })}</td>
+      <td class="r">${formatMoney(line, { currency: cur })}</td>
+    </tr>`;
+  }).join('');
+
+  // Header fields
+  const today = _pqIsoDate(new Date());
+  $('#pq-date').value     = today;
+  $('#pq-expiry').value   = _pqAddDays(today, 14);
+  $('#pq-ref').value      = '';
+  $('#pq-notes').value    = '';
+  $('#pq-discount').value = '0';
+  $('#pq-tax').value      = '0';
+  $('#pq-mark-sent').checked = false;
+  $('#pq-print').checked     = false;
+  _pqSyncPresets();
+  _pqRecalc();
+
+  // Customer list — the cart's customer is pre-selected
+  const sel = $('#pq-customer');
+  const renderCustomers = list => {
+    const cartCust = tab._customer;
+    const all = [...(list || [])];
+    if (cartCust?.id && !all.some(c => c.id == cartCust.id)) all.unshift(cartCust);
+    sel.innerHTML = '<option value="">— Walk-in —</option>'
+      + all.map(c => `<option value="${c.id}">${escHtml(c.name || '')}${c.phone ? ' · ' + escHtml(c.phone) : ''}</option>`).join('');
+    sel.value = cartCust?.id ? String(cartCust.id) : '';
+  };
+  renderCustomers(_pqCustomersCache);
+
+  $('#pq-modal').style.display = 'flex';
+  setTimeout(() => $('#pq-expiry').focus(), 30);
+
+  if (!_pqCustomersCache) {
+    const cr = await API.customers('', 1);
+    if (cr.status === 200) {
+      _pqCustomersCache = cr.body?.data || [];
+      renderCustomers(_pqCustomersCache);
+    }
+  }
+}
+
+function _pqClose() { $('#pq-modal').style.display = 'none'; }
+
+function _pqShowError(msg) {
+  const el = $('#pq-alert');
+  el.textContent   = msg;
+  el.style.display = '';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+$('#pq-close')?.addEventListener('click', _pqClose);
+$('#pq-cancel')?.addEventListener('click', _pqClose);
+$('#pq-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _pqClose(); });
+$('#pq-discount')?.addEventListener('input', _pqRecalc);
+$('#pq-tax')?.addEventListener('input', _pqRecalc);
+$('#pq-date')?.addEventListener('change', _pqSyncPresets);
+$('#pq-expiry')?.addEventListener('change', _pqSyncPresets);
+$$('#pq-expiry-presets button').forEach(b => b.addEventListener('click', () => {
+  const base = $('#pq-date').value || _pqIsoDate(new Date());
+  $('#pq-expiry').value = _pqAddDays(base, parseInt(b.dataset.days));
+  _pqSyncPresets();
+}));
+
+$('#pq-submit')?.addEventListener('click', async () => {
+  const tab = activeTab();
+  if (!tab || !tab.cart.length) { _pqClose(); return; }
+
+  const quoteDate = $('#pq-date').value;
+  const expiry    = $('#pq-expiry').value;
+  if (!quoteDate) { _pqShowError('Please choose the quote date.'); $('#pq-date').focus(); return; }
+  if (!expiry)    { _pqShowError('Please choose how long this quotation is valid (Valid Until).'); $('#pq-expiry').focus(); return; }
+  if (expiry < quoteDate) { _pqShowError('Valid Until cannot be before the quote date.'); $('#pq-expiry').focus(); return; }
+
+  const body = {
+    customer_id:     $('#pq-customer').value || null,
+    branch_id:       state.config?.branch_id ?? null,
+    reference:       $('#pq-ref').value.trim() || null,
+    quote_date:      quoteDate,
+    expiry_date:     expiry,
+    notes:           $('#pq-notes').value.trim() || null,
+    discount_amount: Math.max(0, parseFloat($('#pq-discount').value) || 0),
+    tax_amount:      Math.max(0, parseFloat($('#pq-tax').value) || 0),
+    items:           _pqCartItems(tab),
+  };
+
+  const btn = $('#pq-submit');
+  btn.disabled  = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+
+  const res = await API.createQuotation(body);
+
+  btn.disabled  = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save Quotation';
+
+  if (res.status !== 201 && res.status !== 200) {
+    const msg = res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save quotation.');
+    _pqShowError(msg);
+    return;
+  }
+
+  let quote = res.body?.data;
+  if (quote?.id && $('#pq-mark-sent').checked) {
+    const sr = await API.quotationSent(quote.id);
+    if (sr.status === 200) quote = { ...quote, status: sr.body?.status || 'sent', status_label: 'Sent' };
+  }
+  const wantPrint = $('#pq-print').checked;
+
+  _pqClose();
+  tab.cart      = [];
+  tab._customer = null;
+  renderCart();
+  renderPosTabBar();
+
+  const num = quote?.quote_number || 'Quotation';
+  toast(`${num} saved — cart cleared. Click to view quotations.`, 'success', () => {
+    activateTab('sales');
+    _salSwitchView('quotes');
+  });
+
+  if (wantPrint && quote) _qtPrint(quote);
+});
+
 // ── Checkout ───────────────────────────────────────────────────────────────
 let _coSubtotal = 0; // base subtotal before order-level discount
 let _coAmount   = ''; // numpad string
@@ -32605,6 +32936,8 @@ function _coNumpadKey(key) {
 function openCheckout() {
   const tab = activeTab();
   if (!tab || !tab.cart.length) { toast('Cart is empty', 'error'); return; }
+  // Quotation mode: checkout saves a quotation instead of recording a sale
+  if (state.posQuoteMode) { openPosQuoteModal(); return; }
   _coSubtotal = _coComputeSubtotal();
 
   // Reset discount first so _coGetTotal() computes at 0% discount

@@ -85,7 +85,10 @@ class QuotationService
 
         return DB::transaction(function () use ($quotation, $data, $items) {
             $quotation->update([
-                'branch_id'   => $this->nullableInt($data['branch_id'] ?? null),
+                // Keep the original branch when the editor doesn't send one
+                'branch_id'   => array_key_exists('branch_id', $data)
+                    ? $this->nullableInt($data['branch_id'])
+                    : $quotation->branch_id,
                 'customer_id' => $this->nullableInt($data['customer_id'] ?? null),
                 'reference'   => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'quote_date'  => $data['quote_date'],

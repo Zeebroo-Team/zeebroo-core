@@ -937,11 +937,18 @@
             <button class="ribbon-btn-lg" id="rb-lock-register" title="Close Cash Register">
               <i class="fa fa-lock"></i>Close<br>Register
             </button>
-            <div class="ribbon-counter-wrap" id="rb-counter-wrap" style="display:none">
-              <label class="ribbon-counter-label"><i class="fa fa-cash-register"></i> Counter</label>
-              <select id="rb-counter-select" class="ribbon-counter-select">
-                <option value="">— None —</option>
-              </select>
+            <div class="ribbon-counter-col">
+              <div class="ribbon-counter-wrap" id="rb-counter-wrap" style="display:none">
+                <label class="ribbon-counter-label"><i class="fa fa-cash-register"></i> Counter</label>
+                <select id="rb-counter-select" class="ribbon-counter-select">
+                  <option value="">— None —</option>
+                </select>
+              </div>
+              <button type="button" class="ribbon-quote-toggle" id="rb-quote-toggle" role="switch" aria-checked="false"
+                      title="Quotation mode — checkout saves a quotation instead of recording a sale">
+                <span class="rqt-track"><span class="rqt-thumb"></span></span>
+                <span class="rqt-label"><i class="fa fa-file-signature"></i> Quotation</span>
+              </button>
             </div>
           </div>
           <div class="ribbon-group-label">Session</div>
@@ -2579,6 +2586,11 @@
             <button class="cart-hdr-btn" id="btn-gift-card" title="Check gift card balance"><i class="fa fa-gift"></i></button>
             <button class="cart-hdr-btn" id="btn-coupon" title="Check coupon"><i class="fa fa-ticket"></i></button>
             <button class="cart-hdr-btn" id="btn-customer" title="Assign customer (F10)"><i class="fa fa-user"></i></button>
+          </div>
+          <div id="cart-quote-banner" style="display:none">
+            <i class="fa fa-file-signature"></i>
+            <div class="cqb-text"><strong>Quotation mode</strong><span>Checkout saves a quote — no sale is recorded</span></div>
+            <button type="button" id="cart-quote-banner-off" title="Turn quotation mode off">Turn off</button>
           </div>
           <div id="cart-customer-bar" style="display:none"></div>
           <div id="cart-items">
@@ -14886,7 +14898,9 @@
       <div class="csv-step-line"></div>
       <div class="csv-step" id="csv-step-ind-2"><span class="csv-step-num">2</span><span class="csv-step-label">Preview</span></div>
       <div class="csv-step-line"></div>
-      <div class="csv-step" id="csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Result</span></div>
+      <div class="csv-step" id="csv-step-ind-3"><span class="csv-step-num">3</span><span class="csv-step-label">Branches</span></div>
+      <div class="csv-step-line"></div>
+      <div class="csv-step" id="csv-step-ind-4"><span class="csv-step-num">4</span><span class="csv-step-label">Result</span></div>
     </div>
 
     <!-- Step 1: Upload -->
@@ -14919,12 +14933,28 @@
       </div>
       <div class="csv-import-footer">
         <button class="psm-btn-cancel" id="csv-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="eod-settle-btn" id="csv-next-btn"><i class="fa fa-arrow-right"></i> Next: Choose Branches</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Branches — which branch(es) receive the imported stock -->
+    <div class="csv-import-body" id="csv-step-3" style="display:none">
+      <div class="csv-branch-head">
+        <div>
+          <div class="csv-branch-title">Add stock to which branches?</div>
+          <div class="csv-branch-sub">Products are added to <b>all</b> branches. Each product's CSV stock quantity is added only to the selected branches.</div>
+        </div>
+        <label class="csv-branch-all"><input type="checkbox" id="csv-branch-all"> Select all</label>
+      </div>
+      <div class="csv-branch-list" id="csv-branch-list"></div>
+      <div class="csv-import-footer">
+        <button class="psm-btn-cancel" id="csv-branch-back-btn"><i class="fa fa-arrow-left"></i> Back</button>
         <button class="eod-settle-btn" id="csv-import-btn"><i class="fa fa-file-import"></i> Import <span id="csv-import-count"></span> Products</button>
       </div>
     </div>
 
-    <!-- Step 3: Result -->
-    <div class="csv-import-body" id="csv-step-3" style="display:none">
+    <!-- Step 4: Result -->
+    <div class="csv-import-body" id="csv-step-4" style="display:none">
       <div class="csv-result-summary" id="csv-result-summary"></div>
       <div class="csv-result-errors" id="csv-result-errors" style="display:none">
         <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
@@ -17307,6 +17337,116 @@
       <button class="so-confirm-cancel" id="so-confirm-cancel">Cancel</button>
       <button class="so-confirm-submit" id="so-confirm-submit">
         <i class="fa fa-check"></i> Confirm &amp; Create Order
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── POS Quotation Mode — "mode on" alert ───────────────────────────── -->
+<div id="pq-mode-alert" class="modal-overlay" style="display:none;z-index:1060">
+  <div class="pq-alert-box">
+    <div class="pq-alert-icon"><i class="fa fa-file-signature"></i></div>
+    <div class="pq-alert-title">Quotation Mode is ON</div>
+    <div class="pq-alert-text">
+      While this is on, checking out <strong>won't record a sale</strong>. The cart is saved as a
+      <strong>quotation</strong> you can send to the customer.
+    </div>
+    <ul class="pq-alert-list">
+      <li><i class="fa fa-ban"></i> No payment is taken</li>
+      <li><i class="fa fa-boxes-stacked"></i> No stock is deducted</li>
+      <li><i class="fa fa-calendar-check"></i> You set a valid-until date at checkout</li>
+    </ul>
+    <button type="button" class="pq-alert-ok" id="pq-mode-alert-ok">Got it</button>
+  </div>
+</div>
+
+<!-- ── POS Quotation Mode — save quotation modal ──────────────────────── -->
+<div id="pq-modal" class="modal-overlay" style="display:none;z-index:1050">
+  <div class="so-confirm-box pq-box">
+    <div class="so-confirm-header">
+      <div class="so-confirm-icon pq-icon"><i class="fa fa-file-signature"></i></div>
+      <div>
+        <div class="so-confirm-title">Save as Quotation</div>
+        <div class="so-confirm-sub">This is not a sale. No payment or stock movement is recorded.</div>
+      </div>
+      <button class="co-close" id="pq-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="so-confirm-body">
+      <div id="pq-alert" class="alert alert-danger" style="display:none"></div>
+
+      <div class="pq-grid">
+        <div class="so-confirm-field pq-span-2">
+          <label class="so-confirm-label">Customer</label>
+          <select id="pq-customer" class="so-confirm-input">
+            <option value="">— Walk-in —</option>
+          </select>
+        </div>
+        <div class="so-confirm-field">
+          <label class="so-confirm-label">Quote Date</label>
+          <input type="date" id="pq-date" class="so-confirm-input">
+        </div>
+        <div class="so-confirm-field">
+          <label class="so-confirm-label">Valid Until <span class="pq-req">*</span></label>
+          <input type="date" id="pq-expiry" class="so-confirm-input">
+        </div>
+        <div class="pq-span-2 pq-presets" id="pq-expiry-presets">
+          <span>Valid for:</span>
+          <button type="button" data-days="7">7 days</button>
+          <button type="button" data-days="14">14 days</button>
+          <button type="button" data-days="30">30 days</button>
+          <button type="button" data-days="60">60 days</button>
+        </div>
+        <div class="so-confirm-field pq-span-2">
+          <label class="so-confirm-label">Reference <span class="pq-opt">(optional)</span></label>
+          <input type="text" id="pq-ref" class="so-confirm-input" maxlength="120" placeholder="e.g. Customer PO / project name">
+        </div>
+      </div>
+
+      <table class="so-confirm-table">
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="r">Qty</th>
+            <th class="r">Unit Price</th>
+            <th class="r">Total</th>
+          </tr>
+        </thead>
+        <tbody id="pq-rows"></tbody>
+      </table>
+
+      <div class="pq-grid">
+        <div class="so-confirm-field">
+          <label class="so-confirm-label">Discount <span class="pq-opt">(amount)</span></label>
+          <input type="number" id="pq-discount" class="so-confirm-input" min="0" step="0.01" value="0">
+        </div>
+        <div class="so-confirm-field">
+          <label class="so-confirm-label">Tax <span class="pq-opt">(amount)</span></label>
+          <input type="number" id="pq-tax" class="so-confirm-input" min="0" step="0.01" value="0">
+        </div>
+      </div>
+
+      <div class="so-confirm-totals">
+        <div class="so-confirm-total-row"><span>Subtotal</span><span id="pq-subtotal">0.00</span></div>
+        <div class="so-confirm-total-row"><span>Discount</span><span id="pq-discount-show">0.00</span></div>
+        <div class="so-confirm-total-row"><span>Tax</span><span id="pq-tax-show">0.00</span></div>
+        <div class="so-confirm-total-row grand"><span>Quote Total</span><strong id="pq-total">0.00</strong></div>
+      </div>
+
+      <div class="so-confirm-field">
+        <label class="so-confirm-label">Notes / Terms <span class="pq-opt">(optional)</span></label>
+        <textarea id="pq-notes" class="so-confirm-input so-confirm-textarea" rows="3" maxlength="5000"
+                  placeholder="Payment terms, delivery details, warranty notes…"></textarea>
+      </div>
+
+      <div class="pq-checks">
+        <label><input type="checkbox" id="pq-mark-sent"> Mark as sent to the customer</label>
+        <label><input type="checkbox" id="pq-print"> Print / preview after saving</label>
+      </div>
+    </div>
+    <div class="so-confirm-footer">
+      <button class="so-confirm-cancel" id="pq-cancel">Cancel</button>
+      <button class="so-confirm-submit pq-submit" id="pq-submit">
+        <i class="fa fa-floppy-disk"></i> Save Quotation
       </button>
     </div>
   </div>
