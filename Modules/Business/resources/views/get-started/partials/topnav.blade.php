@@ -12,7 +12,7 @@
     $gsActive = $gsActive ?? 'platforms';
     $gsLinks = [
         ['key' => 'platforms', 'label' => 'Platforms', 'icon' => 'fa-layer-group', 'href' => route('business.platform-choice'), 'external' => false],
-        ['key' => 'docs', 'label' => 'Docs', 'icon' => 'fa-book-open', 'href' => 'https://zeebroo.com/tutorial', 'external' => true],
+        ['key' => 'docs', 'label' => 'Docs', 'icon' => 'fa-book-open', 'href' => config('support.docs_url'), 'external' => true],
         ['key' => 'community', 'label' => 'Community', 'icon' => 'fa-users', 'href' => route('business.get-started.community'), 'external' => false],
         ['key' => 'videos', 'label' => 'Video Tutorials', 'icon' => 'fa-circle-play', 'href' => 'https://www.youtube.com/@zeebroo-erp', 'external' => true],
         ['key' => 'support', 'label' => 'Contact Support', 'icon' => 'fa-headset', 'href' => route('business.get-started.support'), 'external' => false],
