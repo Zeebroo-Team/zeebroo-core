@@ -33796,9 +33796,11 @@ function buildBillCard(b) {
 
   // Overdue / fully-paid — server flags are authoritative
   const today        = new Date().toISOString().slice(0, 10);
-  const dueDate      = b.due_date || b.first_installment_due_date;
+  // Recurring: server-computed first unpaid period; fall back to the anchor date
+  const dueDate      = (b.payment_mode === 'recurring' && b.next_due_date) || b.due_date || b.first_installment_due_date;
   const isOverdue    = ('overdue' in b) ? Boolean(b.overdue) : (dueDate && dueDate <= today);
   const isFullyPaid  = Boolean(b.is_fully_paid);
+  const money        = v => (parseFloat(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Mode pill
   const modeHtml = b.payment_mode === 'one_time'
@@ -33825,14 +33827,18 @@ function buildBillCard(b) {
     if (b.agreement_valid_until_year)
       chips.push(`<span class="bc-detail"><i class="fa fa-calendar"></i> Until ${b.agreement_valid_until_year}</span>`);
   }
+  if (b.payment_mode === 'recurring' && !dueDate)
+    chips.push(`<span class="bc-detail" style="color:#d97706"><i class="fa fa-calendar-xmark"></i> No start date set</span>`);
   if (b.assignment_type && b.assignment_type !== 'none') {
     const aLabel = b.assignment_type.charAt(0).toUpperCase() + b.assignment_type.slice(1);
-    const aName  = b.assignable?.name || b.branch?.name || b.department?.name || b.employee?.name || null;
+    const aName  = b.assignment_name || null;
     chips.push(`<span class="bc-detail"><i class="fa fa-sitemap"></i> ${escHtml(aLabel)}${aName ? ': ' + escHtml(aName) : ''}</span>`);
   }
-  const acctName = b.account?.name || b.account?.account_name || null;
+  const acctName = b.account?.account_name || b.account?.name || null;
   if (acctName)
     chips.push(`<span class="bc-detail"><i class="fa fa-building-columns"></i> ${escHtml(acctName)}</span>`);
+  if (b.payments_count > 0)
+    chips.push(`<span class="bc-detail"><i class="fa fa-receipt"></i> Paid ${money(b.total_paid)} (${b.payments_count})</span>`);
   if (b.remind_before_days && !isFullyPaid)
     chips.push(`<span class="bc-detail"><i class="fa fa-bell"></i> Remind ${b.remind_before_days}d</span>`);
   if (b.allow_split_payment)
@@ -33846,9 +33852,9 @@ function buildBillCard(b) {
     : `<div class="bill-card-details">${statusHtml}</div>`;
 
   // Progress bar — hide for fully-paid bills
-  const prog = billProgress(b);
+  const prog = billProgress({ ...b, due_date: dueDate });
   let progressHtml = '';
-  if (prog && !isFullyPaid) {
+  if (prog && !isFullyPaid && (prog.overdue || prog.daysLeft != null)) {
     const pct    = prog.pct;
     const barCls = prog.overdue       ? 'bp-overdue'
                  : pct >= 85          ? 'bp-urgent'
@@ -33870,13 +33876,13 @@ function buildBillCard(b) {
 
   // Date stat
   const dateLabel = b.payment_mode === 'recurring' ? 'Next due' : 'Due date';
-  const dateVal   = fmtDate(dueDate) || '—';
+  const dateVal   = isFullyPaid && b.payment_mode === 'recurring' ? 'Completed' : (fmtDate(dueDate) || 'Not set');
 
   // Amount stat
-  const amtLabel = b.amount_varies_by_usage ? 'Amount' : 'Per cycle';
+  const amtLabel = b.amount_varies_by_usage || b.payment_mode === 'one_time' ? 'Amount' : 'Per cycle';
   const amtHtml  = b.amount_varies_by_usage
     ? `<span class="bill-stat-val varies-val">Varies by usage</span>`
-    : `<span class="bill-stat-val">${b.recurring_cost != null ? parseFloat(b.recurring_cost).toFixed(2) : '—'}</span>`;
+    : `<span class="bill-stat-val">${b.recurring_cost != null ? money(b.recurring_cost) : '—'}</span>`;
 
   return `
     <div class="bill-card${isOverdue ? ' bill-card-overdue' : ''}" style="--bill-color:${color}" data-bill-id="${b.id}">
@@ -34053,44 +34059,47 @@ $('#bd-inv-tabs').addEventListener('click', e => {
   $$('.inv-tab-pane[id^="bd-pane-"]').forEach(p => p.classList.toggle('active', p.id === `bd-pane-${key}`));
 });
 
+const BILL_ASSIGN_LABEL = {
+  branch: 'Branch', department: 'Department', property: 'Property',
+  employee: 'Employee', modification: 'Modification', rental: 'Rental',
+};
+
+let _bdBill        = null; // bill currently shown on the detail page
+let _bdTxLoadedFor = null; // bill id whose Transaction details tab is loaded
+
+// The list endpoint uses different keys than the show endpoint — normalise to the show shape
+function normalizeBillForDetail(b) {
+  return {
+    ...b,
+    bill_category:              b.bill_category ?? b.category,
+    recurring_cost:             b.recurring_cost ?? b.amount,
+    agreement_valid_until_year: b.agreement_valid_until_year ?? (b.agreement_until || null),
+    remind_before_days:         b.remind_before_days ?? (b.remind_days || null),
+    is_overdue:                 b.is_overdue ?? b.overdue,
+  };
+}
+
+function billAssigneeName(b) {
+  return b.assignment_name || b.assignment_target_name || b.employee_name || b.property_name
+    || b.modification_name || b.department_name || b.rental_type || b.branch_name || null;
+}
+
+// Re-fetch the full bill (all saved form fields + schedule + ledger) and re-render the page
 function refreshBillDetailOverdue(billId) {
   API.bill(billId).then(res => {
     if (res.status !== 200) return;
+    if (!_bdBill || String(_bdBill.id) !== String(billId)) return; // user navigated away
     const d = res.body?.data || {};
-    const isOverdue   = d.is_overdue === true;
-    const isFPaid     = d.is_fully_paid === true;
-    const cat = BILL_CAT[d.bill_category] || BILL_CAT.other;
-
-    const badges = [];
-    if (isFPaid)   badges.push('<span class="inv-badge inv-badge-green">Paid</span>');
-    else if (isOverdue) badges.push('<span class="inv-badge inv-badge-red">Overdue</span>');
-    else           badges.push('<span class="inv-badge inv-badge-green">Active</span>');
-    if (d.amount_varies_by_usage)        badges.push('<span class="inv-badge inv-badge-amber">Variable amount</span>');
-    if (d.payment_mode === 'recurring')  badges.push('<span class="inv-badge inv-badge-blue">Recurring</span>');
-    if (d.agreement_valid_until_year)    badges.push(`<span class="inv-badge inv-badge-gray">Through ${d.agreement_valid_until_year}</span>`);
-    $('#bd-hero-badges').innerHTML = badges.join('');
-
-    // Remove overdue alert when no longer overdue
-    const alertEl = $('#bd-pane-overview .bd-alert');
-    if (alertEl && !isOverdue) alertEl.remove();
+    renderBillDetail({ ..._bdBill, ...d, _loaded: true });
 
     // Update local cache
     const idx = _financeAllBills.findIndex(x => String(x.id) === String(billId));
-    if (idx !== -1) _financeAllBills[idx] = { ..._financeAllBills[idx], overdue: isOverdue, is_fully_paid: isFPaid };
+    if (idx !== -1) _financeAllBills[idx] = { ..._financeAllBills[idx], overdue: d.is_overdue === true, is_fully_paid: d.is_fully_paid === true };
   });
 }
 
 function openBillDetailPage(b) {
-  const full     = _financeAllBills.find(x => String(x.id) === String(b.id)) || b;
-  const cat      = BILL_CAT[full.bill_category] || BILL_CAT.other;
-  const catLabel = full.bill_category === 'other' ? (full.bill_category_other || 'Other') : cat.label;
-  const dueDate  = full.due_date || full.first_installment_due_date || null;
-  const today    = new Date().toISOString().slice(0, 10);
-  // Use cached overdue flag if available; date-compare is a fallback only
-  const isOverdue   = ('overdue' in full) ? Boolean(full.overdue) : (dueDate && dueDate <= today);
-  const isFullyPaid = Boolean(full.is_fully_paid);
-  const modeLabel = full.payment_mode === 'one_time'
-    ? 'One-time' : (BILL_REC_LABEL[full.recurring_type] || 'Recurring');
+  const cached = _financeAllBills.find(x => String(x.id) === String(b.id)) || b;
 
   // Show detail, hide list + subnav
   $('.fin-subnav').style.display        = 'none';
@@ -34100,6 +34109,47 @@ function openBillDetailPage(b) {
   // Reset to overview tab
   $$('#bd-inv-tabs .inv-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'overview'));
   $$('.inv-tab-pane[id^="bd-pane-"]').forEach(p => p.classList.toggle('active', p.id === 'bd-pane-overview'));
+
+  _bdTxLoadedFor = null;
+  $('#bd-pane-transactions').innerHTML = `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin" style="font-size:22px;opacity:.4"></i></div>`;
+
+  // Render immediately from the list cache, then fill in every field from the server
+  renderBillDetail(normalizeBillForDetail(cached));
+  refreshBillDetailOverdue(cached.id);
+}
+
+// Load transaction details tab on demand (single listener; reads the current bill)
+$$('#bd-inv-tabs .inv-tab').forEach(tab => {
+  if (tab.dataset.tab !== 'transactions') return;
+  tab.addEventListener('click', () => {
+    if (!_bdBill || _bdTxLoadedFor === _bdBill.id) return;
+    _bdTxLoadedFor = _bdBill.id;
+    loadBillTransactionTab(_bdBill.id);
+  });
+});
+
+function renderBillDetail(full) {
+  _bdBill = full;
+  const cat      = BILL_CAT[full.bill_category] || BILL_CAT.other;
+  const catLabel = full.bill_category === 'other' ? (full.bill_category_other || 'Other') : cat.label;
+  const isOneTime = full.payment_mode === 'one_time';
+  const today    = new Date().toISOString().slice(0, 10);
+  const schedule = Array.isArray(full.schedule) ? full.schedule : null;
+  const ledger   = Array.isArray(full.ledger)   ? full.ledger   : null;
+
+  // Next due: first unpaid schedule row when known, else the stored dates
+  const nextUnpaid = schedule ? schedule.find(r => !r.paid) : null;
+  const dueDate    = isOneTime
+    ? (full.due_date || full.first_installment_due_date || null)
+    : (nextUnpaid?.due_ymd || full.next_due_date || full.due_date || full.first_installment_due_date || null);
+
+  // Use server overdue flag if available; date-compare is a fallback only
+  const isOverdue   = (full.is_overdue != null) ? Boolean(full.is_overdue) : Boolean(dueDate && dueDate <= today);
+  const isFullyPaid = Boolean(full.is_fully_paid);
+  const modeLabel   = isOneTime ? 'One-time' : 'Recurring';
+  const assignee    = billAssigneeName(full);
+  const money       = v => (v != null && v !== '' ? parseFloat(v) : 0).toFixed(2);
+  const dash        = '<span style="color:var(--text-muted)">—</span>';
 
   // ── Hero (same structure as product detail) ────────────────────────────
   $('#bd-breadcrumb').textContent = full.name;
@@ -34113,17 +34163,15 @@ function openBillDetailPage(b) {
 
   const metaParts = [
     `<span><i class="fa ${cat.icon}"></i> ${escHtml(catLabel)}</span>`,
-    `<span><i class="fa fa-rotate"></i> ${modeLabel}</span>`,
+    `<span><i class="fa fa-rotate"></i> ${isOneTime ? 'One-time' : (BILL_REC_LABEL[full.recurring_type] || 'Recurring')}</span>`,
   ];
-  if (full.assignment_type && full.assignment_type !== 'none' && (full.assignment_name || full.assignment_target_name)) {
-    metaParts.push(`<span><i class="fa fa-user"></i> ${escHtml(full.assignment_name || full.assignment_target_name)}</span>`);
-  }
+  if (assignee) metaParts.push(`<span><i class="fa fa-user"></i> ${escHtml(assignee)}</span>`);
   $('#bd-hero-meta').innerHTML = metaParts.join('<span class="inv-sep">·</span>');
 
   const badges = [];
-  if (isFullyPaid) badges.push('<span class="inv-badge inv-badge-green">Paid</span>');
+  if (isFullyPaid)    badges.push('<span class="inv-badge inv-badge-green">Paid</span>');
   else if (isOverdue) badges.push('<span class="inv-badge inv-badge-red">Overdue</span>');
-  else             badges.push('<span class="inv-badge inv-badge-green">Active</span>');
+  else                badges.push('<span class="inv-badge inv-badge-green">Active</span>');
   if (full.amount_varies_by_usage)
     badges.push('<span class="inv-badge inv-badge-amber">Variable amount</span>');
   if (full.payment_mode === 'recurring')
@@ -34136,49 +34184,90 @@ function openBillDetailPage(b) {
   let html = '';
 
   // Overdue alert
-  if (isOverdue)
+  if (isOverdue && !isFullyPaid)
     html += `<div class="bd-alert" style="margin-bottom:14px">
       <i class="fa fa-circle-exclamation"></i>
       <div><strong>Unpaid billing due</strong> — A scheduled payment on or before today has no ledger record. Log the payment to keep your schedule accurate.</div>
     </div>`;
 
-  // ── Details section (same pattern as product Details section) ─────────
-  const { pct, daysLeft, overdue } = billProgress(full);
-  const pfClass  = pct >= 100 ? 'pf-overdue' : pct >= 80 ? 'pf-urgent' : pct >= 50 ? 'pf-warn' : 'pf-ok';
+  const { pct } = billProgress({ ...full, due_date: dueDate, overdue: isOverdue });
+  const pfClass = pct >= 100 ? 'pf-overdue' : pct >= 80 ? 'pf-urgent' : pct >= 50 ? 'pf-warn' : 'pf-ok';
 
   const amtVal = full.amount_varies_by_usage
     ? '<span style="color:var(--text-muted);font-style:italic">Variable (by usage)</span>'
-    : `<strong>${full.recurring_cost != null ? parseFloat(full.recurring_cost).toFixed(2) : '0.00'}</strong>`;
+    : `<strong>${money(full.recurring_cost)}</strong>`;
 
-  const dueDateVal = isOverdue
+  const dueDateVal = (isOverdue && !isFullyPaid && dueDate)
     ? `<span style="color:#dc2626;font-weight:600">${escHtml(dueDate)}</span>&nbsp;<span class="inv-badge inv-badge-red" style="font-size:10px">Overdue</span>`
-    : escHtml(dueDate || '—');
+    : (dueDate ? escHtml(dueDate) : dash);
 
+  const yesNo = v => v
+    ? '<span class="inv-badge inv-badge-green">Yes</span>'
+    : '<span class="inv-badge inv-badge-gray">No</span>';
+
+  // ── Schedule section: every payment field from the create form ───────
   const schedRows = [
-    ['Next due',        dueDateVal],
-    ['Schedule',        escHtml(modeLabel)],
-    ['Amount',          amtVal],
+    [isOneTime ? 'Due date' : 'Next due', dueDateVal],
+    ['Payment mode', escHtml(modeLabel)],
   ];
+  if (!isOneTime)
+    schedRows.push(['Recurring type', escHtml(BILL_REC_LABEL[full.recurring_type] || full.recurring_type || '—')]);
+  schedRows.push([isOneTime ? 'Amount' : 'Amount per period', amtVal]);
+  schedRows.push(['Amount varies by usage', yesNo(full.amount_varies_by_usage)]);
+  if (full.first_installment_due_date)
+    schedRows.push(['First installment', escHtml(full.first_installment_due_date)]);
   if (full.agreement_valid_until_year)
-    schedRows.push(['Valid through', escHtml(String(full.agreement_valid_until_year))]);
-  if (full.remind_before_days && !isFullyPaid)
-    schedRows.push(['Reminder', `${full.remind_before_days} day(s) before due`]);
+    schedRows.push([isOneTime ? 'Year' : 'Valid until year', escHtml(String(full.agreement_valid_until_year))]);
+  schedRows.push(['Reminder', full.remind_before_days ? `${full.remind_before_days} day(s) before due` : dash]);
+  if ('allow_split_payment' in full)
+    schedRows.push(['Split payment allowed', yesNo(full.allow_split_payment)]);
 
+  // ── Details section ──────────────────────────────────────────────────
   const detailRows = [
-    ['Category',   `<span class="inv-badge inv-badge-gray">${escHtml(catLabel)}</span>`],
+    ['Bill name', escHtml(full.name || '')],
+    ['Category',  `<span class="inv-badge inv-badge-gray">${escHtml(catLabel)}</span>`],
   ];
-  if (full.assignment_type && full.assignment_type !== 'none') {
-    const who = full.assignment_name || full.assignment_target_name || full.assignment_target_id || '—';
-    detailRows.push(['Assigned to', escHtml(String(who))]);
+  const desc = full.description;
+  detailRows.push(['Description', desc ? `<span style="white-space:pre-wrap">${escHtml(desc)}</span>` : dash]);
+
+  const assignType = full.assignment_type;
+  if (assignType && assignType !== 'none') {
+    detailRows.push(['Assigned to', `${escHtml(BILL_ASSIGN_LABEL[assignType] || assignType)}${assignee ? ' · ' + escHtml(assignee) : ''}`]);
+  } else if (assignee) {
+    detailRows.push(['Assigned to', escHtml(assignee)]);
+  } else if (full._loaded) {
+    detailRows.push(['Assigned to', dash]);
   }
-  const acctName = full.account?.name || full.account?.account_name;
-  if (acctName) detailRows.push(['Account', escHtml(acctName)]);
 
-  const note = full.notes || full.description;
-  if (note) detailRows.push(['Notes', `<span style="white-space:pre-wrap">${escHtml(note)}</span>`]);
+  const acctName = full.account?.account_name || full.account?.name;
+  if (acctName) {
+    const bank = full.account?.bank_name ? ` <span style="color:var(--text-muted)">(${escHtml(full.account.bank_name)})</span>` : '';
+    detailRows.push(['Deduct from account', escHtml(acctName) + bank]);
+  } else if (full._loaded) {
+    detailRows.push(['Deduct from account', dash]);
+  }
 
-  const rowsHtml = rows => rows.map(([l, v]) =>
-    `<tr><td class="inv-dt-label">${escHtml(l)}</td><td class="inv-dt-val">${v}</td></tr>`).join('');
+  detailRows.push(['Notes', full.notes ? `<span style="white-space:pre-wrap">${escHtml(full.notes)}</span>` : dash]);
+  if (full.created_at) detailRows.push(['Created', escHtml(full.created_at)]);
+
+  // ── Payment summary (only once the server data has arrived) ──────────
+  let summaryHtml = '';
+  if (ledger && schedule) {
+    const totalPaid  = ledger.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
+    const paidPeriods = schedule.filter(r => r.paid).length;
+    const lastPay    = ledger[0]?.occurrence_date || null;
+    const summaryRows = [
+      ['Total paid',        `<strong>${totalPaid.toFixed(2)}</strong>`],
+      ['Payments recorded', String(ledger.length)],
+      ['Periods paid',      `${paidPeriods} / ${schedule.length}`],
+      ['Last payment',      lastPay ? escHtml(lastPay) : dash],
+    ];
+    summaryHtml = `
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-receipt"></i> Payment summary</div>
+      <table class="inv-detail-table">${rowsHtmlBill(summaryRows)}</table>
+    </div>`;
+  }
 
   const progressSection = isFullyPaid
     ? `<div style="padding:10px 14px 12px;display:flex;align-items:center;gap:8px;color:#4ade80;font-size:12px;font-weight:600;">
@@ -34196,13 +34285,14 @@ function openBillDetailPage(b) {
   html += `
     <div class="inv-section">
       <div class="inv-section-title"><i class="fa fa-calendar-check"></i> Schedule</div>
-      <table class="inv-detail-table">${rowsHtml(schedRows)}</table>
+      <table class="inv-detail-table">${rowsHtmlBill(schedRows)}</table>
       ${progressSection}
     </div>
     <div class="inv-section" style="margin-top:14px">
       <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
-      <table class="inv-detail-table">${rowsHtml(detailRows)}</table>
+      <table class="inv-detail-table">${rowsHtmlBill(detailRows)}</table>
     </div>
+    ${summaryHtml}
     <div class="inv-section" style="margin-top:14px">
       <div class="inv-section-title" style="color:#dc2626"><i class="fa fa-trash"></i> Remove bill</div>
       <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -34215,22 +34305,6 @@ function openBillDetailPage(b) {
 
   $('#bd-pane-overview').innerHTML = html;
 
-  // Always re-verify overdue status from server (list cache uses date-only comparison)
-  refreshBillDetailOverdue(full.id);
-
-  // Load transaction details tab on demand
-  let _bdScheduleLoaded = false;
-  $$('#bd-inv-tabs .inv-tab').forEach(tab => {
-    if (tab.dataset.tab !== 'transactions') return;
-    tab.addEventListener('click', () => {
-      if (_bdScheduleLoaded) return;
-      _bdScheduleLoaded = true;
-      loadBillTransactionTab(full.id);
-    }, { once: false });
-  });
-  // Show spinner in tab until loaded
-  $('#bd-pane-transactions').innerHTML = `<div class="inv-pane-loading"><i class="fa fa-spinner fa-spin" style="font-size:22px;opacity:.4"></i></div>`;
-
   $('#bd-delete-bill').addEventListener('click', async () => {
     if (!confirm(`Delete "${full.name}"? This cannot be undone.`)) return;
     const btn = $('#bd-delete-bill');
@@ -34238,13 +34312,19 @@ function openBillDetailPage(b) {
     const res = await API.deleteBill(full.id);
     if (res.status === 200) {
       _financeAllBills = _financeAllBills.filter(x => String(x.id) !== String(full.id));
+      _bdBill = null;
       $('#bill-detail-back').click(); renderBillCards();
       toast('Bill deleted', 'success');
     } else {
-      btn.disabled = false; btn.innerHTML = '<i class="fa fa-trash"></i> Remove bill';
+      btn.disabled = false; btn.innerHTML = '<i class="fa fa-trash"></i> Remove';
       toast(res.body?.message || 'Failed to delete', 'error');
     }
   });
+}
+
+function rowsHtmlBill(rows) {
+  return rows.map(([l, v]) =>
+    `<tr><td class="inv-dt-label">${escHtml(l)}</td><td class="inv-dt-val">${v}</td></tr>`).join('');
 }
 
 async function loadBillTransactionTab(billId) {
@@ -39446,6 +39526,7 @@ function switchHrView(view) {
   $('#employees-list-view').style.display       = view === 'employees'   ? 'flex' : 'none';
   $('#employee-detail-view').style.display      = 'none';
   $('#departments-list-view').style.display     = view === 'departments' ? 'flex' : 'none';
+  $('#department-detail-view').style.display    = 'none';
   $('#payroll-list-view').style.display         = view === 'payroll'     ? 'flex' : 'none';
   $('#payroll-cycle-detail-view').style.display = 'none';
   $('#rule-sets-list-view').style.display       = view === 'rule-sets'       ? 'flex' : 'none';
@@ -42363,6 +42444,7 @@ $('#rb-departments').addEventListener('click', () => { activateTab('hr'); switch
 $('#rb-hr-payroll').addEventListener('click',  () => { activateTab('hr'); switchHrView('payroll'); });
 $('#rb-positions').addEventListener('click',   () => { activateTab('hr'); switchHrView('positions'); });
 $('#rb-attendance').addEventListener('click',  () => { activateTab('hr'); switchHrView('attendance'); });
+$('#rb-leave-rules').addEventListener('click', () => { activateTab('hr'); switchHrView('leave-rules'); });
 
 // ── Employees list ──────────────────────────────────────────────────────────
 
@@ -42449,10 +42531,16 @@ $('#emp-add-btn').addEventListener('click', openEmpCreateModal);
 
 // ── Employee detail page ────────────────────────────────────────────────────
 
-async function openEmployeeDetailPage(emp) {
-  $('#employees-list-view').style.display   = 'none';
-  $('#departments-list-view').style.display = 'none';
-  $('#employee-detail-view').style.display  = 'flex';
+// Where the employee detail Back button returns to: 'employees' list or the open 'department' page
+let _empDetailFrom = 'employees';
+
+async function openEmployeeDetailPage(emp, from = 'employees') {
+  _empDetailFrom = from;
+  $('#emp-back-btn').innerHTML = `<i class="fa fa-arrow-left"></i> ${from === 'department' ? escHtml(_deptDetailCurrent?.name || 'Department') : 'Employees'}`;
+  $('#employees-list-view').style.display    = 'none';
+  $('#departments-list-view').style.display  = 'none';
+  $('#department-detail-view').style.display = 'none';
+  $('#employee-detail-view').style.display   = 'flex';
 
   const typeColor = { full_time: '#4caf7d', part_time: '#f7a54e', contract: '#9c6ef7' };
   const color = typeColor[emp.employment_type] || '#90a4ae';
@@ -42466,7 +42554,10 @@ async function openEmployeeDetailPage(emp) {
     emp.job_title  ? `<span class="lm-badge" style="background:var(--sidebar-bg);color:var(--text-muted)">${escHtml(emp.job_title)}</span>`  : '',
   ].join('');
 
-  // Overview pane
+  // Overview pane — daily / hourly rates come from basic salary ÷ the Settings → HR working schedule
+  const rateBasis = emp.working_days_per_week
+    ? `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Based on ${emp.working_days_per_week} working day${emp.working_days_per_week !== 1 ? 's' : ''} · ${_psmHrFmtHours(emp.working_minutes_per_week || 0)} per week</div>`
+    : `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Set the working schedule in Settings → HR</div>`;
   const ovPane = $('#emp-pane-overview');
   ovPane.innerHTML = `
     <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
@@ -42476,6 +42567,8 @@ async function openEmployeeDetailPage(emp) {
       ${empDetailRow('Job Title', emp.job_title || '—')}
       ${empDetailRow('Basic Salary', emp.basic_salary_fmt ? _hrMoney(emp.basic_salary_fmt) : '—')}
       ${empDetailRow('Date of Joining', emp.date_of_joining || '—')}
+      ${empDetailRow('Average Daily Salary', (emp.daily_rate_fmt ? escHtml(_hrMoney(emp.daily_rate_fmt)) : '—') + rateBasis)}
+      ${empDetailRow('Hourly Rate', (emp.hourly_rate_fmt ? escHtml(_hrMoney(emp.hourly_rate_fmt)) : '—') + rateBasis)}
       ${empDetailRow('Phone', emp.phone_number || '—')}
     </div>`;
 
@@ -42487,13 +42580,195 @@ async function openEmployeeDetailPage(emp) {
   $('#emp-pane-personal').innerHTML = '';
   $('#emp-pane-leave').innerHTML = '';
   $('#emp-pane-attendance').innerHTML = '';
+  $('#emp-pane-bills').innerHTML = '';
 
-  // Lazy-load personal details + leave + attendance (current month)
+  // Lazy-load personal details + leave + attendance (current month) + assigned bills
   _empDetailCurrent = emp;
   loadEmployeePersonalTab(emp.id);
   loadEmployeeLeaveTab(emp.id);
   loadEmployeeAttendanceTab(emp);
+  loadEmployeeBillsTab(emp.id);
 }
+
+// ── Employee detail: Bills tab ──────────────────────────────────────────────
+// Bills assigned to this employee (Finance → Create Bill → Assign to: Employee).
+// Cards reuse buildBillCard; clicking one opens the bill detail popup.
+
+let _empBillsSeq = 0;
+
+async function loadEmployeeBillsTab(empId) {
+  const pane = $('#emp-pane-bills');
+  const seq  = ++_empBillsSeq;
+  pane.innerHTML = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading bills…</p>';
+  const res = await API.employeeBills(empId);
+  if (seq !== _empBillsSeq) return;
+  if (res.status !== 200) {
+    pane.innerHTML = '<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load bills.</p>';
+    return;
+  }
+
+  _renderAssignedBills(pane, res.body, 'Employee', 'this employee');
+}
+
+/** Bills pane shared by the employee and department detail pages: summary tiles + bill cards. */
+function _renderAssignedBills(pane, body, assignLabel, targetLabel) {
+  const bills = body?.data || [];
+  const s     = body?.summary || {};
+  if (!bills.length) {
+    pane.innerHTML = `
+      <div class="finance-empty">
+        <div class="finance-empty-icon"><i class="fa fa-file-invoice-dollar"></i></div>
+        <p>No bills assigned</p>
+        <span>In Finance → Create Bill, set <strong>Assign to</strong> to ${assignLabel} and pick ${targetLabel}.</span>
+      </div>`;
+    return;
+  }
+
+  const stat = (label, val, tip = '', color = '') =>
+    `<div class="eas-item" title="${escHtml(tip)}"><span>${label}</span><b${color ? ` style="color:${color}"` : ''}>${val}</b></div>`;
+
+  pane.innerHTML = `
+    <div class="emp-bills">
+      <div class="eas">
+        ${stat('Bills', s.count ?? bills.length)}
+        ${stat('Total billed', escHtml(_hrMoney(_empBillMoney(s.billed))), 'One-time bills in full + recurring periods due up to today')}
+        ${stat('Paid', escHtml(_hrMoney(_empBillMoney(s.paid))), '', s.paid ? '#16a34a' : '')}
+        ${stat('Outstanding', escHtml(_hrMoney(_empBillMoney(s.outstanding))), 'Billed but not yet paid', s.outstanding ? '#d97706' : '')}
+        ${stat('Overdue', escHtml(_hrMoney(_empBillMoney(s.overdue))), `${s.overdue_count || 0} bill${s.overdue_count === 1 ? '' : 's'} past due`, s.overdue ? '#dc2626' : '')}
+      </div>
+      <div class="emp-bills-list">${bills.map(buildBillCard).join('')}</div>
+    </div>`;
+
+  const byId = new Map(bills.map(b => [String(b.id), b]));
+  pane.querySelectorAll('.bill-card[data-bill-id]').forEach(card =>
+    card.addEventListener('click', () => openEmpBillPopup(byId.get(card.dataset.billId))));
+}
+
+function _empBillMoney(v) {
+  return (parseFloat(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+let _empBillPopupSeq = 0;
+
+/** Bill detail popup: renders from the list row at once, then adds schedule + payments from the show endpoint. */
+async function openEmpBillPopup(b) {
+  if (!b) return;
+  const seq = ++_empBillPopupSeq;
+  const cat = BILL_CAT[b.bill_category] || BILL_CAT.other;
+  $('#bdm-title').innerHTML = `<i class="fa ${cat.icon}" style="color:${cat.color}"></i> ${escHtml(b.name)}`;
+  $('#bdm-body').innerHTML  = _empBillPopupHtml(b, null);
+  $('#bill-detail-modal').style.display = 'flex';
+
+  const res = await API.bill(b.id);
+  if (seq !== _empBillPopupSeq || $('#bill-detail-modal').style.display === 'none') return;
+  $('#bdm-body').innerHTML = res.status === 200
+    ? _empBillPopupHtml({ ...b, ...res.body.data }, res.body.data)
+    : _empBillPopupHtml(b, null) + '<p style="padding:0 0 14px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Could not load the payment schedule.</p>';
+}
+
+function _empBillPopupHtml(b, full) {
+  const cat       = BILL_CAT[b.bill_category] || BILL_CAT.other;
+  const catLabel  = b.bill_category === 'other' ? (b.bill_category_other || 'Other') : cat.label;
+  const isOneTime = b.payment_mode === 'one_time';
+  const isPaid    = Boolean(b.is_fully_paid);
+  const isOverdue = Boolean(b.is_overdue ?? b.overdue);
+  const dash      = '<span style="color:var(--text-muted)">—</span>';
+  const money     = v => escHtml(_hrMoney(_empBillMoney(v)));
+  const yesNo     = v => v ? '<span class="inv-badge inv-badge-green">Yes</span>' : '<span class="inv-badge inv-badge-gray">No</span>';
+  const t         = b.totals || {};
+  const dueDate   = isOneTime ? (b.due_date || b.first_installment_due_date) : b.next_due_date;
+
+  const badges = [
+    isPaid ? '<span class="inv-badge inv-badge-green">Paid</span>'
+      : isOverdue ? '<span class="inv-badge inv-badge-red">Overdue</span>'
+      : '<span class="inv-badge inv-badge-green">Active</span>',
+    `<span class="inv-badge inv-badge-gray">${escHtml(catLabel)}</span>`,
+    `<span class="inv-badge inv-badge-blue">${isOneTime ? 'One-time' : escHtml(BILL_REC_LABEL[b.recurring_type] || 'Recurring')}</span>`,
+    b.amount_varies_by_usage ? '<span class="inv-badge inv-badge-amber">Variable amount</span>' : '',
+  ].join('');
+
+  const tiles = `
+    <div class="eas" style="margin:14px 0 4px">
+      <div class="eas-item"><span>Total billed</span><b>${money(t.billed)}</b></div>
+      <div class="eas-item"><span>Paid</span><b style="color:#16a34a">${money(t.paid ?? b.total_paid)}</b></div>
+      <div class="eas-item"><span>Outstanding</span><b${t.outstanding ? ' style="color:#d97706"' : ''}>${money(t.outstanding)}</b></div>
+      <div class="eas-item"><span>${isOneTime ? 'Due date' : 'Next due'}</span><b${isOverdue && !isPaid ? ' style="color:#dc2626"' : ''}>${isPaid && !isOneTime ? 'Completed' : escHtml(dueDate || 'Not set')}</b></div>
+    </div>`;
+
+  const rows = [
+    ['Category', escHtml(catLabel)],
+    ['Payment mode', isOneTime ? 'One-time' : 'Recurring'],
+  ];
+  if (!isOneTime) rows.push(['Recurring type', escHtml(BILL_REC_LABEL[b.recurring_type] || b.recurring_type || '—')]);
+  rows.push([isOneTime ? 'Amount' : 'Amount per period', b.amount_varies_by_usage
+    ? '<span style="color:var(--text-muted);font-style:italic">Variable (by usage)</span>'
+    : `<strong>${money(b.recurring_cost)}</strong>`]);
+  if (b.due_date && isOneTime)       rows.push(['Due date', escHtml(b.due_date)]);
+  if (b.first_installment_due_date)  rows.push(['First installment', escHtml(b.first_installment_due_date)]);
+  if (b.agreement_valid_until_year)  rows.push([isOneTime ? 'Year' : 'Valid until year', escHtml(String(b.agreement_valid_until_year))]);
+  rows.push(['Reminder', b.remind_before_days ? `${b.remind_before_days} day(s) before due` : dash]);
+  rows.push(['Split payment allowed', yesNo(b.allow_split_payment)]);
+  rows.push(['Assigned to', `${b.assignment_type === 'department' ? 'Department' : 'Employee'}${billAssigneeName(b) ? ' · ' + escHtml(billAssigneeName(b)) : ''}`]);
+  const acct = b.account?.account_name;
+  rows.push(['Deduct from account', acct ? escHtml(acct) + (b.account.bank_name ? ` <span style="color:var(--text-muted)">(${escHtml(b.account.bank_name)})</span>` : '') : dash]);
+  rows.push(['Description', b.description ? `<span style="white-space:pre-wrap">${escHtml(b.description)}</span>` : dash]);
+  rows.push(['Notes', b.notes ? `<span style="white-space:pre-wrap">${escHtml(b.notes)}</span>` : dash]);
+  if (full?.created_at) rows.push(['Created', escHtml(full.created_at)]);
+
+  let scheduleHtml = '<div class="inv-pane-loading" style="padding:24px"><i class="fa fa-spinner fa-spin" style="font-size:18px;opacity:.4"></i></div>';
+  let ledgerHtml   = '';
+  if (full) {
+    const sched = full.schedule || [];
+    const status = r => r.paid ? '<span class="bd-sched-badge bd-sched-paid"><i class="fa fa-check-circle"></i> Paid</span>'
+      : r.past_due_unpaid && r.partially_paid ? '<span class="bd-sched-badge bd-sched-partial"><i class="fa fa-circle-half-stroke"></i> Past due · partial</span>'
+      : r.past_due_unpaid ? '<span class="bd-sched-badge bd-sched-overdue"><i class="fa fa-circle-exclamation"></i> Past due · unpaid</span>'
+      : r.partially_paid ? '<span class="bd-sched-badge bd-sched-partial"><i class="fa fa-circle-half-stroke"></i> Partially paid</span>'
+      : '<span class="bd-sched-badge bd-sched-await"><i class="fa fa-circle-info"></i> Outstanding</span>';
+    scheduleHtml = sched.length
+      ? `<div class="bd-sched-scroll" style="max-height:260px;overflow-y:auto"><table class="bd-sched-table">
+          <thead><tr><th class="bd-sched-num">#</th><th>Due date</th><th>Amount</th><th>Status</th><th>Paid</th></tr></thead>
+          <tbody>${sched.map((r, i) => `<tr class="${r.past_due_unpaid && !r.paid ? 'bd-sched-row-due' : ''}">
+            <td class="bd-sched-num">${i + 1}</td>
+            <td class="bd-sched-cell">${escHtml(r.due_ymd)}</td>
+            <td class="bd-sched-cell">${r.amount_varies && !r.period_charge_declared ? '<span style="color:var(--text-muted);font-style:italic">Varies</span>' : escHtml(r.amount_formatted)}</td>
+            <td class="bd-sched-cell">${status(r)}</td>
+            <td class="bd-sched-cell">${r.paid_total > 0 ? escHtml(r.paid_total_formatted) : '—'}</td>
+          </tr>`).join('')}</tbody></table></div>`
+      : `<div class="inv-pane-empty" style="padding:20px 14px"><p>No billing dates yet${isOneTime ? '' : ' — set a first installment date on the bill'}.</p></div>`;
+
+    const ledger = full.ledger || [];
+    ledgerHtml = `
+      <div class="inv-section" style="margin-top:14px">
+        <div class="inv-section-title"><i class="fa fa-receipt"></i> Payments (${ledger.length})</div>
+        ${ledger.length ? `<table class="bd-sched-table">
+          <thead><tr><th>Date posted</th><th>Billing date</th><th style="text-align:right">Amount</th><th>Account</th></tr></thead>
+          <tbody>${ledger.map(tx => `<tr>
+            <td class="bd-sched-cell">${escHtml(tx.created_at || '—')}</td>
+            <td class="bd-sched-cell">${escHtml(tx.occurrence_date || '—')}</td>
+            <td class="bd-sched-cell" style="text-align:right;font-weight:600">${money(tx.amount)}</td>
+            <td class="bd-sched-cell">${escHtml(tx.account_name || '—')}${tx.bank_name ? ` <span style="color:var(--text-muted);font-size:11px">· ${escHtml(tx.bank_name)}</span>` : ''}</td>
+          </tr>`).join('')}</tbody></table>`
+        : '<div class="inv-pane-empty" style="padding:20px 14px"><p>No payments recorded yet.</p></div>'}
+      </div>`;
+  }
+
+  return `
+    <div style="display:flex;flex-wrap:wrap;gap:6px">${badges}</div>
+    ${tiles}
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
+      <table class="inv-detail-table">${rowsHtmlBill(rows)}</table>
+    </div>
+    <div class="inv-section" style="margin-top:14px">
+      <div class="inv-section-title"><i class="fa fa-calendar-days"></i> Billing schedule</div>
+      ${scheduleHtml}
+    </div>
+    ${ledgerHtml}
+    <div style="height:14px"></div>`;
+}
+
+$('#bill-detail-close').addEventListener('click', () => { $('#bill-detail-modal').style.display = 'none'; });
+$('#bill-detail-modal').addEventListener('click', e => { if (e.target === $('#bill-detail-modal')) $('#bill-detail-modal').style.display = 'none'; });
 
 // ── Employee detail: Leave tab ──────────────────────────────────────────────
 
@@ -42707,7 +42982,8 @@ async function loadEmployeePersonalTab(empId) {
 
 $('#emp-back-btn').addEventListener('click', () => {
   $('#employee-detail-view').style.display = 'none';
-  $('#employees-list-view').style.display  = 'flex';
+  if (_empDetailFrom === 'department') $('#department-detail-view').style.display = 'flex';
+  else $('#employees-list-view').style.display = 'flex';
 });
 
 $$('#employee-detail-view .inv-tab').forEach(tab => {
@@ -42891,6 +43167,13 @@ async function loadDepartments(search) {
   area.innerHTML = filtered.map(d => buildDepartmentCard(d)).join('');
   footer.textContent = `${filtered.length} department${filtered.length !== 1 ? 's' : ''}`;
 
+  area.querySelectorAll('.lm-card[data-id]').forEach(card => {
+    card.addEventListener('click', () => {
+      const dept = hrDepartments.find(d => d.id === parseInt(card.dataset.id, 10));
+      if (dept) openDepartmentDetailPage(dept);
+    });
+  });
+
   area.querySelectorAll('.dept-delete-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -42918,7 +43201,7 @@ function buildDepartmentCard(d) {
     : d.salary_range_min ? `From ${d.salary_range_min}` : '';
   const canDelete = (d.employees_count || 0) === 0;
   return `
-    <div class="lm-card" style="cursor:default">
+    <div class="lm-card" data-id="${d.id}" style="cursor:pointer">
       <div class="lm-card-header">
         <div class="lm-card-icon" style="background:#9c6ef720;color:#9c6ef7"><i class="fa fa-sitemap"></i></div>
         <div class="lm-card-title-wrap">
@@ -42937,6 +43220,553 @@ function buildDepartmentCard(d) {
 
 $('#dept-search').addEventListener('input', e => loadDepartments(e.target.value));
 $('#dept-add-btn').addEventListener('click', openDeptCreateModal);
+
+// ── Department detail page ──────────────────────────────────────────────────
+// Overview · Employees · Salary Range · Bills · Payroll. One /hr/departments/{id} call feeds every
+// tab except Bills, which loads from /hr/departments/{id}/bills.
+
+let _deptDetailCurrent = null;
+let _deptDetailSeq = 0;
+
+const DEPT_RANGE_POS = {
+  below:  { label: 'Below range',  color: '#d97706' },
+  within: { label: 'Within range', color: '#16a34a' },
+  above:  { label: 'Above range',  color: '#dc2626' },
+};
+const DEPT_TYPE_LABEL = { full_time: 'Full Time', part_time: 'Part Time', contract: 'Contract' };
+
+async function openDepartmentDetailPage(dept) {
+  $('#departments-list-view').style.display  = 'none';
+  $('#employee-detail-view').style.display   = 'none';
+  $('#department-detail-view').style.display = 'flex';
+
+  _deptDetailCurrent = dept;
+  $('#dept-detail-name').textContent       = dept.name || '—';
+  $('#dept-detail-breadcrumb').textContent = dept.name || 'Department Detail';
+  $('#dept-detail-meta').textContent       = '';
+  $('#dept-detail-badges').innerHTML       = '';
+
+  $$('#department-detail-view .inv-tab').forEach(t => t.classList.remove('active'));
+  $$('#department-detail-view .inv-tab-pane').forEach(p => p.classList.remove('active'));
+  $('#department-detail-view .inv-tab[data-tab="dept-overview"]').classList.add('active');
+  $('#dept-pane-overview').classList.add('active');
+
+  const loading = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</p>';
+  ['overview', 'employees', 'salary', 'payroll'].forEach(k => { $('#dept-pane-' + k).innerHTML = loading; });
+
+  loadDepartmentBillsTab(dept.id);
+  await loadDepartmentDetail(dept.id);
+}
+
+async function loadDepartmentDetail(deptId) {
+  const seq = ++_deptDetailSeq;
+  const res = await API.department(deptId);
+  if (seq !== _deptDetailSeq) return;
+  if (res.status !== 200) {
+    const err = '<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load department.</p>';
+    ['overview', 'employees', 'salary', 'payroll'].forEach(k => { $('#dept-pane-' + k).innerHTML = err; });
+    return;
+  }
+  _renderDepartmentDetail(res.body.data || {});
+}
+
+function _renderDepartmentDetail(d) {
+  _deptDetailCurrent = d;
+  const n = d.employees_count || 0;
+  $('#dept-detail-name').textContent = d.name || '—';
+  const metaLink = (label, id, name) => id
+    ? `${label}: <a href="#" class="dept-lead-profile" data-id="${id}" style="color:var(--accent);text-decoration:none">${escHtml(name || '—')}</a>` : '';
+  $('#dept-detail-meta').innerHTML = [metaLink('Head', d.head_employee_id, d.head), metaLink('Co-head', d.co_head_employee_id, d.co_head)].filter(Boolean).join(' · ');
+  $('#dept-detail-meta').querySelectorAll('.dept-lead-profile').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    openEmployeeProfilePopup(parseInt(a.dataset.id, 10));
+  }));
+  $('#dept-detail-badges').innerHTML = [
+    `<span class="lm-badge" style="background:#9c6ef720;color:#9c6ef7;border:1px solid #9c6ef740">${n} employee${n !== 1 ? 's' : ''}</span>`,
+    _deptRangeText(d) ? `<span class="lm-badge" style="background:var(--sidebar-bg);color:var(--text-muted)">${escHtml(_deptRangeText(d))}</span>` : '',
+  ].join('');
+
+  _renderDeptOverview(d);
+  _renderDeptEmployees(d);
+  _renderDeptSalary(d);
+  _renderDeptPayroll(d);
+}
+
+function _deptMoney(v) {
+  return v == null ? '—' : escHtml(_hrMoney(_empBillMoney(v)));
+}
+
+function _deptRangeText(d) {
+  if (d.salary_range_min_fmt && d.salary_range_max_fmt) return `${d.salary_range_min_fmt} – ${d.salary_range_max_fmt}`;
+  if (d.salary_range_min_fmt) return `From ${d.salary_range_min_fmt}`;
+  if (d.salary_range_max_fmt) return `Up to ${d.salary_range_max_fmt}`;
+  return '';
+}
+
+function _deptRangePill(pos) {
+  const p = DEPT_RANGE_POS[pos];
+  return p ? `<span class="lm-pill" style="background:${p.color}18;color:${p.color}">${p.label}</span>` : '';
+}
+
+function _renderDeptOverview(d) {
+  const s  = d.salary_stats || {};
+  const t  = d.employment_types || {};
+  const pt = d.payroll?.totals || {};
+  const mix = [
+    t.full_time ? `${t.full_time} full time` : '',
+    t.part_time ? `${t.part_time} part time` : '',
+    t.contract  ? `${t.contract} contract`   : '',
+  ].filter(Boolean).join(' · ') || '—';
+  const range = _deptRangeText(d);
+  // Head / Co-head card: name opens the employee profile popup, pencil opens the edit popup
+  const leadCard = (role, label, id, name) => `
+    <div style="background:var(--surface);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">${label}</div>
+        <button class="dept-lead-edit" data-role="${role}" title="Change ${label.toLowerCase()}"
+          style="border:none;background:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:13px"><i class="fa fa-pencil"></i></button>
+      </div>
+      <div style="font-size:15px;font-weight:600">${id
+        ? `<a href="#" class="dept-lead-profile" data-id="${id}" style="color:var(--accent);text-decoration:none">${escHtml(name || '—')}</a>`
+        : '<span style="color:var(--text-muted);font-weight:500">Not assigned</span>'}</div>
+    </div>`;
+
+  $('#dept-pane-overview').innerHTML = `
+    <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      ${empDetailRow('Department', escHtml(d.name || '—'))}
+      ${empDetailRow('Employees', `${d.employees_count || 0}<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">${escHtml(mix)}</div>`)}
+      ${leadCard('head', 'Head', d.head_employee_id, d.head)}
+      ${leadCard('co_head', 'Co-head', d.co_head_employee_id, d.co_head)}
+      ${_deptRangeCard(d)}
+      ${empDetailRow('Average Basic Salary', _deptMoney(s.average))}
+      ${empDetailRow('Monthly Basic Salaries', _deptMoney(s.monthly_basic) + `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Sum of current members' basic salary</div>`)}
+      ${empDetailRow('Total Payroll (net)', _deptMoney(pt.net) + `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">${pt.cycles || 0} payroll cycle${pt.cycles === 1 ? '' : 's'}</div>`)}
+    </div>`;
+
+  const pane = $('#dept-pane-overview');
+  pane.querySelectorAll('.dept-lead-edit').forEach(btn => btn.addEventListener('click', () => openDeptLeadModal(d, btn.dataset.role)));
+  pane.querySelectorAll('.dept-sr-edit').forEach(btn => btn.addEventListener('click', () => openDeptSalaryRangeModal(d)));
+  pane.querySelectorAll('.dept-lead-profile').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    openEmployeeProfilePopup(parseInt(a.dataset.id, 10));
+  }));
+}
+
+// ── Department: edit Head / Co-head popup ──────────────────────────────────
+
+let _deptLeadRole = 'head';
+
+function openDeptLeadModal(d, role) {
+  _deptLeadRole = role;
+  const isHead  = role === 'head';
+  const current = isHead ? d.head_employee_id : d.co_head_employee_id;
+  const other   = isHead ? d.co_head_employee_id : d.head_employee_id;
+  const members = d.employees || [];
+
+  $('#dept-lead-title').textContent = isHead ? 'Edit Head' : 'Edit Co-head';
+  $('#dept-lead-label').textContent = isHead ? 'HEAD' : 'CO-HEAD';
+  $('#dept-lead-select').innerHTML = '<option value="">— Not assigned —</option>' + members.map(e =>
+    `<option value="${e.id}"${e.id === current ? ' selected' : ''}${e.id === other ? ' disabled' : ''}>${escHtml(e.name)}${e.job_title ? ' · ' + escHtml(e.job_title) : ''}${e.id === other ? (isHead ? ' (co-head)' : ' (head)') : ''}</option>`).join('');
+  _deptLeadAlert(members.length ? '' : 'Add employees to this department first.');
+  $('#dept-lead-modal').style.display = '';
+}
+
+function _deptLeadAlert(msg) {
+  const el = $('#dept-lead-alert');
+  el.textContent = msg;
+  el.style.display = msg ? '' : 'none';
+}
+
+function closeDeptLeadModal() { $('#dept-lead-modal').style.display = 'none'; }
+
+$('#dept-lead-close').addEventListener('click', closeDeptLeadModal);
+$('#dept-lead-cancel').addEventListener('click', closeDeptLeadModal);
+$('#dept-lead-modal').addEventListener('click', e => { if (e.target === $('#dept-lead-modal')) closeDeptLeadModal(); });
+
+$('#dept-lead-save').addEventListener('click', async () => {
+  const d = _deptDetailCurrent;
+  if (!d) return;
+  const v   = $('#dept-lead-select').value;
+  const sel = v === '' ? null : parseInt(v, 10);
+  const body = {
+    head_employee_id:    _deptLeadRole === 'head'    ? sel : (d.head_employee_id ?? null),
+    co_head_employee_id: _deptLeadRole === 'co_head' ? sel : (d.co_head_employee_id ?? null),
+  };
+  if (body.head_employee_id != null && body.head_employee_id === body.co_head_employee_id) {
+    _deptLeadAlert('Head and co-head must be different people.');
+    return;
+  }
+  const btn = $('#dept-lead-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.updateDepartmentLeadership(d.id, body);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save';
+  if (res.status === 200) {
+    closeDeptLeadModal();
+    toast(_deptLeadRole === 'head' ? 'Head updated' : 'Co-head updated', 'success');
+    _renderDepartmentDetail(res.body.data || d);
+  } else {
+    _deptLeadAlert(res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to update.'));
+  }
+});
+
+// ── Employee profile popup ──────────────────────────────────────────────────
+// Quick look at an employee without leaving the current page; "Open full profile" goes to the detail page.
+
+let _empProfileSeq = 0;
+let _empProfileData = null;
+
+async function openEmployeeProfilePopup(empId) {
+  const seq = ++_empProfileSeq;
+  _empProfileData = null;
+  $('#emp-profile-body').innerHTML = '<p style="padding:24px 0;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</p>';
+  $('#emp-profile-open').disabled = true;
+  $('#emp-profile-modal').style.display = '';
+
+  const res = await API.employee(empId);
+  if (seq !== _empProfileSeq) return;
+  if (res.status !== 200 || !res.body?.data) {
+    $('#emp-profile-body').innerHTML = '<p style="padding:24px 0;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load employee.</p>';
+    return;
+  }
+
+  const e = _empProfileData = res.body.data;
+  $('#emp-profile-open').disabled = false;
+  $('#emp-profile-body').innerHTML = _empProfileHtml(e);
+}
+
+function _empProfileHtml(e) {
+  const typeColor = { full_time: '#16a34a', part_time: '#d97706', contract: '#7c3aed' };
+  const color    = typeColor[e.employment_type] || '#64748b';
+  const initials = (e.name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('');
+  const dept     = _deptDetailCurrent;
+  const role     = dept && dept.head_employee_id === e.id ? 'Department head'
+                 : dept && dept.co_head_employee_id === e.id ? 'Department co-head' : '';
+
+  // "8 yrs 1 mo" since joining
+  let tenure = '—';
+  if (e.date_of_joining) {
+    const j = new Date(e.date_of_joining), n = new Date();
+    const m = (n.getFullYear() - j.getFullYear()) * 12 + n.getMonth() - j.getMonth() - (n.getDate() < j.getDate() ? 1 : 0);
+    tenure = m < 1 ? 'New' : [Math.floor(m / 12) ? Math.floor(m / 12) + ' yr' + (Math.floor(m / 12) > 1 ? 's' : '') : '', m % 12 ? (m % 12) + ' mo' : ''].filter(Boolean).join(' ');
+  }
+  let age = '';
+  if (e.date_of_birth) {
+    const b = new Date(e.date_of_birth), n = new Date();
+    age = n.getFullYear() - b.getFullYear() - ((n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) ? 1 : 0);
+  }
+
+  const money = f => f ? escHtml(_hrMoney(f)) : null;
+  const row   = (label, val, full = false) =>
+    `<div class="epp-row${full ? ' full' : ''}"><dt>${label}</dt><dd${val ? '' : ' class="muted"'}>${val || '—'}</dd></div>`;
+  const esc   = v => v ? escHtml(String(v)) : null;
+  const ec    = e.emergency_contact || {};
+  const bank  = e.bank || {};
+
+  return `
+    <div class="epp-head">
+      <div class="epp-avatar" style="background:${color}1a;color:${color}">${escHtml(initials)}</div>
+      <div style="min-width:0">
+        <div class="epp-name">${escHtml(e.name || '—')}</div>
+        <div class="epp-sub">${[e.job_title, e.department].filter(Boolean).map(escHtml).join(' · ') || '—'}</div>
+        <div class="epp-tags">
+          ${e.employee_id ? `<span class="epp-tag">#${escHtml(e.employee_id)}</span>` : ''}
+          <span class="epp-tag" style="background:${color}1a;color:${color}">${escHtml(e.type_label || '—')}</span>
+          ${role ? `<span class="epp-tag" style="background:#9c6ef71a;color:#7c3aed">${role}</span>` : ''}
+        </div>
+      </div>
+    </div>
+
+    <div class="epp-kpis">
+      <div class="epp-kpi"><span>Basic salary</span><b>${money(e.basic_salary_fmt) || '—'}</b></div>
+      <div class="epp-kpi"><span>Daily rate</span><b>${money(e.daily_rate_fmt) || '—'}</b></div>
+      <div class="epp-kpi"><span>Service</span><b>${escHtml(tenure)}</b></div>
+    </div>
+
+    <div class="epp-sec">
+      <div class="epp-sec-title">Employment</div>
+      <dl class="epp-dl">
+        ${row('Date of joining', esc(e.date_of_joining))}
+        ${row('Employment type', esc(e.type_label))}
+        ${row('Monthly gross', money(e.salary_fmt))}
+        ${row('Hourly rate', money(e.hourly_rate_fmt))}
+      </dl>
+    </div>
+
+    <div class="epp-sec">
+      <div class="epp-sec-title">Contact</div>
+      <dl class="epp-dl">
+        ${row('Phone', esc(e.phone_number))}
+        ${row('Email', esc(e.personal_email))}
+        ${row('Current address', esc(e.current_address), true)}
+        ${e.permanent_address && e.permanent_address !== e.current_address ? row('Permanent address', esc(e.permanent_address), true) : ''}
+      </dl>
+    </div>
+
+    <div class="epp-sec">
+      <div class="epp-sec-title">Personal</div>
+      <dl class="epp-dl">
+        ${row('Date of birth', e.date_of_birth ? escHtml(e.date_of_birth) + (age !== '' ? ` <span style="color:var(--text-muted);font-weight:400">· ${age} yrs</span>` : '') : null)}
+        ${row('NIC / Passport', esc(e.nic_passport_number))}
+        ${row('Emergency contact', ec.name ? escHtml(ec.name) + (ec.relationship ? ` <span style="color:var(--text-muted);font-weight:400">· ${escHtml(ec.relationship)}</span>` : '') : null)}
+        ${row('Emergency phone', esc(ec.phone))}
+      </dl>
+    </div>
+
+    <div class="epp-sec">
+      <div class="epp-sec-title">Bank &amp; statutory</div>
+      <dl class="epp-dl">
+        ${row('Bank', bank.name ? escHtml(bank.name) + (bank.branch ? ` <span style="color:var(--text-muted);font-weight:400">· ${escHtml(bank.branch)}</span>` : '') : null)}
+        ${row('Account', bank.account_masked ? escHtml(bank.account_masked) + (bank.holder ? ` <span style="color:var(--text-muted);font-weight:400">· ${escHtml(bank.holder)}</span>` : '') : null)}
+        ${row('EPF number', esc(e.epf_number))}
+        ${row('ETF number', esc(e.etf_number))}
+        ${row('Tax TIN', esc(e.tax_tin))}
+      </dl>
+    </div>`;
+}
+
+function closeEmployeeProfilePopup() { $('#emp-profile-modal').style.display = 'none'; }
+
+$('#emp-profile-close').addEventListener('click', closeEmployeeProfilePopup);
+$('#emp-profile-cancel').addEventListener('click', closeEmployeeProfilePopup);
+$('#emp-profile-modal').addEventListener('click', e => { if (e.target === $('#emp-profile-modal')) closeEmployeeProfilePopup(); });
+$('#emp-profile-open').addEventListener('click', () => {
+  if (!_empProfileData) return;
+  closeEmployeeProfilePopup();
+  openEmployeeDetailPage(_empProfileData, $('#department-detail-view').style.display === 'flex' ? 'department' : 'employees');
+});
+
+function _renderDeptEmployees(d) {
+  const pane = $('#dept-pane-employees');
+  const list = d.employees || [];
+  if (!list.length) {
+    pane.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:40px 0"><i class="fa fa-users" style="font-size:32px;display:block;margin-bottom:12px;opacity:.3"></i>No employees in this department.</p>';
+    return;
+  }
+  const typeColor = { full_time: '#4caf7d', part_time: '#f7a54e', contract: '#9c6ef7' };
+  pane.innerHTML = `<div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">${list.map(e => {
+    const color = typeColor[e.employment_type] || '#90a4ae';
+    const meta  = [e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ');
+    return `
+      <div class="lm-card dept-emp-card" data-id="${e.id}" style="cursor:pointer">
+        <div class="lm-card-header">
+          <div class="lm-card-icon" style="background:${color}20;color:${color}"><i class="fa fa-user"></i></div>
+          <div class="lm-card-title-wrap">
+            <span class="lm-card-name">${escHtml(e.name || '—')}</span>
+            <div class="lm-card-pills">
+              <span class="lm-pill" style="background:${color}18;color:${color}">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+              ${meta ? `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)">${meta}</span>` : ''}
+              ${_deptRangePill(e.range_position)}
+            </div>
+          </div>
+          ${e.basic_salary_fmt ? `<span style="font-size:13px;font-weight:700;color:var(--accent);margin-left:auto;white-space:nowrap">${escHtml(_hrMoney(e.basic_salary_fmt))}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('')}</div>`;
+
+  pane.querySelectorAll('.dept-emp-card').forEach(card => {
+    card.addEventListener('click', async () => {
+      card.style.opacity = '.6';
+      const res = await API.employee(parseInt(card.dataset.id, 10));
+      card.style.opacity = '';
+      if (res.status === 200 && res.body?.data) openEmployeeDetailPage(res.body.data, 'department');
+      else toast(res.body?.message || 'Could not open employee.', 'error');
+    });
+  });
+}
+
+function _renderDeptSalary(d) {
+  const pane = $('#dept-pane-salary');
+  const s    = d.salary_stats || {};
+  const hasRange = d.salary_range_min != null || d.salary_range_max != null;
+  const stat = (label, val, tip = '', color = '') =>
+    `<div class="eas-item" title="${escHtml(tip)}"><span>${label}</span><b${color ? ` style="color:${color}"` : ''}>${val}</b></div>`;
+
+  // Members sorted by basic salary, each with a bar against the band (scaled to the larger of band max / top salary)
+  const members = (d.employees || []).filter(e => e.basic_salary != null).sort((a, b) => b.basic_salary - a.basic_salary);
+  const scale   = Math.max(d.salary_range_max || 0, s.highest || 0, 1);
+  const pct     = v => Math.min(100, (v / scale) * 100);
+  const band    = hasRange
+    ? `<div style="position:absolute;top:0;bottom:0;left:${pct(d.salary_range_min || 0)}%;width:${pct(d.salary_range_max ?? scale) - pct(d.salary_range_min || 0)}%;background:#16a34a1f;border-left:1px dashed #16a34a80;border-right:1px dashed #16a34a80"></div>`
+    : '';
+  const rows = members.map(e => {
+    const c = DEPT_RANGE_POS[e.range_position]?.color || 'var(--accent)';
+    return `
+      <tr>
+        <td><b>${escHtml(e.name)}</b>${e.job_title ? `<div class="att-emp-sub">${escHtml(e.job_title)}</div>` : ''}</td>
+        <td style="width:45%">
+          <div style="position:relative;height:10px;border-radius:5px;background:var(--sidebar-bg);overflow:hidden">
+            ${band}
+            <div style="position:relative;height:100%;width:${pct(e.basic_salary)}%;background:${c};border-radius:5px;opacity:.85"></div>
+          </div>
+        </td>
+        <td class="num" style="white-space:nowrap">${_deptMoney(e.basic_salary)}</td>
+        <td>${_deptRangePill(e.range_position)}</td>
+      </tr>`;
+  }).join('');
+
+  pane.innerHTML = `
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      ${_deptRangeCard(d, 'Monthly basic salary band for this department — indicative only.')}
+      <div class="eas">
+        ${stat('Lowest',  _deptMoney(s.lowest))}
+        ${stat('Average', _deptMoney(s.average))}
+        ${stat('Highest', _deptMoney(s.highest))}
+        ${hasRange ? stat('Below range',  s.below  || 0, 'Basic salary under the minimum', s.below  ? DEPT_RANGE_POS.below.color  : '') : ''}
+        ${hasRange ? stat('Within range', s.within || 0, '', s.within ? DEPT_RANGE_POS.within.color : '') : ''}
+        ${hasRange ? stat('Above range',  s.above  || 0, 'Basic salary over the maximum',  s.above  ? DEPT_RANGE_POS.above.color  : '') : ''}
+      </div>
+      ${members.length ? `
+        <table class="att-table"><thead><tr>
+          <th class="no-sort">Employee</th><th class="no-sort">Basic salary${hasRange ? ' <span style="font-weight:500;color:var(--text-muted)">· shaded = range</span>' : ''}</th>
+          <th class="no-sort">Amount</th><th class="no-sort">Position</th>
+        </tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="att-empty" style="padding:20px 0">No employee salaries recorded in this department.</div>'}
+    </div>`;
+
+  pane.querySelectorAll('.dept-sr-edit').forEach(btn => btn.addEventListener('click', () => openDeptSalaryRangeModal(d)));
+}
+
+/** Read-only salary range card with a pencil that opens the edit popup (Overview + Salary Range tabs). */
+function _deptRangeCard(d, hint = '') {
+  const range = _deptRangeText(d);
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">Salary Range</div>
+        <button class="dept-sr-edit" title="Change salary range"
+          style="border:none;background:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:13px"><i class="fa fa-pencil"></i></button>
+      </div>
+      <div style="font-size:15px;font-weight:600">${range ? escHtml(_hrMoney(range)) : '<span style="color:var(--text-muted);font-weight:500">Not set</span>'}</div>
+      ${hint ? `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">${hint}</div>` : ''}
+    </div>`;
+}
+
+// ── Department: edit salary range popup ─────────────────────────────────────
+
+function _deptSrAlert(msg) {
+  const el = $('#dept-sr-alert');
+  el.textContent = msg;
+  el.style.display = msg ? '' : 'none';
+}
+
+function openDeptSalaryRangeModal(d) {
+  $('#dept-sr-min').value = d.salary_range_min ?? '';
+  $('#dept-sr-max').value = d.salary_range_max ?? '';
+  _deptSrAlert('');
+  $('#dept-sr-modal').style.display = '';
+  setTimeout(() => $('#dept-sr-min').focus(), 60);
+}
+
+function closeDeptSalaryRangeModal() { $('#dept-sr-modal').style.display = 'none'; }
+
+$('#dept-sr-close').addEventListener('click', closeDeptSalaryRangeModal);
+$('#dept-sr-cancel').addEventListener('click', closeDeptSalaryRangeModal);
+$('#dept-sr-modal').addEventListener('click', e => { if (e.target === $('#dept-sr-modal')) closeDeptSalaryRangeModal(); });
+['#dept-sr-min', '#dept-sr-max'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key === 'Enter') $('#dept-sr-save').click(); }));
+
+$('#dept-sr-save').addEventListener('click', async () => {
+  const d = _deptDetailCurrent;
+  if (!d) return;
+  const val  = id => { const v = $(id).value.trim(); return v === '' ? null : parseFloat(v); };
+  const body = { salary_range_min: val('#dept-sr-min'), salary_range_max: val('#dept-sr-max') };
+  if (body.salary_range_min != null && body.salary_range_max != null && body.salary_range_max < body.salary_range_min) {
+    _deptSrAlert('Maximum must be greater than or equal to the minimum.');
+    return;
+  }
+  const btn = $('#dept-sr-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.updateDepartmentSalaryRange(d.id, body);
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save';
+  if (res.status === 200) {
+    closeDeptSalaryRangeModal();
+    toast('Salary range saved', 'success');
+    _renderDepartmentDetail(res.body.data || d);
+  } else {
+    _deptSrAlert(res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to save salary range.'));
+  }
+});
+
+function _renderDeptPayroll(d) {
+  const pane   = $('#dept-pane-payroll');
+  const p      = d.payroll || {};
+  const t      = p.totals || {};
+  const cycles = p.cycles || [];
+  if (!cycles.length) {
+    pane.innerHTML = `
+      <div class="finance-empty">
+        <div class="finance-empty-icon"><i class="fa fa-money-check-dollar"></i></div>
+        <p>No payroll yet</p>
+        <span>Payroll cycles that include this department's employees will appear here.</span>
+      </div>`;
+    return;
+  }
+  const stat = (label, val, tip = '', color = '') =>
+    `<div class="eas-item" title="${escHtml(tip)}"><span>${label}</span><b${color ? ` style="color:${color}"` : ''}>${val}</b></div>`;
+  const statusCls = { finalized: 'inv-badge-green', computed: 'inv-badge-blue', draft: 'inv-badge-gray' };
+
+  pane.innerHTML = `
+    <div style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      <div class="eas">
+        ${stat('Cycles', t.cycles || 0)}
+        ${stat('Total gross', _deptMoney(t.gross))}
+        ${stat('Deductions', _deptMoney(t.deductions), '', t.deductions ? '#d97706' : '')}
+        ${stat('Total net pay', _deptMoney(t.net), 'All cycles, including drafts')}
+        ${stat('Finalized net', _deptMoney(t.finalized_net), 'Finalized cycles only', '#16a34a')}
+      </div>
+      <table class="att-table"><thead><tr>
+        <th class="no-sort">Cycle</th><th class="no-sort">Status</th><th class="no-sort">Employees</th>
+        <th class="no-sort">Gross</th><th class="no-sort">Deductions</th><th class="no-sort">Net pay</th>
+      </tr></thead><tbody>${cycles.map(c => `
+        <tr class="att-row" data-cycle-id="${c.id}" title="Open payroll cycle">
+          <td><b>${escHtml(c.month_label)} ${c.year}</b><div class="att-emp-sub">${escHtml(c.name || '')}</div></td>
+          <td><span class="inv-badge ${statusCls[c.status] || 'inv-badge-gray'}">${escHtml(c.status_label)}</span></td>
+          <td class="num">${c.employees}</td>
+          <td class="num">${_deptMoney(c.gross)}</td>
+          <td class="num">${_deptMoney(c.deductions)}</td>
+          <td class="num"><b>${_deptMoney(c.net)}</b></td>
+        </tr>`).join('')}</tbody></table>
+      <div style="font-size:12px;color:var(--text-muted)">Totals cover the department's current employees.</div>
+    </div>`;
+
+  pane.querySelectorAll('[data-cycle-id]').forEach(row => row.addEventListener('click', () => {
+    switchHrView('payroll');
+    openPayrollCycleDetail(parseInt(row.dataset.cycleId, 10));
+  }));
+}
+
+let _deptBillsSeq = 0;
+
+async function loadDepartmentBillsTab(deptId) {
+  const pane = $('#dept-pane-bills');
+  const seq  = ++_deptBillsSeq;
+  pane.innerHTML = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading bills…</p>';
+  const res = await API.departmentBills(deptId);
+  if (seq !== _deptBillsSeq) return;
+  if (res.status !== 200) {
+    pane.innerHTML = '<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load bills.</p>';
+    return;
+  }
+  _renderAssignedBills(pane, res.body, 'Department', 'this department');
+}
+
+$('#dept-back-btn').addEventListener('click', () => {
+  $('#department-detail-view').style.display = 'none';
+  $('#departments-list-view').style.display  = 'flex';
+  loadDepartments($('#dept-search').value);
+});
+
+$$('#department-detail-view .inv-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    $$('#department-detail-view .inv-tab').forEach(t => t.classList.remove('active'));
+    $$('#department-detail-view .inv-tab-pane').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    $('#' + tab.dataset.tab.replace(/^dept-/, 'dept-pane-')).classList.add('active');
+  });
+});
 
 // ── Create Department Modal ─────────────────────────────────────────────────
 

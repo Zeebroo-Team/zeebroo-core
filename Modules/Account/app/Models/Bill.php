@@ -136,6 +136,20 @@ class Bill extends Model
         return $this->payment_mode === self::PAYMENT_MODE_ONE_TIME;
     }
 
+    /** Assignment is stored as mutually-exclusive foreign keys; derive which one is set. */
+    public function resolvedAssignmentType(): string
+    {
+        return match (true) {
+            $this->rental_property_related && $this->rental_id !== null => 'rental',
+            $this->employee_id !== null     => 'employee',
+            $this->property_id !== null     => 'property',
+            $this->modification_id !== null => 'modification',
+            $this->department_id !== null   => 'department',
+            $this->branch_id !== null       => 'branch',
+            default                         => 'none',
+        };
+    }
+
     /** @return array<string, string> */
     public static function billCategories(): array
     {

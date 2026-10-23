@@ -379,7 +379,7 @@ class PosExpenseBillApiController extends Controller
             'remind_before_days'         => $bill->remind_before_days,
             'amount_varies_by_usage'     => (bool) $bill->amount_varies_by_usage,
             'allow_split_payment'        => (bool) $bill->allow_split_payment,
-            'assignment_type'            => $bill->assignment_type ?? 'none',
+            'assignment_type'            => $bill->resolvedAssignmentType(),
             'branch_id'                  => $bill->branch_id,
             'department_id'              => $bill->department_id,
             'property_id'                => $bill->property_id,
@@ -390,6 +390,7 @@ class PosExpenseBillApiController extends Controller
             'deduct_account_id'          => $bill->deduct_account_id,
             'description'                => $bill->description,
             'notes'                      => $bill->notes,
+            'created_at'                 => $bill->created_at?->format('Y-m-d'),
         ];
     }
 }

@@ -14,6 +14,7 @@ use Modules\HRManagement\Models\Employee;
 use Modules\HRManagement\Models\JobTitle;
 use Modules\HRManagement\Services\DepartmentService;
 use Modules\HRManagement\Services\EmployeeService;
+use Modules\HRManagement\Services\HrWorkSettingsService;
 use Modules\HRManagement\Services\JobTitleService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
@@ -25,7 +26,11 @@ class PosHrEmployeeListApiController extends Controller
         private readonly EmployeeService $employeeService,
         private readonly DepartmentService $departmentService,
         private readonly JobTitleService $jobTitleService,
+        private readonly HrWorkSettingsService $hrWorkSettings,
     ) {}
+
+    /** @var array{days: int, minutes: int}|null */
+    private ?array $weeklyTotals = null;
 
     public function index(Request $request): JsonResponse
     {
@@ -46,6 +51,8 @@ class PosHrEmployeeListApiController extends Controller
             ->orderBy('full_name')
             ->get();
 
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+
         return response()->json([
             'data'            => $employees->map(fn (Employee $e) => $this->format($e))->values(),
             'total_count'     => $employees->count(),
@@ -63,7 +70,8 @@ class PosHrEmployeeListApiController extends Controller
             return response()->json(['message' => 'Employee not found.'], 404);
         }
 
-        $employee->load(['department', 'jobTitle']);
+        $employee->load(['department', 'jobTitle', 'bank']);
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
 
         return response()->json(['data' => $this->format($employee, detailed: true)]);
     }
@@ -177,6 +185,7 @@ class PosHrEmployeeListApiController extends Controller
         });
 
         $employee->load(['department', 'jobTitle']);
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
 
         return response()->json(['data' => $this->format($employee, detailed: true)], 201);
     }
@@ -208,11 +217,43 @@ class PosHrEmployeeListApiController extends Controller
             'phone_number'     => $employee->phone_number,
         ];
 
+        if ($this->weeklyTotals !== null) {
+            $rates = $this->hrWorkSettings->salaryRates(
+                $this->weeklyTotals,
+                $employee->basic_salary !== null ? (float) $employee->basic_salary : null,
+            );
+            $base['working_days_per_week']    = $rates['working_days_per_week'];
+            $base['working_minutes_per_week'] = $rates['working_minutes_per_week'];
+            $base['daily_rate']      = $rates['daily_rate'];
+            $base['daily_rate_fmt']  = $rates['daily_rate'] !== null ? number_format($rates['daily_rate'], 2, '.', ',') : null;
+            $base['hourly_rate']     = $rates['hourly_rate'];
+            $base['hourly_rate_fmt'] = $rates['hourly_rate'] !== null ? number_format($rates['hourly_rate'], 2, '.', ',') : null;
+        }
+
         if ($detailed) {
             $base['personal_email']    = $employee->personal_email ?? null;
             $base['permanent_address'] = $employee->permanent_address ?? null;
             $base['epf_number']        = $employee->epf_number ?? null;
             $base['etf_number']        = $employee->etf_number ?? null;
+            $base['tax_tin']           = $employee->tax_tin ?? null;
+            $base['date_of_birth']     = $employee->date_of_birth?->format('Y-m-d');
+            $base['nic_passport_number'] = $employee->nic_passport_number ?? null;
+            $base['current_address']   = $employee->current_address ?? null;
+            $base['salary']            = $employee->salary !== null ? (float) $employee->salary : null;
+            $base['salary_fmt']        = $employee->salary !== null ? number_format((float) $employee->salary, 2, '.', ',') : null;
+            $base['emergency_contact'] = [
+                'name'         => $employee->emergency_contact_name,
+                'relationship' => $employee->emergency_contact_relationship,
+                'phone'        => $employee->emergency_contact_phone,
+            ];
+            $account = (string) ($employee->bank_account_number ?? '');
+            $base['bank'] = [
+                'name'           => $employee->bank?->name,
+                'branch'         => $employee->bank_branch,
+                'holder'         => $employee->bank_account_holder_name,
+                // Only the last 4 digits leave the server
+                'account_masked' => $account !== '' ? '•••• '.substr($account, -4) : null,
+            ];
         }
 
         return $base;

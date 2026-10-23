@@ -263,10 +263,15 @@ const API = (() => {
     employees:      ()     => request('GET',  '/hr/employees'),
     employee:       (id)   => request('GET',  `/hr/employees/${id}`),
     employeeLeave:  (id, year) => request('GET', `/hr/employees/${id}/leave${year ? '?year=' + year : ''}`),
+    employeeBills:  (id)   => request('GET',  `/hr/employees/${id}/bills`),
     createEmployee: (body) => request('POST', '/hr/employees', body),
     departments:      ()     => request('GET',    '/hr/departments'),
     createDepartment: (body) => request('POST',   '/hr/departments', body),
     deleteDepartment: (id)   => request('DELETE', `/hr/departments/${id}`),
+    department:       (id)   => request('GET',    `/hr/departments/${id}`),
+    departmentBills:  (id)   => request('GET',    `/hr/departments/${id}/bills`),
+    updateDepartmentSalaryRange: (id, body) => request('PATCH', `/hr/departments/${id}/salary-range`, body),
+    updateDepartmentLeadership:  (id, body) => request('PATCH', `/hr/departments/${id}/leadership`, body),
     jobTitles:      ()     => request('GET',  '/hr/job-titles'),
 
     // HR — Positions (job titles)
