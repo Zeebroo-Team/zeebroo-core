@@ -262,7 +262,9 @@ class SaleStockConsumptionService
         return [[
             'product_stock_layer_id' => null,
             'quantity' => round($quantity, 3),
-            'unit_cost' => null,
+            // No stock batch to take the cost from — record the product's cost price
+            // so profit reports see what the item cost.
+            'unit_cost' => (float) $product->cost_price > 0 ? round((float) $product->cost_price, 2) : null,
             'unit_sell_price' => $sellPrice,
         ]];
     }
