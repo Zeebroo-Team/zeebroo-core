@@ -35738,10 +35738,11 @@ function _srpProfitHtml(s) {
       </div>
       <div class="srp-pl srp-mt">
         ${line('POS sales', _srpMoney(s.pos_total))}
+        ${s.uncosted_sales > 0 ? line('Sales without a cost price', `− ${_srpMoney(s.uncosted_sales)}`, 'minus', _srpPlural(s.uncosted_lines, 'item')) : ''}
         ${line('Cost of goods sold', `− ${_srpMoney(s.cogs)}`, 'minus')}
         ${line('Gross profit', _srpMoney(s.gross_profit), `total${s.gross_profit < 0 ? ' neg' : ''}`, `${s.gross_margin}% margin`)}
       </div>
-      <div class="srp-hint">Cost prices are only recorded on POS sales, so profit covers POS sales. Invoices are not costed.</div>
+      <div class="srp-hint">Profit covers POS sales whose items have a cost price — items sold below cost reduce it. Invoices are not costed.</div>
     </div>`;
 }
 
@@ -35836,7 +35837,7 @@ function _srpCategoriesHtml(rows) {
               <td class="num">${_srpNum(r.qty)}</td>
               <td class="num">${_srpMoney(r.total)}</td>
               <td class="num srp-muted">${r.share}%</td>
-              <td class="num">${r.margin === null ? '<span class="srp-muted">—</span>' : `<span class="${r.profit < 0 ? 'srp-neg' : ''}">${_srpMoney(r.profit)}</span>`}</td>
+              <td class="num">${r.profit === null || r.profit === undefined ? '<span class="srp-muted">—</span>' : `<span class="${r.profit < 0 ? 'srp-neg' : ''}">${_srpMoney(r.profit)}</span>`}</td>
               <td class="num">${_srpMarginPill(r.margin)}</td>
             </tr>`).join('')}
           </tbody>
@@ -35931,7 +35932,7 @@ function _srpKpisHtml(s) {
       ${kpi('Revenue', _srpMoney(s.revenue), _srpDelta(s.revenue_change_pct))}
       ${kpi('Transactions', _srpNum(s.transactions), _srpDelta(s.transactions_change_pct))}
       ${kpi('Average sale', _srpMoney(s.avg_ticket), `<span class="srp-muted">${_srpNum(s.pos_count)} POS · ${_srpNum(s.invoices_paid_count)} invoices</span>`)}
-      ${kpi('Gross profit', _srpMoney(s.gross_profit), `<span class="srp-muted">${s.gross_margin}% margin on POS sales</span>`, s.gross_profit < 0 ? 'neg' : '')}
+      ${kpi('Gross profit', _srpMoney(s.gross_profit), `<span class="srp-muted">${s.gross_margin}% margin on POS sales${s.uncosted_sales > 0 ? ` · ${_srpMoney(s.uncosted_sales)} without cost` : ''}</span>`, s.gross_profit < 0 ? 'neg' : '')}
     </div>`;
 }
 
@@ -35959,6 +35960,18 @@ function _srpHighlightsHtml(d, hasAny) {
       out.push({ tone: up ? 'good' : 'bad', icon: up ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down',
         html: `Revenue is <b>${up ? 'up' : 'down'} ${Math.abs(s.revenue_change_pct)}%</b> on the previous ${_srpPlural(days, 'day')}.` });
     }
+    // Profit problems first — only the first 7 highlights are shown
+    if (s.pos_total > 0 && s.gross_profit < 0) {
+      out.push({ tone: 'bad', icon: 'fa-circle-exclamation', html: `POS margin is <b>${s.gross_margin}%</b> — check cost and selling prices.` });
+    }
+    if (s.below_cost_lines > 0) {
+      out.push({ tone: 'bad', icon: 'fa-arrow-trend-down',
+        html: `<b>${_srpPlural(s.below_cost_lines, 'item')}</b> sold below cost — ${_srpMoney(s.below_cost_loss)} lost.` });
+    }
+    if (s.uncosted_lines > 0) {
+      out.push({ tone: 'warn', icon: 'fa-tag',
+        html: `<b>${_srpPlural(s.uncosted_lines, 'item')}</b> sold without a cost price — ${_srpMoney(s.uncosted_sales)} left out of profit.` });
+    }
     const peak = _srpHeatPeak(d.heatmap);
     if (peak) {
       out.push({ icon: 'fa-clock', html: days === 1
@@ -35982,9 +35995,6 @@ function _srpHighlightsHtml(d, hasAny) {
     }
     if (s.credit_outstanding > 0) {
       out.push({ tone: 'warn', icon: 'fa-hand-holding-dollar', html: `<b>${_srpMoney(s.credit_outstanding)}</b> in POS credit not yet collected.` });
-    }
-    if (s.pos_total > 0 && s.gross_profit < 0) {
-      out.push({ tone: 'bad', icon: 'fa-circle-exclamation', html: `POS margin is <b>${s.gross_margin}%</b> — check cost and selling prices.` });
     }
   }
   return `
@@ -36484,7 +36494,7 @@ function _srpPdfHtml(d) {
       <div class="kpi"><div class="l">Revenue</div><div class="v">${m(s.revenue)}</div><div class="f">${delta(s.revenue_change_pct)}</div></div>
       <div class="kpi"><div class="l">Transactions</div><div class="v">${_srpNum(s.transactions)}</div><div class="f">${delta(s.transactions_change_pct)}</div></div>
       <div class="kpi"><div class="l">Average sale</div><div class="v">${m(s.avg_ticket)}</div><div class="f">${_srpNum(s.pos_count)} POS · ${_srpNum(s.invoices_paid_count)} invoices</div></div>
-      <div class="kpi"><div class="l">Gross profit (POS)</div><div class="v">${m(s.gross_profit)}</div><div class="f">${s.gross_margin}% margin</div></div>
+      <div class="kpi"><div class="l">Gross profit (POS)</div><div class="v">${m(s.gross_profit)}</div><div class="f">${s.gross_margin}% margin${s.uncosted_sales > 0 ? ` · ${m(s.uncosted_sales)} without cost` : ''}</div></div>
     </div>
     <div class="stats">
       <div><span>Net sales</span><b>${m(s.net_sales)}</b></div>
@@ -36506,9 +36516,11 @@ function _srpPdfHtml(d) {
         [`Less returns (${s.return_rate}%)`, `− ${m(s.returns_total)}`],
         ['<b>Net sales</b>', `<b>${m(s.net_sales)}</b>`],
         ['POS sales', m(s.pos_total)],
+        ...(s.uncosted_sales > 0 ? [[`Less sales without a cost price (${_srpPlural(s.uncosted_lines, 'item')})`, `− ${m(s.uncosted_sales)}`]] : []),
         ['Less cost of goods sold', `− ${m(s.cogs)}`],
         [`<b>Gross profit</b> (${s.gross_margin}% margin)`, `<b>${m(s.gross_profit)}</b>`],
-      ], 'Cost prices are recorded on POS sales only, so profit covers POS sales.')}
+        ...(s.below_cost_lines > 0 ? [[`Items sold below cost (${_srpNum(s.below_cost_lines)})`, `${m(s.below_cost_loss)} lost`]] : []),
+      ], 'Profit covers POS sales whose items have a cost price. Invoices are not costed.')}
       ${table('Key figures', [{ t: 'Measure' }, { t: 'Value', num: true }], [
         ['Average revenue per day', m(s.avg_daily_revenue)],
         ['Days with sales', `${_srpNum(s.active_days)} of ${_srpNum(r.days)}`],
@@ -36555,7 +36567,7 @@ function _srpPdfHtml(d) {
       'Profit and margin use POS cost prices.')}
     ${table('Sales by category (POS)', [{ t: 'Category' }, { t: 'Products', num: true }, { t: 'Qty', num: true }, { t: 'Revenue', num: true }, { t: 'Share', num: true }, { t: 'Profit', num: true }, { t: 'Margin', num: true }],
       (d.by_category || []).map(c => [e(c.label), _srpNum(c.products), _srpNum(c.qty), m(c.total), `${c.share}%`,
-        c.margin === null ? '—' : m(c.profit), c.margin === null ? '—' : `${c.margin}%`]))}
+        c.profit === null || c.profit === undefined ? '—' : m(c.profit), c.margin === null ? '—' : `${c.margin}%`]))}
     ${d.trend.labels.length > 1 ? table('Breakdown by period', [{ t: 'Period' }, { t: 'POS sales', num: true }, { t: 'POS revenue', num: true }, { t: 'Paid invoices', num: true }, { t: 'Returns', num: true }, { t: 'Net', num: true }],
       d.trend.labels.map((l, i) => [e(l), _srpNum(d.trend.transactions[i]), m(d.trend.pos[i]), m(d.trend.invoices[i]), m(d.trend.returns[i]),
         m(d.trend.pos[i] + d.trend.invoices[i] - d.trend.returns[i])])) : ''}

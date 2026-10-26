@@ -62,7 +62,7 @@ class SalesReportService
         $posVoid      = $pos->where('status', Sale::STATUS_VOID);
 
         $posTotal     = (float) $posCompleted->sum('total');
-        $posDiscounts = (float) $posCompleted->sum(fn ($s) => (float) $s->discount_amount + (float) ($s->coupon_discount ?? 0));
+        $posDiscounts = (float) $posCompleted->sum(fn ($s) => $this->saleDiscount($s));
         $creditOpen   = (float) $posCompleted
             ->filter(fn ($s) => $s->payment_method === Sale::PAYMENT_CREDIT && ! $s->is_settled)
             ->sum(fn ($s) => max(0, (float) $s->total - (float) $s->amount_paid));
@@ -85,7 +85,7 @@ class SalesReportService
             $amt  = (float) $s->total;
             $when = Carbon::parse($s->sold_at);
 
-            if ((float) $s->discount_amount + (float) ($s->coupon_discount ?? 0) > 0) {
+            if ($this->saleDiscount($s) > 0) {
                 $discountedCount++;
             }
             if ($s->pos_customer_id === null) {
@@ -170,8 +170,12 @@ class SalesReportService
         $revenue      = $posTotal + $invPaidTotal;
         $netSales     = $revenue - $returnsTotal;
         $txCount      = $posCompleted->count() + $invPaid->count();
-        // POS only — invoice lines carry no unit cost. Uses the sale total (after order-level discounts).
-        $grossProfit  = $posTotal - $items['cogs'];
+        // POS only — invoice lines carry no unit cost. Covers lines whose cost is known,
+        // after their share of the bill discount; lines without a cost price are
+        // reported as uncosted instead of counting as 100% margin.
+        $costedSales   = $items['costed_revenue'];
+        $grossProfit   = $costedSales - $items['cogs'];
+        $uncostedSales = max(0.0, $posTotal - $costedSales);
 
         $prev = $this->previousPeriod($business, $from, $days, $f['branch'], $f['counter'], $posOnly);
 
@@ -206,7 +210,12 @@ class SalesReportService
             'returns_count'      => $returnsCount,
             'cogs'               => round($items['cogs'], 2),
             'gross_profit'       => round($grossProfit, 2),
-            'gross_margin'       => $posTotal > 0 ? round($grossProfit / $posTotal * 100, 1) : 0.0,
+            'gross_margin'       => $costedSales > 0 ? round($grossProfit / $costedSales * 100, 1) : 0.0,
+            'costed_sales'       => round($costedSales, 2),
+            'uncosted_sales'     => round($uncostedSales, 2),
+            'uncosted_lines'     => $items['uncosted_lines'],
+            'below_cost_lines'   => $items['below_cost_lines'],
+            'below_cost_loss'    => round($items['below_cost_loss'], 2),
             'pos_total'          => round($posTotal, 2),
             'pos_count'          => $posCompleted->count(),
             'void_total'         => round((float) $posVoid->sum('total'), 2),
@@ -325,30 +334,100 @@ class SalesReportService
                 'pos_sales.discount_amount', 'pos_sales.coupon_discount', 'pos_sales.gift_card_amount',
                 'pos_sales.total', 'pos_sales.amount_paid', 'pos_sales.is_settled', 'pos_sales.sold_at',
             ])
+            ->when($this->hasTable('pos_sale_items'), fn ($q) => $q->selectRaw(
+                '(SELECT COALESCE(SUM(d.discount_amount * d.quantity), 0) FROM pos_sale_items d WHERE d.pos_sale_id = pos_sales.id) as item_discount'
+            ))
             ->get();
     }
 
-    /** @return array{qty: float, revenue: float, cogs: float, products: array<int, array>} */
-    private function posItemTotals(Business $business, Carbon $from, Carbon $to, int|string|null $branch, ?int $counter): array
+    /** Everything taken off a sale: per-item discounts, the bill discount and the coupon. */
+    private function saleDiscount(object $s): float
     {
-        $empty = ['qty' => 0.0, 'revenue' => 0.0, 'cogs' => 0.0, 'products' => []];
-        if (! $this->hasTable('pos_sale_items') || ! $this->hasTable('pos_sales')) {
-            return $empty;
+        return (float) ($s->item_discount ?? 0) + (float) $s->discount_amount + (float) ($s->coupon_discount ?? 0);
+    }
+
+    /**
+     * Per-line aggregates shared by the product and category breakdowns (rows of
+     * pos_sale_items `i` joined to their sale `s` and product `p`):
+     *   revenue        line total after its share of the bill discount + coupon
+     *   costed_revenue revenue of lines whose unit cost is known
+     *   cogs           unit cost × quantity of those lines
+     *   uncosted       lines sold without any cost price
+     *   below_cost / loss  lines sold for less than they cost, and by how much
+     */
+    private function lineAggregatesSql(): string
+    {
+        // What the stock batch cost; else the product's cost price (stock sold without
+        // a batch, or a batch received before the cost was entered). Services carry no
+        // goods cost. NULL = unknown, kept out of profit rather than counted as 100% margin.
+        $cost = $this->hasTable('products')
+            ? 'CASE WHEN i.unit_cost > 0 THEN i.unit_cost WHEN p.cost_price > 0 THEN p.cost_price WHEN i.service_item_id IS NOT NULL THEN 0 ELSE NULL END'
+            : 'CASE WHEN i.unit_cost > 0 THEN i.unit_cost WHEN i.service_item_id IS NOT NULL THEN 0 ELSE NULL END';
+        // Bill discount and coupon are spread over the lines in proportion to line value
+        // (sale total ÷ subtotal), so the lines add up to what was actually charged.
+        $net = 'i.line_total * (CASE WHEN s.subtotal > 0 THEN s.total * 1.0 / s.subtotal ELSE 1 END)';
+
+        return "SUM(i.quantity) as qty, SUM({$net}) as revenue,"
+            ." SUM(CASE WHEN ({$cost}) IS NULL THEN 0 ELSE {$net} END) as costed_revenue,"
+            ." SUM(COALESCE({$cost}, 0) * i.quantity) as cogs,"
+            ." SUM(CASE WHEN ({$cost}) IS NULL THEN 1 ELSE 0 END) as uncosted,"
+            ." SUM(CASE WHEN ({$cost}) * i.quantity - {$net} > 0.005 THEN 1 ELSE 0 END) as below_cost,"
+            ." SUM(CASE WHEN ({$cost}) * i.quantity - {$net} > 0.005 THEN ({$cost}) * i.quantity - {$net} ELSE 0 END) as loss";
+    }
+
+    /** POS sale lines in range, joined to their product for the cost-price fallback. */
+    private function posLines(Business $business, Carbon $from, Carbon $to, int|string|null $branch, ?int $counter): Builder
+    {
+        $q = $this->posBase($business, $from, $to, $branch, $counter, 's')
+            ->join('pos_sale_items as i', 'i.pos_sale_id', '=', 's.id')
+            ->where('s.status', Sale::STATUS_COMPLETED);
+        if ($this->hasTable('products')) {
+            $q->leftJoin('products as p', 'p.id', '=', 'i.product_id');
         }
 
-        $rows = $this->posBase($business, $from, $to, $branch, $counter, 's')
-            ->join('pos_sale_items as i', 'i.pos_sale_id', '=', 's.id')
-            ->where('s.status', Sale::STATUS_COMPLETED)
-            ->selectRaw('i.product_name as name, SUM(i.quantity) as qty, SUM(i.line_total) as revenue, SUM(COALESCE(i.unit_cost, 0) * i.quantity) as cogs')
+        return $q;
+    }
+
+    /** Profit and margin of a breakdown row — null where none of its lines has a known cost. */
+    private function rowProfit(float $costedRevenue, float $cogs): array
+    {
+        if ($costedRevenue <= 0 && $cogs <= 0) {
+            return ['profit' => null, 'margin' => null];
+        }
+        $profit = $costedRevenue - $cogs;
+
+        return [
+            'profit' => round($profit, 2),
+            'margin' => $costedRevenue > 0 ? round($profit / $costedRevenue * 100, 1) : null,
+        ];
+    }
+
+    /** @return array{qty: float, revenue: float, costed_revenue: float, cogs: float, uncosted_lines: int, below_cost_lines: int, below_cost_loss: float, products: array<int, array>} */
+    private function posItemTotals(Business $business, Carbon $from, Carbon $to, int|string|null $branch, ?int $counter): array
+    {
+        $out = ['qty' => 0.0, 'revenue' => 0.0, 'costed_revenue' => 0.0, 'cogs' => 0.0,
+            'uncosted_lines' => 0, 'below_cost_lines' => 0, 'below_cost_loss' => 0.0, 'products' => []];
+        if (! $this->hasTable('pos_sale_items') || ! $this->hasTable('pos_sales')) {
+            return $out;
+        }
+
+        $rows = $this->posLines($business, $from, $to, $branch, $counter)
+            ->selectRaw('i.product_name as name, '.$this->lineAggregatesSql())
             ->groupBy('i.product_name')
             ->get();
 
-        $out = $empty;
         foreach ($rows as $r) {
-            $out['qty']     += (float) $r->qty;
-            $out['revenue'] += (float) $r->revenue;
-            $out['cogs']    += (float) $r->cogs;
-            $out['products'][] = ['name' => (string) $r->name, 'qty' => (float) $r->qty, 'revenue' => (float) $r->revenue, 'cogs' => (float) $r->cogs];
+            $out['qty']              += (float) $r->qty;
+            $out['revenue']          += (float) $r->revenue;
+            $out['costed_revenue']   += (float) $r->costed_revenue;
+            $out['cogs']             += (float) $r->cogs;
+            $out['uncosted_lines']   += (int) $r->uncosted;
+            $out['below_cost_lines'] += (int) $r->below_cost;
+            $out['below_cost_loss']  += (float) $r->loss;
+            $out['products'][] = [
+                'name' => (string) $r->name, 'qty' => (float) $r->qty, 'revenue' => (float) $r->revenue,
+                'costed_revenue' => (float) $r->costed_revenue, 'cogs' => (float) $r->cogs,
+            ];
         }
 
         return $out;
@@ -364,9 +443,7 @@ class SalesReportService
             return [];
         }
 
-        $q = $this->posBase($business, $from, $to, $branch, $counter, 's')
-            ->join('pos_sale_items as i', 'i.pos_sale_id', '=', 's.id')
-            ->where('s.status', Sale::STATUS_COMPLETED);
+        $q = $this->posLines($business, $from, $to, $branch, $counter);
 
         $nameSql = "'Uncategorised'";
         if ($this->hasTable('product_product_category') && $this->hasTable('product_categories')) {
@@ -378,7 +455,7 @@ class SalesReportService
             $nameSql = "COALESCE(c.name, 'Uncategorised')";
         }
 
-        $rows = $q->selectRaw("{$nameSql} as name, COUNT(DISTINCT i.product_name) as products, SUM(i.quantity) as qty, SUM(i.line_total) as revenue, SUM(COALESCE(i.unit_cost, 0) * i.quantity) as cogs")
+        $rows = $q->selectRaw("{$nameSql} as name, COUNT(DISTINCT i.product_name) as products, ".$this->lineAggregatesSql())
             ->groupByRaw($nameSql)
             ->get();
 
@@ -389,10 +466,7 @@ class SalesReportService
             'products' => (int) $r->products,
             'qty'      => round((float) $r->qty, 3),
             'total'    => round((float) $r->revenue, 2),
-            'profit'   => round((float) $r->revenue - (float) $r->cogs, 2),
-            'margin'   => (float) $r->revenue > 0 && (float) $r->cogs > 0
-                ? round(((float) $r->revenue - (float) $r->cogs) / (float) $r->revenue * 100, 1)
-                : null,
+            ...$this->rowProfit((float) $r->costed_revenue, (float) $r->cogs),
             'share'    => $whole > 0 ? round((float) $r->revenue / $whole * 100, 1) : 0.0,
         ])->all();
     }
@@ -746,15 +820,15 @@ class SalesReportService
             ->all();
     }
 
-    /** POS + paid-invoice lines merged by product name; margin only where POS cost is known. */
+    /** POS + paid-invoice lines merged by product name; profit only where POS cost is known. */
     private function mergeTopProducts(array $pos, array $invoice): array
     {
         $merged = [];
         foreach ($pos as $p) {
-            $merged[$p['name']] = ['name' => $p['name'], 'qty' => $p['qty'], 'revenue' => $p['revenue'], 'pos_revenue' => $p['revenue'], 'cogs' => $p['cogs']];
+            $merged[$p['name']] = ['name' => $p['name'], 'qty' => $p['qty'], 'revenue' => $p['revenue'], 'costed_revenue' => $p['costed_revenue'], 'cogs' => $p['cogs']];
         }
         foreach ($invoice as $p) {
-            $merged[$p['name']] ??= ['name' => $p['name'], 'qty' => 0.0, 'revenue' => 0.0, 'pos_revenue' => 0.0, 'cogs' => 0.0];
+            $merged[$p['name']] ??= ['name' => $p['name'], 'qty' => 0.0, 'revenue' => 0.0, 'costed_revenue' => 0.0, 'cogs' => 0.0];
             $merged[$p['name']]['qty']     += $p['qty'];
             $merged[$p['name']]['revenue'] += $p['revenue'];
         }
@@ -770,10 +844,7 @@ class SalesReportService
             'share'   => $whole > 0 ? round($p['revenue'] / $whole * 100, 1) : 0.0,
             'avg_price' => $p['qty'] > 0 ? round($p['revenue'] / $p['qty'], 2) : 0.0,
             // Profit only where POS cost is known — invoice lines carry no unit cost
-            'profit'  => $p['cogs'] > 0 ? round($p['pos_revenue'] - $p['cogs'], 2) : null,
-            'margin'  => $p['pos_revenue'] > 0 && $p['cogs'] > 0
-                ? round(($p['pos_revenue'] - $p['cogs']) / $p['pos_revenue'] * 100, 1)
-                : null,
+            ...$this->rowProfit($p['costed_revenue'], $p['cogs']),
         ], array_slice($merged, 0, 20));
     }
 
