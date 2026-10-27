@@ -18132,6 +18132,29 @@
   </div>
 </div>
 
+<!-- ── Barcode Generator — Missing Barcode Prompt ────────────────────── -->
+<div id="bc-missing-modal" class="modal-overlay" style="display:none;z-index:1250">
+  <div class="modal-box bc-missing-box">
+    <div class="modal-header">
+      <div class="modal-title"><i class="fa fa-triangle-exclamation" style="color:#f59e0b"></i> <span id="bc-missing-title">Products without a barcode</span></div>
+      <button class="co-close" id="bc-missing-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="modal-body bc-missing-body">
+      <p class="bc-missing-msg" id="bc-missing-msg"></p>
+      <div class="bc-missing-list" id="bc-missing-list"></div>
+      <div class="bc-missing-hint">
+        <i class="fa fa-circle-info"></i>
+        <span><b>Generate &amp; save</b> creates a unique SKU for each product and saves it to the product, so the printed label scans at the POS.</span>
+      </div>
+    </div>
+    <div class="bc-missing-footer">
+      <button type="button" class="bc-missing-btn" id="bc-missing-cancel">Cancel</button>
+      <button type="button" class="bc-missing-btn" id="bc-missing-skip"><i class="fa fa-forward"></i> <span>Skip these</span></button>
+      <button type="button" class="bc-missing-btn primary" id="bc-missing-generate"><i class="fa fa-wand-magic-sparkles"></i> <span>Generate &amp; save barcodes</span></button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Barcode Generator — Stock Layers Popup ────────────────────────── -->
 <div id="bc-stock-modal" class="modal-overlay" style="display:none;z-index:1200">
   <div class="modal-box bc-stock-box">

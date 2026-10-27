@@ -760,7 +760,7 @@
 /* ── Generate Barcode builder overlay (layered above the Barcodes dialog,
    same pattern as .qf-picker-backdrop in js/stock.js) ──────────────────── */
 .bc-builder-backdrop { position: fixed; inset: 0; z-index: 260; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(20, 22, 34, .45); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
-.bc-builder-card { width: 100%; max-width: 920px; max-height: calc(100vh - 60px); display: flex; flex-direction: column; background: #fff; border-radius: 18px; box-shadow: 0 30px 70px rgba(20, 24, 40, .3); overflow: hidden; font-family: inherit; color: var(--text); }
+.bc-builder-card { width: 100%; max-width: 1280px; height: calc(100vh - 40px); max-height: calc(100vh - 40px); display: flex; flex-direction: column; background: #fff; border-radius: 18px; box-shadow: 0 30px 70px rgba(20, 24, 40, .3); overflow: hidden; font-family: inherit; color: var(--text); }
 .bc-builder-head { display: flex; align-items: center; gap: 12px; padding: 16px 18px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
 .bc-builder-head-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #fff; background: linear-gradient(135deg, var(--accent), #14b8a6); flex-shrink: 0; }
 .bc-builder-head-text { flex: 1; min-width: 0; }
@@ -782,7 +782,7 @@
 .bc-preview-ph { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); text-align: center; max-width: 260px; font-size: 12.5px; }
 .bc-preview-ph i { font-size: 30px; opacity: .5; }
 
-.bc-builder-options { width: 260px; flex-shrink: 0; border-left: 1px solid var(--border); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.bc-builder-options { width: 290px; flex-shrink: 0; border-left: 1px solid var(--border); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
 .bc-opt-title { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
 .bc-paper-opts { display: flex; flex-direction: column; gap: 8px; }
 .bc-paper-opt { position: relative; display: block; }
@@ -854,6 +854,24 @@
 .bc-pick-qty { width: 64px; border: 1px solid var(--border); border-radius: 7px; padding: 5px 7px; font-size: 12px; text-align: center; font-family: inherit; flex-shrink: 0; }
 .bc-pick-layers { width: 28px; height: 28px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 7px; background: #fff; color: var(--muted); cursor: pointer; }
 .bc-pick-layers:hover { color: var(--accent); border-color: var(--accent); }
+.bc-nocode-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; background: rgba(245, 158, 11, .14); color: #b45309; font-size: 10.5px; font-weight: 700; }
+.bc-pick-nocode { color: #b45309; font-weight: 700; }
+
+/* Missing-barcode prompt (barcodes.js askMissingBarcodes) — sits above the stock-layers popup */
+.bc-missing-backdrop { z-index: 330; }
+.bc-missing-card { max-width: 520px; }
+.bc-missing-icon { background: linear-gradient(135deg, #f59e0b, #f97316) !important; color: #fff !important; }
+.bc-missing-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 18px; }
+.bc-missing-msg { margin: 0 0 12px; font-size: 13px; line-height: 1.5; }
+.bc-missing-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface2); }
+.bc-missing-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.bc-missing-row:last-child { border-bottom: none; }
+.bc-missing-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-missing-qty { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.bc-missing-more { padding: 7px 12px; font-size: 12px; color: var(--muted); font-style: italic; }
+.bc-missing-hint { display: flex; gap: 8px; align-items: flex-start; margin-top: 12px; padding: 9px 12px; border-radius: 10px; background: var(--accent-light); color: var(--muted); font-size: 12px; line-height: 1.45; }
+.bc-missing-hint i { color: var(--accent); margin-top: 2px; }
+.bc-missing-foot { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
 
 /* Print queue: editable copies per product */
 .bc-batch-copies { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--muted); }

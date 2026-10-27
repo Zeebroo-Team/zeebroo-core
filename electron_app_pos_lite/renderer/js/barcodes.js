@@ -670,6 +670,7 @@
   function pickDefaultQty(p) { return Math.max(1, Math.min(BC_MAX_LABELS, Math.floor(parseFloat(p.stock_quantity) || 0))); }
   function pickQty(p) { return _pick.qty.has(p.id) ? _pick.qty.get(p.id) : pickDefaultQty(p); }
   function pickPrice(p) { return p.unit_sell_price != null && p.unit_sell_price !== '' ? money(p.unit_sell_price) : ''; }
+  function hasCode(p) { return !!(p.sku && String(p.sku).trim()); }
   // Labels for a picked product, split across its in-stock batches (FIFO) so each
   // label carries that batch's own barcode and price. Labels beyond the batch
   // stock (qty typed higher) fall back to the product SKU / price.
@@ -722,7 +723,7 @@
       <div class="bc-pick-info">
         <div class="bc-pick-name">${esc(p.name)}</div>
         <div class="bc-pick-meta">
-          ${p.sku ? `<span class="bc-layer-sku"><i class="fa-solid fa-barcode"></i> ${esc(p.sku)}</span>` : `<span style="opacity:.6">${t('No SKU')}</span>`}
+          ${hasCode(p) ? `<span class="bc-layer-sku"><i class="fa-solid fa-barcode"></i> ${esc(p.sku)}</span>` : `<span class="bc-nocode-chip" title="${t('This product has no barcode yet')}"><i class="fa-solid fa-triangle-exclamation"></i> ${t('No barcode')}</span>`}
           <span>${t('Stock: {n}', { n: stock % 1 === 0 ? stock : stock.toFixed(2) })}</span>
         </div>
       </div>
@@ -766,12 +767,14 @@
       allChk.indeterminate = inView > 0 && inView < shown;
       allChk.disabled = !shown;
     }
-    const labels = n ? [..._pick.selected.values()].reduce((s, p) => s + pickQty(p), 0) : 0;
+    let labels = 0, noCode = 0;
+    _pick.selected.forEach((p) => { labels += pickQty(p); if (!hasCode(p)) noCode++; });
     const countEl = document.getElementById('bcm-pick-count');
     if (countEl) {
-      countEl.textContent = n
-        ? t('{sel} of {shown} selected · {labels} labels', { sel: fmtNum(n), shown: fmtNum(shown), labels: fmtNum(labels) })
-        : (shown ? t('{n} products', { n: fmtNum(shown) }) : '');
+      countEl.innerHTML = n
+        ? esc(t('{sel} of {shown} selected · {labels} labels', { sel: fmtNum(n), shown: fmtNum(shown), labels: fmtNum(labels) }))
+          + (noCode ? ` · <span class="bc-pick-nocode">${esc(t('{n} without barcode', { n: fmtNum(noCode) }))}</span>` : '')
+        : esc(shown ? t('{n} products', { n: fmtNum(shown) }) : '');
     }
     const addBtn = document.getElementById('bcm-pick-add');
     if (addBtn && !addBtn.dataset.busy) {
@@ -831,25 +834,124 @@
     });
 
     const addBtn = document.getElementById('bcm-pick-add');
-    addBtn.addEventListener('click', () => {
+    addBtn.addEventListener('click', async () => {
       if (!_pick.selected.size) return;
-      const total = [..._pick.selected.values()].reduce((s, p) => s + pickQty(p), 0);
+      let picked = [..._pick.selected.values()];
+
+      // Products without a barcode: ask whether to generate one or leave them out
+      const missing = picked.filter((p) => !hasCode(p));
+      if (missing.length) {
+        const choice = await askMissingBarcodes(missing, picked.length);
+        if (!choice || !document.getElementById('bcm-pick-list')) return;
+        if (choice === 'skip') picked = picked.filter((p) => hasCode(p));
+        if (!picked.length) return;
+      }
+
+      const total = picked.reduce((s, p) => s + pickQty(p), 0);
       if (total > 2000 && !confirm(t('This will add {n} labels (label count follows stock). Large sheets can take a while to render. Continue?', { n: fmtNum(total) }))) return;
       busy(addBtn, t('Adding…'), () => {
         let added = 0;
-        _pick.selected.forEach((p) => {
+        picked.forEach((p) => {
           const items = pickItems(p, pickQty(p));
           for (const it of items) _bc.items.push(it);
           added += items.length;
         });
-        const products = _pick.selected.size;
+        const skipped = _pick.selected.size - picked.length;
         _pick.selected.clear();
         _pick.qty.clear();
         pickRender();
         refreshBuilderPreview();
         setBuilderView('preview');
-        showToast(t('{n} labels added from {p} products', { n: fmtNum(added), p: fmtNum(products) }), 'success');
+        showToast(t('{n} labels added from {p} products', { n: fmtNum(added), p: fmtNum(picked.length) })
+          + (skipped ? ` · ${t('{n} skipped (no barcode)', { n: fmtNum(skipped) })}` : ''), 'success');
       }, pickSyncToolbar);
+    });
+  }
+
+  // ── Missing-barcode prompt (layered above the builder) ───────────────
+  // Resolves 'generate' (SKUs created + saved, products updated in place),
+  // 'skip' (leave those products out) or null (cancelled).
+  const BC_SKU_CHUNK = 500; // server accepts at most 500 ids per request
+
+  async function generateMissingSkus(ids) {
+    for (let i = 0; i < ids.length; i += BC_SKU_CHUNK) {
+      const res = await API.barcodeGenerateSkus(ids.slice(i, i + BC_SKU_CHUNK));
+      if (res.status !== 200) throw new Error(res.body?.message || t('Failed to generate barcodes'));
+      // Patch the cached catalog so labels and rows pick up the new SKU
+      const byId = new Map(_pick.all.map((p) => [p.id, p]));
+      for (const row of (res.body?.data || [])) {
+        const p = byId.get(row.id);
+        if (p) p.sku = row.sku;
+      }
+    }
+  }
+
+  function askMissingBarcodes(missing, pickedCount) {
+    return new Promise((resolve) => {
+      const n = missing.length;
+      const all = n === pickedCount;
+      const shown = missing.slice(0, 50);
+      const el = document.createElement('div');
+      el.className = 'bc-layers-backdrop bc-missing-backdrop';
+      el.id = 'bcm-missing-backdrop';
+      el.setAttribute('role', 'dialog');
+      el.setAttribute('aria-modal', 'true');
+      el.innerHTML = `
+        <div class="bc-layers-card bc-missing-card">
+          <div class="qf-picker-head">
+            <span class="qf-picker-head-icon bc-missing-icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+            <div style="flex:1;min-width:0">
+              <div class="qf-picker-title" style="margin-bottom:0">${esc(t('{n} products without a barcode', { n: fmtNum(n) }))}</div>
+            </div>
+            <button class="salm-modal-close" id="bcm-missing-x" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+          <div class="bc-missing-body">
+            <p class="bc-missing-msg">${esc(all
+              ? t('None of the selected products have a barcode yet. Generate barcodes for them before printing?')
+              : t('{n} of the {total} selected products have no barcode yet. What would you like to do with them?', { n: fmtNum(n), total: fmtNum(pickedCount) }))}</p>
+            <div class="bc-missing-list">
+              ${shown.map((p) => `<div class="bc-missing-row">
+                <span class="bc-missing-name">${esc(p.name)}</span>
+                <span class="bc-missing-qty">${esc(t('{n} labels', { n: fmtNum(pickQty(p)) }))}</span>
+              </div>`).join('')}
+              ${n > shown.length ? `<div class="bc-missing-more">${esc(t('…and {n} more', { n: fmtNum(n - shown.length) }))}</div>` : ''}
+            </div>
+            <div class="bc-missing-hint">
+              <i class="fa-solid fa-circle-info"></i>
+              <span>${esc(t('Generate & save creates a unique SKU for each product and saves it to the product, so the printed label scans at the POS.'))}</span>
+            </div>
+          </div>
+          <div class="bc-missing-foot">
+            <button type="button" class="salm-btn-ghost" id="bcm-missing-cancel">${t('Cancel')}</button>
+            ${all ? '' : `<button type="button" class="salm-btn-ghost" id="bcm-missing-skip"><i class="fa-solid fa-forward"></i> ${esc(t('Skip these, add {n}', { n: fmtNum(pickedCount - n) }))}</button>`}
+            <button type="button" class="salm-btn-primary" id="bcm-missing-generate"><i class="fa-solid fa-wand-magic-sparkles"></i> ${esc(t('Generate & save {n} barcodes', { n: fmtNum(n) }))}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+
+      const genBtn = document.getElementById('bcm-missing-generate');
+      function close(result) {
+        if (genBtn.dataset.busy) return; // wait for the server call
+        el.remove();
+        resolve(result);
+      }
+      document.getElementById('bcm-missing-x').addEventListener('click', () => close(null));
+      document.getElementById('bcm-missing-cancel').addEventListener('click', () => close(null));
+      document.getElementById('bcm-missing-skip')?.addEventListener('click', () => close('skip'));
+      el.addEventListener('mousedown', (e) => { if (e.target === el) close(null); });
+      genBtn.addEventListener('click', () => {
+        let ok = false;
+        busy(genBtn, t('Generating…'), async () => {
+          try {
+            await generateMissingSkus(missing.map((p) => p.id));
+            ok = true;
+            showToast(t('{n} barcodes generated and saved', { n: fmtNum(n) }), 'success');
+          } catch (err) {
+            showToast(err.message, 'error'); // prompt stays open so the user can retry or skip
+          }
+        }, () => { if (ok) close('generate'); });
+      });
+      setTimeout(() => genBtn.focus(), 60);
     });
   }
 
@@ -1158,9 +1260,10 @@
     }
     function onKey(e) {
       if (e.key !== 'Escape') return;
-      // Esc closes the top-most layer first (sheet job → stock layers → builder → dialog)
+      // Esc closes the top-most layer first (sheet job → missing-barcode prompt → stock layers → builder → dialog)
       const job = document.getElementById('bcm-job');
       if (job) { e.preventDefault(); job.querySelector('#bcm-job-x')?.click(); return; }
+      if (document.getElementById('bcm-missing-backdrop')) { e.preventDefault(); document.getElementById('bcm-missing-cancel').click(); return; }
       if (document.getElementById('bcm-layers-backdrop')) { e.preventDefault(); document.getElementById('bcm-layers-backdrop').remove(); return; }
       if (document.getElementById('bcm-builder-backdrop')) { e.preventDefault(); document.getElementById('bcm-builder-close').click(); return; }
       e.preventDefault();

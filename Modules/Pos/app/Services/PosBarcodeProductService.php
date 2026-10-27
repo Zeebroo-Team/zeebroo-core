@@ -5,6 +5,7 @@ namespace Modules\Pos\Services;
 use Illuminate\Support\Facades\DB;
 use Modules\Business\Models\Business;
 use Modules\Product\Models\Product;
+use Modules\Product\Services\ProductSkuGeneratorService;
 
 /**
  * Lightweight product list for the desktop Barcode Generator picker.
@@ -15,6 +16,42 @@ use Modules\Product\Models\Product;
  */
 class PosBarcodeProductService
 {
+    public function __construct(private readonly ProductSkuGeneratorService $skuGenerator)
+    {
+    }
+
+    /**
+     * Assign a generated SKU (= barcode) to each given product that has none.
+     * Products that already have a SKU are left untouched and returned as-is,
+     * so a retried request never overwrites a barcode that is already printed.
+     *
+     * @param  list<int>  $productIds
+     * @return list<array{id: int, sku: string, generated: bool}>
+     */
+    public function assignMissingSkus(Business $business, array $productIds): array
+    {
+        return DB::transaction(function () use ($business, $productIds) {
+            $products = Product::query()
+                ->where('business_id', $business->id)
+                ->whereIn('id', $productIds)
+                ->orderBy('name')
+                ->lockForUpdate()
+                ->get(['id', 'name', 'sku']);
+
+            return $products->map(function (Product $p) use ($business) {
+                if ($p->sku !== null && trim((string) $p->sku) !== '') {
+                    return ['id' => (int) $p->id, 'sku' => (string) $p->sku, 'generated' => false];
+                }
+                // Saved one at a time so the generator sees the previous SKU
+                // and keeps the sequence unique within this batch.
+                $p->sku = $this->skuGenerator->generate($business, $p, $p->name);
+                $p->save();
+
+                return ['id' => (int) $p->id, 'sku' => (string) $p->sku, 'generated' => true];
+            })->values()->all();
+        });
+    }
+
     /**
      * @return list<array{id: int, name: string, sku: ?string, stock_quantity: float, unit_sell_price: ?float}>
      */

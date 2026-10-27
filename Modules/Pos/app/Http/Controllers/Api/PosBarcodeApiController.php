@@ -41,4 +41,26 @@ class PosBarcodeApiController extends Controller
             'meta' => ['total' => count($data)],
         ]);
     }
+
+    /** POST online/barcodes/generate-skus {product_ids: int[]} — give products without a barcode a generated SKU. */
+    public function generateSkus(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        $validated = $request->validate([
+            'product_ids'   => ['required', 'array', 'min:1', 'max:500'],
+            'product_ids.*' => ['integer', 'distinct'],
+        ]);
+
+        $data = $this->barcodeProducts->assignMissingSkus(
+            $business,
+            array_map('intval', $validated['product_ids']),
+        );
+
+        return response()->json([
+            'data' => $data,
+            'meta' => ['generated' => count(array_filter($data, fn ($r) => $r['generated']))],
+        ]);
+    }
 }
