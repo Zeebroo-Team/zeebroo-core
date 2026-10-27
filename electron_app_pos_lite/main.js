@@ -450,8 +450,18 @@ function apiDownloadFile(path_, token, businessId, branchId) {
 // renderer is denied by default (no setWindowOpenHandler is registered, and
 // Electron 14+ denies popups by default), so printing has to go through a
 // real BrowserWindow created here rather than a popup document.write().
+// Big documents (e.g. thousands of barcode labels) are too large for a data:
+// URL, so print / PDF documents are loaded from a temp file instead.
+function _writeTempHtml(html, prefix) {
+  const os = require('os');
+  const file = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+  fs.writeFileSync(file, html, 'utf8');
+  return file;
+}
+
 ipcMain.handle('print-html', (_e, { html }) => {
   return new Promise((resolve) => {
+    const tmpHtml = _writeTempHtml(html, 'zeebroo-lite-print');
     const win = new BrowserWindow({
       width: 480,
       height: 720,
@@ -459,6 +469,7 @@ ipcMain.handle('print-html', (_e, { html }) => {
       show: false,
       webPreferences: { sandbox: true },
     });
+    win.once('closed', () => { try { fs.unlinkSync(tmpHtml); } catch (_) {} });
     win.once('ready-to-show', () => {
       win.show();
       win.webContents.print({ printBackground: true }, () => {
@@ -466,22 +477,30 @@ ipcMain.handle('print-html', (_e, { html }) => {
       });
       resolve(true);
     });
-    win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    win.loadFile(tmpHtml);
   });
 });
 
 // Renders the given HTML to a PDF (via Electron's printToPDF) and lets the
 // user save it — same save-dialog + fs.writeFileSync shape as api-download-file
 // below, just generating the PDF locally instead of fetching one from the API.
-ipcMain.handle('save-html-as-pdf', async (_e, { html, suggestedFilename }) => {
+// printToPDF has no progress callback, so stages are sent to the renderer
+// ('loading' | 'rendering' | 'saving-dialog' | 'writing') for a progress UI.
+ipcMain.handle('save-html-as-pdf', async (e, { html, suggestedFilename }) => {
   let win;
+  let tmpHtml;
+  const stage = (s) => { if (!e.sender.isDestroyed()) e.sender.send('save-html-as-pdf-progress', s); };
   try {
+    stage('loading');
+    tmpHtml = _writeTempHtml(html, 'zeebroo-lite-pdf');
     win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
-    await win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    await win.loadFile(tmpHtml);
+    stage('rendering');
     const buffer = await win.webContents.printToPDF({ printBackground: true });
     win.destroy();
     win = null;
 
+    stage('saving-dialog');
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: suggestedFilename || 'document.pdf',
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -490,11 +509,14 @@ ipcMain.handle('save-html-as-pdf', async (_e, { html, suggestedFilename }) => {
       return { status: 0, canceled: true };
     }
 
+    stage('writing');
     fs.writeFileSync(filePath, buffer);
     return { status: 200, savedPath: filePath };
   } catch (err) {
     if (win) { try { win.destroy(); } catch (_) {} }
     return { status: 0, message: err.message };
+  } finally {
+    if (tmpHtml) { try { fs.unlinkSync(tmpHtml); } catch (_) {} }
   }
 });
 

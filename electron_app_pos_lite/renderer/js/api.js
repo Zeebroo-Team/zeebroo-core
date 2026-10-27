@@ -61,6 +61,8 @@ const API = (() => {
       const suffix = qs.toString();
       return request('GET', '/online/products' + (suffix ? `?${suffix}` : ''));
     },
+    // Barcode Generator picker — every sellable product (name, SKU, stock, label price), unpaginated
+    barcodeProducts: () => request('GET', '/online/barcodes/products'),
     // Exact product SKU or batch SKU (barcode scan)
     productBySku: (sku) => request('GET', `/online/products/sku/${encodeURIComponent(sku)}`),
     posCategories: () => request('GET', '/online/categories'),

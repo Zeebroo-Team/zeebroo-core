@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // or render it to a PDF and let the user save it (js/pos.js sale-completed modal).
   printHtml: (html) => ipcRenderer.invoke('print-html', { html }),
   savePdf: (html, suggestedFilename) => ipcRenderer.invoke('save-html-as-pdf', { html, suggestedFilename }),
+  // Stage updates while savePdf runs: 'loading' | 'rendering' | 'saving-dialog' | 'writing'
+  onPdfProgress: (cb) => {
+    const handler = (_e, stage) => cb(stage);
+    ipcRenderer.on('save-html-as-pdf-progress', handler);
+    return () => ipcRenderer.removeListener('save-html-as-pdf-progress', handler);
+  },
 
   // Thermal printer (Settings → Printer) — stored in local config.json, per device
   getPrinters: () => ipcRenderer.invoke('get-printers'),
