@@ -3277,6 +3277,7 @@
           <button class="inv-refresh-btn" id="inv-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
           <button class="inv-import-btn" id="inv-import-csv-btn" title="Import products from CSV"><i class="fa fa-file-arrow-up"></i> Import CSV</button>
           <button class="inv-import-btn" id="inv-dump-import-btn" title="Import products from MySQL backup dump"><i class="fa fa-database"></i> Import from SQL Dump</button>
+          <button class="inv-import-btn" id="inv-export-btn" title="Export products to CSV or PDF"><i class="fa fa-file-export"></i> Export Products</button>
           <button class="po-add-btn cat-add-btn" id="inv-new-product-btn"><i class="fa fa-plus"></i> New Product</button>
         </div>
         <div class="inv-filter-bar" id="inv-filter-bar">
@@ -3311,7 +3312,7 @@
         <div class="inv-bulk-bar" id="inv-bulk-bar" style="display:none">
           <span class="inv-bulk-count" id="inv-bulk-count">0 selected</span>
           <button class="inv-bulk-btn danger" id="inv-bulk-delete"><i class="fa fa-trash"></i> Delete</button>
-          <button class="inv-bulk-btn" id="inv-bulk-export"><i class="fa fa-file-csv"></i> Export CSV</button>
+          <button class="inv-bulk-btn" id="inv-bulk-export"><i class="fa fa-file-export"></i> Export…</button>
           <button class="inv-bulk-btn muted" id="inv-bulk-deselect"><i class="fa fa-xmark"></i> Deselect All</button>
         </div>
         <div class="inv-table-wrap">
@@ -15332,6 +15333,60 @@
 </div>
 
 <!-- ── CSV Product Import modal ──────────────────────────────────────── -->
+<!-- ── Export Products modal (Inventory → Products) ── -->
+<div id="pex-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="pex-title">
+  <div class="csv-import-card pex-card">
+    <div class="csv-import-header">
+      <div class="csv-import-title" id="pex-title"><i class="fa fa-file-export"></i> Export Products</div>
+      <button class="csv-import-close" id="pex-close" title="Close"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <div class="pex-body">
+      <!-- Products -->
+      <section class="pex-pane pex-products">
+        <div class="pex-pane-head">
+          <div class="pex-pane-title">1. Choose products</div>
+          <div class="pex-filter-note" id="pex-filter-note"></div>
+        </div>
+        <div class="pex-search-wrap">
+          <i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="pex-search" placeholder="Search by name, SKU or barcode…">
+        </div>
+        <div class="pex-list-head">
+          <label class="pex-check-label"><input type="checkbox" id="pex-all" class="inv-chk"> <span id="pex-all-label">Select all</span></label>
+          <span class="pex-selected-count" id="pex-selected-count">0 selected</span>
+        </div>
+        <div class="pex-list" id="pex-list"></div>
+      </section>
+
+      <!-- Columns -->
+      <section class="pex-pane pex-columns">
+        <div class="pex-pane-head">
+          <div class="pex-pane-title">2. Choose columns</div>
+          <div class="pex-col-actions">
+            <button class="pex-link-btn" id="pex-cols-basic">Basic</button>
+            <button class="pex-link-btn" id="pex-cols-all">All</button>
+            <button class="pex-link-btn" id="pex-cols-none">None</button>
+          </div>
+        </div>
+        <div class="pex-col-list" id="pex-col-list"></div>
+      </section>
+    </div>
+
+    <div class="pex-footer">
+      <div class="pex-format">
+        <span class="pex-format-label">3. Format</span>
+        <label class="pex-format-opt"><input type="radio" name="pex-format" value="csv" checked> <i class="fa fa-file-csv"></i> CSV</label>
+        <label class="pex-format-opt"><input type="radio" name="pex-format" value="pdf"> <i class="fa fa-file-pdf"></i> PDF report</label>
+      </div>
+      <div class="pex-footer-actions">
+        <button class="csv-sample-btn" id="pex-cancel">Cancel</button>
+        <button class="po-add-btn" id="pex-export-btn" disabled><i class="fa fa-download"></i> Export</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="csv-import-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
   <div class="csv-import-card">
     <!-- Header -->

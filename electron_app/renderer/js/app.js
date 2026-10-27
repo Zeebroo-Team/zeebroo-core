@@ -14514,30 +14514,324 @@ async function _invBulkDelete() {
   else toast(`${ids.length} product${ids.length > 1 ? 's' : ''} deleted`, 'success');
 }
 
-function _invExportCsv() {
-  const ids = new Set([...invSelected]);
-  const rows = [...$$('#inv-tbody .inv-row')]
-    .filter(r => ids.has(r.dataset.id))
-    .map(r => {
-      const name  = r.querySelector('.inv-name')?.textContent      || '';
-      const sku   = r.querySelector('.inv-sku')?.textContent       || '';
-      const cat   = r.querySelector('.inv-cat')?.textContent       || '';
-      const price = r.querySelector('.inv-price')?.textContent     || '';
-      const stock = r.querySelector('.inv-stock-cell')?.textContent || '';
-      return [name, sku, cat, price, stock].map(v => `"${v.replace(/"/g, '""')}"`).join(',');
-    });
-  const csv  = ['Name,SKU,Category,Price,Stock', ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
+// ── Export Products (CSV / PDF) ────────────────────────────────────────────
+// Loads every product matching the current inventory filters (full detail, from
+// /online/products/export), lets the user pick products + columns, then saves a
+// CSV (for other systems / spreadsheets) or a PDF stock report.
+const PEX_COLUMNS = [
+  { key: 'name',               label: 'Product Name',          basic: true },
+  { key: 'sku',                label: 'SKU',                   basic: true },
+  { key: 'barcodes',           label: 'Barcodes / Batch SKUs' },
+  { key: 'category',           label: 'Category',              basic: true },
+  { key: 'brand',              label: 'Brand',                 basic: true },
+  { key: 'unit',               label: 'Unit' },
+  { key: 'selling_price',      label: 'Selling Price',         basic: true, num: 2 },
+  { key: 'cost_price',         label: 'Cost Price (avg)',      basic: true, num: 2 },
+  { key: 'wholesale_price',    label: 'Wholesale Price',       num: 2 },
+  { key: 'stock_quantity',     label: 'Stock Qty',             basic: true, num: 0 },
+  { key: 'stock_status',       label: 'Stock Status',          basic: true },
+  { key: 'stock_cost_value',   label: 'Stock Value (Cost)',    basic: true, num: 2 },
+  { key: 'stock_retail_value', label: 'Stock Value (Retail)',  num: 2 },
+  { key: 'model_no',           label: 'Model No' },
+  { key: 'size',               label: 'Size' },
+  { key: 'mfg_date',           label: 'MFG Date' },
+  { key: 'exp_date',           label: 'EXP Date' },
+  { key: 'warranty',           label: 'Warranty' },
+  { key: 'tags',               label: 'Tags' },
+  { key: 'description',        label: 'Description' },
+  { key: 'branch',             label: 'Branch' },
+  { key: 'created_at',         label: 'Created At' },
+  { key: 'updated_at',         label: 'Updated At' },
+  { key: 'id',                 label: 'Product ID' },
+];
+const PEX_COLS_STORAGE = 'zb.productExport.columns';
+const PEX_RENDER_LIMIT = 1500;   // rows drawn in the picker at once — search narrows the rest
+const _pex = { rows: [], selected: new Set(), cols: new Set(), q: '', preselect: false, loadToken: 0 };
+
+// num: 2 → money (2 dp), num: 0 → quantity (up to 3 dp)
+function _pexNum(v, dp) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = Number(v);
+  return dp === 2
+    ? n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : n.toLocaleString('en-US', { maximumFractionDigits: 3 });
+}
+
+function _pexFilterNote() {
+  const parts = [];
+  if (invState.search)      parts.push(`“${invState.search}”`);
+  if (invState.catId)       parts.push($('#inv-cat-filter .inv-chip.active')?.textContent || 'Category');
+  if (invState.brandId)     parts.push($('#inv-brand-filter')?.selectedOptions?.[0]?.text || 'Brand');
+  if (invState.stockStatus) parts.push($('#inv-stock-filter')?.selectedOptions?.[0]?.text || invState.stockStatus);
+  return parts.length ? `Filtered: ${parts.join(' · ')}` : 'All products';
+}
+
+function _pexLoadCols() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(PEX_COLS_STORAGE) || 'null'); } catch (_) {}
+  const valid = Array.isArray(saved) ? saved.filter(k => PEX_COLUMNS.some(c => c.key === k)) : [];
+  _pex.cols = new Set(valid.length ? valid : PEX_COLUMNS.filter(c => c.basic).map(c => c.key));
+}
+
+function _pexSaveCols() {
+  try { localStorage.setItem(PEX_COLS_STORAGE, JSON.stringify([..._pex.cols])); } catch (_) {}
+}
+
+function _pexRenderCols() {
+  $('#pex-col-list').innerHTML = PEX_COLUMNS.map(c => `
+    <label class="pex-col-item">
+      <input type="checkbox" class="inv-chk pex-col-chk" data-key="${c.key}" ${_pex.cols.has(c.key) ? 'checked' : ''}>
+      ${escHtml(c.label)}
+    </label>`).join('');
+  _pexSync();
+}
+
+function _pexVisibleRows() {
+  const words = _pex.q.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return _pex.rows;
+  return _pex.rows.filter(r => {
+    const hay = `${r.name} ${r.sku || ''} ${r.barcodes || ''}`.toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
+}
+
+function _pexListMsg(html) {
+  $('#pex-list').innerHTML = `<div class="pex-list-msg">${html}</div>`;
+}
+
+function _pexRenderList() {
+  const vis = _pexVisibleRows();
+  if (!_pex.rows.length) { _pexListMsg('<i class="fa fa-box-open"></i>&nbsp; No products match the current filters'); _pexSync(); return; }
+  if (!vis.length)       { _pexListMsg('No products match your search'); _pexSync(); return; }
+
+  const shown = vis.slice(0, PEX_RENDER_LIMIT);
+  $('#pex-list').innerHTML = shown.map(r => {
+    const qty = Number(r.stock_quantity) || 0;
+    const cls = qty <= 0 ? 'out' : qty <= 5 ? 'low' : '';
+    return `
+      <label class="pex-row">
+        <input type="checkbox" class="inv-chk pex-chk" data-id="${r.id}" ${_pex.selected.has(r.id) ? 'checked' : ''}>
+        <span class="pex-row-name">${escHtml(r.name)}${r.sku ? `<span class="pex-row-sku">${escHtml(r.sku)}</span>` : ''}</span>
+        <span class="pex-row-stock ${cls}">${_pexNum(qty, 0)} in stock</span>
+      </label>`;
+  }).join('') + (vis.length > shown.length
+    ? `<div class="pex-list-more">Showing ${shown.length} of ${vis.length} — search to find others. “Select all” still covers all ${vis.length}.</div>`
+    : '');
+  _pexSync();
+}
+
+function _pexSync() {
+  const vis    = _pexVisibleRows();
+  const selVis = vis.filter(r => _pex.selected.has(r.id)).length;
+  const all    = $('#pex-all');
+  all.disabled      = !vis.length;
+  all.checked       = vis.length > 0 && selVis === vis.length;
+  all.indeterminate = selVis > 0 && selVis < vis.length;
+  $('#pex-all-label').textContent      = _pex.q ? `Select all matching (${vis.length})` : `Select all (${vis.length})`;
+  $('#pex-selected-count').textContent = `${_pex.selected.size} of ${_pex.rows.length} selected`;
+  $('#pex-export-btn').disabled        = !_pex.selected.size || !_pex.cols.size;
+}
+
+async function _pexLoadRows() {
+  const token   = ++_pex.loadToken;
+  const filters = {
+    q:           invState.search,
+    catId:       invState.catId,
+    brandId:     invState.brandId,
+    stockStatus: invState.stockStatus,
+    sort:        invState.sort,
+  };
+  _pexListMsg('<i class="fa fa-spinner fa-spin"></i>&nbsp; Loading products…');
+
+  const rows = [];
+  for (let page = 1, last = 1; page <= last; page++) {
+    const res = await API.exportProducts(filters, page);
+    if (token !== _pex.loadToken) return;   // modal closed / reopened meanwhile
+    if (res.status !== 200) {
+      _pexListMsg(`<span style="color:#e74c3c"><i class="fa fa-circle-exclamation"></i>&nbsp; ${escHtml(res.body?.message || 'Failed to load products')}</span>`);
+      return;
+    }
+    rows.push(...(res.body?.data || []));
+    last = res.body?.meta?.last_page || 1;
+    if (page < last) _pexListMsg(`<i class="fa fa-spinner fa-spin"></i>&nbsp; Loading products… ${rows.length} / ${res.body?.meta?.total || rows.length}`);
+  }
+
+  _pex.rows = rows;
+  if (_pex.preselect) {
+    const ids = new Set(rows.map(r => r.id));
+    _pex.selected = new Set([..._pex.selected].filter(id => ids.has(id)));
+  } else {
+    _pex.selected = new Set(rows.map(r => r.id));
+  }
+  _pexRenderList();
+}
+
+function _pexOpen(preselectIds = []) {
+  _pex.q         = '';
+  _pex.rows      = [];
+  _pex.selected  = new Set(preselectIds.map(Number));
+  _pex.preselect = preselectIds.length > 0;
+  $('#pex-search').value = '';
+  $('#pex-filter-note').textContent = _pexFilterNote();
+  _pexLoadCols();
+  _pexRenderCols();
+  $('#pex-modal').style.display = 'flex';
+  _pexLoadRows();
+}
+
+function _pexClose() {
+  _pex.loadToken++;
+  $('#pex-modal').style.display = 'none';
+  _pex.rows = [];
+  _pex.selected.clear();
+}
+
+function _pexCsvCell(v, col) {
+  let s = v === null || v === undefined ? '' : String(v);
+  // Keep spreadsheets from evaluating text cells as formulas
+  if (col.num === undefined && /^[=+@]/.test(s)) s = `'${s}`;
+  return `"${s.replace(/"/g, '""')}"`;
+}
+
+function _pexDownloadCsv(rows, cols, filename) {
+  const lines = [
+    cols.map(c => _pexCsvCell(c.label, {})).join(','),
+    ...rows.map(r => cols.map(c => _pexCsvCell(r[c.key], c)).join(',')),
+  ];
+  // BOM so Excel opens non-Latin product names (e.g. Sinhala) correctly
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
   a.href     = url;
-  a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
 }
 
+function _pexPdfHtml(rows, cols) {
+  const e     = escHtml;
+  const biz   = state._bizName || $('#sel-business')?.selectedOptions?.[0]?.text || 'Business';
+  const sum   = k => rows.reduce((t, r) => t + (Number(r[k]) || 0), 0);
+  const out   = rows.filter(r => Number(r.stock_quantity) <= 0).length;
+  const low   = rows.filter(r => { const q = Number(r.stock_quantity); return q > 0 && q <= 5; }).length;
+  const tiles = [
+    ['Products',             rows.length.toLocaleString('en-US')],
+    ['Total stock qty',      _pexNum(sum('stock_quantity'), 0)],
+    ['Low stock',            low.toLocaleString('en-US')],
+    ['Out of stock',         out.toLocaleString('en-US')],
+    ['Stock value (cost)',   _pexNum(sum('stock_cost_value'), 2)],
+    ['Stock value (retail)', _pexNum(sum('stock_retail_value'), 2)],
+  ];
+  const isNum = c => c.num !== undefined;
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Product stock report</title><style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 9.5px; margin: 0; }
+    header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1f2937; padding-bottom: 8px; margin-bottom: 12px; }
+    h1 { font-size: 17px; margin: 0 0 3px; }
+    .sub { color: #6b7280; font-size: 10px; }
+    .meta { text-align: right; color: #6b7280; font-size: 10px; line-height: 1.5; }
+    .tiles { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 14px; }
+    .tile { border: 1px solid #e5e7eb; border-radius: 6px; padding: 7px 9px; }
+    .tile b { display: block; font-size: 13px; margin-top: 2px; }
+    .tile span { color: #6b7280; font-size: 8.5px; text-transform: uppercase; letter-spacing: .03em; }
+    table { width: 100%; border-collapse: collapse; }
+    thead { display: table-header-group; }
+    th { background: #f3f4f6; text-align: left; font-size: 8.5px; text-transform: uppercase; letter-spacing: .03em; color: #4b5563; padding: 5px 6px; border-bottom: 1px solid #d1d5db; }
+    td { padding: 4px 6px; border-bottom: 1px solid #eef0f3; vertical-align: top; word-break: break-word; }
+    tr { page-break-inside: avoid; }
+    tbody tr:nth-child(even) td { background: #fafafa; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .out { color: #dc2626; font-weight: 600; } .low { color: #d97706; font-weight: 600; }
+  </style></head><body>
+    <header>
+      <div><h1>Product Stock Report</h1><div class="sub">${e(biz)} · ${e(_pexFilterNote())}</div></div>
+      <div class="meta">Generated ${e(new Date().toLocaleString())}<br>${rows.length.toLocaleString('en-US')} products · ${cols.length} columns</div>
+    </header>
+    <div class="tiles">${tiles.map(([l, v]) => `<div class="tile"><span>${l}</span><b>${v}</b></div>`).join('')}</div>
+    <table>
+      <thead><tr>${cols.map(c => `<th class="${isNum(c) ? 'num' : ''}">${e(c.label)}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(r => `<tr>${cols.map(c => {
+        if (isNum(c)) return `<td class="num">${_pexNum(r[c.key], c.num)}</td>`;
+        if (c.key === 'stock_status') {
+          const cls = r.stock_status === 'Out of stock' ? 'out' : r.stock_status === 'Low stock' ? 'low' : '';
+          return `<td class="${cls}">${e(r.stock_status || '')}</td>`;
+        }
+        return `<td>${e(r[c.key] ?? '')}</td>`;
+      }).join('')}</tr>`).join('')}</tbody>
+    </table>
+  </body></html>`;
+}
+
+async function _pexExport() {
+  const cols   = PEX_COLUMNS.filter(c => _pex.cols.has(c.key));
+  const rows   = _pex.rows.filter(r => _pex.selected.has(r.id));   // keeps the list's sort order
+  const format = document.querySelector('input[name="pex-format"]:checked')?.value || 'csv';
+  const name   = `products-${new Date().toISOString().slice(0, 10)}`;
+  if (!rows.length || !cols.length) return;
+
+  if (format === 'csv') {
+    _pexDownloadCsv(rows, cols, `${name}.csv`);
+    toast(`${rows.length} product${rows.length !== 1 ? 's' : ''} exported to CSV`, 'success');
+    _pexClose();
+    return;
+  }
+
+  if (!window.electronAPI?.saveHtmlPdf) { toast('PDF export needs the latest desktop app — please update.', 'error'); return; }
+  const btn = $('#pex-export-btn');
+  const btnHtml = btn.innerHTML;
+  btn.disabled  = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Building PDF…';
+  try {
+    const out = await window.electronAPI.saveHtmlPdf({
+      html: _pexPdfHtml(rows, cols), filename: `${name}.pdf`, landscape: cols.length > 6,
+    });
+    if (out?.success) { toast('PDF report saved', 'success'); _pexClose(); }
+    else if (!out?.canceled) toast(out?.error || 'PDF export failed', 'error');
+  } finally {
+    btn.innerHTML = btnHtml;
+    _pexSync();
+  }
+}
+
+let _pexSearchTimer;
+$('#pex-search').addEventListener('input', e => {
+  clearTimeout(_pexSearchTimer);
+  _pexSearchTimer = setTimeout(() => { _pex.q = e.target.value.trim(); _pexRenderList(); }, 200);
+});
+$('#pex-list').addEventListener('change', e => {
+  if (!e.target.classList.contains('pex-chk')) return;
+  const id = Number(e.target.dataset.id);
+  if (e.target.checked) _pex.selected.add(id); else _pex.selected.delete(id);
+  _pexSync();
+});
+$('#pex-all').addEventListener('change', e => {
+  const on = e.target.checked;
+  _pexVisibleRows().forEach(r => { if (on) _pex.selected.add(r.id); else _pex.selected.delete(r.id); });
+  $$('#pex-list .pex-chk').forEach(chk => { chk.checked = on; });
+  _pexSync();
+});
+$('#pex-col-list').addEventListener('change', e => {
+  if (!e.target.classList.contains('pex-col-chk')) return;
+  if (e.target.checked) _pex.cols.add(e.target.dataset.key); else _pex.cols.delete(e.target.dataset.key);
+  _pexSaveCols();
+  _pexSync();
+});
+const _pexSetCols = keys => { _pex.cols = new Set(keys); _pexSaveCols(); _pexRenderCols(); };
+$('#pex-cols-basic').addEventListener('click', () => _pexSetCols(PEX_COLUMNS.filter(c => c.basic).map(c => c.key)));
+$('#pex-cols-all').addEventListener('click',   () => _pexSetCols(PEX_COLUMNS.map(c => c.key)));
+$('#pex-cols-none').addEventListener('click',  () => _pexSetCols([]));
+$('#pex-export-btn').addEventListener('click', _pexExport);
+$('#pex-close').addEventListener('click',  _pexClose);
+$('#pex-cancel').addEventListener('click', _pexClose);
+$('#pex-modal').addEventListener('click', e => { if (e.target === e.currentTarget) _pexClose(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#pex-modal').style.display === 'flex') _pexClose();
+});
+$('#inv-export-btn').addEventListener('click', () => _pexOpen());
+
 $('#inv-bulk-delete').addEventListener('click',   _invBulkDelete);
-$('#inv-bulk-export').addEventListener('click',   _invExportCsv);
+$('#inv-bulk-export').addEventListener('click',   () => _pexOpen([...invSelected]));
 $('#inv-bulk-deselect').addEventListener('click', () => {
   invSelected.clear();
   $$('.inv-row-check').forEach(chk => { chk.checked = false; });
