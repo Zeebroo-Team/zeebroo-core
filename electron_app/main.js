@@ -887,6 +887,8 @@ ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
   const { html = '', filename = 'report.pdf', landscape = false } = opts;
   const os      = require('os');
   const tmpHtml = path.join(os.tmpdir(), `zeebroo-report-${Date.now()}.html`);
+  // printToPDF has no progress callback — report stages so the UI can show it's working
+  const stage = (s) => { if (!e.sender.isDestroyed()) e.sender.send('save-html-pdf-progress', s); };
 
   const renderWin = new BrowserWindow({
     width: 1000, height: 1400, show: false, skipTaskbar: true,
@@ -894,9 +896,11 @@ ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
   });
   try {
     // A file instead of a data: URL — reports with many transaction rows get large
+    stage('loading');
     fs.writeFileSync(tmpHtml, html, 'utf8');
     await renderWin.loadFile(tmpHtml);
 
+    stage('rendering');
     const pdf = await renderWin.webContents.printToPDF({
       pageSize: 'A4',
       landscape: !!landscape,
@@ -907,6 +911,7 @@ ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
       footerTemplate: '<div style="font-size:8px;color:#9ca3af;width:100%;text-align:center;font-family:Segoe UI,Arial,sans-serif">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
     });
 
+    stage('saving-dialog');
     const parent = BrowserWindow.fromWebContents(e.sender) || mainWindow;
     const { canceled, filePath } = await dialog.showSaveDialog(parent, {
       defaultPath: filename,
@@ -914,6 +919,7 @@ ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
     });
     if (canceled || !filePath) return { success: false, canceled: true };
 
+    stage('writing');
     fs.writeFileSync(filePath, pdf);
     shell.openPath(filePath);
     return { success: true, path: filePath };

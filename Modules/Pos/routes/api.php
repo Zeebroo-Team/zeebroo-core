@@ -127,6 +127,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/sale-campaigns/products', [PosSaleCampaignApiController::class, 'products'])->name('online.sale-campaigns.products');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
+    Route::get('online/barcodes/products', [\Modules\Pos\Http\Controllers\Api\PosBarcodeApiController::class, 'products'])->name('online.barcodes.products');
     // Mobile app "Offline products" cache sync (read-only, mobile-only)
     Route::get('online/products/sync-index', [PosProductSyncApiController::class, 'index'])->name('online.products.sync-index');
     Route::get('online/products/by-ids', [PosProductSyncApiController::class, 'byIds'])->name('online.products.by-ids');

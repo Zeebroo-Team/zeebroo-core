@@ -71,6 +71,7 @@ const API = (() => {
     },
     campaignProducts: () => request('GET', '/online/sale-campaigns/products'),
     productSearch:(q, perPage)    => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
+    barcodeProducts:(q)           => request('GET', `/online/barcodes/products${q ? `?q=${encodeURIComponent(q)}` : ''}`),
     product:          (id)         => request('GET', `/online/products/${id}`),
     productSalesChart:  (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
     productStockHistory:(id)        => request('GET', `/online/products/${id}/stock-history`),

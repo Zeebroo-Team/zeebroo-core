@@ -34,6 +34,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   printReceiptEscpos:  (opts)  => ipcRenderer.invoke('print-receipt-escpos', opts),
   previewReceiptPdf:   (opts)  => ipcRenderer.invoke('preview-receipt-pdf', opts),
   saveHtmlPdf:         (opts)  => ipcRenderer.invoke('save-html-pdf', opts),
+  // Stage updates while save-html-pdf runs: 'loading' | 'rendering' | 'saving-dialog' | 'writing'
+  onPdfProgress: (cb) => {
+    const fn = (_e, stage) => cb(stage);
+    ipcRenderer.on('save-html-pdf-progress', fn);
+    return () => ipcRenderer.removeListener('save-html-pdf-progress', fn);
+  },
   fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),

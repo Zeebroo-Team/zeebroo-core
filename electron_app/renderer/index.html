@@ -17965,7 +17965,7 @@
         <div class="bc-main-header-icon"><i class="fa fa-barcode"></i></div>
         <div>
           <div class="bc-main-title">Generate Barcode</div>
-          <div class="bc-main-sub">Search a product to add barcode labels</div>
+          <div class="bc-main-sub">Select products (or search) to add barcode labels</div>
         </div>
       </div>
       <button class="co-close" id="bc-main-close"><i class="fa fa-xmark"></i></button>
@@ -17976,29 +17976,48 @@
       <div class="bc-product-search-box">
         <i class="fa fa-magnifying-glass bc-search-ico"></i>
         <input type="text" id="bc-product-search-inp" class="bc-product-search-inp"
-          placeholder="Search product by name or SKU…" autocomplete="off" spellcheck="false">
-        <div class="bc-product-dropdown" id="bc-product-dropdown" style="display:none"></div>
+          placeholder="Search or browse products below by name or SKU…" autocomplete="off" spellcheck="false">
       </div>
     </div>
 
     <!-- split: preview ← → options -->
     <div class="bc-main-content">
 
-      <!-- LEFT: barcode preview -->
+      <!-- LEFT: product picker / barcode preview -->
       <div class="bc-main-preview-wrap">
         <div class="bc-main-preview-header">
-          <div class="bc-main-preview-title">
-            <i class="fa fa-eye"></i> Barcode Preview
-            <span class="bc-main-label-count" id="bc-main-label-count"></span>
+          <div class="bc-view-tabs">
+            <button type="button" class="bc-view-tab active" data-bc-view="products">
+              <i class="fa fa-list-check"></i> Products
+            </button>
+            <button type="button" class="bc-view-tab" data-bc-view="preview">
+              <i class="fa fa-eye"></i> Preview
+              <span class="bc-main-label-count" id="bc-main-label-count"></span>
+            </button>
           </div>
           <button class="po-add-btn cat-add-btn" id="bc-print-btn" disabled>
             <i class="fa fa-print"></i> Print Sheet
           </button>
         </div>
-        <div class="bc-main-preview-body" id="bc-main-preview-body">
+
+        <!-- product picker -->
+        <div class="bc-pick-wrap" id="bc-pick-wrap">
+          <div class="bc-pick-toolbar">
+            <label class="bc-pick-all">
+              <input type="checkbox" id="bc-pick-all"> Select all
+            </label>
+            <span class="bc-pick-count" id="bc-pick-count"></span>
+            <button type="button" class="po-add-btn cat-add-btn" id="bc-pick-add" disabled>
+              <i class="fa fa-plus"></i> Add Selected
+            </button>
+          </div>
+          <div class="bc-pick-list" id="bc-pick-list"></div>
+        </div>
+
+        <div class="bc-main-preview-body" id="bc-main-preview-body" style="display:none">
           <div class="bc-preview-ph">
             <i class="fa fa-barcode"></i>
-            <span>Search for a product above, then add barcode labels from its stock layers</span>
+            <span>Select products in the Products tab, then add barcode labels</span>
           </div>
         </div>
       </div>
@@ -18116,14 +18135,30 @@
 
 <div id="bc-preview-modal" class="bc-preview-modal" style="display:none">
   <div class="bc-preview-toolbar">
-    <div class="bc-preview-title"><i class="fa fa-barcode"></i> Barcode Sheet Preview</div>
+    <div class="bc-preview-title"><i class="fa fa-barcode"></i> Barcode Sheet Preview
+      <span class="bc-prev-progress" id="bc-prev-progress"></span>
+    </div>
     <div class="bc-preview-actions">
       <button class="bc-prev-btn" id="bc-prev-close"><i class="fa fa-xmark"></i> Close</button>
+      <button class="bc-prev-btn" id="bc-prev-pdf"><i class="fa fa-file-pdf"></i> Save PDF</button>
       <button class="bc-prev-btn bc-prev-print" id="bc-prev-print"><i class="fa fa-print"></i> Print</button>
     </div>
   </div>
-  <div class="bc-preview-body">
-    <div id="bc-preview-sheet" class="bc-preview-sheet"></div>
+  <div class="bc-preview-stage">
+    <div class="bc-preview-body">
+      <div id="bc-preview-sheet" class="bc-preview-sheet"></div>
+    </div>
+    <!-- shown while barcodes are being drawn; Print / Save PDF appear once done -->
+    <div class="bc-prev-rendering" id="bc-prev-rendering" style="display:none">
+      <div class="bc-prev-rendering-card">
+        <i class="fa fa-barcode bc-prev-rendering-ico" id="bc-prev-rendering-ico"></i>
+        <div class="bc-prev-rendering-title" id="bc-prev-rendering-title">Rendering barcodes…</div>
+        <div class="bc-prev-rendering-bar" id="bc-prev-rendering-bar"><div class="bc-prev-rendering-fill" id="bc-prev-rendering-fill"></div></div>
+        <div class="bc-prev-rendering-text" id="bc-prev-rendering-text"></div>
+        <ul class="bc-prev-steps" id="bc-prev-steps" style="display:none"></ul>
+        <div class="bc-prev-rendering-hint" id="bc-prev-rendering-hint">Print and Save PDF will be available when rendering finishes</div>
+      </div>
+    </div>
   </div>
 </div>
 

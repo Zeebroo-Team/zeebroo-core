@@ -20527,54 +20527,238 @@ function _bcOpenMain() {
   _bc.items = [];
   const inp = $('#bc-product-search-inp');
   if (inp) inp.value = '';
-  const dd = $('#bc-product-dropdown');
-  if (dd) dd.style.display = 'none';
+  _bcPick.selected.clear();
+  _bcPick.qty.clear();
+  _bcPick.q = '';
   _bcRefreshPreview();
+  _bcSetView('products');
+  _bcPickLoad();
   $('#bc-main-modal').style.display = 'flex';
   setTimeout(() => $('#bc-product-search-inp')?.focus(), 80);
 }
 
-// product search dropdown
+// ── Left pane: Products ↔ Preview tabs ────────────────────────────────────
+function _bcSetView(view) {
+  $$('.bc-view-tab').forEach(t => t.classList.toggle('active', t.dataset.bcView === view));
+  const pick = $('#bc-pick-wrap');
+  const prev = $('#bc-main-preview-body');
+  if (pick) pick.style.display = view === 'products' ? '' : 'none';
+  if (prev) prev.style.display = view === 'preview'  ? '' : 'none';
+}
+$$('.bc-view-tab').forEach(t => t.addEventListener('click', () => _bcSetView(t.dataset.bcView)));
+
+// ── Product picker (browse / search, multi-select, select all) ────────────
+// The whole catalog is fetched once per modal open; search filters it locally.
+// Rows are rendered in chunks as the list scrolls so thousands stay snappy.
+const BC_PICK_CHUNK = 200;
+const BC_MAX_LABELS = 9999;
+const _bcPick = { q: '', all: [], list: [], rendered: 0, selected: new Map(), qty: new Map(), reqId: 0 };
+
+// Default label count = stock on hand (at least 1)
+function _bcPickDefaultQty(p) {
+  return Math.max(1, Math.min(BC_MAX_LABELS, Math.floor(parseFloat(p.stock_quantity) || 0)));
+}
+function _bcPickQty(p) { return _bcPick.qty.get(p.id) ?? _bcPickDefaultQty(p); }
+function _bcPickPrice(p) {
+  return p.unit_sell_price != null && p.unit_sell_price !== ''
+    ? formatMoney(parseFloat(p.unit_sell_price), {currency: state.currency || ''}) : '';
+}
+
 $('#bc-product-search-inp')?.addEventListener('input', e => {
   const q = e.target.value.trim();
   clearTimeout(_bc.searchTimer);
-  if (!q) { const dd = $('#bc-product-dropdown'); if (dd) dd.style.display = 'none'; return; }
-  _bc.searchTimer = setTimeout(() => _bcSearchProducts(q), 250);
-});
-$('#bc-product-search-inp')?.addEventListener('blur', () => {
-  setTimeout(() => { const dd = $('#bc-product-dropdown'); if (dd) dd.style.display = 'none'; }, 180);
+  _bc.searchTimer = setTimeout(() => { _bcSetView('products'); _bcPickFilter(q); }, 150);
 });
 
-async function _bcSearchProducts(q) {
-  const dd = $('#bc-product-dropdown');
-  if (!dd) return;
-  dd.innerHTML = `<div class="bc-dd-loading"><i class="fa fa-spinner fa-spin"></i> Searching…</div>`;
-  dd.style.display = '';
-  const res  = await API.productSearch(q, 20);
-  const list = res.status === 200 ? (res.body?.data ?? []) : [];
-  if (!list.length) {
-    dd.innerHTML = `<div class="bc-dd-empty"><i class="fa fa-inbox"></i> No products found</div>`;
+async function _bcPickLoad() {
+  const listEl = $('#bc-pick-list');
+  if (!listEl) return;
+  const reqId = ++_bcPick.reqId;
+  _bcPick.all = []; _bcPick.list = []; _bcPick.rendered = 0;
+  listEl.innerHTML = `<div class="bc-dd-loading"><i class="fa fa-spinner fa-spin"></i> Loading all products…</div>`;
+  _bcPickSyncToolbar();
+  const res = await API.barcodeProducts();
+  if (reqId !== _bcPick.reqId) return; // modal was reopened meanwhile
+  if (res.status !== 200) {
+    listEl.innerHTML = `<div class="bc-dd-empty"><i class="fa fa-triangle-exclamation"></i> Failed to load products</div>`;
     return;
   }
-  dd.innerHTML = list.map(p => `
-    <div class="bc-dd-item"
-      data-pid="${p.id}"
-      data-name="${p.name.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
-      data-sku="${(p.sku||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;')}"
-      data-qty="${p.stock_quantity || 0}"
-      data-price="${p.unit_sell_price || ''}">
-      <div class="bc-dd-item-name">${escHtml(p.name)}</div>
-      <div class="bc-dd-item-sku">${p.sku ? escHtml(p.sku) : '<span style="opacity:.4">No SKU</span>'}</div>
-    </div>`).join('');
-  dd.querySelectorAll('.bc-dd-item').forEach(el => {
-    el.addEventListener('mousedown', () => {
-      const inp = $('#bc-product-search-inp');
-      if (inp) inp.value = el.dataset.name;
-      dd.style.display = 'none';
-      _bcOpenStockModal(el.dataset.pid, el.dataset.name, el.dataset.sku, el.dataset.qty, el.dataset.price);
-    });
-  });
+  _bcPick.all = res.body?.data ?? [];
+  _bcPickFilter(($('#bc-product-search-inp')?.value || '').trim());
 }
+
+function _bcPickFilter(q) {
+  _bcPick.q = q;
+  const needle = q.toLowerCase();
+  _bcPick.list = needle
+    ? _bcPick.all.filter(p => p.name.toLowerCase().includes(needle) || (p.sku || '').toLowerCase().includes(needle))
+    : _bcPick.all;
+  _bcPickRender();
+}
+
+function _bcPickRowHtml(p) {
+  const checked = _bcPick.selected.has(p.id);
+  const stock   = parseFloat(p.stock_quantity || 0);
+  return `<div class="bc-pick-row${checked ? ' selected' : ''}" data-pid="${p.id}">
+    <input type="checkbox" class="bc-pick-chk"${checked ? ' checked' : ''}>
+    <div class="bc-pick-info">
+      <div class="bc-pick-name">${escHtml(p.name)}</div>
+      <div class="bc-pick-meta">
+        ${p.sku ? `<span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(p.sku)}</span>` : '<span style="opacity:.5">No SKU</span>'}
+        <span>Stock: ${stock % 1 === 0 ? stock : stock.toFixed(2)}</span>
+      </div>
+    </div>
+    <div class="bc-pick-price">${_bcPickPrice(p)}</div>
+    <input type="number" class="bc-pick-qty" value="${_bcPickQty(p)}" min="1" max="${BC_MAX_LABELS}" title="Labels to print">
+    <button type="button" class="bc-pick-layers" title="Pick from stock layers"><i class="fa fa-layer-group"></i></button>
+  </div>`;
+}
+
+function _bcPickRender() {
+  const listEl = $('#bc-pick-list');
+  if (!listEl) return;
+  listEl.scrollTop = 0;
+  _bcPick.rendered = 0;
+  if (!_bcPick.list.length) {
+    listEl.innerHTML = `<div class="bc-dd-empty"><i class="fa fa-inbox"></i> No products found</div>`;
+    _bcPickSyncToolbar();
+    return;
+  }
+  listEl.innerHTML = '';
+  _bcPickRenderMore();
+  _bcPickSyncToolbar();
+}
+
+function _bcPickRenderMore() {
+  const listEl = $('#bc-pick-list');
+  if (!listEl || _bcPick.rendered >= _bcPick.list.length) return;
+  const next = _bcPick.list.slice(_bcPick.rendered, _bcPick.rendered + BC_PICK_CHUNK);
+  listEl.insertAdjacentHTML('beforeend', next.map(_bcPickRowHtml).join(''));
+  _bcPick.rendered += next.length;
+}
+
+$('#bc-pick-list')?.addEventListener('scroll', e => {
+  const el = e.currentTarget;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) _bcPickRenderMore();
+});
+
+function _bcPickSyncToolbar() {
+  const n      = _bcPick.selected.size;
+  const allChk = $('#bc-pick-all');
+  const shown  = _bcPick.list.length;
+  const inView = n ? _bcPick.list.filter(p => _bcPick.selected.has(p.id)).length : 0;
+  if (allChk) {
+    allChk.checked       = shown > 0 && inView === shown;
+    allChk.indeterminate = inView > 0 && inView < shown;
+    allChk.disabled      = !shown;
+  }
+  const labels  = n ? [..._bcPick.selected.values()].reduce((s, p) => s + _bcPickQty(p), 0) : 0;
+  const countEl = $('#bc-pick-count');
+  if (countEl) countEl.textContent = n
+    ? `${n} of ${shown} selected · ${labels} label${labels !== 1 ? 's' : ''}`
+    : (shown ? `${shown} product${shown !== 1 ? 's' : ''}` : '');
+  const addBtn = $('#bc-pick-add');
+  if (addBtn) {
+    addBtn.disabled  = !n;
+    addBtn.innerHTML = `<i class="fa fa-plus"></i> Add Selected${n ? ` (${n})` : ''}`;
+  }
+}
+
+function _bcPickToggle(pid, on) {
+  const p = _bcPick.all.find(x => x.id === pid);
+  if (!p) return;
+  if (on) _bcPick.selected.set(pid, p); else _bcPick.selected.delete(pid);
+  const row = $('#bc-pick-list')?.querySelector(`.bc-pick-row[data-pid="${pid}"]`);
+  if (row) {
+    row.classList.toggle('selected', on);
+    const chk = row.querySelector('.bc-pick-chk');
+    if (chk) chk.checked = on;
+  }
+}
+
+$('#bc-pick-list')?.addEventListener('click', e => {
+  const row = e.target.closest('.bc-pick-row');
+  if (!row) return;
+  const pid = parseInt(row.dataset.pid);
+  if (e.target.closest('.bc-pick-layers')) {
+    const p = _bcPick.all.find(x => x.id === pid);
+    if (p) _bcOpenStockModal(p.id, p.name, p.sku || '', p.stock_quantity || 0, p.unit_sell_price || '');
+    return;
+  }
+  if (e.target.closest('.bc-pick-qty')) return;
+  const on = e.target.classList.contains('bc-pick-chk') ? e.target.checked : !_bcPick.selected.has(pid);
+  _bcPickToggle(pid, on);
+  _bcPickSyncToolbar();
+});
+
+$('#bc-pick-list')?.addEventListener('input', e => {
+  if (!e.target.classList.contains('bc-pick-qty')) return;
+  const pid = parseInt(e.target.closest('.bc-pick-row')?.dataset.pid);
+  const qty = Math.max(1, Math.min(BC_MAX_LABELS, parseInt(e.target.value) || 1));
+  _bcPick.qty.set(pid, qty);
+  // typing a label count implies the product should be included
+  if (!_bcPick.selected.has(pid)) _bcPickToggle(pid, true);
+  _bcPickSyncToolbar();
+});
+
+// Select all = every product matching the current search (not only rendered rows)
+$('#bc-pick-all')?.addEventListener('change', e => {
+  const on = e.target.checked;
+  _bcPick.list.forEach(p => { if (on) _bcPick.selected.set(p.id, p); else _bcPick.selected.delete(p.id); });
+  $('#bc-pick-list')?.querySelectorAll('.bc-pick-row').forEach(row => {
+    row.classList.toggle('selected', on);
+    const chk = row.querySelector('.bc-pick-chk');
+    if (chk) chk.checked = on;
+  });
+  _bcPickSyncToolbar();
+});
+
+// ── Busy state for heavy barcode actions ──────────────────────────────────
+// Large selections (thousands of labels) block the UI thread, so: disable the
+// button, show a spinner, and yield one frame so it paints before the work runs.
+const _bcYield = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+
+async function _bcBusy(btn, label, fn, after) {
+  if (!btn || btn.dataset.busy) return;
+  btn.dataset.busy = '1';
+  const html = btn.innerHTML;
+  btn.disabled  = true;
+  btn.classList.add('bc-busy');
+  btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${label}`;
+  try {
+    await _bcYield();
+    await fn();
+  } finally {
+    delete btn.dataset.busy;
+    btn.classList.remove('bc-busy');
+    btn.innerHTML = html;
+    btn.disabled  = false;
+    after?.(); // let the owner re-apply its normal enabled/disabled state
+  }
+}
+
+$('#bc-pick-add')?.addEventListener('click', () => {
+  if (!_bcPick.selected.size) return;
+  const total = [..._bcPick.selected.values()].reduce((s, p) => s + _bcPickQty(p), 0);
+  if (total > 2000 && !confirm(`This will add ${total.toLocaleString()} labels (label count follows stock). Large sheets can take a while to render. Continue?`)) return;
+  _bcBusy($('#bc-pick-add'), 'Adding…', () => {
+    let added = 0;
+    _bcPick.selected.forEach(p => {
+      const qty   = _bcPickQty(p);
+      const code  = p.sku || String(p.id);
+      const price = _bcPickPrice(p);
+      for (let i = 0; i < qty; i++) _bc.items.push({ name: p.name, code, price });
+      added += qty;
+    });
+    const products = _bcPick.selected.size;
+    _bcPick.selected.clear();
+    _bcPick.qty.clear();
+    _bcPickRender();
+    _bcRefreshPreview();
+    _bcSetView('preview');
+    toast(`${added.toLocaleString()} label${added !== 1 ? 's' : ''} added from ${products} product${products !== 1 ? 's' : ''}`, 'success');
+  }, _bcPickSyncToolbar);
+});
 
 // ── Secondary stock popup ─────────────────────────────────────────────────
 $('#bc-stock-close')?.addEventListener('click', () => { $('#bc-stock-modal').style.display = 'none'; });
@@ -20664,6 +20848,7 @@ async function _bcOpenStockModal(productId, productName, productSku, productQty,
         _bc.items.push({ name: btn.dataset.name, code: btn.dataset.sku, price: btn.dataset.price });
       }
       _bcRefreshPreview();
+      _bcSetView('preview');
       $('#bc-stock-modal').style.display = 'none';
     });
   });
@@ -20712,7 +20897,7 @@ function _bcRefreshPreview() {
   if (footerCount) footerCount.textContent = n ? `${n} label${n !== 1 ? 's' : ''} ready` : 'No labels added';
   if (addToPrint) addToPrint.disabled = !n;
   if (!n) {
-    body.innerHTML = `<div class="bc-preview-ph"><i class="fa fa-barcode"></i><span>Search for a product above, then add barcode labels from its stock layers</span></div>`;
+    body.innerHTML = `<div class="bc-preview-ph"><i class="fa fa-barcode"></i><span>Select products in the Products tab, then add barcode labels</span></div>`;
     return;
   }
   const it          = _bc.items[_bc.items.length - 1];
@@ -20746,13 +20931,87 @@ $('#bc-print-btn')?.addEventListener('click', () => {
   if (!_bc.items.length) return;
   const paper = document.querySelector('input[name="bc-paper"]:checked')?.value || 'single';
   const cols  = paper === 'double' ? 2 : 1;
-  _bcRenderPreview(_bc.items,
+  _bcBusy($('#bc-print-btn'), 'Preparing…', () => _bcRenderPreview(_bc.items,
     { pageType: 'roll', cols },
     ($('#bc-top-text')?.value || '').trim(),
-    ($('#bc-custom-text')?.value || '').trim());
+    ($('#bc-custom-text')?.value || '').trim()), _bcRefreshPreview);
 });
 
-function _bcRenderPreview(items, config, topText = '', bottomText = '') {
+// Preview-modal Print / Save PDF stay disabled until every barcode is drawn —
+// otherwise the printout / PDF would contain empty labels.
+let _bcRenderToken = 0;
+let _bcRenderTotal = 0;
+// While rendering: overlay with progress, Print / Save PDF hidden.
+// When ready: overlay gone, buttons shown and enabled.
+function _bcPreviewReady(ready, done = 0, total = _bcRenderTotal) {
+  ['#bc-prev-print', '#bc-prev-pdf'].forEach(sel => {
+    const b = $(sel);
+    if (!b) return;
+    b.style.display = ready ? '' : 'none';
+    if (!b.dataset.busy) b.disabled = !ready;
+  });
+  const overlay = $('#bc-prev-rendering');
+  if (overlay) overlay.style.display = ready ? 'none' : '';
+  const prog = $('#bc-prev-progress');
+  if (ready) {
+    if (prog) prog.textContent = total ? `${total.toLocaleString()} label${total !== 1 ? 's' : ''} ready` : '';
+    return;
+  }
+  const pct  = total ? Math.floor(done / total * 100) : 0;
+  _bcOverlayMode('fa-barcode', 'Rendering barcodes…', 'Print and Save PDF will be available when rendering finishes');
+  const fill = $('#bc-prev-rendering-fill');
+  const txt  = $('#bc-prev-rendering-text');
+  if (fill) fill.style.width = `${pct}%`;
+  if (txt)  txt.textContent  = `${done.toLocaleString()} / ${total.toLocaleString()} labels · ${pct}%`;
+  if (prog) prog.textContent = '';
+}
+
+function _bcOverlayMode(icon, title, hint, steps = null, working = false) {
+  const ico = $('#bc-prev-rendering-ico');
+  if (ico) ico.className = `fa ${icon} bc-prev-rendering-ico`;
+  const t = $('#bc-prev-rendering-title'); if (t) t.textContent = title;
+  const h = $('#bc-prev-rendering-hint'); if (h) h.textContent = hint;
+  $('#bc-prev-rendering-bar')?.classList.toggle('bc-working', working);
+  const ul = $('#bc-prev-steps');
+  if (ul) {
+    ul.style.display = steps ? '' : 'none';
+    ul.innerHTML = steps || '';
+  }
+}
+
+// ── PDF generation progress ───────────────────────────────────────────────
+// Chromium's printToPDF gives no percentage, so progress is per stage (reported
+// by the main process) plus an elapsed-time counter — enough to show it's alive.
+const BC_PDF_STEPS = [
+  ['prepare',       'Preparing labels',        8],
+  ['loading',       'Loading into PDF engine', 20],
+  ['rendering',     'Generating PDF pages',    55],
+  ['saving-dialog', 'Choose where to save',    90],
+  ['writing',       'Saving file',             97],
+];
+
+function _bcPdfOverlay(stage, startedAt, total) {
+  const idx  = Math.max(0, BC_PDF_STEPS.findIndex(s => s[0] === stage));
+  const secs = Math.floor((Date.now() - startedAt) / 1000);
+  const steps = BC_PDF_STEPS.map(([, label], i) => {
+    const cls  = i < idx ? 'done' : i === idx ? 'active' : '';
+    const icon = i < idx ? 'fa-circle-check' : i === idx ? 'fa-spinner fa-spin' : 'fa-circle';
+    return `<li class="${cls}"><i class="fa ${icon}"></i> ${label}</li>`;
+  }).join('');
+  const waitingOnUser = stage === 'saving-dialog';
+  _bcOverlayMode('fa-file-pdf', 'Generating PDF…',
+    waitingOnUser ? 'Pick a file name in the save window to finish'
+                  : 'Large sheets can take a minute — please keep this window open',
+    steps, !waitingOnUser);
+  const fill = $('#bc-prev-rendering-fill');
+  if (fill) fill.style.width = `${BC_PDF_STEPS[idx][2]}%`;
+  const txt = $('#bc-prev-rendering-text');
+  if (txt) txt.textContent = `${total.toLocaleString()} label${total !== 1 ? 's' : ''} · ${secs}s elapsed`;
+  const overlay = $('#bc-prev-rendering');
+  if (overlay) overlay.style.display = '';
+}
+
+async function _bcRenderPreview(items, config, topText = '', bottomText = '') {
   // accept both legacy numeric cols arg and new config object
   const cfg = typeof config === 'number' ? { pageType: 'roll', cols: config } : (config || {});
   const { pageType = 'roll', cols = 3, rowsPerPage = null } = cfg;
@@ -20760,6 +21019,16 @@ function _bcRenderPreview(items, config, topText = '', bottomText = '') {
   const sheet = $('#bc-preview-sheet');
   const modal = $('#bc-preview-modal');
   if (!sheet || !modal) return;
+
+  // Open with the rendering overlay first, so building the markup for a big
+  // sheet happens behind it instead of before anything is visible.
+  const token = ++_bcRenderToken;
+  _bcRenderTotal = items.length;
+  sheet.innerHTML = '';
+  _bcPreviewReady(false, 0);
+  modal.style.display = 'flex';
+  await _bcYield();
+  if (token !== _bcRenderToken) return;
 
   const mkLabel = it => {
     const top = it.topText    !== undefined ? it.topText    : topText;
@@ -20794,60 +21063,153 @@ function _bcRenderPreview(items, config, topText = '', bottomText = '') {
     sheet.innerHTML = items.map(mkLabel).join('');
   }
 
-  modal.style.display = 'flex';
-
-  requestAnimationFrame(() => {
-    sheet.querySelectorAll('.bc-psvg').forEach(svg => {
+  // Draw barcodes in chunks so the window stays responsive. Each distinct code is
+  // generated once and cloned for its copies — copies share the same SKU.
+  const svgs  = [...sheet.querySelectorAll('.bc-psvg')];
+  const cache = new Map();
+  const CHUNK = 250;
+  _bcRenderTotal = svgs.length;
+  _bcPreviewReady(false, 0);
+  for (let i = 0; i < svgs.length; i += CHUNK) {
+    await _bcYield();
+    if (token !== _bcRenderToken) return; // closed or replaced by a newer preview
+    svgs.slice(i, i + CHUNK).forEach(svg => {
       const code = svg.dataset.code;
+      const hit  = cache.get(code);
+      if (hit) { svg.replaceWith(hit.cloneNode(true)); return; }
+      let out;
       if (!code) {
-        const fb = document.createElement('div');
-        fb.style.cssText = 'font-size:9px;text-align:center;color:#ef4444;padding:6px 0';
-        fb.textContent = 'No SKU';
-        svg.replaceWith(fb);
-        return;
+        out = document.createElement('div');
+        out.style.cssText = 'font-size:9px;text-align:center;color:#ef4444;padding:6px 0';
+        out.textContent = 'No SKU';
+        svg.replaceWith(out);
+      } else {
+        try {
+          JsBarcode(svg, code, { format: 'CODE128', width: 1.5, height: 48, displayValue: false, margin: 4 });
+          out = svg;
+        } catch (e) {
+          out = document.createElement('div');
+          out.style.cssText = 'font-size:9px;text-align:center;letter-spacing:2px;font-family:monospace;padding:6px 0';
+          out.textContent = code;
+          svg.replaceWith(out);
+        }
       }
-      try {
-        JsBarcode(svg, code, { format: 'CODE128', width: 1.5, height: 48, displayValue: false, margin: 4 });
-      } catch (e) {
-        const fb = document.createElement('div');
-        fb.style.cssText = 'font-size:9px;text-align:center;letter-spacing:2px;font-family:monospace;padding:6px 0';
-        fb.textContent = code;
-        svg.replaceWith(fb);
-      }
+      cache.set(code, out);
     });
-  });
+    _bcPreviewReady(false, Math.min(i + CHUNK, svgs.length));
+  }
+  if (token !== _bcRenderToken) return;
+  _bcPreviewReady(true);
 }
 
-$('#bc-prev-close')?.addEventListener('click', () => { $('#bc-preview-modal').style.display = 'none'; });
-$('#bc-prev-print')?.addEventListener('click', () => window.electronAPI.printReceipt());
+$('#bc-prev-close')?.addEventListener('click', () => {
+  _bcRenderToken++; // stop any in-progress render
+  $('#bc-preview-modal').style.display = 'none';
+});
+$('#bc-prev-print')?.addEventListener('click', () => {
+  _bcBusy($('#bc-prev-print'), 'Printing…', () => window.electronAPI.printReceipt(), () => _bcPreviewReady(true));
+});
+
+// Save the rendered sheet as an A4 PDF. Barcodes are already drawn as inline
+// SVG by JsBarcode, so the PDF renderer (JS disabled) needs only the markup + CSS.
+$('#bc-prev-pdf')?.addEventListener('click', () => {
+  const sheet = $('#bc-preview-sheet');
+  if (!sheet || !sheet.children.length) return;
+  _bcBusy($('#bc-prev-pdf'), 'Saving PDF…', () => _bcSavePdf(sheet), () => _bcPreviewReady(true));
+});
+
+async function _bcSavePdf(sheet) {
+  const startedAt = Date.now();
+  const total     = _bcRenderTotal;
+  let stage       = 'prepare';
+  const paint     = () => _bcPdfOverlay(stage, startedAt, total);
+  const printBtn  = $('#bc-prev-print');
+  if (printBtn) printBtn.disabled = true;
+  paint();
+  const timer = setInterval(paint, 1000);
+  const off   = window.electronAPI.onPdfProgress?.(s => { stage = s; paint(); });
+  try {
+    await _bcYield(); // let the overlay paint before serialising a big sheet
+    await _bcSavePdfRun(sheet);
+  } finally {
+    clearInterval(timer);
+    off?.();
+  }
+}
+
+async function _bcSavePdfRun(sheet) {
+  const css = `
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: 'Segoe UI', Arial, sans-serif; color: #000; background: #fff; }
+    .bc-preview-sheet { display: grid; gap: 10px; }
+    .bc-ps-a4 { display: block; }
+    .bc-a4-page { display: grid; gap: 10px; break-after: page; page-break-after: always; }
+    .bc-a4-page:last-child { break-after: auto; page-break-after: auto; }
+    .bc-page-sep { display: none; }
+    .bc-plabel { border: 1px dashed #bbb; padding: 6px 4px; display: flex; flex-direction: column; align-items: stretch;
+      justify-content: center; min-height: 80px; break-inside: avoid; page-break-inside: avoid; }
+    .bc-psvg { width: 100%; max-width: 100%; display: block; }
+    .bc-pname { font-size: 8pt; text-align: center; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .bc-psku { font-size: 7pt; color: #555; text-align: center; }
+    .bc-pprice { font-size: 8pt; font-weight: 700; text-align: center; }
+    .bc-ptoptext { font-size: 8pt; text-align: center; color: #555; margin-bottom: 4px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; font-weight: 600; }
+    .bc-pcustom { font-size: 8pt; text-align: center; color: #555; margin-top: 2px; border-top: 1px solid #e5e7eb; padding-top: 4px; }`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`;
+  const res = await window.electronAPI.saveHtmlPdf({ html, filename: `barcodes-${new Date().toISOString().slice(0, 10)}.pdf` });
+  if (res?.success) toast('Barcode PDF saved', 'success');
+  else if (!res?.canceled) toast(res?.error || 'Could not save PDF', 'error');
+}
 
 // ── Add to Print (modal footer) ───────────────────────────────────────────
 $('#bc-add-to-print')?.addEventListener('click', () => {
   if (!_bc.items.length) return;
+  _bcBusy($('#bc-add-to-print'), 'Adding to print…', _bcAddToPrint, _bcRefreshPreview);
+});
+
+function _bcAddToPrint() {
   const copies     = Math.max(1, Math.min(100, parseInt($('#bc-footer-copies')?.value) || 1));
   const topText    = ($('#bc-top-text')?.value    || '').trim();
   const bottomText = ($('#bc-custom-text')?.value || '').trim();
   const paper      = document.querySelector('input[name="bc-paper"]:checked')?.value || 'single';
   const customW    = parseInt($('#bc-custom-w')?.value) || 60;
   const customH    = parseInt($('#bc-custom-h')?.value) || 30;
-  const batchItems = _bc.items.map(it => ({ ...it, topText, bottomText }));
-  const allItems   = [];
-  for (let c = 0; c < copies; c++) allItems.push(...batchItems);
-  _bc.queue.push({
-    items: allItems,
-    topText, bottomText, paper, customW, customH,
-    productName: _bc.items[0]?.name || 'Labels',
-    labelCount: allItems.length,
+  // One queue entry per product/barcode, so the tab lists every product with its copy count
+  const groups = new Map();
+  _bc.items.forEach(it => {
+    const key = `${it.code}\u0000${it.name}\u0000${it.price || ''}`;
+    const g = groups.get(key);
+    if (g) g.count++; else groups.set(key, { item: { ...it, topText, bottomText }, count: 1 });
+  });
+  groups.forEach(({ item, count }) => {
+    const labelCount = count * copies;
+    const existing = _bc.queue.find(b =>
+      b.item && b.item.code === item.code && b.item.name === item.name && (b.item.price || '') === (item.price || '') &&
+      b.topText === topText && b.bottomText === bottomText && b.paper === paper &&
+      (paper !== 'custom' || (b.customW === customW && b.customH === customH)));
+    if (existing) {
+      _bcSetBatchCopies(existing, existing.labelCount + labelCount);
+    } else {
+      const batch = { item, topText, bottomText, paper, customW, customH, productName: item.name, items: [], labelCount: 0 };
+      _bcSetBatchCopies(batch, labelCount);
+      _bc.queue.push(batch);
+    }
   });
   $('#bc-main-modal').style.display = 'none';
   _bcRefreshTab();
-});
+  toast(`${groups.size} product${groups.size !== 1 ? 's' : ''} added to the print list`, 'success');
+}
+
+function _bcSetBatchCopies(batch, n) {
+  batch.labelCount = Math.max(1, Math.min(BC_MAX_LABELS, n));
+  batch.items      = Array.from({ length: batch.labelCount }, () => batch.item);
+}
 
 // ── Print All (tab header) ────────────────────────────────────────────────
 $('#bc-print-all-btn')?.addEventListener('click', () => {
   if (!_bc.queue.length) return;
-  const allItems = _bc.queue.flatMap(b => b.items);
-  _bcRenderPreview(allItems, _bcGetPrintConfig(), '', '');
+  _bcBusy($('#bc-print-all-btn'), 'Preparing…',
+    () => _bcRenderPreview(_bc.queue.flatMap(b => b.items), _bcGetPrintConfig(), '', ''),
+    _bcRefreshTab);
 });
 
 // ── Thermal printer settings (PSM Printer tab) ────────────────────────────
@@ -21053,23 +21415,37 @@ function _bcRefreshTab() {
   }
   content.innerHTML = _bc.queue.map((batch, i) => {
     const paperLabel = batch.paper === 'single' ? 'Single Row' : batch.paper === 'double' ? 'Double Row' : `${batch.customW}×${batch.customH} mm`;
+    const code  = batch.item?.code  || batch.items[0]?.code  || '';
+    const price = batch.item?.price || batch.items[0]?.price || '';
     return `<div class="bc-batch-card">
       <div class="bc-batch-card-icon"><i class="fa fa-barcode"></i></div>
       <div class="bc-batch-card-info">
         <div class="bc-batch-card-name">${escHtml(batch.productName)}</div>
         <div class="bc-batch-card-meta">
-          <span class="bc-label-badge">${batch.labelCount} label${batch.labelCount !== 1 ? 's' : ''}</span>
+          ${code  ? `<span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(code)}</span>` : ''}
+          ${price ? `<span class="bc-batch-meta-tag"><i class="fa fa-tag"></i> ${escHtml(String(price))}</span>` : ''}
           ${batch.topText    ? `<span class="bc-batch-meta-tag"><i class="fa fa-arrow-up"></i> ${escHtml(batch.topText)}</span>`    : ''}
           ${batch.bottomText ? `<span class="bc-batch-meta-tag"><i class="fa fa-arrow-down"></i> ${escHtml(batch.bottomText)}</span>` : ''}
           <span class="bc-batch-meta-paper"><i class="fa fa-ruler-combined"></i> ${escHtml(paperLabel)}</span>
         </div>
       </div>
       <div class="bc-batch-card-actions">
+        ${batch.item ? `<label class="bc-batch-copies">Copies
+          <input type="number" class="bc-batch-copies-inp" data-idx="${i}" value="${batch.labelCount}" min="1" max="${BC_MAX_LABELS}">
+        </label>` : `<span class="bc-label-badge">${batch.labelCount} label${batch.labelCount !== 1 ? 's' : ''}</span>`}
         <button class="bc-batch-print-btn" data-idx="${i}"><i class="fa fa-print"></i> Print</button>
         <button class="bc-batch-del-btn" data-idx="${i}"><i class="fa fa-trash"></i></button>
       </div>
     </div>`;
   }).join('');
+  content.querySelectorAll('.bc-batch-copies-inp').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const batch = _bc.queue[parseInt(inp.dataset.idx)];
+      if (!batch) return;
+      _bcSetBatchCopies(batch, parseInt(inp.value) || 1);
+      _bcRefreshTab();
+    });
+  });
   content.querySelectorAll('.bc-batch-del-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       _bc.queue.splice(parseInt(btn.dataset.idx), 1);
@@ -21079,7 +21455,7 @@ function _bcRefreshTab() {
   content.querySelectorAll('.bc-batch-print-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const batch = _bc.queue[parseInt(btn.dataset.idx)];
-      if (batch) _bcRenderPreview(batch.items, _bcGetPrintConfig(), batch.topText, batch.bottomText);
+      if (batch) _bcBusy(btn, 'Preparing…', () => _bcRenderPreview(batch.items, _bcGetPrintConfig(), batch.topText, batch.bottomText));
     });
   });
 }
