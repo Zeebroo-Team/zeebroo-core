@@ -20506,7 +20506,7 @@ $$('.brand-ft-btn').forEach(btn => {
 // ── End Product Brands ────────────────────────────────────────────────────
 
 // ── Barcode Sheets ────────────────────────────────────────────────────────
-const _bc      = { items: [], queue: [], searchTimer: null };
+const _bc      = { items: [], queue: [], selected: new Set(), searchTimer: null };
 const _bcPrint = { pageType: 'roll', rollCols: 1, a4Cols: 3, a4Rows: 8 };
 
 function _bcGetPrintConfig() {
@@ -20562,6 +20562,24 @@ function _bcPickQty(p) { return _bcPick.qty.get(p.id) ?? _bcPickDefaultQty(p); }
 function _bcPickPrice(p) {
   return p.unit_sell_price != null && p.unit_sell_price !== ''
     ? formatMoney(parseFloat(p.unit_sell_price), {currency: state.currency || ''}) : '';
+}
+// Labels for a picked product, split across its in-stock batches (FIFO) so each
+// label carries that batch's own barcode and price. Labels beyond the batch
+// stock (qty typed higher) fall back to the product SKU / price.
+function _bcPickItems(p, qty) {
+  const productCode  = p.sku || String(p.id);
+  const productPrice = _bcPickPrice(p);
+  const items = [];
+  for (const b of (p.batches || [])) {
+    if (items.length >= qty) break;
+    const code  = b.batch_sku || productCode;
+    const price = b.selling_unit_price != null
+      ? formatMoney(parseFloat(b.selling_unit_price), {currency: state.currency || ''}) : productPrice;
+    const n = Math.min(qty - items.length, Math.floor(parseFloat(b.quantity_remaining) || 0));
+    for (let i = 0; i < n; i++) items.push({ name: p.name, code, price });
+  }
+  while (items.length < qty) items.push({ name: p.name, code: productCode, price: productPrice });
+  return items;
 }
 
 $('#bc-product-search-inp')?.addEventListener('input', e => {
@@ -20744,11 +20762,9 @@ $('#bc-pick-add')?.addEventListener('click', () => {
   _bcBusy($('#bc-pick-add'), 'Adding…', () => {
     let added = 0;
     _bcPick.selected.forEach(p => {
-      const qty   = _bcPickQty(p);
-      const code  = p.sku || String(p.id);
-      const price = _bcPickPrice(p);
-      for (let i = 0; i < qty; i++) _bc.items.push({ name: p.name, code, price });
-      added += qty;
+      const items = _bcPickItems(p, _bcPickQty(p));
+      for (const it of items) _bc.items.push(it);
+      added += items.length;
     });
     const products = _bcPick.selected.size;
     _bcPick.selected.clear();
@@ -20950,15 +20966,19 @@ function _bcPreviewReady(ready, done = 0, total = _bcRenderTotal) {
     b.style.display = ready ? '' : 'none';
     if (!b.dataset.busy) b.disabled = !ready;
   });
+  _bcPartNavLock(!ready);
   const overlay = $('#bc-prev-rendering');
   if (overlay) overlay.style.display = ready ? 'none' : '';
   const prog = $('#bc-prev-progress');
+  const multi = _bcJob && _bcJob.parts.length > 1;
+  const partTag = multi ? `Part ${_bcJob.part + 1} of ${_bcJob.parts.length}` : '';
   if (ready) {
-    if (prog) prog.textContent = total ? `${total.toLocaleString()} label${total !== 1 ? 's' : ''} ready` : '';
+    if (prog) prog.textContent = total ? `${partTag ? partTag + ' · ' : ''}${total.toLocaleString()} label${total !== 1 ? 's' : ''} ready` : '';
     return;
   }
   const pct  = total ? Math.floor(done / total * 100) : 0;
-  _bcOverlayMode('fa-barcode', 'Rendering barcodes…', 'Print and Save PDF will be available when rendering finishes');
+  _bcOverlayMode('fa-barcode', multi ? `Rendering ${partTag.toLowerCase()}…` : 'Rendering barcodes…',
+    'Print and Save PDF will be available when rendering finishes');
   const fill = $('#bc-prev-rendering-fill');
   const txt  = $('#bc-prev-rendering-text');
   if (fill) fill.style.width = `${pct}%`;
@@ -21011,10 +21031,85 @@ function _bcPdfOverlay(stage, startedAt, total) {
   if (overlay) overlay.style.display = '';
 }
 
+// ── Large jobs ────────────────────────────────────────────────────────────
+// Rendering / printing tens of thousands of labels at once freezes the app and
+// can crash the print spooler or PDF engine. Jobs above BC_PART_LABELS are split
+// into parts; only the selected part is drawn, and Print / Save PDF act on it.
+const BC_PART_LABELS = 1000;
+let _bcJob = null; // { items, cfg, topText, bottomText, parts: [[start, end]], part, done: Set }
+
+function _bcSplitParts(n, cfg) {
+  let size = BC_PART_LABELS;
+  // A4: keep whole pages in each part so no page is left half-filled mid-job
+  if (cfg.pageType === 'a4' && cfg.rowsPerPage) {
+    const perPage = (cfg.cols || 3) * cfg.rowsPerPage;
+    size = Math.max(perPage, Math.floor(size / perPage) * perPage);
+  }
+  const parts = [];
+  for (let i = 0; i < n; i += size) parts.push([i, Math.min(i + size, n)]);
+  return parts.length ? parts : [[0, 0]];
+}
+
+function _bcPartNavSync() {
+  const bar = $('#bc-prev-parts');
+  if (!bar) return;
+  const job = _bcJob;
+  if (!job || job.parts.length < 2) { bar.style.display = 'none'; return; }
+  bar.style.display = '';
+  const total = job.items.length;
+  const msg = $('#bc-prev-parts-msg');
+  if (msg) msg.textContent = `Large job: ${total.toLocaleString()} labels split into ${job.parts.length} parts of up to ` +
+    `${(job.parts[0][1] - job.parts[0][0]).toLocaleString()} — print or save each part separately (${job.done.size} of ${job.parts.length} done)`;
+  const sel = $('#bc-prev-part-sel');
+  if (sel) {
+    sel.innerHTML = job.parts.map(([a, b], i) =>
+      `<option value="${i}"${i === job.part ? ' selected' : ''}>${job.done.has(i) ? '✓ ' : ''}Part ${i + 1} of ${job.parts.length} · labels ${(a + 1).toLocaleString()}–${b.toLocaleString()}</option>`).join('');
+  }
+  _bcPartNavLock(false);
+}
+
+function _bcPartNavLock(locked) {
+  const job = _bcJob;
+  const sel = $('#bc-prev-part-sel'), prev = $('#bc-prev-part-prev'), next = $('#bc-prev-part-next');
+  if (sel)  sel.disabled  = locked;
+  if (prev) prev.disabled = locked || !job || job.part <= 0;
+  if (next) next.disabled = locked || !job || job.part >= job.parts.length - 1;
+}
+
+function _bcGoPart(idx) {
+  const job = _bcJob;
+  if (!job || idx < 0 || idx >= job.parts.length || idx === job.part) return;
+  job.part = idx;
+  _bcRenderPart();
+}
+
+function _bcMarkPartDone() {
+  if (!_bcJob) return;
+  _bcJob.done.add(_bcJob.part);
+  _bcPartNavSync();
+}
+
+$('#bc-prev-part-sel')?.addEventListener('change', e => _bcGoPart(parseInt(e.target.value)));
+$('#bc-prev-part-prev')?.addEventListener('click', () => _bcJob && _bcGoPart(_bcJob.part - 1));
+$('#bc-prev-part-next')?.addEventListener('click', () => _bcJob && _bcGoPart(_bcJob.part + 1));
+
 async function _bcRenderPreview(items, config, topText = '', bottomText = '') {
   // accept both legacy numeric cols arg and new config object
   const cfg = typeof config === 'number' ? { pageType: 'roll', cols: config } : (config || {});
+  _bcJob = { items, cfg, topText, bottomText, parts: _bcSplitParts(items.length, cfg), part: 0, done: new Set() };
+  if (_bcJob.parts.length > 1) {
+    toast(`${items.length.toLocaleString()} labels — split into ${_bcJob.parts.length} parts to keep the system stable`, 'warning');
+  }
+  return _bcRenderPart();
+}
+
+async function _bcRenderPart() {
+  const job = _bcJob;
+  if (!job) return;
+  const { cfg, topText, bottomText } = job;
   const { pageType = 'roll', cols = 3, rowsPerPage = null } = cfg;
+  const [from, to] = job.parts[job.part];
+  const items = job.items.slice(from, to);
 
   const sheet = $('#bc-preview-sheet');
   const modal = $('#bc-preview-modal');
@@ -21023,8 +21118,11 @@ async function _bcRenderPreview(items, config, topText = '', bottomText = '') {
   // Open with the rendering overlay first, so building the markup for a big
   // sheet happens behind it instead of before anything is visible.
   const token = ++_bcRenderToken;
+  _bcPartNavSync();
   _bcRenderTotal = items.length;
   sheet.innerHTML = '';
+  const body = sheet.closest('.bc-preview-body');
+  if (body) body.scrollTop = 0;
   _bcPreviewReady(false, 0);
   modal.style.display = 'flex';
   await _bcYield();
@@ -21104,10 +21202,17 @@ async function _bcRenderPreview(items, config, topText = '', bottomText = '') {
 
 $('#bc-prev-close')?.addEventListener('click', () => {
   _bcRenderToken++; // stop any in-progress render
+  _bcJob = null;
+  $('#bc-preview-sheet').innerHTML = ''; // free the DOM of a large sheet
   $('#bc-preview-modal').style.display = 'none';
 });
 $('#bc-prev-print')?.addEventListener('click', () => {
-  _bcBusy($('#bc-prev-print'), 'Printing…', () => window.electronAPI.printReceipt(), () => _bcPreviewReady(true));
+  _bcPartNavLock(true);
+  _bcBusy($('#bc-prev-print'), 'Printing…', async () => {
+    const res = await window.electronAPI.printReceipt();
+    if (res?.success) _bcMarkPartDone();
+    return res;
+  }, () => _bcPreviewReady(true));
 });
 
 // Save the rendered sheet as an A4 PDF. Barcodes are already drawn as inline
@@ -21125,6 +21230,7 @@ async function _bcSavePdf(sheet) {
   const paint     = () => _bcPdfOverlay(stage, startedAt, total);
   const printBtn  = $('#bc-prev-print');
   if (printBtn) printBtn.disabled = true;
+  _bcPartNavLock(true);
   paint();
   const timer = setInterval(paint, 1000);
   const off   = window.electronAPI.onPdfProgress?.(s => { stage = s; paint(); });
@@ -21155,8 +21261,14 @@ async function _bcSavePdfRun(sheet) {
     .bc-ptoptext { font-size: 8pt; text-align: center; color: #555; margin-bottom: 4px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; font-weight: 600; }
     .bc-pcustom { font-size: 8pt; text-align: center; color: #555; margin-top: 2px; border-top: 1px solid #e5e7eb; padding-top: 4px; }`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><style>${css}</style></head><body>${sheet.outerHTML}</body></html>`;
-  const res = await window.electronAPI.saveHtmlPdf({ html, filename: `barcodes-${new Date().toISOString().slice(0, 10)}.pdf` });
-  if (res?.success) toast('Barcode PDF saved', 'success');
+  const multi = _bcJob && _bcJob.parts.length > 1;
+  const pad   = n => String(n).padStart(String(_bcJob.parts.length).length, '0');
+  const part  = multi ? `-part-${pad(_bcJob.part + 1)}-of-${_bcJob.parts.length}` : '';
+  const res = await window.electronAPI.saveHtmlPdf({ html, filename: `barcodes-${new Date().toISOString().slice(0, 10)}${part}.pdf` });
+  if (res?.success) {
+    _bcMarkPartDone();
+    toast(multi ? `Part ${_bcJob.part + 1} of ${_bcJob.parts.length} saved as PDF` : 'Barcode PDF saved', 'success');
+  }
   else if (!res?.canceled) toast(res?.error || 'Could not save PDF', 'error');
 }
 
@@ -21210,6 +21322,44 @@ $('#bc-print-all-btn')?.addEventListener('click', () => {
   _bcBusy($('#bc-print-all-btn'), 'Preparing…',
     () => _bcRenderPreview(_bc.queue.flatMap(b => b.items), _bcGetPrintConfig(), '', ''),
     _bcRefreshTab);
+});
+
+// ── Bulk clear / remove selected (tab header + selection bar) ─────────────
+$('#bc-clear-all-btn')?.addEventListener('click', async () => {
+  if (!_bc.queue.length) return;
+  const ok = await appConfirm({
+    title: 'Clear print list?',
+    message: `Remove all ${_bc.queue.length} product${_bc.queue.length !== 1 ? 's' : ''} from the print list?`,
+    confirmText: '<i class="fa fa-broom"></i> Clear All',
+    icon: 'fa-broom', danger: true,
+  });
+  if (!ok) return;
+  _bc.queue.length = 0;
+  _bc.selected.clear();
+  _bcRefreshTab();
+  toast('Print list cleared', 'success');
+});
+
+$('#bc-sel-all')?.addEventListener('change', e => {
+  _bc.selected.clear();
+  if (e.target.checked) _bc.queue.forEach(b => _bc.selected.add(b));
+  _bcRefreshTab();
+});
+
+$('#bc-sel-remove')?.addEventListener('click', async () => {
+  const n = _bc.selected.size;
+  if (!n) return;
+  const ok = await appConfirm({
+    title: 'Remove selected?',
+    message: `Remove ${n} selected product${n !== 1 ? 's' : ''} from the print list?`,
+    confirmText: '<i class="fa fa-trash"></i> Remove',
+    icon: 'fa-trash', danger: true,
+  });
+  if (!ok) return;
+  _bc.queue = _bc.queue.filter(b => !_bc.selected.has(b));
+  _bc.selected.clear();
+  _bcRefreshTab();
+  toast(`${n} product${n !== 1 ? 's' : ''} removed`, 'success');
 });
 
 // ── Thermal printer settings (PSM Printer tab) ────────────────────────────
@@ -21390,6 +21540,22 @@ function _bcRefreshTab() {
   const estPages       = totalLabels ? Math.ceil(totalLabels / labelsPerPage) : 0;
   if (countEl) countEl.innerHTML = totalLabels ? `<span class="bc-label-badge">${totalLabels}</span>` : '';
   if (printAll) printAll.disabled = !batchCount;
+  const clearAll = $('#bc-clear-all-btn');
+  if (clearAll) clearAll.disabled = !batchCount;
+  // drop selections for batches no longer in the queue
+  _bc.selected.forEach(b => { if (!_bc.queue.includes(b)) _bc.selected.delete(b); });
+  const selCount = _bc.selected.size;
+  const selBar   = $('#bc-sel-bar');
+  const selAll   = $('#bc-sel-all');
+  if (selBar) selBar.style.display = batchCount ? '' : 'none';
+  if (selAll) {
+    selAll.checked       = batchCount > 0 && selCount === batchCount;
+    selAll.indeterminate = selCount > 0 && selCount < batchCount;
+  }
+  const selCountEl = $('#bc-sel-count');
+  if (selCountEl) selCountEl.textContent = selCount ? `${selCount} of ${batchCount} selected` : '';
+  const selRemove = $('#bc-sel-remove');
+  if (selRemove) selRemove.disabled = !selCount;
   // footer stats
   const tfBatches  = $('#bc-tf-batches');
   const tfLabels   = $('#bc-tf-labels');
@@ -21417,7 +21583,9 @@ function _bcRefreshTab() {
     const paperLabel = batch.paper === 'single' ? 'Single Row' : batch.paper === 'double' ? 'Double Row' : `${batch.customW}×${batch.customH} mm`;
     const code  = batch.item?.code  || batch.items[0]?.code  || '';
     const price = batch.item?.price || batch.items[0]?.price || '';
-    return `<div class="bc-batch-card">
+    const sel   = _bc.selected.has(batch);
+    return `<div class="bc-batch-card${sel ? ' bc-batch-selected' : ''}">
+      <input type="checkbox" class="bc-batch-chk" data-idx="${i}"${sel ? ' checked' : ''} title="Select">
       <div class="bc-batch-card-icon"><i class="fa fa-barcode"></i></div>
       <div class="bc-batch-card-info">
         <div class="bc-batch-card-name">${escHtml(batch.productName)}</div>
@@ -21443,6 +21611,14 @@ function _bcRefreshTab() {
       const batch = _bc.queue[parseInt(inp.dataset.idx)];
       if (!batch) return;
       _bcSetBatchCopies(batch, parseInt(inp.value) || 1);
+      _bcRefreshTab();
+    });
+  });
+  content.querySelectorAll('.bc-batch-chk').forEach(chk => {
+    chk.addEventListener('change', () => {
+      const batch = _bc.queue[parseInt(chk.dataset.idx)];
+      if (!batch) return;
+      if (chk.checked) _bc.selected.add(batch); else _bc.selected.delete(batch);
       _bcRefreshTab();
     });
   });

@@ -747,6 +747,15 @@
 .bc-batch-card-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .bc-batch-meta-tag { font-size: 10.5px; color: var(--muted); background: var(--surface2); padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .bc-batch-card-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.bc-batch-card.bc-batch-selected { border-color: var(--accent); background: var(--accent-light); }
+.bc-batch-chk, .bc-sel-all input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+
+/* Selection bar above the print queue */
+.bc-sel-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.bc-sel-all { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); cursor: pointer; user-select: none; }
+.bc-sel-count { font-size: 12px; color: var(--muted); }
+.bc-sel-bar #bcm-sel-remove { margin-left: auto; }
+.bc-danger-btn:not(:disabled):hover { color: #dc2626; border-color: #dc2626; }
 
 /* ── Generate Barcode builder overlay (layered above the Barcodes dialog,
    same pattern as .qf-picker-backdrop in js/stock.js) ──────────────────── */
@@ -799,7 +808,8 @@
 .bc-plabel .bc-pname { font-size: 11px; font-weight: 700; color: var(--text); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bc-plabel .bc-psku { font-size: 9.5px; font-family: monospace; color: var(--muted); }
 .bc-plabel .bc-pprice { font-size: 11px; font-weight: 800; color: var(--accent); }
-.bc-plabel svg { width: 100%; display: block; }
+.bc-plabel svg { width: 100%; display: block; flex-shrink: 0; }
+.bc-plabel > * { flex-shrink: 0; }
 
 /* Stock layers popup — opens above the builder overlay (one z-index layer
    higher), mirrors .bc-builder-backdrop's shell */
@@ -857,6 +867,19 @@
 .bc-job-backdrop { position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(20, 22, 34, .55); }
 .bc-job-card { width: 100%; max-width: 440px; display: flex; flex-direction: column; background: #fff; border-radius: 16px; box-shadow: 0 30px 70px rgba(20, 24, 40, .3); overflow: hidden; color: var(--text); }
 .bc-job-body { padding: 26px 26px 20px; text-align: center; }
+.bc-job-card.bc-job-card-wide { max-width: 640px; }
+.bc-job-preview { margin-top: 16px; text-align: left; }
+.bc-job-preview-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.bc-job-preview-note { margin-left: auto; font-weight: 600; }
+.bc-job-preview-frame { display: block; width: 100%; height: 300px; border: 1px solid var(--border); border-radius: 10px; background: #eef0f5; }
+/* Large-job part navigator */
+.bc-job-parts { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: #fef3c7; color: #92400e; border-bottom: 1px solid #fcd34d; font-size: 12px; }
+.bc-job-parts-msg { display: flex; align-items: flex-start; gap: 8px; font-weight: 700; line-height: 1.4; }
+.bc-job-parts-msg i { margin-top: 2px; }
+.bc-job-parts-nav { display: flex; align-items: center; gap: 6px; }
+.bc-job-parts-nav .salm-btn-ghost { padding: 6px 10px; }
+.bc-job-parts-nav button:disabled, .bc-job-part-sel:disabled { opacity: .55; cursor: not-allowed; }
+.bc-job-part-sel { flex: 1; min-width: 0; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--text); font-size: 12px; font-weight: 600; }
 .bc-job-ico { font-size: 32px; color: var(--accent); }
 .bc-job-ico.bc-ok { color: var(--success, #16a34a); }
 .bc-job-ico.bc-pulse { animation: bc-pulse 1.2s ease-in-out infinite; }
