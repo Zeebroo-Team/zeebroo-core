@@ -20559,6 +20559,7 @@ function _bcPickDefaultQty(p) {
   return Math.max(1, Math.min(BC_MAX_LABELS, Math.floor(parseFloat(p.stock_quantity) || 0)));
 }
 function _bcPickQty(p) { return _bcPick.qty.get(p.id) ?? _bcPickDefaultQty(p); }
+function _bcHasCode(p) { return !!(p.sku && String(p.sku).trim()); }
 function _bcPickPrice(p) {
   return p.unit_sell_price != null && p.unit_sell_price !== ''
     ? formatMoney(parseFloat(p.unit_sell_price), {currency: state.currency || ''}) : '';
@@ -20622,7 +20623,7 @@ function _bcPickRowHtml(p) {
     <div class="bc-pick-info">
       <div class="bc-pick-name">${escHtml(p.name)}</div>
       <div class="bc-pick-meta">
-        ${p.sku ? `<span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(p.sku)}</span>` : '<span style="opacity:.5">No SKU</span>'}
+        ${_bcHasCode(p) ? `<span class="bc-batch-sku-chip"><i class="fa fa-barcode"></i> ${escHtml(p.sku)}</span>` : '<span class="bc-nocode-chip" title="This product has no barcode yet"><i class="fa fa-triangle-exclamation"></i> No barcode</span>'}
         <span>Stock: ${stock % 1 === 0 ? stock : stock.toFixed(2)}</span>
       </div>
     </div>
@@ -20670,10 +20671,12 @@ function _bcPickSyncToolbar() {
     allChk.indeterminate = inView > 0 && inView < shown;
     allChk.disabled      = !shown;
   }
-  const labels  = n ? [..._bcPick.selected.values()].reduce((s, p) => s + _bcPickQty(p), 0) : 0;
+  let labels = 0, noCode = 0;
+  _bcPick.selected.forEach(p => { labels += _bcPickQty(p); if (!_bcHasCode(p)) noCode++; });
   const countEl = $('#bc-pick-count');
-  if (countEl) countEl.textContent = n
+  if (countEl) countEl.innerHTML = n
     ? `${n} of ${shown} selected · ${labels} label${labels !== 1 ? 's' : ''}`
+      + (noCode ? ` · <span class="bc-pick-nocode">${noCode} without barcode</span>` : '')
     : (shown ? `${shown} product${shown !== 1 ? 's' : ''}` : '');
   const addBtn = $('#bc-pick-add');
   if (addBtn) {
@@ -20755,25 +20758,103 @@ async function _bcBusy(btn, label, fn, after) {
   }
 }
 
-$('#bc-pick-add')?.addEventListener('click', () => {
+$('#bc-pick-add')?.addEventListener('click', async () => {
   if (!_bcPick.selected.size) return;
-  const total = [..._bcPick.selected.values()].reduce((s, p) => s + _bcPickQty(p), 0);
+  let picked = [..._bcPick.selected.values()];
+
+  // Products without a barcode: ask whether to generate one or leave them out
+  const missing = picked.filter(p => !_bcHasCode(p));
+  if (missing.length) {
+    const choice = await _bcAskMissing(missing, picked.length);
+    if (!choice) return;
+    if (choice === 'skip') picked = picked.filter(p => _bcHasCode(p));
+    if (!picked.length) return;
+  }
+
+  const total = picked.reduce((s, p) => s + _bcPickQty(p), 0);
   if (total > 2000 && !confirm(`This will add ${total.toLocaleString()} labels (label count follows stock). Large sheets can take a while to render. Continue?`)) return;
   _bcBusy($('#bc-pick-add'), 'Adding…', () => {
     let added = 0;
-    _bcPick.selected.forEach(p => {
+    picked.forEach(p => {
       const items = _bcPickItems(p, _bcPickQty(p));
       for (const it of items) _bc.items.push(it);
       added += items.length;
     });
-    const products = _bcPick.selected.size;
+    const skipped = _bcPick.selected.size - picked.length;
     _bcPick.selected.clear();
     _bcPick.qty.clear();
     _bcPickRender();
     _bcRefreshPreview();
     _bcSetView('preview');
-    toast(`${added.toLocaleString()} label${added !== 1 ? 's' : ''} added from ${products} product${products !== 1 ? 's' : ''}`, 'success');
+    toast(`${added.toLocaleString()} label${added !== 1 ? 's' : ''} added from ${picked.length} product${picked.length !== 1 ? 's' : ''}`
+      + (skipped ? ` · ${skipped} skipped (no barcode)` : ''), 'success');
   }, _bcPickSyncToolbar);
+});
+
+// ── Missing-barcode prompt ────────────────────────────────────────────────
+// Resolves 'generate' (SKUs created + saved, products updated in place),
+// 'skip' (leave those products out) or null (cancelled).
+const BC_SKU_CHUNK = 500; // server accepts at most 500 ids per request
+let _bcMissingResolve = null;
+
+function _bcAskMissing(missing, pickedCount) {
+  const n = missing.length;
+  const all = n === pickedCount;
+  $('#bc-missing-title').textContent = `${n} product${n !== 1 ? 's' : ''} without a barcode`;
+  $('#bc-missing-msg').textContent = all
+    ? `None of the selected products have a barcode yet. Generate barcodes for them before printing?`
+    : `${n} of the ${pickedCount} selected products have no barcode yet. What would you like to do with them?`;
+  const shown = missing.slice(0, 50);
+  $('#bc-missing-list').innerHTML = shown.map(p => `<div class="bc-missing-row">
+      <span class="bc-missing-name">${escHtml(p.name)}</span>
+      <span class="bc-missing-qty">${_bcPickQty(p)} label${_bcPickQty(p) !== 1 ? 's' : ''}</span>
+    </div>`).join('')
+    + (n > shown.length ? `<div class="bc-missing-more">…and ${(n - shown.length).toLocaleString()} more</div>` : '');
+  const skipBtn = $('#bc-missing-skip');
+  skipBtn.style.display = all ? 'none' : '';
+  skipBtn.querySelector('span').textContent = `Skip these, add ${pickedCount - n}`;
+  $('#bc-missing-generate').querySelector('span').textContent = `Generate & save ${n} barcode${n !== 1 ? 's' : ''}`;
+  $('#bc-missing-modal').dataset.ids = JSON.stringify(missing.map(p => p.id));
+  $('#bc-missing-modal').style.display = 'flex';
+  return new Promise(resolve => { _bcMissingResolve = resolve; });
+}
+
+function _bcCloseMissing(result) {
+  $('#bc-missing-modal').style.display = 'none';
+  const resolve = _bcMissingResolve;
+  _bcMissingResolve = null;
+  resolve?.(result);
+}
+
+async function _bcGenerateMissingSkus(ids) {
+  for (let i = 0; i < ids.length; i += BC_SKU_CHUNK) {
+    const res = await API.barcodeGenerateSkus(ids.slice(i, i + BC_SKU_CHUNK));
+    if (res.status !== 200) {
+      throw new Error(res.body?.message || 'Failed to generate barcodes');
+    }
+    // Patch the cached catalog so labels and rows pick up the new SKU
+    for (const row of (res.body?.data ?? [])) {
+      const p = _bcPick.all.find(x => x.id === row.id);
+      if (p) p.sku = row.sku;
+    }
+  }
+}
+
+$('#bc-missing-close')?.addEventListener('click',  () => { if (!$('#bc-missing-generate').dataset.busy) _bcCloseMissing(null); });
+$('#bc-missing-cancel')?.addEventListener('click', () => { if (!$('#bc-missing-generate').dataset.busy) _bcCloseMissing(null); });
+$('#bc-missing-skip')?.addEventListener('click',   () => { if (!$('#bc-missing-generate').dataset.busy) _bcCloseMissing('skip'); });
+$('#bc-missing-generate')?.addEventListener('click', () => {
+  const ids = JSON.parse($('#bc-missing-modal').dataset.ids || '[]');
+  let ok = false;
+  _bcBusy($('#bc-missing-generate'), 'Generating…', async () => {
+    try {
+      await _bcGenerateMissingSkus(ids);
+      ok = true;
+      toast(`${ids.length} barcode${ids.length !== 1 ? 's' : ''} generated and saved`, 'success');
+    } catch (err) {
+      toast(err.message, 'error'); // dialog stays open so the user can retry or skip
+    }
+  }, () => { if (ok) _bcCloseMissing('generate'); });
 });
 
 // ── Secondary stock popup ─────────────────────────────────────────────────

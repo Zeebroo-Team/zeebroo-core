@@ -13291,7 +13291,7 @@ body.dark .pc-modal-head {
 
 /* Primary "Generate Barcode" modal */
 .bc-main-box {
-  width: 860px; max-width: 96vw; max-height: 88vh;
+  width: 1280px; max-width: 96vw; height: 92vh; max-height: 92vh;
   background: var(--surface); border-radius: var(--radius-sm);
   box-shadow: 0 20px 60px rgba(0,0,0,.35);
   display: flex; flex-direction: column; overflow: hidden;
@@ -13409,6 +13409,52 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
   background: var(--surface); color: var(--text-muted); cursor: pointer;
 }
 .bc-pick-layers:hover { color: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); }
+.bc-nocode-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 10px;
+  background: rgba(245,158,11,.12); color: #b45309;
+  font-size: 10.5px; font-weight: 600;
+}
+body.dark .bc-nocode-chip { color: #fbbf24; }
+.bc-pick-nocode { color: #b45309; font-weight: 600; }
+body.dark .bc-pick-nocode { color: #fbbf24; }
+
+/* Missing-barcode prompt */
+.bc-missing-box { width: 520px; max-width: 94vw; display: flex; flex-direction: column; max-height: 80vh; }
+.bc-missing-body { padding: 16px 20px; overflow-y: auto; min-height: 0; }
+.bc-missing-msg { margin: 0 0 12px; font-size: 13px; color: var(--text); line-height: 1.5; }
+.bc-missing-list {
+  max-height: 240px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface2);
+}
+.bc-missing-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 12px; border-bottom: 1px solid var(--border); font-size: 12.5px;
+}
+.bc-missing-row:last-child { border-bottom: none; }
+.bc-missing-name { color: var(--text); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bc-missing-qty  { color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+.bc-missing-more { padding: 7px 12px; font-size: 12px; color: var(--text-muted); font-style: italic; }
+.bc-missing-hint {
+  display: flex; gap: 8px; align-items: flex-start; margin-top: 12px;
+  padding: 9px 12px; border-radius: 6px;
+  background: rgba(59,130,246,.08); color: var(--text-muted); font-size: 12px; line-height: 1.45;
+}
+.bc-missing-hint i { color: var(--accent, #3b82f6); margin-top: 2px; }
+.bc-missing-footer {
+  display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap;
+  padding: 12px 20px; border-top: 1px solid var(--border);
+}
+.bc-missing-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  font-size: 12.5px; font-weight: 600;
+}
+.bc-missing-btn:hover { background: var(--surface2); }
+.bc-missing-btn.primary { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }
+.bc-missing-btn.primary:hover { opacity: .9; background: var(--accent, #3b82f6); }
+.bc-missing-btn:disabled { opacity: .6; cursor: default; }
 .bc-batch-copies {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 12px; font-weight: 600; color: var(--text-muted);
@@ -13444,7 +13490,7 @@ body.dark .bc-main-preview-body { background: #1a1a1a; }
 
 /* Right options panel */
 .bc-options-panel {
-  width: 220px; flex-shrink: 0; border-left: 1px solid var(--border);
+  width: 280px; flex-shrink: 0; border-left: 1px solid var(--border);
   overflow-y: auto; background: var(--surface);
 }
 .bc-opt-section {

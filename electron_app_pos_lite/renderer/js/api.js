@@ -63,6 +63,8 @@ const API = (() => {
     },
     // Barcode Generator picker — every sellable product (name, SKU, stock, label price), unpaginated
     barcodeProducts: () => request('GET', '/online/barcodes/products'),
+    // Give products without a barcode a generated SKU (saved on the product); max 500 ids per call
+    barcodeGenerateSkus: (ids) => request('POST', '/online/barcodes/generate-skus', { product_ids: ids }),
     // Exact product SKU or batch SKU (barcode scan)
     productBySku: (sku) => request('GET', `/online/products/sku/${encodeURIComponent(sku)}`),
     posCategories: () => request('GET', '/online/categories'),
