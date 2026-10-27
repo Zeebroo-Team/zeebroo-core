@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Services\PosProductExportService;
 use Modules\Pos\Services\PosProductQuickCreateService;
 use Modules\Pos\Services\PosSettingsService;
 use Modules\Product\Models\Product;
@@ -24,6 +25,7 @@ class PosProductApiController extends Controller
         private readonly ProductService $productService,
         private readonly ProductStockLayerService $stockLayers,
         private readonly PosSettingsService $posSettings,
+        private readonly PosProductExportService $exporter,
     ) {
     }
 
@@ -323,6 +325,46 @@ class PosProductApiController extends Controller
         $this->productService->delete($product);
 
         return response()->json(['message' => 'Product deleted.']);
+    }
+
+    /**
+     * Inventory → Export Products: paged, full-detail product rows for CSV / PDF export.
+     * Same filters as the inventory list, plus `ids[]` to export a hand-picked set.
+     */
+    public function export(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $data = $request->validate([
+            'q'            => ['nullable', 'string', 'max:255'],
+            'category'     => ['nullable', 'integer', 'min:0'],
+            'brand_id'     => ['nullable', 'integer', 'min:0'],
+            'stock_status' => ['nullable', 'in:in_stock,low_stock,out_of_stock'],
+            'sort'         => ['nullable', 'in:name_asc,name_desc,price_asc,price_desc,stock_asc,stock_desc'],
+            'ids'          => ['nullable', 'array', 'max:'.PosProductExportService::MAX_PER_PAGE],
+            'ids.*'        => ['integer'],
+            'page'         => ['nullable', 'integer', 'min:1'],
+            'per_page'     => ['nullable', 'integer', 'min:1', 'max:'.PosProductExportService::MAX_PER_PAGE],
+        ]);
+
+        $branchId = $request->query('branch') ?? $request->header('X-Branch-Id');
+
+        $result = $this->exporter->rows(
+            $business,
+            [
+                'q'            => $data['q'] ?? null,
+                'category_id'  => $data['category'] ?? null,
+                'brand_id'     => $data['brand_id'] ?? null,
+                'stock_status' => $data['stock_status'] ?? null,
+                'sort'         => $data['sort'] ?? 'name_asc',
+                'ids'          => $data['ids'] ?? [],
+            ],
+            (int) ($data['page'] ?? 1),
+            (int) ($data['per_page'] ?? 500),
+            is_numeric($branchId) ? (int) $branchId : null,
+        );
+
+        return response()->json($result);
     }
 
     public function import(Request $request): JsonResponse

@@ -18525,6 +18525,72 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 }
 .csv-sample-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+/* ── Export Products modal ── */
+.pex-card { width: min(980px, 94vw); height: min(680px, 88vh); }
+.pex-body {
+  flex: 1; min-height: 0; display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+}
+.pex-pane { display: flex; flex-direction: column; min-height: 0; padding: 16px 20px; gap: 10px; }
+.pex-columns { border-left: 1px solid var(--border); background: var(--surface2); }
+.pex-pane-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pex-pane-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.pex-filter-note { font-size: 11.5px; color: var(--text-muted); }
+.pex-search-wrap { position: relative; }
+.pex-search-wrap i { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 12px; }
+.pex-search-wrap input {
+  width: 100%; padding: 8px 10px 8px 32px; border: 1.5px solid var(--border);
+  border-radius: var(--radius-xs); background: var(--surface); color: var(--text); font-size: 13px;
+}
+.pex-search-wrap input:focus { outline: none; border-color: var(--accent); }
+.pex-list-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px; }
+.pex-check-label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer; }
+.pex-selected-count { font-size: 12px; font-weight: 600; color: var(--accent); }
+.pex-list {
+  flex: 1; min-height: 0; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.pex-row {
+  display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  padding: 7px 12px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 12.5px;
+}
+.pex-row:last-child { border-bottom: none; }
+.pex-row:hover { background: var(--surface2); }
+.pex-row-name { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pex-row-sku { color: var(--text-muted); font-size: 11px; font-weight: 400; margin-left: 6px; }
+.pex-row-stock { color: var(--text-muted); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pex-row-stock.out { color: #e74c3c; }
+.pex-row-stock.low { color: #e67e22; }
+.pex-list-msg { padding: 40px 16px; text-align: center; color: var(--text-muted); font-size: 13px; }
+.pex-list-more { padding: 10px; text-align: center; font-size: 11.5px; color: var(--text-muted); }
+.pex-col-actions { display: flex; gap: 4px; }
+.pex-link-btn {
+  border: none; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600;
+  cursor: pointer; padding: 2px 6px; border-radius: 4px;
+}
+.pex-link-btn:hover { background: var(--surface); }
+.pex-col-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.pex-col-item {
+  display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: var(--radius-xs);
+  font-size: 12.5px; color: var(--text); cursor: pointer;
+}
+.pex-col-item:hover { background: var(--surface); }
+.pex-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 14px 20px; border-top: 1px solid var(--border); flex-shrink: 0;
+}
+.pex-format { display: flex; align-items: center; gap: 14px; }
+.pex-format-label { font-size: 13px; font-weight: 700; color: var(--text); }
+.pex-format-opt { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.pex-format-opt i { color: var(--text-muted); }
+.pex-footer-actions { display: flex; gap: 8px; }
+#pex-export-btn:disabled { opacity: .5; cursor: not-allowed; }
+@media (max-width: 760px) {
+  .pex-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .pex-columns { border-left: none; border-top: 1px solid var(--border); }
+  .pex-list { min-height: 220px; }
+}
+
 /* Branch selection step */
 .csv-branch-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .csv-branch-title { font-size: 14px; font-weight: 600; color: var(--text); }

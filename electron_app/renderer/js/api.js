@@ -87,6 +87,16 @@ const API = (() => {
     checkout:     (body)              => request('POST', '/online/checkout', body),
     createProduct: (body)              => request('POST',   '/online/products', body),
     importProducts:(rows, branchIds = []) => request('POST', '/online/products/import', { rows, branch_ids: branchIds }),
+    exportProducts:(filters = {}, page = 1, perPage = 1000, ids = []) => {
+      const p = new URLSearchParams({ page, per_page: perPage });
+      if (filters.q)           p.set('q',            filters.q);
+      if (filters.catId)       p.set('category',     filters.catId);
+      if (filters.brandId)     p.set('brand_id',     filters.brandId);
+      if (filters.stockStatus) p.set('stock_status', filters.stockStatus);
+      if (filters.sort)        p.set('sort',         filters.sort);
+      ids.forEach(id => p.append('ids[]', id));
+      return request('GET', `/online/products/export?${p.toString()}`);
+    },
     updateProduct: (id, body)          => request('PATCH',  `/online/products/${id}`, body),
     quickSetupProduct: (id, body)      => request('POST',   `/online/products/${id}/quick-setup`, body),
     deleteProduct: (id)                => request('DELETE', `/online/products/${id}`),
