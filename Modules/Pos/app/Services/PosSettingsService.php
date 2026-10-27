@@ -69,6 +69,15 @@ class PosSettingsService
 
     public const RECEIPT_LOGO_GAP_DEFAULT_MM = 2;
 
+    /** Receipt logo size as a percentage (50–300) of the default logo footprint. */
+    public const KEY_RECEIPT_LOGO_SIZE = 'pos.receipt_logo_size';
+
+    public const RECEIPT_LOGO_SIZE_DEFAULT = 100;
+
+    public const RECEIPT_LOGO_SIZE_MIN = 50;
+
+    public const RECEIPT_LOGO_SIZE_MAX = 300;
+
     public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
 
     /** @var string `before` | `after` — where the currency code sits relative to the amount */
@@ -199,6 +208,7 @@ class PosSettingsService
             'receipt_margin_bottom'      => $this->receiptMargin($business, 'bottom'),
             'receipt_margin_left'        => $this->receiptMargin($business, 'left'),
             'receipt_logo_gap'           => $this->clampReceiptMargin($business->getSetting(self::KEY_RECEIPT_LOGO_GAP, self::RECEIPT_LOGO_GAP_DEFAULT_MM)),
+            'receipt_logo_size'          => $this->clampReceiptLogoSize($business->getSetting(self::KEY_RECEIPT_LOGO_SIZE, self::RECEIPT_LOGO_SIZE_DEFAULT)),
             // Branch / warehouse
             'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
             'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
@@ -263,6 +273,15 @@ class PosSettingsService
     private function clampReceiptMargin(mixed $value): float
     {
         return round(min(self::RECEIPT_MARGIN_MAX_MM, max(0, (float) $value)), 1);
+    }
+
+    private function clampReceiptLogoSize(mixed $value): int
+    {
+        if (! is_numeric($value)) {
+            return self::RECEIPT_LOGO_SIZE_DEFAULT;
+        }
+
+        return (int) round(min(self::RECEIPT_LOGO_SIZE_MAX, max(self::RECEIPT_LOGO_SIZE_MIN, (float) $value)));
     }
 
     /** Current purchasing mode, falling back to the legacy purchase_order_enabled flag. */
@@ -431,6 +450,10 @@ class PosSettingsService
 
         if (array_key_exists('receipt_logo_gap', $data)) {
             $business->setSetting(self::KEY_RECEIPT_LOGO_GAP, $this->clampReceiptMargin($data['receipt_logo_gap'] ?? self::RECEIPT_LOGO_GAP_DEFAULT_MM));
+        }
+
+        if (array_key_exists('receipt_logo_size', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_LOGO_SIZE, $this->clampReceiptLogoSize($data['receipt_logo_size'] ?? self::RECEIPT_LOGO_SIZE_DEFAULT));
         }
 
         if (array_key_exists('business_logo_url', $data)) {

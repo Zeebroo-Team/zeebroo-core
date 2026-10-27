@@ -1128,6 +1128,7 @@ window.I18N_DICTS = window.I18N_DICTS || {};
     "Test bill sent to \"{name}\"": "පරීක්ෂණ බිල්පත \"{name}\" වෙත යවන ලදී",
     "Receipt Logo": "රිසිට්පත් ලාංඡනය",
     "Gap below logo": "ලාංඡනයට පහළින් ඇති පරතරය",
+    "Logo size": "ලාංඡනයේ ප්‍රමාණය",
     "Business Info": "ව්‍යාපාර තොරතුරු",
     "Show business name": "ව්‍යාපාරයේ නම පෙන්වන්න",
     "Show address": "ලිපිනය පෙන්වන්න",

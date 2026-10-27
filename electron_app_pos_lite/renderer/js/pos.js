@@ -1679,6 +1679,7 @@ function renderBillHtml(data) {
   const footer = posSettings.receipt_footer || rt('Thank you for your purchase!');
   const logoUrl = posSettings.receipt_logo_url || '';
   const logoGap = window.ReceiptPrinter.logoGapFrom(posSettings);
+  const logoStyle = window.ReceiptPrinter.logoImgStyle(posSettings.receipt_logo_size);
 
   const rows = data.items.map((it) => {
     let row = `<tr>
@@ -1718,7 +1719,7 @@ function renderBillHtml(data) {
 
   return `
     <div class="rd-center">
-      ${logoUrl ? `<div style="margin-bottom:${logoGap}mm"><img src="${esc(logoUrl)}" alt="" style="max-width:64px;max-height:64px;display:block;margin:0 auto"></div>` : ''}
+      ${logoUrl ? `<div style="margin-bottom:${logoGap}mm"><img src="${esc(logoUrl)}" alt="" style="${logoStyle};display:block;margin:0 auto"></div>` : ''}
       ${showName ? `<div class="rd-business">${esc(businessName)}</div>` : ''}
       ${showAddr && addr ? `<div class="rd-meta">${esc(addr)}</div>` : ''}
       ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
@@ -1752,6 +1753,7 @@ function buildEscposReceiptData(data) {
   return {
     logoUrl: posSettings.receipt_logo_url || '',
     logoGap: window.ReceiptPrinter.logoGapFrom(posSettings),
+    logoSize: window.ReceiptPrinter.logoSizeFrom(posSettings),
     businessName: posSettings.show_business_name !== false ? (posSettings.business_name || '') : '',
     address: posSettings.show_business_address ? (posSettings.receipt_address_line || '') : '',
     header: posSettings.receipt_header || '',
