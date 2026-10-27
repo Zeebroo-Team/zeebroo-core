@@ -23,11 +23,14 @@
   // Current label builder (cleared each time the builder overlay opens) and
   // the queue of products added to print (cleared only when the dialog closes).
   // Queue entry: { item, labelCount, items, topText, bottomText, paper, customW, customH, productName }
-  const _bc = { items: [], queue: [] };
+  const _bc = { items: [], queue: [], selected: new Set() };
 
   const BC_PICK_CHUNK = 200;  // picker rows rendered per scroll step
   const BC_MAX_LABELS = 9999; // per product
   const BC_SHEET_CHUNK = 400; // labels built per frame when preparing a sheet
+  // Jobs above this are split into parts — tens of thousands of labels in one
+  // sheet freeze the app and can crash the print spooler / PDF engine.
+  const BC_PART_LABELS = 1000;
 
   // Product picker — whole catalog fetched once per builder open, search filters locally
   const _pick = { all: [], list: [], rendered: 0, selected: new Map(), qty: new Map(), reqId: 0 };
@@ -159,6 +162,21 @@
 </style></head><body><div class="bc-print-sheet">${bodyHtml}</div></body></html>`;
   }
 
+  // Same markup/styles as the print sheet, shown on a "paper" backdrop. Roll
+  // labels are pinned to their real mm size so the preview matches the stock.
+  function previewDocument(bodyHtml, cfg) {
+    const cols = cfg.cols || 1;
+    const sheetW = cfg.mmW ? `width: ${cols * cfg.mmW + (cols - 1) * 3}mm;` : '';
+    const labelH = cfg.mmH ? `.bc-plabel { min-height: ${cfg.mmH}mm; }` : '';
+    const extra = `<style>
+  html { background: #eef0f5; }
+  body { padding: 12px; }
+  .bc-print-sheet { ${sheetW} max-width: 100%; margin: 0 auto; padding: 3mm; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.15); }
+  ${labelH}
+</style>`;
+    return sheetDocument(bodyHtml, cfg).replace('</head>', `${extra}</head>`);
+  }
+
   // ── Sheet job: prepare (progress) → ready (Print / Save PDF) ─────────
   // Print and Save PDF only appear once every label is built, so nothing can
   // print a half-prepared sheet. PDF generation reports per-stage progress.
@@ -172,9 +190,21 @@
     ['writing', 'Saving file', 97],
   ];
 
-  function jobPanel({ icon, iconCls = '', title, pct, working = false, text = '', steps = null, hint = '', footer = false }) {
+  // Labels shown in the ready-state preview — enough to check the layout
+  // without rendering a whole (possibly 1000-label) sheet a second time.
+  const BC_PREVIEW_LABELS = 12;
+
+  function jobPanel({ icon, iconCls = '', title, pct, working = false, text = '', steps = null, hint = '', footer = false, preview = null }) {
     const $ = (id) => document.getElementById(id);
     if (!$('bcm-job')) return;
+    const prev = $('bcm-job-preview');
+    $('bcm-job-card').classList.toggle('bc-job-card-wide', !!preview);
+    prev.style.display = preview ? '' : 'none';
+    if (preview) {
+      const frame = $('bcm-job-preview-frame');
+      if (frame.dataset.src !== preview.html) { frame.dataset.src = preview.html; frame.srcdoc = preview.html; }
+      $('bcm-job-preview-note').textContent = preview.note || '';
+    }
     $('bcm-job-ico').className = `fa-solid ${icon} bc-job-ico ${iconCls}`;
     $('bcm-job-title').textContent = title;
     $('bcm-job-bar').classList.toggle('bc-working', working);
@@ -186,21 +216,47 @@
     $('bcm-job-foot').style.display = footer ? '' : 'none';
   }
 
-  async function openSheetJob(items, cfg) {
-    if (!items.length || document.getElementById('bcm-job')) return;
-    const token = ++jobToken;
-    const total = items.length;
+  // [start, end) ranges of at most BC_PART_LABELS; A4 parts hold whole pages only
+  function splitParts(n, cfg) {
+    let size = BC_PART_LABELS;
+    if (cfg.rowsPerPage) {
+      const perPage = (cfg.cols || 1) * cfg.rowsPerPage;
+      size = Math.max(perPage, Math.floor(size / perPage) * perPage);
+    }
+    const parts = [];
+    for (let i = 0; i < n; i += size) parts.push([i, Math.min(i + size, n)]);
+    return parts;
+  }
+
+  async function openSheetJob(allItems, cfg) {
+    if (!allItems.length || document.getElementById('bcm-job')) return;
+    const parts = splitParts(allItems.length, cfg);
+    const multi = parts.length > 1;
+    const done = new Set();
+    let part = 0;
+    let items = [];
+    let total = 0;
+    let html = null;
+    let previewHtml = null;
     const el = document.createElement('div');
     el.className = 'bc-job-backdrop';
     el.id = 'bcm-job';
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-modal', 'true');
     el.innerHTML = `
-      <div class="bc-job-card">
+      <div class="bc-job-card" id="bcm-job-card">
         <div class="qf-picker-head">
           <span class="qf-picker-head-icon"><i class="fa-solid fa-barcode"></i></span>
           <div style="flex:1;min-width:0"><div class="qf-picker-title" style="margin-bottom:0">${t('Barcode Labels')}</div></div>
           <button class="salm-modal-close" id="bcm-job-x" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="bc-job-parts" id="bcm-job-parts" style="display:none">
+          <div class="bc-job-parts-msg"><i class="fa-solid fa-triangle-exclamation"></i> <span id="bcm-job-parts-msg"></span></div>
+          <div class="bc-job-parts-nav">
+            <button class="salm-btn-ghost" id="bcm-job-part-prev" type="button" title="${t('Previous part')}"><i class="fa-solid fa-chevron-left"></i></button>
+            <select class="bc-job-part-sel" id="bcm-job-part-sel"></select>
+            <button class="salm-btn-ghost" id="bcm-job-part-next" type="button" title="${t('Next part')}"><i class="fa-solid fa-chevron-right"></i></button>
+          </div>
         </div>
         <div class="bc-job-body">
           <i class="fa-solid fa-barcode bc-job-ico" id="bcm-job-ico"></i>
@@ -209,6 +265,10 @@
           <div class="bc-job-text" id="bcm-job-text"></div>
           <ul class="bc-job-steps" id="bcm-job-steps" style="display:none"></ul>
           <div class="bc-job-hint" id="bcm-job-hint"></div>
+          <div class="bc-job-preview" id="bcm-job-preview" style="display:none">
+            <div class="bc-job-preview-head"><i class="fa-solid fa-eye"></i> ${t('Preview')}<span class="bc-job-preview-note" id="bcm-job-preview-note"></span></div>
+            <iframe class="bc-job-preview-frame" id="bcm-job-preview-frame" title="${t('Preview')}" sandbox></iframe>
+          </div>
         </div>
         <div class="bc-job-foot" id="bcm-job-foot" style="display:none">
           <button class="salm-btn-ghost" id="bcm-job-close" type="button"><i class="fa-solid fa-xmark"></i> ${t('Close')}</button>
@@ -227,50 +287,101 @@
     document.getElementById('bcm-job-x').addEventListener('click', close);
     document.getElementById('bcm-job-close').addEventListener('click', close);
 
-    const renderingPanel = (done) => {
-      const pct = Math.floor(done / total * 100);
+    const partTitle = (title) => (multi ? `${title} — ${t('Part {p} of {n}', { p: part + 1, n: parts.length })}` : title);
+    const renderingPanel = (n) => {
+      const pct = Math.floor(n / total * 100);
       jobPanel({
-        icon: 'fa-barcode', iconCls: 'bc-pulse', title: t('Rendering barcodes…'), pct,
-        text: t('{done} / {total} labels · {pct}%', { done: fmtNum(done), total: fmtNum(total), pct }),
+        icon: 'fa-barcode', iconCls: 'bc-pulse', title: partTitle(t('Rendering barcodes…')), pct,
+        text: t('{done} / {total} labels · {pct}%', { done: fmtNum(n), total: fmtNum(total), pct }),
         hint: t('Print and Save PDF will be available when rendering finishes'),
       });
     };
     const readyPanel = (hint = '') => {
       const perPage = cfg.rowsPerPage ? cfg.cols * cfg.rowsPerPage : 0;
       jobPanel({
-        icon: 'fa-circle-check', iconCls: 'bc-ok', title: t('Sheet ready'), pct: 100,
+        icon: 'fa-circle-check', iconCls: 'bc-ok', title: partTitle(t('Sheet ready')), pct: 100,
         text: perPage
           ? t('{n} labels · about {p} pages', { n: fmtNum(total), p: fmtNum(Math.ceil(total / perPage)) })
           : t('{n} labels', { n: fmtNum(total) }),
         hint, footer: true,
+        preview: previewHtml ? {
+          html: previewHtml,
+          note: total > BC_PREVIEW_LABELS
+            ? t('first {n} of {total}', { n: BC_PREVIEW_LABELS, total: fmtNum(total) }) : '',
+        } : null,
       });
     };
 
-    // Build the sheet in chunks so the window stays responsive
-    renderingPanel(0);
-    const h = cfg.mmH ? Math.max(24, Math.round(cfg.mmH * 1.7)) : 46;
-    const parts = [];
-    for (let i = 0; i < total; i += BC_SHEET_CHUNK) {
-      await nextFrame();
-      if (token !== jobToken) return;
-      const end = Math.min(i + BC_SHEET_CHUNK, total);
-      for (let k = i; k < end; k++) parts.push(labelMarkup({ ...items[k], _h: h }));
-      renderingPanel(end);
+    // ── Part navigator (large jobs only) ──
+    const partSel = document.getElementById('bcm-job-part-sel');
+    const partPrev = document.getElementById('bcm-job-part-prev');
+    const partNext = document.getElementById('bcm-job-part-next');
+    function syncParts() {
+      if (!multi) return;
+      document.getElementById('bcm-job-parts').style.display = '';
+      document.getElementById('bcm-job-parts-msg').textContent = t(
+        'Large job: {total} labels split into {n} parts — print or save each part separately ({d} of {n} done)',
+        { total: fmtNum(allItems.length), n: parts.length, d: done.size });
+      partSel.innerHTML = parts.map(([a, b], i) => `<option value="${i}"${i === part ? ' selected' : ''}>${done.has(i) ? '✓ ' : ''}${esc(
+        t('Part {p} of {n} · labels {a}–{b}', { p: i + 1, n: parts.length, a: fmtNum(a + 1), b: fmtNum(b) }))}</option>`).join('');
     }
-    if (token !== jobToken) return;
-    const html = sheetDocument(parts.join(''), cfg);
-    readyPanel();
+    function lockParts(locked) {
+      partSel.disabled = locked;
+      partPrev.disabled = locked || part <= 0;
+      partNext.disabled = locked || part >= parts.length - 1;
+    }
+    function markDone() { done.add(part); syncParts(); }
+
+    // Build the current part in chunks so the window stays responsive
+    const h = cfg.mmH ? Math.max(24, Math.round(cfg.mmH * 1.7)) : 46;
+    async function buildPart() {
+      const token = ++jobToken;
+      const [from, to] = parts[part];
+      items = allItems.slice(from, to);
+      total = items.length;
+      html = null;
+      previewHtml = null;
+      syncParts();
+      lockParts(true);
+      renderingPanel(0);
+      const out = [];
+      for (let i = 0; i < total; i += BC_SHEET_CHUNK) {
+        await nextFrame();
+        if (token !== jobToken) return;
+        const end = Math.min(i + BC_SHEET_CHUNK, total);
+        for (let k = i; k < end; k++) out.push(labelMarkup({ ...items[k], _h: h }));
+        renderingPanel(end);
+      }
+      if (token !== jobToken) return;
+      html = sheetDocument(out.join(''), cfg);
+      previewHtml = previewDocument(out.slice(0, BC_PREVIEW_LABELS).join(''), cfg);
+      lockParts(false);
+      readyPanel();
+    }
+    const goPart = (i) => {
+      if (pdfRunning || i < 0 || i >= parts.length || i === part) return;
+      part = i;
+      buildPart();
+    };
+    partSel.addEventListener('change', () => goPart(parseInt(partSel.value, 10)));
+    partPrev.addEventListener('click', () => goPart(part - 1));
+    partNext.addEventListener('click', () => goPart(part + 1));
 
     const printBtn = document.getElementById('bcm-job-print');
     const pdfBtn = document.getElementById('bcm-job-pdf');
 
     printBtn.addEventListener('click', () => {
-      busy(printBtn, t('Printing…'), () => window.electronAPI.printHtml(html));
+      if (!html) return;
+      lockParts(true);
+      busy(printBtn, t('Printing…'), async () => {
+        if (await window.electronAPI.printHtml(html)) markDone();
+      }, () => lockParts(false));
     });
 
     pdfBtn.addEventListener('click', async () => {
-      if (pdfRunning) return;
+      if (pdfRunning || !html) return;
       pdfRunning = true;
+      lockParts(true);
       const startedAt = Date.now();
       let stage = 'prepare';
       const paint = () => {
@@ -283,7 +394,7 @@
         }).join('');
         const waitingOnUser = stage === 'saving-dialog';
         jobPanel({
-          icon: 'fa-file-pdf', iconCls: 'bc-pulse', title: t('Generating PDF…'), pct: PDF_STEPS[idx][2],
+          icon: 'fa-file-pdf', iconCls: 'bc-pulse', title: partTitle(t('Generating PDF…')), pct: PDF_STEPS[idx][2],
           working: !waitingOnUser, steps,
           text: t('{n} labels · {s}s elapsed', { n: fmtNum(total), s: secs }),
           hint: waitingOnUser ? t('Pick a file name in the save window to finish')
@@ -296,14 +407,18 @@
       let res;
       try {
         await nextFrame();
-        res = await window.electronAPI.savePdf(html, `barcodes-${new Date().toISOString().slice(0, 10)}.pdf`);
+        const pad = String(parts.length).length;
+        const suffix = multi ? `-part-${String(part + 1).padStart(pad, '0')}-of-${parts.length}` : '';
+        res = await window.electronAPI.savePdf(html, `barcodes-${new Date().toISOString().slice(0, 10)}${suffix}.pdf`);
       } finally {
         clearInterval(timer);
         if (off) off();
         pdfRunning = false;
+        lockParts(false);
       }
       if (!document.getElementById('bcm-job')) return;
       if (res?.status === 200) {
+        markDone();
         readyPanel(t('PDF saved: {path}', { path: res.savedPath }));
         showToast(t('Barcode PDF saved.'), 'success');
       } else if (res?.canceled) {
@@ -312,6 +427,9 @@
         readyPanel(res?.message || t('Could not save PDF.'));
       }
     });
+
+    if (multi) showToast(t('{n} labels — split into {p} parts to keep the system stable', { n: fmtNum(allItems.length), p: parts.length }));
+    buildPart();
   }
 
   // ── Home view: the print queue (one entry per product) ───────────────
@@ -332,6 +450,23 @@
     if (badgeEl) badgeEl.innerHTML = totalLabels ? `<span class="bc-queue-badge">${fmtNum(totalLabels)}</span>` : '';
     const printAllBtn = document.getElementById('bcm-print-all');
     if (printAllBtn && !printAllBtn.dataset.busy) printAllBtn.disabled = !batchCount;
+    const clearAllBtn = document.getElementById('bcm-clear-all');
+    if (clearAllBtn) clearAllBtn.disabled = !batchCount;
+
+    // drop selections for batches no longer in the queue
+    _bc.selected.forEach((b) => { if (!_bc.queue.includes(b)) _bc.selected.delete(b); });
+    const selCount = _bc.selected.size;
+    const selBar = document.getElementById('bcm-sel-bar');
+    if (selBar) selBar.style.display = batchCount ? '' : 'none';
+    const selAll = document.getElementById('bcm-sel-all');
+    if (selAll) {
+      selAll.checked = batchCount > 0 && selCount === batchCount;
+      selAll.indeterminate = selCount > 0 && selCount < batchCount;
+    }
+    const selCountEl = document.getElementById('bcm-sel-count');
+    if (selCountEl) selCountEl.textContent = selCount ? t('{sel} of {total} selected', { sel: fmtNum(selCount), total: fmtNum(batchCount) }) : '';
+    const selRemove = document.getElementById('bcm-sel-remove');
+    if (selRemove) selRemove.disabled = !selCount;
 
     document.getElementById('bcm-tf-batches').textContent = batchCount;
     document.getElementById('bcm-tf-labels').textContent = fmtNum(totalLabels);
@@ -355,7 +490,9 @@
 
     queueContentEl.innerHTML = _bc.queue.map((batch, i) => {
       const paperLabel = batch.paper === 'single' ? t('Single Row') : batch.paper === 'double' ? t('Double Row') : t('{w}×{h} mm', { w: batch.customW, h: batch.customH });
-      return `<div class="bc-batch-card">
+      const sel = _bc.selected.has(batch);
+      return `<div class="bc-batch-card${sel ? ' bc-batch-selected' : ''}">
+        <input type="checkbox" class="bc-batch-chk" data-sel="${i}"${sel ? ' checked' : ''} title="${t('Select')}">
         <div class="bc-batch-card-icon"><i class="fa-solid fa-barcode"></i></div>
         <div class="bc-batch-card-info">
           <div class="bc-batch-card-name">${esc(batch.productName)}</div>
@@ -382,6 +519,14 @@
         const batch = _bc.queue[Number(inp.dataset.copies)];
         if (!batch) return;
         setBatchCopies(batch, parseInt(inp.value) || 1);
+        refreshQueue();
+      });
+    });
+    queueContentEl.querySelectorAll('input[data-sel]').forEach((chk) => {
+      chk.addEventListener('change', () => {
+        const batch = _bc.queue[Number(chk.dataset.sel)];
+        if (!batch) return;
+        if (chk.checked) _bc.selected.add(batch); else _bc.selected.delete(batch);
         refreshQueue();
       });
     });
@@ -525,6 +670,23 @@
   function pickDefaultQty(p) { return Math.max(1, Math.min(BC_MAX_LABELS, Math.floor(parseFloat(p.stock_quantity) || 0))); }
   function pickQty(p) { return _pick.qty.has(p.id) ? _pick.qty.get(p.id) : pickDefaultQty(p); }
   function pickPrice(p) { return p.unit_sell_price != null && p.unit_sell_price !== '' ? money(p.unit_sell_price) : ''; }
+  // Labels for a picked product, split across its in-stock batches (FIFO) so each
+  // label carries that batch's own barcode and price. Labels beyond the batch
+  // stock (qty typed higher) fall back to the product SKU / price.
+  function pickItems(p, qty) {
+    const productCode = p.sku || String(p.id);
+    const productPrice = pickPrice(p);
+    const items = [];
+    for (const b of (p.batches || [])) {
+      if (items.length >= qty) break;
+      const code = b.batch_sku || productCode;
+      const price = b.selling_unit_price != null ? money(b.selling_unit_price) : productPrice;
+      const n = Math.min(qty - items.length, Math.floor(parseFloat(b.quantity_remaining) || 0));
+      for (let i = 0; i < n; i++) items.push({ name: p.name, code, price });
+    }
+    while (items.length < qty) items.push({ name: p.name, code: productCode, price: productPrice });
+    return items;
+  }
 
   async function pickLoad() {
     const listEl = document.getElementById('bcm-pick-list');
@@ -676,11 +838,9 @@
       busy(addBtn, t('Adding…'), () => {
         let added = 0;
         _pick.selected.forEach((p) => {
-          const qty = pickQty(p);
-          const code = p.sku || String(p.id);
-          const price = pickPrice(p);
-          for (let i = 0; i < qty; i++) _bc.items.push({ name: p.name, code, price });
-          added += qty;
+          const items = pickItems(p, pickQty(p));
+          for (const it of items) _bc.items.push(it);
+          added += items.length;
         });
         const products = _pick.selected.size;
         _pick.selected.clear();
@@ -711,6 +871,9 @@
     const prev = document.getElementById('bcm-preview-body');
     if (pick) pick.style.display = view === 'products' ? '' : 'none';
     if (prev) prev.style.display = view === 'preview' ? '' : 'none';
+    // the label can only be measured once its tab is visible
+    const labelEl = view === 'preview' && prev?.querySelector('.bc-plabel');
+    if (labelEl && labelEl.style.height) fitLabelBarcode(labelEl);
   }
 
   function refreshBuilderPreview() {
@@ -738,6 +901,26 @@
     body.innerHTML = labelMarkup({ ...it, topText, bottomText, _h: dims.barcodeH });
     const labelEl = body.querySelector('.bc-plabel');
     if (labelEl) { labelEl.style.width = `${dims.w}px`; if (dims.h) labelEl.style.height = `${dims.h}px`; }
+    if (labelEl && dims.h) fitLabelBarcode(labelEl);
+  }
+
+  // A fixed-height (custom size) label can't hold a full-height barcode plus
+  // every text line — shrink the bars into whatever height the text leaves.
+  function fitLabelBarcode(labelEl) {
+    const svg = labelEl.querySelector('svg');
+    if (!svg) return;
+    // Sum the children — centred flex content overflows both edges, so
+    // scrollHeight would under-report it.
+    const cs = getComputedStyle(labelEl);
+    const kids = [...labelEl.children];
+    const used = kids.reduce((s, k) => s + k.getBoundingClientRect().height, 0)
+      + (parseFloat(cs.rowGap) || 0) * Math.max(0, kids.length - 1);
+    const avail = labelEl.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const overflow = Math.ceil(used - avail);
+    if (overflow <= 0) return;
+    const barH = svg.getBoundingClientRect().height;
+    svg.setAttribute('preserveAspectRatio', 'none'); // keep full width, squash height only
+    svg.style.height = `${Math.max(12, Math.floor(barH - overflow))}px`;
   }
 
   // One queue entry per product/barcode, so the home view lists every product with its copy count
@@ -937,11 +1120,17 @@
           <div class="bc-toolbar">
             <div class="bc-toolbar-left" id="bcm-queue-badge"></div>
             <div class="bc-toolbar-right">
+              <button class="salm-icon-btn bc-danger-btn" id="bcm-clear-all" type="button" disabled><i class="fa-solid fa-broom"></i> ${t('Clear All')}</button>
               <button class="salm-icon-btn" id="bcm-print-all" type="button" disabled><i class="fa-solid fa-print"></i> ${t('Print All')}</button>
               <button class="salm-btn-primary" id="bcm-generate" type="button"><i class="fa-solid fa-barcode"></i> ${t('Generate Barcode')}</button>
             </div>
           </div>
           <div class="bc-print-settings" id="bcm-print-settings"></div>
+          <div class="bc-sel-bar" id="bcm-sel-bar" style="display:none">
+            <label class="bc-sel-all"><input type="checkbox" id="bcm-sel-all"> <span>${t('Select all')}</span></label>
+            <span class="bc-sel-count" id="bcm-sel-count"></span>
+            <button class="salm-icon-btn bc-danger-btn" id="bcm-sel-remove" type="button" disabled><i class="fa-solid fa-trash"></i> ${t('Remove Selected')}</button>
+          </div>
           <div id="bcm-queue-content"></div>
           <div class="bc-footer-stats">
             <div class="bc-tf-stats">
@@ -986,6 +1175,25 @@
     document.getElementById('bcm-print-all').addEventListener('click', () => {
       if (!_bc.queue.length) return;
       openSheetJob(_bc.queue.flatMap((b) => b.items), printConfig());
+    });
+    document.getElementById('bcm-clear-all').addEventListener('click', () => {
+      const n = _bc.queue.length;
+      if (!n || !confirm(t('Remove all {n} products from the print list?', { n: fmtNum(n) }))) return;
+      _bc.queue.length = 0;
+      _bc.selected.clear();
+      refreshQueue();
+    });
+    document.getElementById('bcm-sel-all').addEventListener('change', (e) => {
+      _bc.selected.clear();
+      if (e.target.checked) _bc.queue.forEach((b) => _bc.selected.add(b));
+      refreshQueue();
+    });
+    document.getElementById('bcm-sel-remove').addEventListener('click', () => {
+      const n = _bc.selected.size;
+      if (!n || !confirm(t('Remove {n} selected products from the print list?', { n: fmtNum(n) }))) return;
+      _bc.queue = _bc.queue.filter((b) => !_bc.selected.has(b));
+      _bc.selected.clear();
+      refreshQueue();
     });
 
     requestAnimationFrame(() => el.classList.add('open'));

@@ -4844,6 +4844,9 @@
             <span id="bc-tab-queue-count"></span>
           </div>
           <div class="bc-tab-header-right">
+            <button class="bc-clear-all-btn" id="bc-clear-all-btn" disabled>
+              <i class="fa fa-broom"></i> Clear All
+            </button>
             <button class="bc-print-all-btn" id="bc-print-all-btn" disabled>
               <i class="fa fa-print"></i> Print All
             </button>
@@ -4893,6 +4896,18 @@
           </div>
 
         </div><!-- /bc-ps-strip -->
+
+        <!-- selection bar — shown when the queue has items -->
+        <div class="bc-sel-bar" id="bc-sel-bar" style="display:none">
+          <label class="bc-sel-all">
+            <input type="checkbox" id="bc-sel-all">
+            <span>Select All</span>
+          </label>
+          <span class="bc-sel-count" id="bc-sel-count"></span>
+          <button class="bc-sel-remove-btn" id="bc-sel-remove" disabled>
+            <i class="fa fa-trash"></i> Remove Selected
+          </button>
+        </div>
 
         <!-- queue content — empty state or batch cards -->
         <div class="bc-tab-content" id="bc-tab-content">
@@ -18147,6 +18162,15 @@
       <button class="bc-prev-btn" id="bc-prev-close"><i class="fa fa-xmark"></i> Close</button>
       <button class="bc-prev-btn" id="bc-prev-pdf"><i class="fa fa-file-pdf"></i> Save PDF</button>
       <button class="bc-prev-btn bc-prev-print" id="bc-prev-print"><i class="fa fa-print"></i> Print</button>
+    </div>
+  </div>
+  <!-- large jobs are split into parts; Print / Save PDF act on the selected part only -->
+  <div class="bc-prev-parts" id="bc-prev-parts" style="display:none">
+    <div class="bc-prev-parts-msg"><i class="fa fa-triangle-exclamation"></i> <span id="bc-prev-parts-msg"></span></div>
+    <div class="bc-prev-parts-nav">
+      <button class="bc-prev-btn" id="bc-prev-part-prev" title="Previous part"><i class="fa fa-chevron-left"></i></button>
+      <select class="bc-prev-part-sel" id="bc-prev-part-sel"></select>
+      <button class="bc-prev-btn" id="bc-prev-part-next" title="Next part"><i class="fa fa-chevron-right"></i></button>
     </div>
   </div>
   <div class="bc-preview-stage">
