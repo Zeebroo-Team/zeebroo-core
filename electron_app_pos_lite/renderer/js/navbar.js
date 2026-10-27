@@ -2100,6 +2100,11 @@
                   <button class="bm-btn bm-btn-outline sm-logo-remove" id="rle-logo-remove" type="button" title="${t('Remove logo')}" style="display:none"><i class="fa-solid fa-trash"></i></button>
                 </div>
               </div>
+              <div class="rle-logo-gap">
+                <label for="rle-logo-size">${t('Logo size')}</label>
+                <span class="rle-mg-field"><input type="number" id="rle-logo-size" min="50" max="300" step="10" value="100"><em>%</em></span>
+              </div>
+              <input type="range" id="rle-logo-size-range" class="rle-logo-range" min="50" max="300" step="5" value="100" aria-label="${t('Logo size')}">
               <label class="rle-logo-gap" for="rle-logo-gap">
                 <span>${t('Gap below logo')}</span>
                 <span class="rle-mg-field"><input type="number" id="rle-logo-gap" min="0" max="20" step="0.5" value="2"><em>mm</em></span>
@@ -2277,7 +2282,7 @@
         </div>`).join('');
 
       $('rle-paper').innerHTML = `
-        ${state.logoUrl ? `<div class="rle-paper-logo" style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt=""></div>` : ''}
+        ${state.logoUrl ? `<div class="rle-paper-logo" style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt="" style="${window.ReceiptPrinter.logoImgStyle(currentLogoSize())}"></div>` : ''}
         ${showBiz ? `<div class="rle-paper-biz">${esc(state.businessName || t('Your Business'))}</div>` : ''}
         ${showAddr && address ? `<div class="rle-paper-addr">${esc(address)}</div>` : ''}
         ${header ? `<div class="rle-paper-header">${esc(header)}</div>` : ''}
@@ -2313,6 +2318,25 @@
     function currentLogoGap() {
       return window.ReceiptPrinter.logoGapFrom({ receipt_logo_gap: $('rle-logo-gap').value });
     }
+
+    function currentLogoSize() {
+      return window.ReceiptPrinter.logoSizeFrom({ receipt_logo_size: $('rle-logo-size').value });
+    }
+
+    // Logo size: slider and % box mirror each other
+    $('rle-logo-size-range').addEventListener('input', (e) => {
+      $('rle-logo-size').value = e.target.value;
+      renderPreview();
+    });
+    $('rle-logo-size').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v)) $('rle-logo-size-range').value = v;
+      renderPreview();
+    });
+    $('rle-logo-size').addEventListener('change', (e) => {
+      e.target.value = $('rle-logo-size-range').value = currentLogoSize();
+      renderPreview();
+    });
 
     ['rle-address', 'rle-header', 'rle-footer', 'rle-logo-gap', ...MARGIN_SIDES.map((side) => 'rle-mg-' + side)].forEach((id) => $(id).addEventListener('input', renderPreview));
     ['rle-show-biz', 'rle-show-addr', 'rle-show-payment'].forEach((id) => $(id).addEventListener('change', renderPreview));
@@ -2354,7 +2378,7 @@
           </tr>`).join('');
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TEST-0001</title><style>${RP.docStyles(cfg.paperWidth === 58 ? 58 : 80)}</style></head><body>
           <div class="rd-center">
-            ${state.logoUrl ? `<div style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt="" style="max-width:64px;max-height:64px;display:block;margin:0 auto"></div>` : ''}
+            ${state.logoUrl ? `<div style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt="" style="${RP.logoImgStyle(currentLogoSize())};display:block;margin:0 auto"></div>` : ''}
             ${biz ? `<div class="rd-business">${esc(biz)}</div>` : ''}
             ${address ? `<div class="rd-meta">${esc(address)}</div>` : ''}
             ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
@@ -2378,7 +2402,7 @@
         </body></html>`;
 
         const escpos = {
-          logoUrl: state.logoUrl, logoGap: currentLogoGap(),
+          logoUrl: state.logoUrl, logoGap: currentLogoGap(), logoSize: currentLogoSize(),
           businessName: biz, address, header, footer,
           currency: state.currency, currencyPosition: state.currencyPosition,
           saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
@@ -2406,6 +2430,7 @@
       const d = res.body?.data || {};
       state.logoUrl = d.receipt_logo_url || '';
       $('rle-logo-gap').value = window.ReceiptPrinter.logoGapFrom(d);
+      $('rle-logo-size').value = $('rle-logo-size-range').value = window.ReceiptPrinter.logoSizeFrom(d);
       state.businessName = d.business_name || '';
       state.currency = (d.currency || 'LKR').toUpperCase();
       state.currencyPosition = d.currency_position === 'before' ? 'before' : 'after';
@@ -2432,6 +2457,7 @@
       const payload = {
         receipt_logo_url: state.logoUrl || '',
         receipt_logo_gap: currentLogoGap(),
+        receipt_logo_size: currentLogoSize(),
         show_business_name: $('rle-show-biz').checked,
         show_business_address: $('rle-show-addr').checked,
         receipt_address_line: $('rle-address').value.trim(),
@@ -3824,6 +3850,18 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return Number.isFinite(v) ? Math.min(20, Math.max(0, v)) : 2;
   }
 
+  // Logo size (% of the default 64px logo, 50–300, default 100) — receipt_logo_size
+  const LOGO_BASE_PX = 64;
+  function logoSizeFrom(settings = {}) {
+    const v = parseFloat(settings.receipt_logo_size);
+    return Number.isFinite(v) ? Math.round(Math.min(300, Math.max(50, v))) : 100;
+  }
+  // Inline max-size style for the receipt logo <img>; never wider than the paper
+  function logoImgStyle(sizePct) {
+    const px = Math.round(LOGO_BASE_PX * logoSizeFrom({ receipt_logo_size: sizePct }) / 100);
+    return `max-width:min(100%, ${px}px);max-height:${px}px`;
+  }
+
   let marginsCache = null;
   async function savedMargins() {
     if (!marginsCache) {
@@ -3905,5 +3943,5 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
   }
 
-  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print, marginsFrom, logoGapFrom, setSavedMargins };
+  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print, marginsFrom, logoGapFrom, logoSizeFrom, logoImgStyle, setSavedMargins };
 })();

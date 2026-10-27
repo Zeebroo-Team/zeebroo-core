@@ -573,11 +573,12 @@ function _escposAscii(s) {
   return String(s || '').replace(/[—–−‘’“”•… ×]/g, (ch) => _ESCPOS_ASCII[ch]);
 }
 
-// Receipt logo → 1-bit raster for ESC/POS (GS v 0), max ~26×13 mm at 203 dpi
+// Receipt logo → 1-bit raster for ESC/POS (GS v 0), max ~26×13 mm at 203 dpi,
+// scaled by the Logo size setting (50–300 %) and capped to the printable width.
 const LOGO_MAX_W_DOTS = 208;
 const LOGO_MAX_H_DOTS = 104;
 
-async function _loadLogoRaster(url) {
+async function _loadLogoRaster(url, sizePct = 100, maxWidthDots = 576) {
   if (!url) return null;
   try {
     let buf;
@@ -592,8 +593,11 @@ async function _loadLogoRaster(url) {
     let img = nativeImage.createFromBuffer(buf);  // PNG / JPEG
     if (img.isEmpty()) return null;
 
+    const pct   = Number.isFinite(parseFloat(sizePct)) ? Math.min(300, Math.max(50, parseFloat(sizePct))) : 100;
+    const maxW  = Math.min(maxWidthDots, Math.round(LOGO_MAX_W_DOTS * pct / 100));
+    const maxH  = Math.round(LOGO_MAX_H_DOTS * pct / 100);
     const src   = img.getSize();
-    const scale = Math.min(1, LOGO_MAX_W_DOTS / src.width, LOGO_MAX_H_DOTS / src.height);
+    const scale = Math.min(1, maxW / src.width, maxH / src.height);
     img = img.resize({
       width:   Math.max(1, Math.round(src.width  * scale)),
       height:  Math.max(1, Math.round(src.height * scale)),
@@ -836,7 +840,10 @@ ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
   const { receipt, name, paperWidth = 80, margins = {} } = opts;
   if (!name) return { success: false, error: 'No printer specified' };
   try {
-    const logo = await _loadLogoRaster(receipt?.logoUrl);
+    // Keep the logo inside the left/right margins — same column rounding as _escposBuffer (12 dots per col)
+    const mg   = _receiptMargins(margins);
+    const maxW = Math.max(8, (paperWidth === 58 ? 384 : 576) - (Math.round(mg.left / 1.5) + Math.round(mg.right / 1.5)) * 12);
+    const logo = await _loadLogoRaster(receipt?.logoUrl, receipt?.logoSize, maxW);
     return await _sendRawToPrinter(name, _escposBuffer(receipt || {}, paperWidth, margins, logo));
   } catch (err) {
     return { success: false, error: err.message || String(err) };

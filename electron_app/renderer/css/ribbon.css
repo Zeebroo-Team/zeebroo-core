@@ -12453,6 +12453,7 @@ body.dark .pc-modal-head {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   margin-top: 8px; font-size: 12.5px; color: var(--text); cursor: text;
 }
+.rcpt-ed-logo-range { display: block; width: 100%; margin: 6px 0 2px; accent-color: var(--accent); cursor: pointer; }
 /* Mini receipt in the middle of the margin controls */
 .rcpt-ed-mg-paper {
   grid-area: paper; width: 46px; height: 60px; box-sizing: border-box;
@@ -12567,7 +12568,11 @@ body.dark .pc-modal-head {
 }
 .rcpt-paper * { box-sizing: border-box; }
 .rcpt-logo-wrap { text-align: center; margin-bottom: 10px; }
-.rcpt-logo-img  { max-width: 130px; max-height: 64px; object-fit: contain; display: block; margin: 0 auto; }
+/* --rcpt-logo-scale: Logo size setting (0.5–3) set inline on .rcpt-logo-wrap */
+.rcpt-logo-img  {
+  max-width: min(100%, calc(130px * var(--rcpt-logo-scale, 1))); max-height: calc(64px * var(--rcpt-logo-scale, 1));
+  object-fit: contain; display: block; margin: 0 auto;
+}
 .rcpt-biz-name {
   text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 2px; letter-spacing: .03em;
 }
@@ -12605,7 +12610,9 @@ body.dark .pc-modal-head {
 /* 58 mm roll: 219px paper (≈58mm @96dpi), ≈48mm printable — price column dropped like the ESC/POS layout */
 .rcpt-paper[data-paper="58"] { width: 219px; padding: 16px 18px 24px; font-size: 10px; }
 .rcpt-paper[data-paper="58"] .rcpt-biz-name { font-size: 13px; }
-.rcpt-paper[data-paper="58"] .rcpt-logo-img { max-width: 100px; max-height: 48px; }
+.rcpt-paper[data-paper="58"] .rcpt-logo-img {
+  max-width: min(100%, calc(100px * var(--rcpt-logo-scale, 1))); max-height: calc(48px * var(--rcpt-logo-scale, 1));
+}
 .rcpt-paper[data-paper="58"] .rcpt-meta,
 .rcpt-paper[data-paper="58"] .rcpt-customer,
 .rcpt-paper[data-paper="58"] .rcpt-total-row { font-size: 9.5px; }

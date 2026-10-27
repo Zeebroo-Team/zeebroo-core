@@ -1409,6 +1409,7 @@ body:has(#sdb-bar) .ev-bar { bottom: 92px; }
   color: var(--text, #1f2430);
   cursor: text;
 }
+.rle-logo-range { display: block; width: 100%; margin: 6px 0 2px; accent-color: var(--primary, #2563eb); cursor: pointer; }
 .rle-mg-field em { flex-shrink: 0; padding-right: 8px; font-style: normal; font-size: 10.5px; font-weight: 600; text-transform: none; color: var(--muted, #6b7280); }
 .rle-mg-paper {
   grid-area: paper;

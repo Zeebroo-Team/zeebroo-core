@@ -31240,6 +31240,7 @@ function buildReceiptHTML(sale, overrides = {}) {
   const footerText   = 'receipt_footer'         in overrides ? overrides.receipt_footer         : (s.receipt_footer  || 'Thank you for your purchase!');
   const logoUrl      = 'receipt_logo_url'       in overrides ? overrides.receipt_logo_url       : (s.receipt_logo_url || '');
   const logoGap      = _rcptLogoGap('receipt_logo_gap' in overrides ? overrides : s);
+  const logoScale    = _rcptLogoSize('receipt_logo_size' in overrides ? overrides : s) / 100;
   const customerName = 'customer_name'          in overrides ? overrides.customer_name          : (sale.customer?.name || sale.customer_name || '');
   const noteText     = 'note'                   in overrides ? overrides.note                   : (sale.notes || '');
 
@@ -31318,7 +31319,7 @@ function buildReceiptHTML(sale, overrides = {}) {
   return {
     lang,
     html: `
-    ${logoUrl    ? `<div class="rcpt-logo-wrap" style="margin-bottom:${logoGap}mm"><img class="rcpt-logo-img" src="${escHtml(logoUrl)}" alt="Logo"></div>` : ''}
+    ${logoUrl    ? `<div class="rcpt-logo-wrap" style="margin-bottom:${logoGap}mm;--rcpt-logo-scale:${logoScale}"><img class="rcpt-logo-img" src="${escHtml(logoUrl)}" alt="Logo"></div>` : ''}
     ${bizName    ? `<div class="rcpt-biz-name">${escHtml(bizName)}</div>` : ''}
     ${addrLines}
     ${headerText ? `<div class="rcpt-biz-sub">${escHtml(headerText)}</div>` : ''}
@@ -31483,6 +31484,11 @@ function _rcptLogoGap(s = state.receiptSettings || {}) {
   const v = parseFloat(s.receipt_logo_gap);
   return Number.isFinite(v) ? Math.min(20, Math.max(0, v)) : 2;
 }
+// Receipt logo size as a % of the default logo footprint (50–300, default 100)
+function _rcptLogoSize(s = state.receiptSettings || {}) {
+  const v = parseFloat(s.receipt_logo_size);
+  return Number.isFinite(v) ? Math.round(Math.min(300, Math.max(50, v))) : 100;
+}
 function _rcptMargins(s = state.receiptSettings || {}) {
   const out = {};
   RCPT_MARGIN_SIDES.forEach(side => {
@@ -31503,6 +31509,7 @@ function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
     businessName:  state._bizName || '',
     logoUrl:       s.receipt_logo_url || '',
     logoGap:       _rcptLogoGap(s),
+    logoSize:      _rcptLogoSize(s),
     address:       s.receipt_address_line || '',
     header:        s.receipt_header || '',
     footer:        s.receipt_footer || 'Thank you for your purchase!',
@@ -31819,6 +31826,7 @@ function _rcptEdOverrides() {
     show_account_info:     $('#rcpt-ed-show-acct').checked,
     receipt_logo_url:      _rcptLogoUrl,
     receipt_logo_gap:      _rcptLogoGap({ receipt_logo_gap: $('#rcpt-ed-logo-gap').value }),
+    receipt_logo_size:     _rcptLogoSize({ receipt_logo_size: $('#rcpt-ed-logo-size').value }),
   };
 }
 
@@ -31846,6 +31854,7 @@ function showReceiptEditor() {
   RCPT_MARGIN_SIDES.forEach(side => { $('#rcpt-ed-mg-' + side).value = mg[side]; });
   _rcptLogoUrl = s.receipt_logo_url || '';
   $('#rcpt-ed-logo-gap').value = _rcptLogoGap(s);
+  $('#rcpt-ed-logo-size').value = $('#rcpt-ed-logo-size-range').value = _rcptLogoSize(s);
   _rcptEdLogoRender();
   _buildReceiptTemplates();
   _syncEditorPreview();
@@ -31874,6 +31883,20 @@ $('#rcpt-logo-remove').addEventListener('click', () => {
 ['rcpt-ed-address', 'rcpt-ed-header', 'rcpt-ed-footer', 'rcpt-ed-logo-gap',
  'rcpt-ed-mg-top', 'rcpt-ed-mg-right', 'rcpt-ed-mg-bottom', 'rcpt-ed-mg-left'].forEach(id => {
   $('#' + id).addEventListener('input', _syncEditorPreview);
+});
+// Logo size: slider and % box mirror each other
+$('#rcpt-ed-logo-size-range').addEventListener('input', (e) => {
+  $('#rcpt-ed-logo-size').value = e.target.value;
+  _syncEditorPreview();
+});
+$('#rcpt-ed-logo-size').addEventListener('input', (e) => {
+  const v = parseFloat(e.target.value);
+  if (Number.isFinite(v)) $('#rcpt-ed-logo-size-range').value = v;
+  _syncEditorPreview();
+});
+$('#rcpt-ed-logo-size').addEventListener('change', (e) => {
+  e.target.value = $('#rcpt-ed-logo-size-range').value = _rcptLogoSize({ receipt_logo_size: e.target.value });
+  _syncEditorPreview();
 });
 $('#rcpt-ed-mg-reset').addEventListener('click', () => {
   RCPT_MARGIN_SIDES.forEach(side => { $('#rcpt-ed-mg-' + side).value = 0; });
@@ -31921,6 +31944,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
     show_account_info:     ov.show_account_info,
     receipt_logo_url:      ov.receipt_logo_url || null,
     receipt_logo_gap:      ov.receipt_logo_gap,
+    receipt_logo_size:     ov.receipt_logo_size,
     ..._rcptEdMarginSettings(),
   });
 
@@ -31935,7 +31959,7 @@ $('#rcpt-ed-save').addEventListener('click', async () => {
   // Sync into in-session state
   const saved = res.body?.data || {};
   ['receipt_language','show_business_name','show_business_address','receipt_address_line',
-   'receipt_header','receipt_footer','show_account_info','receipt_logo_url','receipt_logo_gap',
+   'receipt_header','receipt_footer','show_account_info','receipt_logo_url','receipt_logo_gap','receipt_logo_size',
    ...RCPT_MARGIN_SIDES.map(side => 'receipt_margin_' + side)].forEach(k => {
     if (saved[k] !== undefined) state.receiptSettings = { ...state.receiptSettings, [k]: saved[k] };
   });

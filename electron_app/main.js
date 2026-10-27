@@ -372,11 +372,12 @@ function _escposAscii(s) {
 }
 
 // ── Receipt logo → 1-bit raster for ESC/POS (GS v 0) ─────────────────────────
-// Same footprint as the HTML receipt's logo (max 100×48 CSS px ≈ 26×13 mm at 203 dpi).
+// Same footprint as the HTML receipt's logo (max 100×48 CSS px ≈ 26×13 mm at 203 dpi),
+// scaled by the Logo size setting (50–300 %) and capped to the print head width.
 const LOGO_MAX_W_DOTS = 208;
 const LOGO_MAX_H_DOTS = 104;
 
-async function _loadLogoRaster(url) {
+async function _loadLogoRaster(url, sizePct = 100, maxWidthDots = 576) {
   if (!url) return null;
   try {
     let buf;
@@ -391,8 +392,11 @@ async function _loadLogoRaster(url) {
     let img = nativeImage.createFromBuffer(buf);  // PNG / JPEG
     if (img.isEmpty()) return null;
 
+    const pct   = Number.isFinite(parseFloat(sizePct)) ? Math.min(300, Math.max(50, parseFloat(sizePct))) : 100;
+    const maxW  = Math.min(maxWidthDots, Math.round(LOGO_MAX_W_DOTS * pct / 100));
+    const maxH  = Math.round(LOGO_MAX_H_DOTS * pct / 100);
     const src   = img.getSize();
-    const scale = Math.min(1, LOGO_MAX_W_DOTS / src.width, LOGO_MAX_H_DOTS / src.height);
+    const scale = Math.min(1, maxW / src.width, maxH / src.height);
     const w     = Math.max(1, Math.round(src.width  * scale));
     const h     = Math.max(1, Math.round(src.height * scale));
     img = img.resize({ width: w, height: h, quality: 'best' });
@@ -671,7 +675,11 @@ ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
   const { receipt, name, paperWidth = 80, margins = {} } = opts;
   if (!name) return { success: false, error: 'No printer name specified' };
   try {
-    const logo   = await _loadLogoRaster(receipt?.logoUrl);
+    const mg     = _receiptMargins(margins);
+    const head   = paperWidth === 58 ? 384 : 576;
+    // Keep the logo inside the left/right margins — same column rounding as _escposBuffer (12 dots per col)
+    const maxW   = Math.max(8, head - (Math.round(mg.left / 1.5) + Math.round(mg.right / 1.5)) * 12);
+    const logo   = await _loadLogoRaster(receipt?.logoUrl, receipt?.logoSize, maxW);
     const buffer = _escposBuffer(receipt, paperWidth, margins, logo);
     return await _sendRawToPrinter(name, buffer);
   } catch (err) {
@@ -721,7 +729,7 @@ function _thermalHtml(html, paperWidth, margins = {}, { leftAlign = false } = {}
   @page { margin: 0; }
   .rcpt-paper { width:100%; }
   .rcpt-logo-wrap    { text-align:center; margin-bottom:8px; }
-  .rcpt-logo-img     { max-width:100px; max-height:48px; object-fit:contain; display:block; margin:0 auto; }
+  .rcpt-logo-img     { max-width:min(100%, calc(100px * var(--rcpt-logo-scale, 1))); max-height:calc(48px * var(--rcpt-logo-scale, 1)); object-fit:contain; display:block; margin:0 auto; }
   .rcpt-biz-name     { text-align:center; font-size:12pt; font-weight:700; margin-bottom:2px; }
   .rcpt-biz-sub      { text-align:center; font-size:8.5pt; color:#555; margin-bottom:8px; }
   .rcpt-divider      { border:none; border-top:1px dashed #999; margin:6px 0; }
