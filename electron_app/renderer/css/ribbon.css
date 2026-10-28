@@ -6814,6 +6814,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 }
 .cart-hdr-btn + .cart-hdr-btn { margin-left: 0; }
 .cart-hdr-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+.cart-hdr-btn--danger:hover { background: #ef444415; color: #ef4444; border-color: #ef4444; }
 .park-badge {
   position: absolute; top: -5px; right: -5px;
   background: #ef4444; color: #fff; font-size: 9px; font-weight: 700;
@@ -10954,6 +10955,25 @@ body.dark .inv-badge-purple { background: #2e1065; color: #c4b5fd; }
 }
 .finance-create-btn:hover { background: var(--accent-dark); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(78,142,247,.4); }
 .finance-create-btn:active { transform: translateY(0); }
+/* Export menu — pushed to the right end of the finance toolbar; menu styles from .srp-menu */
+.fin-export-wrap { margin-left: auto; }
+.fin-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 16px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .12s, color .12s;
+}
+.fin-export-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.fin-export-btn:disabled { opacity: .6; cursor: default; }
 .finance-cards-wrap {
   flex: 1;
   min-height: 0;

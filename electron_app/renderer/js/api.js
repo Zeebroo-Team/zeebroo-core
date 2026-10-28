@@ -211,6 +211,7 @@ const API = (() => {
       return request('GET', `/reports/sales${kind ? `/${kind}` : ''}?${p.toString()}`);
     },
     payrollOverview:  ()              => request('GET',    '/payroll-overview'),
+    businessFlowSummary: ()           => request('GET',    '/business-flow/summary'),
     createBill:   (body)              => request('POST',   '/expenses/bills', body),
     bills:        ()                  => request('GET',    '/expenses/bills'),
     bill:         (id)                => request('GET',    `/expenses/bills/${id}`),

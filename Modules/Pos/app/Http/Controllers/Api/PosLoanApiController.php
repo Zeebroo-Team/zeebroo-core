@@ -124,10 +124,20 @@ class PosLoanApiController extends Controller
             return response()->json(['message' => 'Loan not found.'], 404);
         }
 
-        $loan->load(['bank', 'deductAccount.bank', 'deductAccount.bankType', 'ledgerTransactions', 'externalInstallmentMarks']);
+        $loan->load(['bank', 'deductAccount.bank', 'deductAccount.bankType', 'ledgerTransactions.deductAccount.bank', 'externalInstallmentMarks']);
 
         $summary  = $this->loanOverviewService->summarizeLoan($loan);
         $schedule = $this->loanOverviewService->installmentScheduleWithPaymentStatus($loan);
+
+        // Payment history — same shape as the bill / investment ledger
+        $ledger = $loan->ledgerTransactions->sortByDesc('id')->map(fn ($tx) => [
+            'id'              => $tx->id,
+            'amount'          => (float) $tx->amount,
+            'occurrence_date' => $tx->occurrence_date?->format('Y-m-d'),
+            'account_name'    => $tx->deductAccount?->account_name ?? $tx->deductAccount?->name ?? null,
+            'bank_name'       => $tx->deductAccount?->bank?->name ?? null,
+            'created_at'      => $tx->created_at?->format('Y-m-d H:i'),
+        ])->values();
 
         return response()->json([
             'data' => array_merge($this->format($loan, $summary), [
@@ -140,6 +150,7 @@ class PosLoanApiController extends Controller
                     'past_due_unpaid' => $row['past_due_unpaid'],
                     'status_label'    => $row['status_label'],
                 ])->values(),
+                'ledger' => $ledger,
             ]),
         ]);
     }
