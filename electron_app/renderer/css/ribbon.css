@@ -6814,6 +6814,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 }
 .cart-hdr-btn + .cart-hdr-btn { margin-left: 0; }
 .cart-hdr-btn:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+.cart-hdr-btn--danger:hover { background: #ef444415; color: #ef4444; border-color: #ef4444; }
 .park-badge {
   position: absolute; top: -5px; right: -5px;
   background: #ef4444; color: #fff; font-size: 9px; font-weight: 700;

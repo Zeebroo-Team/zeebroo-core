@@ -7018,6 +7018,7 @@ function applyFeatureVisibility() {
   btn('#btn-park',     mp('pos_cart_park'));
   btn('#btn-recall',   mp('pos_cart_recall'));
   btn('#btn-customer', mp('pos_cart_customer'));
+  btn('#btn-clear-cart', mp('pos_btn_clear_cart'));
   btn('#btn-gift-card', mp('pos_cart_checkout'));
   btn('#btn-coupon',    mp('pos_cart_checkout'));
   btn('#checkout-btn',        mp('pos_cart_checkout'));
@@ -33871,6 +33872,7 @@ function clearCart() {
 }
 
 $('#rb-clear-cart').addEventListener('click', clearCart);
+$('#btn-clear-cart')?.addEventListener('click', clearCart);
 $('#checkout-btn').addEventListener('click', openCheckout);
 $('#rb-checkout').addEventListener('click', () => { const t = activeTab(); if (t && t.cart.length) openCheckout(); });
 $('#btn-park')?.addEventListener('click', parkCurrentSale);
