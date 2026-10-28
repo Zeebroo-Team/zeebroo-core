@@ -31,6 +31,7 @@
     { key: 'subscriptions', icon: 'fa-repeat', title: 'Recurring Sales', desc: 'Subscription sales and their billing cycles.', accent: '#7c3aed' },
     { key: 'rentals', icon: 'fa-calendar-days', title: 'Rental', desc: 'Rented items, due dates, and returns.', accent: '#e11d48' },
     { key: 'returns', icon: 'fa-rotate-left', title: 'Returns', desc: 'Processed refunds and returned items (view only).', accent: '#64748b' },
+    { key: 'reverts', icon: 'fa-ban', title: 'Reverted Bills', desc: 'Bills undone because they were entered by mistake, with the reason.', accent: '#dc2626' },
   ];
 
   // ── Small shared helpers ──────────────────────────────────────────────────
@@ -145,6 +146,7 @@
     subscriptions: renderSubscriptions,
     rentals: renderRentals,
     returns: renderReturns,
+    reverts: renderReverts,
   };
 
   function openSection(key) {
@@ -185,7 +187,7 @@
         <select class="salm-select" id="tx-status">
           <option value="">${t('All statuses')}</option>
           <option value="completed">${t('Completed')}</option>
-          <option value="void">${t('Voided')}</option>
+          <option value="void">${t('Reverted')}</option>
         </select>
         <button class="salm-icon-btn" id="tx-refresh"><i class="fa-solid fa-arrows-rotate"></i> ${t('Refresh')}</button>
         <span class="salm-count-pill" id="tx-count"></span>
@@ -264,7 +266,7 @@
         <td class="salm-muted-cell">${esc(s.customer_name) || '—'}</td>
         <td><span class="salm-chip ${s.channel === 'online' ? 'online' : ''}">${s.channel === 'online' ? t('Online') : t('POS')}</span></td>
         <td class="salm-muted-cell">${esc(s.payment_method) || '—'}</td>
-        <td><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Voided') : t('Completed')}</span></td>
+        <td><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Reverted') : t('Completed')}</span></td>
         <td class="salm-amt-cell">${money(s.total)}</td>
         <td><div class="salm-row-actions"><button data-view title="${t('View')}"><i class="fa-solid fa-eye"></i></button></div></td>
       </tr>`).join('');
@@ -290,8 +292,17 @@
         <div class="salm-item-total">${money(it.line_total)}</div>
       </div>`).join('') || `<div class="salm-item-row"><span class="salm-item-meta">${t('No items.')}</span></div>`;
 
+    const rev = s.revert;
+    const revertNotice = s.status === 'void' && rev ? `
+      <div class="salm-revert-notice">
+        <div><i class="fa-solid fa-ban"></i> <strong>${t('Reverted')}</strong> — ${esc(t(rev.reason_label))} <span class="salm-muted-inline">(${esc(rev.revert_number)})</span></div>
+        ${rev.notes ? `<div class="salm-revert-note">“${esc(rev.notes)}”</div>` : ''}
+        <div class="salm-revert-meta">${fmtDateTime(rev.reverted_at)}${rev.reverted_by ? ` · ${esc(rev.reverted_by)}` : ''} · ${t('Refund due')} ${money(rev.amount_refunded)}</div>
+      </div>` : '';
+
     const bodyHtml = `
-      <div class="salm-view-row"><span>${t('Status')}</span><span><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Voided') : t('Completed')}</span></span></div>
+      ${revertNotice}
+      <div class="salm-view-row"><span>${t('Status')}</span><span><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Reverted') : t('Completed')}</span></span></div>
       <div class="salm-view-row"><span>${t('Date')}</span><span>${fmtDateTime(s.sold_at)}</span></div>
       <div class="salm-view-row"><span>${t('Customer')}</span><span>${esc(s.customer_name) || t('Walk-in')}</span></div>
       <div class="salm-view-row"><span>${t('Cashier')}</span><span>${esc(s.cashier?.name) || '—'}</span></div>
@@ -310,18 +321,246 @@
       </div>`;
 
     const footHtml = s.status !== 'void'
-      ? `<button class="salm-btn-ghost danger" id="tx-void-btn" type="button"><i class="fa-solid fa-ban"></i> ${t('Void Sale')}</button>`
+      ? `<button class="salm-btn-ghost danger" id="tx-void-btn" type="button" title="${t('Undo a bill entered by mistake — restores stock and payment')}"><i class="fa-solid fa-ban"></i> ${t('Revert Bill')}</button>`
       : '';
 
     openDetail({ title: s.sale_number || `#${s.id}`, bodyHtml, footHtml });
-    document.getElementById('tx-void-btn')?.addEventListener('click', async () => {
-      if (!await zeebrooConfirm(t('Void {label}? This cannot be undone.', { label: s.sale_number }), { okText: t('Void Sale'), tone: 'danger' })) return;
-      const voidRes = await API.voidSale(id);
-      if (voidRes.status !== 200) { showToast(t(voidRes.body?.message || 'Could not void sale.'), 'error'); return; }
-      closeDetail();
-      showToast(t('{label} has been voided.', { label: s.sale_number }), 'success');
-      loadTransactions();
+    document.getElementById('tx-void-btn')?.addEventListener('click', () => openRevertForm(s));
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Revert Bill — undo a bill entered by mistake. The server voids it,
+  // restocks what wasn't already returned, takes the payment back out of the
+  // deposit account and keeps the reason (see Reverted Bills below).
+  // ════════════════════════════════════════════════════════════════════════
+  let revertReasons = null;
+
+  async function loadRevertReasons() {
+    if (revertReasons) return revertReasons;
+    const res = await API.saleRevertReasons();
+    revertReasons = res.status === 200 && res.body?.data ? res.body.data : { other: 'Other' };
+    return revertReasons;
+  }
+
+  async function openRevertForm(s) {
+    const reasons = await loadRevertReasons();
+
+    // Mirrors SaleRevertService so the cashier sees the refund before confirming
+    const items = s.items || [];
+    const restockQty = items.reduce((n, it) => n + Math.max(0, parseFloat(it.quantity || 0) - parseFloat(it.returned_quantity || 0)), 0);
+    const gift = parseFloat(s.gift_card_amount || 0);
+    const returnedAmt = items.reduce((n, it) => n + parseFloat(it.returned_quantity || 0) * parseFloat(it.unit_sell_price || 0), 0);
+    const refundDue = Math.max(0, Math.max(0, parseFloat(s.amount_paid || 0) - gift) - returnedAmt);
+    const qty = (q) => (q % 1 === 0 ? String(q) : q.toFixed(3));
+
+    const bodyHtml = `
+      <div class="salm-revert-warn">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+        <div>${t('This cancels the whole bill. Stock goes back into inventory, the payment is taken back out of the deposit account, and the bill is removed from sales totals. This can\'t be undone.')}</div>
+      </div>
+      <div class="salm-totals" style="border-top:none;padding-top:0">
+        <div class="salm-view-row"><span>${t('Bill total')}</span><span>${money(s.total)}</span></div>
+        <div class="salm-view-row"><span>${t('Items back to stock')}</span><span>${qty(restockQty)}</span></div>
+        ${returnedAmt > 0.005 ? `<div class="salm-view-row"><span>${t('Already refunded via Returns')}</span><span>-${money(returnedAmt)}</span></div>` : ''}
+        ${gift > 0.005 ? `<div class="salm-view-row"><span>${t('Back to gift card')}</span><span>${money(gift)}</span></div>` : ''}
+        <div class="salm-view-row grand"><span>${t('Give back to customer')}</span><span>${money(refundDue)}</span></div>
+      </div>
+      <div class="salm-section-label">${t('Why is this bill being reverted?')} <span style="color:var(--danger)">*</span></div>
+      <div class="salm-revert-reasons">
+        ${Object.entries(reasons).map(([k, v]) => `
+          <label class="salm-revert-reason"><input type="radio" name="salm-revert-reason" value="${esc(k)}"> <span>${esc(t(v))}</span></label>`).join('')}
+      </div>
+      <div class="salm-section-label" id="rv-notes-label">${t('Details (optional)')}</div>
+      <textarea id="rv-notes" class="salm-revert-notes" rows="3" maxlength="1000" placeholder="${t('e.g. Cashier scanned the item twice')}"></textarea>
+      <div class="salm-revert-error" id="rv-error" style="display:none"></div>`;
+
+    const footHtml = `
+      <button class="salm-btn-ghost" id="rv-cancel" type="button">${t('Cancel')}</button>
+      <button class="salm-btn-primary salm-btn-danger" id="rv-confirm" type="button"><i class="fa-solid fa-ban"></i> ${t('Revert Bill')}</button>`;
+
+    openDetail({ title: t('Revert {label}', { label: s.sale_number || `#${s.id}` }), bodyHtml, footHtml });
+
+    const errEl = document.getElementById('rv-error');
+    const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = ''; };
+
+    detailBody.querySelectorAll('input[name="salm-revert-reason"]').forEach((inp) => inp.addEventListener('change', () => {
+      document.getElementById('rv-notes-label').innerHTML = inp.value === 'other'
+        ? `${t('Details')} <span style="color:var(--danger)">*</span>`
+        : t('Details (optional)');
+      errEl.style.display = 'none';
+    }));
+
+    document.getElementById('rv-cancel').addEventListener('click', () => openSaleDetail(s.id));
+    document.getElementById('rv-confirm').addEventListener('click', async () => {
+      const reason = detailBody.querySelector('input[name="salm-revert-reason"]:checked')?.value;
+      const notes = document.getElementById('rv-notes').value.trim();
+      if (!reason) { showErr(t('Choose why this bill is being reverted.')); return; }
+      if (reason === 'other' && !notes) { showErr(t('Describe why this bill is being reverted.')); return; }
+
+      const btn = document.getElementById('rv-confirm');
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Reverting…')}`;
+      const res = await API.revertSale(s.id, { reason, notes });
+      if (res.status >= 400) {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid fa-ban"></i> ${t('Revert Bill')}`;
+        const errs = res.body?.errors ? Object.values(res.body.errors).flat() : [];
+        showErr(t(errs[0] || res.body?.message || 'Could not revert this bill.'));
+        return;
+      }
+
+      const refunded = res.body?.data?.revert?.amount_refunded;
+      showToast(t('{label} reverted — give back {amount}.', { label: s.sale_number, amount: money(refunded) }), 'success');
+      if (currentSectionKey === 'transactions') loadTransactions();
+      if (currentSectionKey === 'history') loadHistory(histPage);
+      openSaleDetail(s.id);
     });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Reverted Bills — read-only list of reverts with reason and amounts
+  // ════════════════════════════════════════════════════════════════════════
+  let revPage = 1;
+
+  async function renderReverts() {
+    sectionBody.innerHTML = `
+      <div class="salm-toolbar">
+        <div class="salm-search"><i class="fa-solid fa-magnifying-glass"></i><input id="rev-search" type="text" placeholder="${t('Search bill #, customer, note…')}"></div>
+        <select class="salm-select" id="rev-reason"><option value="all">${t('All reasons')}</option></select>
+        <input type="date" class="salm-date-input" id="rev-from" title="${t('From date')}">
+        <input type="date" class="salm-date-input" id="rev-to" title="${t('To date')}">
+        <button class="salm-icon-btn" id="rev-refresh"><i class="fa-solid fa-arrows-rotate"></i> ${t('Refresh')}</button>
+        <span class="salm-count-pill" id="rev-count"></span>
+      </div>
+      <div class="salm-kpi-bar" id="rev-kpi" style="display:none">
+        <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Reverted Bills')}</span><span class="salm-kpi-val" id="rev-kpi-count">0</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Bill Value Reverted')}</span><span class="salm-kpi-val" id="rev-kpi-total" style="color:var(--danger)">0.00</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Refunded to Customers')}</span><span class="salm-kpi-val accent" id="rev-kpi-refunded">0.00</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Units Restocked')}</span><span class="salm-kpi-val" id="rev-kpi-units">0</span></div>
+      </div>
+      <div class="salm-table-card"><table class="salm-table">
+        <thead><tr><th>${t('Revert #')}</th><th>${t('Bill #')}</th><th>${t('Reverted')}</th><th>${t('Customer')}</th><th>${t('Reason')}</th><th>${t('By')}</th><th style="text-align:right">${t('Bill Total')}</th><th style="text-align:right">${t('Refunded')}</th></tr></thead>
+        <tbody id="rev-rows"><tr><td colspan="8" class="salm-loading">${t('Loading…')}</td></tr></tbody>
+      </table></div>
+      <div class="salm-pagination" id="rev-pagination"></div>`;
+
+    document.getElementById('rev-search').addEventListener('input', debounce(() => loadReverts(1), 350));
+    ['rev-reason', 'rev-from', 'rev-to'].forEach((id) => document.getElementById(id).addEventListener('change', () => loadReverts(1)));
+    document.getElementById('rev-refresh').addEventListener('click', () => loadReverts(revPage));
+
+    loadReverts(1);
+    const reasons = await loadRevertReasons();
+    const sel = document.getElementById('rev-reason');
+    if (sel) sel.insertAdjacentHTML('beforeend', Object.entries(reasons).map(([k, v]) => `<option value="${esc(k)}">${esc(t(v))}</option>`).join(''));
+  }
+
+  async function loadReverts(page) {
+    revPage = page;
+    const rowsEl = document.getElementById('rev-rows');
+    rowsEl.innerHTML = `<tr><td colspan="8" class="salm-loading">${t('Loading…')}</td></tr>`;
+    await loadSettings();
+
+    const res = await API.saleReverts({
+      q: document.getElementById('rev-search').value.trim(),
+      reason: document.getElementById('rev-reason').value,
+      dateFrom: document.getElementById('rev-from').value,
+      dateTo: document.getElementById('rev-to').value,
+      page,
+    });
+
+    if (res.status !== 200) {
+      rowsEl.innerHTML = `<tr><td colspan="8" class="salm-empty">${t('Could not load reverted bills ({reason}).', { reason: t(res.body?.message) || res.status })}</td></tr>`;
+      document.getElementById('rev-kpi').style.display = 'none';
+      document.getElementById('rev-count').textContent = '';
+      document.getElementById('rev-pagination').innerHTML = '';
+      return;
+    }
+
+    const list = res.body.data || [];
+    const summary = res.body.summary || {};
+    const kpi = document.getElementById('rev-kpi');
+    if (summary.count) {
+      kpi.style.display = '';
+      document.getElementById('rev-kpi-count').textContent = summary.count;
+      document.getElementById('rev-kpi-total').textContent = money(summary.sale_total);
+      document.getElementById('rev-kpi-refunded').textContent = money(summary.amount_refunded);
+      document.getElementById('rev-kpi-units').textContent = parseFloat(summary.stock_restored_qty || 0);
+    } else {
+      kpi.style.display = 'none';
+    }
+
+    const total = res.body.meta?.total || 0;
+    document.getElementById('rev-count').textContent = total
+      ? t(total === 1 ? '{n} reverted bill' : '{n} reverted bills', { n: total })
+      : t('No reverted bills');
+
+    if (!list.length) {
+      rowsEl.innerHTML = `<tr><td colspan="8" class="salm-empty">${t('No reverted bills found.')}</td></tr>`;
+    } else {
+      rowsEl.innerHTML = list.map((r) => `
+        <tr data-id="${r.id}">
+          <td class="salm-ref"><i class="fa-solid fa-ban"></i>${esc(r.revert_number)}</td>
+          <td class="salm-muted-cell">${esc(r.sale_number) || '—'}</td>
+          <td class="salm-muted-cell">${fmtDateTime(r.reverted_at)}</td>
+          <td class="salm-muted-cell">${esc(r.customer_name) || '—'}</td>
+          <td><span class="salm-badge red">${esc(t(r.reason_label))}</span>${r.notes ? `<div class="salm-revert-row-note" title="${esc(r.notes)}">${esc(r.notes)}</div>` : ''}</td>
+          <td class="salm-muted-cell">${esc(r.reverted_by?.name) || '—'}</td>
+          <td class="salm-amt-cell">${money(r.sale_total)}</td>
+          <td class="salm-amt-cell">${money(r.amount_refunded)}</td>
+        </tr>`).join('');
+      rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openRevertDetail(Number(tr.dataset.id))));
+    }
+
+    renderPagination(document.getElementById('rev-pagination'), res.body.meta, loadReverts);
+  }
+
+  async function openRevertDetail(id) {
+    openDetail({ title: t('Loading…'), bodyHtml: `<div class="salm-loading">${t('Loading…')}</div>` });
+    const res = await API.saleRevert(id);
+    if (res.status !== 200) {
+      openDetail({ title: t('Reverted Bill'), bodyHtml: `<div class="salm-empty">${t('Could not load reverted bill ({reason}).', { reason: t(res.body?.message) || res.status })}</div>` });
+      return;
+    }
+    const r = res.body.data;
+    const qty = (v) => { const q = parseFloat(v || 0); return q % 1 === 0 ? String(q) : q.toFixed(3); };
+
+    const itemsHtml = (r.items || []).map((it) => {
+      const returned = parseFloat(it.returned_quantity || 0);
+      const restocked = parseFloat(it.restocked_quantity || 0);
+      return `
+      <div class="salm-item-row">
+        <div>
+          <div class="salm-item-name">${esc(it.product_name)}${it.type === 'service' ? ` <span class="salm-muted-inline">(${t('service')})</span>` : ''}</div>
+          <div class="salm-item-meta">${qty(it.quantity)} × ${money(it.unit_sell_price)}${returned ? ` · ${t('returned before')} ${qty(returned)}` : ''} · ${t('restocked')} ${restocked ? qty(restocked) : '—'}</div>
+        </div>
+        <div class="salm-item-total">${money(it.line_total)}</div>
+      </div>`;
+    }).join('') || `<div class="salm-item-row"><span class="salm-item-meta">${t('No items.')}</span></div>`;
+
+    const bodyHtml = `
+      <div class="salm-revert-notice">
+        <div><i class="fa-solid fa-ban"></i> <strong>${esc(t(r.reason_label))}</strong></div>
+        ${r.notes ? `<div class="salm-revert-note">“${esc(r.notes)}”</div>` : ''}
+      </div>
+      <div class="salm-view-row"><span>${t('Bill #')}</span><span>${esc(r.sale_number) || '—'}</span></div>
+      <div class="salm-view-row"><span>${t('Bill date')}</span><span>${fmtDateTime(r.sale_sold_at)}</span></div>
+      <div class="salm-view-row"><span>${t('Reverted')}</span><span>${fmtDateTime(r.reverted_at)}</span></div>
+      <div class="salm-view-row"><span>${t('Reverted by')}</span><span>${esc(r.reverted_by?.name) || '—'}</span></div>
+      <div class="salm-view-row"><span>${t('Customer')}</span><span>${esc(r.customer_name) || t('Walk-in')}</span></div>
+      <div class="salm-view-row"><span>${t('Payment method')}</span><span>${esc(r.payment_method) || '—'}</span></div>
+      <div class="salm-section-label">${t('Items')}</div>
+      <div class="salm-item-list">${itemsHtml}</div>
+      <div class="salm-totals">
+        <div class="salm-view-row"><span>${t('Bill total')}</span><span>${money(r.sale_total)}</span></div>
+        <div class="salm-view-row"><span>${t('Amount paid')}</span><span>${money(r.amount_paid)}</span></div>
+        ${parseFloat(r.gift_card_refunded) > 0 ? `<div class="salm-view-row"><span>${t('Returned to gift card')}</span><span>${money(r.gift_card_refunded)}</span></div>` : ''}
+        ${parseFloat(r.returned_total) > 0 ? `<div class="salm-view-row"><span>${t('Refunded earlier via Returns')}</span><span>${money(r.returned_total)}</span></div>` : ''}
+        <div class="salm-view-row"><span>${t('Taken back from deposit account')}</span><span>${money(r.account_reversed)}</span></div>
+        <div class="salm-view-row"><span>${t('Units restocked')}</span><span>${qty(r.stock_restored_qty)}</span></div>
+        <div class="salm-view-row grand"><span>${t('Refunded to customer')}</span><span>${money(r.amount_refunded)}</span></div>
+      </div>`;
+
+    openDetail({ title: `${r.revert_number} · ${r.sale_number || ''}`, bodyHtml });
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -336,7 +575,7 @@
         <select class="salm-select" id="hist-status">
           <option value="all">${t('All statuses')}</option>
           <option value="completed">${t('Completed')}</option>
-          <option value="void">${t('Voided')}</option>
+          <option value="void">${t('Reverted')}</option>
         </select>
         <select class="salm-select" id="hist-channel">
           <option value="all">${t('All channels')}</option>
@@ -350,7 +589,7 @@
       <div class="salm-kpi-bar" id="hist-kpi" style="display:none">
         <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Total Sales')}</span><span class="salm-kpi-val" id="hist-kpi-count">0</span></div>
         <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Completed')}</span><span class="salm-kpi-val" id="hist-kpi-completed">0</span></div>
-        <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Voided')}</span><span class="salm-kpi-val" id="hist-kpi-void">0</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Reverted')}</span><span class="salm-kpi-val" id="hist-kpi-void">0</span></div>
         <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Completed Revenue')}</span><span class="salm-kpi-val accent" id="hist-kpi-revenue">0.00</span></div>
       </div>
       <div class="salm-table-card"><table class="salm-table">
@@ -413,7 +652,7 @@
           <td class="salm-muted-cell">${esc(s.customer_name) || '—'}</td>
           <td><span class="salm-chip ${s.channel === 'online' ? 'online' : ''}">${s.channel === 'online' ? t('Online') : t('POS')}</span></td>
           <td class="salm-muted-cell">${esc(s.payment_method) || '—'}</td>
-          <td><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Voided') : t('Completed')}</span></td>
+          <td><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Reverted') : t('Completed')}</span></td>
           <td class="salm-amt-cell">${money(s.total)}</td>
         </tr>`).join('');
       rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openSaleDetail(Number(tr.dataset.id))));

@@ -198,6 +198,20 @@ const API = (() => {
     },
     saleReturn: (id) => request('GET', `/sale-returns/${id}`),
 
+    // Sales Management — Reverted Bills (bills undone because they were entered by mistake)
+    revertSale: (id, payload) => request('POST', `/sales/${id}/revert`, payload),
+    saleRevertReasons: () => request('GET', '/sale-reverts/reasons'),
+    saleReverts: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.reason && params.reason !== 'all') qs.set('reason', params.reason);
+      if (params.dateFrom) qs.set('date_from', params.dateFrom);
+      if (params.dateTo) qs.set('date_to', params.dateTo);
+      qs.set('page', params.page || 1);
+      return request('GET', '/sale-reverts?' + qs.toString());
+    },
+    saleRevert: (id) => request('GET', `/sale-reverts/${id}`),
+
     // Sales Management — History (paginated, with summary + filters)
     salesHistory: (params = {}) => {
       const qs = new URLSearchParams();
