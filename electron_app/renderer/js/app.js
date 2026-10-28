@@ -910,6 +910,7 @@ function _salSwitchView(view) {
   const showSubs     = view === 'subscriptions';
   const showRentals  = view === 'rentals';
   const showReverts  = view === 'reverts';
+  const showCheques  = view === 'cheques';
   $('#sal-list-view').style.display      = showTxn      ? '' : 'none';
   $('#sal-history-view').style.display   = showHist     ? '' : 'none';
   $('#sal-credits-view').style.display   = showCredits  ? 'flex' : 'none';
@@ -919,6 +920,7 @@ function _salSwitchView(view) {
   $('#sal-subscriptions-view').style.display = showSubs ? 'flex' : 'none';
   $('#sal-rentals-view').style.display   = showRentals  ? 'flex' : 'none';
   $('#sal-reverts-view').style.display   = showReverts  ? 'flex' : 'none';
+  $('#sal-cheques-view').style.display   = showCheques  ? 'flex' : 'none';
   $('#sal-detail-view').style.display    = 'none';
   if (showTxn      && !_sal.all.length) loadSalesList();
   if (showHist)     loadSalesHistory();
@@ -929,6 +931,7 @@ function _salSwitchView(view) {
   if (showSubs)     loadSubscriptionsList();
   if (showRentals)  loadRentalsList();
   if (showReverts)  loadSaleReverts();
+  if (showCheques)  loadSaleCheques();
 }
 
 // ── Subscriptions (Sales panel tab) ─────────────────────────────────────────
@@ -1679,6 +1682,11 @@ $('#credit-pay-amount')?.addEventListener('keydown', e => {
 
 // Payment cell for a sale row: "credit" plus, while money is owed, the due and a Pay button.
 function _salPaymentCell(s, cur) {
+  if (s.payment_method === 'cheque' && s.cheque_status && !_isVoidSale(s)) {
+    const key   = s.cheque_status === 'cleared' ? 'cleared' : s.cheque_status;
+    const label = { pending: 'Not claimed', cleared: 'Claimed', bounced: 'Bounced', cancelled: 'Cancelled' }[key] || key;
+    return `cheque <span class="schq-badge schq-badge--${escHtml(key)}" style="margin-left:4px">${escHtml(label)}</span>`;
+  }
   const due = Number(s.due_amount) || 0;
   if (s.payment_method !== 'credit' || due <= 0.005) return escHtml(s.payment_method || '—');
   return `credit <span class="sal-due-chip${s.is_overdue ? ' overdue' : ''}">Due ${escHtml(formatMoney(due, {currency: cur}))}</span>
@@ -1861,8 +1869,12 @@ function _salRenderList() {
   // KPI bar
   const completed = list.filter(s => !_isVoidSale(s));
   const revenue   = completed.reduce((n, s) => n + parseFloat(s.total || 0), 0);
-  const profit    = completed.reduce((n, s) => n + parseFloat(s.profit || 0), 0);
-  const margin    = revenue > 0 ? (profit / revenue) * 100 : 0;
+  // Unclaimed cheque sales are left out of profit (and its margin) until the money arrives
+  const earned    = completed.filter(s => !_salChequeUnclaimed(s));
+  const unclaimed = completed.length - earned.length;
+  const profit    = earned.reduce((n, s) => n + parseFloat(s.profit || 0), 0);
+  const earnedRev = earned.reduce((n, s) => n + parseFloat(s.total || 0), 0);
+  const margin    = earnedRev > 0 ? (profit / earnedRev) * 100 : 0;
   const anyMissingCost = completed.some(s => s.missing_cost || s.profit == null);
   const kpiBar    = $('#sal-kpi-bar');
   if (list.length) {
@@ -1881,7 +1893,7 @@ function _salRenderList() {
         <span class="sal-kpi-val accent">${formatMoney(revenue, {currency: cur})}</span>
       </div>
       <div class="sal-kpi-item">
-        <span class="sal-kpi-label">Profit${anyMissingCost ? ' <i class="fa fa-triangle-exclamation sal-profit-warn" title="Some items have no cost price recorded — their cost is counted as zero"></i>' : ''}</span>
+        <span class="sal-kpi-label">Profit${anyMissingCost ? ' <i class="fa fa-triangle-exclamation sal-profit-warn" title="Some items have no cost price recorded — their cost is counted as zero"></i>' : ''}${unclaimed ? ` <i class="fa fa-hourglass-half" style="color:#b45309" title="${unclaimed} cheque sale${unclaimed !== 1 ? 's' : ''} not counted until the cheque is claimed"></i>` : ''}</span>
         <span class="sal-kpi-val ${profit < 0 ? 'sal-profit-neg' : 'sal-profit-pos'}">${formatMoney(profit, {currency: cur})}</span>
       </div>
       <div class="sal-kpi-item">
@@ -1931,8 +1943,17 @@ function _salRenderList() {
   _salWirePayButtons($('#sal-table-wrap'), list, () => loadSalesList());
 }
 
+// A cheque sale earns nothing until the cheque is claimed (pending or bounced)
+function _salChequeUnclaimed(s) {
+  return s.payment_method === 'cheque' && ['pending', 'bounced'].includes(s.cheque_status);
+}
+
 function _salProfitCell(s, cur) {
   if (s.profit == null || _isVoidSale(s)) return '<td class="td-amt td-muted">—</td>';
+  if (_salChequeUnclaimed(s)) {
+    const tip = `Profit ${formatMoney(parseFloat(s.profit), {currency: cur})} once the cheque is claimed`;
+    return `<td class="td-amt td-muted" title="${escHtml(tip)}"><i class="fa fa-hourglass-half" style="margin-right:4px"></i>Not claimed</td>`;
+  }
   const p    = parseFloat(s.profit);
   const tot  = parseFloat(s.total || 0);
   const tip  = `Cost ${formatMoney(parseFloat(s.cost || 0), {currency: cur})}${tot > 0 ? ` · Margin ${((p / tot) * 100).toFixed(1)}%` : ''}`;
@@ -2030,6 +2051,35 @@ async function _salSelectSale(id) {
     totalsHTML += `
     <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${formatMoney(paidVia, {currency: cur})}</span></div>`;
   }
+  const chq = sale.cheque;
+  if (chq) {
+    const chqDate = chq.cheque_date ? new Date(chq.cheque_date + 'T00:00:00').toLocaleDateString([], { dateStyle: 'medium' }) : '—';
+    const chqWhen = d => d ? new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+    const chqRow  = (label, val) => `<div class="sal-chq-row"><span>${label}</span><span>${val}</span></div>`;
+    const chqRows = [
+      chqRow('Amount', `<strong>${formatMoney(parseFloat(chq.amount || 0), {currency: cur})}</strong>`),
+      chq.bank_name ? chqRow('Bank', escHtml(chq.bank_name)) : '',
+      chqRow('Cheque date', escHtml(chqDate)),
+      chqRow('Received', `${escHtml(chqWhen(chq.created_at))}${chq.received_by ? `<br><span class="sal-chq-who">by ${escHtml(chq.received_by)}</span>` : ''}`),
+    ];
+    if (chq.status === 'cleared') {
+      chqRows.push(
+        chqRow('Claimed', `${escHtml(chqWhen(chq.claimed_at))}${chq.claimed_by ? `<br><span class="sal-chq-who">by ${escHtml(chq.claimed_by)}</span>` : ''}`),
+        chqRow('Deposited into', escHtml(chq.deposit_account?.label || '—')),
+      );
+    }
+    if (chq.bounced_at) {
+      chqRows.push(chqRow('Bounced', `${escHtml(chqWhen(chq.bounced_at))}${chq.bounce_reason ? `<br><span class="sal-chq-who">${escHtml(chq.bounce_reason)}</span>` : ''}`));
+    }
+    if (chq.status === 'cancelled') chqRows.push(chqRow('Cancelled', 'Bill reverted — cheque handed back'));
+    if (chq.notes) chqRows.push(chqRow('Note', `<em>${escHtml(chq.notes)}</em>`));
+    totalsHTML += `
+    <div class="sal-chq-box">
+      <div class="sal-chq-head"><span class="sal-chq-no"><i class="fa fa-money-check"></i> Cheque #${escHtml(chq.cheque_number || '')}</span>${_schqBadge(chq)}</div>
+      <div class="sal-chq-details">${chqRows.join('')}</div>
+      ${chq.is_claimable && !isVoided ? `<button type="button" class="schq-btn schq-btn--claim sal-chq-claim" id="sal-chq-claim"><i class="fa fa-building-columns"></i> Claim Cheque</button>` : ''}
+    </div>`;
+  }
   if (change > 0) {
     totalsHTML += `<div class="sal-total-row"><span class="label">Change</span><span>${formatMoney(change, {currency: cur})}</span></div>`;
   }
@@ -2068,7 +2118,7 @@ async function _salSelectSale(id) {
     <div class="sal-section-title">Totals</div>
     <div class="sal-totals">${totalsHTML}</div>
 
-    ${isVoided ? '' : `<div class="sal-section-title">Profit</div>
+    ${isVoided ? '' : `<div class="sal-section-title">Profit${chq && ['pending', 'bounced'].includes(chq.status) ? ' <span class="schq-badge schq-badge--pending" style="margin-left:6px;text-transform:none;letter-spacing:0">Not earned until the cheque is claimed</span>' : ''}</div>
     <div class="sal-totals">
       <div class="sal-total-row"><span class="label">Sale Total</span><span>${formatMoney(saleTotal, {currency: cur})}</span></div>
       <div class="sal-total-row"><span class="label">Cost${missingCost ? ' ' + warnIcon : ''}</span><span>-${formatMoney(costTotal, {currency: cur})}</span></div>
@@ -2082,6 +2132,12 @@ async function _salSelectSale(id) {
     saleId: sale.id, saleNumber: num, due: sale.due_amount,
     onDone: () => _salSelectSale(sale.id),
   }));
+  // The cheque payload inside a sale omits the bill/customer — fill them in for the dialog
+  $('#sal-chq-claim')?.addEventListener('click', () => _schqOpenDialog(
+    { ...sale.cheque, sale_number: num, customer: sale.customer_name ? { name: sale.customer_name } : null },
+    'claim',
+    () => _salSelectSale(sale.id),
+  ));
 }
 
 function _salCreditPaymentsHtml(sale, cur) {
@@ -2106,6 +2162,9 @@ function _salCloseDetail() {
   $('#sal-detail-view').style.display = 'none';
   if (_sal.view === 'history') {
     $('#sal-history-view').style.display = '';
+  } else if (_sal.view === 'cheques') {
+    $('#sal-cheques-view').style.display = 'flex';
+    loadSaleCheques();
   } else {
     $('#sal-list-view').style.display = '';
   }
@@ -2209,7 +2268,9 @@ async function _salOpenRevert(sale) {
   const gift        = parseFloat(sale.gift_card_amount || 0);
   const paidByMeth  = Math.max(0, parseFloat(sale.amount_paid || 0) - gift);
   const returnedAmt = items.reduce((n, i) => n + parseFloat(i.returned_quantity || 0) * parseFloat(i.unit_sell_price || 0), 0);
-  const refundDue   = Math.max(0, paidByMeth - returnedAmt);
+  // An unclaimed cheque is handed back instead of refunding money
+  const chqBack     = !!sale.cheque && ['pending', 'bounced'].includes(sale.cheque.status);
+  const refundDue   = chqBack ? 0 : Math.max(0, paidByMeth - returnedAmt);
   const fmtQty = q => (q % 1 === 0 ? String(q) : q.toFixed(3));
 
   $('#sal-revert-num').textContent = `#${sale.sale_number || sale.id}`;
@@ -2218,6 +2279,7 @@ async function _salOpenRevert(sale) {
     <div class="srv-sum-row"><span>Items back to stock</span><strong>${fmtQty(restockQty)} unit${restockQty === 1 ? '' : 's'}</strong></div>
     ${returnedAmt > 0.005 ? `<div class="srv-sum-row"><span>Already refunded via Returns</span><strong>-${formatMoney(returnedAmt, {currency: cur})}</strong></div>` : ''}
     ${gift > 0.005 ? `<div class="srv-sum-row"><span>Back to gift card</span><strong>${formatMoney(gift, {currency: cur})}</strong></div>` : ''}
+    ${chqBack ? `<div class="srv-sum-row"><span>Hand back cheque #${escHtml(sale.cheque.cheque_number || '')} (not claimed)</span><strong>${formatMoney(parseFloat(sale.cheque.amount || 0), {currency: cur})}</strong></div>` : ''}
     <div class="srv-sum-row srv-sum-total"><span>Give back to customer (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><strong>${formatMoney(refundDue, {currency: cur})}</strong></div>`;
 
   $('#sal-revert-reasons').innerHTML = Object.entries(reasons).map(([k, v]) => `
@@ -2427,6 +2489,245 @@ $('#srv-reason-filter').addEventListener('change', e => { _srv.reason = e.target
 $('#srv-date-from').addEventListener('change', e => { _srv.dateFrom = e.target.value; _srv.page = 1; loadSaleReverts(); });
 $('#srv-date-to').addEventListener('change', e => { _srv.dateTo = e.target.value; _srv.page = 1; loadSaleReverts(); });
 $('#srv-refresh').addEventListener('click', () => loadSaleReverts());
+
+// ── Cheques tab ───────────────────────────────────────────────────────────
+// Customer cheques taken at checkout. A cheque stays pending until it is
+// claimed (deposited — the money goes into an account) or marked bounced.
+const _schq = {
+  list: [], page: 1, lastPage: 1,
+  q: '', status: 'all', dateFrom: '', dateTo: '',
+  searchTimer: null,
+  accounts: null,
+  dialog: null,             // { cheque, mode: 'claim' | 'bounce', onDone }
+};
+
+// Pending cheques whose date has arrived show as "Due" so the cashier knows to bank them
+function _schqBadge(c) {
+  const key   = c.status === 'pending' && c.is_due ? 'due' : c.status;
+  const label = key === 'due' ? 'Due to claim' : (c.status_label || c.status);
+  return `<span class="schq-badge schq-badge--${escHtml(key)}">${escHtml(label)}</span>`;
+}
+
+function _schqActionsHtml(c) {
+  if (!c.is_claimable) return '';
+  return `<div class="schq-actions">
+    <button type="button" class="schq-btn schq-btn--claim" data-schq-claim="${c.id}"><i class="fa fa-building-columns"></i> ${c.status === 'bounced' ? 'Claim again' : 'Claim'}</button>
+    ${c.status === 'pending' ? `<button type="button" class="schq-btn schq-btn--bounce" data-schq-bounce="${c.id}" title="Bank returned it unpaid"><i class="fa fa-ban"></i></button>` : ''}
+  </div>`;
+}
+
+// Wire Claim / Bounce buttons inside `root`; `list` holds the cheques rendered there
+function _schqWireActions(root, list, onDone) {
+  root.querySelectorAll('[data-schq-claim]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const c = list.find(x => x.id === Number(b.dataset.schqClaim));
+    if (c) _schqOpenDialog(c, 'claim', onDone);
+  }));
+  root.querySelectorAll('[data-schq-bounce]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    const c = list.find(x => x.id === Number(b.dataset.schqBounce));
+    if (c) _schqOpenDialog(c, 'bounce', onDone);
+  }));
+}
+
+async function loadSaleCheques() {
+  const body = $('#schq-body');
+  body.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+  $('#schq-kpi').style.display = 'none';
+
+  const res = await API.saleCheques({
+    q: _schq.q, status: _schq.status, date_from: _schq.dateFrom, date_to: _schq.dateTo, page: _schq.page,
+  });
+  if (res.status !== 200) {
+    body.innerHTML = '<div class="finance-loading"><i class="fa fa-circle-exclamation" style="color:#ef4444"></i> Failed to load cheques</div>';
+    $('#schq-count').textContent = '—';
+    return;
+  }
+  _schq.list     = res.body?.data || [];
+  _schq.lastPage = res.body?.meta?.last_page || 1;
+  _schqRender(res.body?.summary, res.body?.meta);
+}
+
+function _schqRender(summary, meta) {
+  const cur  = state.currency || '';
+  const list = _schq.list;
+  const kpi  = $('#schq-kpi');
+  const fm   = v => formatMoney(parseFloat(v || 0), {currency: cur});
+
+  if (summary && (summary.pending_count || summary.cleared_count || summary.bounced_count)) {
+    kpi.style.display = '';
+    kpi.innerHTML = `
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Due to Claim (${summary.due_count})</span><span class="sal-kpi-val accent">${fm(summary.due_total)}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">All Pending (${summary.pending_count})</span><span class="sal-kpi-val">${fm(summary.pending_total)}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Claimed (${summary.cleared_count})</span><span class="sal-kpi-val sal-profit-pos">${fm(summary.cleared_total)}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Bounced (${summary.bounced_count})</span><span class="sal-kpi-val sal-profit-neg">${fm(summary.bounced_total)}</span></div>`;
+  } else {
+    kpi.style.display = 'none';
+  }
+  _schqSetTabCount(summary?.due_count || 0);
+
+  const total = meta?.total ?? list.length;
+  $('#schq-count').textContent = total ? `${total} cheque${total !== 1 ? 's' : ''}` : 'No cheques';
+
+  const pager = $('#schq-pager');
+  pager.innerHTML = _schq.lastPage > 1 ? `
+    <button class="po-btn-ghost" id="schq-prev" ${_schq.page <= 1 ? 'disabled' : ''}><i class="fa fa-chevron-left"></i></button>
+    <span class="td-muted">Page ${_schq.page} of ${_schq.lastPage}</span>
+    <button class="po-btn-ghost" id="schq-next" ${_schq.page >= _schq.lastPage ? 'disabled' : ''}><i class="fa fa-chevron-right"></i></button>` : '';
+  $('#schq-prev')?.addEventListener('click', () => { _schq.page--; loadSaleCheques(); });
+  $('#schq-next')?.addEventListener('click', () => { _schq.page++; loadSaleCheques(); });
+
+  if (!list.length) {
+    $('#schq-body').innerHTML = '<div class="finance-loading">No cheques found. Cheques taken at checkout show up here.</div>';
+    return;
+  }
+
+  const fmtD  = d => d ? new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  const fmtDt = d => d ? new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  $('#schq-body').innerHTML = `<table class="sal-tbl">
+    <thead><tr>
+      <th>Cheque #</th><th>Cheque Date</th><th>Customer</th><th>Bill #</th><th>Status</th>
+      <th style="text-align:right">Amount</th><th></th>
+    </tr></thead>
+    <tbody>
+    ${list.map(c => {
+      let sub = '';
+      if (c.status === 'cleared') sub = `Claimed ${fmtDt(c.claimed_at)}${c.claimed_by ? ' by ' + escHtml(c.claimed_by) : ''}${c.deposit_account ? ' → ' + escHtml(c.deposit_account.label) : ''}`;
+      else if (c.status === 'pending' && c.received_by) sub = `Received by ${escHtml(c.received_by)}`;
+      else if (c.status === 'bounced') sub = `Bounced ${fmtDt(c.bounced_at)}${c.bounce_reason ? ' — ' + escHtml(c.bounce_reason) : ''}`;
+      else if (c.status === 'cancelled') sub = 'Bill reverted — hand the cheque back';
+      return `<tr data-schq-id="${c.id}">
+      <td class="td-ref"><i class="fa fa-money-check" style="margin-right:6px;opacity:.55"></i>${escHtml(c.cheque_number || '')}${c.bank_name ? `<div class="schq-sub">${escHtml(c.bank_name)}</div>` : ''}</td>
+      <td class="td-muted">${fmtD(c.cheque_date)}</td>
+      <td class="td-muted">${escHtml(c.customer?.name || '—')}${c.customer?.phone ? `<div class="schq-sub">${escHtml(c.customer.phone)}</div>` : ''}</td>
+      <td class="td-muted">${escHtml(c.sale_number || '—')}</td>
+      <td>${_schqBadge(c)}${sub ? `<div class="schq-sub">${sub}</div>` : ''}</td>
+      <td class="td-amt">${fm(c.amount)}</td>
+      <td>${_schqActionsHtml(c)}</td>
+    </tr>`;
+    }).join('')}
+    </tbody>
+  </table>`;
+
+  _schqWireActions($('#schq-body'), list, loadSaleCheques);
+  // Click a row to open its bill
+  $('#schq-body').querySelectorAll('tr[data-schq-id]').forEach(row => row.addEventListener('click', () => {
+    const c = list.find(x => x.id === Number(row.dataset.schqId));
+    if (!c?.sale_id) return;
+    $('#sal-cheques-view').style.display = 'none';
+    _salSelectSale(c.sale_id);
+  }));
+}
+
+function _schqSetTabCount(n) {
+  const el = $('#schq-tab-count');
+  if (!el) return;
+  el.textContent = n;
+  el.style.display = n ? '' : 'none';
+  el.title = n ? `${n} cheque${n !== 1 ? 's' : ''} due to claim` : '';
+}
+
+async function _schqOpenDialog(cheque, mode, onDone) {
+  _schq.dialog = { cheque, mode, onDone };
+  const cur = state.currency || '';
+  const isClaim = mode === 'claim';
+  const dt = d => d ? new Date(d + 'T00:00:00').toLocaleDateString([], { dateStyle: 'medium' }) : '—';
+
+  $('#schq-dlg-title').textContent = `${isClaim ? 'Claim' : 'Bounced'} Cheque #${cheque.cheque_number}`;
+  $('#schq-dlg-summary').innerHTML = `
+    <div class="srv-sum-row"><span>Customer</span><strong>${escHtml(cheque.customer?.name || '—')}</strong></div>
+    <div class="srv-sum-row"><span>Bill</span><strong>${escHtml(cheque.sale_number || '—')}</strong></div>
+    ${cheque.bank_name ? `<div class="srv-sum-row"><span>Bank</span><strong>${escHtml(cheque.bank_name)}</strong></div>` : ''}
+    <div class="srv-sum-row"><span>Cheque date</span><strong>${dt(cheque.cheque_date)}</strong></div>
+    <div class="srv-sum-row srv-sum-total"><span>Amount</span><strong>${formatMoney(parseFloat(cheque.amount || 0), {currency: cur})}</strong></div>`;
+  $('#schq-dlg-claim').style.display  = isClaim ? '' : 'none';
+  $('#schq-dlg-bounce').style.display = isClaim ? 'none' : '';
+  $('#schq-dlg-error').style.display  = 'none';
+  $('#schq-dlg-notes').value  = '';
+  $('#schq-dlg-reason').value = '';
+  const btn = $('#schq-dlg-confirm');
+  btn.classList.toggle('schq-confirm-bounce', !isClaim);
+  btn.innerHTML = isClaim ? '<i class="fa fa-building-columns"></i> Claim Cheque' : '<i class="fa fa-ban"></i> Mark Bounced';
+  $('#schq-overlay').style.display = 'flex';
+
+  if (!isClaim) { setTimeout(() => $('#schq-dlg-reason').focus(), 40); return; }
+
+  // Post-dated cheque — the bank won't pay it yet
+  if (cheque.cheque_date && !cheque.is_due && cheque.status === 'pending') {
+    _schqDialogError(`This cheque is dated ${dt(cheque.cheque_date)} — the bank won't pay it before then. Claim it only if it has already cleared.`);
+  }
+
+  const sel = $('#schq-dlg-account');
+  if (!_schq.accounts) {
+    sel.innerHTML = '<option value="">Loading accounts…</option>';
+    const [aRes, sRes] = await Promise.all([API.accounts(), API.settingsGet()]);
+    _schq.accounts = aRes.status === 200 ? (aRes.body?.data || []) : [];
+    _schq.defaultAccountId = sRes.status === 200 ? sRes.body?.data?.default_deposit_account_id : null;
+  }
+  sel.innerHTML = _schq.accounts.length
+    ? _schq.accounts.map(a => `<option value="${a.id}"${String(a.id) === String(_schq.defaultAccountId) ? ' selected' : ''}>${escHtml(a.account_name || a.name || '')}${a.bank_name ? ' · ' + escHtml(a.bank_name) : ''}</option>`).join('')
+    : '<option value="">No accounts — add one in Finance first</option>';
+}
+
+function _schqCloseDialog() {
+  $('#schq-overlay').style.display = 'none';
+  _schq.dialog = null;
+}
+
+function _schqDialogError(msg) {
+  const el = $('#schq-dlg-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+$('#schq-dlg-cancel').addEventListener('click', _schqCloseDialog);
+$('#schq-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) _schqCloseDialog(); });
+$('#schq-dlg-confirm').addEventListener('click', async () => {
+  const dlg = _schq.dialog;
+  if (!dlg) return;
+  const { cheque, mode, onDone } = dlg;
+  const btn = $('#schq-dlg-confirm');
+  let res;
+
+  if (mode === 'claim') {
+    const accountId = parseInt($('#schq-dlg-account').value) || null;
+    if (!accountId) { _schqDialogError('Choose the account this cheque is deposited into.'); return; }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Claiming…';
+    res = await API.claimSaleCheque(cheque.id, { deposit_account_id: accountId, notes: $('#schq-dlg-notes').value.trim() || undefined });
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-building-columns"></i> Claim Cheque';
+  } else {
+    const reason = $('#schq-dlg-reason').value.trim();
+    if (!reason) { _schqDialogError('Say why the cheque bounced.'); $('#schq-dlg-reason').focus(); return; }
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+    res = await API.bounceSaleCheque(cheque.id, { reason });
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-ban"></i> Mark Bounced';
+  }
+
+  if (res.status >= 400) {
+    const errs = res.body?.errors ? Object.values(res.body.errors).flat() : [];
+    _schqDialogError(errs[0] || res.body?.message || 'Could not update this cheque.');
+    return;
+  }
+
+  _schqCloseDialog();
+  toast(res.body?.message || (mode === 'claim' ? 'Cheque claimed' : 'Cheque marked as bounced'), mode === 'claim' ? 'success' : 'info');
+  if (typeof onDone === 'function') onDone();
+});
+$('#schq-dlg-reason').addEventListener('keydown', e => { if (e.key === 'Enter') $('#schq-dlg-confirm').click(); });
+
+$('#schq-search').addEventListener('input', e => {
+  clearTimeout(_schq.searchTimer);
+  _schq.q = e.target.value.trim();
+  _schq.searchTimer = setTimeout(() => { _schq.page = 1; loadSaleCheques(); }, 300);
+});
+$('#schq-status-filter').addEventListener('change', e => { _schq.status = e.target.value; _schq.page = 1; loadSaleCheques(); });
+$('#schq-date-from').addEventListener('change', e => { _schq.dateFrom = e.target.value; _schq.page = 1; loadSaleCheques(); });
+$('#schq-date-to').addEventListener('change', e => { _schq.dateTo = e.target.value; _schq.page = 1; loadSaleCheques(); });
+$('#schq-refresh').addEventListener('click', () => loadSaleCheques());
 
 // ── History view ──────────────────────────────────────────────────────────
 const _salHist = {
@@ -6743,7 +7044,7 @@ function applyFeatureVisibility() {
     if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
     if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
-  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions'), rentals: mp('sal_tab_rentals'), reverts: mp('sal_tab_transactions') };
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions'), rentals: mp('sal_tab_rentals'), reverts: mp('sal_tab_transactions'), cheques: mp('sal_tab_transactions') };
     $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
     const _salActive = $('.sal-view-btn.active');
     if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
@@ -26459,7 +26760,7 @@ function _cmRenderPagination() {
 async function _cmSelectCustomer(id) {
   _cm.selectedId = id;
   _cm.editingId  = null;
-  _cm.tabLoaded  = { subs: false, warranty: false, credit: false, rentals: false };
+  _cm.tabLoaded  = { subs: false, warranty: false, credit: false, rentals: false, cheques: false };
   _cmRenderList();
   _cmShowForm(false);
   _cmShowDetail(true);
@@ -26499,7 +26800,7 @@ async function _cmSelectCustomer(id) {
       <div class="cm-dv-field-val${f.val ? '' : ' empty'}">${f.val ? (f.raw ? f.val : escHtml(f.val)) : '—'}</div>
     </div>`).join('');
 
-  const pmLabel = { cash: 'Cash', card: 'Card', credit: 'Credit' };
+  const pmLabel = { cash: 'Cash', card: 'Card', credit: 'Credit', cheque: 'Cheque' };
   const history = $('#cm-dv-history');
   if (c.recent_sales?.length) {
     history.innerHTML = `<div class="cm-dv-history-title"><i class="fa fa-clock-rotate-left"></i> Recent Sales</div>` +
@@ -26679,6 +26980,42 @@ async function _cmLoadTabData(tab) {
         const r = list.find(x => x.id === Number(row.dataset.cmRental));
         if (r) _prentalOpenDetail(r);
       });
+    });
+
+  } else if (tab === 'cheques') {
+    const panel = $('#cm-dv-panel-cheques');
+    panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+    const res = await API.saleCheques({ customer_id: id, per_page: 100 });
+    if (_cm.selectedId !== id) return;
+    const list = res.status === 200 ? (res.body?.data ?? []) : [];
+    const sum  = res.body?.summary || {};
+    if (!list.length) {
+      panel.innerHTML = '<div class="cm-dv-no-sales"><i class="fa fa-money-check"></i> No cheques from this customer</div>';
+      return;
+    }
+    const kpis = `
+      <div class="cm-credit-kpis">
+        <div class="cm-credit-kpi is-due"><span>Pending (${sum.pending_count || 0})</span><strong>${escHtml(formatMoney(sum.pending_total || 0))}</strong></div>
+        <div class="cm-credit-kpi is-avail"><span>Claimed (${sum.cleared_count || 0})</span><strong>${escHtml(formatMoney(sum.cleared_total || 0))}</strong></div>
+        <div class="cm-credit-kpi"><span>Bounced (${sum.bounced_count || 0})</span><strong>${escHtml(formatMoney(sum.bounced_total || 0))}</strong></div>
+      </div>`;
+    panel.innerHTML = kpis + list.map(c => {
+      const meta = [c.sale_number, c.cheque_date ? `Dated ${c.cheque_date}` : '', c.bank_name,
+        c.status === 'bounced' && c.bounce_reason ? `Bounced: ${c.bounce_reason}` : '',
+        c.status === 'cleared' && c.deposit_account ? `→ ${c.deposit_account.label}` : ''].filter(Boolean).join(' · ');
+      return `
+      <div class="cm-dv-credit-row cm-dv-chq-row">
+        <span class="cm-dv-sale-num">#${escHtml(c.cheque_number || '')}</span>
+        <span class="cm-dv-credit-meta">${escHtml(meta)}</span>
+        ${_schqBadge(c)}
+        <span class="cm-dv-sale-amt">${parseFloat(c.amount || 0).toFixed(2)}</span>
+        ${_schqActionsHtml(c)}
+      </div>`;
+    }).join('');
+    _schqWireActions(panel, list, () => {
+      if (_cm.selectedId !== id) return;
+      _cm.tabLoaded.cheques = false;
+      _cmLoadTabData('cheques');
     });
   }
 }
@@ -34138,6 +34475,7 @@ function _coRefresh() {
   const amountEl = $('#co-amount');
   if (amountEl) amountEl.value = _coAmount || '';
   if ($('#co-amount-due')) $('#co-amount-due').textContent = formatMoney(due);
+  if ($('#co-cheque-amount')) $('#co-cheque-amount').textContent = formatMoney(due);
   const changeEl = $('#co-change');
   if (changeEl) {
     changeEl.textContent  = formatMoney(change);
@@ -34198,6 +34536,14 @@ function openCheckout() {
   const creditDueDateEl = $('#co-credit-due-date');
   if (creditDueDateEl) creditDueDateEl.value = '';
   _coCredit = { customerId: null, info: null }; // re-fetch the customer's available credit each checkout
+
+  // Reset cheque fields — the date defaults to today (most cheques aren't post-dated)
+  ['#co-cheque-number', '#co-cheque-bank'].forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+  const chqDateEl = $('#co-cheque-date');
+  if (chqDateEl) {
+    const d = new Date();
+    chqDateEl.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
   _coSyncPaymentSections();
 
   // Reset notes & alert
@@ -34234,21 +34580,29 @@ function openCheckout() {
 $('#checkout-cancel').addEventListener('click', () => { $('#checkout-modal').style.display = 'none'; });
 
 function _coSyncPaymentSections() {
-  const isCredit = _coGetMethod() === 'credit';
+  const method   = _coGetMethod();
+  const isCredit = method === 'credit';
+  const isCheque = method === 'cheque';
   const creditSec  = $('#co-credit-section');
+  const chequeSec  = $('#co-cheque-section');
   const cashSec    = $('#co-cash-section');
   const numpadSec  = $('#co-numpad-section');
   if (creditSec)  creditSec.style.display  = isCredit ? '' : 'none';
-  if (cashSec)    cashSec.style.display    = isCredit ? 'none' : '';
-  if (numpadSec)  numpadSec.style.display  = isCredit ? 'none' : '';
+  if (chequeSec)  chequeSec.style.display  = isCheque ? '' : 'none';
+  if (cashSec)    cashSec.style.display    = isCredit || isCheque ? 'none' : '';
+  if (numpadSec)  numpadSec.style.display  = isCredit || isCheque ? 'none' : '';
   _coSyncCreditNotice();
+  if (isCheque) setTimeout(() => (activeTab()?._customer ? $('#co-cheque-number') : $('#co-cust-trigger'))?.focus(), 40);
 }
 
+// Credit and cheque both need a customer on the bill
 function _coSyncCreditNotice() {
-  const notice = $('#co-credit-customer-notice');
-  if (!notice) return;
   const tab = activeTab();
-  notice.style.display = (_coGetMethod() === 'credit' && !tab?._customer) ? '' : 'none';
+  const method = _coGetMethod();
+  const notice = $('#co-credit-customer-notice');
+  if (notice) notice.style.display = (method === 'credit' && !tab?._customer) ? '' : 'none';
+  const chqNotice = $('#co-cheque-customer-notice');
+  if (chqNotice) chqNotice.style.display = (method === 'cheque' && !tab?._customer) ? '' : 'none';
   _coSyncCreditLimit();
 }
 
@@ -34651,9 +35005,32 @@ $('#checkout-confirm').addEventListener('click', async () => {
   const giftAmt = _coGiftApplied(total);
   const due    = _coGetDue();
 
-  if (method !== 'credit' && amount + 0.005 < due) {
+  if (method !== 'credit' && method !== 'cheque' && amount + 0.005 < due) {
     showAlert(alertEl, `Amount given (${amount.toFixed(2)}) is less than amount due (${due.toFixed(2)})`);
     return;
+  }
+
+  // Cheque payment needs a customer plus the cheque number and date
+  const chequeNumber = ($('#co-cheque-number')?.value || '').trim();
+  const chequeDate   = $('#co-cheque-date')?.value || '';
+  const chequeBank   = ($('#co-cheque-bank')?.value || '').trim();
+  if (method === 'cheque') {
+    if (!tab?._customer) {
+      showAlert(alertEl, 'Cheque payment requires a customer. Please assign a customer above.');
+      _coSyncCreditNotice();
+      setTimeout(() => $('#co-cust-trigger')?.focus(), 60);
+      return;
+    }
+    if (!chequeNumber) {
+      showAlert(alertEl, 'Enter the cheque number.');
+      setTimeout(() => $('#co-cheque-number')?.focus(), 60);
+      return;
+    }
+    if (!chequeDate) {
+      showAlert(alertEl, 'Enter the date written on the cheque.');
+      setTimeout(() => $('#co-cheque-date')?.focus(), 60);
+      return;
+    }
   }
 
   // Credit payment requires a customer
@@ -34711,8 +35088,11 @@ $('#checkout-confirm').addEventListener('click', async () => {
   // Single unified checkout — products and services in one Sale record
   const body = {
     payment_method:   method,
-    amount_paid:      method === 'credit' ? total : amount,
+    amount_paid:      method === 'credit' ? total : (method === 'cheque' ? due : amount),
     amount_tendered:  method === 'cash'   ? amount : undefined,
+    cheque_number:    method === 'cheque' ? chequeNumber : undefined,
+    cheque_date:      method === 'cheque' ? chequeDate : undefined,
+    cheque_bank:      method === 'cheque' ? (chequeBank || undefined) : undefined,
     notes:            notes || undefined,
     discount_percent: discountPct  > 0 ? discountPct  : undefined,
     discount_flat:    discountFlat > 0 ? discountFlat : undefined,

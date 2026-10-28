@@ -8,7 +8,9 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleCheque;
 use Modules\Pos\Models\SaleItem;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
@@ -44,7 +46,7 @@ class SaleService
     public function listForBusiness(Business $business, ?string $search = null, ?int $limit = null): Collection
     {
         $query = $business->sales()
-            ->with(['user', 'creditAccount', 'branch', 'customer'])
+            ->with(['user', 'creditAccount', 'branch', 'customer', 'cheque:id,pos_sale_id,status'])
             ->withCount('items')
             // Cost of goods per sale (items with no unit_cost count as zero
             // and are flagged via items_missing_cost) for list-level profit.
@@ -127,7 +129,7 @@ class SaleService
     public function indexForBusiness(Business $business, array $filters = []): LengthAwarePaginator
     {
         $query = $business->sales()
-            ->with(['user', 'branch', 'customer'])
+            ->with(['user', 'branch', 'customer', 'cheque:id,pos_sale_id,status'])
             ->withCount('items');
 
         $this->applyIndexFilters($query, $filters);
@@ -254,6 +256,8 @@ class SaleService
         bool $honourClientPrices = false,
         ?string $clientUuid = null,
         ?string $offlineRef = null,
+        // Cheque sales only: {cheque_number, cheque_date, bank_name?}
+        ?array $cheque = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -274,6 +278,12 @@ class SaleService
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel       = $this->normalizeChannel($channel);
 
+        if ($paymentMethod === Sale::PAYMENT_CHEQUE) {
+            $cheque = $this->normalizeCheque($business, $customerId, $cheque);
+            // The money only lands in an account when the cheque is claimed
+            $deferSettlement = true;
+        }
+
         $posSettings = $this->posSettings->forBusiness($business);
         $branchStockSeparate = (bool) ($posSettings['branch_stock_separate'] ?? false);
 
@@ -287,7 +297,7 @@ class SaleService
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds)
             ->concat($this->campaignService->activeForProducts($business, $cartProductIds));
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount, $couponCode, $soldAt, $clientUuid, $offlineRef) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount, $couponCode, $soldAt, $clientUuid, $offlineRef, $cheque) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
@@ -575,7 +585,7 @@ class SaleService
             }
 
             $paid = match ($paymentMethod) {
-                Sale::PAYMENT_CASH, Sale::PAYMENT_CARD => $total,
+                Sale::PAYMENT_CASH, Sale::PAYMENT_CARD, Sale::PAYMENT_CHEQUE => $total,
                 default => $giftApplied,
             };
 
@@ -596,6 +606,20 @@ class SaleService
             // Only the non-gift-card portion is new money into the deposit account.
             if (!$deferSettlement && $due > self::MONEY_TOLERANCE && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
                 $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $due, $paymentMethod);
+            }
+
+            // The cheque covers what the gift card didn't
+            if ($paymentMethod === Sale::PAYMENT_CHEQUE && $due > self::MONEY_TOLERANCE) {
+                $sale->cheque()->create([
+                    'business_id'     => $business->id,
+                    'pos_customer_id' => $customerId,
+                    'user_id'         => $user->id,
+                    'cheque_number'   => $cheque['cheque_number'],
+                    'bank_name'       => $cheque['bank_name'],
+                    'cheque_date'     => $cheque['cheque_date'],
+                    'amount'          => $due,
+                    'status'          => SaleCheque::STATUS_PENDING,
+                ]);
             }
 
             return $sale->refresh()->load(['items.product', 'items.serviceItem.products', 'creditAccount', 'user']);
@@ -661,6 +685,11 @@ class SaleService
 
             $this->giftCards->refundForSale($sale);
             $this->coupons->reverseForSale($sale);
+
+            // An unclaimed cheque is simply handed back
+            $sale->cheque()
+                ->whereIn('status', [SaleCheque::STATUS_PENDING, SaleCheque::STATUS_BOUNCED])
+                ->update(['status' => SaleCheque::STATUS_CANCELLED]);
 
             $sale->update(['status' => Sale::STATUS_VOID]);
 
@@ -933,13 +962,52 @@ class SaleService
     private function normalizePaymentMethod(string $method): string
     {
         $method = strtolower(trim($method));
-        if (! in_array($method, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD, Sale::PAYMENT_CREDIT], true)) {
+        if (! in_array($method, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD, Sale::PAYMENT_CREDIT, Sale::PAYMENT_CHEQUE], true)) {
             throw ValidationException::withMessages([
                 'payment_method' => 'Choose a valid payment method.',
             ]);
         }
 
         return $method;
+    }
+
+    /**
+     * A cheque sale needs a customer (so the cheque can be chased if it bounces),
+     * a cheque number and the date written on the cheque.
+     *
+     * @return array{cheque_number: string, cheque_date: string, bank_name: ?string}
+     */
+    private function normalizeCheque(Business $business, ?int $customerId, ?array $cheque): array
+    {
+        if ($customerId === null) {
+            throw ValidationException::withMessages([
+                'pos_customer_id' => 'A customer must be assigned for cheque payment.',
+            ]);
+        }
+
+        if (! Customer::query()->whereKey($customerId)->where('business_id', $business->id)->exists()) {
+            throw ValidationException::withMessages([
+                'pos_customer_id' => 'Choose a valid customer for this cheque.',
+            ]);
+        }
+
+        $number = trim((string) ($cheque['cheque_number'] ?? ''));
+        if ($number === '') {
+            throw ValidationException::withMessages(['cheque_number' => 'Enter the cheque number.']);
+        }
+
+        $date = trim((string) ($cheque['cheque_date'] ?? ''));
+        if ($date === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || strtotime($date) === false) {
+            throw ValidationException::withMessages(['cheque_date' => 'Enter the date written on the cheque.']);
+        }
+
+        $bank = trim((string) ($cheque['bank_name'] ?? ''));
+
+        return [
+            'cheque_number' => mb_substr($number, 0, 60),
+            'cheque_date'   => $date,
+            'bank_name'     => $bank !== '' ? mb_substr($bank, 0, 120) : null,
+        ];
     }
 
     private function normalizeChannel(string $channel): string

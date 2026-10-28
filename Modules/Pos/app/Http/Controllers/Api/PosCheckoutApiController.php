@@ -49,7 +49,10 @@ class PosCheckoutApiController extends Controller
             'items.*.custom_requirement_values.*.label'  => ['nullable', 'string', 'max:255'],
             'items.*.custom_requirement_values.*.type'   => ['nullable', 'string', 'in:text,textarea,select,number,date,checkbox,radio'],
             'items.*.custom_requirement_values.*.value'  => ['nullable', 'string', 'max:1000'],
-            'payment_method'                 => ['required', 'string', 'in:cash,card,credit'],
+            'payment_method'                 => ['required', 'string', 'in:cash,card,credit,cheque'],
+            'cheque_number'                  => ['nullable', 'required_if:payment_method,cheque', 'string', 'max:60'],
+            'cheque_date'                    => ['nullable', 'required_if:payment_method,cheque', 'date_format:Y-m-d'],
+            'cheque_bank'                    => ['nullable', 'string', 'max:120'],
             'channel'                        => ['nullable', 'string', 'in:retail,online'],
             'credit_account_id'              => ['nullable', 'integer', 'min:1'],
             'pos_customer_id'                => ['nullable', 'integer', 'min:1'],
@@ -72,10 +75,10 @@ class PosCheckoutApiController extends Controller
             ?? $request->header('X-Branch-Id');
         $branchId = is_numeric($branchId) ? (int) $branchId : null;
 
-        if ($validated['payment_method'] === 'credit' && empty($validated['pos_customer_id'])) {
+        if (in_array($validated['payment_method'], ['credit', 'cheque'], true) && empty($validated['pos_customer_id'])) {
             return response()->json([
-                'message' => 'A customer must be assigned for credit payment.',
-                'errors'  => ['pos_customer_id' => ['A customer is required for credit payment.']],
+                'message' => "A customer must be assigned for {$validated['payment_method']} payment.",
+                'errors'  => ['pos_customer_id' => ["A customer is required for {$validated['payment_method']} payment."]],
             ], 422);
         }
 
@@ -129,6 +132,11 @@ class PosCheckoutApiController extends Controller
                 $validated['gift_card_code'] ?? null,
                 isset($validated['gift_card_amount']) ? (float) $validated['gift_card_amount'] : null,
                 $validated['coupon_code'] ?? null,
+                cheque: $validated['payment_method'] === Sale::PAYMENT_CHEQUE ? [
+                    'cheque_number' => $validated['cheque_number'] ?? null,
+                    'cheque_date'   => $validated['cheque_date'] ?? null,
+                    'bank_name'     => $validated['cheque_bank'] ?? null,
+                ] : null,
             );
         } catch (ValidationException $e) {
             return response()->json([

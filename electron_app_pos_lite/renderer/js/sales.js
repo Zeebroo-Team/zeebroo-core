@@ -32,6 +32,8 @@
     { key: 'rentals', icon: 'fa-calendar-days', title: 'Rental', desc: 'Rented items, due dates, and returns.', accent: '#e11d48' },
     { key: 'returns', icon: 'fa-rotate-left', title: 'Returns', desc: 'Processed refunds and returned items (view only).', accent: '#64748b' },
     { key: 'reverts', icon: 'fa-ban', title: 'Reverted Bills', desc: 'Bills undone because they were entered by mistake, with the reason.', accent: '#dc2626' },
+    { key: 'cheques', icon: 'fa-money-check', title: 'Cheques', desc: 'Customer cheques taken at checkout — claim them once deposited.', accent: '#0284c7' },
+    { key: 'credits', icon: 'fa-hand-holding-dollar', title: 'Pending Credits', desc: 'Unpaid credit sales by customer — receive their payments.', accent: '#ea580c' },
   ];
 
   // ── Small shared helpers ──────────────────────────────────────────────────
@@ -91,6 +93,42 @@
   };
   function badgeClass(status) { return BADGE_CLASS[status] || 'gray'; }
 
+  // ── Cheque status helpers (shared by Transactions, History, sale detail, Cheques) ──
+  const CHEQUE_BADGE = { pending: 'amber', due: 'blue', cleared: 'green', bounced: 'red', cancelled: 'gray' };
+  const CHEQUE_LABEL = { pending: 'Not claimed', due: 'Due to claim', cleared: 'Claimed', bounced: 'Bounced', cancelled: 'Cancelled' };
+
+  // A pending cheque whose date has arrived shows as "Due to claim"
+  function chequeBadge(status, isDue = false) {
+    const key = status === 'pending' && isDue ? 'due' : status;
+    return `<span class="salm-badge ${CHEQUE_BADGE[key] || 'gray'}">${t(CHEQUE_LABEL[key] || key)}</span>`;
+  }
+
+  // Payment column: "cheque" plus its claim status for cheque sales; for credit
+  // sales still owing money, the due amount and a Pay button
+  function paymentCell(s) {
+    if (s.payment_method === 'cheque' && s.cheque_status && s.status !== 'void') {
+      return `${t('Cheque')} ${chequeBadge(s.cheque_status)}`;
+    }
+    const due = Number(s.due_amount) || 0;
+    if (s.payment_method !== 'credit' || due <= 0.005 || s.status === 'void') return esc(s.payment_method) || '—';
+    return `${t('Credit')} <span class="salm-badge ${s.is_overdue ? 'red' : 'amber'}">${t('Due {amount}', { amount: money(due) })}</span>
+      ${s.pos_customer_id ? `<button type="button" class="salm-pay-btn" data-pay="${s.id}"><i class="fa-solid fa-hand-holding-dollar"></i> ${t('Pay')}</button>` : ''}`;
+  }
+
+  // Pay buttons inside a sales list → receive a payment against that one bill
+  function wirePayButtons(rowsEl, list, onDone) {
+    rowsEl.querySelectorAll('[data-pay]').forEach((btn) => btn.addEventListener('click', (e) => {
+      e.stopPropagation(); // don't open the sale detail
+      const s = list.find((x) => x.id === Number(btn.dataset.pay));
+      if (s) {
+        openCreditPayForm({
+          customerId: s.pos_customer_id, customerName: s.customer_name,
+          saleId: s.id, saleNumber: s.sale_number, due: s.due_amount, onDone,
+        });
+      }
+    }));
+  }
+
   function renderPagination(el, meta, onPage) {
     if (!meta || meta.last_page <= 1) { el.innerHTML = ''; return; }
     el.innerHTML = `
@@ -147,6 +185,8 @@
     rentals: renderRentals,
     returns: renderReturns,
     reverts: renderReverts,
+    cheques: renderCheques,
+    credits: renderCredits,
   };
 
   function openSection(key) {
@@ -265,7 +305,7 @@
         <td class="salm-muted-cell">${fmtDateTime(s.sold_at)}</td>
         <td class="salm-muted-cell">${esc(s.customer_name) || '—'}</td>
         <td><span class="salm-chip ${s.channel === 'online' ? 'online' : ''}">${s.channel === 'online' ? t('Online') : t('POS')}</span></td>
-        <td class="salm-muted-cell">${esc(s.payment_method) || '—'}</td>
+        <td class="salm-muted-cell">${paymentCell(s)}</td>
         <td><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Reverted') : t('Completed')}</span></td>
         <td class="salm-amt-cell">${money(s.total)}</td>
         <td><div class="salm-row-actions"><button data-view title="${t('View')}"><i class="fa-solid fa-eye"></i></button></div></td>
@@ -275,6 +315,7 @@
       const id = Number(tr.dataset.id);
       tr.addEventListener('click', () => openSaleDetail(id));
     });
+    wirePayButtons(rowsEl, list, () => { closeDetail(); loadTransactions(); });
   }
 
   async function openSaleDetail(id) {
@@ -285,6 +326,7 @@
       return;
     }
     const s = res.body.data;
+    const isCredit = s.payment_method === 'credit';
 
     const itemsHtml = (s.items || []).map((it) => `
       <div class="salm-item-row">
@@ -317,15 +359,157 @@
         ${parseFloat(s.coupon_discount || 0) > 0 ? `<div class="salm-view-row"><span>${t('Coupon')}${s.coupon?.code ? ` (${esc(s.coupon.code)})` : ''}</span><span>-${money(s.coupon_discount)}</span></div>` : ''}
         <div class="salm-view-row grand"><span>${t('Total')}</span><span>${money(s.total)}</span></div>
         ${parseFloat(s.gift_card_amount || 0) > 0 ? `<div class="salm-view-row"><span>${t('Gift card')}${s.gift_card?.code ? ` (${esc(s.gift_card.code)})` : ''}</span><span>-${money(s.gift_card_amount)}</span></div>` : ''}
-        <div class="salm-view-row"><span>${t('Amount paid')}</span><span>${money(s.amount_paid)}</span></div>
-      </div>`;
+        ${isCredit ? creditTotalsHtml(s) : `<div class="salm-view-row"><span>${t('Amount paid')}</span><span>${money(s.amount_paid)}</span></div>`}
+      </div>
+      ${s.cheque ? chequeDetailsHtml(s.cheque) : ''}
+      ${isCredit ? creditPaymentsHtml(s.credit_payments || []) : ''}`;
 
+    const canClaim = s.cheque?.is_claimable && s.status !== 'void';
+    const canPay = isCredit && s.status !== 'void' && s.pos_customer_id && (Number(s.due_amount) || 0) > 0.005;
     const footHtml = s.status !== 'void'
-      ? `<button class="salm-btn-ghost danger" id="tx-void-btn" type="button" title="${t('Undo a bill entered by mistake — restores stock and payment')}"><i class="fa-solid fa-ban"></i> ${t('Revert Bill')}</button>`
+      ? `${canClaim ? `<button class="salm-btn-primary" id="tx-chq-claim-btn" type="button"><i class="fa-solid fa-building-columns"></i> ${t('Claim Cheque')}</button>` : ''}
+         ${canPay ? `<button class="salm-btn-primary" id="tx-credit-pay-btn" type="button"><i class="fa-solid fa-hand-holding-dollar"></i> ${t('Receive Payment')}</button>` : ''}
+         <button class="salm-btn-ghost danger" id="tx-void-btn" type="button" title="${t('Undo a bill entered by mistake — restores stock and payment')}"><i class="fa-solid fa-ban"></i> ${t('Revert Bill')}</button>`
       : '';
 
     openDetail({ title: s.sale_number || `#${s.id}`, bodyHtml, footHtml });
     document.getElementById('tx-void-btn')?.addEventListener('click', () => openRevertForm(s));
+    document.getElementById('tx-credit-pay-btn')?.addEventListener('click', () => openCreditPayForm({
+      customerId: s.pos_customer_id, customerName: s.customer_name,
+      saleId: s.id, saleNumber: s.sale_number, due: s.due_amount,
+      onDone: () => openSaleDetail(s.id),
+      onCancel: () => openSaleDetail(s.id),
+    }));
+    // The cheque inside a sale payload omits the bill/customer — fill them in for the claim form
+    document.getElementById('tx-chq-claim-btn')?.addEventListener('click', () => openChequeForm(
+      { ...s.cheque, sale_number: s.sale_number, customer: s.customer_name ? { name: s.customer_name } : null },
+      'claim',
+      () => openSaleDetail(s.id),
+    ));
+  }
+
+  // Credit sale totals: what's been received since the sale, and what's still owed
+  function creditTotalsHtml(s) {
+    // amount_paid = gift card + payments received later
+    const paidLater = Math.max(0, parseFloat(s.amount_paid || 0) - parseFloat(s.gift_card_amount || 0));
+    const dueLabel = s.credit_due_date
+      ? t('Balance due (by {date})', { date: fmtDate(s.credit_due_date + 'T00:00:00') })
+      : t('Balance due');
+    return `
+      <div class="salm-view-row"><span>${t('Paid')}</span><span class="salm-amt-in">${money(paidLater)}</span></div>
+      <div class="salm-view-row grand${s.is_overdue ? ' salm-overdue' : ''}"><span>${dueLabel}${s.is_overdue ? ` <span class="salm-badge red">${t('Overdue')}</span>` : ''}</span><span>${money(s.due_amount)}</span></div>`;
+  }
+
+  function creditPaymentsHtml(payments) {
+    const rows = payments.map((p) => `
+      <div class="salm-view-row">
+        <span>${fmtDateTime(p.paid_at)}<div class="salm-chq-who">${esc((p.payment_method || '').toUpperCase())}${p.received_by ? ` · ${esc(p.received_by)}` : ''}</div></span>
+        <span class="salm-amt-in">${money(p.amount)}</span>
+      </div>`).join('');
+    return `
+      <div class="salm-section-label"><i class="fa-solid fa-hand-holding-dollar"></i> ${t('Credit Payments')}</div>
+      <div class="salm-chq-box">${rows || `<div class="salm-view-row"><span>${t('No payments received yet.')}</span></div>`}</div>`;
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Receive Credit Payment — shown in the detail popup.
+  // opts: { customerId, customerName, due, saleId?, saleNumber?, onDone?, onCancel? }
+  // With saleId the payment goes to that one bill; without it the server applies
+  // it to the customer's oldest unpaid credit sales first.
+  // ════════════════════════════════════════════════════════════════════════
+  function openCreditPayForm(opts) {
+    if (!opts?.customerId) { showToast(t('This credit sale has no customer to collect from.'), 'error'); return; }
+    const due = Number(opts.due) || 0;
+    let method = 'cash';
+
+    const bodyHtml = `
+      <div class="salm-totals" style="border-top:none;padding-top:0">
+        <div class="salm-view-row"><span>${t('Customer')}</span><span>${esc(opts.customerName) || '—'}</span></div>
+        ${opts.saleNumber ? `<div class="salm-view-row"><span>${t('Bill #')}</span><span>${esc(opts.saleNumber)}</span></div>` : ''}
+        <div class="salm-view-row grand"><span>${t(opts.saleId ? 'Due on this sale' : 'Total outstanding')}</span><span>${money(due)}</span></div>
+      </div>
+      <div class="salm-section-label">${t('Amount')} <span style="color:var(--danger)">*</span></div>
+      <div class="salm-pay-amt">
+        <input type="text" inputmode="decimal" id="cpf-amount" class="salm-chq-input" placeholder="0.00" autocomplete="off">
+        <button type="button" class="salm-btn-ghost" id="cpf-full">${t('Pay full')}</button>
+      </div>
+      <div class="salm-section-label">${t('Payment method')}</div>
+      <div class="salm-pay-methods">
+        <button type="button" class="salm-pay-method active" data-method="cash"><i class="fa-solid fa-money-bill-wave"></i> ${t('Cash')}</button>
+        <button type="button" class="salm-pay-method" data-method="card"><i class="fa-solid fa-credit-card"></i> ${t('Card')}</button>
+      </div>
+      <div class="salm-revert-error" id="cpf-error" style="display:none"></div>`;
+
+    const footHtml = `
+      <button class="salm-btn-ghost" id="cpf-cancel" type="button">${t('Cancel')}</button>
+      <button class="salm-btn-primary" id="cpf-confirm" type="button"><i class="fa-solid fa-check"></i> ${t('Receive Payment')}</button>`;
+
+    openDetail({ title: t('Receive Credit Payment'), bodyHtml, footHtml });
+
+    const amtEl = document.getElementById('cpf-amount');
+    const errEl = document.getElementById('cpf-error');
+    const btn = document.getElementById('cpf-confirm');
+    const fail = (msg) => { errEl.textContent = msg; errEl.style.display = ''; amtEl.focus(); };
+    setTimeout(() => amtEl.focus(), 50);
+
+    document.getElementById('cpf-cancel').addEventListener('click', () => (opts.onCancel ? opts.onCancel() : closeDetail()));
+    document.getElementById('cpf-full').addEventListener('click', () => { amtEl.value = due.toFixed(2); amtEl.focus(); });
+    document.querySelectorAll('.salm-pay-method').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('.salm-pay-method').forEach((x) => x.classList.toggle('active', x === b));
+      method = b.dataset.method;
+    }));
+
+    const submit = async () => {
+      const amount = Number(amtEl.value.trim());
+      if (!Number.isFinite(amount) || amount <= 0) { fail(t('Enter a payment amount.')); return; }
+      if (amount > due + 0.005) { fail(t('Payment is more than the amount due ({amount}).', { amount: money(due) })); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
+      const res = await API.customerCreditPayment(opts.customerId, {
+        amount,
+        payment_method: method,
+        ...(opts.saleId ? { pos_sale_id: opts.saleId } : {}),
+      });
+      btn.disabled = false;
+      btn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Receive Payment')}`;
+
+      if (res.status !== 200) {
+        fail(t(res.body?.errors?.amount?.[0] || res.body?.message || 'Could not record the payment.'));
+        return;
+      }
+      showToast(t(res.body?.message || 'Payment received'), 'success');
+      if (typeof opts.onDone === 'function') opts.onDone(); else closeDetail();
+    };
+
+    btn.addEventListener('click', submit);
+    amtEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+  }
+
+  // Everything recorded about a cheque: who took it, who claimed it and where the money went
+  function chequeDetailsHtml(c) {
+    const row = (label, val) => `<div class="salm-view-row"><span>${label}</span><span>${val}</span></div>`;
+    const by = (name) => (name ? `<div class="salm-chq-who">${t('by {name}', { name: esc(name) })}</div>` : '');
+    const rows = [
+      row(t('Status'), chequeBadge(c.status, c.is_due)),
+      row(t('Amount'), `<strong>${money(c.amount)}</strong>`),
+      c.bank_name ? row(t('Bank'), esc(c.bank_name)) : '',
+      row(t('Cheque date'), fmtDate(c.cheque_date ? c.cheque_date + 'T00:00:00' : null)),
+      row(t('Received'), `${fmtDateTime(c.created_at)}${by(c.received_by)}`),
+    ];
+    if (c.status === 'cleared') {
+      rows.push(
+        row(t('Claimed'), `${fmtDateTime(c.claimed_at)}${by(c.claimed_by)}`),
+        row(t('Deposited into'), esc(c.deposit_account?.label) || '—'),
+      );
+    }
+    if (c.bounced_at) rows.push(row(t('Bounced'), `${fmtDateTime(c.bounced_at)}${c.bounce_reason ? `<div class="salm-chq-who">${esc(c.bounce_reason)}</div>` : ''}`));
+    if (c.status === 'cancelled') rows.push(row(t('Cancelled'), t('Bill reverted — cheque handed back')));
+    if (c.notes) rows.push(row(t('Note'), `<em>${esc(c.notes)}</em>`));
+
+    return `
+      <div class="salm-section-label"><i class="fa-solid fa-money-check"></i> ${t('Cheque #{number}', { number: esc(c.cheque_number) })}</div>
+      <div class="salm-chq-box">${rows.join('')}</div>`;
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -350,7 +534,9 @@
     const restockQty = items.reduce((n, it) => n + Math.max(0, parseFloat(it.quantity || 0) - parseFloat(it.returned_quantity || 0)), 0);
     const gift = parseFloat(s.gift_card_amount || 0);
     const returnedAmt = items.reduce((n, it) => n + parseFloat(it.returned_quantity || 0) * parseFloat(it.unit_sell_price || 0), 0);
-    const refundDue = Math.max(0, Math.max(0, parseFloat(s.amount_paid || 0) - gift) - returnedAmt);
+    // An unclaimed cheque is handed back instead of refunding money
+    const chqBack = !!s.cheque && ['pending', 'bounced'].includes(s.cheque.status);
+    const refundDue = chqBack ? 0 : Math.max(0, Math.max(0, parseFloat(s.amount_paid || 0) - gift) - returnedAmt);
     const qty = (q) => (q % 1 === 0 ? String(q) : q.toFixed(3));
 
     const bodyHtml = `
@@ -363,6 +549,7 @@
         <div class="salm-view-row"><span>${t('Items back to stock')}</span><span>${qty(restockQty)}</span></div>
         ${returnedAmt > 0.005 ? `<div class="salm-view-row"><span>${t('Already refunded via Returns')}</span><span>-${money(returnedAmt)}</span></div>` : ''}
         ${gift > 0.005 ? `<div class="salm-view-row"><span>${t('Back to gift card')}</span><span>${money(gift)}</span></div>` : ''}
+        ${chqBack ? `<div class="salm-view-row"><span>${t('Hand back cheque #{number} (not claimed)', { number: esc(s.cheque.cheque_number) })}</span><span>${money(s.cheque.amount)}</span></div>` : ''}
         <div class="salm-view-row grand"><span>${t('Give back to customer')}</span><span>${money(refundDue)}</span></div>
       </div>
       <div class="salm-section-label">${t('Why is this bill being reverted?')} <span style="color:var(--danger)">*</span></div>
@@ -564,6 +751,353 @@
   }
 
   // ════════════════════════════════════════════════════════════════════════
+  // Cheques — customer cheques taken at checkout. A cheque stays pending
+  // until it is claimed (deposited — the money goes into an account) or
+  // marked bounced. Pending cheques whose date has arrived are "due to claim".
+  // ════════════════════════════════════════════════════════════════════════
+  let chqPage = 1;
+  let chqList = [];
+  let chqAccounts = null;
+
+  function renderCheques() {
+    sectionBody.innerHTML = `
+      <div class="salm-toolbar">
+        <div class="salm-search"><i class="fa-solid fa-magnifying-glass"></i><input id="chq-search" type="text" placeholder="${t('Search cheque #, bank, bill #, customer…')}"></div>
+        <select class="salm-select" id="chq-status">
+          <option value="all">${t('All cheques')}</option>
+          <option value="due">${t('Due to claim')}</option>
+          <option value="pending">${t('Pending')}</option>
+          <option value="cleared">${t('Claimed')}</option>
+          <option value="bounced">${t('Bounced')}</option>
+          <option value="cancelled">${t('Cancelled')}</option>
+        </select>
+        <input type="date" class="salm-date-input" id="chq-from" title="${t('Cheque date from')}">
+        <input type="date" class="salm-date-input" id="chq-to" title="${t('Cheque date to')}">
+        <button class="salm-icon-btn" id="chq-refresh"><i class="fa-solid fa-arrows-rotate"></i> ${t('Refresh')}</button>
+        <span class="salm-count-pill" id="chq-count"></span>
+      </div>
+      <div class="salm-kpi-bar" id="chq-kpi" style="display:none">
+        <div class="salm-kpi-item"><span class="salm-kpi-label" id="chq-kpi-due-label">${t('Due to Claim')}</span><span class="salm-kpi-val accent" id="chq-kpi-due">0.00</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label" id="chq-kpi-pending-label">${t('All Pending')}</span><span class="salm-kpi-val" id="chq-kpi-pending">0.00</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label" id="chq-kpi-cleared-label">${t('Claimed')}</span><span class="salm-kpi-val" id="chq-kpi-cleared" style="color:var(--success, #16a34a)">0.00</span></div>
+        <div class="salm-kpi-item"><span class="salm-kpi-label" id="chq-kpi-bounced-label">${t('Bounced')}</span><span class="salm-kpi-val" id="chq-kpi-bounced" style="color:var(--danger)">0.00</span></div>
+      </div>
+      <div class="salm-table-card"><table class="salm-table">
+        <thead><tr><th>${t('Cheque #')}</th><th>${t('Cheque Date')}</th><th>${t('Customer')}</th><th>${t('Bill #')}</th><th>${t('Status')}</th><th style="text-align:right">${t('Amount')}</th><th></th></tr></thead>
+        <tbody id="chq-rows"><tr><td colspan="7" class="salm-loading">${t('Loading…')}</td></tr></tbody>
+      </table></div>
+      <div class="salm-pagination" id="chq-pagination"></div>`;
+
+    document.getElementById('chq-search').addEventListener('input', debounce(() => loadCheques(1), 350));
+    ['chq-status', 'chq-from', 'chq-to'].forEach((id) => document.getElementById(id).addEventListener('change', () => loadCheques(1)));
+    document.getElementById('chq-refresh').addEventListener('click', () => loadCheques(chqPage));
+    loadCheques(1);
+  }
+
+  async function loadCheques(page) {
+    chqPage = page;
+    const rowsEl = document.getElementById('chq-rows');
+    if (!rowsEl) return; // section closed meanwhile
+    rowsEl.innerHTML = `<tr><td colspan="7" class="salm-loading">${t('Loading…')}</td></tr>`;
+    await loadSettings();
+
+    const res = await API.saleCheques({
+      q: document.getElementById('chq-search').value.trim(),
+      status: document.getElementById('chq-status').value,
+      dateFrom: document.getElementById('chq-from').value,
+      dateTo: document.getElementById('chq-to').value,
+      page,
+    });
+
+    if (res.status !== 200) {
+      rowsEl.innerHTML = `<tr><td colspan="7" class="salm-empty">${t('Could not load cheques ({reason}).', { reason: t(res.body?.message) || res.status })}</td></tr>`;
+      document.getElementById('chq-kpi').style.display = 'none';
+      document.getElementById('chq-count').textContent = '';
+      document.getElementById('chq-pagination').innerHTML = '';
+      return;
+    }
+
+    chqList = res.body.data || [];
+    const sum = res.body.summary || {};
+    const kpi = document.getElementById('chq-kpi');
+    if (sum.pending_count || sum.cleared_count || sum.bounced_count) {
+      kpi.style.display = '';
+      document.getElementById('chq-kpi-due-label').textContent = `${t('Due to Claim')} (${sum.due_count || 0})`;
+      document.getElementById('chq-kpi-due').textContent = money(sum.due_total);
+      document.getElementById('chq-kpi-pending-label').textContent = `${t('All Pending')} (${sum.pending_count || 0})`;
+      document.getElementById('chq-kpi-pending').textContent = money(sum.pending_total);
+      document.getElementById('chq-kpi-cleared-label').textContent = `${t('Claimed')} (${sum.cleared_count || 0})`;
+      document.getElementById('chq-kpi-cleared').textContent = money(sum.cleared_total);
+      document.getElementById('chq-kpi-bounced-label').textContent = `${t('Bounced')} (${sum.bounced_count || 0})`;
+      document.getElementById('chq-kpi-bounced').textContent = money(sum.bounced_total);
+    } else {
+      kpi.style.display = 'none';
+    }
+
+    const total = res.body.meta?.total || 0;
+    document.getElementById('chq-count').textContent = total
+      ? t(total === 1 ? '{n} cheque' : '{n} cheques', { n: total })
+      : t('No cheques');
+
+    if (!chqList.length) {
+      rowsEl.innerHTML = `<tr><td colspan="7" class="salm-empty">${t('No cheques found. Cheques taken at checkout show up here.')}</td></tr>`;
+    } else {
+      rowsEl.innerHTML = chqList.map((c) => {
+        let sub = '';
+        if (c.status === 'cleared') sub = `${t('Claimed')} ${fmtDateTime(c.claimed_at)}${c.claimed_by ? ' · ' + t('by {name}', { name: esc(c.claimed_by) }) : ''}${c.deposit_account ? ' → ' + esc(c.deposit_account.label) : ''}`;
+        else if (c.status === 'bounced') sub = `${t('Bounced')} ${fmtDateTime(c.bounced_at)}${c.bounce_reason ? ' — ' + esc(c.bounce_reason) : ''}`;
+        else if (c.status === 'cancelled') sub = t('Bill reverted — hand the cheque back');
+        else if (c.received_by) sub = t('Received by {name}', { name: esc(c.received_by) });
+        return `
+        <tr data-id="${c.id}">
+          <td class="salm-ref"><i class="fa-solid fa-money-check"></i>${esc(c.cheque_number)}${c.bank_name ? `<div class="salm-chq-sub">${esc(c.bank_name)}</div>` : ''}</td>
+          <td class="salm-muted-cell">${fmtDate(c.cheque_date ? c.cheque_date + 'T00:00:00' : null)}</td>
+          <td class="salm-muted-cell">${esc(c.customer?.name) || '—'}${c.customer?.phone ? `<div class="salm-chq-sub">${esc(c.customer.phone)}</div>` : ''}</td>
+          <td class="salm-muted-cell">${esc(c.sale_number) || '—'}</td>
+          <td>${chequeBadge(c.status, c.is_due)}${sub ? `<div class="salm-chq-sub">${sub}</div>` : ''}</td>
+          <td class="salm-amt-cell">${money(c.amount)}</td>
+          <td>${c.is_claimable ? `<div class="salm-chq-actions">
+            <button type="button" class="salm-chq-btn claim" data-claim="${c.id}"><i class="fa-solid fa-building-columns"></i> ${c.status === 'bounced' ? t('Claim again') : t('Claim')}</button>
+            ${c.status === 'pending' ? `<button type="button" class="salm-chq-btn bounce" data-bounce="${c.id}" title="${t('Bank returned it unpaid')}"><i class="fa-solid fa-ban"></i></button>` : ''}
+          </div>` : ''}</td>
+        </tr>`;
+      }).join('');
+
+      rowsEl.querySelectorAll('[data-claim]').forEach((b) => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const c = chqList.find((x) => x.id === Number(b.dataset.claim));
+        if (c) openChequeForm(c, 'claim', () => { closeDetail(); loadCheques(chqPage); });
+      }));
+      rowsEl.querySelectorAll('[data-bounce]').forEach((b) => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const c = chqList.find((x) => x.id === Number(b.dataset.bounce));
+        if (c) openChequeForm(c, 'bounce', () => { closeDetail(); loadCheques(chqPage); });
+      }));
+      // Click a row to open its bill
+      rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => {
+        const c = chqList.find((x) => x.id === Number(tr.dataset.id));
+        if (c?.sale_id) openSaleDetail(c.sale_id);
+      }));
+    }
+
+    renderPagination(document.getElementById('chq-pagination'), res.body.meta, loadCheques);
+  }
+
+  // Claim (deposit into an account) or mark a cheque bounced, in the detail popup
+  async function openChequeForm(c, mode, onDone) {
+    const isClaim = mode === 'claim';
+    const summary = `
+      <div class="salm-totals" style="border-top:none;padding-top:0">
+        <div class="salm-view-row"><span>${t('Customer')}</span><span>${esc(c.customer?.name) || '—'}</span></div>
+        <div class="salm-view-row"><span>${t('Bill #')}</span><span>${esc(c.sale_number) || '—'}</span></div>
+        ${c.bank_name ? `<div class="salm-view-row"><span>${t('Bank')}</span><span>${esc(c.bank_name)}</span></div>` : ''}
+        <div class="salm-view-row"><span>${t('Cheque date')}</span><span>${fmtDate(c.cheque_date ? c.cheque_date + 'T00:00:00' : null)}</span></div>
+        <div class="salm-view-row grand"><span>${t('Amount')}</span><span>${money(c.amount)}</span></div>
+      </div>`;
+
+    const postDated = isClaim && c.status === 'pending' && c.cheque_date && !c.is_due;
+    const bodyHtml = isClaim ? `
+      ${summary}
+      ${postDated ? `<div class="salm-revert-warn"><i class="fa-solid fa-triangle-exclamation"></i><div>${t('This cheque is dated {date} — the bank won\'t pay it before then. Claim it only if it has already cleared.', { date: fmtDate(c.cheque_date + 'T00:00:00') })}</div></div>` : ''}
+      <div class="salm-section-label">${t('Deposit into account')} <span style="color:var(--danger)">*</span></div>
+      <select id="chqf-account" class="salm-chq-input"><option value="">${t('Loading accounts…')}</option></select>
+      <div class="salm-section-label">${t('Note (optional)')}</div>
+      <textarea id="chqf-notes" class="salm-revert-notes" rows="2" maxlength="1000" placeholder="${t('e.g. Deposited at BOC Kandy branch')}"></textarea>
+      <div class="salm-revert-error" id="chqf-error" style="display:none"></div>` : `
+      ${summary}
+      <div class="salm-revert-warn"><i class="fa-solid fa-triangle-exclamation"></i><div>${t('Mark this cheque as returned unpaid by the bank. You can still claim it later if the customer\'s bank pays it on re-presentation.')}</div></div>
+      <div class="salm-section-label">${t('Why did it bounce?')} <span style="color:var(--danger)">*</span></div>
+      <input type="text" id="chqf-reason" class="salm-chq-input" maxlength="255" placeholder="${t('e.g. Insufficient funds')}">
+      <div class="salm-revert-error" id="chqf-error" style="display:none"></div>`;
+
+    const footHtml = `
+      <button class="salm-btn-ghost" id="chqf-cancel" type="button">${t('Cancel')}</button>
+      <button class="salm-btn-primary${isClaim ? '' : ' salm-btn-danger'}" id="chqf-confirm" type="button">
+        <i class="fa-solid ${isClaim ? 'fa-building-columns' : 'fa-ban'}"></i> ${isClaim ? t('Claim Cheque') : t('Mark Bounced')}
+      </button>`;
+
+    openDetail({ title: t(isClaim ? 'Claim Cheque #{number}' : 'Bounced Cheque #{number}', { number: c.cheque_number }), bodyHtml, footHtml });
+
+    const errEl = document.getElementById('chqf-error');
+    const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = ''; };
+    document.getElementById('chqf-cancel').addEventListener('click', () => (c.sale_id ? openSaleDetail(c.sale_id) : closeDetail()));
+
+    if (isClaim) {
+      await loadSettings();
+      if (!chqAccounts) {
+        const aRes = await API.accounts();
+        chqAccounts = aRes.status === 200 ? (aRes.body?.data || []) : [];
+      }
+      const sel = document.getElementById('chqf-account');
+      if (sel) {
+        sel.innerHTML = chqAccounts.length
+          ? chqAccounts.map((a) => `<option value="${a.id}"${String(a.id) === String(posSettings.default_deposit_account_id) ? ' selected' : ''}>${esc(a.account_name || a.name)}${a.bank_name ? ' · ' + esc(a.bank_name) : ''}</option>`).join('')
+          : `<option value="">${t('No accounts — add one in Finance first')}</option>`;
+      }
+    } else {
+      document.getElementById('chqf-reason').focus();
+    }
+
+    document.getElementById('chqf-confirm').addEventListener('click', async () => {
+      const btn = document.getElementById('chqf-confirm');
+      let res;
+      if (isClaim) {
+        const accountId = parseInt(document.getElementById('chqf-account').value, 10) || null;
+        if (!accountId) { showErr(t('Choose the account this cheque is deposited into.')); return; }
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Claiming…')}`;
+        res = await API.claimSaleCheque(c.id, { deposit_account_id: accountId, notes: document.getElementById('chqf-notes').value.trim() || undefined });
+      } else {
+        const reason = document.getElementById('chqf-reason').value.trim();
+        if (!reason) { showErr(t('Say why the cheque bounced.')); return; }
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
+        res = await API.bounceSaleCheque(c.id, { reason });
+      }
+
+      if (res.status >= 400) {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="fa-solid ${isClaim ? 'fa-building-columns' : 'fa-ban'}"></i> ${isClaim ? t('Claim Cheque') : t('Mark Bounced')}`;
+        const errs = res.body?.errors ? Object.values(res.body.errors).flat() : [];
+        showErr(t(errs[0] || res.body?.message || 'Could not update this cheque.'));
+        return;
+      }
+
+      showToast(isClaim
+        ? t('Cheque {number} claimed.', { number: c.cheque_number })
+        : t('Cheque {number} marked as bounced.', { number: c.cheque_number }), 'success');
+      if (currentSectionKey === 'transactions') loadTransactions();
+      if (currentSectionKey === 'history') loadHistory(histPage);
+      if (currentSectionKey === 'cheques' && c.sale_id && document.getElementById('chq-rows')) loadCheques(chqPage);
+      if (typeof onDone === 'function') onDone();
+    });
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  // Pending Credits — unpaid credit sales grouped by customer. Pay a whole
+  // customer's balance (oldest bills first) or one bill at a time.
+  // ════════════════════════════════════════════════════════════════════════
+  let pcAll = [];
+
+  function renderCredits() {
+    sectionBody.innerHTML = `
+      <div class="salm-toolbar">
+        <div class="salm-search"><i class="fa-solid fa-magnifying-glass"></i><input id="pc-search" type="text" placeholder="${t('Search customer or sale number…')}"></div>
+        <button class="salm-icon-btn" id="pc-refresh"><i class="fa-solid fa-arrows-rotate"></i> ${t('Refresh')}</button>
+      </div>
+      <div class="salm-kpi-bar" id="pc-kpi" style="display:none"></div>
+      <div id="pc-body"><div class="salm-loading">${t('Loading…')}</div></div>`;
+
+    document.getElementById('pc-search').addEventListener('input', debounce(renderCreditGroups, 200));
+    document.getElementById('pc-refresh').addEventListener('click', () => {
+      document.getElementById('pc-search').value = '';
+      loadCredits();
+    });
+    loadCredits();
+  }
+
+  async function loadCredits() {
+    const body = document.getElementById('pc-body');
+    if (!body) return;
+    body.innerHTML = `<div class="salm-loading">${t('Loading…')}</div>`;
+    document.getElementById('pc-kpi').style.display = 'none';
+    await loadSettings();
+    const res = await API.pendingCredits();
+    if (!document.getElementById('pc-body')) return; // section changed meanwhile
+    if (res.status !== 200) {
+      body.innerHTML = `<div class="salm-empty">${t('Could not load pending credits ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
+      return;
+    }
+    pcAll = res.body.data || [];
+    renderCreditGroups();
+  }
+
+  function renderCreditGroups() {
+    const body = document.getElementById('pc-body');
+    const kpi = document.getElementById('pc-kpi');
+    if (!body) return;
+    const q = document.getElementById('pc-search').value.trim().toLowerCase();
+    const groups = pcAll.filter((g) => !q
+      || (g.customer_name || '').toLowerCase().includes(q)
+      || (g.customer_phone || '').toLowerCase().includes(q)
+      || g.sales.some((s) => (s.sale_number || '').toLowerCase().includes(q)));
+
+    const totalOwed = groups.reduce((n, g) => n + Number(g.total_owed || 0), 0);
+    const totalOverdue = groups.reduce((n, g) => n + Number(g.overdue_amount || 0), 0);
+    kpi.style.display = '';
+    kpi.innerHTML = `
+      <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Customers')}</span><span class="salm-kpi-val">${groups.length}</span></div>
+      <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Total Outstanding')}</span><span class="salm-kpi-val accent">${money(totalOwed)}</span></div>
+      <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Overdue')}</span><span class="salm-kpi-val salm-overdue-val">${money(totalOverdue)}</span></div>
+      <div class="salm-kpi-item"><span class="salm-kpi-label">${t('Overdue Customers')}</span><span class="salm-kpi-val salm-overdue-val">${groups.filter((g) => g.has_overdue).length}</span></div>`;
+
+    if (!groups.length) {
+      body.innerHTML = `<div class="salm-empty"><i class="fa-solid fa-circle-check" style="color:var(--success, #16a34a)"></i> ${
+        q ? t('No results for "{q}"', { q: esc(q) }) : t('No pending credit sales — all clear!')}</div>`;
+      return;
+    }
+
+    body.innerHTML = groups.map((g, gi) => {
+      const rows = g.sales.map((s) => {
+        const paid = Number(s.amount_paid) || 0;
+        return `
+        <tr${s.is_overdue ? ' class="salm-row-overdue"' : ''}>
+          <td class="salm-ref">${esc(s.sale_number || `#${s.id}`)}</td>
+          <td class="salm-muted-cell">${fmtDate(s.sold_at)}</td>
+          <td class="salm-muted-cell">${s.credit_due_date ? fmtDate(s.credit_due_date + 'T00:00:00') : '—'}${s.is_overdue ? ` <span class="salm-badge red">${t('Overdue')}</span>` : ''}</td>
+          <td class="salm-amt-cell">${money(s.total)}</td>
+          <td class="salm-amt-cell salm-amt-in">${paid > 0 ? money(paid) : '—'}</td>
+          <td class="salm-amt-cell"><strong>${money(s.due_amount)}</strong></td>
+          <td style="text-align:right">${g.customer_id ? `<button type="button" class="salm-pay-btn" data-pc-sale="${gi}:${s.id}"><i class="fa-solid fa-hand-holding-dollar"></i> ${t('Pay')}</button>` : ''}</td>
+        </tr>`;
+      }).join('');
+
+      return `
+      <div class="salm-pc-card${g.has_overdue ? ' has-overdue' : ''}">
+        <div class="salm-pc-head" data-pc-toggle>
+          <div class="salm-pc-avatar">${esc((g.customer_name || '?')[0].toUpperCase())}</div>
+          <div class="salm-pc-info">
+            <div class="salm-pc-name">${esc(g.customer_name)}</div>
+            <div class="salm-pc-meta">${g.customer_phone ? `${esc(g.customer_phone)} · ` : ''}${t(g.sale_count === 1 ? '{n} sale' : '{n} sales', { n: g.sale_count })}</div>
+          </div>
+          <div class="salm-pc-right">
+            <div class="salm-pc-total">${money(g.total_owed)}</div>
+            ${g.has_overdue ? `<div class="salm-pc-overdue"><i class="fa-solid fa-triangle-exclamation"></i> ${t('Overdue {amount}', { amount: money(g.overdue_amount) })}</div>` : ''}
+          </div>
+          ${g.customer_id ? `<button type="button" class="salm-pay-btn" data-pc-cust="${gi}" title="${t('Applied to the oldest bills first')}"><i class="fa-solid fa-hand-holding-dollar"></i> ${t('Pay')}</button>` : ''}
+          <i class="fa-solid fa-chevron-down salm-pc-chevron"></i>
+        </div>
+        <div class="salm-pc-sales">
+          <table class="salm-table">
+            <thead><tr><th>${t('Sale #')}</th><th>${t('Date')}</th><th>${t('Due Date')}</th><th style="text-align:right">${t('Total')}</th><th style="text-align:right">${t('Paid')}</th><th style="text-align:right">${t('Due')}</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    }).join('');
+
+    body.querySelectorAll('[data-pc-toggle]').forEach((head) => head.addEventListener('click', () => head.parentElement.classList.toggle('expanded')));
+    body.querySelectorAll('[data-pc-cust]').forEach((btn) => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const g = groups[Number(btn.dataset.pcCust)];
+      if (g) openCreditPayForm({ customerId: g.customer_id, customerName: g.customer_name, due: g.total_owed, onDone: () => { closeDetail(); loadCredits(); } });
+    }));
+    body.querySelectorAll('[data-pc-sale]').forEach((btn) => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const [gi, saleId] = btn.dataset.pcSale.split(':').map(Number);
+      const g = groups[gi];
+      const s = g?.sales.find((x) => x.id === saleId);
+      if (s) {
+        openCreditPayForm({
+          customerId: g.customer_id, customerName: g.customer_name,
+          saleId: s.id, saleNumber: s.sale_number, due: s.due_amount,
+          onDone: () => { closeDetail(); loadCredits(); },
+        });
+      }
+    }));
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
   // History
   // ════════════════════════════════════════════════════════════════════════
   let histPage = 1;
@@ -651,11 +1185,12 @@
           <td class="salm-muted-cell">${fmtDateTime(s.sold_at)}</td>
           <td class="salm-muted-cell">${esc(s.customer_name) || '—'}</td>
           <td><span class="salm-chip ${s.channel === 'online' ? 'online' : ''}">${s.channel === 'online' ? t('Online') : t('POS')}</span></td>
-          <td class="salm-muted-cell">${esc(s.payment_method) || '—'}</td>
+          <td class="salm-muted-cell">${paymentCell(s)}</td>
           <td><span class="salm-badge ${badgeClass(s.status)}">${s.status === 'void' ? t('Reverted') : t('Completed')}</span></td>
           <td class="salm-amt-cell">${money(s.total)}</td>
         </tr>`).join('');
       rowsEl.querySelectorAll('tr[data-id]').forEach((tr) => tr.addEventListener('click', () => openSaleDetail(Number(tr.dataset.id))));
+      wirePayButtons(rowsEl, list, () => { closeDetail(); loadHistory(histPage); });
     }
 
     renderPagination(document.getElementById('hist-pagination'), res.body.meta, loadHistory);

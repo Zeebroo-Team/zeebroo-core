@@ -5298,6 +5298,68 @@ body.dark .srv-reason-chip { color: #f87171; }
 }
 #srv-body tr[data-srv-id] { cursor: pointer; }
 
+/* ── Customer cheques (checkout fields, Cheques tab, claim dialog) ──── */
+.co-chq-amount {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 10px 14px; margin: 8px 0 10px; border-radius: 10px;
+  background: var(--surface2); border: 1px solid var(--border); font-size: 13px; color: var(--text-muted);
+}
+.co-chq-amount strong { font-size: 22px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.co-chq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+/* doubled class beats .co-amount-input / .co-date-input, which are declared later in this file */
+.co-amount-input.co-chq-input { font-size: 14px; font-weight: 600; text-align: left; padding: 9px 12px; height: 42px; }
+.co-chq-input::placeholder { font-weight: 500; color: var(--text-muted); opacity: .7; }
+.co-chq-hint { margin-top: 8px; font-size: 11.5px; color: var(--text-muted); line-height: 1.45; }
+.co-chq-hint i { color: #d4a04a; margin-right: 4px; }
+.schq-tab-count {
+  display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 4px; border-radius: 999px;
+  background: #f59e0b; color: #fff; font-size: 10.5px; font-weight: 700; line-height: 17px; text-align: center;
+}
+.schq-badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap;
+}
+.schq-badge--pending   { background: rgba(245,158,11,.13); color: #b45309; }
+.schq-badge--due       { background: rgba(59,130,246,.12); color: #2563eb; }
+.schq-badge--cleared   { background: rgba(16,185,129,.12); color: #059669; }
+.schq-badge--bounced   { background: rgba(239,68,68,.1);  color: #dc2626; }
+.schq-badge--cancelled { background: var(--surface2); color: var(--text-muted); }
+body.dark .schq-badge--pending { color: #fbbf24; }
+body.dark .schq-badge--due     { color: #60a5fa; }
+body.dark .schq-badge--cleared { color: #34d399; }
+body.dark .schq-badge--bounced { color: #f87171; }
+.schq-sub { margin-top: 2px; font-size: 11.5px; color: var(--text-muted); }
+.schq-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.schq-btn {
+  padding: 5px 10px; border-radius: 7px; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+}
+.schq-btn:hover { border-color: var(--accent); }
+.schq-btn--claim { background: #16a34a; border-color: #16a34a; color: #fff; }
+.schq-btn--claim:hover { background: #15803d; border-color: #15803d; }
+.sal-chq-box {
+  margin: 6px 0 4px; padding: 10px 12px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+}
+.sal-chq-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sal-chq-no { font-size: 12.5px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sal-chq-no i { color: var(--text-muted); margin-right: 4px; }
+.sal-chq-head .schq-badge { flex-shrink: 0; font-size: 11px; }
+.sal-chq-meta { margin-top: 3px; font-size: 11.5px; color: var(--text-muted); }
+.sal-chq-details { margin-top: 8px; border-top: 1px solid var(--border); padding-top: 4px; }
+.sal-chq-row {
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  padding: 4px 0; font-size: 12px; line-height: 1.4;
+}
+.sal-chq-row > span:first-child { color: var(--text-muted); white-space: nowrap; }
+.sal-chq-row > span:last-child { color: var(--text); text-align: right; word-break: break-word; }
+.sal-chq-who { font-size: 11px; color: var(--text-muted); }
+.sal-chq-claim { display: block; width: 100%; margin-top: 8px; padding: 6px 10px; }
+.schq-btn--bounce { color: #dc2626; }
+.schq-btn--bounce:hover { border-color: #dc2626; }
+.schq-confirm-bounce { background: #dc2626 !important; border-color: #dc2626 !important; }
+.cm-dv-chq-row .schq-badge { font-size: 10px; padding: 2px 8px; }
+.cm-dv-chq-row .schq-btn { padding: 3px 8px; font-size: 11px; }
+
 /* ── Sales history view ──────────────────────────────────────────────── */
 .sal-period-bar {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
@@ -7037,6 +7099,7 @@ body.dark .product-card .p-icon { background: rgba(255,255,255,.07); }
 .cm-dv-pm-badge--cash   { background: rgba(16,185,129,.12); color: #059669; }
 .cm-dv-pm-badge--card   { background: rgba(79,70,229,.12);  color: #4338ca; }
 .cm-dv-pm-badge--credit { background: rgba(245,158,11,.13); color: #b45309; }
+.cm-dv-pm-badge--cheque { background: rgba(14,165,233,.12); color: #0369a1; }
 
 /* Detail tabs (Recent Sales / Subscriptions / Warranty / Credit) */
 .cm-dv-tabs {
@@ -8062,7 +8125,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .co-right > * { flex-shrink: 0; }
 
 /* Payment method cards */
-.co-pay-methods { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+.co-pay-methods { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .co-pay-method {
   display: flex; flex-direction: row; align-items: center; justify-content: center;
   gap: 8px; padding: 11px 4px; border-radius: 11px;

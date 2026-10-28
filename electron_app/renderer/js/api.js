@@ -187,6 +187,16 @@ const API = (() => {
       Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
       return request('GET', `/sale-reverts?${p.toString()}`);
     },
+    // Customer cheques taken at checkout (Sales → Cheques, Customers → Cheques)
+    saleCheques:        (params)      => {
+      const p = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+      return request('GET', `/sale-cheques?${p.toString()}`);
+    },
+    saleCheque:         (id)          => request('GET',  `/sale-cheques/${id}`),
+    // body: { deposit_account_id?, notes? } — falls back to the POS default deposit account
+    claimSaleCheque:    (id, body)    => request('POST', `/sale-cheques/${id}/claim`, body || {}),
+    bounceSaleCheque:   (id, body)    => request('POST', `/sale-cheques/${id}/bounce`, body),
     returnReasons:()                  => request('GET',  '/online/return-reasons'),
 
     // Finance — expenses / bills / profit
