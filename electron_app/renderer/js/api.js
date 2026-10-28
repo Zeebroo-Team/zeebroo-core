@@ -593,6 +593,11 @@ const API = (() => {
     guideConversationShow: (id) => request('GET', `/guide/conversations/${id}`),
     guideConversationDelete: (id) => request('DELETE', `/guide/conversations/${id}`),
 
+    // CRM permissions
+    crmPermissions:          ()                => request('GET',    '/crm/permissions'),
+    crmMyPermissions:        ()                => request('GET',    '/crm/permissions/me'),
+    crmSaveUserPermissions:  (userId, body)    => request('PUT',    `/crm/permissions/users/${userId}`, body),
+    crmResetUserPermissions: (userId)          => request('DELETE', `/crm/permissions/users/${userId}`),
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
     crmCreateProject:(body)               => request('POST',   '/crm/projects', body),

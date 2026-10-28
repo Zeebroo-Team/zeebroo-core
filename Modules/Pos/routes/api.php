@@ -574,6 +574,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('guide/conversations/{conversation}', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'conversationShow'])->whereNumber('conversation')->name('guide.conversations.show');
     Route::delete('guide/conversations/{conversation}', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'conversationDestroy'])->whereNumber('conversation')->name('guide.conversations.destroy');
 
+    // CRM permissions (per-user function + stage access)
+    Route::get   ('crm/permissions',                   [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'index']) ->name('crm.permissions.index');
+    Route::get   ('crm/permissions/me',                [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'me'])    ->name('crm.permissions.me');
+    Route::put   ('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'update'])->whereNumber('user')->name('crm.permissions.update');
+    Route::delete('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'reset']) ->whereNumber('user')->name('crm.permissions.reset');
+
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');

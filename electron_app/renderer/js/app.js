@@ -54767,8 +54767,37 @@ async function submitDsCreate() {
     { type: 'field', field: 'phone',   label: 'Phone' },
   ];
 
+  // ── Per-user CRM access ──────────────────────────────────────────────────
+  // Set from /crm/permissions/me. The server enforces every rule; this only hides
+  // the controls a user can't use (via crm-deny-<key> classes on <body>).
+  let _crmAccess = null;   // { is_admin, permissions: { key: bool }, stage_access }
+
+  function _crmCan(key) {
+    return !_crmAccess || _crmAccess.permissions?.[key] !== false;
+  }
+
+  async function loadCrmAccess() {
+    const res = await API.crmMyPermissions().catch(() => ({ status: 0 }));
+    _crmAccess = res.status === 200 ? res.body.data : null;
+    _crmApplyAccessUI();
+  }
+
+  function _crmApplyAccessUI() {
+    const perms = _crmAccess?.permissions || {};
+    Object.keys(perms).forEach(k => document.body.classList.toggle(`crm-deny-${k}`, perms[k] === false));
+    document.body.classList.toggle('crm-is-admin', !!_crmAccess?.is_admin);
+    // A ribbon group whose buttons are all hidden would otherwise show as an empty box
+    $$('.ribbon-page[data-page="crm"] .ribbon-group').forEach(grp => {
+      grp.classList.remove('crm-perm-hidden');
+      const btns = [...grp.querySelectorAll('button')];
+      grp.classList.toggle('crm-perm-hidden', btns.length > 0 && btns.every(b => getComputedStyle(b).display === 'none'));
+    });
+  }
+
   // ── View switch ──────────────────────────────────────────────────────────
   function switchCrmView(view, opts = {}) {
+    // Re-read access whenever the CRM tab opens, so changes and business switches apply
+    if (view === 'overview' || !_crmAccess) loadCrmAccess();
     _crmView = view;
     $('#crm-overview-view').style.display = view === 'overview' ? 'flex' : 'none';
     $('#crm-relation-view').style.display = view === 'relation' ? 'flex' : 'none';
@@ -54986,6 +55015,8 @@ async function submitDsCreate() {
     $$('#crm-relation-tabs .inv-tab').forEach(b => b.classList.toggle('active', b.dataset.crmdtab === tab));
     $$('#crm-relation-tab-body .inv-tab-pane').forEach(el => el.classList.remove('active'));
     $(`#crm-relation-pane-${tab}`)?.classList.add('active');
+    const body = $('#crm-relation-tab-body'); if (body) body.scrollTop = 0;
+    $('#crm-relation-hero')?.classList.remove('inv-hero--compact');
     if (tab === 'forms' && !_crmDetailLoaded.forms) {
       _crmDetailLoaded.forms = true;
       loadCrmForms();
@@ -55005,6 +55036,18 @@ async function submitDsCreate() {
     if (btn) _crmSwitchDetailTab(btn.dataset.crmdtab);
   });
   $('#crm-relation-back-btn')?.addEventListener('click', () => closeRelationDetail());
+
+  // Shrink the hero while the tab body is scrolled; hysteresis avoids flicker
+  // caused by the body growing when the hero collapses.
+  $('#crm-relation-tab-body')?.addEventListener('scroll', e => {
+    const hero = $('#crm-relation-hero');
+    const el   = e.target;
+    if (!hero || el.id !== 'crm-relation-tab-body') return;
+    const top = el.scrollTop;
+    if (top > 40) hero.classList.add('inv-hero--compact');
+    else if (top < 8) hero.classList.remove('inv-hero--compact');
+  }, { passive: true, capture: true });
+
   $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
   $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());
   $('#crm-relation-delete-btn')?.addEventListener('click',  () => {
@@ -55093,7 +55136,7 @@ async function submitDsCreate() {
     if (!board || !_crmPipeline) return;
     board.innerHTML = _crmPipeline.columns.map(col => {
       const cards = col.leads.map(lead => `
-        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="true" data-lead-id="${lead.id}" data-stage-id="${col.id}">
+        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmCan('leads_move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}">
           <div class="crm-card-name">${escHtml(lead.name)}</div>
           ${lead.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}
           ${lead.company ? `<div class="crm-card-company"><i class="fa fa-building" style="margin-right:3px;opacity:.6"></i>${escHtml(lead.company)}</div>` : ''}
@@ -55677,11 +55720,270 @@ async function submitDsCreate() {
   $('#rb-crm-new-task')?.addEventListener('click',  () => { activateTab('crm'); switchCrmView('tasks');    setTimeout(() => _openTaskModal(), 100); });
   $('#rb-crm-projects')?.addEventListener('click',  () => { activateTab('crm'); _openProjectModal(); });
   $('#rb-crm-refresh')?.addEventListener('click',   () => {
+    loadCrmAccess();
     if (_crmView === 'overview')      loadCrmOverview();
     else if (_crmView === 'relation') { if ($('#crm-relation-detail').style.display === 'flex') loadCrmPipeline(); else loadCrmRelationsView(); }
     else if (_crmView === 'contacts') loadCrmContacts();
     else if (_crmView === 'tasks')    loadCrmTasks();
   });
+  $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
+
+  // ── Permissions modal ─────────────────────────────────────────────────────
+  // Owner/admins pick a user, then toggle CRM functions and choose which stages
+  // that user sees in each relation (all / selected / hidden).
+  let _crmPerms       = null;   // { functions, users, relations } from /crm/permissions
+  let _crmPermsUserId = null;   // user currently being edited
+  let _crmPermsDraft  = null;   // { permissions: { key: bool }, stage_access: { projectId: [stageIds] } }
+  let _crmPermsDirty  = false;
+  let _crmPermsUserQ  = '';
+
+  async function openCrmPermissionsModal() {
+    _crmPerms = null; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false;
+    $('#crm-perms-modal').style.display = 'flex';
+    $('#crm-perms-alert').style.display = 'none';
+    $('#crm-perms-user-search').value = _crmPermsUserQ = '';
+    $('#crm-perms-user-list').innerHTML = '<span class="crm-perms-muted">Loading…</span>';
+    $('#crm-perms-editor-body').innerHTML = '<span class="crm-perms-muted">Select a user to edit their CRM access.</span>';
+    _crmPermsSyncFooter();
+
+    const res = await API.crmPermissions();
+    if (res.status !== 200) {
+      $('#crm-perms-user-list').innerHTML = `<span class="crm-perms-muted">${escHtml(res.body?.message || 'Failed to load permissions.')}</span>`;
+      return;
+    }
+    _crmPerms = res.body.data;
+    _crmRenderPermsUsers();
+    const first = _crmPerms.users.find(u => !u.is_admin) || _crmPerms.users[0];
+    if (first) _crmSelectPermsUser(first.user_id);
+  }
+
+  function _crmClosePermsModal() {
+    if (_crmPermsDirty && !confirm('Discard unsaved permission changes?')) return;
+    $('#crm-perms-modal').style.display = 'none';
+  }
+
+  function _crmPermsUser(id = _crmPermsUserId) {
+    return _crmPerms?.users.find(u => u.user_id === id) || null;
+  }
+
+  function _crmRenderPermsUsers() {
+    const list = $('#crm-perms-user-list');
+    if (!list || !_crmPerms) return;
+    const q = _crmPermsUserQ.trim().toLowerCase();
+    const users = _crmPerms.users.filter(u => !q || `${u.name} ${u.email} ${u.role}`.toLowerCase().includes(q));
+    if (!users.length) { list.innerHTML = '<span class="crm-perms-muted">No users found.</span>'; return; }
+    list.innerHTML = users.map(u => {
+      const initials = (u.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+      const tag = u.is_admin ? '<span class="crm-perms-tag crm-perms-tag--admin">Admin</span>'
+                : u.customized ? '<span class="crm-perms-tag crm-perms-tag--custom">Custom</span>'
+                : '<span class="crm-perms-tag">Full</span>';
+      return `<button type="button" class="crm-perms-user${u.user_id === _crmPermsUserId ? ' active' : ''}" data-perms-user="${u.user_id}">
+        <span class="crm-perms-avatar">${escHtml(initials)}</span>
+        <span class="crm-perms-user-info">
+          <span class="crm-perms-user-name" style="display:block">${escHtml(u.name)}</span>
+          <span class="crm-perms-user-sub" style="display:block">${escHtml(u.role)}${u.email ? ' · ' + escHtml(u.email) : ''}</span>
+        </span>
+        ${tag}
+      </button>`;
+    }).join('');
+  }
+
+  function _crmSelectPermsUser(userId) {
+    if (userId !== _crmPermsUserId && _crmPermsDirty && !confirm('Discard unsaved permission changes?')) return;
+    const user = _crmPermsUser(userId);
+    if (!user) return;
+    _crmPermsUserId = userId;
+    _crmPermsDirty  = false;
+    $('#crm-perms-alert').style.display = 'none';
+
+    const saved = user.permissions || {};
+    const permissions = {};
+    _crmPerms.functions.forEach(g => g.items.forEach(i => { permissions[i.key] = saved[i.key] !== false; }));
+    const stage_access = {};
+    Object.entries(user.stage_access || {}).forEach(([pid, ids]) => { stage_access[pid] = (ids || []).map(Number); });
+    _crmPermsDraft = { permissions, stage_access };
+
+    _crmRenderPermsUsers();
+    _crmRenderPermsEditor();
+    _crmPermsSyncFooter();
+  }
+
+  function _crmRelationMode(pid) {
+    const ids = _crmPermsDraft.stage_access[pid];
+    if (ids === undefined) return 'all';
+    return ids.length ? 'selected' : 'hidden';
+  }
+
+  function _crmRenderPermsEditor() {
+    const body = $('#crm-perms-editor-body');
+    const user = _crmPermsUser();
+    if (!body || !user) return;
+
+    const header = `<div style="display:flex;align-items:center;gap:10px">
+      <div style="min-width:0">
+        <div style="font-size:15px;font-weight:700">${escHtml(user.name)}</div>
+        <div class="crm-perms-muted">${escHtml(user.role)}${user.email ? ' · ' + escHtml(user.email) : ''}</div>
+      </div>
+    </div>`;
+
+    if (user.is_admin) {
+      body.innerHTML = `${header}
+        <div class="crm-perms-admin-note"><i class="fa fa-crown" style="color:#f59e0b"></i>
+          ${user.role === 'owner' ? 'The business owner' : 'Admins'} always have full access to every CRM function and stage.</div>`;
+      return;
+    }
+
+    const groups = _crmPerms.functions.map(g => {
+      const allOn = g.items.every(i => _crmPermsDraft.permissions[i.key]);
+      return `<div class="crm-perms-group">
+        <div class="crm-perms-group-head"><i class="fa ${escHtml(g.icon)}"></i>${escHtml(g.label)}
+          <button type="button" data-perms-group="${escHtml(g.key)}" data-on="${allOn ? 0 : 1}">${allOn ? 'Block all' : 'Allow all'}</button>
+        </div>
+        ${g.items.map(i => `<label class="crm-perms-item">
+          <input type="checkbox" data-perm-key="${escHtml(i.key)}" ${_crmPermsDraft.permissions[i.key] ? 'checked' : ''}>
+          <span>${escHtml(i.label)}<small>${escHtml(i.desc)}</small></span>
+        </label>`).join('')}
+      </div>`;
+    }).join('');
+
+    const relations = _crmPerms.relations.length ? _crmPerms.relations.map(r => {
+      const mode = _crmRelationMode(r.id);
+      const visible = _crmPermsDraft.stage_access[r.id] || [];
+      const stages = mode === 'selected' ? `<div class="crm-perms-stages">
+        ${r.stages.map(s => `<label class="crm-perms-stage">
+          <input type="checkbox" data-rel-stage="${r.id}" value="${s.id}" ${visible.includes(s.id) ? 'checked' : ''}>
+          <span class="crm-perms-stage-dot" style="background:${escHtml(s.color || '#64748b')}"></span>
+          ${escHtml(s.name)}${s.is_won ? ' <i class="fa fa-trophy" style="color:#16a34a;font-size:10px"></i>' : ''}${s.is_lost ? ' <i class="fa fa-circle-xmark" style="color:#ef4444;font-size:10px"></i>' : ''}
+        </label>`).join('') || '<span class="crm-perms-muted">This relation has no stages yet.</span>'}
+      </div>` : '';
+      return `<div class="crm-perms-rel">
+        <div class="crm-perms-rel-head">
+          <i class="fa fa-handshake" style="color:#7c3aed"></i>
+          <span class="crm-perms-rel-name" title="${escHtml(r.name)}">${escHtml(r.name)}</span>
+          <select class="po-field-input" data-rel-mode="${r.id}">
+            <option value="all"${mode === 'all' ? ' selected' : ''}>All stages</option>
+            <option value="selected"${mode === 'selected' ? ' selected' : ''}>Selected stages</option>
+            <option value="hidden"${mode === 'hidden' ? ' selected' : ''}>Hidden</option>
+          </select>
+        </div>
+        ${stages}
+      </div>`;
+    }).join('') : '<span class="crm-perms-muted">No relations yet.</span>';
+
+    body.innerHTML = `${header}
+      <div>
+        <div class="crm-perms-section-title">Functions
+          <button type="button" data-perms-all="1">Allow all</button><button type="button" data-perms-all="0">Block all</button>
+        </div>
+        <div class="crm-perms-groups">${groups}</div>
+      </div>
+      <div>
+        <div class="crm-perms-section-title">Stage visibility</div>
+        <div class="crm-perms-muted" style="margin-bottom:8px">Choose which pipeline stages this user sees in each relation. Leads in other stages stay out of their pipeline, contacts and custom data; hidden relations don't appear at all.</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${relations}</div>
+      </div>`;
+  }
+
+  function _crmPermsSyncFooter() {
+    const user = _crmPermsUser();
+    const editable = !!user && !user.is_admin;
+    $('#crm-perms-save-btn').disabled = !editable;
+    $('#crm-perms-reset-btn').style.display = editable && user.customized ? '' : 'none';
+  }
+
+  function _crmPermsChanged() {
+    _crmPermsDirty = true;
+    _crmRenderPermsEditor();
+  }
+
+  $('#crm-perms-editor-body')?.addEventListener('change', e => {
+    if (!_crmPermsDraft) return;
+    const t = e.target;
+    if (t.dataset.permKey) {
+      _crmPermsDraft.permissions[t.dataset.permKey] = t.checked;
+      _crmPermsChanged();
+    } else if (t.dataset.relMode) {
+      const pid = t.dataset.relMode;
+      const rel = _crmPerms.relations.find(r => String(r.id) === pid);
+      if (t.value === 'all')      delete _crmPermsDraft.stage_access[pid];
+      if (t.value === 'hidden')   _crmPermsDraft.stage_access[pid] = [];
+      // Start from every stage ticked, so the admin only unticks the ones to hide
+      if (t.value === 'selected') _crmPermsDraft.stage_access[pid] = (rel?.stages || []).map(s => s.id);
+      _crmPermsChanged();
+    } else if (t.dataset.relStage) {
+      const pid = t.dataset.relStage;
+      const id  = Number(t.value);
+      const ids = new Set(_crmPermsDraft.stage_access[pid] || []);
+      t.checked ? ids.add(id) : ids.delete(id);
+      _crmPermsDraft.stage_access[pid] = [...ids];
+      _crmPermsDirty = true;   // no re-render: unticking the last stage keeps "Selected" open
+    }
+  });
+
+  $('#crm-perms-editor-body')?.addEventListener('click', e => {
+    if (!_crmPermsDraft) return;
+    const allBtn   = e.target.closest('[data-perms-all]');
+    const groupBtn = e.target.closest('[data-perms-group]');
+    if (allBtn) {
+      const on = allBtn.dataset.permsAll === '1';
+      Object.keys(_crmPermsDraft.permissions).forEach(k => { _crmPermsDraft.permissions[k] = on; });
+      _crmPermsChanged();
+    } else if (groupBtn) {
+      const on    = groupBtn.dataset.on === '1';
+      const group = _crmPerms.functions.find(g => g.key === groupBtn.dataset.permsGroup);
+      group?.items.forEach(i => { _crmPermsDraft.permissions[i.key] = on; });
+      _crmPermsChanged();
+    }
+  });
+
+  $('#crm-perms-user-list')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-perms-user]');
+    if (btn) _crmSelectPermsUser(Number(btn.dataset.permsUser));
+  });
+  $('#crm-perms-user-search')?.addEventListener('input', e => { _crmPermsUserQ = e.target.value; _crmRenderPermsUsers(); });
+
+  $('#crm-perms-save-btn')?.addEventListener('click', async () => {
+    const user = _crmPermsUser();
+    if (!user || user.is_admin || !_crmPermsDraft) return;
+    const btn = $('#crm-perms-save-btn');
+    btn.disabled = true;
+    const res = await API.crmSaveUserPermissions(user.user_id, _crmPermsDraft);
+    btn.disabled = false;
+    if (res.status === 200) {
+      Object.assign(user, res.body.data);
+      _crmPermsDirty = false;
+      toast(`CRM permissions saved for ${user.name}.`, 'success');
+      _crmSelectPermsUser(user.user_id);
+    } else {
+      const alertEl = $('#crm-perms-alert');
+      alertEl.textContent = res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save permissions.');
+      alertEl.style.display = '';
+    }
+  });
+
+  $('#crm-perms-reset-btn')?.addEventListener('click', async () => {
+    const user = _crmPermsUser();
+    if (!user || user.is_admin) return;
+    const ok = await appConfirm({
+      title: 'Reset CRM permissions?',
+      message: `${user.name} will get full access to every CRM function and stage again.`,
+      confirmText: '<i class="fa fa-rotate-left"></i> Reset',
+      icon: 'fa-user-shield',
+    });
+    if (!ok) return;
+    const res = await API.crmResetUserPermissions(user.user_id);
+    if (res.status === 200) {
+      Object.assign(user, { customized: false, permissions: {}, stage_access: {} });
+      _crmPermsDirty = false;
+      toast(`${user.name} now has full CRM access.`, 'success');
+      _crmSelectPermsUser(user.user_id);
+    } else {
+      toast(res.body?.message || 'Failed to reset permissions.', 'error');
+    }
+  });
+
+  $('#crm-perms-modal-close')?.addEventListener('click', _crmClosePermsModal);
+  $('#crm-perms-cancel-btn')?.addEventListener('click',  _crmClosePermsModal);
 
   // ── Subnav ────────────────────────────────────────────────────────────────
   $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));
