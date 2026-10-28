@@ -5254,6 +5254,50 @@ body.dark .sal-channel-chip.online { color: #a78bfa; }
 }
 body.dark .sal-void-notice { color: #f87171; background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.25); }
 
+/* ── Revert bill (dialog, notice, Reverted Bills tab) ───────────────── */
+.srv-notice { flex-direction: column; align-items: flex-start; gap: 4px; }
+.srv-notice-note { font-weight: 500; font-style: italic; color: var(--text); }
+.srv-notice-meta { font-weight: 500; font-size: 12px; color: var(--text-muted); }
+.srv-warn {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 10px 12px; border-radius: 8px; margin-bottom: 12px;
+  background: rgba(245,158,11,.1); border: 1px solid rgba(245,158,11,.3);
+  color: var(--text); font-size: 12.5px; line-height: 1.45;
+}
+.srv-warn i { color: #d97706; margin-top: 2px; }
+.srv-summary {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 14px; background: var(--surface);
+}
+.srv-sum-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13px; }
+.srv-sum-row span { color: var(--text-muted); }
+.srv-sum-total { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 8px; }
+.srv-sum-total span { color: var(--text); font-weight: 700; }
+.srv-sum-total strong { color: var(--accent); font-size: 15px; }
+.srv-reason-list { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.srv-reason {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 7px 10px; border: 1px solid var(--border); border-radius: 7px;
+  font-size: 12.5px; color: var(--text);
+}
+.srv-reason:has(input:checked) { border-color: var(--accent); background: rgba(59,130,246,.08); }
+.srv-error {
+  margin-top: 8px; padding: 8px 12px; border-radius: 7px; font-size: 12.5px;
+  background: rgba(239,68,68,.08); border: 1px solid rgba(239,68,68,.25); color: #dc2626;
+}
+.srv-confirm-btn { background: #dc2626 !important; border-color: #dc2626 !important; }
+.srv-confirm-btn:hover { background: #b91c1c !important; }
+.srv-reason-chip {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  background: rgba(239,68,68,.1); color: #dc2626;
+}
+body.dark .srv-reason-chip { color: #f87171; }
+.srv-row-note {
+  max-width: 260px; margin-top: 3px; font-size: 11.5px; color: var(--text-muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#srv-body tr[data-srv-id] { cursor: pointer; }
+
 /* ── Sales history view ──────────────────────────────────────────────── */
 .sal-period-bar {
   display: flex; align-items: center; gap: 6px; flex-wrap: wrap;

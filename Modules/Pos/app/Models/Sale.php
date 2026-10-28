@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Modules\Account\Models\Account;
 use Modules\Business\Models\Branch;
@@ -153,6 +154,11 @@ class Sale extends Model
     public function returns(): HasMany
     {
         return $this->hasMany(SaleReturn::class, 'pos_sale_id')->orderBy('returned_at');
+    }
+
+    public function revert(): HasOne
+    {
+        return $this->hasOne(SaleRevert::class, 'pos_sale_id');
     }
 
     public function ledgerTransactions(): MorphMany

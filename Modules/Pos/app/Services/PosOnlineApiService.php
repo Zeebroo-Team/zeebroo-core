@@ -186,7 +186,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items', 'giftCard', 'coupon']);
+        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items', 'giftCard', 'coupon', 'revert.user']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -244,6 +244,15 @@ class PosOnlineApiService
                 ])->values()->all()
                 : [],
             'sold_at' => $sale->sold_at?->toIso8601String(),
+            'revert' => $sale->revert ? [
+                'id' => (int) $sale->revert->id,
+                'revert_number' => $sale->revert->revert_number,
+                'reason_label' => $sale->revert->reasonLabel(),
+                'notes' => $sale->revert->notes,
+                'amount_refunded' => round((float) $sale->revert->amount_refunded, 2),
+                'reverted_at' => $sale->revert->reverted_at?->toIso8601String(),
+                'reverted_by' => $sale->revert->user?->name,
+            ] : null,
             'credit_account' => $sale->creditAccount ? [
                 'id' => (int) $sale->creditAccount->id,
                 'label' => $sale->creditAccount->deductOptionLabel(),
@@ -366,5 +375,45 @@ class PosOnlineApiService
                 'line_total' => round((float) $item->line_total, 2),
             ])->values()->all(),
         ];
+    }
+
+    /**
+     * A reverted bill (Sales → Reverted Bills). The list omits the item snapshot.
+     *
+     * @return array<string, mixed>
+     */
+    public function formatSaleRevert(\Modules\Pos\Models\SaleRevert $rev, bool $withItems = true): array
+    {
+        $rev->loadMissing('user:id,name');
+
+        $data = [
+            'id'                 => (int) $rev->id,
+            'revert_number'      => $rev->revert_number,
+            'sale_id'            => (int) $rev->pos_sale_id,
+            'sale_number'        => $rev->sale_number,
+            'customer_name'      => $rev->customer_name,
+            'payment_method'     => $rev->payment_method,
+            'reason'             => $rev->reason,
+            'reason_label'       => $rev->reasonLabel(),
+            'notes'              => $rev->notes,
+            'sale_sold_at'       => $rev->sale_sold_at?->toIso8601String(),
+            'sale_total'         => round((float) $rev->sale_total, 2),
+            'sale_cost'          => round((float) $rev->sale_cost, 2),
+            'amount_paid'        => round((float) $rev->amount_paid, 2),
+            'gift_card_refunded' => round((float) $rev->gift_card_refunded, 2),
+            'returned_total'     => round((float) $rev->returned_total, 2),
+            'amount_refunded'    => round((float) $rev->amount_refunded, 2),
+            'account_reversed'   => round((float) $rev->account_reversed, 2),
+            'stock_restored_qty' => round((float) $rev->stock_restored_qty, 3),
+            'items_count'        => count($rev->items ?? []),
+            'reverted_at'        => $rev->reverted_at?->toIso8601String(),
+            'reverted_by'        => $rev->user ? ['id' => (int) $rev->user->id, 'name' => $rev->user->name] : null,
+        ];
+
+        if ($withItems) {
+            $data['items'] = array_values($rev->items ?? []);
+        }
+
+        return $data;
     }
 }

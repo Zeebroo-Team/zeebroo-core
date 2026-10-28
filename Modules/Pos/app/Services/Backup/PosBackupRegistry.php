@@ -111,6 +111,7 @@ class PosBackupRegistry
                     ['table' => 'pos_sale_items', 'parent' => ['pos_sale_id', 'pos_sales']],
                     ['table' => 'pos_sale_returns'],
                     ['table' => 'pos_sale_return_items', 'parent' => ['pos_sale_return_id', 'pos_sale_returns']],
+                    ['table' => 'pos_sale_reverts'],
                     ['table' => 'invoices'],
                     ['table' => 'invoice_items', 'parent' => ['invoice_id', 'invoices']],
                     ['table' => 'quotations'],

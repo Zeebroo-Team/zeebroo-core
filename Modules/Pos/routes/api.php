@@ -16,6 +16,7 @@ use Modules\Pos\Http\Controllers\Api\PosProductApiController;
 use Modules\Pos\Http\Controllers\Api\PosPurchaseOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleReturnApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleRevertApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseBillApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseBillAssignmentApiController;
 use Modules\Pos\Http\Controllers\Api\PosAccountApiController;
@@ -253,6 +254,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get  ('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');
     Route::post ('sales/{sale}/void',      [PosSaleApiController::class, 'void']            )->name('sales.void');
     Route::post ('sales/{sale}/return',    [PosSaleReturnApiController::class, 'store']     )->name('sales.return');
+    // Revert a bill entered by mistake (voids it, restores stock & money, stores the reason)
+    Route::post ('sales/{sale}/revert',    [PosSaleRevertApiController::class, 'store']     )->name('sales.revert');
+    Route::get  ('sale-reverts',           [PosSaleRevertApiController::class, 'index']     )->name('sale-reverts.index');
+    Route::get  ('sale-reverts/reasons',   [PosSaleRevertApiController::class, 'reasons']   )->name('sale-reverts.reasons');
+    Route::get  ('sale-reverts/{saleRevert}', [PosSaleRevertApiController::class, 'show']   )->name('sale-reverts.show');
     Route::get  ('sale-returns',           [PosSaleReturnApiController::class, 'index']     )->name('sale-returns.index');
     Route::get  ('sale-returns/{saleReturn}', [PosSaleReturnApiController::class, 'show']   )->name('sale-returns.show');
     Route::get('online/return-reasons', [PosReturnReasonsApiController::class, 'index'])->name('online.return-reasons');

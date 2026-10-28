@@ -865,8 +865,8 @@ async function loadSalesPage() {
     <tbody>
     ${items.map(s => {
       const dt  = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
-      const cls = s.status === 'voided' ? 'voided' : 'completed';
-      const lbl = s.status === 'voided' ? 'Voided' : 'Completed';
+      const cls = _isVoidSale(s) ? 'voided' : 'completed';
+      const lbl = _isVoidSale(s) ? 'Voided' : 'Completed';
       return `<tr>
         <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.6"></i>${escHtml(s.sale_number||String(s.id))}</td>
         <td class="td-muted">${dt}</td>
@@ -889,6 +889,11 @@ const _sal = {
 };
 let _salSearchTimer;
 
+// The API sends status 'void' for voided / reverted bills ('voided' kept for older payloads)
+function _isVoidSale(s) {
+  return !!s && (s.status === 'void' || s.status === 'voided');
+}
+
 function _salSwitchView(view) {
   _sal.view = view;
   $$('.sal-view-btn').forEach(b => {
@@ -904,6 +909,7 @@ function _salSwitchView(view) {
   const showOrders   = view === 'orders';
   const showSubs     = view === 'subscriptions';
   const showRentals  = view === 'rentals';
+  const showReverts  = view === 'reverts';
   $('#sal-list-view').style.display      = showTxn      ? '' : 'none';
   $('#sal-history-view').style.display   = showHist     ? '' : 'none';
   $('#sal-credits-view').style.display   = showCredits  ? 'flex' : 'none';
@@ -912,6 +918,7 @@ function _salSwitchView(view) {
   $('#sal-orders-view').style.display    = showOrders   ? 'flex' : 'none';
   $('#sal-subscriptions-view').style.display = showSubs ? 'flex' : 'none';
   $('#sal-rentals-view').style.display   = showRentals  ? 'flex' : 'none';
+  $('#sal-reverts-view').style.display   = showReverts  ? 'flex' : 'none';
   $('#sal-detail-view').style.display    = 'none';
   if (showTxn      && !_sal.all.length) loadSalesList();
   if (showHist)     loadSalesHistory();
@@ -921,6 +928,7 @@ function _salSwitchView(view) {
   if (showOrders)   loadSalesOrderList();
   if (showSubs)     loadSubscriptionsList();
   if (showRentals)  loadRentalsList();
+  if (showReverts)  loadSaleReverts();
 }
 
 // ── Subscriptions (Sales panel tab) ─────────────────────────────────────────
@@ -1851,7 +1859,7 @@ function _salRenderList() {
   const list = _sal.filtered;
 
   // KPI bar
-  const completed = list.filter(s => s.status !== 'voided');
+  const completed = list.filter(s => !_isVoidSale(s));
   const revenue   = completed.reduce((n, s) => n + parseFloat(s.total || 0), 0);
   const profit    = completed.reduce((n, s) => n + parseFloat(s.profit || 0), 0);
   const margin    = revenue > 0 ? (profit / revenue) * 100 : 0;
@@ -1899,8 +1907,8 @@ function _salRenderList() {
     <tbody>
     ${list.map(s => {
       const dt  = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
-      const cls = s.status === 'voided' ? 'voided' : 'completed';
-      const lbl = s.status === 'voided' ? 'Voided' : 'Completed';
+      const cls = _isVoidSale(s) ? 'voided' : 'completed';
+      const lbl = _isVoidSale(s) ? 'Reverted' : 'Completed';
       const ch  = s.channel === 'online' ? 'online' : '';
       const chLbl = s.channel === 'online' ? 'Online' : 'POS';
       return `<tr data-sal-id="${s.id}"${s.is_overdue ? ' class="sal-row-overdue" title="Credit payment overdue"' : ''}>
@@ -1924,7 +1932,7 @@ function _salRenderList() {
 }
 
 function _salProfitCell(s, cur) {
-  if (s.profit == null || s.status === 'voided') return '<td class="td-amt td-muted">—</td>';
+  if (s.profit == null || _isVoidSale(s)) return '<td class="td-amt td-muted">—</td>';
   const p    = parseFloat(s.profit);
   const tot  = parseFloat(s.total || 0);
   const tip  = `Cost ${formatMoney(parseFloat(s.cost || 0), {currency: cur})}${tot > 0 ? ` · Margin ${((p / tot) * 100).toFixed(1)}%` : ''}`;
@@ -1948,7 +1956,7 @@ async function _salSelectSale(id) {
 
   const num     = sale.sale_number || String(sale.id);
   const cur     = state.currency || '';
-  const isVoided = sale.status === 'voided';
+  const isVoided = _isVoidSale(sale);
 
   $('#sal-detail-title').textContent = `Sale #${num}`;
   $('#sal-void-btn').style.display   = isVoided ? 'none' : '';
@@ -2027,7 +2035,7 @@ async function _salSelectSale(id) {
   }
 
   $('#sal-detail-body').innerHTML = `
-    ${isVoided ? '<div class="sal-void-notice"><i class="fa fa-ban"></i> This sale has been voided</div>' : ''}
+    ${isVoided ? _salRevertNoticeHtml(sale, cur) : ''}
     <div class="sal-detail-meta">
       <div class="sal-detail-meta-item">
         <span class="sal-detail-meta-label">Sale #</span>
@@ -2047,7 +2055,7 @@ async function _salSelectSale(id) {
       </div>` : ''}
       <div class="sal-detail-meta-item">
         <span class="sal-detail-meta-label">Status</span>
-        <span class="sal-detail-meta-val"><span class="bs-sales-badge ${isVoided ? 'voided' : 'completed'}">${isVoided ? 'Voided' : 'Completed'}</span></span>
+        <span class="sal-detail-meta-val"><span class="bs-sales-badge ${isVoided ? 'voided' : 'completed'}">${isVoided ? 'Reverted' : 'Completed'}</span></span>
       </div>
     </div>
 
@@ -2088,7 +2096,7 @@ function _salCreditPaymentsHtml(sale, cur) {
   return `
     <div class="sal-section-title" style="display:flex;align-items:center;justify-content:space-between">
       <span>Credit Payments</span>
-      ${due > 0.005 && sale.status !== 'voided' ? `<button type="button" class="sal-pay-btn" id="sal-detail-pay-btn"><i class="fa fa-hand-holding-dollar"></i> Receive Payment</button>` : ''}
+      ${due > 0.005 && !_isVoidSale(sale) ? `<button type="button" class="sal-pay-btn" id="sal-detail-pay-btn"><i class="fa fa-hand-holding-dollar"></i> Receive Payment</button>` : ''}
     </div>
     <div class="sal-cp-list">${rows || '<div class="td-muted" style="padding:8px 0">No payments received yet.</div>'}</div>`;
 }
@@ -2152,22 +2160,273 @@ $('#sal-custom-req-close').addEventListener('click', () => { $('#sal-custom-req-
 $('#sal-custom-req-overlay').addEventListener('click', e => {
   if (e.target === e.currentTarget) $('#sal-custom-req-overlay').style.display = 'none';
 });
-$('#sal-void-btn').addEventListener('click', async () => {
-  const sale = _sal.activeSale;
+$('#sal-void-btn').addEventListener('click', () => {
+  if (_sal.activeSale) _salOpenRevert(_sal.activeSale);
+});
+
+// ── Revert bill ───────────────────────────────────────────────────────────
+// Reverting voids a bill entered by mistake: the server restocks what wasn't
+// already returned, takes the payment back out of the deposit account and
+// stores the reason in its own table (Sales → Reverted Bills).
+const _srv = {
+  reasons: null,           // { key: label } from the server
+  sale: null,              // sale being reverted
+  list: [], page: 1, lastPage: 1,
+  q: '', reason: 'all', dateFrom: '', dateTo: '',
+  searchTimer: null,
+};
+
+async function _srvLoadReasons() {
+  if (_srv.reasons) return _srv.reasons;
+  const res = await API.saleRevertReasons();
+  _srv.reasons = res.status === 200 && res.body?.data ? res.body.data : { other: 'Other' };
+  const sel = $('#srv-reason-filter');
+  if (sel && sel.options.length <= 1) {
+    Object.entries(_srv.reasons).forEach(([k, v]) => sel.insertAdjacentHTML('beforeend', `<option value="${escHtml(k)}">${escHtml(v)}</option>`));
+  }
+  return _srv.reasons;
+}
+
+function _salRevertNoticeHtml(sale, cur) {
+  const r = sale.revert;
+  if (!r) return '<div class="sal-void-notice"><i class="fa fa-ban"></i> This sale has been voided</div>';
+  const when = r.reverted_at ? new Date(r.reverted_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  return `<div class="sal-void-notice srv-notice">
+    <div><i class="fa fa-rotate-left"></i> <strong>Reverted</strong> — ${escHtml(r.reason_label || '')} <span class="td-muted">(${escHtml(r.revert_number || '')})</span></div>
+    ${r.notes ? `<div class="srv-notice-note">“${escHtml(r.notes)}”</div>` : ''}
+    <div class="srv-notice-meta">${escHtml(when)}${r.reverted_by ? ' · by ' + escHtml(r.reverted_by) : ''} · Refund due ${formatMoney(r.amount_refunded || 0, {currency: cur})}</div>
+  </div>`;
+}
+
+async function _salOpenRevert(sale) {
+  _srv.sale = sale;
+  const cur = state.currency || '';
+  const reasons = await _srvLoadReasons();
+
+  // What the server will undo — mirrors SaleRevertService so the cashier knows the refund up front
+  const items       = sale.items || [];
+  const restockQty  = items.reduce((n, i) => n + Math.max(0, parseFloat(i.quantity || 0) - parseFloat(i.returned_quantity || 0)), 0);
+  const gift        = parseFloat(sale.gift_card_amount || 0);
+  const paidByMeth  = Math.max(0, parseFloat(sale.amount_paid || 0) - gift);
+  const returnedAmt = items.reduce((n, i) => n + parseFloat(i.returned_quantity || 0) * parseFloat(i.unit_sell_price || 0), 0);
+  const refundDue   = Math.max(0, paidByMeth - returnedAmt);
+  const fmtQty = q => (q % 1 === 0 ? String(q) : q.toFixed(3));
+
+  $('#sal-revert-num').textContent = `#${sale.sale_number || sale.id}`;
+  $('#sal-revert-summary').innerHTML = `
+    <div class="srv-sum-row"><span>Bill total</span><strong>${formatMoney(parseFloat(sale.total || 0), {currency: cur})}</strong></div>
+    <div class="srv-sum-row"><span>Items back to stock</span><strong>${fmtQty(restockQty)} unit${restockQty === 1 ? '' : 's'}</strong></div>
+    ${returnedAmt > 0.005 ? `<div class="srv-sum-row"><span>Already refunded via Returns</span><strong>-${formatMoney(returnedAmt, {currency: cur})}</strong></div>` : ''}
+    ${gift > 0.005 ? `<div class="srv-sum-row"><span>Back to gift card</span><strong>${formatMoney(gift, {currency: cur})}</strong></div>` : ''}
+    <div class="srv-sum-row srv-sum-total"><span>Give back to customer (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><strong>${formatMoney(refundDue, {currency: cur})}</strong></div>`;
+
+  $('#sal-revert-reasons').innerHTML = Object.entries(reasons).map(([k, v]) => `
+    <label class="srv-reason"><input type="radio" name="sal-revert-reason" value="${escHtml(k)}"> <span>${escHtml(v)}</span></label>`).join('');
+  $('#sal-revert-reasons').querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => {
+    const isOther = inp.value === 'other';
+    $('#sal-revert-notes-label').innerHTML = isOther ? 'Details <span style="color:#dc2626">*</span>' : 'Details (optional)';
+    $('#sal-revert-error').style.display = 'none';
+  }));
+  $('#sal-revert-notes').value = '';
+  $('#sal-revert-notes-label').textContent = 'Details (optional)';
+  $('#sal-revert-error').style.display = 'none';
+  $('#sal-revert-overlay').style.display = 'flex';
+}
+
+function _salCloseRevert() {
+  $('#sal-revert-overlay').style.display = 'none';
+  _srv.sale = null;
+}
+
+function _salRevertError(msg) {
+  const el = $('#sal-revert-error');
+  el.textContent = msg;
+  el.style.display = '';
+}
+
+$('#sal-revert-cancel').addEventListener('click', _salCloseRevert);
+$('#sal-revert-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) _salCloseRevert(); });
+$('#sal-revert-confirm').addEventListener('click', async () => {
+  const sale = _srv.sale;
   if (!sale) return;
-  const btn = $('#sal-void-btn');
+  const reason = $('#sal-revert-reasons').querySelector('input:checked')?.value;
+  const notes  = $('#sal-revert-notes').value.trim();
+  if (!reason) { _salRevertError('Choose why this bill is being reverted.'); return; }
+  if (reason === 'other' && !notes) { _salRevertError('Describe why this bill is being reverted.'); return; }
+
+  const btn = $('#sal-revert-confirm');
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Voiding…';
-  const res = await API.voidSale(sale.id);
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Reverting…';
+  const res = await API.revertSale(sale.id, { reason, notes });
   btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-ban"></i> Void';
-  if (res.status >= 400) { toast(res.body?.message || 'Could not void sale', 'error'); return; }
-  toast(`Sale #${sale.sale_number} voided`, 'info');
+  btn.innerHTML = '<i class="fa fa-rotate-left"></i> Revert Bill';
+  if (res.status >= 400) {
+    const errs = res.body?.errors ? Object.values(res.body.errors).flat() : [];
+    _salRevertError(errs[0] || res.body?.message || 'Could not revert this bill.');
+    return;
+  }
+
+  _salCloseRevert();
+  const rev = res.body?.data?.revert;
+  const cur = state.currency || '';
+  toast(`Bill #${sale.sale_number} reverted${rev ? ` — give back ${formatMoney(rev.amount_refunded || 0, {currency: cur})}` : ''}`, 'success');
+
   const idx = _sal.all.findIndex(s => s.id === sale.id);
-  if (idx >= 0) _sal.all[idx] = { ..._sal.all[idx], status: 'voided' };
+  if (idx >= 0) _sal.all[idx] = { ..._sal.all[idx], status: 'void', due_amount: 0 };
   _salApplyFilters();
+  // Stock changed — refresh the POS grid (ribbon totals reload when the POS tab opens)
+  loadProducts(state.searchQuery, state.activeCategory);
   await _salSelectSale(sale.id);
 });
+
+// ── Reverted Bills tab ────────────────────────────────────────────────────
+async function loadSaleReverts() {
+  const body = $('#srv-body');
+  body.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>';
+  $('#srv-kpi').style.display = 'none';
+  _srvLoadReasons();
+
+  const res = await API.saleReverts({
+    q: _srv.q, reason: _srv.reason, date_from: _srv.dateFrom, date_to: _srv.dateTo, page: _srv.page,
+  });
+  if (res.status !== 200) {
+    body.innerHTML = '<div class="finance-loading"><i class="fa fa-circle-exclamation" style="color:#ef4444"></i> Failed to load reverted bills</div>';
+    $('#srv-count').textContent = '—';
+    return;
+  }
+  _srv.list     = res.body?.data || [];
+  _srv.lastPage = res.body?.meta?.last_page || 1;
+  _srvRender(res.body?.summary, res.body?.meta);
+}
+
+function _srvRender(summary, meta) {
+  const cur  = state.currency || '';
+  const list = _srv.list;
+  const kpi  = $('#srv-kpi');
+
+  if (summary && summary.count) {
+    kpi.style.display = '';
+    kpi.innerHTML = `
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Reverted Bills</span><span class="sal-kpi-val">${summary.count}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Bill Value Reverted</span><span class="sal-kpi-val sal-profit-neg">${formatMoney(summary.sale_total, {currency: cur})}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Refunded to Customers</span><span class="sal-kpi-val accent">${formatMoney(summary.amount_refunded, {currency: cur})}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Taken from Accounts</span><span class="sal-kpi-val">${formatMoney(summary.account_reversed, {currency: cur})}</span></div>
+      <div class="sal-kpi-item"><span class="sal-kpi-label">Units Restocked</span><span class="sal-kpi-val">${parseFloat(summary.stock_restored_qty || 0)}</span></div>`;
+  } else {
+    kpi.style.display = 'none';
+  }
+
+  const total = meta?.total ?? list.length;
+  $('#srv-count').textContent = total ? `${total} reverted bill${total !== 1 ? 's' : ''}` : 'No reverted bills';
+
+  const pager = $('#srv-pager');
+  pager.innerHTML = _srv.lastPage > 1 ? `
+    <button class="po-btn-ghost" id="srv-prev" ${_srv.page <= 1 ? 'disabled' : ''}><i class="fa fa-chevron-left"></i></button>
+    <span class="td-muted">Page ${_srv.page} of ${_srv.lastPage}</span>
+    <button class="po-btn-ghost" id="srv-next" ${_srv.page >= _srv.lastPage ? 'disabled' : ''}><i class="fa fa-chevron-right"></i></button>` : '';
+  $('#srv-prev')?.addEventListener('click', () => { _srv.page--; loadSaleReverts(); });
+  $('#srv-next')?.addEventListener('click', () => { _srv.page++; loadSaleReverts(); });
+
+  if (!list.length) {
+    $('#srv-body').innerHTML = '<div class="finance-loading">No reverted bills found.</div>';
+    return;
+  }
+
+  const fmtDt = d => d ? new Date(d).toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+  $('#srv-body').innerHTML = `<table class="sal-tbl">
+    <thead><tr>
+      <th>Revert #</th><th>Bill #</th><th>Reverted</th><th>Customer</th><th>Reason</th><th>By</th>
+      <th style="text-align:right">Bill Total</th><th style="text-align:right">Refunded</th>
+    </tr></thead>
+    <tbody>
+    ${list.map(r => `<tr data-srv-id="${r.id}">
+      <td class="td-ref"><i class="fa fa-rotate-left" style="margin-right:6px;opacity:.55"></i>${escHtml(r.revert_number || '')}</td>
+      <td class="td-muted">${escHtml(r.sale_number || '—')}</td>
+      <td class="td-muted">${fmtDt(r.reverted_at)}</td>
+      <td class="td-muted">${escHtml(r.customer_name || '—')}</td>
+      <td><span class="srv-reason-chip">${escHtml(r.reason_label || '')}</span>${r.notes ? `<div class="srv-row-note" title="${escHtml(r.notes)}">${escHtml(r.notes)}</div>` : ''}</td>
+      <td class="td-muted">${escHtml(r.reverted_by?.name || '—')}</td>
+      <td class="td-amt">${formatMoney(r.sale_total, {currency: cur})}</td>
+      <td class="td-amt">${formatMoney(r.amount_refunded, {currency: cur})}</td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+
+  $('#srv-body').querySelectorAll('tr[data-srv-id]').forEach(row => {
+    row.addEventListener('click', () => _srvOpenDetail(Number(row.dataset.srvId)));
+  });
+}
+
+async function _srvOpenDetail(id) {
+  const overlay = $('#srv-detail-overlay');
+  const body    = $('#srv-detail-body');
+  $('#srv-detail-title').textContent = 'Reverted Bill';
+  body.innerHTML = '<div class="finance-loading"><i class="fa fa-spinner fa-spin"></i></div>';
+  overlay.style.display = 'flex';
+
+  const res = await API.saleRevert(id);
+  if (res.status !== 200) {
+    body.innerHTML = '<div class="finance-loading"><i class="fa fa-circle-exclamation" style="color:#ef4444"></i> Failed to load</div>';
+    return;
+  }
+  const r   = res.body?.data || {};
+  const cur = state.currency || '';
+  const fm  = v => formatMoney(parseFloat(v || 0), {currency: cur});
+  const fq  = v => { const q = parseFloat(v || 0); return q % 1 === 0 ? String(q) : q.toFixed(3); };
+  const dt  = d => d ? new Date(d).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+  const meta = (lbl, val) => `<div class="sal-detail-meta-item"><span class="sal-detail-meta-label">${lbl}</span><span class="sal-detail-meta-val">${val}</span></div>`;
+
+  $('#srv-detail-title').textContent = `${r.revert_number || ''} · Bill #${r.sale_number || ''}`;
+  body.innerHTML = `
+    <div class="sal-void-notice srv-notice">
+      <div><i class="fa fa-rotate-left"></i> <strong>${escHtml(r.reason_label || '')}</strong></div>
+      ${r.notes ? `<div class="srv-notice-note">“${escHtml(r.notes)}”</div>` : ''}
+    </div>
+    <div class="sal-detail-meta">
+      ${meta('Bill date', dt(r.sale_sold_at))}
+      ${meta('Reverted', dt(r.reverted_at))}
+      ${meta('Reverted by', escHtml(r.reverted_by?.name || '—'))}
+      ${meta('Customer', escHtml(r.customer_name || 'Walk-in'))}
+      ${meta('Payment', escHtml((r.payment_method || '—').toUpperCase()))}
+    </div>
+
+    <div class="sal-section-title">Items</div>
+    <table class="sal-items-tbl">
+      <thead><tr><th>Item</th><th class="td-r">Sold</th><th class="td-r">Returned before</th><th class="td-r">Restocked</th><th class="td-r">Unit Price</th><th class="td-r">Total</th></tr></thead>
+      <tbody>${(r.items || []).map(i => `<tr>
+        <td>${escHtml(i.product_name || '—')}${i.type === 'service' ? ' <span class="td-muted">(service)</span>' : ''}${i.sku ? `<br><span class="td-muted">${escHtml(i.sku)}</span>` : ''}</td>
+        <td class="td-r">${fq(i.quantity)}</td>
+        <td class="td-r td-muted">${parseFloat(i.returned_quantity || 0) ? fq(i.returned_quantity) : '—'}</td>
+        <td class="td-r">${parseFloat(i.restocked_quantity || 0) ? fq(i.restocked_quantity) : '—'}</td>
+        <td class="td-r">${fm(i.unit_sell_price)}</td>
+        <td class="td-r"><strong>${fm(i.line_total)}</strong></td>
+      </tr>`).join('')}</tbody>
+    </table>
+
+    <div class="sal-section-title">Amounts</div>
+    <div class="sal-totals">
+      <div class="sal-total-row"><span class="label">Bill total</span><span>${fm(r.sale_total)}</span></div>
+      <div class="sal-total-row"><span class="label">Cost of goods</span><span>${fm(r.sale_cost)}</span></div>
+      <div class="sal-total-row"><span class="label">Amount paid</span><span>${fm(r.amount_paid)}</span></div>
+      ${parseFloat(r.gift_card_refunded) > 0 ? `<div class="sal-total-row"><span class="label">Returned to gift card</span><span>${fm(r.gift_card_refunded)}</span></div>` : ''}
+      ${parseFloat(r.returned_total) > 0 ? `<div class="sal-total-row"><span class="label">Refunded earlier via Returns</span><span>${fm(r.returned_total)}</span></div>` : ''}
+      <div class="sal-total-row"><span class="label">Taken back from deposit account</span><span>${fm(r.account_reversed)}</span></div>
+      <div class="sal-total-row"><span class="label">Units restocked</span><span>${fq(r.stock_restored_qty)}</span></div>
+      <div class="sal-total-row grand"><span class="label">Refunded to customer</span><span>${fm(r.amount_refunded)}</span></div>
+    </div>`;
+}
+
+$('#srv-detail-close').addEventListener('click', () => { $('#srv-detail-overlay').style.display = 'none'; });
+$('#srv-detail-overlay').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.style.display = 'none'; });
+$('#srv-search').addEventListener('input', e => {
+  clearTimeout(_srv.searchTimer);
+  _srv.q = e.target.value.trim();
+  _srv.searchTimer = setTimeout(() => { _srv.page = 1; loadSaleReverts(); }, 300);
+});
+$('#srv-reason-filter').addEventListener('change', e => { _srv.reason = e.target.value; _srv.page = 1; loadSaleReverts(); });
+$('#srv-date-from').addEventListener('change', e => { _srv.dateFrom = e.target.value; _srv.page = 1; loadSaleReverts(); });
+$('#srv-date-to').addEventListener('change', e => { _srv.dateTo = e.target.value; _srv.page = 1; loadSaleReverts(); });
+$('#srv-refresh').addEventListener('click', () => loadSaleReverts());
 
 // ── History view ──────────────────────────────────────────────────────────
 const _salHist = {
@@ -2341,7 +2600,7 @@ function _salHistRenderTable(data) {
     <tbody>
     ${data.map(s => {
       const dt  = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
-      const cls = s.status === 'voided' ? 'voided' : 'completed';
+      const cls = _isVoidSale(s) ? 'voided' : 'completed';
       const ch  = s.channel === 'online' ? 'online' : '';
       return `<tr data-sal-id="${s.id}"${s.is_overdue ? ' class="sal-row-overdue" title="Credit payment overdue"' : ''}>
         <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}</td>
@@ -2349,7 +2608,7 @@ function _salHistRenderTable(data) {
         <td class="td-muted">${escHtml(s.customer_name || '—')}</td>
         <td><span class="sal-channel-chip ${ch}">${s.channel === 'online' ? 'Online' : 'POS'}</span></td>
         <td class="td-muted">${_salPaymentCell(s, cur)}</td>
-        <td><span class="bs-sales-badge ${cls}">${cls === 'voided' ? 'Voided' : 'Completed'}</span></td>
+        <td><span class="bs-sales-badge ${cls}">${cls === 'voided' ? 'Reverted' : 'Completed'}</span></td>
         <td class="td-amt">${formatMoney(parseFloat(s.total || 0), {currency: cur})}</td>
       </tr>`;
     }).join('')}
@@ -6484,7 +6743,7 @@ function applyFeatureVisibility() {
     if (salGrps[4]) salGrps[4].style.display = (mp('sal_btn_qt_new')||mp('sal_btn_qt_refresh')) ? '' : 'none';
     if (salGrps[5]) salGrps[5].style.display = mp('sal_tab_orders') ? '' : 'none'; }
   // ── Sales panel: sub-nav tab gating with fallback ──
-  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions'), rentals: mp('sal_tab_rentals') };
+  { const _salTabPerms = { transactions: mp('sal_tab_transactions'), history: mp('sal_tab_history'), credits: mp('sal_tab_transactions'), quotes: mp('sal_tab_quotes'), invoices: mp('sal_tab_invoices'), orders: mp('sal_tab_orders'), subscriptions: mp('sal_tab_subscriptions'), rentals: mp('sal_tab_rentals'), reverts: mp('sal_tab_transactions') };
     $$('.sal-view-btn').forEach(b => { b.style.display = _salTabPerms[b.dataset.salView] ? '' : 'none'; });
     const _salActive = $('.sal-view-btn.active');
     if (_salActive && !_salTabPerms[_salActive.dataset.salView]) {
@@ -12669,7 +12928,7 @@ async function _tdsOpenSaleProfit(id) {
   const discount = parseFloat(sale.discount_amount || 0);
   const coupon   = parseFloat(sale.coupon_discount || 0);
   const change   = parseFloat(sale.change_amount || 0);
-  const isVoided = sale.status === 'voided';
+  const isVoided = _isVoidSale(sale);
   const dateStr  = sale.sold_at ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : '—';
   const meta = (lbl, val) => `<div class="sal-detail-meta-item"><span class="sal-detail-meta-label">${lbl}</span><span class="sal-detail-meta-val">${val}</span></div>`;
 
@@ -13479,7 +13738,7 @@ async function _homeActivityLoad() {
     const total  = parseFloat(s.total || 0).toFixed(2);
     const dt     = s.sold_at ? new Date(s.sold_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
     const ref    = s.sale_number || `#${s.id}`;
-    const voided = s.status === 'voided';
+    const voided = _isVoidSale(s);
     let profitHtml = '';
     if (voided) {
       profitHtml = '<div class="home-act-profit voided">Voided</div>';
@@ -13530,7 +13789,7 @@ async function _homeAnalyticsLoad() {
 function _hanKPIs() {
   const today = new Date().toISOString().slice(0, 10);
   const month = new Date().toISOString().slice(0, 7);
-  const active = _han.sales.filter(s => s.status !== 'voided');
+  const active = _han.sales.filter(s => !_isVoidSale(s));
   const todaySales = active.filter(s => (s.sold_at || '').slice(0, 10) === today);
   const todayRev   = todaySales.reduce((a, s) => a + parseFloat(s.total || 0), 0);
   const monthRev   = active.filter(s => (s.sold_at || '').slice(0, 7) === month)
@@ -13557,7 +13816,7 @@ function _hanLineChart() {
     const d = new Date(cutoff); d.setDate(d.getDate() + i);
     buckets[d.toISOString().slice(0, 10)] = 0;
   }
-  _han.sales.filter(s => s.status !== 'voided' && (s.sold_at || '') >= cutoff.toISOString().slice(0, 10)).forEach(s => {
+  _han.sales.filter(s => !_isVoidSale(s) && (s.sold_at || '') >= cutoff.toISOString().slice(0, 10)).forEach(s => {
     const k = (s.sold_at || '').slice(0, 10);
     if (k in buckets) buckets[k] += parseFloat(s.total || 0);
   });
@@ -13631,7 +13890,7 @@ function _hanBarChart() {
   const days   = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
   const totals = [0,0,0,0,0,0,0];
   const cutoffStr = cutoff.toISOString().slice(0, 10);
-  _han.sales.filter(s => s.status !== 'voided' && (s.sold_at || '') >= cutoffStr).forEach(s => {
+  _han.sales.filter(s => !_isVoidSale(s) && (s.sold_at || '') >= cutoffStr).forEach(s => {
     const dow = new Date((s.sold_at || '').slice(0, 10) + 'T00:00:00').getDay(); // 0=Sun
     const idx = dow === 0 ? 6 : dow - 1;
     totals[idx] += parseFloat(s.total || 0);

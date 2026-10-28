@@ -178,6 +178,15 @@ const API = (() => {
       return request('GET', `/sales/history?${p.toString()}`);
     },
     processReturn:(id, body)          => request('POST', `/sales/${id}/return`, body),
+    // Revert a bill entered by mistake — body: { reason, notes }
+    revertSale:         (id, body)    => request('POST', `/sales/${id}/revert`, body),
+    saleRevertReasons:  ()            => request('GET',  '/sale-reverts/reasons'),
+    saleRevert:         (id)          => request('GET',  `/sale-reverts/${id}`),
+    saleReverts:        (params)      => {
+      const p = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+      return request('GET', `/sale-reverts?${p.toString()}`);
+    },
     returnReasons:()                  => request('GET',  '/online/return-reasons'),
 
     // Finance — expenses / bills / profit
