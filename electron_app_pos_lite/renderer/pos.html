@@ -314,6 +314,7 @@
             <button type="button" class="pm-btn active" data-method="cash"><i class="fa-solid fa-money-bill"></i> Cash</button>
             <button type="button" class="pm-btn" data-method="card"><i class="fa-solid fa-credit-card"></i> Card</button>
             <button type="button" class="pm-btn" data-method="credit"><i class="fa-solid fa-file-invoice-dollar"></i> Credit</button>
+            <button type="button" class="pm-btn" data-method="cheque"><i class="fa-solid fa-money-check"></i> Cheque</button>
           </div>
 
           <!-- Coupon: a % or flat discount on the bill, applied before any gift card -->
@@ -352,6 +353,42 @@
               <strong class="co-gc-amt" id="co-gc-applied-amt"></strong>
               <button type="button" class="co-gc-x" id="co-gc-remove" title="Remove gift card"><i class="fa-solid fa-xmark"></i></button>
             </div>
+          </div>
+
+          <!-- Cheque: a customer is required; the money is deposited later (Sales → Cheques → Claim) -->
+          <div id="cheque-section" hidden>
+            <div class="co-chq-notice" id="cheque-customer-notice" hidden>
+              <i class="fa-solid fa-triangle-exclamation"></i> <span>A customer is required for cheque payment.</span>
+            </div>
+            <div class="co-chq-amount"><span>Cheque amount</span><strong id="cheque-amount">0.00</strong></div>
+            <div class="co-chq-grid">
+              <div class="field">
+                <label for="cheque-number-input">Cheque Number <span class="co-chq-req">*</span></label>
+                <input type="text" id="cheque-number-input" maxlength="60" placeholder="e.g. 000123" autocomplete="off" />
+              </div>
+              <div class="field">
+                <label for="cheque-date-input">Cheque Date <span class="co-chq-req">*</span></label>
+                <input type="date" id="cheque-date-input" />
+              </div>
+            </div>
+            <div class="field">
+              <label for="cheque-bank-input">Bank <span class="co-chq-opt">(optional)</span></label>
+              <input type="text" id="cheque-bank-input" maxlength="120" placeholder="e.g. Bank of Ceylon — Kandy" autocomplete="off" />
+            </div>
+            <div class="co-chq-hint"><i class="fa-solid fa-circle-info"></i> <span>Claim the cheque from Sales → Cheques once it is deposited — the money goes into the account then.</span></div>
+          </div>
+
+          <!-- Credit: a customer is required; the sale can't take them past their credit limit -->
+          <div id="credit-section" hidden>
+            <div class="co-chq-notice" id="credit-customer-notice" hidden>
+              <i class="fa-solid fa-triangle-exclamation"></i> <span>A customer is required for credit payment.</span>
+            </div>
+            <div class="co-credit-box" id="credit-limit-box" hidden></div>
+            <div class="field">
+              <label for="credit-due-date-input">Payment Due Date <span class="co-chq-opt">(optional)</span></label>
+              <input type="date" id="credit-due-date-input" />
+            </div>
+            <div class="co-chq-hint"><i class="fa-solid fa-circle-info"></i> <span>Receive the payment later from Sales → Pending Credits or the customer's Credit / Due tab.</span></div>
           </div>
 
           <div id="tender-section">

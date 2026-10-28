@@ -260,6 +260,7 @@ tbody tr:hover { background: #fafbff; }
 }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
 .field textarea { resize: vertical; min-height: 56px; }
+.field-hint { font-weight: 400; }
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
 .select-with-add { display: flex; align-items: center; gap: 8px; }
@@ -326,7 +327,7 @@ tbody tr:hover { background: #fafbff; }
 }
 .error-box.show { display: block; }
 
-/* View modal specifics */
+/* View supplier modal */
 .view-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid #f1f2f5; font-size: 13px; }
 .view-row span:first-child { color: var(--muted); }
 .view-row span:last-child { font-weight: 600; text-align: right; max-width: 60%; }
@@ -334,6 +335,96 @@ tbody tr:hover { background: #fafbff; }
 .mini-list { margin-top: 4px; }
 .mini-list-item { display: flex; justify-content: space-between; font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid #f6f6f8; }
 .mini-list-item .muted { color: var(--muted); }
+.mini-list-item > span:last-child { white-space: nowrap; }
+
+/* View customer modal — header, field grid, tabbed history (mirrors the main app's customer modal) */
+.modal.modal-cv { width: 900px; display: flex; flex-direction: column; overflow: hidden; }
+.cv-head { display: flex; align-items: center; gap: 14px; padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.cv-avatar {
+  width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+  background: var(--accent); color: #fff; font-size: 22px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.cv-titles { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 5px; }
+.cv-titles h2 { margin: 0; font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.cv-sales-badge { font-size: 11.5px; font-weight: 600; color: var(--accent); background: #fff1e0; border: 1px solid #fed7aa; border-radius: 999px; padding: 1px 9px; }
+.cv-sales-badge:empty { display: none; }
+
+.cv-rental-alert {
+  display: flex; align-items: center; gap: 10px; margin: 12px 22px 0; padding: 9px 12px;
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; border-radius: 8px; font-size: 12.5px;
+}
+.cv-rental-alert span { flex: 1; }
+.cv-rental-alert button { border: 1px solid #fca5a5; background: #fff; color: #b91c1c; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+.cv-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 24px; padding: 16px 22px; border-bottom: 1px solid var(--border); }
+.cv-field-label { font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+.cv-field-val { font-size: 13.5px; word-break: break-word; }
+.cv-field-val.empty { color: #c0c4cc; }
+.cv-credit-avail { color: var(--success); }
+.cv-credit-avail.is-empty { color: var(--danger); }
+
+.cv-tabs { display: flex; gap: 2px; padding: 0 22px; border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0; }
+.cv-tab {
+  border: none; background: transparent; color: var(--muted); font-size: 13px; font-weight: 600;
+  padding: 11px 12px; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: inherit;
+}
+.cv-tab:hover { color: var(--text); }
+.cv-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.cv-tab-count { display: inline-block; min-width: 17px; padding: 0 5px; margin-left: 3px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 10.5px; line-height: 17px; text-align: center; }
+
+.cv-panels { padding: 10px 22px 16px; min-height: 200px; max-height: 340px; overflow-y: auto; }
+.cv-section-title { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin: 6px 0 4px; }
+.cv-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f2f5; font-size: 13px; }
+.cv-row:last-child { border-bottom: none; }
+.cv-row.is-overdue { background: #fff8f8; }
+.cv-row-main { font-weight: 700; white-space: nowrap; }
+.cv-row-meta { flex: 1; min-width: 0; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cv-row-date { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.cv-row-amt { font-weight: 700; color: var(--accent); white-space: nowrap; min-width: 80px; text-align: right; }
+.cv-row-amt.is-in { color: var(--success); }
+.cv-spacer { flex: 1; }
+.cv-empty { padding: 34px 0; text-align: center; color: var(--muted); font-size: 13px; }
+.cv-empty i { margin-right: 6px; }
+
+.cv-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; background: #f1f2f7; color: var(--muted); }
+.cv-pill.cash, .cv-pill.active, .cv-pill.paid, .cv-pill.returned  { background: #dcfce7; color: #15803d; }
+.cv-pill.card     { background: #e0e7ff; color: #4338ca; }
+.cv-pill.credit, .cv-pill.due, .cv-pill.paused  { background: #fff1e0; color: #c2410c; }
+.cv-pill.cheque   { background: #dbeafe; color: #1d4ed8; }
+.cv-pill.overdue, .cv-pill.expired { background: #fee2e2; color: #b91c1c; }
+
+.cv-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 10px; }
+.cv-kpi { border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; display: flex; flex-direction: column; gap: 2px; }
+.cv-kpi span { font-size: 11px; color: var(--muted); font-weight: 600; }
+.cv-kpi strong { font-size: 15px; }
+.cv-kpi.is-due strong { color: #c2410c; }
+.cv-kpi.is-avail strong { color: var(--success); }
+.cv-kpi.is-avail.is-empty strong { color: var(--danger); }
+.cv-usage { margin-bottom: 10px; }
+.cv-usage-bar { height: 6px; border-radius: 999px; background: #f1f2f5; overflow: hidden; }
+.cv-usage-bar span { display: block; height: 100%; background: var(--success); }
+.cv-usage.is-high .cv-usage-bar span { background: var(--danger); }
+.cv-usage small { font-size: 11px; color: var(--muted); }
+
+.cv-pay { border: 1px dashed #fed7aa; background: #fffaf5; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.cv-pay-title { font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
+.cv-pay-title i { color: var(--accent); margin-right: 4px; }
+.cv-pay-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cv-pay-amt { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 8px; background: #fff; overflow: hidden; }
+.cv-pay-amt span { padding: 0 8px; font-size: 12px; color: var(--muted); font-weight: 600; }
+.cv-pay-amt input { border: none; outline: none; width: 110px; padding: 8px 4px; font-size: 13px; font-family: inherit; }
+.cv-pay-amt button { border: none; border-left: 1px solid var(--border); background: #f8f9fb; padding: 8px 10px; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--accent); }
+.cv-pay-method { border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 7px 11px; font-size: 12.5px; font-weight: 600; cursor: pointer; color: var(--muted); }
+.cv-pay-method.is-active { border-color: var(--accent); color: var(--accent); background: #fff1e0; }
+.cv-pay-row .primary-btn { margin-left: auto; }
+
+.chq-pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.chq-pill.pending   { background: #fef3c7; color: #b45309; }
+.chq-pill.due       { background: #dbeafe; color: #1d4ed8; }
+.chq-pill.cleared   { background: #dcfce7; color: #15803d; }
+.chq-pill.bounced   { background: #fee2e2; color: #b91c1c; }
+.chq-pill.cancelled { background: #f1f2f7; color: var(--muted); }
 
 /* ── Toast ───────────────────────────────────────────────────────────── */
 .toast {

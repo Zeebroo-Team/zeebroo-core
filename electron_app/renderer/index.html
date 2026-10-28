@@ -2761,6 +2761,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="subscriptions"><i class="fa fa-repeat"></i> Recurring Sales</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="rentals"><i class="fa fa-calendar-days"></i> Rental</button>
         <button class="fin-subnav-btn sal-view-btn" data-sal-view="reverts"><i class="fa fa-rotate-left"></i> Reverted Bills</button>
+        <button class="fin-subnav-btn sal-view-btn" data-sal-view="cheques"><i class="fa fa-money-check"></i> Cheques <span class="schq-tab-count" id="schq-tab-count" style="display:none"></span></button>
       </div>
 
       <!-- Transactions list -->
@@ -3280,6 +3281,38 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
         <div class="finance-footer">
           <span id="srv-count">—</span>
           <div id="srv-pager" style="margin-left:auto;display:flex;gap:6px;align-items:center"></div>
+        </div>
+      </div>
+
+      <!-- Cheques view (customer cheques taken at checkout) -->
+      <div id="sal-cheques-view" style="display:none;flex:1;flex-direction:column;overflow:hidden">
+        <div class="qt-topbar">
+          <div class="finance-search-wrap" style="flex:1;max-width:320px">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="schq-search" placeholder="Search cheque #, bank, bill #, customer…">
+          </div>
+          <select class="sal-hist-select" id="schq-status-filter" style="margin-left:8px">
+            <option value="all">All Cheques</option>
+            <option value="due">Due to Claim</option>
+            <option value="pending">Pending</option>
+            <option value="cleared">Claimed</option>
+            <option value="bounced">Bounced</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+          <input type="date" id="schq-date-from" class="sal-date-input" style="margin-left:8px" title="Cheque date from">
+          <span style="color:var(--text-muted);font-size:12px">—</span>
+          <input type="date" id="schq-date-to" class="sal-date-input" title="Cheque date to">
+          <button class="po-btn-ghost" id="schq-refresh" style="margin-left:auto"><i class="fa fa-arrows-rotate"></i> Refresh</button>
+        </div>
+        <div class="sal-content-card">
+          <div class="sal-kpi-bar" id="schq-kpi" style="display:none"></div>
+          <div class="sal-table-wrap" id="schq-body">
+            <div class="finance-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</div>
+          </div>
+        </div>
+        <div class="finance-footer">
+          <span id="schq-count">—</span>
+          <div id="schq-pager" style="margin-left:auto;display:flex;gap:6px;align-items:center"></div>
         </div>
       </div>
 
@@ -15062,6 +15095,10 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <i class="fa fa-file-invoice-dollar"></i>
             <span>Credit</span>
           </button>
+          <button class="co-pay-method" data-method="cheque">
+            <i class="fa fa-money-check"></i>
+            <span>Cheque</span>
+          </button>
         </div>
 
         <!-- Coupon (a discount on the bill — applied before any gift card) -->
@@ -15110,6 +15147,30 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
           <div id="co-credit-limit-box" class="co-credit-limit-box" style="display:none"></div>
           <div class="co-field-label">Payment Due Date <span class="co-field-opt">(optional)</span></div>
           <input type="date" id="co-credit-due-date" class="co-amount-input co-date-input">
+        </div>
+
+        <!-- Cheque fields (customer required; the money is deposited later via Sales → Cheques → Claim) -->
+        <div id="co-cheque-section" style="display:none">
+          <div id="co-cheque-customer-notice" class="co-credit-notice" style="display:none">
+            <i class="fa fa-triangle-exclamation"></i> A customer is required for cheque payment.
+          </div>
+          <div class="co-chq-amount">
+            <span>Cheque amount</span>
+            <strong id="co-cheque-amount">0.00</strong>
+          </div>
+          <div class="co-chq-grid">
+            <div>
+              <div class="co-field-label">Cheque Number <span style="color:#dc2626">*</span></div>
+              <input type="text" id="co-cheque-number" class="co-amount-input co-chq-input" maxlength="60" placeholder="e.g. 000123" autocomplete="off">
+            </div>
+            <div>
+              <div class="co-field-label">Cheque Date <span style="color:#dc2626">*</span></div>
+              <input type="date" id="co-cheque-date" class="co-amount-input co-date-input co-chq-input">
+            </div>
+          </div>
+          <div class="co-field-label">Bank <span class="co-field-opt">(optional)</span></div>
+          <input type="text" id="co-cheque-bank" class="co-amount-input co-chq-input" maxlength="120" placeholder="e.g. Bank of Ceylon — Kandy" autocomplete="off">
+          <div class="co-chq-hint"><i class="fa fa-circle-info"></i> Claim the cheque from Sales → Cheques once it is deposited — the money goes into the account then.</div>
         </div>
 
         <!-- Cash / Card -->
@@ -15981,6 +16042,45 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <div class="eod-modal-body" id="srv-detail-body" style="overflow-y:auto"></div>
     <div class="eod-modal-footer">
       <button class="psm-btn-cancel" id="srv-detail-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Customer cheque: claim / bounce (Sales → Cheques, Customers → Cheques) ── -->
+<div id="schq-overlay" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:480px">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-money-check"></i> <span id="schq-dlg-title">Claim Cheque</span></span>
+    </div>
+    <div class="eod-modal-body">
+      <div id="schq-dlg-summary" class="srv-summary"></div>
+      <!-- Claim -->
+      <div id="schq-dlg-claim">
+        <div class="po-field">
+          <label class="po-field-label">Deposit into account <span style="color:#dc2626">*</span></label>
+          <select id="schq-dlg-account" class="po-field-input"></select>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Note (optional)</label>
+          <textarea id="schq-dlg-notes" class="po-field-textarea" rows="2" maxlength="1000" placeholder="e.g. Deposited at BOC Kandy branch"></textarea>
+        </div>
+      </div>
+      <!-- Bounce -->
+      <div id="schq-dlg-bounce" style="display:none">
+        <div class="srv-warn">
+          <i class="fa fa-triangle-exclamation"></i>
+          <div>Mark this cheque as returned unpaid by the bank. You can still claim it later if the customer's bank pays it on re-presentation.</div>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label">Why did it bounce? <span style="color:#dc2626">*</span></label>
+          <input type="text" id="schq-dlg-reason" class="po-field-input" maxlength="255" placeholder="e.g. Insufficient funds">
+        </div>
+      </div>
+      <div id="schq-dlg-error" class="srv-error" style="display:none"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="schq-dlg-cancel">Cancel</button>
+      <button class="eod-settle-btn" id="schq-dlg-confirm"><i class="fa fa-check"></i> Claim Cheque</button>
     </div>
   </div>
 </div>
@@ -17372,6 +17472,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <button class="cm-dv-tab" data-cm-tab="warranty"><i class="fa fa-shield-halved"></i> Warranty</button>
             <button class="cm-dv-tab" data-cm-tab="credit"><i class="fa fa-hand-holding-dollar"></i> Credit / Due</button>
             <button class="cm-dv-tab" data-cm-tab="rentals"><i class="fa fa-calendar-days"></i> Rentals <span class="cm-dv-tab-count" id="cm-dv-rentals-count" style="display:none"></span></button>
+            <button class="cm-dv-tab" data-cm-tab="cheques"><i class="fa fa-money-check"></i> Cheques</button>
           </div>
           <div class="cm-dv-tab-panels" id="cm-dv-tab-panels">
             <div class="cm-dv-tab-panel cm-dv-history" id="cm-dv-history"></div>
@@ -17379,6 +17480,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <div class="cm-dv-tab-panel" id="cm-dv-panel-warranty" style="display:none"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-credit" style="display:none"></div>
             <div class="cm-dv-tab-panel" id="cm-dv-panel-rentals" style="display:none"></div>
+            <div class="cm-dv-tab-panel" id="cm-dv-panel-cheques" style="display:none"></div>
           </div>
           <div class="cm-dv-actions">
             <button class="cm-btn-edit"   id="cm-btn-edit"><i class="fa fa-pen"></i> Edit</button>

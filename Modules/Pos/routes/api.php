@@ -17,6 +17,7 @@ use Modules\Pos\Http\Controllers\Api\PosPurchaseOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleReturnApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleRevertApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleChequeApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseBillApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseBillAssignmentApiController;
 use Modules\Pos\Http\Controllers\Api\PosAccountApiController;
@@ -259,6 +260,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get  ('sale-reverts',           [PosSaleRevertApiController::class, 'index']     )->name('sale-reverts.index');
     Route::get  ('sale-reverts/reasons',   [PosSaleRevertApiController::class, 'reasons']   )->name('sale-reverts.reasons');
     Route::get  ('sale-reverts/{saleRevert}', [PosSaleRevertApiController::class, 'show']   )->name('sale-reverts.show');
+    // Customer cheques taken at checkout — claim deposits the money, bounce records a returned cheque
+    Route::get  ('sale-cheques',                    [PosSaleChequeApiController::class, 'index'] )->name('sale-cheques.index');
+    Route::get  ('sale-cheques/{saleCheque}',       [PosSaleChequeApiController::class, 'show']  )->name('sale-cheques.show');
+    Route::post ('sale-cheques/{saleCheque}/claim', [PosSaleChequeApiController::class, 'claim'] )->name('sale-cheques.claim');
+    Route::post ('sale-cheques/{saleCheque}/bounce',[PosSaleChequeApiController::class, 'bounce'])->name('sale-cheques.bounce');
     Route::get  ('sale-returns',           [PosSaleReturnApiController::class, 'index']     )->name('sale-returns.index');
     Route::get  ('sale-returns/{saleReturn}', [PosSaleReturnApiController::class, 'show']   )->name('sale-returns.show');
     Route::get('online/return-reasons', [PosReturnReasonsApiController::class, 'index'])->name('online.return-reasons');

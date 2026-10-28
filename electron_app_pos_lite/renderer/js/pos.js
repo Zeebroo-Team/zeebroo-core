@@ -148,6 +148,7 @@ const passwordConfirmBtn = document.getElementById('password-confirm-btn');
 let products = [];
 let cart = []; // { cartKey, product_id, name, price, customPrice, qty, stock, isRental?, isDynamic?, ... }
 let paymentMethod = 'cash';
+let creditInfo = { customerId: null, data: null }; // the selected customer's credit summary (credit checkout)
 let searchDebounce = null;
 let posSettings = {}; // POS/Sale settings from the General tab (Settings → General)
 // Receipt Layout Editor saved (js/navbar.js) — next receipt uses the new layout/language
@@ -979,9 +980,88 @@ document.querySelectorAll('.pm-btn').forEach((btn) => {
     btn.classList.add('active');
     paymentMethod = btn.dataset.method;
     tenderSection.style.display = paymentMethod === 'cash' ? '' : 'none';
+    syncChequeSection();
     updateCheckoutTender();
+    if (paymentMethod === 'cheque' && selectedCustomer) document.getElementById('cheque-number-input').focus();
   });
 });
+
+// ── Cheque payment ───────────────────────────────────────────────────────
+// A cheque sale needs a customer, the cheque number and the date on the cheque.
+// The money reaches an account only when the cheque is claimed (Sales → Cheques).
+function syncChequeSection() {
+  document.getElementById('cheque-section').hidden = paymentMethod !== 'cheque';
+  document.getElementById('cheque-customer-notice').hidden = paymentMethod !== 'cheque' || !!selectedCustomer;
+  syncCreditSection();
+}
+
+// ── Credit payment ───────────────────────────────────────────────────────
+// A credit sale needs a customer and can't take them past their credit limit
+// (the server checks this too). The money is received later — Sales → Pending
+// Credits, or the customer's Credit / Due tab in Contacts.
+
+function syncCreditSection() {
+  const isCredit = paymentMethod === 'credit';
+  document.getElementById('credit-section').hidden = !isCredit;
+  document.getElementById('credit-customer-notice').hidden = !isCredit || !!selectedCustomer;
+  renderCreditLimitBox();
+}
+
+// How much this sale would go past the customer's available credit (0 = fits, or no limit)
+function creditOverBy() {
+  const info = creditInfo.data;
+  if (!selectedCustomer || creditInfo.customerId !== selectedCustomer.id || !info || info.credit_limit == null) return 0;
+  const over = Math.round((amountDueAfterGiftCard() - Number(info.credit_available || 0)) * 100) / 100;
+  return over > 0.005 ? over : 0;
+}
+
+function renderCreditLimitBox() {
+  const box = document.getElementById('credit-limit-box');
+  if (paymentMethod !== 'credit' || !selectedCustomer) { box.hidden = true; return; }
+
+  const custId = selectedCustomer.id;
+  if (creditInfo.customerId !== custId) {
+    creditInfo = { customerId: custId, data: null };
+    box.className = 'co-credit-box';
+    box.innerHTML = `<span><i class="fa-solid fa-spinner fa-spin"></i> ${t('Checking credit limit…')}</span>`;
+    box.hidden = false;
+    API.customer(custId).then((res) => {
+      if (creditInfo.customerId !== custId) return;
+      creditInfo.data = res.status === 200 ? res.body.data : { credit_limit: null, credit_outstanding: 0 };
+      renderCreditLimitBox();
+      updateCheckoutTender();
+    });
+    return;
+  }
+  const info = creditInfo.data;
+  if (!info) return; // still loading
+
+  const owed = Number(info.credit_outstanding) || 0;
+  const row = (label, val, cls = '') => `<div class="co-credit-row ${cls}"><span>${label}</span><strong>${val}</strong></div>`;
+  if (info.credit_limit == null) {
+    box.className = 'co-credit-box';
+    box.innerHTML = row(t('Credit limit'), t('No limit')) + row(t('Outstanding'), money(owed));
+    box.hidden = false;
+    return;
+  }
+
+  const over = creditOverBy();
+  box.className = `co-credit-box${over > 0 ? ' is-over' : ''}`;
+  box.innerHTML = row(t('Credit limit'), money(info.credit_limit))
+    + row(t('Outstanding'), money(owed))
+    + row(t('Available'), money(info.credit_available), 'avail')
+    + (over > 0 ? `<div class="co-credit-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${t('This sale ({total}) is {over} over the available credit.', { total: money(amountDueAfterGiftCard()), over: money(over) })}</div>` : '');
+  box.hidden = false;
+}
+
+function resetChequeFields() {
+  document.getElementById('cheque-number-input').value = '';
+  document.getElementById('cheque-bank-input').value = '';
+  // Defaults to today — most cheques aren't post-dated
+  const d = new Date();
+  document.getElementById('cheque-date-input').value =
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // ── Customer select ──────────────────────────────────────────────────────
 function refreshCheckoutCustomerBox() {
@@ -998,6 +1078,7 @@ function refreshCheckoutCustomerBox() {
     cartCustomerChipEl.hidden = true;
     cartCustomerEmptyEl.hidden = false;
   }
+  syncChequeSection();
 }
 
 function selectCustomer(customer) {
@@ -2191,6 +2272,7 @@ document.getElementById('co-gc-remove').addEventListener('click', () => {
 function updateCheckoutTender() {
   const total = amountDueAfterGiftCard();
   coAmountDueEl.textContent = money(total);
+  document.getElementById('cheque-amount').textContent = money(total);
   renderCheckoutCoupon();
   renderCheckoutGiftCard();
 
@@ -2200,7 +2282,8 @@ function updateCheckoutTender() {
   coChangeEl.classList.toggle('negative', change < 0);
 
   const insufficientCash = paymentMethod === 'cash' && change < -0.001;
-  checkoutCompleteBtn.disabled = cart.length === 0 || insufficientCash;
+  if (paymentMethod === 'credit') renderCreditLimitBox(); // the due changes with coupons / gift cards
+  checkoutCompleteBtn.disabled = cart.length === 0 || insufficientCash || creditOverBy() > 0;
 }
 
 discountInput.addEventListener('input', () => { renderCart(); refreshCheckoutSummary(); });
@@ -2248,6 +2331,10 @@ function openCheckoutModal() {
   document.querySelector('#checkout-payment-methods .pm-btn[data-method="cash"]').classList.add('active');
   paymentMethod = 'cash';
   tenderSection.style.display = '';
+  resetChequeFields();
+  document.getElementById('credit-due-date-input').value = '';
+  creditInfo = { customerId: null, data: null }; // re-check the limit — dues may have changed since
+  syncChequeSection();
   checkoutNoteInput.value = '';
   checkoutGiftCard = null;
   document.getElementById('co-gc-entry').hidden = true;
@@ -2288,6 +2375,36 @@ checkoutCompleteBtn.addEventListener('click', async () => {
     openCustomerPickerModal();
     return;
   }
+  if (paymentMethod === 'credit' && creditOverBy() > 0) {
+    showToast(t('Credit limit exceeded for {name}: available {available}, this sale {total}. Reduce the bill, or receive a payment on their dues first.', {
+      name: selectedCustomer.label,
+      available: money(creditInfo.data.credit_available),
+      total: money(amountDueAfterGiftCard()),
+    }), 'error');
+    return;
+  }
+  const creditDueDate = document.getElementById('credit-due-date-input').value;
+
+  const chequeNumber = document.getElementById('cheque-number-input').value.trim();
+  const chequeDate = document.getElementById('cheque-date-input').value;
+  const chequeBank = document.getElementById('cheque-bank-input').value.trim();
+  if (paymentMethod === 'cheque') {
+    if (!selectedCustomer) {
+      showToast(t('Select a customer for cheque payment.'), 'error');
+      openCustomerPickerModal();
+      return;
+    }
+    if (!chequeNumber) {
+      showToast(t('Enter the cheque number.'), 'error');
+      document.getElementById('cheque-number-input').focus();
+      return;
+    }
+    if (!chequeDate) {
+      showToast(t('Enter the date written on the cheque.'), 'error');
+      document.getElementById('cheque-date-input').focus();
+      return;
+    }
+  }
 
   const { discountType: orderDiscountType, discountValue: orderDiscountValue, total: orderTotal } = currentOrderTotals();
   const giftAmount = giftCardApplied(orderTotal);
@@ -2319,6 +2436,8 @@ checkoutCompleteBtn.addEventListener('click', async () => {
       ...(orderDiscountValue > 0 && orderDiscountType === 'percent' ? { discount_percent: orderDiscountValue } : {}),
       ...(selectedCustomer ? { pos_customer_id: selectedCustomer.id } : {}),
       ...(paymentMethod === 'cash' ? { amount_tendered: amountTendered } : {}),
+      ...(paymentMethod === 'credit' && creditDueDate ? { credit_due_date: creditDueDate } : {}),
+      ...(paymentMethod === 'cheque' ? { cheque_number: chequeNumber, cheque_date: chequeDate, ...(chequeBank ? { cheque_bank: chequeBank } : {}) } : {}),
       ...(checkoutGiftCard && giftAmount > 0 ? { gift_card_code: checkoutGiftCard.code, gift_card_amount: giftAmount } : {}),
       ...(checkoutCoupon ? { coupon_code: checkoutCoupon.code } : {}),
       ...(notes ? { notes } : {}),
@@ -2585,7 +2704,7 @@ shiftOpenSkipBtn.addEventListener('click', () => {
 // sales, withdrawals, running balance) into one read-only overview, plus the
 // Withdraw Cash action (password-gated — see below).
 function methodLabel(method) {
-  return { cash: t('Cash'), card: t('Card'), credit: t('Credit') }[method] || esc(method);
+  return { cash: t('Cash'), card: t('Card'), credit: t('Credit'), cheque: t('Cheque') }[method] || esc(method);
 }
 
 function openEodModal() {
@@ -2613,7 +2732,7 @@ async function _loadEodData() {
   _eodDrawer = drawer;
 
   const byMethod = sales.by_method || {};
-  const methodTabs = ['cash', 'card', 'credit'].map((m) => {
+  const methodTabs = ['cash', 'card', 'credit', 'cheque'].map((m) => {
     const entry = byMethod[m] || { count: 0, total: 0 };
     return `<div class="eod-method-tab">
       <div class="eod-method-name">${esc(methodLabel(m))}</div>

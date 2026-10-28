@@ -84,7 +84,7 @@
   }
 
   function methodLabel(method) {
-    return { cash: t('Cash'), card: t('Card'), credit: t('Credit') }[method] || esc(method) || t('Other');
+    return { cash: t('Cash'), card: t('Card'), credit: t('Credit'), cheque: t('Cheque') }[method] || esc(method) || t('Other');
   }
 
   // ── View switching (home ↔ section report) ──────────────────────────────

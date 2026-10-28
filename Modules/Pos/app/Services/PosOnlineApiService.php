@@ -186,7 +186,7 @@ class PosOnlineApiService
      */
     public function formatSale(Sale $sale): array
     {
-        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items', 'giftCard', 'coupon', 'revert.user']);
+        $sale->loadMissing(['items.product', 'items.productRental', 'creditAccount', 'user', 'branch', 'customer', 'returns.items', 'giftCard', 'coupon', 'revert.user', 'cheque']);
 
         // Build returned-quantity map keyed by sale item id
         $returnedQtys = [];
@@ -253,6 +253,7 @@ class PosOnlineApiService
                 'reverted_at' => $sale->revert->reverted_at?->toIso8601String(),
                 'reverted_by' => $sale->revert->user?->name,
             ] : null,
+            'cheque' => $sale->cheque ? $this->formatSaleCheque($sale->cheque, false) : null,
             'credit_account' => $sale->creditAccount ? [
                 'id' => (int) $sale->creditAccount->id,
                 'label' => $sale->creditAccount->deductOptionLabel(),
@@ -311,6 +312,8 @@ class PosOnlineApiService
             'due_amount' => $sale->status === Sale::STATUS_COMPLETED ? $sale->creditDue() : 0.0,
             'credit_due_date' => $sale->credit_due_date?->format('Y-m-d'),
             'is_overdue' => $sale->isCreditOverdue(),
+            // Cheque sales: pending / cleared / bounced / cancelled (null for other methods)
+            'cheque_status' => $sale->payment_method === Sale::PAYMENT_CHEQUE ? $sale->cheque?->status : null,
         ])->values()->all();
     }
 
@@ -412,6 +415,57 @@ class PosOnlineApiService
 
         if ($withItems) {
             $data['items'] = array_values($rev->items ?? []);
+        }
+
+        return $data;
+    }
+
+    /**
+     * A customer cheque (Sales → Cheques, Customers → Cheques). Inside a sale payload
+     * the bill and customer are already known, so they are left out.
+     *
+     * @return array<string, mixed>
+     */
+    public function formatSaleCheque(\Modules\Pos\Models\SaleCheque $chq, bool $withSale = true): array
+    {
+        $chq->loadMissing(['depositAccount', 'claimedBy:id,name', 'user:id,name']);
+
+        $data = [
+            'id'             => (int) $chq->id,
+            'sale_id'        => (int) $chq->pos_sale_id,
+            'cheque_number'  => $chq->cheque_number,
+            'bank_name'      => $chq->bank_name,
+            'cheque_date'    => $chq->cheque_date?->format('Y-m-d'),
+            'amount'         => round((float) $chq->amount, 2),
+            'status'         => $chq->status,
+            'status_label'   => $chq->statusLabel(),
+            'is_due'         => $chq->isDue(),
+            'is_claimable'   => $chq->isClaimable(),
+            'deposit_account' => $chq->depositAccount ? [
+                'id'    => (int) $chq->depositAccount->id,
+                'label' => $chq->depositAccount->account_name.($chq->depositAccount->bank_name ? ' · '.$chq->depositAccount->bank_name : ''),
+            ] : null,
+            'claimed_at'     => $chq->claimed_at?->toIso8601String(),
+            'claimed_by'     => $chq->claimedBy?->name,
+            'bounced_at'     => $chq->bounced_at?->toIso8601String(),
+            'bounce_reason'  => $chq->bounce_reason,
+            'notes'          => $chq->notes,
+            // Who took the cheque at the till, and when
+            'received_by'    => $chq->user?->name,
+            'created_at'     => $chq->created_at?->toIso8601String(),
+        ];
+
+        if ($withSale) {
+            $chq->loadMissing(['sale:id,sale_number,status,total,sold_at', 'customer:id,name,phone']);
+            $data['sale_number']   = $chq->sale?->sale_number;
+            $data['sale_status']   = $chq->sale?->status;
+            $data['sale_total']    = $chq->sale ? round((float) $chq->sale->total, 2) : null;
+            $data['sold_at']       = $chq->sale?->sold_at?->toIso8601String();
+            $data['customer']      = $chq->customer ? [
+                'id'    => (int) $chq->customer->id,
+                'name'  => $chq->customer->name,
+                'phone' => $chq->customer->phone,
+            ] : null;
         }
 
         return $data;

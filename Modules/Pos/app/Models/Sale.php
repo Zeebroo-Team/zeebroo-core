@@ -25,6 +25,8 @@ class Sale extends Model
 
     public const PAYMENT_CREDIT = 'credit';
 
+    public const PAYMENT_CHEQUE = 'cheque';
+
     public const CHANNEL_RETAIL = 'retail';
 
     public const CHANNEL_ONLINE = 'online';
@@ -161,6 +163,11 @@ class Sale extends Model
         return $this->hasOne(SaleRevert::class, 'pos_sale_id');
     }
 
+    public function cheque(): HasOne
+    {
+        return $this->hasOne(SaleCheque::class, 'pos_sale_id');
+    }
+
     public function ledgerTransactions(): MorphMany
     {
         return $this->morphMany(LedgerTransaction::class, 'transactionable');
@@ -183,6 +190,7 @@ class Sale extends Model
             self::PAYMENT_CASH => 'Cash',
             self::PAYMENT_CARD => 'Card payment',
             self::PAYMENT_CREDIT => 'Credit payment',
+            self::PAYMENT_CHEQUE => 'Cheque',
         ];
     }
 

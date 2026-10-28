@@ -534,6 +534,44 @@ html, body {
   color: var(--muted);
 }
 .pm-btn.active { border-color: var(--accent); color: var(--accent); background: #eef0ff; }
+.payment-methods .pm-btn { white-space: nowrap; }
+
+/* ── Cheque payment fields (checkout) ───────────────────────────────────── */
+#cheque-section { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+#cheque-section[hidden] { display: none; }
+.co-chq-notice {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 11px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: #fff7ed; color: #c2410c; border: 1px solid rgba(194,65,12,.25);
+}
+.co-chq-notice[hidden] { display: none; }
+.co-chq-amount {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc;
+  font-size: 12px; color: var(--muted);
+}
+.co-chq-amount strong { font-size: 20px; font-weight: 800; color: var(--text, #0f172a); font-variant-numeric: tabular-nums; }
+.co-chq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.co-chq-req { color: #dc2626; }
+.co-chq-opt { font-weight: 400; }
+.co-chq-hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.co-chq-hint i { color: var(--accent); margin-right: 3px; }
+
+/* ── Credit payment fields (checkout) ───────────────────────────────────── */
+#credit-section { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+#credit-section[hidden] { display: none; }
+.co-credit-box {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc;
+  font-size: 12px; color: var(--muted);
+}
+.co-credit-box[hidden] { display: none; }
+.co-credit-row { display: flex; justify-content: space-between; align-items: baseline; }
+.co-credit-row strong { color: var(--text, #0f172a); font-variant-numeric: tabular-nums; }
+.co-credit-row.avail strong { color: #16a34a; }
+.co-credit-box.is-over { border-color: rgba(220,38,38,.35); background: #fef2f2; }
+.co-credit-box.is-over .co-credit-row.avail strong { color: #dc2626; }
+.co-credit-warn { margin-top: 4px; color: #b91c1c; font-weight: 600; line-height: 1.4; }
 
 /* ── Cart footer actions (Clear / Checkout) ─────────────────────────────── */
 .cart-actions { display: flex; gap: 10px; margin-top: 14px; }

@@ -13,6 +13,7 @@ use Modules\Account\Services\AccountService;
 use Modules\Business\Models\Business;
 use Modules\Pos\Models\CustomerSubscription;
 use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleCheque;
 use Modules\Pos\Models\SaleRevert;
 use Modules\Product\Models\Product;
 
@@ -155,6 +156,14 @@ class SaleRevertService
             $giftAmount   = round((float) $sale->gift_card_amount, 2);
             $paidByMethod = round(max(0.0, (float) $sale->amount_paid - $giftAmount), 2);
             $refundDue    = round(max(0.0, $paidByMethod - $returnedTotal), 2);
+
+            // A cheque that was never claimed is handed back, so no money is owed
+            $unclaimedCheques = $sale->cheque()
+                ->whereIn('status', [SaleCheque::STATUS_PENDING, SaleCheque::STATUS_BOUNCED])
+                ->update(['status' => SaleCheque::STATUS_CANCELLED]);
+            if ($unclaimedCheques > 0) {
+                $refundDue = 0.0;
+            }
 
             $sale->update(['status' => Sale::STATUS_VOID]);
 

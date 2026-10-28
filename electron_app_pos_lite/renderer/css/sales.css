@@ -450,10 +450,72 @@
   border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 13px; resize: vertical;
 }
 .salm-revert-notes:focus { outline: none; border-color: var(--accent); }
+
+/* ── Cheques (list, sale detail box, claim / bounce form) ───────────────── */
+.salm-chq-sub { margin-top: 2px; font-size: 11.5px; color: var(--muted); font-weight: 400; }
+.salm-chq-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.salm-chq-btn {
+  padding: 5px 10px; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border); background: #fff; color: var(--text);
+}
+.salm-chq-btn.claim { background: #16a34a; border-color: #16a34a; color: #fff; }
+.salm-chq-btn.claim:hover { background: #15803d; }
+.salm-chq-btn.bounce { color: var(--danger); }
+.salm-chq-btn.bounce:hover { border-color: var(--danger); }
+.salm-chq-box { border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px; background: #f8fafc; }
+.salm-chq-box .salm-view-row:last-child { border-bottom: none; }
+.salm-chq-box .salm-view-row span:last-child { text-align: right; }
+.salm-chq-who { font-size: 11.5px; color: var(--muted); }
+.salm-chq-input {
+  width: 100%; box-sizing: border-box; margin-top: 8px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px; font: inherit; font-size: 13px; background: #fff;
+}
+.salm-chq-input:focus { outline: none; border-color: var(--accent); }
 .salm-revert-error {
   margin-top: 10px; padding: 8px 12px; border-radius: 7px; font-size: 12.5px;
   background: #fef2f2; border: 1px solid #fecaca; color: var(--danger);
 }
+/* ── Credit sales: Pay buttons, receive-payment form, Pending Credits ── */
+.salm-pay-btn {
+  margin-left: 6px; padding: 3px 9px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  border: 1px solid #fed7aa; background: #fff7ed; color: #c2410c; font: inherit; font-size: 11.5px; font-weight: 700;
+}
+.salm-pay-btn:hover { background: #ffedd5; }
+.salm-amt-in { color: var(--success); }
+.salm-view-row.salm-overdue span:last-child, .salm-overdue-val { color: var(--danger); }
+.salm-row-overdue td { background: #fff8f8; }
+
+.salm-pay-amt { display: flex; align-items: center; gap: 8px; }
+.salm-pay-amt .salm-chq-input { flex: 1; }
+.salm-pay-amt .salm-btn-ghost { margin-top: 8px; }
+.salm-pay-methods { display: flex; gap: 8px; margin-top: 8px; }
+.salm-pay-method {
+  flex: 1; padding: 8px 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: #fff; color: var(--muted); font: inherit; font-size: 12.5px; font-weight: 600;
+}
+.salm-pay-method.active { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+.salm-pc-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+.salm-pc-card.has-overdue { border-color: #fecaca; }
+.salm-pc-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer; }
+.salm-pc-head:hover { background: #fafbff; }
+.salm-pc-avatar {
+  width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent-light); color: var(--accent); font-weight: 800;
+}
+.salm-pc-card.has-overdue .salm-pc-avatar { background: #fee2e2; color: var(--danger); }
+.salm-pc-info { flex: 1; min-width: 0; }
+.salm-pc-name { font-weight: 700; font-size: 13.5px; }
+.salm-pc-meta { font-size: 11.5px; color: var(--muted); }
+.salm-pc-right { text-align: right; }
+.salm-pc-total { font-weight: 800; font-size: 15px; }
+.salm-pc-overdue { font-size: 11px; font-weight: 700; color: var(--danger); }
+.salm-pc-chevron { color: var(--muted); transition: transform .15s; }
+.salm-pc-card.expanded .salm-pc-chevron { transform: rotate(180deg); }
+.salm-pc-sales { display: none; border-top: 1px solid var(--border); }
+.salm-pc-card.expanded .salm-pc-sales { display: block; }
+
 .salm-revert-row-note {
   max-width: 240px; margin-top: 3px; font-size: 11.5px; color: var(--muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
