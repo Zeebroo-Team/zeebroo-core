@@ -10117,6 +10117,32 @@ body.dark .inv-status-out { background: #450a0a; color: #fca5a5; }
 .inv-sep { color: var(--border); }
 .inv-hero-badges { display: flex; flex-wrap: wrap; gap: 6px; }
 
+/* Compact hero — toggled while the tab body is scrolled down */
+.inv-hero.inv-hero--compact { align-items: center; gap: 12px; padding: 8px 16px; }
+.inv-hero.inv-hero--compact .inv-hero-img { width: 36px; height: 36px; }
+.inv-hero.inv-hero--compact .inv-thumb-ph.inv-thumb-lg { font-size: 15px; }
+.inv-hero.inv-hero--compact .inv-hero-name { font-size: 15px; }
+.inv-hero.inv-hero--compact .inv-hero-meta { display: none; }
+.inv-hero.inv-hero--compact .inv-hero-info { flex-direction: row; align-items: center; gap: 10px; }
+
+/* Smooth compact ↔ full transition. Sizes ease; the parts that change layout
+   (meta shown/hidden, badges moving beside the name) fade in after the swap. */
+.inv-hero,
+.inv-hero-img,
+.inv-hero-name,
+.inv-thumb-ph.inv-thumb-lg {
+  transition: padding .25s ease, gap .25s ease, width .25s ease, height .25s ease, font-size .25s ease;
+}
+.inv-hero .inv-hero-meta,
+.inv-hero .inv-hero-badges { animation: invHeroFadeDown .3s ease both; }
+.inv-hero.inv-hero--compact .inv-hero-badges { animation: invHeroFadeLeft .3s ease both; }
+@keyframes invHeroFadeDown { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes invHeroFadeLeft { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .inv-hero, .inv-hero-img, .inv-hero-name, .inv-thumb-ph.inv-thumb-lg { transition: none; }
+  .inv-hero .inv-hero-meta, .inv-hero .inv-hero-badges { animation: none; }
+}
+
 /* Badges */
 .inv-badge {
   display: inline-block;

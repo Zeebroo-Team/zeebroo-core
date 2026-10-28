@@ -491,6 +491,12 @@
           ]
         },
         {
+          "label": "Access",
+          "items": [
+            { "type": "lg", "id": "rb-crm-permissions",   "icon": "fa-user-shield",        "label": "Permissions" }
+          ]
+        },
+        {
           "label": "Actions",
           "items": [
             { "type": "lg", "id": "rb-crm-refresh",       "icon": "fa-rotate",             "label": "Refresh" }
