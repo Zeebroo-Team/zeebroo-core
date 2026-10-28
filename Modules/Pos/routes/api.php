@@ -58,6 +58,7 @@ use Modules\Pos\Http\Controllers\Api\PosExpensesBreakdownApiController;
 use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosSalesReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
+use Modules\Pos\Http\Controllers\Api\PosBusinessFlowSummaryApiController;
 use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosBranchManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
@@ -242,6 +243,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get ('reports/sales/products',  [PosSalesReportApiController::class, 'products'])->name('reports.sales.products');
     Route::get ('reports/sales/customers', [PosSalesReportApiController::class, 'customers'])->name('reports.sales.customers');
     Route::get ('payroll-overview',   [PosPayrollOverviewApiController::class,  'show'])->name('payroll-overview');
+    Route::get ('business-flow/summary', [PosBusinessFlowSummaryApiController::class, 'show'])->name('business-flow.summary');
 
     Route::get  ('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');
     Route::post ('sales',                  [PosSaleApiController::class, 'store']          )->name('sales.store');

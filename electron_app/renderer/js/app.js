@@ -14338,6 +14338,7 @@ function renderBusinessChart(bizName) {
       React.createElement(Handle, { type: 'source', position: Position.Left,   id: 'src-l', style: makeH(C_ROOT) }),
       React.createElement(Handle, { type: 'source', position: Position.Right,  id: 'src-r', style: makeH(C_ROOT) }),
       React.createElement(Handle, { type: 'source', position: Position.Bottom, id: 'src-b', style: makeH(C_ROOT) }),
+      React.createElement(Handle, { type: 'source', position: Position.Bottom, id: 'src-b2', style: makeH(C_ROOT, { left: '20%' }) }),
       data.label
     );
 
@@ -14390,7 +14391,94 @@ function renderBusinessChart(bizName) {
       boxShadow: '0 2px 8px rgba(0,0,0,.12)', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap',
     }},
       React.createElement(Handle, { type: 'target', position: posMap[data.ts] || Position.Right, id: 'tgt', style: makeH(hColor) }),
-      data.label
+      React.createElement(Handle, { type: 'source', position: posMap[data.ss] || Position.Top,  id: 'src', style: makeH(hColor) }),
+      data.label,
+      data.count > 0 && React.createElement('span', { style: {
+        background: isExp ? '#ef4444' : '#16a34a', color: '#fff',
+        borderRadius: 9, padding: '1px 5px', fontSize: 9, fontWeight: 800, lineHeight: '14px',
+      }}, data.count)
+    );
+  };
+
+  // ── Profit & Loss node — month-to-date money in vs money out ───────────────
+  const ProfitNode = ({ data }) => {
+    const p    = data.profit;
+    const good = p.is_profit;
+    const c    = good ? '#16a34a' : '#dc2626';
+    const muted = isDark ? '#9ca3af' : '#6b7280';
+    const text  = isDark ? '#e5e7eb' : '#111827';
+    const row = (label, value, opts = {}) =>
+      React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: opts.bold ? 10.5 : 9.5, padding: opts.bold ? '2px 0' : 0 } },
+        React.createElement('span', { style: { color: opts.bold ? text : muted, fontWeight: opts.bold ? 700 : 400, paddingLeft: opts.bold ? 0 : 8 } }, label),
+        React.createElement('span', { style: { fontWeight: 700, color: opts.color || text, whiteSpace: 'nowrap' } }, value)
+      );
+    const line = () => React.createElement('div', { style: { borderTop: `1px solid ${isDark ? '#334155' : '#e5e7eb'}`, margin: '3px 0' } });
+    // Only list money-out lines that actually have a value, to keep the card short
+    const outRows = [
+      ['Cost of goods sold', p.outgoing.cogs], ['Payroll', p.outgoing.payroll],
+      ['Bills paid', p.outgoing.bills], ['Rent paid', p.outgoing.rentals], ['Loan repayments', p.outgoing.loans],
+    ].filter(([, v]) => v > 0);
+
+    return React.createElement('div', { style: {
+      background: isDark ? '#0f172a' : '#fff',
+      border: `2px solid ${c}`, borderRadius: 12, padding: '9px 12px', width: 220,
+      display: 'flex', flexDirection: 'column', gap: 2,
+      fontFamily: "'Segoe UI',sans-serif",
+      boxShadow: `0 4px 16px ${c}33`, cursor: 'pointer', userSelect: 'none',
+    }},
+      React.createElement(Handle, { type: 'target', position: Position.Top, id: 'tgt', style: makeH(c) }),
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 } },
+        React.createElement('span', { style: { fontWeight: 800, fontSize: 11, color: text, display: 'flex', alignItems: 'center', gap: 5 } },
+          React.createElement('i', { className: 'fa fa-scale-balanced', style: { fontSize: 10, color: C_ROOT } }), 'Profit & Loss'),
+        React.createElement('span', { style: { fontSize: 9, color: muted } }, p.period_label)
+      ),
+      row('Money in', fmtN(p.income.total), { bold: true, color: '#16a34a' }),
+      row('POS sales', fmtN(p.income.sales)),
+      p.income.invoices > 0 && row('Paid invoices', fmtN(p.income.invoices)),
+      p.income.returns > 0 && row('Returns', '−' + fmtN(p.income.returns)),
+      line(),
+      row('Money out', fmtN(p.outgoing.total), { bold: true, color: '#dc2626' }),
+      ...outRows.map(([l, v]) => row(l, fmtN(v))),
+      line(),
+      React.createElement('div', { style: {
+        marginTop: 2, borderRadius: 8, padding: '6px 8px',
+        background: good ? (isDark ? '#052e16' : '#dcfce7') : (isDark ? '#450a0a' : '#fee2e2'),
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }},
+        React.createElement('span', { style: { fontWeight: 800, fontSize: 11, color: c, display: 'flex', alignItems: 'center', gap: 5 } },
+          React.createElement('i', { className: `fa ${good ? 'fa-arrow-trend-up' : 'fa-arrow-trend-down'}`, style: { fontSize: 10 } }),
+          good ? 'Profit' : 'Loss'),
+        React.createElement('span', { style: { textAlign: 'right' } },
+          React.createElement('div', { style: { fontWeight: 800, fontSize: 12, color: c } }, fmtN(Math.abs(p.net))),
+          React.createElement('div', { style: { fontSize: 9, color: c } }, `${p.margin}% margin`)
+        )
+      )
+    );
+  };
+
+  // ── Summary card node — small stats card attached to an Expense/Income leaf ──
+  const fmtN = v => (Number(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const SummaryNode = ({ data }) => {
+    const isExp = data.variant === 'exp';
+    const c     = isExp ? '#ef4444' : '#16a34a';
+    return React.createElement('div', { style: {
+      background: isDark ? (isExp ? '#1c0a0a' : '#04190d') : '#fff',
+      border: `1.5px dashed ${c}`, borderRadius: 10, padding: '7px 10px', minWidth: 132,
+      display: 'flex', flexDirection: 'column', gap: 3,
+      fontFamily: "'Segoe UI',sans-serif",
+      boxShadow: `0 3px 10px ${c}22`, cursor: 'pointer', userSelect: 'none',
+    }},
+      React.createElement(Handle, { type: 'target', position: posMap[data.ts] || Position.Bottom, id: 'tgt', style: makeH(c) }),
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 5, marginBottom: 1 } },
+        React.createElement('i', { className: `fa ${data.icon}`, style: { fontSize: 9, color: c } }),
+        React.createElement('span', { style: { fontWeight: 700, fontSize: 10, color: isDark ? (isExp ? '#fca5a5' : '#6ee7b7') : (isExp ? '#991b1b' : '#065f46') } }, data.title)
+      ),
+      ...data.rows.map((r, i) =>
+        React.createElement('div', { key: i, style: { display: 'flex', justifyContent: 'space-between', gap: 6, fontSize: 9.5 } },
+          React.createElement('span', { style: { color: isDark ? '#9ca3af' : '#6b7280', whiteSpace: 'nowrap' } }, r[0]),
+          React.createElement('span', { style: { fontWeight: 700, whiteSpace: 'nowrap', color: r[2] || (isDark ? '#e5e7eb' : '#111827') } }, r[1])
+        )
+      )
     );
   };
 
@@ -14654,9 +14742,9 @@ function renderBusinessChart(bizName) {
     { id: 'e7', type: 'leafNode', position: { x: 510, y: -90 }, data: { label: 'Legal',           variant: 'exp', ts: 'bottom' } },
     // ── Income leaves ─────────────────────────────────────────────────────────
     { id: 'i0', type: 'leafNode', position: { x: 740, y:  55 }, data: { label: 'POS Sales',       variant: 'inc', ts: 'bottom' } },
-    { id: 'i1', type: 'leafNode', position: { x: 920, y: 120 }, data: { label: 'Quotations',      variant: 'inc', ts: 'left'   } },
-    { id: 'i2', type: 'leafNode', position: { x: 930, y: 300 }, data: { label: 'Invoices',        variant: 'inc', ts: 'left'   } },
-    { id: 'i3', type: 'leafNode', position: { x: 820, y: 420 }, data: { label: 'Credit Recovery', variant: 'inc', ts: 'top'    } },
+    { id: 'i1', type: 'leafNode', position: { x: 920, y: 120 }, data: { label: 'Quotations',      variant: 'inc', ts: 'left', ss: 'right' } },
+    { id: 'i2', type: 'leafNode', position: { x: 930, y: 300 }, data: { label: 'Invoices',        variant: 'inc', ts: 'left', ss: 'right' } },
+    { id: 'i3', type: 'leafNode', position: { x: 820, y: 420 }, data: { label: 'Credit Recovery', variant: 'inc', ts: 'top',  ss: 'right' } },
   ];
 
   const mGray  = { type: MarkerType.ArrowClosed, color: isDark ? '#94a3b8' : '#64748b', width: 14, height: 14 };
@@ -14796,9 +14884,97 @@ function renderBusinessChart(bizName) {
       });
     }, [rfInst]);
 
+    // Summary cards beside the Expense / Income leaves (staff, sales, POs, …)
+    React.useEffect(() => {
+      if (!rfInst) return;
+      API.businessFlowSummary().then(res => {
+        if (res.status !== 200) return;
+        const s = res.body?.data;
+        if (!s) return;
+        const red = '#ef4444';
+        const newNodesExtra = [], newEdgesExtra = [];
+        // [leafId, x, y, side-on-card, variant, icon, title, badge count on leaf, rows]
+        const cards = [
+          ['e3', 10,   -290, 'bottom', 'exp', 'fa-users',          'Staff & Salary', s.salary.employees, [
+            ['Employees',  String(s.salary.employees)],
+            ['Monthly',    fmtN(s.salary.monthly)],
+            ...(s.salary.last_cycle_label ? [['Last payroll', fmtN(s.salary.last_cycle_net)]] : []),
+          ]],
+          ['e4', 160,  -420, 'bottom', 'exp', 'fa-screwdriver-wrench', 'Modifications', s.modifications.count, [
+            ['Count',      String(s.modifications.count)],
+            ['Est. cost',  fmtN(s.modifications.total)],
+          ]],
+          ['e5', 300,  -290, 'bottom', 'exp', 'fa-truck',         'Purchases', s.purchase_orders.open_count, [
+            ['Open POs',   String(s.purchase_orders.open_count)],
+            ['Open total', fmtN(s.purchase_orders.open_total)],
+            ['Month POs',  String(s.purchase_orders.month_count)],
+            ['Month total', fmtN(s.purchase_orders.month_total)],
+          ]],
+          ['i0', 715,  -150, 'bottom', 'inc', 'fa-cash-register', 'Sales', s.pos_sales.month_count, [
+            ['Sales today', String(s.pos_sales.today_count)],
+            ['Today total', fmtN(s.pos_sales.today_total)],
+            ['Sales this month', String(s.pos_sales.month_count)],
+            ['Month total', fmtN(s.pos_sales.month_total)],
+          ]],
+          ['i1', 1080, 60,   'left',   'inc', 'fa-file-lines',    'Quotations', s.quotations.open_count, [
+            ['Open',       String(s.quotations.open_count)],
+            ['Open total', fmtN(s.quotations.open_total)],
+            ['Accepted',   String(s.quotations.accepted_count)],
+          ]],
+          ['i2', 1080, 250,  'left',   'inc', 'fa-file-invoice',  'Invoices', s.invoices.unpaid_count, [
+            ['Unpaid',       String(s.invoices.unpaid_count)],
+            ['Unpaid total', fmtN(s.invoices.unpaid_total)],
+            ['Overdue',      String(s.invoices.overdue_count), s.invoices.overdue_count > 0 ? red : null],
+          ]],
+          ['i3', 1080, 420,  'left',   'inc', 'fa-credit-card',   'Credits', s.credits.count, [
+            ['Outstanding', String(s.credits.count)],
+            ['Owed',        fmtN(s.credits.total)],
+            ['Overdue',     String(s.credits.overdue_count), s.credits.overdue_count > 0 ? red : null],
+            ['Overdue owed', fmtN(s.credits.overdue_total), s.credits.overdue_count > 0 ? red : null],
+          ]],
+        ];
+
+        // Profit & Loss — hangs below the business root, left of the Assets branch
+        if (s.profit) {
+          const pc = s.profit.is_profit ? '#16a34a' : '#dc2626';
+          newNodesExtra.push({ id: 'pnl', type: 'profitNode', position: { x: 290, y: 540 }, data: { profit: s.profit } });
+          newEdgesExtra.push({
+            id: 'root-pnl', source: 'root', sourceHandle: 'src-b2', target: 'pnl', targetHandle: 'tgt',
+            type: ss, style: { stroke: pc, strokeWidth: 2 }, markerEnd: { type: MarkerType.ArrowClosed, color: pc, width: 12, height: 12 },
+          });
+        }
+
+        const badges = new Map(cards.map(c => [c[0], c[7]]));
+        const newNodes = cards.map(([leaf, x, y, ts, variant, icon, title, , rows]) => ({
+          id: `sum-${leaf}`, type: 'summaryNode', position: { x, y }, data: { ts, variant, icon, title, rows },
+        }));
+        const newEdges = cards.map(([leaf, , , , variant]) => {
+          const c = variant === 'exp' ? (isDark ? '#f87171' : '#ef4444') : (isDark ? '#4ade80' : '#22c55e');
+          return {
+            id: `sume-${leaf}`, source: leaf, sourceHandle: 'src', target: `sum-${leaf}`, targetHandle: 'tgt',
+            type: ss, style: { stroke: c, strokeWidth: 1.3, strokeDasharray: '4 3' },
+            markerEnd: { type: MarkerType.ArrowClosed, color: c, width: 9, height: 9 },
+          };
+        });
+
+        setNodes(ns => [
+          ...ns.filter(n => !n.id.startsWith('sum-') && n.id !== 'pnl')
+            .map(n => {
+              // The chart can render before the business name is known — use the server's name for the root
+              if (n.id === 'root' && s.business_name) return { ...n, data: { ...n.data, label: s.business_name } };
+              return badges.has(n.id) ? { ...n, data: { ...n.data, count: badges.get(n.id) } } : n;
+            }),
+          ...newNodes, ...newNodesExtra,
+        ]);
+        setEdges(es => [...es.filter(e => !e.id.startsWith('sume-') && e.id !== 'root-pnl'), ...newEdges, ...newEdgesExtra]);
+        setTimeout(() => rfInst.fitView({ padding: 0.14, duration: 400 }), 80);
+      }).catch(() => {});
+    }, [rfInst]);
+
     const onNodeClick = React.useCallback((_e, node) => {
       const actions = {
         root:   () => {},
+        pnl:    () => { activateTab('home'); switchHomeView('profit'); },
         exp:    () => activateTab('finance'),
         inc:    () => activateTab('pos'),
         assets: () => { activateTab('finance'); switchFinView('properties'); },
@@ -14819,7 +14995,8 @@ function renderBusinessChart(bizName) {
       if (node.id.startsWith('dl-')) { activateTab('finance'); switchFinView('loans');      return; }
       if (node.id.startsWith('dr-')) { activateTab('finance'); switchFinView('rentals');    return; }
       if (node.id.startsWith('dp-')) { activateTab('finance'); switchFinView('properties'); return; }
-      const act = actions[node.id];
+      // Summary cards behave like the leaf they hang off
+      const act = actions[node.id.startsWith('sum-') ? node.id.slice(4) : node.id];
       if (act) act();
     }, []);
 
@@ -14845,6 +15022,8 @@ function renderBusinessChart(bizName) {
       expHubNode:    ExpHubNode,
       incHubNode:    IncHubNode,
       leafNode:      LeafNode,
+      summaryNode:   SummaryNode,
+      profitNode:    ProfitNode,
       billsHubNode:  BillsHubNode,
       dueBillNode:   DueBillNode,
       loansHubNode:  LoansHubNode,
@@ -35661,15 +35840,16 @@ async function loadFinance(search) {
   renderBillCards();
 }
 
-function renderBillCards() {
-  const area = $('#finance-cards-area');
-  let bills = _financeAllBills;
+function _billsFiltered() {
+  if (!financeSearchFilter) return _financeAllBills;
+  const q = financeSearchFilter.toLowerCase();
+  return _financeAllBills.filter(b => (b.name || '').toLowerCase().includes(q) ||
+    (b.bill_category || '').toLowerCase().includes(q));
+}
 
-  if (financeSearchFilter) {
-    const q = financeSearchFilter.toLowerCase();
-    bills = bills.filter(b => (b.name || '').toLowerCase().includes(q) ||
-      (b.bill_category || '').toLowerCase().includes(q));
-  }
+function renderBillCards() {
+  const area  = $('#finance-cards-area');
+  const bills = _billsFiltered();
 
   $('#finance-count').textContent = `${bills.length} bill${bills.length !== 1 ? 's' : ''}`;
 
@@ -39186,12 +39366,17 @@ async function loadRentals(search) {
   renderRentalCards();
 }
 
-function renderRentalCards() {
-  const area = $('#rentals-cards-area');
+function _rentalsFiltered() {
   const q = rentalsSearchFilter.trim().toLowerCase();
-  const list = q
+  return q
     ? _rentalsAll.filter(r => (r.property_type||'').toLowerCase().includes(q) || (r.purpose||'').toLowerCase().includes(q))
     : _rentalsAll;
+}
+
+function renderRentalCards() {
+  const area = $('#rentals-cards-area');
+  const q    = rentalsSearchFilter.trim();
+  const list = _rentalsFiltered();
 
   $('#rentals-count').textContent = `${list.length} rental${list.length !== 1 ? 's' : ''}`;
 
@@ -39871,11 +40056,16 @@ async function loadProperties(search) {
   renderPropertyCards();
 }
 
-function renderPropertyCards() {
-  const q    = propertiesSearchFilter.toLowerCase();
-  const list = q
+function _propertiesFiltered() {
+  const q = propertiesSearchFilter.toLowerCase();
+  return q
     ? _propertiesAll.filter(p => p.property_name.toLowerCase().includes(q) || p.property_type.toLowerCase().includes(q))
     : _propertiesAll;
+}
+
+function renderPropertyCards() {
+  const q    = propertiesSearchFilter;
+  const list = _propertiesFiltered();
 
   const area = $('#properties-cards-area');
   $('#properties-count').textContent = `${list.length} propert${list.length === 1 ? 'y' : 'ies'}`;
@@ -40076,12 +40266,17 @@ async function loadLoans(search) {
   renderLoanCards();
 }
 
-function renderLoanCards() {
-  const area = $('#loans-cards-area');
+function _loansFiltered() {
   const q = loansSearchFilter.trim().toLowerCase();
-  const list = q
+  return q
     ? _loansAll.filter(l => (l.name||'').toLowerCase().includes(q) || (l.bank_name||'').toLowerCase().includes(q))
     : _loansAll;
+}
+
+function renderLoanCards() {
+  const area = $('#loans-cards-area');
+  const q    = loansSearchFilter.trim();
+  const list = _loansFiltered();
 
   $('#loans-count').textContent = `${list.length} loan${list.length !== 1 ? 's' : ''}`;
 
@@ -40791,15 +40986,20 @@ async function loadModifications(search) {
   renderModificationCards();
 }
 
-function renderModificationCards() {
-  const area = $('#modifications-cards-area');
-  const q    = modificationsSearchFilter.trim().toLowerCase();
-  const list = q
+function _modificationsFiltered() {
+  const q = modificationsSearchFilter.trim().toLowerCase();
+  return q
     ? _modificationsAll.filter(m =>
         (m.name || '').toLowerCase().includes(q) ||
         (m.assignment_display || '').toLowerCase().includes(q) ||
         (m.assignment_type || '').toLowerCase().includes(q))
     : _modificationsAll;
+}
+
+function renderModificationCards() {
+  const area = $('#modifications-cards-area');
+  const q    = modificationsSearchFilter.trim();
+  const list = _modificationsFiltered();
 
   $('#modifications-count').textContent =
     `${list.length} modification${list.length !== 1 ? 's' : ''}`;
@@ -41236,23 +41436,34 @@ async function loadInvestments(search) {
   renderInvestmentCards();
 }
 
-function ivStatusBadge(iv) {
-  if (iv.status === 'matured') return '<span class="inv-badge inv-badge-blue">Matured</span>';
-  if (iv.status === 'closed')  return '<span class="inv-badge inv-badge-gray">Closed</span>';
-  if (iv.is_overdue)           return '<span class="inv-badge inv-badge-red">Overdue</span>';
-  if (iv.periods_total > 0 && iv.periods_paid >= iv.periods_total) return '<span class="inv-badge inv-badge-green">Fully funded</span>';
-  return '<span class="inv-badge inv-badge-green">Active</span>';
+/** [label, badge colour] — shared by the card badge and the exports. */
+function ivStatus(iv) {
+  if (iv.status === 'matured') return ['Matured', 'blue'];
+  if (iv.status === 'closed')  return ['Closed', 'gray'];
+  if (iv.is_overdue)           return ['Overdue', 'red'];
+  if (iv.periods_total > 0 && iv.periods_paid >= iv.periods_total) return ['Fully funded', 'green'];
+  return ['Active', 'green'];
 }
 
-function renderInvestmentCards() {
-  const area = $('#investments-cards-area');
-  const q    = investmentsSearchFilter.trim().toLowerCase();
-  const list = q
+function ivStatusBadge(iv) {
+  const [label, color] = ivStatus(iv);
+  return `<span class="inv-badge inv-badge-${color}">${label}</span>`;
+}
+
+function _investmentsFiltered() {
+  const q = investmentsSearchFilter.trim().toLowerCase();
+  return q
     ? _investmentsAll.filter(i =>
         (i.name || '').toLowerCase().includes(q) ||
         (i.type_label || '').toLowerCase().includes(q) ||
         (i.provider || '').toLowerCase().includes(q))
     : _investmentsAll;
+}
+
+function renderInvestmentCards() {
+  const area = $('#investments-cards-area');
+  const q    = investmentsSearchFilter.trim();
+  const list = _investmentsFiltered();
 
   $('#investments-count').textContent = `${list.length} investment${list.length !== 1 ? 's' : ''}`;
 
@@ -41774,10 +41985,15 @@ async function loadBudgets(search) {
   renderBudgetCards();
 }
 
+function _budgetsFiltered() {
+  const q = budgetSearchFilter.trim().toLowerCase();
+  return q ? _budgetsAll.filter(b => (b.name || '').toLowerCase().includes(q)) : _budgetsAll;
+}
+
 function renderBudgetCards() {
   const area = $('#budget-cards-area');
-  const q    = budgetSearchFilter.trim().toLowerCase();
-  const list = q ? _budgetsAll.filter(b => (b.name || '').toLowerCase().includes(q)) : _budgetsAll;
+  const q    = budgetSearchFilter.trim();
+  const list = _budgetsFiltered();
 
   $('#budget-count').textContent = `${list.length} budget${list.length !== 1 ? 's' : ''}`;
 
@@ -41880,6 +42096,468 @@ $('#budget-search').addEventListener('input', e => {
   clearTimeout(_budgetSearchTimer);
   budgetSearchFilter = e.target.value;
   _budgetSearchTimer = setTimeout(renderBudgetCards, 250);
+});
+
+// ── Finance list exports (PDF / CSV) ─────────────────────────────────────
+// Every list tab gets an Export menu. Exports follow the on-screen search, and
+// include every field the list API returns, not just what the cards show.
+
+/** Number from a raw or "1,234.50" formatted value; null when it isn't one. */
+function _finNum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+const _finMoney  = v => { const n = _finNum(v); return n === null ? (v ?? '') : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+const _finYesNo  = v => (v ? 'Yes' : 'No');
+const _finSum    = (rows, f) => rows.reduce((a, r) => a + (_finNum(f(r)) || 0), 0);
+const _finJoin   = (...parts) => parts.filter(Boolean).join(' · ');
+const _finCycle  = t => ({ per_day: 'Daily', per_month: 'Monthly', per_year: 'Yearly' })[t] || '';
+
+// Balances are hidden from non-owners on the cards, so they're left out of exports too
+const _finAcct = r => _finJoin(r.account_name, r.account_number, r.account_bank_name, r.account_type_name);
+const _finBalanceCol = () => (state.memberIsOwner ? [{ h: 'Account balance', v: r => r.account_balance, money: true }] : []);
+
+function _billStatus(b) {
+  if (b.is_fully_paid) return 'Paid';
+  const due = (b.payment_mode === 'recurring' && b.next_due_date) || b.due_date || b.first_installment_due_date;
+  const overdue = ('overdue' in b) ? Boolean(b.overdue) : (due && due <= new Date().toISOString().slice(0, 10));
+  return overdue ? 'Overdue' : 'Active';
+}
+
+// ── Nested tables built from each record's detail endpoint (r._d) ──
+function _finSchedStatus(s) {
+  if (s.paid) return s.paid_via_ledger === false ? 'Paid (external)' : 'Paid';
+  if (s.past_due_unpaid) return s.partially_paid ? 'Past due · partial' : 'Past due · unpaid';
+  if (s.partially_paid) return 'Partially paid';
+  return s.amount_varies && !s.period_charge_declared ? 'Awaiting usage / invoice' : 'Outstanding';
+}
+const _finSchedSub = (title, withPaid = false) => ({
+  title, total: true, rows: r => r._d?.schedule || [],
+  cols: [
+    { h: '#', v: s => s.period ?? '' },
+    { h: 'Due date', v: s => s.due_ymd || '' },
+    { h: 'Amount', v: s => (s.amount_varies && !s.period_charge_declared ? 'Varies by usage' : s.amount_formatted), money: true },
+    { h: 'Status', v: _finSchedStatus },
+    ...(withPaid ? [{ h: 'Paid', v: s => s.paid_total || 0, money: true }] : []),
+  ],
+});
+const _FIN_LEDGER_SUB = {
+  title: 'Payment history', total: true, rows: r => r._d?.ledger || [],
+  cols: [
+    { h: 'Payment date', v: t => t.occurrence_date || '' },
+    { h: 'Amount', v: t => t.amount, money: true },
+    { h: 'Paid from', v: t => _finJoin(t.account_name, t.bank_name) },
+    { h: 'Recorded at', v: t => t.created_at || '' },
+  ],
+};
+const _finLedgerTotal = r => (r._d ? _finSum(r._d.ledger || [], t => t.amount) : '');
+const _finPeriodsPaid = r => (r._d?.schedule?.length ? `${r._d.schedule.filter(s => s.paid).length} / ${r._d.schedule.length}` : '');
+
+/**
+ * Column: h = header, v = value, pdf = also in the PDF summary table,
+ * money = 2-dp amount, wide = long text (full width in PDF details).
+ * detail: per-record fetch, stored on r._d. subs: nested tables under each record
+ * (own blocks in the CSV, tables in the PDF details).
+ */
+const FIN_EXPORTS = {
+  bills: {
+    title: 'Bills', file: 'bills', rows: () => _billsFiltered(), search: () => financeSearchFilter,
+    name: b => b.name,
+    detail: id => API.bill(id),
+    subs: [_finSchedSub('Billing schedule & payment status', true), _FIN_LEDGER_SUB],
+    cols: () => [
+      { h: 'Bill', v: b => b.name, pdf: true },
+      { h: 'Category', v: b => (b.bill_category === 'other' ? (b.bill_category_other || 'Other') : (BILL_CAT[b.bill_category] || BILL_CAT.other).label), pdf: true },
+      { h: 'Payment mode', v: b => (b.payment_mode === 'one_time' ? 'One-time' : _finJoin('Recurring', _finCycle(b.recurring_type))), pdf: true },
+      { h: 'Status', v: _billStatus, pdf: true },
+      { h: 'Due / next due', v: b => (b.payment_mode === 'recurring' && b.next_due_date) || b.due_date || b.first_installment_due_date || '', pdf: true },
+      { h: 'Amount / per cycle', v: b => (b.amount_varies_by_usage ? 'Varies by usage' : b.recurring_cost), money: true, pdf: true },
+      { h: 'Total paid', v: b => b.total_paid || 0, money: true, pdf: true },
+      { h: 'Payments', v: b => b.payments_count || 0 },
+      { h: 'Valid until', v: b => b.agreement_valid_until_year || '' },
+      { h: 'Assigned to', v: b => (b.assignment_type && b.assignment_type !== 'none'
+          ? `${b.assignment_type.charAt(0).toUpperCase()}${b.assignment_type.slice(1)}${b.assignment_name ? ': ' + b.assignment_name : ''}` : '') },
+      { h: 'Account', v: b => b.account?.account_name || b.account?.name || '' },
+      { h: 'Remind before (days)', v: b => b.remind_before_days ?? '' },
+      { h: 'Split payments', v: b => _finYesNo(b.allow_split_payment) },
+      { h: 'Description', v: b => b.description || '', wide: true },
+      { h: 'Notes', v: b => b.notes || '', wide: true },
+    ],
+    kpis: rows => [
+      ['Bills', rows.length],
+      ['Overdue', rows.filter(b => _billStatus(b) === 'Overdue').length],
+      ['Paid', rows.filter(b => b.is_fully_paid).length],
+      ['Total paid', _finMoney(_finSum(rows, b => b.total_paid))],
+    ],
+  },
+
+  loans: {
+    title: 'Loans', file: 'loans', rows: () => _loansFiltered(), search: () => loansSearchFilter,
+    name: l => l.name,
+    detail: id => API.loan(id),
+    subs: [_finSchedSub('Installment schedule'), _FIN_LEDGER_SUB],
+    cols: () => [
+      { h: 'Loan', v: l => l.name, pdf: true },
+      { h: 'Bank', v: l => l.bank_name || '', pdf: true },
+      { h: 'Status', v: l => (l.loan_ending_date && l.loan_ending_date < new Date().toISOString().slice(0, 10) ? 'Completed' : 'Active'), pdf: true },
+      { h: 'Principal', v: l => l.borrowed_amount, money: true, pdf: true },
+      { h: 'Interest', v: l => `${l.interest_rate_type_label || ''} · ${l.interest_rate_type === 'flat' ? `${l.interest_rate} flat` : `${l.interest_rate}% APR`}`, pdf: true },
+      { h: 'Cadence', v: l => l.cadence_label || _finCycle(l.recurring_type) },
+      { h: 'Payment per period', v: l => l.payment_formatted, money: true, pdf: true },
+      { h: 'Monthly equivalent', v: l => l.approx_monthly_formatted, money: true, pdf: true },
+      { h: 'Installments', v: l => l.period_count ?? '' },
+      { h: 'Installments basis', v: l => l.period_source || '' },
+      { h: 'Installments paid', v: _finPeriodsPaid, pdf: true },
+      { h: 'Total paid (ledger)', v: _finLedgerTotal, money: true, pdf: true },
+      { h: 'First installment', v: l => l.first_installment_due_date || '', pdf: true },
+      { h: 'End date', v: l => l.loan_ending_date || '', pdf: true },
+      { h: 'Remind before (days)', v: l => l.remind_before_days ?? '' },
+      { h: 'Debit account', v: _finAcct },
+      ..._finBalanceCol(),
+      { h: 'Description', v: l => l.description || '', wide: true },
+    ],
+    kpis: rows => [
+      ['Facilities', rows.length],
+      ['Total principal', _finMoney(_finSum(rows, l => l.borrowed_amount))],
+      ['Approx. monthly outflow', _finMoney(_finSum(rows, l => l.approx_monthly_formatted))],
+      ['Total paid (ledger)', _finMoney(_finSum(rows, _finLedgerTotal))],
+    ],
+  },
+
+  rentals: {
+    title: 'Rentals', file: 'rentals', rows: () => _rentalsFiltered(), search: () => rentalsSearchFilter,
+    name: r => _finJoin(r.property_type, r.purpose),
+    detail: id => API.rental(id),
+    subs: [
+      _finSchedSub('Billing schedule & payment status'),
+      _FIN_LEDGER_SUB,
+      { title: 'Linked bills', rows: r => r._d?.bills || [], cols: [
+        { h: 'Bill', v: b => b.name || '' },
+        { h: 'Category', v: b => b.category_label || '' },
+        { h: 'Schedule', v: b => (b.is_one_time ? b.payment_mode_label : b.recurring_type_label) || '' },
+        { h: 'Amount', v: b => (b.amount_varies ? 'Varies by usage' : b.recurring_cost_fmt), money: true },
+      ] },
+    ],
+    cols: () => [
+      { h: 'Property', v: r => r.property_type || '', pdf: true },
+      { h: 'Purpose', v: r => r.purpose || '', pdf: true },
+      { h: 'Status', v: r => (r.overdue ? 'Overdue' : 'Active'), pdf: true },
+      { h: 'Cadence', v: r => r.cadence_label || RENTAL_REC_LABEL[r.recurring_type] || '', pdf: true },
+      { h: 'Rent amount', v: r => r.recurring_cost, money: true, pdf: true },
+      { h: 'Key money', v: r => r.key_money ?? '', money: true, pdf: true },
+      { h: 'Valid until', v: r => r.agreement_valid_until_year || '', pdf: true },
+      { h: 'First due', v: r => r.due_date || '', pdf: true },
+      { h: 'Periods paid', v: _finPeriodsPaid, pdf: true },
+      { h: 'Total paid (ledger)', v: _finLedgerTotal, money: true, pdf: true },
+      { h: 'Remind before (days)', v: r => r._d?.remind_before_days ?? '' },
+      { h: 'Warehouse / branch', v: r => r._d?.warehouse_name || '' },
+      { h: 'Landlord', v: r => { const ll = r._d?.landlord; return ll ? _finJoin(ll.name, ll.phone, ll.email) : ''; } },
+      { h: 'Landlord address', v: r => r._d?.landlord?.street_address || '', wide: true },
+      { h: 'Landlord bank details', v: r => r._d?.landlord?.bank_account_details || '', wide: true },
+      { h: 'Debit account', v: _finAcct },
+      ..._finBalanceCol(),
+      { h: 'Notes', v: r => r.notes || '', wide: true },
+    ],
+    kpis: rows => [
+      ['Rentals', rows.length],
+      ['Overdue', rows.filter(r => r.overdue).length],
+      ['Total rent per cycle', _finMoney(_finSum(rows, r => r.recurring_cost))],
+      ['Total paid (ledger)', _finMoney(_finSum(rows, _finLedgerTotal))],
+    ],
+  },
+
+  properties: {
+    title: 'Properties', file: 'properties', rows: () => _propertiesFiltered(), search: () => propertiesSearchFilter,
+    name: p => p.property_name,
+    cols: () => [
+      { h: 'Property', v: p => p.property_name, pdf: true },
+      { h: 'Type', v: p => p.property_type, pdf: true },
+      { h: 'Asset value', v: p => p.cost, money: true, pdf: true },
+      { h: 'Has expiry', v: p => _finYesNo(p.has_expiry), pdf: true },
+      { h: 'Expiry date', v: p => p.expire_date || '', pdf: true },
+      { h: 'Status', v: p => (p.expired ? 'Expired' : p.expiring_soon ? 'Expiring soon' : 'Valid'), pdf: true },
+      { h: 'Description', v: p => p.description || '', wide: true },
+    ],
+    kpis: rows => [
+      ['Properties', rows.length],
+      ['Expiring soon', rows.filter(p => p.expiring_soon).length],
+      ['Expired', rows.filter(p => p.expired).length],
+      ['Total asset value', _finMoney(_finSum(rows, p => p.cost))],
+    ],
+  },
+
+  modifications: {
+    title: 'Modifications', file: 'modifications', rows: () => _modificationsFiltered(), search: () => modificationsSearchFilter,
+    name: m => m.name,
+    detail: id => API.modification(id),
+    subs: [
+      { title: 'Linked bills', rows: m => m._d?.bills || [], cols: [
+        { h: 'Bill', v: b => b.name || '' },
+        { h: 'Category', v: b => b.category_label || '' },
+        { h: 'Payment', v: b => b.payment_mode_label || '' },
+        { h: 'Amount', v: b => b.recurring_cost_fmt, money: true },
+        { h: 'Due date', v: b => b.due_date || '' },
+      ] },
+    ],
+    cols: () => [
+      { h: 'Modification', v: m => m.name, pdf: true },
+      { h: 'Type', v: m => MOD_TYPE_LABEL[m.assignment_type] || m.assignment_type || '', pdf: true },
+      { h: 'Work type', v: m => m.work_type_label || '', pdf: true },
+      { h: 'Reference', v: m => m.assignment_display || '', pdf: true },
+      { h: 'Estimated cost', v: m => m.estimated_cost, money: true, pdf: true },
+      { h: 'Duration', v: m => m.duration || '', pdf: true },
+      { h: 'Linked bills', v: m => m.bills_count || 0, pdf: true },
+      { h: 'Created', v: m => m.created_at || '' },
+      { h: 'Description', v: m => m.description || '', wide: true },
+    ],
+    kpis: rows => [
+      ['Modifications', rows.length],
+      ['Total est. cost', _finMoney(_finSum(rows, m => m.estimated_cost))],
+      ['Linked bills', _finSum(rows, m => m.bills_count)],
+    ],
+  },
+
+  investments: {
+    title: 'Investments', file: 'investments', rows: () => _investmentsFiltered(), search: () => investmentsSearchFilter,
+    name: i => i.name,
+    detail: id => API.investment(id),
+    subs: [_finSchedSub('Contribution schedule & status', true), _FIN_LEDGER_SUB],
+    cols: () => [
+      { h: 'Investment', v: i => i.name, pdf: true },
+      { h: 'Type', v: i => i.type_label || '', pdf: true },
+      { h: 'Provider', v: i => i.provider || '', pdf: true },
+      { h: 'Reference no.', v: i => i.reference_number || '' },
+      { h: 'Status', v: i => ivStatus(i)[0], pdf: true },
+      { h: 'Payment mode', v: i => (i.payment_mode === 'one_time' ? 'One-time' : _finJoin('Recurring', _finCycle(i.recurring_type))), pdf: true },
+      { h: 'Contribution', v: i => i.contribution_amount, money: true, pdf: true },
+      { h: 'Total invested', v: i => i.total_invested, money: true, pdf: true },
+      { h: 'Planned total', v: i => i.planned_total_fmt, money: true },
+      { h: 'Target amount', v: i => i.target_amount ?? '', money: true },
+      { h: 'Progress %', v: i => i.progress_pct ?? '', pdf: true },
+      { h: 'Periods paid', v: i => (i.periods_total ? `${i.periods_paid} / ${i.periods_total}` : '') },
+      { h: 'Overdue periods', v: i => i.overdue_count || 0 },
+      { h: 'Start date', v: i => i.start_date || '' },
+      { h: 'Next payment', v: i => i.next_due_ymd || '', pdf: true },
+      { h: 'Maturity date', v: i => i.maturity_date || '', pdf: true },
+      { h: 'Schedule valid until', v: i => i.schedule_valid_until_year || '' },
+      { h: 'Expected return %', v: i => i.expected_return_rate ?? '' },
+      { h: 'Account', v: i => i.account_name || '' },
+      { h: 'Remind before (days)', v: i => i.remind_before_days ?? '' },
+      { h: 'Description', v: i => i.description || '', wide: true },
+      { h: 'Notes', v: i => i.notes || '', wide: true },
+    ],
+    kpis: rows => [
+      ['Plans', rows.length],
+      ['Active', rows.filter(i => i.status === 'active').length],
+      ['Overdue', rows.filter(i => i.is_overdue).length],
+      ['Total invested', _finMoney(_finSum(rows, i => i.total_invested))],
+    ],
+  },
+
+  budget: {
+    title: 'Budgets', file: 'budgets', rows: () => _budgetsFiltered(), search: () => budgetSearchFilter,
+    name: b => b.name,
+    cols: () => [
+      { h: 'Budget', v: b => b.name, pdf: true },
+      { h: 'Type', v: b => b.type_label || BUDGET_TYPE_LABEL[b.type] || b.type || '', pdf: true },
+      { h: 'Active', v: b => _finYesNo(b.is_active), pdf: true },
+      { h: 'Start date', v: b => b.start_date || '', pdf: true },
+      { h: 'End date', v: b => b.end_date || '', pdf: true },
+      { h: 'Monthly total', v: b => b.total_monthly, money: true, pdf: true },
+      { h: 'Yearly total', v: b => b.total_yearly ?? b.total_yearly_fmt, money: true, pdf: true },
+    ],
+    subs: [
+      { title: 'Allocations', total: true,
+        rows: b => (b.items || []).filter(it => _finNum(it.monthly_amount) || _finNum(it.yearly_amount)),
+        cols: [
+          { h: 'Category', v: it => it.category_label || it.category || '' },
+          { h: 'Monthly', v: it => it.monthly_amount, money: true },
+          { h: 'Yearly', v: it => it.yearly_amount, money: true },
+        ] },
+    ],
+    kpis: rows => [
+      ['Budgets', rows.length],
+      ['Active budget', rows.find(b => b.is_active)?.name || 'None'],
+    ],
+  },
+};
+
+function _finExportCsv(spec, rows) {
+  const cols = spec.cols();
+  const cell = (c, r) => {
+    const raw = c.v(r);
+    if (!c.money) return raw ?? '';
+    const n = _finNum(raw);
+    return n === null ? (raw ?? '') : n.toFixed(2);
+  };
+  const lines = [cols.map(c => c.h), ...rows.map(r => cols.map(c => cell(c, r)))];
+  // Each nested table (schedule, payment history…) as its own block below,
+  // first column naming the record it belongs to
+  const label = spec.title.replace(/s$/, '');
+  (spec.subs || []).forEach(sub => {
+    const block = rows.flatMap(r => sub.rows(r).map(k => [spec.name(r) || '', ...sub.cols.map(c => cell(c, k))]));
+    if (!block.length) return;
+    lines.push([], [sub.title], [label, ...sub.cols.map(c => c.h)], ...block);
+  });
+  _srpDownloadCsv(`${spec.file}-${new Date().toISOString().slice(0, 10)}.csv`, lines);
+}
+
+/** Fetches each record's detail (schedule, payment history…) a few at a time; stored on r._d. */
+async function _finLoadDetails(spec, rows, onProgress) {
+  const out = new Array(rows.length);
+  let next = 0, done = 0;
+  const worker = async () => {
+    while (next < rows.length) {
+      const i   = next++;
+      const res = await spec.detail(rows[i].id).catch(() => null);
+      out[i] = { ...rows[i], _d: res?.status === 200 ? (res.body?.data || null) : null };
+      onProgress(++done);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(4, rows.length) }, worker));
+  const failed = out.filter(r => !r._d).length;
+  if (failed) toast(`Couldn't load schedule / payment history for ${failed} record${failed !== 1 ? 's' : ''} — exported without it`, 'info');
+  return out;
+}
+
+function _finExportPdfHtml(spec, rows) {
+  const e    = escHtml;
+  const cols = spec.cols();
+  const show = (c, r) => {
+    const raw = c.v(r);
+    return c.money ? _finMoney(raw) : String(raw ?? '');
+  };
+  const td = (c, r) => `<td${c.money ? ' class="num"' : ''}>${e(show(c, r)) || '—'}</td>`;
+  const sumCols = cols.filter(c => c.pdf);
+  const biz     = state._bizName || $('#sel-business')?.selectedOptions?.[0]?.text || 'Business';
+  const branch  = $('#sel-branch')?.value ? $('#sel-branch').selectedOptions[0].text : '';
+  const q       = (spec.search() || '').trim();
+
+  const subTable = (sub, r) => {
+    const kids = sub.rows(r);
+    const head = `<h4>${e(sub.title)}${kids.length ? ` (${kids.length})` : ''}</h4>`;
+    if (!kids.length) return `${head}<p class="note">None recorded.</p>`;
+    return `${head}<table>
+      <thead><tr>${sub.cols.map(c => `<th${c.money ? ' class="num"' : ''}>${e(c.h)}</th>`).join('')}</tr></thead>
+      <tbody>${kids.map(k => `<tr>${sub.cols.map(c => td(c, k)).join('')}</tr>`).join('')}
+        ${sub.total ? `<tr class="tot">${sub.cols.map((c, i) => (i === 0 ? '<td>Total</td>'
+          : c.money ? `<td class="num">${_finMoney(_finSum(kids, c.v))}</td>` : '<td></td>')).join('')}</tr>` : ''}</tbody>
+    </table>`;
+  };
+
+  const details = rows.map(r => {
+    const facts = cols.filter(c => show(c, r) !== '');
+    const subs  = spec.detail && !r._d
+      ? '<p class="note">Schedule and payment history could not be loaded for this record.</p>'
+      : (spec.subs || []).map(sub => subTable(sub, r)).join('');
+    return `<div class="rec">
+      <div class="rec-head">
+        <h3>${e(spec.name(r) || '—')}</h3>
+        <div class="facts">${facts.map(c => `<div${c.wide ? ' class="wide"' : ''}><span>${e(c.h)}</span><b>${e(show(c, r))}</b></div>`).join('')}</div>
+      </div>
+      ${subs}
+    </div>`;
+  }).join('');
+
+  const kpis = spec.kpis(rows);
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${e(spec.title)} report</title><style>${SRP_PDF_CSS}
+    .kpis { grid-template-columns: repeat(${kpis.length}, 1fr); }
+    section { break-inside: auto; }
+    h2 { break-after: avoid; }
+    .rec { border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; break-inside: auto; }
+    .rec-head { break-inside: avoid; }
+    .rec h3 { font-size: 12px; margin: 0 0 6px; }
+    .rec h4 { font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: #374151; margin: 10px 0 3px; break-after: avoid; }
+    .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px 14px; }
+    .facts .wide { grid-column: 1 / -1; }
+    .facts span { display: block; font-size: 8px; color: #6b7280; text-transform: uppercase; letter-spacing: .04em; }
+    .facts b { font-weight: 600; font-size: 10px; white-space: pre-wrap; word-break: break-word; }
+    tr.tot td { font-weight: 700; border-top: 1px solid #9ca3af; }
+  </style></head><body>
+    <header>
+      <div><h1>${e(spec.title)} report</h1><div class="biz">${e(biz)}</div></div>
+      <div class="meta">
+        ${branch ? `<div>${e(branch)}</div>` : ''}
+        <div><b>${rows.length}</b> record${rows.length !== 1 ? 's' : ''}${q ? ` · search “${e(q)}”` : ''}</div>
+        <div>Generated ${new Date().toLocaleString()}</div>
+      </div>
+    </header>
+    <div class="kpis">${kpis.map(([l, v]) => `<div class="kpi"><div class="l">${e(l)}</div><div class="v">${e(String(v))}</div></div>`).join('')}</div>
+    <section>
+      <h2>Summary</h2>
+      <table>
+        <thead><tr>${sumCols.map(c => `<th${c.money ? ' class="num"' : ''}>${e(c.h)}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(r => `<tr>${sumCols.map(c => td(c, r)).join('')}</tr>`).join('')}
+          <tr class="tot">${sumCols.map((c, i) => (i === 0 ? '<td>Total</td>'
+            : c.money ? `<td class="num">${_finMoney(_finSum(rows, c.v))}</td>` : '<td></td>')).join('')}</tr></tbody>
+      </table>
+    </section>
+    <section>
+      <h2>Full details</h2>
+      ${details}
+    </section>
+  </body></html>`;
+}
+
+async function _finExport(section, kind, btn) {
+  const spec = FIN_EXPORTS[section];
+  let rows = spec.rows();
+  if (!rows.length) { toast('Nothing to export', 'info'); return; }
+
+  const old  = btn.innerHTML;
+  const busy = msg => { btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${msg}`; };
+  btn.disabled = true;
+  try {
+    if (spec.detail) {
+      busy(`Loading details 0/${rows.length}…`);
+      rows = await _finLoadDetails(spec, rows, n => busy(`Loading details ${n}/${rows.length}…`));
+    }
+    if (kind === 'csv') { _finExportCsv(spec, rows); return; }
+    busy('Preparing PDF…');
+    await _srpSavePdf(_finExportPdfHtml(spec, rows), `${spec.file}-${new Date().toISOString().slice(0, 10)}.pdf`, true);
+  } finally {
+    btn.disabled  = false;
+    btn.innerHTML = old;
+  }
+}
+
+// Export menu next to each tab's Create button
+const FIN_EXPORT_SEARCH = {
+  bills: '#finance-search', loans: '#loans-search', rentals: '#rentals-search', properties: '#properties-search',
+  modifications: '#modifications-search', investments: '#investments-search', budget: '#budget-search',
+};
+Object.entries(FIN_EXPORT_SEARCH).forEach(([section, sel]) => {
+  const toolbar = $(sel)?.closest('.finance-toolbar');
+  if (!toolbar) return;
+  const title = FIN_EXPORTS[section].title;
+  toolbar.insertAdjacentHTML('beforeend', `
+    <div class="srp-menu-wrap fin-export-wrap">
+      <button class="fin-export-btn" data-fin-export-btn="${section}"><i class="fa fa-download"></i> Export <i class="fa fa-chevron-down srp-caret"></i></button>
+      <div class="srp-menu" hidden>
+        <div class="srp-menu-label">${title} · matches your search</div>
+        <button data-fin-export="pdf"><i class="fa fa-file-pdf"></i><span>PDF report<small>Summary, totals and full details — incl. schedules &amp; payment history</small></span></button>
+        <button data-fin-export="csv"><i class="fa fa-file-csv"></i><span>CSV spreadsheet<small>Every field, plus schedule &amp; payment history blocks — opens in Excel</small></span></button>
+      </div>
+    </div>`);
+  const wrap = toolbar.lastElementChild;
+  const btn  = wrap.querySelector('.fin-export-btn');
+  const menu = wrap.querySelector('.srp-menu');
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const open = menu.hidden;
+    $$('.fin-export-wrap .srp-menu').forEach(m => { m.hidden = true; });
+    menu.hidden = !open;
+  });
+  menu.addEventListener('click', e => {
+    const item = e.target.closest('[data-fin-export]');
+    if (!item) return;
+    menu.hidden = true;
+    _finExport(section, item.dataset.finExport, btn);
+  });
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.fin-export-wrap')) $$('.fin-export-wrap .srp-menu').forEach(m => { m.hidden = true; });
 });
 
 // ── Budget Detail Page (excel-like allocation sheet) ───────────────────────

@@ -155,7 +155,7 @@ class PosRentalApiController extends Controller
         $rental->load([
             'deductAccount.bank',
             'deductAccount.bankType',
-            'ledgerTransactions',
+            'ledgerTransactions.deductAccount.bank',
             'externalBillingMarks',
             'bills',
             'landlord',
@@ -164,6 +164,16 @@ class PosRentalApiController extends Controller
 
         $isOverdue = $this->rentalService->rentalHasOverduePayments($rental);
         $schedule  = $this->rentalService->rentalBillingScheduleWithPaymentStatus($rental);
+
+        // Payment history — same shape as the bill / investment ledger
+        $ledger = $rental->ledgerTransactions->sortByDesc('id')->map(fn ($tx) => [
+            'id'              => $tx->id,
+            'amount'          => (float) $tx->amount,
+            'occurrence_date' => $tx->occurrence_date?->format('Y-m-d'),
+            'account_name'    => $tx->deductAccount?->account_name ?? $tx->deductAccount?->name ?? null,
+            'bank_name'       => $tx->deductAccount?->bank?->name ?? null,
+            'created_at'      => $tx->created_at?->format('Y-m-d H:i'),
+        ])->values();
 
         $billRecurringTypes = \Modules\Account\Models\Bill::recurringTypes();
         $billPaymentModes   = \Modules\Account\Models\Bill::paymentModes();
@@ -203,6 +213,7 @@ class PosRentalApiController extends Controller
                     'notes'                => $rental->landlord->notes,
                 ] : null,
                 'warehouse_name'         => $rental->warehouse?->name,
+                'ledger'                 => $ledger,
             ]),
         ]);
     }
