@@ -5484,6 +5484,11 @@
       <!-- ── Sales Reports view ── -->
       <div id="sales-report-view" class="fin-view" style="display:none">
         <div class="srp-bar">
+          <div class="srp-reports" id="srp-reports">
+            <button class="srp-report active" data-srp-report="summary"><i class="fa fa-chart-pie"></i><span>Sales summary<small>Revenue, profit, breakdowns &amp; transactions</small></span></button>
+            <button class="srp-report" data-srp-report="products"><i class="fa fa-boxes-stacked"></i><span>Product-wise sales<small>Every product, day by day · last 30 days</small></span></button>
+            <button class="srp-report" data-srp-report="customers"><i class="fa fa-users"></i><span>Customer-wise sales<small>What each customer bought &amp; still owes</small></span></button>
+          </div>
           <div class="srp-bar-row">
             <div class="srp-filters">
               <div class="srp-control">
@@ -5520,10 +5525,8 @@
               <button class="srp-icon-btn" id="srp-refresh" title="Refresh"><i class="fa fa-arrows-rotate"></i></button>
               <div class="srp-menu-wrap">
                 <button class="srp-primary" id="srp-export-btn"><i class="fa fa-download"></i> Export <i class="fa fa-chevron-down srp-caret"></i></button>
-                <div class="srp-menu" id="srp-export-menu" hidden>
-                  <button data-srp-export="pdf"><i class="fa fa-file-pdf"></i><span>PDF report<small>Summary, breakdowns &amp; transactions</small></span></button>
-                  <button data-srp-export="csv"><i class="fa fa-file-csv"></i><span>CSV for Excel<small>Transactions for these filters</small></span></button>
-                </div>
+                <!-- Items depend on the selected report — filled by _srpRenderExportMenu() -->
+                <div class="srp-menu" id="srp-export-menu" hidden></div>
               </div>
             </div>
           </div>

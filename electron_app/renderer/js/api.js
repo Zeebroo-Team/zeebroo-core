@@ -185,10 +185,11 @@ const API = (() => {
     profitReport:     (period)        => request('GET',    `/profit-report?period=${period}`),
     // Finance → Sales Reports: { date_from, date_to, branch_id ('' | id | 'none'), counter_id, group_by,
     //   source, status, q, page, per_page, export }
-    salesReport:      (params)        => {
+    // `kind`: '' = summary, 'products' (today back 30 days only, + source), 'customers'
+    salesReport:      (params, kind = '') => {
       const p = new URLSearchParams();
       Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
-      return request('GET', `/reports/sales?${p.toString()}`);
+      return request('GET', `/reports/sales${kind ? `/${kind}` : ''}?${p.toString()}`);
     },
     payrollOverview:  ()              => request('GET',    '/payroll-overview'),
     createBill:   (body)              => request('POST',   '/expenses/bills', body),

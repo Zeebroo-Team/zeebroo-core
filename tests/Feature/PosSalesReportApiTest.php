@@ -85,3 +85,78 @@ test('rejects an unknown source', function () {
 
     $controller->show(Request::create('/reports/sales', 'GET', ['source' => 'payroll']));
 })->throws(\Illuminate\Validation\ValidationException::class);
+
+test('product-wise report keeps the end date and caps the range at 30 days', function () {
+    Carbon::setTestNow('2026-10-28 10:00:00');
+    [$controller, $service] = salesReportFixture();
+    $service->shouldReceive('products')->once()
+        ->withArgs(fn ($business, $f) => $f['from']->toDateString() === '2026-09-29'
+            && $f['to']->toDateString() === '2026-10-28'
+            && $f['branch'] === 3 && $f['source'] === 'pos')
+        ->andReturn(['range' => []]);
+
+    $response = $controller->products(Request::create('/reports/sales/products', 'GET', [
+        'date_from' => '2026-01-01', 'date_to' => '2026-10-28', 'branch_id' => '3', 'source' => 'pos',
+    ]));
+
+    expect($response->getData(true)['data']['range']['max_days'])->toBe(30);
+});
+
+test('product-wise report only covers today and the 29 days before it', function () {
+    Carbon::setTestNow('2026-10-28 10:00:00');
+    [$controller, $service] = salesReportFixture();
+    $service->shouldReceive('products')->once()
+        ->withArgs(fn ($business, $f) => $f['from']->toDateString() === '2026-09-29'
+            && $f['to']->toDateString() === '2026-10-05')
+        ->andReturn(['range' => []]);
+
+    $response = $controller->products(Request::create('/reports/sales/products', 'GET', [
+        'date_from' => '2026-08-01', 'date_to' => '2026-10-05',
+    ]));
+
+    expect($response->getData(true)['data']['range'])
+        ->toMatchArray(['min_date' => '2026-09-29', 'max_date' => '2026-10-28']);
+});
+
+test('product-wise report pulls a range older than 30 days into the window', function () {
+    Carbon::setTestNow('2026-10-28 10:00:00');
+    [$controller, $service] = salesReportFixture();
+    $service->shouldReceive('products')->once()
+        ->withArgs(fn ($business, $f) => $f['from']->toDateString() === '2026-09-29'
+            && $f['to']->toDateString() === '2026-09-29')
+        ->andReturn(['range' => []]);
+
+    $controller->products(Request::create('/reports/sales/products', 'GET', [
+        'date_from' => '2026-08-01', 'date_to' => '2026-08-31',
+    ]));
+});
+
+test('product-wise report treats "all" sources as no source filter', function () {
+    [$controller, $service] = salesReportFixture();
+    $service->shouldReceive('products')->once()
+        ->withArgs(fn ($business, $f) => $f['source'] === null && $f['from']->diffInDays($f['to']) === 6.0)
+        ->andReturn(['range' => []]);
+
+    $controller->products(Request::create('/reports/sales/products', 'GET', [
+        'date_from' => '2026-10-01', 'date_to' => '2026-10-07', 'source' => 'all',
+    ]));
+});
+
+test('product-wise report rejects quotation sources', function () {
+    [$controller, $service] = salesReportFixture();
+    $service->shouldNotReceive('products');
+
+    $controller->products(Request::create('/reports/sales/products', 'GET', ['source' => 'quotations']));
+})->throws(\Illuminate\Validation\ValidationException::class);
+
+test('customer-wise report allows long ranges and parses the counter', function () {
+    [$controller, $service] = salesReportFixture();
+    $service->shouldReceive('customers')->once()
+        ->withArgs(fn ($business, $f) => $f['from']->toDateString() === '2026-01-01'
+            && $f['to']->toDateString() === '2026-10-28' && $f['counter'] === 4 && $f['branch'] === 'none')
+        ->andReturn(['range' => []]);
+
+    $controller->customers(Request::create('/reports/sales/customers', 'GET', [
+        'date_from' => '2026-01-01', 'date_to' => '2026-10-28', 'counter_id' => '4', 'branch_id' => 'none',
+    ]));
+});
