@@ -36392,12 +36392,45 @@ $$('#panel-finance .fin-subnav-btn[data-fin]').forEach(btn => {
 // Every income stream (POS sales, invoices, quotations, sales orders, returns) in one
 // report, filterable by period, branch / warehouse and counter. Exports to PDF or CSV.
 // Data: GET /reports/sales (PosSalesReportApiController → SalesReportService).
+// Three reports share the filter bar: the sales summary, product-wise sales (day by
+// day, today and the 29 days before it only — /reports/sales/products) and customer-wise sales (/reports/sales/customers).
 const _srp = {
+  report: 'summary',
   preset: '30d', from: '', to: '', branch: '', counter: '', group: 'auto',
   tab: 'overview', chart: 'revenue',
   txn: { source: 'all', status: '', q: '', page: 1 },
   data: null, seq: 0, searchTimer: null, resizeTimer: null,
+  // Product-wise: view = products | days | grid; days = dates expanded in the day-by-day list
+  prod: { data: null, key: '', view: 'products', metric: 'qty', source: 'all', q: '', sort: 'revenue', dir: 'desc', open: '', days: null },
+  cust: { data: null, key: '', filter: 'all', q: '', sort: 'revenue', dir: 'desc', open: '', page: 1 },
 };
+
+const SRP_REPORTS = {
+  summary:   { title: 'Sales report' },
+  products:  { title: 'Product-wise sales report', maxDays: 30 },
+  customers: { title: 'Customer-wise sales report' },
+};
+// Presets that reach further back than the product-wise report's last-30-days window
+const SRP_LONG_PRESETS = ['lastmonth', 'qtd', 'ytd', '12m'];
+const SRP_EXPORTS = {
+  summary: [
+    ['pdf', 'fa-file-pdf', 'PDF report', 'Summary, breakdowns &amp; transactions'],
+    ['csv', 'fa-file-csv', 'CSV for Excel', 'Transactions for these filters'],
+  ],
+  products: [
+    ['pdf',      'fa-file-pdf', 'PDF report', 'Product totals &amp; every day in detail'],
+    ['pdf-grid', 'fa-file-pdf', 'PDF product × day grid', 'Landscape, one column per day'],
+    ['csv',      'fa-file-csv', 'CSV — product totals', 'One row per product'],
+    ['csv-days', 'fa-file-csv', 'CSV — day by day', 'One row per product per day'],
+    ['csv-grid', 'fa-file-csv', 'CSV — product × day grid', 'Products down, days across'],
+  ],
+  customers: [
+    ['pdf', 'fa-file-pdf', 'PDF report', 'Customer totals &amp; balances'],
+    ['csv', 'fa-file-csv', 'CSV for Excel', 'One row per customer, with contact details'],
+  ],
+};
+const SRP_CUST_FILTERS = [['all', 'All'], ['named', 'Named customers'], ['new', 'New'], ['repeat', 'Repeat buyers'], ['balance', 'Balance due']];
+const SRP_CUST_PAGE = 50;
 
 const SRP_SOURCES = {
   pos:          { label: 'POS sales',    one: 'POS sale',    color: '#3b82f6' },
@@ -36444,6 +36477,11 @@ function _srpPayLabel(key) {
   const known = { cash: 'Cash', card: 'Card', credit: 'Credit', gift_card: 'Gift card' };
   return known[key] || String(key).replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
+const _srpAmt      = v => (Number(v) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const _srpAddDays  = (iso, n) => { const [y, m, d] = iso.split('-').map(Number); return _srpIso(new Date(y, m - 1, d + n)); };
+const _srpDayCount = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 864e5) + 1;
+const _srpProfitCell = v => v === null || v === undefined
+  ? '<span class="srp-muted">—</span>' : `<span class="${v < 0 ? 'srp-neg' : ''}">${_srpMoney(v)}</span>`;
 
 function _srpPresetRange(preset) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -36481,9 +36519,136 @@ function openSalesReport(opts = {}) {
     const known = !!SRP_SOURCES[opts.source];
     _srp.txn = { source: known ? opts.source : 'all', status: '', q: '', page: 1 };
     _srp.tab = known ? 'transactions' : 'overview';
+    _srp.report = 'summary';
   }
+  if (SRP_REPORTS[opts.report]) _srp.report = opts.report;
   activateTab('finance');
   switchFinView('sales');
+}
+
+/** [min, max] dates the current report allows — product-wise: today and the 29 days before it. */
+function _srpWindow() {
+  const max = SRP_REPORTS[_srp.report].maxDays;
+  if (!max) return null;
+  const today = _srpIso(new Date());
+  return [_srpAddDays(today, -(max - 1)), today];
+}
+
+/**
+ * The product-wise report only covers the last 30 days — pulls dates outside that
+ * window back into it. Returns true when the range changed.
+ */
+function _srpFitRange() {
+  const win = _srpWindow();
+  if (!win || !_srp.from) return false;
+  const [min, max] = win;
+  const clamp = d => (d < min ? min : d > max ? max : d);
+  const from = clamp(_srp.from), to = clamp(_srp.to);
+  if (from === _srp.from && to === _srp.to) return false;
+  _srp.from = from; _srp.to = to;
+  // "Last 30 days" is the window itself; anything else trimmed becomes a custom range
+  if (_srp.preset !== '30d') _srp.preset = 'custom';
+  $('#srp-period').value = _srp.preset;
+  $('#srp-from').value   = _srp.from;
+  $('#srp-to').value     = _srp.to;
+  toast(`Product-wise sales cover the last ${SRP_REPORTS[_srp.report].maxDays} days only (${_srpFmtDate(min)} – ${_srpFmtDate(max)})`, 'info');
+  return true;
+}
+
+function _srpSwitchReport(report) {
+  if (!SRP_REPORTS[report] || report === _srp.report) return;
+  _srp.report = report;
+  $('#srp-export-menu').hidden = true;
+  if (SRP_REPORTS[report].maxDays && SRP_LONG_PRESETS.includes(_srp.preset)) {
+    _srpSetPreset('30d');
+    toast(`Product-wise sales cover the last ${SRP_REPORTS[report].maxDays} days only`, 'info');
+  } else {
+    _srpFitRange();
+  }
+  loadSalesReport();
+}
+
+/** Switcher highlight, period options the report allows and its export menu. */
+function _srpSyncReportUi() {
+  $$('#srp-reports .srp-report').forEach(b => b.classList.toggle('active', b.dataset.srpReport === _srp.report));
+  const limited = !!SRP_REPORTS[_srp.report].maxDays;
+  $$('#srp-period option').forEach(o => {
+    o.disabled = limited && SRP_LONG_PRESETS.includes(o.value);
+    o.title    = o.disabled ? `Product-wise sales cover the last ${SRP_REPORTS[_srp.report].maxDays} days only` : '';
+  });
+  // Date pickers can't go outside the report's window
+  const win = _srpWindow();
+  ['#srp-from', '#srp-to'].forEach(sel => {
+    const el = $(sel);
+    if (!el) return;
+    el.min = win ? win[0] : '';
+    el.max = win ? win[1] : '';
+  });
+  _srpRenderExportMenu();
+}
+
+function _srpRenderExportMenu() {
+  const menu = $('#srp-export-menu');
+  if (!menu) return;
+  const st = _srp.report === 'summary' ? null : _srpState();
+  const filtered = st && (st.q || (st.filter && st.filter !== 'all'));
+  menu.innerHTML = `<div class="srp-menu-label">${SRP_REPORTS[_srp.report].title}${filtered ? ' · matches your search &amp; filter' : ''}</div>`
+    + SRP_EXPORTS[_srp.report].map(([k, icon, label, sub]) =>
+      `<button data-srp-export="${k}"><i class="fa ${icon}"></i><span>${label}<small>${sub}</small></span></button>`).join('');
+}
+
+const _srpState      = () => (_srp.report === 'products' ? _srp.prod : _srp.cust);
+const _srpActiveData = () => (_srp.report === 'summary' ? _srp.data : _srpState().data);
+
+function _srpShowError(res) {
+  const msg = res.status === 403
+    ? 'You do not have permission to view sales reports.'
+    : (res.body?.message || `Couldn't load the report (${res.status || 'no response'}).`);
+  $('#srp-body').innerHTML = `<div class="srp-state srp-state-error"><i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}
+    <button class="srp-ghost" id="srp-retry">Try again</button></div>`;
+  $('#srp-retry')?.addEventListener('click', () => loadSalesReport({ force: true }));
+}
+
+/** Product-wise / customer-wise: fetched once per filter set, then searched, sorted and exported locally. */
+async function _srpLoadBreakdown(force = false) {
+  const kind = _srp.report, st = _srpState();
+  _srpFitRange();
+  const params = {
+    date_from: _srp.from, date_to: _srp.to, branch_id: _srp.branch, counter_id: _srp.counter,
+    ...(kind === 'products' ? { source: st.source } : {}),
+  };
+  const key = JSON.stringify(params);
+  if (!force && st.data && st.key === key) {
+    if (!_srpSyncFilters(st.data.filters)) return;
+    _srpRenderScope();
+    _srpRenderBreakdown();
+    return;
+  }
+
+  const seq = ++_srp.seq;
+  $('#srp-body').innerHTML = '<div class="srp-state"><i class="fa fa-spinner fa-spin"></i> Loading report…</div>';
+  let res;
+  try {
+    res = await API.salesReport(params, kind);
+  } catch (err) {
+    res = { status: 0, body: { message: String(err) } };
+  }
+  if (seq !== _srp.seq) return; // superseded by a newer request
+  if (res.status !== 200 || !res.body?.data) { _srpShowError(res); return; }
+
+  st.data = res.body.data;
+  st.open = '';
+  st.days = null;
+  if (kind === 'customers') st.page = 1;
+  const r = st.data.range;
+  if (r.from !== _srp.from || r.to !== _srp.to) {
+    _srp.from = r.from; _srp.to = r.to;
+    $('#srp-from').value = _srp.from; $('#srp-to').value = _srp.to;
+  }
+  st.key = JSON.stringify({ ...params, date_from: r.from, date_to: r.to });
+  if (!_srpSyncFilters(st.data.filters)) return; // stale branch/counter was cleared → reloading
+  _srpRenderScope();
+  _srpRenderBreakdown();
 }
 
 function _srpParams(extra = {}) {
@@ -36502,8 +36667,10 @@ function _srpReload() {
   loadSalesReport();
 }
 
-async function loadSalesReport({ txnOnly = false } = {}) {
+async function loadSalesReport({ txnOnly = false, force = false } = {}) {
   if (!_srp.from) _srpSetPreset(_srp.preset);
+  _srpSyncReportUi();
+  if (_srp.report !== 'summary') return _srpLoadBreakdown(force);
   const body = $('#srp-body');
   const seq  = ++_srp.seq;
 
@@ -36522,15 +36689,7 @@ async function loadSalesReport({ txnOnly = false } = {}) {
   }
   if (seq !== _srp.seq) return; // superseded by a newer request
 
-  if (res.status !== 200 || !res.body?.data) {
-    const msg = res.status === 403
-      ? 'You do not have permission to view sales reports.'
-      : (res.body?.message || `Couldn't load the report (${res.status || 'no response'}).`);
-    body.innerHTML = `<div class="srp-state srp-state-error"><i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}
-      <button class="srp-ghost" id="srp-retry">Try again</button></div>`;
-    $('#srp-retry')?.addEventListener('click', () => loadSalesReport());
-    return;
-  }
+  if (res.status !== 200 || !res.body?.data) { _srpShowError(res); return; }
 
   _srp.data = res.body.data;
   // The server caps a range at 3 years — show the dates actually used
@@ -36586,14 +36745,17 @@ function _srpScopeNames(d) {
 }
 
 function _srpRenderScope() {
-  const d = _srp.data;
+  const d = _srpActiveData();
   if (!d) return;
   const r = d.range;
-  const filtered = _srp.branch || _srp.counter || _srp.preset !== '30d';
+  const filtered = _srp.branch || _srp.counter || _srp.preset !== '30d' || (_srp.report === 'products' && _srp.prod.source !== 'all');
+  const max = SRP_REPORTS[_srp.report].maxDays;
   $('#srp-scope').innerHTML = `
     <span>${_srpFmtDate(r.from)} – ${_srpFmtDate(r.to)}</span>
     <span class="srp-sep">·</span>
-    <span>compared with ${_srpFmtDate(r.prev_from)} – ${_srpFmtDate(r.prev_to)}</span>
+    ${_srp.report === 'summary'
+      ? `<span>compared with ${_srpFmtDate(r.prev_from)} – ${_srpFmtDate(r.prev_to)}</span>`
+      : `<span>${_srpPlural(r.days, 'day')}${max ? ` <span class="srp-muted">(up to ${max})</span>` : ''}</span>`}
     ${d.filters.pos_only ? '<span class="srp-sep">·</span><span class="srp-warn"><i class="fa fa-circle-info"></i> Counter selected — showing POS sales only</span>' : ''}
     ${filtered ? '<button class="srp-link" id="srp-clear">Clear filters</button>' : ''}`;
 }
@@ -36871,13 +37033,20 @@ function _srpDelta(pct) {
   return `<span class="srp-delta ${cls}">${pct > 0 ? '↑' : pct < 0 ? '↓' : ''}${Math.abs(pct)}%</span> <span class="srp-muted">vs previous period</span>`;
 }
 
-function _srpKpisHtml(s) {
-  const kpi = (label, value, foot, cls = '') => `
+function _srpKpi(label, value, foot, cls = '') {
+  return `
     <div class="srp-kpi">
       <div class="srp-kpi-lbl">${label}</div>
       <div class="srp-kpi-val ${cls}" title="${escHtml(String(value))}">${value}</div>
       <div class="srp-kpi-foot">${foot}</div>
     </div>`;
+}
+
+const _srpStat = (label, value, title = '') =>
+  `<div class="srp-stat" title="${escHtml(title)}"><span>${label}</span><b>${value}</b></div>`;
+
+function _srpKpisHtml(s) {
+  const kpi = _srpKpi;
   return `
     <div class="srp-kpis">
       ${kpi('Revenue', _srpMoney(s.revenue), _srpDelta(s.revenue_change_pct))}
@@ -36888,7 +37057,7 @@ function _srpKpisHtml(s) {
 }
 
 function _srpStatsHtml(s) {
-  const stat = (label, value, title = '') => `<div class="srp-stat" title="${escHtml(title)}"><span>${label}</span><b>${value}</b></div>`;
+  const stat = _srpStat;
   return `
     <div class="srp-stats">
       ${stat('Net sales', _srpMoney(s.net_sales), 'Revenue minus returns')}
@@ -37294,8 +37463,630 @@ function _srpCloseRecord() {
   loadSalesReport({ txnOnly: true });
 }
 
+// ── Product-wise & customer-wise reports ─────────────────────────────────────
+function _srpRenderBreakdown() {
+  if (_srp.report === 'products') _srpRenderProducts();
+  else _srpRenderCustomers();
+  _srpRenderExportMenu();
+}
+
+function _srpSortRows(rows, key, dir) {
+  const m = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = a[key], y = b[key];
+    if (typeof x === 'string' || typeof y === 'string') return String(x ?? '').localeCompare(String(y ?? '')) * m;
+    return ((x ?? -1e15) - (y ?? -1e15)) * m;
+  });
+}
+
+/** Sortable header — clicking the sorted column again flips the direction. */
+function _srpTh(label, key, st, attr, num = true) {
+  const on = st.sort === key;
+  return `<th class="sortable${num ? ' num' : ''}${on ? ' sorted' : ''}" ${attr}="${key}" title="Sort by ${escHtml(label.toLowerCase())}">${label}${on
+    ? `<i class="fa fa-arrow-${st.dir === 'asc' ? 'up' : 'down'}"></i>` : ''}</th>`;
+}
+
+function _srpSetSort(st, key) {
+  if (st.sort === key) st.dir = st.dir === 'asc' ? 'desc' : 'asc';
+  else { st.sort = key; st.dir = ['name', 'category'].includes(key) ? 'asc' : 'desc'; }
+}
+
+const _srpBar = (v, max) => `<span class="srp-mini-bar"><i style="width:${max > 0 ? Math.max(0, v / max * 100).toFixed(1) : 0}%"></i></span>`;
+
+// Product-wise ────────────────────────────────────────────────────────────────
+function _srpProdRows() {
+  const st = _srp.prod, q = st.q.toLowerCase();
+  const rows = q
+    ? st.data.products.filter(p => [p.name, p.sku, p.category].some(v => String(v || '').toLowerCase().includes(q)))
+    : st.data.products;
+  return _srpSortRows(rows, st.sort, st.dir);
+}
+
+function _srpRenderProducts() {
+  const st = _srp.prod, d = st.data, s = d.summary;
+  const posOnly = d.filters.pos_only;
+  const views = [['products', 'Product totals', 'fa-list'], ['days', 'Day by day', 'fa-calendar-day'], ['grid', 'Product × day grid', 'fa-table-cells']];
+  const best = s.best_day;
+
+  $('#srp-body').innerHTML = `
+    <div class="srp-kpis">
+      ${_srpKpi('Products sold', _srpNum(s.products), `<span class="srp-muted">${_srpNum(s.qty)} units · ${_srpPlural(s.sales, 'sale')}</span>`)}
+      ${_srpKpi('Product revenue', _srpMoney(s.revenue), `<span class="srp-muted">avg ${_srpMoney(s.avg_daily_revenue)} a day · ${_srpNum(s.active_days)} of ${_srpPlural(d.range.days, 'day')} had sales</span>`)}
+      ${_srpKpi('Gross profit', s.profit === null ? '—' : _srpMoney(s.profit),
+        `<span class="srp-muted">${s.margin ?? 0}% margin${s.uncosted_revenue > 0 ? ` · ${_srpMoney(s.uncosted_revenue)} without cost` : ''}</span>`, s.profit < 0 ? 'neg' : '')}
+      ${_srpKpi('Best day', best ? _srpMoney(best.revenue) : '—', `<span class="srp-muted">${best ? `${escHtml(best.label)} · ${_srpNum(best.qty)} units` : 'No sales yet'}</span>`)}
+    </div>
+    <div class="srp-stats">
+      ${_srpStat('Top seller', s.top_product ? escHtml(s.top_product.name) : '—', s.top_product ? `${s.top_product.name} · ${_srpMoney(s.top_product.revenue)}` : '')}
+      ${_srpStat('Most units', s.most_units ? escHtml(s.most_units.name) : '—', s.most_units ? `${s.most_units.name} · ${_srpNum(s.most_units.qty)} units` : '')}
+      ${_srpStat('Units sold', _srpNum(s.qty))}
+      ${_srpStat('Cost of goods', _srpMoney(s.cogs), 'POS items with a cost price')}
+      ${_srpStat('Returned', `${_srpNum(s.returns_qty)} units`, `${_srpMoney(s.returns_total)} refunded`)}
+      ${_srpStat('Refunded', _srpMoney(s.returns_total))}
+      ${_srpStat('Days with sales', `${_srpNum(s.active_days)} / ${_srpNum(d.range.days)}`)}
+    </div>
+    <div class="srp-card">
+      <div class="srp-toolbar">
+        <div class="srp-seg">${views.map(([k, l, icon]) =>
+          `<button class="${st.view === k ? 'active' : ''}" data-srp-p-view="${k}"><i class="fa ${icon}"></i> ${l}</button>`).join('')}</div>
+        ${st.view === 'grid' ? `<div class="srp-seg">${[['qty', 'Units'], ['revenue', 'Revenue']].map(([k, l]) =>
+          `<button class="${st.metric === k ? 'active' : ''}" data-srp-p-metric="${k}">${l}</button>`).join('')}</div>` : ''}
+        <select class="srp-mini-select" id="srp-p-source" title="Which sales to include"${posOnly ? ' disabled' : ''}>
+          ${[['all', 'POS sales + paid invoices'], ['pos', 'POS sales only'], ['invoices', 'Paid invoices only']].map(([k, l]) =>
+            `<option value="${k}"${(posOnly ? 'pos' : st.source) === k ? ' selected' : ''}>${l}</option>`).join('')}
+        </select>
+        <div class="srp-search"><i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="srp-p-q" placeholder="Search product, SKU or category" value="${escHtml(st.q)}">
+        </div>
+      </div>
+      <div id="srp-p-body"></div>
+    </div>`;
+  _srpRenderProductView();
+}
+
+function _srpRenderProductView() {
+  const el = $('#srp-p-body');
+  if (!el) return;
+  const rows = _srpProdRows();
+  const view = _srp.prod.view;
+  el.innerHTML = view === 'days' ? _srpProdDaysHtml(rows) : view === 'grid' ? _srpProdGridHtml(rows) : _srpProdTableHtml(rows);
+}
+
+function _srpProdEmpty() {
+  return `<div class="srp-empty">${_srp.prod.q ? 'No products match your search' : 'No products sold in this period'}</div>`;
+}
+
+function _srpProdTableHtml(rows) {
+  const st = _srp.prod, days = st.data.range.days;
+  if (!rows.length) return _srpProdEmpty();
+  const th  = (l, k, num = true) => _srpTh(l, k, st, 'data-srp-p-sort', num);
+  const max = Math.max(...rows.map(p => p.revenue), 0);
+  const sum = k => rows.reduce((a, p) => a + (Number(p[k]) || 0), 0);
+  const hasProfit = rows.some(p => p.profit !== null);
+  return `
+    <div class="srp-table-wrap">
+      <table class="srp-table">
+        <thead><tr><th class="srp-caret-cell"></th>${th('Product', 'name', false)}${th('Days sold', 'days_sold')}${th('Sales', 'sales')}${th('Qty', 'qty')}${th('Selling price', 'avg_price')}${th('Cost price', 'unit_cost')}${th('Revenue', 'revenue')}${th('Cost', 'cogs')}${th('Profit', 'profit')}${th('Margin', 'margin')}${th('Returned', 'returns_qty')}</tr></thead>
+        <tbody>${rows.map((p, i) => {
+          const open = st.open === p.key;
+          return `
+          <tr class="clickable${open ? ' open' : ''}" data-srp-p-open="${escHtml(p.key)}" title="${open ? 'Hide' : 'Show'} day-by-day sales">
+            <td class="srp-caret-cell"><i class="fa fa-chevron-${open ? 'down' : 'right'}"></i></td>
+            <td><span class="srp-rank">${i + 1}</span>${escHtml(p.name)}<span class="srp-sub srp-ind">${[p.sku, p.category].filter(Boolean).map(escHtml).join(' · ') || '&nbsp;'}</span></td>
+            <td class="num">${_srpNum(p.days_sold)}<span class="srp-muted"> / ${days}</span></td>
+            <td class="num">${_srpNum(p.sales)}</td>
+            <td class="num"><b>${_srpNum(p.qty)}</b></td>
+            <td class="num">${_srpMoney(p.avg_price)}</td>
+            <td class="num srp-muted">${_srpProfitCell(p.unit_cost)}</td>
+            <td class="num">${_srpMoney(p.revenue)}${_srpBar(p.revenue, max)}</td>
+            <td class="num srp-muted">${_srpProfitCell(p.cogs)}</td>
+            <td class="num">${_srpProfitCell(p.profit)}</td>
+            <td class="num">${_srpMarginPill(p.margin)}</td>
+            <td class="num">${p.returns_qty > 0 ? `<span class="srp-neg" title="${escHtml(_srpMoney(p.returns_total))} refunded">${_srpNum(p.returns_qty)}</span>` : '<span class="srp-muted">—</span>'}</td>
+          </tr>${open ? `<tr class="srp-detail-row"><td colspan="12">${_srpProdDetailHtml(p)}</td></tr>` : ''}`;
+        }).join('')}
+          <tr class="srp-total-row">
+            <td></td><td><b>Total · ${_srpPlural(rows.length, 'product')}</b></td><td></td><td></td>
+            <td class="num"><b>${_srpNum(sum('qty'))}</b></td><td></td><td></td>
+            <td class="num"><b>${_srpMoney(sum('revenue'))}</b></td>
+            <td class="num">${hasProfit ? _srpMoney(sum('cogs')) : ''}</td>
+            <td class="num">${hasProfit ? _srpProfitCell(sum('profit')) : ''}</td><td></td>
+            <td class="num">${_srpNum(sum('returns_qty'))}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="srp-hint">Click a product to see what it sold each day. Revenue is after discounts; profit uses POS cost prices (invoice lines show —).</div>`;
+}
+
+function _srpProdDetailHtml(p) {
+  const days = _srp.prod.data.days.filter(x => p.daily[x.date]);
+  const max  = Math.max(...days.map(x => p.daily[x.date].revenue), 0);
+  const best = days.reduce((b, x) => (!b || p.daily[x.date].qty > p.daily[b.date].qty ? x : b), null);
+  return `
+    <div class="srp-detail">
+      <div class="srp-card">
+        <div class="srp-card-head"><div class="srp-card-title">Sales by day</div><span class="srp-muted">${_srpPlural(days.length, 'day')} with sales</span></div>
+        ${days.length ? `<table class="srp-table">
+          <thead><tr><th>Day</th><th class="num">Qty</th><th class="num">Selling price</th><th class="num">Cost price</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Share of the day</th></tr></thead>
+          <tbody>${days.map(x => {
+            const v = p.daily[x.date];
+            return `<tr class="clickable" data-srp-p-goto-day="${x.date}" title="Open this day in Day by day">
+              <td>${escHtml(x.label)}</td><td class="num"><b>${_srpNum(v.qty)}</b></td>
+              <td class="num">${_srpMoney(v.qty ? v.revenue / v.qty : 0)}</td>
+              <td class="num srp-muted">${_srpProfitCell(v.unit_cost)}</td>
+              <td class="num">${_srpMoney(v.revenue)}${_srpBar(v.revenue, max)}</td>
+              <td class="num srp-muted">${_srpProfitCell(v.cogs)}</td>
+              <td class="num">${_srpProfitCell(v.profit)}</td>
+              <td class="num srp-muted">${x.revenue > 0 ? (v.revenue / x.revenue * 100).toFixed(1) : '0.0'}%</td></tr>`;
+          }).join('')}</tbody>
+        </table>` : '<div class="srp-empty">Not sold in this period — returned only</div>'}
+      </div>
+      <div class="srp-card">
+        <div class="srp-card-head"><div class="srp-card-title">At a glance</div></div>
+        ${_srpFacts([
+          ['Units sold', _srpNum(p.qty), `${_srpNum(p.pos_qty)} POS · ${_srpNum(p.invoice_qty)} invoiced`],
+          ['Revenue', _srpMoney(p.revenue), `${p.share}% of product sales`],
+          ['Average selling price', _srpMoney(p.avg_price)],
+          ['Average cost price', p.unit_cost === null ? '—' : _srpMoney(p.unit_cost), p.cogs === null ? 'No cost price set' : `${_srpMoney(p.cogs)} cost of goods`],
+          ['Profit', p.profit === null ? '—' : _srpMoney(p.profit), p.margin === null ? '' : `${p.margin}% margin`],
+          ['Best day', best ? escHtml(best.label) : '—', best ? `${_srpNum(p.daily[best.date].qty)} units` : ''],
+          ['Per selling day', `${_srpNum(days.length ? p.qty / days.length : 0)} units`, `${_srpMoney(days.length ? p.revenue / days.length : 0)} a day`],
+          ['Returned', _srpNum(p.returns_qty), p.returns_total > 0 ? `${_srpMoney(p.returns_total)} refunded` : 'No returns'],
+        ])}
+      </div>
+    </div>`;
+}
+
+/** Newest day first; each day expands to every product sold on it. */
+function _srpProdDaysHtml(rows) {
+  const st = _srp.prod;
+  if (!rows.length) return _srpProdEmpty();
+  if (!st.days) {
+    const latest = [...st.data.days].reverse().find(x => x.qty > 0 || x.revenue > 0);
+    st.days = new Set(latest ? [latest.date] : []);
+  }
+  const list = [...st.data.days].reverse().map(x => {
+    const items = rows.filter(p => p.daily[x.date])
+      .map(p => ({ p, ...p.daily[x.date] }))
+      .sort((a, b) => b.revenue - a.revenue || b.qty - a.qty);
+    if (!items.length) {
+      return `<div class="srp-day empty"><div class="srp-day-head"><i></i><b>${escHtml(x.label)}</b><span class="srp-muted">${st.q ? 'No matching products' : 'No sales'}</span></div></div>`;
+    }
+    const qty  = items.reduce((a, it) => a + it.qty, 0);
+    const rev  = items.reduce((a, it) => a + it.revenue, 0);
+    const costed = items.filter(it => it.profit !== null && it.profit !== undefined);
+    const cogs   = costed.reduce((a, it) => a + it.cogs, 0);
+    const profit = costed.reduce((a, it) => a + it.profit, 0);
+    const open = st.days.has(x.date);
+    return `
+      <div class="srp-day" id="srp-day-${x.date}">
+        <button class="srp-day-head" data-srp-p-day="${x.date}">
+          <i class="fa fa-chevron-${open ? 'down' : 'right'}"></i><b>${escHtml(x.label)}</b>
+          <span class="srp-muted">${_srpPlural(items.length, 'product')} · ${_srpNum(qty)} units${st.q ? '' : ` · ${_srpPlural(x.sales, 'sale')}`}</span>
+          <span class="srp-day-total">${_srpMoney(rev)}${costed.length ? ` <span class="srp-muted">· profit</span> ${_srpProfitCell(profit)}` : ''}</span>
+        </button>
+        ${open ? `<div class="srp-day-body"><table class="srp-table">
+          <thead><tr><th>Product</th><th>SKU</th><th class="num">Qty</th><th class="num">Selling price</th><th class="num">Cost price</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Share of the day</th></tr></thead>
+          <tbody>${items.map((it, i) => `
+            <tr><td><span class="srp-rank">${i + 1}</span>${escHtml(it.p.name)}</td>
+              <td class="srp-muted">${escHtml(it.p.sku || '—')}</td>
+              <td class="num"><b>${_srpNum(it.qty)}</b></td>
+              <td class="num">${_srpMoney(it.qty ? it.revenue / it.qty : 0)}</td>
+              <td class="num srp-muted">${_srpProfitCell(it.unit_cost)}</td>
+              <td class="num">${_srpMoney(it.revenue)}</td>
+              <td class="num srp-muted">${_srpProfitCell(it.cogs)}</td>
+              <td class="num">${_srpProfitCell(it.profit)}</td>
+              <td class="num">${_srpMarginPill(it.margin)}</td>
+              <td class="num srp-muted">${rev > 0 ? (it.revenue / rev * 100).toFixed(1) : '0.0'}%</td></tr>`).join('')}
+            <tr class="srp-total-row"><td colspan="2"><b>Day total</b></td><td class="num"><b>${_srpNum(qty)}</b></td><td></td><td></td>
+              <td class="num"><b>${_srpMoney(rev)}</b></td>
+              <td class="num">${costed.length ? `<b>${_srpMoney(cogs)}</b>` : ''}</td>
+              <td class="num">${costed.length ? `<b>${_srpProfitCell(profit)}</b>` : ''}</td>
+              <td class="num">${costed.length ? _srpMarginPill(profit + cogs > 0 ? Math.round(profit / (profit + cogs) * 1000) / 10 : null) : ''}</td><td></td></tr>
+          </tbody>
+        </table></div>` : ''}
+      </div>`;
+  }).join('');
+  return `
+    <div class="srp-toolbar-note" style="margin-bottom:10px">Newest day first — click a day to see every product sold. Selling price is the average after discounts; cost and profit use POS cost prices (— when unknown).
+      <button class="srp-link" data-srp-p-days="all">Expand all</button>
+      <button class="srp-link" data-srp-p-days="none">Collapse all</button></div>
+    ${list}`;
+}
+
+/** Products down, days across — units or revenue per cell. */
+function _srpProdGridHtml(rows) {
+  const st = _srp.prod, days = st.data.days, rev = st.metric === 'revenue';
+  if (!rows.length) return _srpProdEmpty();
+  const fmt = rev ? _srpAmt : _srpNum;
+  const val = (p, date) => p.daily[date]?.[rev ? 'revenue' : 'qty'] || 0;
+  const dayTotals = days.map(x => rows.reduce((a, p) => a + val(p, x.date), 0));
+  const cell = v => `<td class="${v ? '' : 'zero'}">${v ? fmt(v) : '·'}</td>`;
+  return `
+    <div class="srp-grid-wrap">
+      <table class="srp-pivot">
+        <thead><tr><th class="srp-pivot-name">Product</th>${days.map(x => {
+          const [wd, md] = x.label.split(', ');
+          return `<th class="${wd === 'Sat' || wd === 'Sun' ? 'wkend' : ''}" title="${escHtml(x.label)}">${escHtml(wd)}<br>${escHtml(md || '')}</th>`;
+        }).join('')}<th class="srp-pivot-total">Total</th></tr></thead>
+        <tbody>${rows.map(p => `
+          <tr><td class="srp-pivot-name" title="${escHtml(p.name)}">${escHtml(p.name)}</td>${days.map(x => cell(val(p, x.date))).join('')}
+            <td class="srp-pivot-total">${fmt(rev ? p.revenue : p.qty)}</td></tr>`).join('')}
+        </tbody>
+        <tfoot><tr><td class="srp-pivot-name">Total · ${_srpPlural(rows.length, 'product')}</td>${dayTotals.map(v => `<td>${v ? fmt(v) : '·'}</td>`).join('')}
+          <td class="srp-pivot-total">${fmt(dayTotals.reduce((a, v) => a + v, 0))}</td></tr></tfoot>
+      </table>
+    </div>
+    <div class="srp-hint">${rev ? `Revenue${state.currency ? ` (${escHtml(state.currency)})` : ''}` : 'Units sold'} per product per day · weekends in orange · scroll sideways for more days.</div>`;
+}
+
+// Customer-wise ───────────────────────────────────────────────────────────────
+function _srpCustRows() {
+  const st = _srp.cust, q = st.q.toLowerCase();
+  const rows = st.data.customers.filter(c => {
+    if (st.filter === 'named'   && c.walkin) return false;
+    if (st.filter === 'new'     && !c.is_new) return false;
+    if (st.filter === 'repeat'  && (c.walkin || c.purchases < 2)) return false;
+    if (st.filter === 'balance' && !(c.balance > 0)) return false;
+    return !q || [c.name, c.phone, c.email].some(v => String(v || '').toLowerCase().includes(q));
+  });
+  return _srpSortRows(rows, st.sort, st.dir);
+}
+
+function _srpRenderCustomers() {
+  const st = _srp.cust, d = st.data, s = d.summary;
+  $('#srp-body').innerHTML = `
+    <div class="srp-kpis">
+      ${_srpKpi('Customers who bought', _srpNum(s.customers), `<span class="srp-muted">${_srpNum(s.new_customers)} new · ${_srpNum(s.repeat_customers)} bought more than once</span>`)}
+      ${_srpKpi('Revenue from customers', _srpMoney(s.named_revenue), `<span class="srp-muted">${s.named_share}% of ${_srpMoney(s.revenue)} · rest is walk-in</span>`)}
+      ${_srpKpi('Average per customer', _srpMoney(s.avg_per_customer), `<span class="srp-muted">${s.top_customer ? `Top: ${escHtml(s.top_customer.name)}` : 'No named customers yet'}</span>`)}
+      ${_srpKpi('Balance due', _srpMoney(s.balance_due), `<span class="srp-muted">${_srpPlural(s.with_balance, 'customer')} with unpaid credit or invoices</span>`, s.balance_due > 0 ? 'neg' : '')}
+    </div>
+    <div class="srp-stats">
+      ${_srpStat('Total revenue', _srpMoney(s.revenue), 'POS sales + paid invoices')}
+      ${_srpStat('Walk-in revenue', _srpMoney(s.walkin_revenue), 'Sales with no customer attached')}
+      ${_srpStat('Walk-in sales', _srpNum(s.walkin_count))}
+      ${_srpStat('New customers', _srpNum(s.new_customers), 'Added during this period')}
+      ${_srpStat('Repeat buyers', _srpNum(s.repeat_customers), '2 or more purchases')}
+      ${_srpStat('Top customer', s.top_customer ? escHtml(s.top_customer.name) : '—', s.top_customer ? `${s.top_customer.name} · ${_srpMoney(s.top_customer.revenue)}` : '')}
+      ${_srpStat('With balance due', _srpNum(s.with_balance))}
+    </div>
+    <div class="srp-card">
+      <div class="srp-toolbar">
+        <div class="srp-seg">${SRP_CUST_FILTERS.map(([k, l]) =>
+          `<button class="${st.filter === k ? 'active' : ''}" data-srp-c-filter="${k}">${l}</button>`).join('')}</div>
+        <div class="srp-search"><i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="srp-c-q" placeholder="Search name, phone or email" value="${escHtml(st.q)}">
+        </div>
+      </div>
+      <div id="srp-c-body"></div>
+    </div>`;
+  _srpRenderCustomerTable();
+}
+
+function _srpRenderCustomerTable() {
+  const el = $('#srp-c-body');
+  if (!el) return;
+  const st = _srp.cust, rows = _srpCustRows();
+  if (!rows.length) {
+    el.innerHTML = `<div class="srp-empty">${st.q || st.filter !== 'all' ? 'No customers match your search or filter' : 'No customer sales in this period'}</div>`;
+    return;
+  }
+  const pages = Math.max(1, Math.ceil(rows.length / SRP_CUST_PAGE));
+  st.page = Math.min(Math.max(1, st.page), pages);
+  const first = (st.page - 1) * SRP_CUST_PAGE;
+  const page  = rows.slice(first, first + SRP_CUST_PAGE);
+  const th  = (l, k, num = true) => _srpTh(l, k, st, 'data-srp-c-sort', num);
+  const max = Math.max(...rows.map(c => c.revenue), 0);
+  const sum = k => rows.reduce((a, c) => a + (Number(c[k]) || 0), 0);
+
+  el.innerHTML = `
+    <div class="srp-table-wrap">
+      <table class="srp-table">
+        <thead><tr><th class="srp-caret-cell"></th>${th('Customer', 'name', false)}${th('Purchases', 'purchases')}${th('Items', 'items')}${th('Revenue', 'revenue')}${th('Avg sale', 'avg_sale')}${th('Discounts', 'discounts')}${th('Returns', 'returns_total')}${th('Profit', 'profit')}${th('Balance due', 'balance')}${th('Last purchase', 'last_purchase')}</tr></thead>
+        <tbody>${page.map((c, i) => {
+          const open = st.open === c.key;
+          const contact = [c.phone, c.email].filter(Boolean).map(escHtml).join(' · ');
+          return `
+          <tr class="clickable${open ? ' open' : ''}" data-srp-c-open="${escHtml(c.key)}" title="${open ? 'Hide' : 'Show'} details">
+            <td class="srp-caret-cell"><i class="fa fa-chevron-${open ? 'down' : 'right'}"></i></td>
+            <td><span class="srp-rank">${first + i + 1}</span>${c.walkin ? `<span class="srp-muted">${escHtml(c.name)}</span><span class="srp-tag muted">No customer</span>` : escHtml(c.name)}${c.is_new ? '<span class="srp-tag">New</span>' : ''}
+              <span class="srp-sub srp-ind">${contact || '&nbsp;'}</span></td>
+            <td class="num">${_srpNum(c.purchases)}</td>
+            <td class="num">${_srpNum(c.items)}</td>
+            <td class="num"><b>${_srpMoney(c.revenue)}</b>${_srpBar(c.revenue, max)}</td>
+            <td class="num srp-muted">${_srpMoney(c.avg_sale)}</td>
+            <td class="num">${c.discounts > 0 ? _srpMoney(c.discounts) : '<span class="srp-muted">—</span>'}</td>
+            <td class="num">${c.returns_total > 0 ? `<span class="srp-neg">− ${_srpMoney(c.returns_total)}</span>` : '<span class="srp-muted">—</span>'}</td>
+            <td class="num">${_srpProfitCell(c.profit)}</td>
+            <td class="num">${c.balance > 0 ? `<span class="srp-pill bad">${_srpMoney(c.balance)}</span>` : '<span class="srp-muted">—</span>'}</td>
+            <td class="num srp-muted">${c.last_purchase ? _srpFmtDate(c.last_purchase.slice(0, 10)) : '—'}</td>
+          </tr>${open ? `<tr class="srp-detail-row"><td colspan="11">${_srpCustDetailHtml(c)}</td></tr>` : ''}`;
+        }).join('')}
+          <tr class="srp-total-row">
+            <td></td><td><b>Total · ${_srpPlural(rows.length, 'row')}</b></td>
+            <td class="num"><b>${_srpNum(sum('purchases'))}</b></td><td class="num">${_srpNum(sum('items'))}</td>
+            <td class="num"><b>${_srpMoney(sum('revenue'))}</b></td><td></td>
+            <td class="num">${_srpMoney(sum('discounts'))}</td><td class="num">${_srpMoney(sum('returns_total'))}</td>
+            <td class="num">${_srpProfitCell(sum('profit'))}</td><td class="num">${_srpMoney(sum('balance'))}</td><td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    ${pages > 1 ? `
+    <div class="srp-pager">
+      <span class="srp-muted">${_srpNum(first + 1)}–${_srpNum(first + page.length)} of ${_srpNum(rows.length)}</span>
+      <div>
+        <button class="srp-icon-btn" data-srp-c-page="${st.page - 1}" ${st.page <= 1 ? 'disabled' : ''} title="Previous page"><i class="fa fa-chevron-left"></i></button>
+        <span class="srp-muted">Page ${st.page} of ${pages}</span>
+        <button class="srp-icon-btn" data-srp-c-page="${st.page + 1}" ${st.page >= pages ? 'disabled' : ''} title="Next page"><i class="fa fa-chevron-right"></i></button>
+      </div>
+    </div>` : ''}
+    <div class="srp-hint">Click a customer for their details and favourite products. Balance due = unpaid POS credit + sent / overdue invoices in this period.</div>`;
+}
+
+function _srpCustDetailHtml(c) {
+  const when = v => (v ? escHtml(v.length > 10 ? v : _srpFmtDate(v)) : '—');
+  return `
+    <div class="srp-detail">
+      <div class="srp-card">
+        <div class="srp-card-head"><div class="srp-card-title">${c.walkin ? 'Walk-in sales' : 'Customer details'}</div></div>
+        ${_srpFacts([
+          ['First purchase', when(c.first_purchase)],
+          ['Last purchase', when(c.last_purchase)],
+          ['Customer since', c.since ? _srpFmtDate(c.since) : '—', c.is_new ? 'New in this period' : ''],
+          ['POS sales', _srpMoney(c.pos_total), _srpPlural(c.pos_count, 'sale')],
+          ['Paid invoices', _srpMoney(c.invoice_total), _srpPlural(c.invoice_count, 'invoice')],
+          ['Usual payment', c.top_payment ? escHtml(_srpPayLabel(c.top_payment)) : '—'],
+          ['Net after returns', _srpMoney(c.net), c.returns_count ? `${_srpPlural(c.returns_count, 'return')} · ${_srpMoney(c.returns_total)}` : 'No returns'],
+          ['Unpaid credit', _srpMoney(c.credit_due), 'POS credit sales'],
+          ['Invoices to collect', _srpMoney(c.receivable), 'Sent &amp; overdue'],
+        ])}
+        ${c.walkin ? '' : `<div class="srp-actions-row">
+          <button class="srp-ghost" style="margin-left:0" data-srp-c-txn="${escHtml(c.name)}"><i class="fa fa-receipt"></i> View their transactions</button>
+        </div>`}
+      </div>
+      <div class="srp-card">
+        <div class="srp-card-head"><div class="srp-card-title">Favourite products</div><span class="srp-muted">${_srpPlural(c.product_count, 'product')} bought on POS</span></div>
+        ${c.top_products.length ? `<table class="srp-table">
+          <thead><tr><th>Product</th><th class="num">Qty</th><th class="num">Spent</th></tr></thead>
+          <tbody>${c.top_products.map((p, i) => `<tr><td><span class="srp-rank">${i + 1}</span>${escHtml(p.name)}</td>
+            <td class="num">${_srpNum(p.qty)}</td><td class="num">${_srpMoney(p.revenue)}</td></tr>`).join('')}</tbody>
+        </table>` : '<div class="srp-empty">No POS items in this period</div>'}
+      </div>
+    </div>`;
+}
+
 // ── Export (CSV / PDF) ───────────────────────────────────────────────────────
+const _srpCsvCell = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+
+function _srpDownloadCsv(filename, rows) {
+  // BOM so Excel opens non-ASCII names correctly
+  const blob = new Blob(['﻿' + rows.map(r => r.map(_srpCsvCell).join(',')).join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function _srpSavePdf(html, filename, landscape = false) {
+  if (!window.electronAPI?.saveHtmlPdf) { toast('PDF export needs the latest desktop app — please update.', 'error'); return; }
+  const out = await window.electronAPI.saveHtmlPdf({ html, filename, landscape });
+  if (out?.success) toast('PDF report saved', 'success');
+  else if (!out?.canceled) toast(out?.error || 'PDF export failed', 'error');
+}
+
 async function _srpExport(kind) {
+  if (_srp.report !== 'summary') {
+    $('#srp-export-menu').hidden = true;
+    if (!_srpState().data) { toast('The report is still loading', 'info'); return; }
+    const btn = $('#srp-export-btn');
+    const old = btn.innerHTML;
+    btn.disabled  = true;
+    btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Preparing ${kind.startsWith('pdf') ? 'PDF' : 'CSV'}…`;
+    try {
+      if (_srp.report === 'products') await _srpExportProducts(kind);
+      else await _srpExportCustomers(kind);
+    } finally {
+      btn.disabled  = false;
+      btn.innerHTML = old;
+    }
+    return;
+  }
+  return _srpExportSummary(kind);
+}
+
+/** Exports follow the on-screen search / filter so what you see is what you get. */
+async function _srpExportProducts(kind) {
+  const st = _srp.prod, d = st.data, rows = _srpProdRows();
+  if (!rows.length) { toast('Nothing to export for these filters', 'info'); return; }
+  const name = `product-sales-${d.range.from}_to_${d.range.to}`;
+  const sold = d.days.filter(x => rows.some(p => p.daily[x.date]));
+
+  if (kind === 'csv') {
+    _srpDownloadCsv(`${name}.csv`, [
+      ['Product', 'SKU', 'Category', 'Days sold', 'Sales', 'Qty sold', 'POS qty', 'Invoice qty', 'Selling price', 'Cost price', 'Revenue', 'Cost', 'Share %', 'Profit', 'Margin %', 'Returned qty', 'Refunded'],
+      ...rows.map(p => [p.name, p.sku || '', p.category || '', p.days_sold, p.sales, p.qty, p.pos_qty, p.invoice_qty, p.avg_price.toFixed(2),
+        p.unit_cost ?? '', p.revenue.toFixed(2), p.cogs ?? '', p.share, p.profit === null ? '' : p.profit.toFixed(2), p.margin ?? '', p.returns_qty, p.returns_total.toFixed(2)]),
+    ]);
+    return;
+  }
+  if (kind === 'csv-days') {
+    const lines = [['Date', 'Day', 'Product', 'SKU', 'Category', 'Qty', 'Selling price', 'Cost price', 'Revenue', 'Cost', 'Profit', 'Margin %']];
+    sold.forEach(x => rows.filter(p => p.daily[x.date])
+      .sort((a, b) => b.daily[x.date].revenue - a.daily[x.date].revenue)
+      .forEach(p => {
+        const v = p.daily[x.date];
+        lines.push([x.date, x.label.split(',')[0], p.name, p.sku || '', p.category || '', v.qty, (v.qty ? v.revenue / v.qty : 0).toFixed(2),
+          v.unit_cost ?? '', v.revenue.toFixed(2), v.cogs ?? '', v.profit ?? '', v.margin ?? '']);
+      }));
+    _srpDownloadCsv(`${name}-daily.csv`, lines);
+    return;
+  }
+  const rev = st.metric === 'revenue';
+  const val = (p, date) => p.daily[date]?.[rev ? 'revenue' : 'qty'] || 0;
+  if (kind === 'csv-grid') {
+    const fix = v => (rev ? v.toFixed(2) : v);
+    _srpDownloadCsv(`${name}-grid-${rev ? 'revenue' : 'units'}.csv`, [
+      [`Product (${rev ? 'revenue' : 'units'})`, 'SKU', ...d.days.map(x => x.date), 'Total'],
+      ...rows.map(p => [p.name, p.sku || '', ...d.days.map(x => fix(val(p, x.date))), fix(rev ? p.revenue : p.qty)]),
+      ['Total', '', ...d.days.map(x => fix(rows.reduce((a, p) => a + val(p, x.date), 0))), fix(rows.reduce((a, p) => a + (rev ? p.revenue : p.qty), 0))],
+    ]);
+    return;
+  }
+
+  const e = escHtml, m = _srpMoney, s = d.summary;
+  const filterNote = [st.q ? `Search: “${e(st.q)}”` : '', { pos: 'POS sales only', invoices: 'Paid invoices only' }[st.source] || ''].filter(Boolean).join(' · ');
+  const sum    = (list, f) => list.reduce((a, x) => a + (Number(f(x)) || 0), 0);
+  const opt    = v => (v === null || v === undefined ? '—' : m(v));
+  const profit = v => (v === null || v === undefined ? '—' : `<span class="${v < 0 ? 'neg' : ''}">${m(v)}</span>`);
+
+  if (kind === 'pdf-grid') {
+    // Whole numbers keep 31 day columns narrow enough for one landscape page
+    const fmt = rev ? v => Math.round(v).toLocaleString() : _srpNum;
+    const head = x => {
+      const [wd, md] = x.label.split(', ');
+      return `<th class="num${wd === 'Sat' || wd === 'Sun' ? ' wk' : ''}">${e(md || '')}<br><span>${e(wd)}</span></th>`;
+    };
+    const body = `
+      ${filterNote ? `<p class="note">${filterNote}</p>` : ''}
+      <table class="grid">
+        <colgroup><col class="name">${d.days.map(() => '<col>').join('')}<col class="total"></colgroup>
+        <thead><tr><th>Product</th>${d.days.map(head).join('')}<th class="num">Total</th></tr></thead>
+        <tbody>${rows.map(p => `<tr><td title="${e(p.name)}">${e(p.name)}</td>${d.days.map(x => { const v = val(p, x.date); return `<td class="num${v ? '' : ' z'}">${v ? fmt(v) : '·'}</td>`; }).join('')}
+          <td class="num"><b>${fmt(rev ? p.revenue : p.qty)}</b></td></tr>`).join('')}
+          <tr class="tot"><td>Total</td>${d.days.map(x => `<td class="num">${fmt(rows.reduce((a, p) => a + val(p, x.date), 0))}</td>`).join('')}
+            <td class="num">${fmt(rows.reduce((a, p) => a + (rev ? p.revenue : p.qty), 0))}</td></tr>
+        </tbody>
+      </table>
+      <p class="note">${rev ? `Revenue${state.currency ? ` (${e(state.currency)})` : ''}, rounded to whole amounts` : 'Units sold'} per product per day · weekends shaded.</p>`;
+    await _srpSavePdf(_srpPdfDoc(`Product sales by day — ${rev ? 'revenue' : 'units'}`, d, body, `
+      .grid { table-layout: fixed; font-size: 7px; }
+      .grid col.name { width: 130px; } .grid col.total { width: ${rev ? 52 : 34}px; }
+      .grid th, .grid td { padding: 2px 1.5px; overflow: hidden; }
+      .grid th { font-size: 6.5px; letter-spacing: 0; text-transform: none; line-height: 1.2; vertical-align: bottom; }
+      .grid th span { color: #9ca3af; font-weight: 400; }
+      .grid th.wk { background: #f3f4f6; }
+      .grid td:first-child { white-space: nowrap; text-overflow: ellipsis; }
+      .grid td.z { color: #d1d5db; }
+      .grid tr.tot td { font-weight: 700; border-top: 1px solid #9ca3af; }`),
+      `${name}-grid.pdf`, true);
+    return;
+  }
+
+  const body = `
+    <div class="kpis">
+      <div class="kpi"><div class="l">Products sold</div><div class="v">${_srpNum(s.products)}</div><div class="f">${_srpNum(s.qty)} units · ${_srpPlural(s.sales, 'sale')}</div></div>
+      <div class="kpi"><div class="l">Product revenue</div><div class="v">${m(s.revenue)}</div><div class="f">avg ${m(s.avg_daily_revenue)} a day</div></div>
+      <div class="kpi"><div class="l">Gross profit (POS)</div><div class="v">${s.profit === null ? '—' : m(s.profit)}</div><div class="f">${s.margin ?? 0}% margin</div></div>
+      <div class="kpi"><div class="l">Best day</div><div class="v">${s.best_day ? m(s.best_day.revenue) : '—'}</div><div class="f">${s.best_day ? e(s.best_day.label) : ''}</div></div>
+    </div>
+    ${filterNote ? `<p class="note">${filterNote}</p>` : ''}
+    <section>
+      <h2>Product totals (${_srpNum(rows.length)})</h2>
+      <table>
+        <thead><tr><th>Product</th><th>SKU</th><th>Category</th><th class="num">Days</th><th class="num">Qty</th><th class="num">Selling price</th><th class="num">Cost price</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Margin</th><th class="num">Share</th><th class="num">Returned</th></tr></thead>
+        <tbody>${rows.map(p => `<tr><td>${e(p.name)}</td><td>${e(p.sku || '—')}</td><td>${e(p.category || '—')}</td>
+          <td class="num">${p.days_sold}</td><td class="num">${_srpNum(p.qty)}</td><td class="num">${m(p.avg_price)}</td><td class="num">${opt(p.unit_cost)}</td>
+          <td class="num">${m(p.revenue)}</td><td class="num">${opt(p.cogs)}</td><td class="num">${profit(p.profit)}</td><td class="num">${p.margin === null ? '—' : `${p.margin}%`}</td>
+          <td class="num">${p.share}%</td><td class="num">${p.returns_qty ? _srpNum(p.returns_qty) : '—'}</td></tr>`).join('')}
+          <tr class="tot"><td colspan="4">Total · ${_srpPlural(rows.length, 'product')}</td><td class="num">${_srpNum(sum(rows, p => p.qty))}</td><td></td><td></td>
+            <td class="num">${m(sum(rows, p => p.revenue))}</td><td class="num">${m(sum(rows, p => p.cogs))}</td><td class="num">${profit(sum(rows, p => p.profit))}</td><td></td><td></td>
+            <td class="num">${_srpNum(sum(rows, p => p.returns_qty))}</td></tr></tbody>
+      </table>
+      <p class="note">Selling price is the average after discounts. Cost and profit use POS cost prices; — means no cost price was recorded (and invoice-only items).</p>
+    </section>
+    <section>
+      <h2>Sales by day</h2>
+      <table>
+        <thead><tr><th>Day</th><th class="num">Products</th><th class="num">Units</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th></tr></thead>
+        <tbody>${sold.map(x => {
+          const items = rows.filter(p => p.daily[x.date]).map(p => p.daily[x.date]);
+          return `<tr><td>${e(x.label)}</td><td class="num">${items.length}</td><td class="num">${_srpNum(sum(items, v => v.qty))}</td>
+            <td class="num">${m(sum(items, v => v.revenue))}</td><td class="num">${m(sum(items, v => v.cogs))}</td><td class="num">${profit(sum(items, v => v.profit))}</td></tr>`;
+        }).join('')}</tbody>
+      </table>
+      <p class="note">${_srpPlural(sold.length, 'day')} with sales out of ${_srpPlural(d.range.days, 'day')}.</p>
+    </section>
+    ${sold.map(x => {
+      const items = rows.filter(p => p.daily[x.date]).sort((a, b) => b.daily[x.date].revenue - a.daily[x.date].revenue);
+      const vs  = items.map(p => p.daily[x.date]);
+      const rev = sum(vs, v => v.revenue);
+      return `<section class="day">
+        <h2>${e(x.label)} — ${_srpPlural(items.length, 'product')} · ${m(rev)} · profit ${profit(sum(vs, v => v.profit))}</h2>
+        <table>
+          <thead><tr><th>Product</th><th>SKU</th><th class="num">Qty</th><th class="num">Selling price</th><th class="num">Cost price</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Profit</th><th class="num">Margin</th></tr></thead>
+          <tbody>${items.map(p => { const v = p.daily[x.date]; return `<tr><td>${e(p.name)}</td><td>${e(p.sku || '—')}</td>
+            <td class="num">${_srpNum(v.qty)}</td><td class="num">${m(v.qty ? v.revenue / v.qty : 0)}</td><td class="num">${opt(v.unit_cost)}</td>
+            <td class="num">${m(v.revenue)}</td><td class="num">${opt(v.cogs)}</td><td class="num">${profit(v.profit)}</td><td class="num">${v.margin === null || v.margin === undefined ? '—' : `${v.margin}%`}</td></tr>`; }).join('')}
+            <tr class="tot"><td colspan="2">Day total</td><td class="num">${_srpNum(sum(vs, v => v.qty))}</td><td></td><td></td>
+              <td class="num">${m(rev)}</td><td class="num">${m(sum(vs, v => v.cogs))}</td><td class="num">${profit(sum(vs, v => v.profit))}</td><td></td></tr></tbody>
+        </table>
+      </section>`;
+    }).join('')}`;
+  // Long tables must be allowed to split across pages — kept whole, the first one jumps
+  // to page 2 and leaves page 1 empty under the KPIs
+  await _srpSavePdf(_srpPdfDoc('Product-wise sales report', d, body, `
+    section { break-inside: auto; }
+    h2 { break-after: avoid; }
+    tr.tot td { font-weight: 700; border-top: 1px solid #9ca3af; }
+    .neg { color: #dc2626; }`), `${name}.pdf`, true);
+}
+
+async function _srpExportCustomers(kind) {
+  const st = _srp.cust, d = st.data, rows = _srpCustRows();
+  if (!rows.length) { toast('Nothing to export for these filters', 'info'); return; }
+  const name = `customer-sales-${d.range.from}_to_${d.range.to}`;
+
+  if (kind === 'csv') {
+    _srpDownloadCsv(`${name}.csv`, [
+      ['Customer', 'Phone', 'Email', 'New in period', 'Customer since', 'Purchases', 'POS sales', 'POS total', 'Paid invoices', 'Invoice total',
+        'Revenue', 'Share %', 'Avg sale', 'Items', 'Discounts', 'Returns', 'Refunded', 'Net', 'Profit', 'Margin %',
+        'Unpaid credit', 'Invoices to collect', 'Balance due', 'First purchase', 'Last purchase', 'Usual payment'],
+      ...rows.map(c => [c.name, c.phone || '', c.email || '', c.is_new ? 'Yes' : 'No', c.since || '', c.purchases, c.pos_count, c.pos_total.toFixed(2),
+        c.invoice_count, c.invoice_total.toFixed(2), c.revenue.toFixed(2), c.share, c.avg_sale.toFixed(2), c.items, c.discounts.toFixed(2),
+        c.returns_count, c.returns_total.toFixed(2), c.net.toFixed(2), c.profit === null ? '' : c.profit.toFixed(2), c.margin ?? '',
+        c.credit_due.toFixed(2), c.receivable.toFixed(2), c.balance.toFixed(2), c.first_purchase || '', c.last_purchase || '',
+        c.top_payment ? _srpPayLabel(c.top_payment) : '']),
+    ]);
+    return;
+  }
+
+  const e = escHtml, m = _srpMoney, s = d.summary;
+  const filterNote = [st.filter !== 'all' ? SRP_CUST_FILTERS.find(([k]) => k === st.filter)?.[1] : '', st.q ? `Search: “${e(st.q)}”` : ''].filter(Boolean).join(' · ');
+  const sum = k => rows.reduce((a, c) => a + (Number(c[k]) || 0), 0);
+  const body = `
+    <div class="kpis">
+      <div class="kpi"><div class="l">Customers who bought</div><div class="v">${_srpNum(s.customers)}</div><div class="f">${_srpNum(s.new_customers)} new · ${_srpNum(s.repeat_customers)} repeat</div></div>
+      <div class="kpi"><div class="l">Revenue from customers</div><div class="v">${m(s.named_revenue)}</div><div class="f">${s.named_share}% of ${m(s.revenue)}</div></div>
+      <div class="kpi"><div class="l">Average per customer</div><div class="v">${m(s.avg_per_customer)}</div><div class="f">Walk-in: ${m(s.walkin_revenue)}</div></div>
+      <div class="kpi"><div class="l">Balance due</div><div class="v">${m(s.balance_due)}</div><div class="f">${_srpPlural(s.with_balance, 'customer')}</div></div>
+    </div>
+    ${filterNote ? `<p class="note">${filterNote}</p>` : ''}
+    <section class="txns">
+      <h2>Customers (${_srpNum(rows.length)})</h2>
+      <table>
+        <thead><tr><th>Customer</th><th>Phone</th><th class="num">Purchases</th><th class="num">Items</th><th class="num">Revenue</th><th class="num">Share</th>
+          <th class="num">Avg sale</th><th class="num">Discounts</th><th class="num">Returns</th><th class="num">Profit</th><th class="num">Balance due</th><th class="num">Last purchase</th></tr></thead>
+        <tbody>${rows.map(c => `<tr><td>${e(c.name)}${c.is_new ? ' <b>(new)</b>' : ''}</td><td>${e(c.phone || '—')}</td>
+          <td class="num">${_srpNum(c.purchases)}</td><td class="num">${_srpNum(c.items)}</td><td class="num">${m(c.revenue)}</td><td class="num">${c.share}%</td>
+          <td class="num">${m(c.avg_sale)}</td><td class="num">${m(c.discounts)}</td><td class="num">${m(c.returns_total)}</td>
+          <td class="num">${c.profit === null ? '—' : m(c.profit)}</td><td class="num">${c.balance > 0 ? `<b>${m(c.balance)}</b>` : '—'}</td>
+          <td class="num">${c.last_purchase ? e(c.last_purchase.slice(0, 10)) : '—'}</td></tr>`).join('')}
+          <tr><td><b>Total</b></td><td></td><td class="num"><b>${_srpNum(sum('purchases'))}</b></td><td class="num">${_srpNum(sum('items'))}</td>
+            <td class="num"><b>${m(sum('revenue'))}</b></td><td></td><td></td><td class="num">${m(sum('discounts'))}</td><td class="num">${m(sum('returns_total'))}</td>
+            <td class="num">${m(sum('profit'))}</td><td class="num"><b>${m(sum('balance'))}</b></td><td></td></tr>
+        </tbody>
+      </table>
+      <p class="note">Revenue = POS sales + paid invoices. Profit uses POS cost prices. Balance due = unpaid POS credit + sent / overdue invoices in this period.</p>
+    </section>`;
+  await _srpSavePdf(_srpPdfDoc('Customer-wise sales report', d, body), `${name}.pdf`, true);
+}
+
+async function _srpExportSummary(kind) {
   $('#srp-export-menu').hidden = true;
   const btn = $('#srp-export-btn');
   const old = btn.innerHTML;
@@ -37310,28 +38101,16 @@ async function _srpExport(kind) {
     if (kind === 'csv') {
       const { data: rows, total } = data.transactions;
       if (!rows.length) { toast('Nothing to export for these filters', 'info'); return; }
-      const cell  = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-      const lines = [
-        ['Type', 'Number', 'Date', 'Customer', 'Branch / Warehouse', 'Status', 'Payment', 'Total'].join(','),
+      _srpDownloadCsv(`${name}.csv`, [
+        ['Type', 'Number', 'Date', 'Customer', 'Branch / Warehouse', 'Status', 'Payment', 'Total'],
         ...rows.map(r => [SRP_SOURCES[r.type]?.one || r.type, r.number, r.occurred_at, r.customer || '', r.branch || 'Main / unassigned',
-          _srpCap(r.status), r.payment ? _srpPayLabel(r.payment) : '', Number(r.total).toFixed(2)].map(cell).join(',')),
-      ];
-      // BOM so Excel opens non-ASCII customer names correctly
-      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href     = url;
-      a.download = `${name}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+          _srpCap(r.status), r.payment ? _srpPayLabel(r.payment) : '', Number(r.total).toFixed(2)]),
+      ]);
       if (total > rows.length) toast(`Exported the latest ${rows.length} of ${total} records — narrow the period for the rest`, 'info');
       return;
     }
 
-    if (!window.electronAPI?.saveHtmlPdf) { toast('PDF export needs the latest desktop app — please update.', 'error'); return; }
-    const out = await window.electronAPI.saveHtmlPdf({ html: _srpPdfHtml(data), filename: `${name}.pdf` });
-    if (out?.success) toast('PDF report saved', 'success');
-    else if (!out?.canceled) toast(out?.error || 'PDF export failed', 'error');
+    await _srpSavePdf(_srpPdfHtml(data), `${name}.pdf`);
   } finally {
     btn.disabled  = false;
     btn.innerHTML = old;
@@ -37374,34 +38153,7 @@ function _srpPdfChartSvg(d) {
   return `<svg width="100%" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${svg}</svg>`;
 }
 
-function _srpPdfHtml(d) {
-  const s = d.summary, r = d.range, e = escHtml, m = _srpMoney;
-  const names = _srpScopeNames(d);
-  const biz   = state._bizName || $('#sel-business')?.selectedOptions?.[0]?.text || 'Business';
-  const delta = p => p === null ? '' : `<span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% vs previous period</span>`;
-
-  const table = (title, cols, rows, note = '') => !rows.length ? '' : `
-    <section>
-      <h2>${title}</h2>
-      <table>
-        <thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.t}</th>`).join('')}</tr></thead>
-        <tbody>${rows.map(row => `<tr>${row.map((v, i) => `<td class="${cols[i].num ? 'num' : ''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>
-      </table>
-      ${note ? `<p class="note">${note}</p>` : ''}
-    </section>`;
-  const shareRows = list => list.map(x => [e(x.label), _srpNum(x.count), m(x.total), `${x.share}%`]);
-  const shareCols = [{ t: 'Name' }, { t: 'Count', num: true }, { t: 'Total', num: true }, { t: 'Share', num: true }];
-
-  const txns    = d.transactions.data.slice(0, SRP_PDF_TXN_LIMIT);
-  const txnNote = d.transactions.total > txns.length
-    ? `Showing the latest ${txns.length} of ${d.transactions.total} records. Export CSV or narrow the period for the full list.` : '';
-  const txnFilter = [_srp.txn.source !== 'all' ? SRP_SOURCES[_srp.txn.source]?.label : '', _srp.txn.status ? _srpCap(_srp.txn.status) : '', _srp.txn.q ? `“${e(_srp.txn.q)}”` : '']
-    .filter(Boolean).join(' · ');
-
-  const q = s.quotations, inv = s.invoices, so = s.sales_orders;
-  const chart = _srpPdfChartSvg(d);
-
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Sales report</title><style>
+const SRP_PDF_CSS = `
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', Arial, sans-serif; color: #1f2937; font-size: 10.5px; margin: 0; }
     header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #1f2937; padding-bottom: 10px; margin-bottom: 14px; }
@@ -37430,17 +38182,52 @@ function _srpPdfHtml(d) {
     thead { display: table-header-group; }
     .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .note { color: #9ca3af; font-size: 8.5px; margin: 5px 0 0; }
-    .txns { break-inside: auto; }
-  </style></head><body>
+    .txns { break-inside: auto; }`;
+
+/** Printable page: shared styles + a header with the report title, business, period and branch / counter. */
+function _srpPdfDoc(title, d, body, extraCss = '') {
+  const r = d.range, e = escHtml;
+  const names = _srpScopeNames(d);
+  const biz   = state._bizName || $('#sel-business')?.selectedOptions?.[0]?.text || 'Business';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${e(title)}</title><style>${SRP_PDF_CSS}${extraCss}</style></head><body>
     <header>
-      <div><h1>Sales report</h1><div class="biz">${e(biz)}</div></div>
+      <div><h1>${e(title)}</h1><div class="biz">${e(biz)}</div></div>
       <div class="meta">
         <div><b>${_srpFmtDate(r.from)} – ${_srpFmtDate(r.to)}</b> (${_srpPlural(r.days, 'day')})</div>
         <div>${e(names.branch)}${names.counter ? ` · ${e(names.counter)}` : ''}</div>
         <div>Generated ${new Date().toLocaleString()}</div>
       </div>
     </header>
+    ${body}
+  </body></html>`;
+}
 
+function _srpPdfHtml(d) {
+  const s = d.summary, r = d.range, e = escHtml, m = _srpMoney;
+  const delta = p => p === null ? '' : `<span class="${p >= 0 ? 'up' : 'down'}">${p >= 0 ? '↑' : '↓'} ${Math.abs(p)}% vs previous period</span>`;
+
+  const table = (title, cols, rows, note = '') => !rows.length ? '' : `
+    <section>
+      <h2>${title}</h2>
+      <table>
+        <thead><tr>${cols.map(c => `<th class="${c.num ? 'num' : ''}">${c.t}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map(row => `<tr>${row.map((v, i) => `<td class="${cols[i].num ? 'num' : ''}">${v}</td>`).join('')}</tr>`).join('')}</tbody>
+      </table>
+      ${note ? `<p class="note">${note}</p>` : ''}
+    </section>`;
+  const shareRows = list => list.map(x => [e(x.label), _srpNum(x.count), m(x.total), `${x.share}%`]);
+  const shareCols = [{ t: 'Name' }, { t: 'Count', num: true }, { t: 'Total', num: true }, { t: 'Share', num: true }];
+
+  const txns    = d.transactions.data.slice(0, SRP_PDF_TXN_LIMIT);
+  const txnNote = d.transactions.total > txns.length
+    ? `Showing the latest ${txns.length} of ${d.transactions.total} records. Export CSV or narrow the period for the full list.` : '';
+  const txnFilter = [_srp.txn.source !== 'all' ? SRP_SOURCES[_srp.txn.source]?.label : '', _srp.txn.status ? _srpCap(_srp.txn.status) : '', _srp.txn.q ? `“${e(_srp.txn.q)}”` : '']
+    .filter(Boolean).join(' · ');
+
+  const q = s.quotations, inv = s.invoices, so = s.sales_orders;
+  const chart = _srpPdfChartSvg(d);
+
+  return _srpPdfDoc('Sales report', d, `
     <div class="kpis">
       <div class="kpi"><div class="l">Revenue</div><div class="v">${m(s.revenue)}</div><div class="f">${delta(s.revenue_change_pct)}</div></div>
       <div class="kpi"><div class="l">Transactions</div><div class="v">${_srpNum(s.transactions)}</div><div class="f">${delta(s.transactions_change_pct)}</div></div>
@@ -37534,15 +38321,19 @@ function _srpPdfHtml(d) {
         </tr>`).join('')}</tbody>
       </table>` : '<p class="note">No transactions for these filters.</p>'}
       ${txnNote ? `<p class="note">${txnNote}</p>` : ''}
-    </section>
-  </body></html>`;
+    </section>`);
 }
 
 // ── Events ───────────────────────────────────────────────────────────────────
 // Filter bar (static markup in index.html)
+$('#srp-reports')?.addEventListener('click', e => {
+  const btn = e.target.closest('[data-srp-report]');
+  if (btn) _srpSwitchReport(btn.dataset.srpReport);
+});
 $('#srp-period')?.addEventListener('change', e => {
   _srpSetPreset(e.target.value);
   if (e.target.value === 'custom') { $('#srp-from').focus(); return; } // dates already set — edit them
+  _srpFitRange(); // e.g. "This month" on the 31st, on the product-wise report
   _srpReload();
 });
 // Editing either date switches the period to "Custom range…"
@@ -37554,11 +38345,13 @@ $('#srp-period')?.addEventListener('change', e => {
   _srp.from = f; _srp.to = t;
   _srp.preset = 'custom';
   $('#srp-period').value = 'custom';
+  // Product-wise: pull dates back into the last 30 days
+  _srpFitRange();
   _srpReload();
 }));
 $('#srp-branch')?.addEventListener('change',  e => { _srp.branch = e.target.value; _srp.counter = ''; _srpReload(); });
 $('#srp-counter')?.addEventListener('change', e => { _srp.counter = e.target.value; _srpReload(); });
-$('#srp-refresh')?.addEventListener('click', () => loadSalesReport());
+$('#srp-refresh')?.addEventListener('click', () => loadSalesReport({ force: true }));
 $('#srp-export-btn')?.addEventListener('click', e => {
   e.stopPropagation();
   $('#srp-export-menu').hidden = !$('#srp-export-menu').hidden;
@@ -37574,8 +38367,82 @@ $('#srp-scope')?.addEventListener('click', e => {
   if (e.target.id !== 'srp-clear') return;
   Object.assign(_srp, { branch: '', counter: '', group: 'auto' });
   _srp.txn = { source: 'all', status: '', q: '', page: 1 };
+  _srp.prod.source = 'all';
   _srpSetPreset('30d');
   loadSalesReport();
+});
+
+// Product-wise / customer-wise body — delegated (re-rendered on every load)
+$('#srp-body')?.addEventListener('click', e => {
+  if (_srp.report === 'summary') return;
+  const hit = attr => e.target.closest(`[${attr}]`);
+  const p = _srp.prod, c = _srp.cust;
+  let el;
+
+  if ((el = hit('data-srp-p-view'))) {
+    p.view = el.dataset.srpPView;
+    _srpRenderProducts();
+  } else if ((el = hit('data-srp-p-metric'))) {
+    p.metric = el.dataset.srpPMetric;
+    _srpRenderProducts();
+  } else if ((el = hit('data-srp-p-sort'))) {
+    _srpSetSort(p, el.dataset.srpPSort);
+    _srpRenderProductView();
+  } else if ((el = hit('data-srp-p-goto-day'))) {
+    const day = el.dataset.srpPGotoDay;
+    p.view = 'days';
+    p.days = new Set([day]);
+    _srpRenderProducts();
+    $(`#srp-day-${day}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } else if ((el = hit('data-srp-p-open'))) {
+    p.open = p.open === el.dataset.srpPOpen ? '' : el.dataset.srpPOpen;
+    _srpRenderProductView();
+  } else if ((el = hit('data-srp-p-day'))) {
+    const day = el.dataset.srpPDay;
+    if (p.days.has(day)) p.days.delete(day); else p.days.add(day);
+    _srpRenderProductView();
+  } else if ((el = hit('data-srp-p-days'))) {
+    p.days = new Set(el.dataset.srpPDays === 'all' ? p.data.days.map(x => x.date) : []);
+    _srpRenderProductView();
+  } else if ((el = hit('data-srp-c-filter'))) {
+    c.filter = el.dataset.srpCFilter;
+    c.page   = 1;
+    el.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === el));
+    _srpRenderCustomerTable();
+    _srpRenderExportMenu();
+  } else if ((el = hit('data-srp-c-sort'))) {
+    _srpSetSort(c, el.dataset.srpCSort);
+    _srpRenderCustomerTable();
+  } else if ((el = hit('data-srp-c-txn'))) {
+    // Jump to this customer's transactions in the sales summary
+    _srp.report = 'summary';
+    _srp.tab    = 'transactions';
+    _srp.txn    = { source: 'all', status: '', q: el.dataset.srpCTxn, page: 1 };
+    loadSalesReport();
+  } else if ((el = hit('data-srp-c-open'))) {
+    c.open = c.open === el.dataset.srpCOpen ? '' : el.dataset.srpCOpen;
+    _srpRenderCustomerTable();
+  } else if ((el = hit('data-srp-c-page')) && !el.disabled) {
+    c.page = Number(el.dataset.srpCPage) || 1;
+    _srpRenderCustomerTable();
+    $('#srp-c-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
+$('#srp-body')?.addEventListener('change', e => {
+  if (e.target.id !== 'srp-p-source') return;
+  _srp.prod.source = e.target.value;
+  loadSalesReport();
+});
+$('#srp-body')?.addEventListener('input', e => {
+  const st = e.target.id === 'srp-p-q' ? _srp.prod : e.target.id === 'srp-c-q' ? _srp.cust : null;
+  if (!st) return;
+  clearTimeout(_srp.searchTimer);
+  _srp.searchTimer = setTimeout(() => {
+    st.q = e.target.value.trim();
+    if (st === _srp.prod) _srpRenderProductView();
+    else { st.page = 1; _srpRenderCustomerTable(); }
+    _srpRenderExportMenu();
+  }, 200);
 });
 
 // Report body (re-rendered on every load) — delegated

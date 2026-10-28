@@ -237,6 +237,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get ('expenses/breakdown', [PosExpensesBreakdownApiController::class, 'show'])->name('expenses.breakdown');
     Route::get ('profit-report',      [PosProfitReportApiController::class,     'show'])->name('profit-report');
     Route::get ('reports/sales',      [PosSalesReportApiController::class,      'show'])->name('reports.sales');
+    Route::get ('reports/sales/products',  [PosSalesReportApiController::class, 'products'])->name('reports.sales.products');
+    Route::get ('reports/sales/customers', [PosSalesReportApiController::class, 'customers'])->name('reports.sales.customers');
     Route::get ('payroll-overview',   [PosPayrollOverviewApiController::class,  'show'])->name('payroll-overview');
 
     Route::get  ('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');

@@ -269,11 +269,7 @@ class SalesReportService
                 'prev_from'=> $from->copy()->subDays($days)->toDateString(),
                 'prev_to'  => $from->copy()->subDay()->toDateString(),
             ],
-            'filters' => [
-                'branches' => collect($branchNames)->map(fn ($name, $id) => ['id' => (int) $id, 'name' => $name])->values()->all(),
-                'counters' => $this->counters($business),
-                'pos_only' => $posOnly,
-            ],
+            'filters' => $this->filterOptions($business, $branchNames, $posOnly),
             'summary' => $summary,
             'trend' => [
                 'labels'          => array_column($bucketValues, 'label'),
@@ -302,6 +298,470 @@ class SalesReportService
             'top_products'  => $this->mergeTopProducts($items['products'], $invoiceItems),
             'top_customers' => array_slice($this->labelled($byCustomer, $revenue, $this->nameLookup('pos_customers', array_keys($byCustomer), 'Walk-in customers', 'walkin')), 0, 10),
             'transactions'  => $this->transactions($business, $from, $to, $f, $posOnly, $branchNames),
+        ];
+    }
+
+    // ── Product-wise report ───────────────────────────────────────────────────
+
+    /**
+     * Every product sold in the period with its quantity and revenue per day, so the
+     * desktop can show product totals, a day-by-day list and a product × day grid.
+     * POS lines are net of their share of the bill discount; paid-invoice lines are
+     * added unless `source` is 'pos' or a counter is picked. Returns (POS only) are
+     * shown per product but not deducted from its revenue.
+     *
+     * @param  array{from: Carbon, to: Carbon, branch: int|string|null, counter: int|null, source: ?string}  $f
+     */
+    public function products(Business $business, array $f): array
+    {
+        $from    = $f['from']->copy()->startOfDay();
+        $to      = $f['to']->copy()->endOfDay();
+        $posOnly = $f['counter'] !== null;
+        $withPos = ($f['source'] ?? null) !== 'invoices';
+        $withInv = ($f['source'] ?? null) !== 'pos' && ! $posOnly;
+
+        $days = [];
+        for ($d = $from->copy(); $d->lte($to); $d->addDay()) {
+            $days[$d->toDateString()] = [
+                'date' => $d->toDateString(), 'label' => $d->format('D, M j'),
+                'qty' => 0.0, 'revenue' => 0.0, 'products' => 0, 'sales' => 0,
+            ];
+        }
+
+        $products = [];
+
+        if ($withPos && $this->hasTable('pos_sale_items') && $this->hasTable('pos_sales')) {
+            $q   = $this->posLines($business, $from, $to, $f['branch'], $f['counter']);
+            $cat = $this->joinFirstCategory($q, 'i.product_id');
+            $rows = $q->selectRaw("DATE(s.sold_at) as day, i.product_id as pid, MAX(i.product_name) as name, MAX(i.sku) as sku, MAX({$cat}) as category, COUNT(DISTINCT s.id) as sales, ".$this->lineAggregatesSql())
+                ->groupByRaw('DATE(s.sold_at), i.product_id')
+                ->get();
+            foreach ($rows as $r) {
+                $this->addProductDay($products, $days, $r, 'pos');
+            }
+
+            $counts = $this->posBase($business, $from, $to, $f['branch'], $f['counter'])
+                ->where('pos_sales.status', Sale::STATUS_COMPLETED)
+                ->selectRaw('DATE(pos_sales.sold_at) as day, COUNT(*) as c')
+                ->groupByRaw('DATE(pos_sales.sold_at)')
+                ->get();
+            foreach ($counts as $c) {
+                $day = substr((string) $c->day, 0, 10);
+                if (isset($days[$day])) {
+                    $days[$day]['sales'] += (int) $c->c;
+                }
+            }
+        }
+
+        if ($withInv && $this->hasTable('invoices') && $this->hasTable('invoice_items')) {
+            $q = DB::table('invoices as v')
+                ->join('invoice_items as i', 'i.invoice_id', '=', 'v.id')
+                ->leftJoin('products as p', 'p.id', '=', 'i.product_id')
+                ->where('v.business_id', $business->id)
+                ->where('v.status', 'paid')
+                ->whereBetween('v.issue_date', [$from->toDateString(), $to->toDateString()]);
+            $this->applyBranch($q, 'v.branch_id', $f['branch']);
+            $cat  = $this->joinFirstCategory($q, 'i.product_id');
+            $name = "COALESCE(p.name, i.description, 'Item')";
+            $rows = $q->selectRaw("v.issue_date as day, i.product_id as pid, {$name} as name, MAX(p.sku) as sku, MAX({$cat}) as category, COUNT(DISTINCT v.id) as sales,"
+                    .' SUM(i.quantity) as qty, SUM(i.line_total) as revenue, 0 as costed_revenue, 0 as costed_qty, 0 as cogs')
+                ->groupByRaw("v.issue_date, i.product_id, {$name}")
+                ->get();
+            foreach ($rows as $r) {
+                $this->addProductDay($products, $days, $r, 'invoice');
+            }
+
+            $counts = DB::table('invoices')
+                ->where('business_id', $business->id)
+                ->where('status', 'paid')
+                ->whereBetween('issue_date', [$from->toDateString(), $to->toDateString()]);
+            $this->applyBranch($counts, 'branch_id', $f['branch']);
+            foreach ($counts->selectRaw('issue_date as day, COUNT(*) as c')->groupBy('issue_date')->get() as $c) {
+                $day = substr((string) $c->day, 0, 10);
+                if (isset($days[$day])) {
+                    $days[$day]['sales'] += (int) $c->c;
+                }
+            }
+        }
+
+        $this->foldNamedIntoProducts($products);
+
+        // Returns per product (POS only)
+        $returnsQty = 0.0;
+        $returnsTotal = 0.0;
+        if ($withPos && $this->hasTable('pos_sale_returns') && $this->hasTable('pos_sale_return_items')) {
+            $q = DB::table('pos_sale_returns as r')
+                ->join('pos_sale_return_items as ri', 'ri.pos_sale_return_id', '=', 'r.id')
+                ->where('r.business_id', $business->id)
+                ->whereBetween('r.returned_at', [$from, $to]);
+            if ($f['branch'] !== null || $f['counter'] !== null) {
+                $q->join('pos_sales as s', 's.id', '=', 'r.pos_sale_id');
+                $this->applyBranch($q, 's.branch_id', $f['branch']);
+                if ($f['counter'] !== null) {
+                    $q->where('s.pos_counter_id', $f['counter']);
+                }
+            }
+            $rows = $q->selectRaw('ri.product_id as pid, MAX(ri.product_name) as name, MAX(ri.sku) as sku, SUM(ri.quantity) as qty, SUM(ri.line_total) as total')
+                ->groupBy('ri.product_id')
+                ->get();
+            foreach ($rows as $r) {
+                $key = 'p'.$r->pid;
+                // Returned now but sold before the period — still listed so the refund is visible
+                $products[$key] ??= $this->blankProduct($key, (int) $r->pid, (string) $r->name, $r->sku, null);
+                $products[$key]['returns_qty']   += (float) $r->qty;
+                $products[$key]['returns_total'] += (float) $r->total;
+                $returnsQty   += (float) $r->qty;
+                $returnsTotal += (float) $r->total;
+            }
+        }
+
+        $revenue = array_sum(array_column($products, 'revenue'));
+        $costed  = array_sum(array_column($products, 'costed_revenue'));
+        $cogs    = array_sum(array_column($products, 'cogs'));
+
+        $out = [];
+        foreach ($products as $p) {
+            foreach ($p['daily'] as $day => $v) {
+                $days[$day]['qty']     += $v['qty'];
+                $days[$day]['revenue'] += $v['revenue'];
+                $days[$day]['products']++;
+            }
+            ksort($p['daily']);
+            $out[] = [
+                'key'           => $p['key'],
+                'product_id'    => $p['product_id'],
+                'name'          => $p['name'],
+                'sku'           => $p['sku'],
+                'category'      => $p['category'],
+                'qty'           => round($p['qty'], 3),
+                'pos_qty'       => round($p['pos_qty'], 3),
+                'invoice_qty'   => round($p['invoice_qty'], 3),
+                'revenue'       => round($p['revenue'], 2),
+                'avg_price'     => $p['qty'] > 0 ? round($p['revenue'] / $p['qty'], 2) : 0.0,
+                'share'         => $revenue > 0 ? round($p['revenue'] / $revenue * 100, 1) : 0.0,
+                'sales'         => $p['sales'],
+                'days_sold'     => count($p['daily']),
+                'returns_qty'   => round($p['returns_qty'], 3),
+                'returns_total' => round($p['returns_total'], 2),
+                ...$this->costFields($p['costed_revenue'], $p['costed_qty'], $p['cogs']),
+                'daily'         => array_map(fn ($v) => [
+                    'qty'     => round($v['qty'], 3),
+                    'revenue' => round($v['revenue'], 2),
+                    ...$this->costFields($v['costed_revenue'], $v['costed_qty'], $v['cogs']),
+                ], $p['daily']),
+            ];
+        }
+        usort($out, fn ($a, $b) => [$b['revenue'], $b['qty']] <=> [$a['revenue'], $a['qty']]);
+
+        $dayList = array_map(fn ($d) => ['qty' => round($d['qty'], 3), 'revenue' => round($d['revenue'], 2)] + $d, array_values($days));
+        $active  = array_filter($dayList, fn ($d) => $d['revenue'] > 0 || $d['qty'] > 0);
+        $best    = $active === [] ? null : array_reduce($active, fn ($c, $d) => $c === null || $d['revenue'] > $c['revenue'] ? $d : $c);
+        $sold    = array_filter($out, fn ($p) => $p['qty'] > 0);
+        $byUnits = $sold;
+        usort($byUnits, fn ($a, $b) => $b['qty'] <=> $a['qty']);
+
+        return [
+            'range' => [
+                'from'     => $from->toDateString(),
+                'to'       => $to->toDateString(),
+                'days'     => count($days),
+            ],
+            'filters' => $this->filterOptions($business, $this->branchNames($business), $posOnly),
+            'summary' => [
+                'products'          => count($sold),
+                'qty'               => round(array_sum(array_column($out, 'qty')), 3),
+                'revenue'           => round($revenue, 2),
+                'sales'             => array_sum(array_column($dayList, 'sales')),
+                'cogs'              => round($cogs, 2),
+                ...$this->rowProfit($costed, $cogs),
+                'uncosted_revenue'  => round(max(0.0, array_sum(array_column($products, 'pos_revenue')) - $costed), 2),
+                'returns_qty'       => round($returnsQty, 3),
+                'returns_total'     => round($returnsTotal, 2),
+                'active_days'       => count($active),
+                'avg_daily_revenue' => round($revenue / max(1, count($days)), 2),
+                'best_day'          => $best ? ['date' => $best['date'], 'label' => $best['label'], 'revenue' => $best['revenue'], 'qty' => $best['qty']] : null,
+                'top_product'       => $sold === [] ? null : ['name' => $out[0]['name'], 'revenue' => $out[0]['revenue'], 'qty' => $out[0]['qty']],
+                'most_units'        => $byUnits === [] ? null : ['name' => $byUnits[0]['name'], 'qty' => $byUnits[0]['qty']],
+            ],
+            'days'     => $dayList,
+            'products' => $out,
+        ];
+    }
+
+    private function blankProduct(string $key, ?int $id, string $name, ?string $sku, ?string $category): array
+    {
+        return [
+            'key' => $key, 'product_id' => $id, 'name' => $name, 'sku' => $sku ?: null, 'category' => $category,
+            'qty' => 0.0, 'pos_qty' => 0.0, 'invoice_qty' => 0.0, 'revenue' => 0.0, 'pos_revenue' => 0.0,
+            'costed_revenue' => 0.0, 'costed_qty' => 0.0, 'cogs' => 0.0, 'sales' => 0, 'returns_qty' => 0.0, 'returns_total' => 0.0, 'daily' => [],
+        ];
+    }
+
+    /** Cost of goods, average unit cost and profit for one product (or one product-day); nulls when no line had a cost. */
+    private function costFields(float $costedRevenue, float $costedQty, float $cogs): array
+    {
+        $known = $costedRevenue > 0 || $cogs > 0;
+
+        return [
+            'cogs'      => $known ? round($cogs, 2) : null,
+            'unit_cost' => $known && $costedQty > 0 ? round($cogs / $costedQty, 2) : null,
+            ...$this->rowProfit($costedRevenue, $cogs),
+        ];
+    }
+
+    /**
+     * Invoice lines typed without picking a product are keyed by name; fold each into the
+     * real product of the same name (case-insensitive) so it isn't listed twice.
+     */
+    private function foldNamedIntoProducts(array &$products): void
+    {
+        $byName = [];
+        foreach ($products as $key => $p) {
+            if ($p['product_id'] !== null) {
+                $byName[mb_strtolower(trim($p['name']))] ??= $key;
+            }
+        }
+        foreach ($products as $key => $n) {
+            $into = $n['product_id'] === null ? ($byName[mb_strtolower(trim($n['name']))] ?? null) : null;
+            if ($into === null) {
+                continue;
+            }
+            $p = &$products[$into];
+            foreach (['qty', 'pos_qty', 'invoice_qty', 'revenue', 'pos_revenue', 'costed_revenue', 'costed_qty', 'cogs', 'sales'] as $f) {
+                $p[$f] += $n[$f];
+            }
+            $p['category'] ??= $n['category'];
+            foreach ($n['daily'] as $day => $v) {
+                $p['daily'][$day] ??= array_fill_keys(array_keys($v), 0.0);
+                foreach ($v as $f => $x) {
+                    $p['daily'][$day][$f] += $x;
+                }
+            }
+            unset($p, $products[$key]);
+        }
+    }
+
+    /** Adds one (day, product) aggregate row from POS or invoice lines; products are merged by id, else by name. */
+    private function addProductDay(array &$products, array $days, object $r, string $src): void
+    {
+        $day = substr((string) $r->day, 0, 10);
+        if (! isset($days[$day])) {
+            return;
+        }
+        $key = $r->pid !== null ? 'p'.$r->pid : 'n'.$r->name;
+        $products[$key] ??= $this->blankProduct($key, $r->pid !== null ? (int) $r->pid : null, (string) $r->name, $r->sku, $r->category);
+        $products[$key]['category'] ??= $r->category;
+        $products[$key]['sku']      ??= $r->sku ?: null;
+
+        $qty = (float) $r->qty;
+        $rev = (float) $r->revenue;
+        $p   = &$products[$key];
+        $p['qty']            += $qty;
+        $p[$src.'_qty']      += $qty;
+        $p['revenue']        += $rev;
+        $p['costed_revenue'] += (float) $r->costed_revenue;
+        $p['costed_qty']     += (float) $r->costed_qty;
+        $p['cogs']           += (float) $r->cogs;
+        $p['sales']          += (int) $r->sales;
+        if ($src === 'pos') {
+            $p['pos_revenue'] += $rev;
+        }
+        $p['daily'][$day] ??= ['qty' => 0.0, 'revenue' => 0.0, 'costed_revenue' => 0.0, 'costed_qty' => 0.0, 'cogs' => 0.0];
+        $d = &$p['daily'][$day];
+        $d['qty']            += $qty;
+        $d['revenue']        += $rev;
+        $d['costed_revenue'] += (float) $r->costed_revenue;
+        $d['costed_qty']     += (float) $r->costed_qty;
+        $d['cogs']           += (float) $r->cogs;
+        unset($d, $p);
+    }
+
+    // ── Customer-wise report ──────────────────────────────────────────────────
+
+    /**
+     * One row per customer who bought in the period (POS sales + paid invoices) or has
+     * an unpaid invoice in it, plus a single walk-in row for POS sales without a customer.
+     *
+     * @param  array{from: Carbon, to: Carbon, branch: int|string|null, counter: int|null}  $f
+     */
+    public function customers(Business $business, array $f): array
+    {
+        $from    = $f['from']->copy()->startOfDay();
+        $to      = $f['to']->copy()->endOfDay();
+        $posOnly = $f['counter'] !== null;
+
+        $rows  = [];
+        $blank = fn () => [
+            'pos_count' => 0, 'pos_total' => 0.0, 'invoice_count' => 0, 'invoice_total' => 0.0,
+            'discounts' => 0.0, 'credit_due' => 0.0, 'receivable' => 0.0, 'returns_count' => 0, 'returns_total' => 0.0,
+            'qty' => 0.0, 'costed_revenue' => 0.0, 'cogs' => 0.0, 'first' => null, 'last' => null,
+            'payments' => [], 'products' => [],
+        ];
+        $seen = function (string $k, string $when) use (&$rows) {
+            if ($rows[$k]['first'] === null || $when < $rows[$k]['first']) {
+                $rows[$k]['first'] = $when;
+            }
+            if ($rows[$k]['last'] === null || $when > $rows[$k]['last']) {
+                $rows[$k]['last'] = $when;
+            }
+        };
+
+        // ── POS sales
+        foreach ($this->posSales($business, $from, $to, $f['branch'], $f['counter'])->where('status', Sale::STATUS_COMPLETED) as $s) {
+            $k = $s->pos_customer_id === null ? 'walkin' : (string) $s->pos_customer_id;
+            $rows[$k] ??= $blank();
+            $amt = (float) $s->total;
+            $rows[$k]['pos_count']++;
+            $rows[$k]['pos_total'] += $amt;
+            $rows[$k]['discounts'] += $this->saleDiscount($s);
+            if ($s->payment_method === Sale::PAYMENT_CREDIT && ! $s->is_settled) {
+                $rows[$k]['credit_due'] += max(0, $amt - (float) $s->amount_paid);
+            }
+            $pay = (string) $s->payment_method;
+            $rows[$k]['payments'][$pay] = ($rows[$k]['payments'][$pay] ?? 0.0) + $amt;
+            $seen($k, Carbon::parse($s->sold_at)->format('Y-m-d H:i'));
+        }
+
+        // ── POS items: units, profit and favourite products
+        if ($this->hasTable('pos_sale_items') && $this->hasTable('pos_sales')) {
+            $lines = $this->posLines($business, $from, $to, $f['branch'], $f['counter'])
+                ->selectRaw('s.pos_customer_id as cid, i.product_id as pid, MAX(i.product_name) as name, '.$this->lineAggregatesSql())
+                ->groupBy('s.pos_customer_id', 'i.product_id')
+                ->get();
+            foreach ($lines as $l) {
+                $k = $l->cid === null ? 'walkin' : (string) $l->cid;
+                $rows[$k] ??= $blank();
+                $rows[$k]['qty']            += (float) $l->qty;
+                $rows[$k]['costed_revenue'] += (float) $l->costed_revenue;
+                $rows[$k]['cogs']           += (float) $l->cogs;
+                $rows[$k]['products'][]      = ['name' => (string) $l->name, 'qty' => (float) $l->qty, 'revenue' => (float) $l->revenue];
+            }
+        }
+
+        // ── Invoices: paid = revenue, sent / overdue = still to collect
+        if (! $posOnly) {
+            foreach ($this->documents('invoices', 'issue_date', $business, $from, $to, $f['branch'], ['payment_method']) as $inv) {
+                $paid = $inv->status === 'paid';
+                if (! $paid && ! in_array($inv->status, ['sent', 'overdue'], true)) {
+                    continue;
+                }
+                $k = $inv->customer_id === null ? 'walkin' : (string) $inv->customer_id;
+                $rows[$k] ??= $blank();
+                if ($paid) {
+                    $amt = (float) $inv->total;
+                    $rows[$k]['invoice_count']++;
+                    $rows[$k]['invoice_total'] += $amt;
+                    $pay = (string) ($inv->payment_method ?: 'invoice');
+                    $rows[$k]['payments'][$pay] = ($rows[$k]['payments'][$pay] ?? 0.0) + $amt;
+                    $seen($k, substr((string) $inv->issue_date, 0, 10));
+                } else {
+                    $rows[$k]['receivable'] += (float) $inv->total;
+                }
+            }
+        }
+
+        // ── Returns, by the customer of the original sale
+        if ($this->hasTable('pos_sale_returns')) {
+            $q = DB::table('pos_sale_returns as r')
+                ->join('pos_sales as s', 's.id', '=', 'r.pos_sale_id')
+                ->where('r.business_id', $business->id)
+                ->whereBetween('r.returned_at', [$from, $to]);
+            $this->applyBranch($q, 's.branch_id', $f['branch']);
+            if ($f['counter'] !== null) {
+                $q->where('s.pos_counter_id', $f['counter']);
+            }
+            foreach ($q->selectRaw('s.pos_customer_id as cid, COUNT(*) as c, SUM(r.total) as t')->groupBy('s.pos_customer_id')->get() as $r) {
+                $k = $r->cid === null ? 'walkin' : (string) $r->cid;
+                $rows[$k] ??= $blank();
+                $rows[$k]['returns_count'] += (int) $r->c;
+                $rows[$k]['returns_total'] += (float) $r->t;
+            }
+        }
+
+        // ── Customer records
+        $ids    = array_values(array_filter(array_keys($rows), fn ($k) => ctype_digit((string) $k)));
+        $people = [];
+        if ($ids !== [] && $this->hasTable('pos_customers')) {
+            foreach (array_chunk($ids, 1000) as $chunk) {
+                DB::table('pos_customers')->where('business_id', $business->id)->whereIn('id', $chunk)
+                    ->get(['id', 'name', 'phone', 'email', 'created_at'])
+                    ->each(function ($c) use (&$people) { $people[(int) $c->id] = $c; });
+            }
+        }
+
+        $revenue = array_sum(array_map(fn ($r) => $r['pos_total'] + $r['invoice_total'], $rows));
+
+        $out = [];
+        foreach ($rows as $k => $r) {
+            $k       = (string) $k;
+            $walkin  = $k === 'walkin';
+            $person  = $walkin ? null : ($people[(int) $k] ?? null);
+            $rev     = $r['pos_total'] + $r['invoice_total'];
+            $count   = $r['pos_count'] + $r['invoice_count'];
+            arsort($r['payments']);
+            usort($r['products'], fn ($a, $b) => $b['revenue'] <=> $a['revenue']);
+
+            $out[] = [
+                'key'           => $k,
+                'id'            => $walkin ? null : (int) $k,
+                'walkin'        => $walkin,
+                'name'          => $walkin ? 'Walk-in customers' : ($person->name ?? "Customer #{$k}"),
+                'phone'         => $person->phone ?? null,
+                'email'         => $person->email ?? null,
+                'is_new'        => $person !== null && $person->created_at !== null && Carbon::parse($person->created_at)->gte($from),
+                'since'         => $person?->created_at ? Carbon::parse($person->created_at)->toDateString() : null,
+                'purchases'     => $count,
+                'pos_count'     => $r['pos_count'],
+                'pos_total'     => round($r['pos_total'], 2),
+                'invoice_count' => $r['invoice_count'],
+                'invoice_total' => round($r['invoice_total'], 2),
+                'revenue'       => round($rev, 2),
+                'share'         => $revenue > 0 ? round($rev / $revenue * 100, 1) : 0.0,
+                'avg_sale'      => $count > 0 ? round($rev / $count, 2) : 0.0,
+                'items'         => round($r['qty'], 3),
+                'product_count' => count($r['products']),
+                'discounts'     => round($r['discounts'], 2),
+                'returns_count' => $r['returns_count'],
+                'returns_total' => round($r['returns_total'], 2),
+                'net'           => round($rev - $r['returns_total'], 2),
+                ...$this->rowProfit($r['costed_revenue'], $r['cogs']),
+                'credit_due'    => round($r['credit_due'], 2),
+                'receivable'    => round($r['receivable'], 2),
+                'balance'       => round($r['credit_due'] + $r['receivable'], 2),
+                'first_purchase'=> $r['first'],
+                'last_purchase' => $r['last'],
+                'top_payment'   => $r['payments'] === [] ? null : (string) array_key_first($r['payments']),
+                'top_products'  => array_map(fn ($p) => ['name' => $p['name'], 'qty' => round($p['qty'], 3), 'revenue' => round($p['revenue'], 2)], array_slice($r['products'], 0, 5)),
+            ];
+        }
+        usort($out, fn ($a, $b) => [$b['revenue'], $b['balance']] <=> [$a['revenue'], $a['balance']]);
+
+        $named  = array_values(array_filter($out, fn ($c) => ! $c['walkin'] && $c['purchases'] > 0));
+        $walkin = collect($out)->firstWhere('walkin', true);
+        $namedRevenue = array_sum(array_column($named, 'revenue'));
+
+        return [
+            'range' => [
+                'from' => $from->toDateString(),
+                'to'   => $to->toDateString(),
+                'days' => (int) $from->diffInDays($to->copy()->startOfDay()) + 1,
+            ],
+            'filters' => $this->filterOptions($business, $this->branchNames($business), $posOnly),
+            'summary' => [
+                'customers'           => count($named),
+                'new_customers'       => count(array_filter($named, fn ($c) => $c['is_new'])),
+                'repeat_customers'    => count(array_filter($named, fn ($c) => $c['purchases'] >= 2)),
+                'revenue'             => round($revenue, 2),
+                'named_revenue'       => round($namedRevenue, 2),
+                'named_share'         => $revenue > 0 ? round($namedRevenue / $revenue * 100, 1) : 0.0,
+                'walkin_revenue'      => $walkin['revenue'] ?? 0.0,
+                'walkin_count'        => $walkin['purchases'] ?? 0,
+                'avg_per_customer'    => count($named) > 0 ? round($namedRevenue / count($named), 2) : 0.0,
+                'balance_due'         => round(array_sum(array_column($out, 'balance')), 2),
+                'with_balance'        => count(array_filter($out, fn ($c) => $c['balance'] > 0)),
+                'top_customer'        => $named === [] ? null : ['name' => $named[0]['name'], 'revenue' => $named[0]['revenue']],
+            ],
+            'customers' => $out,
         ];
     }
 
@@ -369,6 +829,7 @@ class SalesReportService
 
         return "SUM(i.quantity) as qty, SUM({$net}) as revenue,"
             ." SUM(CASE WHEN ({$cost}) IS NULL THEN 0 ELSE {$net} END) as costed_revenue,"
+            ." SUM(CASE WHEN ({$cost}) IS NULL THEN 0 ELSE i.quantity END) as costed_qty,"
             ." SUM(COALESCE({$cost}, 0) * i.quantity) as cogs,"
             ." SUM(CASE WHEN ({$cost}) IS NULL THEN 1 ELSE 0 END) as uncosted,"
             ." SUM(CASE WHEN ({$cost}) * i.quantity - {$net} > 0.005 THEN 1 ELSE 0 END) as below_cost,"
@@ -445,15 +906,7 @@ class SalesReportService
 
         $q = $this->posLines($business, $from, $to, $branch, $counter);
 
-        $nameSql = "'Uncategorised'";
-        if ($this->hasTable('product_product_category') && $this->hasTable('product_categories')) {
-            $first = DB::table('product_product_category')
-                ->selectRaw('product_id, MIN(product_category_id) as category_id')
-                ->groupBy('product_id');
-            $q->leftJoinSub($first, 'pc', 'pc.product_id', '=', 'i.product_id')
-                ->leftJoin('product_categories as c', 'c.id', '=', 'pc.category_id');
-            $nameSql = "COALESCE(c.name, 'Uncategorised')";
-        }
+        $nameSql = $this->joinFirstCategory($q, 'i.product_id');
 
         $rows = $q->selectRaw("{$nameSql} as name, COUNT(DISTINCT i.product_name) as products, ".$this->lineAggregatesSql())
             ->groupByRaw($nameSql)
@@ -469,6 +922,21 @@ class SalesReportService
             ...$this->rowProfit((float) $r->costed_revenue, (float) $r->cogs),
             'share'    => $whole > 0 ? round((float) $r->revenue / $whole * 100, 1) : 0.0,
         ])->all();
+    }
+
+    /** Joins each product's first category (as `c`); returns the SQL for its name. */
+    private function joinFirstCategory(Builder $q, string $productCol): string
+    {
+        if (! $this->hasTable('product_product_category') || ! $this->hasTable('product_categories')) {
+            return "'Uncategorised'";
+        }
+        $first = DB::table('product_product_category')
+            ->selectRaw('product_id, MIN(product_category_id) as category_id')
+            ->groupBy('product_id');
+        $q->leftJoinSub($first, 'pc', 'pc.product_id', '=', $productCol)
+            ->leftJoin('product_categories as c', 'c.id', '=', 'pc.category_id');
+
+        return "COALESCE(c.name, 'Uncategorised')";
     }
 
     /** @return array<int, array{name: string, qty: float, revenue: float}> */
@@ -779,6 +1247,16 @@ class SalesReportService
             : [];
 
         return fn ($id) => ($fallbackKey !== null && $id === $fallbackKey) ? $fallback : ($names[(int) $id] ?? $fallback);
+    }
+
+    /** Branch / counter choices for the desktop filter bar — same shape for every report. */
+    private function filterOptions(Business $business, array $branchNames, bool $posOnly): array
+    {
+        return [
+            'branches' => collect($branchNames)->map(fn ($name, $id) => ['id' => (int) $id, 'name' => $name])->values()->all(),
+            'counters' => $this->counters($business),
+            'pos_only' => $posOnly,
+        ];
     }
 
     /** @return array<int, string> */

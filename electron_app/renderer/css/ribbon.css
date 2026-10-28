@@ -23861,6 +23861,19 @@ body.dark #bwz-overlay .bwz-card { background: var(--surface); }
 
 /* Filter bar */
 .srp-bar { flex-shrink: 0; background: var(--surface); border-bottom: 1px solid var(--border-light); padding: 10px 20px 8px; }
+
+/* Report switcher — Sales summary / Product-wise / Customer-wise */
+.srp-reports { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }
+.srp-report { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border: 1px solid var(--border-light); border-radius: 10px; background: var(--surface); color: var(--text); cursor: pointer; text-align: left; font-size: 13px; font-weight: 600; transition: border-color .12s, background .12s; min-width: 0; }
+.srp-report > i { width: 32px; height: 32px; flex-shrink: 0; border-radius: 8px; background: var(--surface2); color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+.srp-report > span { min-width: 0; }
+.srp-report small { display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.srp-report:hover { border-color: var(--accent); }
+.srp-report.active { border-color: var(--accent); background: var(--accent-light); box-shadow: inset 0 0 0 1px var(--accent); }
+.srp-report.active > i { background: var(--accent); color: #fff; }
+body.dark .srp-report.active { background: rgba(78,142,247,.12); }
+.srp-control select option:disabled { color: var(--text-muted); }
+
 .srp-bar-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .srp-filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .srp-control { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px; border: 1px solid var(--border-light); border-radius: 8px; background: var(--surface); transition: border-color .12s; }
@@ -23883,8 +23896,10 @@ body.dark #bwz-overlay .bwz-card { background: var(--surface); }
 .srp-menu button { width: 100%; display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; border: none; background: none; border-radius: 7px; cursor: pointer; text-align: left; color: var(--text); font-size: 12.5px; font-weight: 600; }
 .srp-menu button:hover { background: var(--surface2); }
 .srp-menu button > i { font-size: 15px; margin-top: 1px; color: var(--text-muted); width: 16px; text-align: center; }
-.srp-menu button:first-child > i { color: #ef4444; }
-.srp-menu button:last-child > i { color: #16a34a; }
+.srp-menu button > i.fa-file-pdf { color: #ef4444; }
+.srp-menu button > i.fa-file-csv { color: #16a34a; }
+.srp-menu-label { padding: 6px 10px 2px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); }
+.srp-menu-label:not(:first-child) { border-top: 1px solid var(--border-light); margin-top: 4px; padding-top: 8px; }
 .srp-menu small { display: block; font-size: 11px; font-weight: 400; color: var(--text-muted); margin-top: 1px; }
 .srp-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; font-size: 11.5px; color: var(--text-muted); }
 .srp-sep { opacity: .5; }
@@ -24049,6 +24064,59 @@ body.dark .srp-row.active { background: rgba(78,142,247,.14); }
 .srp-pager > div { display: flex; align-items: center; gap: 10px; }
 
 /* Record popup — hosts the Sales-tab detail screen over the report (80% of the window) */
+/* Product-wise / customer-wise reports */
+.srp-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.srp-toolbar .srp-search { margin-left: auto; }
+.srp-toolbar-note { font-size: 11.5px; color: var(--text-muted); }
+.srp-table th.sortable { cursor: pointer; user-select: none; }
+.srp-table th.sortable:hover { color: var(--text); }
+.srp-table th.sorted { color: var(--accent); }
+.srp-table th .fa { font-size: 9px; margin-left: 4px; }
+.srp-sub { display: block; font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+.srp-sub.srp-ind { padding-left: 18px; }
+.srp-caret-cell { width: 18px; color: var(--text-muted); font-size: 10px; }
+.srp-table tbody tr.open td { background: var(--surface2); }
+.srp-table tr.srp-detail-row > td { background: var(--surface2); padding: 4px 14px 14px; }
+.srp-detail { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.srp-detail .srp-card { padding: 12px 14px; }
+.srp-detail .srp-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.srp-detail .srp-fact { background: var(--surface); border: 1px solid var(--border-light); }
+.srp-mini-bar { display: inline-block; width: 70px; height: 5px; background: var(--border-light); border-radius: 99px; overflow: hidden; vertical-align: middle; margin-left: 8px; }
+.srp-mini-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+.srp-tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 99px; margin-left: 6px; vertical-align: 1px; background: rgba(34,197,94,.12); color: #16a34a; }
+.srp-tag.muted { background: var(--surface2); color: var(--text-muted); }
+.srp-actions-row { display: flex; gap: 8px; margin-top: 10px; }
+
+/* Day by day */
+.srp-day { border: 1px solid var(--border-light); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.srp-day + .srp-day { margin-top: 8px; }
+.srp-day-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 14px; border: none; background: none; cursor: pointer; text-align: left; color: var(--text); font-size: 13px; }
+.srp-day-head:hover { background: var(--surface2); }
+.srp-day-head > i { width: 12px; font-size: 10px; color: var(--text-muted); }
+.srp-day-head b { font-weight: 600; min-width: 120px; }
+.srp-day-head .srp-muted { font-size: 12px; }
+.srp-day-head .srp-day-total { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.srp-day.empty .srp-day-head { cursor: default; color: var(--text-muted); }
+.srp-day.empty .srp-day-head:hover { background: none; }
+.srp-day-body { padding: 0 14px 12px; border-top: 1px solid var(--border-light); }
+
+/* Product × day grid */
+.srp-grid-wrap { max-height: 560px; overflow: auto; border: 1px solid var(--border-light); border-radius: 8px; }
+.srp-pivot { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.srp-pivot th, .srp-pivot td { padding: 7px 9px; border-bottom: 1px solid var(--border-light); border-right: 1px solid var(--border-light); white-space: nowrap; text-align: right; font-variant-numeric: tabular-nums; background: var(--surface); color: var(--text); }
+.srp-pivot thead th { position: sticky; top: 0; z-index: 2; font-size: 10.5px; font-weight: 600; color: var(--text-muted); text-align: center; line-height: 1.3; }
+.srp-pivot thead th.wkend { color: #d97706; }
+.srp-pivot .srp-pivot-name { position: sticky; left: 0; z-index: 1; text-align: left; min-width: 200px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; box-shadow: 1px 0 0 var(--border-light); }
+.srp-pivot thead .srp-pivot-name { z-index: 3; }
+.srp-pivot td.zero { color: var(--text-muted); opacity: .45; }
+.srp-pivot .srp-pivot-total { font-weight: 700; background: var(--surface2); }
+.srp-pivot tfoot td { position: sticky; bottom: 0; z-index: 1; font-weight: 700; background: var(--surface2); }
+.srp-pivot tfoot .srp-pivot-name { z-index: 3; }
+@media (max-width: 1100px) {
+  .srp-reports small { display: none; }
+  .srp-detail, .srp-detail .srp-facts { grid-template-columns: minmax(0, 1fr); }
+}
+
 .srp-rec-overlay { position: fixed; inset: 0; z-index: 799; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; animation: fadeIn .15s ease; outline: none; }
 .srp-rec-modal { position: relative; width: 80vw; height: 80vh; background: var(--bg); border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,.3); display: flex; flex-direction: column; overflow: hidden; }
 .srp-rec-modal > div { flex: 1; min-height: 0; }
