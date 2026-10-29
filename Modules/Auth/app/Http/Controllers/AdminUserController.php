@@ -14,7 +14,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\Auth\Services\UserManagementService;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessInvitation;
 use Modules\Business\Models\BusinessMember;
+use Modules\Business\Models\BusinessRole;
 use Modules\CRM\Models\Project as CrmProject;
 use Modules\FileManager\Models\FileManagerFile;
 use Modules\Package\Models\Package;
@@ -47,6 +49,8 @@ class AdminUserController extends Controller
             'roles',
             'businesses' => fn ($query) => $query->orderByDesc('created_at'),
             'businesses.branches',
+            'businesses.members' => fn ($query) => $query->orderBy('created_at'),
+            'businesses.members.user',
             'businesses.payments' => fn ($query) => $query->orderByDesc('created_at'),
             'businesses.payments.package',
             'accounts' => fn ($query) => $query->orderByDesc('created_at'),
@@ -101,8 +105,24 @@ class AdminUserController extends Controller
             $lastActiveByPlatform[UserActivityLog::PLATFORM_WEB] = Carbon::createFromTimestamp($lastSeenAt);
         }
 
+        // Who else uses each business: members (joined) + invitations not accepted yet.
+        $businessIds = $user->businesses->pluck('id');
+        $pendingInvites = BusinessInvitation::query()
+            ->whereIn('business_id', $businessIds)
+            ->where('status', BusinessInvitation::STATUS_PENDING)
+            ->latest()
+            ->get()
+            ->groupBy('business_id');
+        $roleNames = BusinessRole::query()
+            ->whereIn('business_id', $businessIds)
+            ->get(['business_id', 'slug', 'name'])
+            ->groupBy('business_id')
+            ->map(fn ($roles) => $roles->pluck('name', 'slug'));
+
         return view('auth::admin.users.show', [
             'user' => $user,
+            'pendingInvites' => $pendingInvites,
+            'roleNames' => $roleNames,
             'businessStats' => $businessStats,
             'recentActivity' => $this->recentActivity($user, $businessStats),
             'lastSeenAt' => $lastSeenAt ? Carbon::createFromTimestamp($lastSeenAt) : null,

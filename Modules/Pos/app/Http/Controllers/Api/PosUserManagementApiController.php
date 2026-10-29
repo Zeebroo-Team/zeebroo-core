@@ -3,11 +3,12 @@
 namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\Business\Models\BusinessInvitation;
 use Modules\Business\Models\BusinessMember;
 use Modules\Business\Models\BusinessRole;
+use Modules\Business\Services\BusinessInvitationService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\PosCashier;
 
@@ -82,7 +83,7 @@ class PosUserManagementApiController extends Controller
         ]);
     }
 
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, BusinessInvitationService $invitations): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
@@ -124,13 +125,21 @@ class PosUserManagementApiController extends Controller
             ];
         }
 
+        $pending = BusinessInvitation::query()
+            ->where('business_id', $business->id)
+            ->where('status', BusinessInvitation::STATUS_PENDING)
+            ->with('invitedBy')
+            ->latest()
+            ->get();
+
         return response()->json([
             'data'        => $users,
+            'invitations' => $pending->map(fn (BusinessInvitation $i) => $invitations->payload($i))->values(),
             'permissions' => BusinessMember::availablePermissions(),
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, BusinessInvitationService $invitations): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
@@ -149,59 +158,54 @@ class PosUserManagementApiController extends Controller
             'permissions.*' => ['string', 'in:' . implode(',', BusinessMember::permissionKeys())],
         ]);
 
-        if ($business->user->email === $validated['email']) {
-            return response()->json(['message' => 'This user is the business owner and already has full access.'], 422);
-        }
-
-        $user = User::query()->where('email', $validated['email'])->first();
-
-        if ($user === null) {
-            return response()->json([
-                'message' => 'No account found with that email address. The person must create an account first.',
-            ], 404);
-        }
-
-        $exists = BusinessMember::query()
-            ->where('business_id', $business->id)
-            ->where('user_id', $user->id)
-            ->exists();
-
-        if ($exists) {
-            return response()->json(['message' => 'This user is already a member of your business.'], 422);
-        }
-
-        // If no permissions explicitly set, inherit from role template
-        $permissions = $validated['permissions'] ?? null;
-        if ($permissions === null) {
-            $roleTemplate = BusinessRole::query()
-                ->where('business_id', $business->id)
-                ->where('slug', $validated['role'])
-                ->first();
-            $permissions = $roleTemplate?->permissions ?? [];
-        }
-
-        $member = BusinessMember::create([
-            'business_id' => $business->id,
-            'user_id'     => $user->id,
-            'role'        => $validated['role'],
-            'permissions' => $permissions,
-            'status'      => 'active',
-            'invited_by'  => $request->user()->id,
-        ]);
+        // Registered or not, the person gets an invitation email; membership is created on accept.
+        [$invitation, $sent] = $invitations->invite(
+            $business,
+            $validated['email'],
+            $validated['role'],
+            $validated['permissions'] ?? null,
+            $request->user(),
+        );
 
         return response()->json([
-            'data' => [
-                'id'          => (int) $member->id,
-                'user_id'     => (int) $user->id,
-                'name'        => $user->name,
-                'email'       => $user->email,
-                'role'        => $member->role,
-                'permissions' => $member->permissions ?? [],
-                'status'      => $member->status,
-                'is_owner'    => false,
-                'joined_at'   => $member->created_at?->toIso8601String(),
-            ],
+            'data'       => $invitations->payload($invitation),
+            'email_sent' => $sent,
+            'message'    => $sent
+                ? "Invitation sent to {$invitation->email}."
+                : 'Invitation saved, but the email could not be sent. Use "Resend" to try again.',
         ], 201);
+    }
+
+    public function resendInvitation(Request $request, int $invitationId, BusinessInvitationService $invitations): JsonResponse
+    {
+        $invitation = $this->pendingInvitationOrFail($request, $invitationId);
+
+        if (! $invitations->resend($invitation)) {
+            return response()->json(['message' => 'The email could not be sent. Please try again in a few minutes.'], 503);
+        }
+
+        return response()->json([
+            'data'    => $invitations->payload($invitation->refresh()),
+            'message' => "Invitation resent to {$invitation->email}.",
+        ]);
+    }
+
+    public function cancelInvitation(Request $request, int $invitationId, BusinessInvitationService $invitations): JsonResponse
+    {
+        $invitations->cancel($this->pendingInvitationOrFail($request, $invitationId));
+
+        return response()->json(['message' => 'Invitation cancelled.']);
+    }
+
+    private function pendingInvitationOrFail(Request $request, int $invitationId): BusinessInvitation
+    {
+        $business = $this->businessOrAbort($request);
+
+        return BusinessInvitation::query()
+            ->where('business_id', $business->id)
+            ->where('id', $invitationId)
+            ->where('status', BusinessInvitation::STATUS_PENDING)
+            ->firstOrFail();
     }
 
     public function update(Request $request, int $memberId): JsonResponse

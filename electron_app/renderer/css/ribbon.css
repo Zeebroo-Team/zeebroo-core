@@ -17642,6 +17642,25 @@ body.dark .svc-req-num { background: color-mix(in srgb, var(--accent) 15%, trans
 .um-status-active   { background:rgba(34,197,94,.12); color:#16a34a; }
 .um-status-pending  { background:rgba(234,179,8,.12);  color:#a16207; }
 .um-status-inactive { background:var(--surface3); color:var(--text-muted); }
+.um-status-expired  { background:rgba(220,38,38,.10); color:#dc2626; }
+
+/* Pending email invitations (not yet members) */
+.um-invite-section-title {
+  padding:10px 14px 6px; font-size:10px; font-weight:700; text-transform:uppercase;
+  letter-spacing:.06em; color:var(--text-muted); background:var(--surface2);
+  border-bottom:1px solid var(--border-light);
+}
+.um-invite-section-title i { margin-right:4px; }
+.um-invite-card .um-card-name { font-weight:500; }
+.um-avatar.um-invite-avatar,
+.um-detail-avatar.um-invite-avatar { background:var(--surface3); color:var(--text-muted); border:1px dashed var(--border); }
+.um-invite-facts { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.um-invite-facts > div {
+  display:flex; flex-direction:column; gap:2px; padding:10px 12px;
+  border:1px solid var(--border); border-radius:var(--radius-sm); background:var(--surface);
+}
+.um-invite-facts span   { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-muted); }
+.um-invite-facts strong { font-size:13px; color:var(--text); }
 
 /* Right column — detail */
 .um-detail-col { flex:1; overflow-y:auto; padding:24px; }

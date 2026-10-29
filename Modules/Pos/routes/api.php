@@ -554,6 +554,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('users',          [PosUserManagementApiController::class, 'store'])  ->name('users.store');
     Route::put   ('users/{member}', [PosUserManagementApiController::class, 'update']) ->name('users.update');
     Route::delete('users/{member}', [PosUserManagementApiController::class, 'destroy'])->name('users.destroy');
+    Route::post  ('users/invitations/{invitation}/resend', [PosUserManagementApiController::class, 'resendInvitation'])->whereNumber('invitation')->middleware('throttle:10,1')->name('users.invitations.resend');
+    Route::delete('users/invitations/{invitation}',        [PosUserManagementApiController::class, 'cancelInvitation'])->whereNumber('invitation')->name('users.invitations.cancel');
 
     // Role Management
     Route::get   ('roles',        [PosRoleManagementApiController::class, 'index'])  ->name('roles.index');
