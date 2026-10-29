@@ -12723,7 +12723,7 @@ async function loadOrdersView() {
   const poSection = $('#hov-po-section');
   const poKpis    = $('#hov-po-kpis');
   if (poSection) poSection.style.display = poEnabled ? '' : 'none';
-  if (poKpis)    poKpis.style.display    = poEnabled ? '' : 'none';
+  if (poKpis)    poKpis.style.display    = poEnabled ? 'contents' : 'none';
 
   salesTbody.innerHTML = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
   if (poEnabled) poTbody.innerHTML = '<tr><td colspan="5" class="hov-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>';
