@@ -53951,6 +53951,7 @@ async function submitDsCreate() {
 // ── User Management ────────────────────────────────────────────────────────
 (function () {
   let _umUsers = [];         // all users (owner + members)
+  let _umInvites = [];       // pending / expired email invitations (not yet members)
   let _umSelected = null;    // currently selected user object
   let _umEditTarget = null;  // user being edited in modal
 
@@ -54250,16 +54251,25 @@ async function submitDsCreate() {
     if (res.status !== 200) return;
 
     _umUsers = res.body.data || [];
+    _umInvites = res.body.invitations || [];
     if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
 
+    _umUpdateCountBadges();
+    renderUserList(listId || 'psm-users-list');
+  }
+
+  function _umUpdateCountBadges() {
     const count = _umUsers.length;
-    const countLabel = `${count} user${count !== 1 ? 's' : ''}`;
+    let countLabel = `${count} user${count !== 1 ? 's' : ''}`;
+    if (_umInvites.length) countLabel += ` · ${_umInvites.length} invited`;
     ['psm-users-count', 'bwz-sc-users-count'].forEach(id => {
       const badge = $(`#${id}`);
       if (badge) badge.textContent = countLabel;
     });
+  }
 
-    renderUserList(listId || 'psm-users-list');
+  function _esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
   function renderUserList(listId) {
@@ -54286,15 +54296,117 @@ async function submitDsCreate() {
             </div>
           </div>
         </div>`;
-    }).join('');
+    }).join('') + _renderInviteCards();
 
-    list.querySelectorAll('.um-user-card').forEach(card => {
+    list.querySelectorAll('.um-user-card[data-uid]').forEach(card => {
       card.addEventListener('click', () => {
         const uid = parseInt(card.dataset.uid);
         const user = _umUsers.find(u => u.user_id === uid);
         if (user) selectUser(user, card, detailId);
       });
     });
+    list.querySelectorAll('.um-user-card[data-iid]').forEach(card => {
+      card.addEventListener('click', () => {
+        const inv = _umInvites.find(i => i.id === parseInt(card.dataset.iid));
+        if (inv) selectInvite(inv, card, detailId);
+      });
+    });
+  }
+
+  // ── Pending invitations ─────────────────────────────────────────────────
+
+  function _renderInviteCards() {
+    if (_umInvites.length === 0) return '';
+    return `<div class="um-invite-section-title"><i class="fa fa-envelope"></i> Invitations not accepted yet (${_umInvites.length})</div>` +
+      _umInvites.map(inv => `
+        <div class="um-user-card um-invite-card" data-iid="${inv.id}">
+          <div class="um-avatar um-invite-avatar"><i class="fa fa-envelope"></i></div>
+          <div class="um-card-info">
+            <div class="um-card-name">${_esc(inv.name || inv.email)}</div>
+            <div class="um-card-email">${inv.name ? _esc(inv.email) : (inv.has_account ? 'Has a Zeebroo account' : 'New to Zeebroo')}</div>
+            <div class="um-card-badges">
+              <span class="um-role-badge um-role-${_esc(inv.role)}">${_esc(inv.role_name || inv.role)}</span>
+              ${_statusBadgeHtml(inv.status === 'expired' ? 'expired' : 'pending')}
+            </div>
+          </div>
+        </div>`).join('');
+  }
+
+  function selectInvite(inv, cardEl, detailId) {
+    detailId = detailId || 'um-detail';
+    _umSelected = null;
+    const listId = detailId.replace(/-detail$/, '-list');
+    $(`#${listId}`)?.querySelectorAll('.um-user-card').forEach(c => c.classList.remove('active'));
+    if (cardEl) cardEl.classList.add('active');
+    renderInviteDetail(inv, detailId);
+  }
+
+  function renderInviteDetail(inv, detailId) {
+    const detail = $(`#${detailId}`);
+    if (!detail) return;
+    const fmt = d => d ? new Date(d).toLocaleString() : '—';
+    const expired = inv.status === 'expired';
+
+    detail.innerHTML = `
+      <div class="um-detail-header">
+        <div class="um-detail-avatar um-invite-avatar"><i class="fa fa-envelope"></i></div>
+        <div class="um-detail-meta">
+          <div class="um-detail-name">${_esc(inv.name || inv.email)}</div>
+          ${inv.name ? `<div class="um-detail-email">${_esc(inv.email)}</div>` : ''}
+          <div class="um-detail-email">${inv.has_account ? 'Already has a Zeebroo account — will join on accept' : 'No Zeebroo account yet — will set a password on accept'}</div>
+          <div class="um-detail-joined"><i class="fa fa-paper-plane"></i> Sent ${fmt(inv.sent_at)}${inv.invited_by ? ' by ' + _esc(inv.invited_by) : ''}</div>
+        </div>
+        <div>${_statusBadgeHtml(expired ? 'expired' : 'pending')}</div>
+      </div>
+
+      <div class="um-detail-section">
+        <div class="um-detail-section-title">Invitation</div>
+        <div class="um-invite-facts">
+          <div><span>Role</span><strong>${_esc(inv.role_name || inv.role)}</strong></div>
+          <div><span>Status</span><strong>${expired ? 'Expired — not accepted' : 'Waiting for acceptance'}</strong></div>
+          <div><span>${expired ? 'Expired' : 'Expires'}</span><strong>${fmt(inv.expires_at)}</strong></div>
+          <div><span>Permissions</span><strong>${(inv.permissions || []).length} features</strong></div>
+        </div>
+      </div>
+
+      <div class="um-detail-actions">
+        <button class="btn-primary" id="um-invite-resend"><i class="fa fa-paper-plane"></i> Resend Invitation</button>
+        <button class="um-remove-btn" id="um-invite-cancel"><i class="fa fa-ban"></i> Cancel Invitation</button>
+      </div>`;
+
+    detail.querySelector('#um-invite-resend')?.addEventListener('click', e => resendInvite(inv, e.currentTarget));
+    detail.querySelector('#um-invite-cancel')?.addEventListener('click', () => cancelInvite(inv));
+  }
+
+  async function _reloadUsersKeepInvite(inviteId) {
+    const ids = _umActiveUserIds();
+    await loadUsersView(ids.listId);
+    const inv = inviteId && _umInvites.find(i => i.id === inviteId);
+    if (inv) selectInvite(inv, $(`#${ids.listId} [data-iid="${inv.id}"]`), ids.detailId);
+    else { const d = $(`#${ids.detailId}`); if (d) d.innerHTML = '<div class="um-detail-empty"><i class="fa fa-user-shield"></i><p>Select a user to view their role and permissions</p></div>'; }
+  }
+
+  async function resendInvite(inv, btn) {
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…'; }
+    const res = await API.usersInviteResend(inv.id);
+    if (res.status === 200) {
+      toast(res.body?.message || 'Invitation resent.', 'success');
+      await _reloadUsersKeepInvite(inv.id);
+    } else {
+      toast(res.body?.message || 'Failed to resend invitation.', 'error');
+      if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Resend Invitation'; }
+    }
+  }
+
+  async function cancelInvite(inv) {
+    if (!confirm(`Cancel the invitation for ${inv.email}? The link in their email will stop working.`)) return;
+    const res = await API.usersInviteCancel(inv.id);
+    if (res.status === 200) {
+      toast('Invitation cancelled.', 'success');
+      await _reloadUsersKeepInvite(null);
+    } else {
+      toast(res.body?.message || 'Failed to cancel invitation.', 'error');
+    }
   }
 
   function selectUser(user, cardEl, detailId) {
@@ -54456,23 +54568,18 @@ async function submitDsCreate() {
     if (!email) { _showModalErr(errEl, 'Please enter an email address.'); return; }
     errEl.style.display = 'none';
     const btn = $('#um-add-save');
-    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Adding…';
+    btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
 
     const res = await API.usersAdd({ email, role, permissions: perms });
-    btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Add User';
+    btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Send Invitation';
 
     if (res.status === 201) {
       closeAddModal();
-      const ids = _umActiveUserIds();
-      await loadUsersView(ids.listId);
-      const newUser = _umUsers.find(u => u.email === email);
-      if (newUser) {
-        const { listId, detailId } = ids;
-        const card = $(`#${listId} [data-uid="${newUser.user_id}"]`);
-        selectUser(newUser, card, detailId);
-      }
+      toast(res.body?.message || `Invitation sent to ${email}.`, res.body?.email_sent === false ? 'error' : 'success');
+      await _reloadUsersKeepInvite(res.body?.data?.id);
     } else {
-      _showModalErr(errEl, res.body?.message || 'Failed to add user.');
+      const fieldErr = res.body?.errors && Object.values(res.body.errors)[0]?.[0];
+      _showModalErr(errEl, fieldErr || res.body?.message || 'Failed to send invitation.');
     }
   }
 
@@ -55186,19 +55293,14 @@ async function submitDsCreate() {
       return;
     }
     _umUsers = usersRes.body.data || [];
+    _umInvites = usersRes.body.invitations || [];
     if (usersRes.body.permissions) _buildPermGroupsFromApi(usersRes.body.permissions);
     if (rolesRes.status === 200) {
       _umRoles = rolesRes.body.data || [];
       if (rolesRes.body.permissions) _buildPermGroupsFromApi(rolesRes.body.permissions);
     }
 
-    const count = _umUsers.length;
-    const countLabel = `${count} user${count !== 1 ? 's' : ''}`;
-    ['psm-users-count', 'bwz-sc-users-count'].forEach(id => {
-      const badge = $(`#${id}`);
-      if (badge) badge.textContent = countLabel;
-    });
-
+    _umUpdateCountBadges();
     renderUserList(listId);
   };
 

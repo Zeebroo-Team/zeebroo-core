@@ -575,6 +575,8 @@ const API = (() => {
     usersAdd:    (body)              => request('POST',   '/users', body),
     usersUpdate: (memberId, body)    => request('PUT',    `/users/${memberId}`, body),
     usersRemove: (memberId)          => request('DELETE', `/users/${memberId}`),
+    usersInviteResend: (inviteId)    => request('POST',   `/users/invitations/${inviteId}/resend`),
+    usersInviteCancel: (inviteId)    => request('DELETE', `/users/invitations/${inviteId}`),
 
     // Role Management
     rolesList:   ()               => request('GET',    '/roles'),

@@ -11,6 +11,7 @@
 .ads-name{margin:0;font-size:21px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px;}
 .ads-email{margin:3px 0 0;font-size:13px;color:var(--muted);}
 .ads-meta{margin:6px 0 0;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;}
+.ads-users-chip{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);}
 .ads-role{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
 .ads-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
 .ads-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
@@ -23,7 +24,7 @@
 .ads-msg{display:flex;align-items:center;gap:8px;margin:-8px 0 18px;padding:10px 14px;border-radius:10px;font-size:13px;
     background:color-mix(in srgb,#22c55e 8%,var(--card));border:1px solid color-mix(in srgb,#22c55e 30%,var(--border));}
 .ads-msg--err{background:color-mix(in srgb,#ef4444 8%,var(--card));border-color:color-mix(in srgb,#ef4444 35%,var(--border));color:#dc2626;}
-.ads-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:22px;}
+.ads-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:22px;}
 @media(max-width:760px){.ads-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
 .ads-stat{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);}
 .ads-stat-label{margin:0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
@@ -157,6 +158,9 @@
 
     @php
         $branchCount = $user->businesses->sum(fn ($b) => $b->branches->count());
+        // Distinct people using any of this user's businesses (owner excluded).
+        $teamUserCount = $user->businesses->flatMap(fn ($b) => $b->members->pluck('user_id'))->unique()->count();
+        $pendingInviteCount = $pendingInvites->flatten()->count();
     @endphp
     <div class="ads-summary">
         <div class="ads-stat">
@@ -166,6 +170,10 @@
         <div class="ads-stat">
             <p class="ads-stat-label">Branches</p>
             <p class="ads-stat-value">{{ $branchCount }}</p>
+        </div>
+        <div class="ads-stat">
+            <p class="ads-stat-label">Team users</p>
+            <p class="ads-stat-value">{{ $teamUserCount }}@if($pendingInviteCount) <span style="font-size:12px;font-weight:600;color:var(--muted);">+ {{ $pendingInviteCount }} invited</span>@endif</p>
         </div>
         <div class="ads-stat">
             <p class="ads-stat-label">Accounts</p>
@@ -185,11 +193,18 @@
         @else
             <div class="ads-card">
                 @foreach($user->businesses as $business)
-                    @php $stats = $businessStats[$business->id]; @endphp
+                    @php
+                        $stats = $businessStats[$business->id];
+                        $bizMembers = $business->members->filter(fn ($m) => $m->user !== null);
+                        $bizInvites = $pendingInvites->get($business->id, collect());
+                        $bizRoles = $roleNames->get($business->id, collect());
+                    @endphp
                     <div class="ads-biz">
                         <div class="ads-biz-head">
                             <div>
-                                <p class="ads-biz-name">{{ $business->name }}</p>
+                                <p class="ads-biz-name">{{ $business->name }}
+                                    <span class="ads-users-chip" title="Owner + team members using this business"><i class="fa fa-users"></i> {{ $bizMembers->count() + 1 }} {{ \Illuminate\Support\Str::plural('user', $bizMembers->count() + 1) }}</span>
+                                </p>
                                 @if($business->category)<p class="ads-biz-cat">{{ str_replace('_', ' ', $business->category) }}</p>@endif
                             </div>
                             <span class="ads-biz-date" title="{{ $business->created_at?->format('d M Y, H:i:s') }}">Registered {{ $business->created_at?->format('d M Y') }}</span>
@@ -217,6 +232,7 @@
 
                         <div class="ads-biz-tabs" role="tablist" aria-label="{{ $business->name }} analysis">
                             <button type="button" class="ads-biz-tab is-active" data-tab="overview"><i class="fa fa-chart-simple"></i> Overview</button>
+                            <button type="button" class="ads-biz-tab" data-tab="users"><i class="fa fa-users"></i> Users ({{ $bizMembers->count() + 1 }})</button>
                             <button type="button" class="ads-biz-tab" data-tab="sales"><i class="fa fa-cart-shopping"></i> Sales &amp; Purchases</button>
                             <button type="button" class="ads-biz-tab" data-tab="hr"><i class="fa fa-people-group"></i> HR</button>
                             <button type="button" class="ads-biz-tab" data-tab="crm"><i class="fa fa-bullseye"></i> CRM</button>
@@ -250,6 +266,70 @@
                                     <p class="ads-mini-stat-label">Storage used</p>
                                     <p class="ads-mini-stat-value">{{ $stats['overview']['storage_human'] }}</p>
                                 </div>
+                            </div>
+                        </div>
+
+                        <div class="ads-biz-panel" data-panel="users" hidden>
+                            <div class="ads-stat-grid" style="margin-bottom:12px;">
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Total users</p>
+                                    <p class="ads-mini-stat-value">{{ $bizMembers->count() + 1 }} <span style="font-size:11px;font-weight:600;color:var(--muted);">incl. owner</span></p>
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Active members</p>
+                                    <p class="ads-mini-stat-value">{{ $bizMembers->where('status', 'active')->count() }}</p>
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Invitations not accepted</p>
+                                    <p class="ads-mini-stat-value">{{ $bizInvites->count() }}</p>
+                                </div>
+                            </div>
+
+                            <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">
+                                <table class="ads-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Email</th>
+                                            <th>Role</th>
+                                            <th>Status</th>
+                                            <th>Since</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td data-label="Name">{{ $user->name }}</td>
+                                            <td data-label="Email">{{ $user->email }}</td>
+                                            <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,#6d28d9 13%,transparent);color:#6d28d9;">Owner</span></td>
+                                            <td data-label="Status">Active</td>
+                                            <td data-label="Since">{{ $business->created_at?->format('d M Y') }}</td>
+                                        </tr>
+                                        @foreach($bizMembers as $member)
+                                            <tr>
+                                                <td data-label="Name"><a href="{{ route('admin.users.show', $member->user) }}" style="color:inherit;font-weight:600;">{{ $member->user->name }}</a></td>
+                                                <td data-label="Email">{{ $member->user->email }}</td>
+                                                <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,{{ $member->roleBadgeColor() }} 15%,transparent);color:{{ $member->roleBadgeColor() }};">{{ $bizRoles->get($member->role) ?? $member->roleLabel() }}</span></td>
+                                                <td data-label="Status" style="text-transform:capitalize;">{{ $member->status }}</td>
+                                                <td data-label="Since">{{ $member->created_at?->format('d M Y') }}</td>
+                                            </tr>
+                                        @endforeach
+                                        @foreach($bizInvites as $invite)
+                                            <tr style="opacity:.8;">
+                                                <td data-label="Name" style="color:var(--muted);font-style:italic;">Invited</td>
+                                                <td data-label="Email">{{ $invite->email }}</td>
+                                                <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;">{{ $bizRoles->get($invite->role) ?? ucfirst($invite->role) }}</span></td>
+                                                <td data-label="Status">
+                                                    @if($invite->isExpired())
+                                                        <span class="ads-badge ads-badge--failed">Invite expired</span>
+                                                    @else
+                                                        <span class="ads-badge ads-badge--pending">Invite pending</span>
+                                                    @endif
+                                                </td>
+                                                <td data-label="Since" title="Last sent {{ $invite->last_sent_at?->format('d M Y, H:i') }}">{{ $invite->created_at?->format('d M Y') }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
