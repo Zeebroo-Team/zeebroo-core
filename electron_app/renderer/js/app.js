@@ -7558,7 +7558,14 @@ async function showApp() {
 // ── Bank Account Setup Wizard ──────────────────────────────────────────────
 const _bwz = { banks: [], bankTypes: [], billingActive: false, billingNextStep: null };
 
+// "Don't show again" flag — stops the wizard auto-opening after sign-in for this business.
+// The Home subnav setup-wizard button still opens it on demand.
+function _bwzDismissKey() {
+  return 'bwz_dismissed_' + (state._bizId || 'default');
+}
+
 async function _checkBankOnboarding() {
+  if (localStorage.getItem(_bwzDismissKey())) return;
   const res = await API.accounts();
   if (res.status !== 200) return;
   if ((res.body?.data || []).length > 0) {
@@ -7569,7 +7576,13 @@ async function _checkBankOnboarding() {
   _bankWizOpen();
 }
 
-async function _bankWizOpen() {
+// opts.standalone — just the bank form (no steps/skip); closes after create and
+// calls opts.onCreated(account). Used by Settings → Accounts and the POS account dropdown.
+async function _bankWizOpen(opts = {}) {
+  _bwz.standalone = !!opts.standalone;
+  _bwz.onCreated  = opts.onCreated || null;
+  $('#bwz-overlay').classList.toggle('bwz-standalone', _bwz.standalone);
+  $('#bwz-panel-1-title').textContent = _bwz.standalone ? 'Add a bank account' : 'Set up your bank account';
   // Ensure panel-1 is visible and every other wizard panel is hidden
   $('#bwz-panel-1').style.display          = '';
   $('#bwz-panel-billing').style.display    = 'none';
@@ -7579,7 +7592,7 @@ async function _bankWizOpen() {
   $('#bwz-panel-done').style.display       = 'none';
   $('#bwz-submit-btn').style.display       = '';
   $('#bwz-billing-skip-btn').style.display = '';
-  $('#bwz-billing-skip-btn').innerHTML     = '<i class="fa fa-forward-step"></i> Set up later';
+  $('#bwz-billing-skip-btn').innerHTML     = '<i class="fa fa-forward-step"></i> Skip this step';
   $('#bwz-ps-cat-skip-btn').style.display  = 'none';
   $('#bwz-pos-footer-back').style.display  = 'none';
   $('#bwz-pos-footer-save').style.display  = 'none';
@@ -7675,6 +7688,12 @@ async function _bwzSubmit() {
   // Refresh the account dropdown so the new account appears immediately
   _posAccountsCache = null;
   loadPosAccounts();
+  if (_bwz.standalone) {
+    const onCreated = _bwz.onCreated;
+    _bwzClose();
+    onCreated?.(res.body?.data);
+    return;
+  }
   // Always offer billing setup as step 2 after the bank account is created
   _bwzShowBillingPanel();
 }
@@ -7979,8 +7998,11 @@ function _bwzClose() {
   const _ov = $('#bwz-overlay');
   _ov.classList.remove('bwz-behind');
   _ov.style.display = 'none';
+  _ov.classList.remove('bwz-standalone');
   _bwz.billingActive = false;
   _bwz.billingNextStep = null;
+  _bwz.standalone = false;
+  _bwz.onCreated = null;
 }
 // Drop wizard behind a child modal (stays visible, z-index lowered below .modal-overlay)
 function _bwzGoBehind() {
@@ -8895,6 +8917,18 @@ $('#home-subnav-setup-wizard')?.addEventListener('click', async () => {
 
 // Close (X) — safe to close any time, each step already persists as it's completed
 $('#bwz-wizard-close')?.addEventListener('click', _bwzClose);
+
+// Remind me later — just close; the wizard auto-opens again on next sign-in
+$('#bwz-remind-later-btn')?.addEventListener('click', () => {
+  _bwzClose();
+  toast('We\'ll remind you next time you sign in', 'info');
+});
+// Don't show again — stop auto-opening for this business
+$('#bwz-dont-show-btn')?.addEventListener('click', () => {
+  localStorage.setItem(_bwzDismissKey(), '1');
+  _bwzClose();
+  toast('Setup wizard hidden. Open it any time from Home → Setup wizard', 'info');
+});
 
 // Top step badges — click any visible step to jump straight to it (free navigation)
 [1, 2, 3, 4, 5].forEach(i => {
@@ -28739,7 +28773,23 @@ $('#pos-acct-add-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   _posAcctDrop.classList.remove('open');
   _posAcctBtn.classList.remove('active');
-  _bankWizOpen();
+  _bankWizOpen({ standalone: true });
+});
+
+// Settings → Accounts "Add account" — create, then add it to the deposit-account select and pick it
+$('#psm-add-account-btn')?.addEventListener('click', () => {
+  _bankWizOpen({
+    standalone: true,
+    onCreated: (acct) => {
+      if (!acct?.id) return;
+      const sel = $('#psm-default-account');
+      const opt = document.createElement('option');
+      opt.value = acct.id;
+      opt.textContent = acct.account_name + (acct.bank_name ? ' · ' + acct.bank_name : '');
+      sel.appendChild(opt);
+      sel.value = String(acct.id);
+    },
+  });
 });
 
 document.addEventListener('click', (e) => {

@@ -23839,6 +23839,34 @@ body.dark #bwz-overlay .bwz-card { background: var(--surface); }
 #bwz-overlay .bwz-pos-info-note i { margin-top: 1px; color: var(--accent); flex-shrink: 0; }
 /* Always pin the right-side footer group to the right edge */
 #bwz-overlay .bwz-footer-right { margin-left: auto; gap: 18px; }
+#bwz-overlay .bwz-footer-dismiss {
+  display: flex; align-items: center; gap: 14px;
+  padding-left: 16px; border-left: 1px solid var(--border-light);
+}
+#bwz-overlay .bwz-footer-dismiss .bwz-btn-skip { font-size: 12px; }
+/* Standalone "add account" mode — only the bank form, no wizard steps */
+#bwz-overlay.bwz-standalone .bwz-steps,
+#bwz-overlay.bwz-standalone .bwz-time-estimate,
+#bwz-overlay.bwz-standalone .bwz-footer-dismiss,
+#bwz-overlay.bwz-standalone #bwz-billing-skip-btn { display: none !important; }
+/* Close button normally sits on the dark step header — restyle for the light card */
+#bwz-overlay.bwz-standalone .bwz-wizard-close {
+  top: 18px; right: 18px;
+  background: var(--surface2); color: var(--text-muted);
+  border: 1px solid var(--border-light);
+}
+#bwz-overlay.bwz-standalone .bwz-wizard-close:hover { background: var(--border-light); color: var(--text); }
+
+/* Settings → Accounts: select + "Add account" button side by side */
+.psm-select-with-btn { display: flex; align-items: stretch; gap: 8px; }
+.psm-select-with-btn .psm-select { flex: 1 1 auto; min-width: 0; }
+.psm-add-acct-btn {
+  flex: 0 0 auto; padding: 0 14px; border-radius: 8px;
+  border: 1.5px solid var(--accent); background: var(--accent-light);
+  color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.psm-add-acct-btn:hover { background: var(--accent); color: #fff; }
 /* --- Receipt editor open button (POS sub-step 4) --- */
 #bwz-overlay .bwz-pos-receipt-open-btn {
   width: 100%; margin-top: 18px;

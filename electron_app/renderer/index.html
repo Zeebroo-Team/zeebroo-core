@@ -16429,7 +16429,10 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <div class="psm-section-label"><i class="fa fa-coins"></i> Payment accounts</div>
             <div class="psm-field-row">
               <label class="psm-field-label" for="psm-default-account">Default deposit account</label>
-              <select id="psm-default-account" class="psm-select"><option value="">— None —</option></select>
+              <div class="psm-select-with-btn">
+                <select id="psm-default-account" class="psm-select"><option value="">— None —</option></select>
+                <button type="button" class="psm-add-acct-btn" id="psm-add-account-btn" title="Add a new bank / cash account"><i class="fa fa-plus"></i> Add account</button>
+              </div>
               <span class="psm-hint">Sales payments will be deposited here by default</span>
             </div>
             <div class="psm-field-row">
@@ -18535,7 +18538,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <!-- Panel 1: Bank account form -->
     <div class="bwz-panel" id="bwz-panel-1">
       <div class="bwz-panel-icon"><i class="fa fa-building-columns"></i></div>
-      <h2 class="bwz-panel-title">Set up your bank account</h2>
+      <h2 class="bwz-panel-title" id="bwz-panel-1-title">Set up your bank account</h2>
       <p class="bwz-panel-sub">Add your account details, banking information, and opening balance.</p>
       <p class="bwz-time-estimate"><i class="fa fa-clock"></i> Takes about 3–5 minutes. You can skip any step and return later.</p>
 
@@ -19248,6 +19251,11 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
         <button class="bwz-btn-skip" id="bwz-ps-cat-skip-btn" style="display:none"><i class="fa fa-forward-step"></i> Skip this step</button>
         <button class="bwz-btn-skip" id="bwz-sc-footer-skip" style="display:none"><i class="fa fa-forward-step"></i> Skip this step</button>
         <button class="bwz-btn-next" id="bwz-sc-footer-save" style="display:none">Save &amp; Continue <i class="fa fa-arrow-right"></i></button>
+      </div>
+      <!-- Dismiss the whole wizard: until next sign-in, or permanently (re-open from Home → setup wizard button) -->
+      <div class="bwz-footer-dismiss">
+        <button class="bwz-btn-skip" id="bwz-remind-later-btn" title="Close now and show again next time you sign in"><i class="fa fa-clock"></i> Remind me later</button>
+        <button class="bwz-btn-skip" id="bwz-dont-show-btn" title="Stop opening this wizard automatically. You can still open it from the Home setup wizard button."><i class="fa fa-eye-slash"></i> Don't show again</button>
       </div>
     </div>
 
