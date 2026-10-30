@@ -57842,6 +57842,71 @@ async function submitDsCreate() {
     return `<span class="crm-src" style="--src:${escHtml(s.color)}" title="Source: ${escHtml(s.label)}"><i class="${escHtml(s.icon)}"></i><span class="crm-src-label">${escHtml(s.label)}</span></span>`;
   }
 
+  function _crmScoreBadge(key) {
+    const s = (_crmPipeline?.scores || []).find(x => x.key === key);
+    if (!s) return '';
+    return `<span class="crm-src" style="--src:${escHtml(s.color)}" title="Score: ${escHtml(s.label)}"><i class="fa fa-fire"></i><span class="crm-src-label">${escHtml(s.label)}</span></span>`;
+  }
+
+  // A lost stage needs a lost reason and some stages a free-text reason; pending approval /
+  // quotation sent are only set by the quotation workflow. Resolves the extra move payload,
+  // or null when the move isn't allowed or was cancelled.
+  function _crmMoveDetails(stageId) {
+    const col = (_crmPipeline?.columns || []).find(c => c.id === stageId);
+    if (!col) return Promise.resolve({});
+    if (col.is_reserved) {
+      toast(`"${col.name}" is set automatically by the quotation workflow.`, 'error');
+      return Promise.resolve(null);
+    }
+    const lost = col.is_lost || col.system_key === 'lost';
+    if (!lost && !col.requires_reason) return Promise.resolve({});
+    return _crmAskReason({ title: `Move to ${col.name}`, lost, reasonRequired: !lost });
+  }
+
+  function _crmAskReason({ title, lost = false, reasonRequired = false, submitLabel = 'Move' }) {
+    const modal   = $('#crm-move-reason-modal');
+    const sel     = $('#crm-move-reason-lost');
+    const text    = $('#crm-move-reason-text');
+    const alertEl = $('#crm-move-reason-alert');
+    $('#crm-move-reason-title').textContent = title;
+    $('#crm-move-reason-lost-wrap').style.display = lost ? '' : 'none';
+    sel.innerHTML = '<option value="">— Pick a reason —</option>'
+      + (_crmPipeline?.lost_reasons || []).map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
+    $('#crm-move-reason-text-label').textContent = lost ? 'Note (optional)' : reasonRequired ? 'Reason *' : 'Reason (optional)';
+    $('#crm-move-reason-submit').innerHTML = `<i class="fa fa-check"></i> ${escHtml(submitLabel)}`;
+    text.value = '';
+    alertEl.style.display = 'none';
+    modal.style.display = 'flex';
+    setTimeout(() => (lost ? sel : text).focus(), 30);
+
+    return new Promise(resolve => {
+      const finish = value => {
+        modal.style.display = 'none';
+        $('#crm-move-reason-submit').removeEventListener('click', onSubmit);
+        $('#crm-move-reason-cancel').removeEventListener('click', onCancel);
+        $('#crm-move-reason-close').removeEventListener('click', onCancel);
+        modal.removeEventListener('click', onBackdrop);
+        document.removeEventListener('keydown', onKey, true);
+        resolve(value);
+      };
+      const fail = msg => { alertEl.textContent = msg; alertEl.style.display = ''; };
+      const onSubmit = () => {
+        const note = text.value.trim();
+        if (lost && !sel.value) return fail('Pick a lost reason.');
+        if (reasonRequired && !note) return fail('A reason is required.');
+        finish(lost ? { lost_reason_id: parseInt(sel.value), lost_reason: note || null } : { reason: note || null });
+      };
+      const onCancel   = () => finish(null);
+      const onBackdrop = e => { if (e.target === modal) finish(null); };
+      const onKey      = e => { if (e.key === 'Escape') { e.stopPropagation(); finish(null); } };
+      $('#crm-move-reason-submit').addEventListener('click', onSubmit);
+      $('#crm-move-reason-cancel').addEventListener('click', onCancel);
+      $('#crm-move-reason-close').addEventListener('click', onCancel);
+      modal.addEventListener('click', onBackdrop);
+      document.addEventListener('keydown', onKey, true);
+    });
+  }
+
   function _crmSourceFieldHtml(id, selected) {
     const sources = _crmPipeline?.sources || [];
     const unknown = !selected || !sources.some(s => s.key === selected)
@@ -57972,7 +58037,7 @@ async function submitDsCreate() {
       const dot = `<span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>`;
       if (!_crmLeadCan(r, 'move')) return `<span class="crm-list-stage">${dot}${escHtml(col.name)}</span>`;
       return `<span class="crm-list-stage">${dot}<select data-move-lead="${r.id}" data-from-stage="${r.stage_id}">
-        ${cols.map(c => `<option value="${c.id}"${c.id === r.stage_id ? ' selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+        ${cols.map(c => `<option value="${c.id}"${c.id === r.stage_id ? ' selected' : ''}${c.is_reserved && c.id !== r.stage_id ? ' disabled' : ''}>${escHtml(c.name)}</option>`).join('')}
       </select></span>`;
     };
 
@@ -58022,8 +58087,10 @@ async function submitDsCreate() {
   $('#crm-pipeline-list')?.addEventListener('change', async e => {
     const sel = e.target.closest('select[data-move-lead]');
     if (!sel) return;
+    const extra = await _crmMoveDetails(parseInt(sel.value));
+    if (extra === null) { sel.value = sel.dataset.fromStage; return; }
     sel.disabled = true;
-    const res = await API.crmMoveLead(parseInt(sel.dataset.moveLead), parseInt(sel.value));
+    const res = await API.crmMoveLead(parseInt(sel.dataset.moveLead), parseInt(sel.value), extra);
     if (res.status === 200) {
       loadCrmPipeline(_crmProjectId, { silent: true });
     } else {
@@ -58090,6 +58157,7 @@ async function submitDsCreate() {
           ? `<span class="crm-card-date${overdue ? ' crm-card-date--overdue' : ''}" title="Expected close ${close.toLocaleDateString()}"><i class="fa fa-flag-checkered"></i>${close.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`
           : (lead.created_at ? `<span class="crm-card-date" title="Created ${new Date(lead.created_at).toLocaleString()}"><i class="fa fa-clock"></i>${_crmAgo(lead.created_at)}</span>` : '');
         const tags = (lead.is_customer ? `<span class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Customer</span>` : '')
+          + _crmScoreBadge(lead.score)
           + _crmSourceBadge(lead.source)
           + (lead.assigned_to_name ? `<span class="crm-card-assignee" title="Assigned to ${escHtml(lead.assigned_to_name)}"><i class="fa fa-user"></i> ${escHtml(lead.assigned_to_name)}</span>` : '');
         return `
@@ -58191,6 +58259,10 @@ async function submitDsCreate() {
         _dragLeadId = _dragFromStage = _dragCardEl = null;
         if (!leadId || toStage === fromStage || !cardEl) return;
 
+        // Lost / reason-requiring stages ask first; reserved stages refuse the drop
+        const extra = await _crmMoveDetails(toStage);
+        if (extra === null) return;
+
         // Move the card in the DOM immediately — don't wait on the network
         // round trip (which now also runs the stage's automation flow, e.g. an
         // outbound email, synchronously server-side and can take a while).
@@ -58204,7 +58276,7 @@ async function submitDsCreate() {
         _crmAdjustColCount(fromStage, -1, fromBody);
         _crmAdjustColCount(toStage, 1, col);
 
-        const res = await API.crmMoveLead(leadId, toStage);
+        const res = await API.crmMoveLead(leadId, toStage, extra);
         if (res.status === 200) {
           // Resync in the background (value totals, won/lost badges, etc.)
           // without blanking the board the optimistic move already updated.
@@ -58216,7 +58288,8 @@ async function submitDsCreate() {
           cardEl.dataset.stageId = fromStage;
           _crmAdjustColCount(toStage, -1, col);
           _crmAdjustColCount(fromStage, 1, fromBody);
-          toast(res.body?.message || 'Failed to move lead.', 'error');
+          const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+          toast(firstError || res.body?.message || 'Failed to move lead.', 'error');
         }
       });
     });
@@ -58419,7 +58492,8 @@ async function submitDsCreate() {
   function _populateStageSelect(selector, selectedId = null) {
     const sel = $(selector);
     if (!sel || !_crmPipeline) return;
-    const openStages = _crmPipeline.stages.filter(s => !s.is_won && !s.is_lost);
+    // Reserved statuses are set by the quotation workflow; keep one only when the lead is already in it
+    const openStages = _crmPipeline.stages.filter(s => !s.is_won && !s.is_lost && (!s.is_reserved || s.id === selectedId));
     sel.innerHTML = openStages.map(s =>
       `<option value="${s.id}"${s.id === selectedId ? ' selected' : ''}>${escHtml(s.name)}</option>`
     ).join('');
@@ -58683,12 +58757,14 @@ async function submitDsCreate() {
           <div class="crm-lead-view-name">${escHtml(lead.name || '')}</div>
           <div class="crm-lead-view-sub">
             ${stage ? `<span class="crm-lead-view-stage"><span class="crm-col-swatch" style="background:${escHtml(stage.color)}"></span>${escHtml(stage.name)}</span>` : ''}
+            ${_crmScoreBadge(lead.score)}
             ${lead.is_customer ? `<span class="crm-card-customer-badge" style="margin-top:0"><i class="fa fa-circle-check"></i> Already a Customer</span>` : ''}
             <span><i class="fa fa-user-pen" style="margin-right:4px"></i>Entered by <strong>${escHtml(lead.created_by_name || 'Web form / unknown')}</strong></span>
             ${lead.created_at ? `<span><i class="fa fa-clock" style="margin-right:4px"></i>${escHtml(_crmFmtDateTime(lead.created_at))}</span>` : ''}
           </div>
         </div>
       </div>
+      ${editing ? '' : _crmLeadStatusActionsHtml(lead, stage)}
       <div id="crm-lead-view-alert" class="svc-form-alert" style="display:none"></div>`;
 
     let fields;
@@ -58708,6 +58784,23 @@ async function submitDsCreate() {
         </div>
         ${_crmSourceFieldHtml('crm-lead-view-source', lead.source)}
         ${_crmAssigneeFieldHtml(lead)}
+        <div class="po-field">
+          <label class="po-field-label">Score</label>
+          <select id="crm-lead-view-score" class="po-field-input" style="appearance:auto">
+            <option value="">— Not rated —</option>
+            ${(_crmPipeline?.scores || []).map(s => `<option value="${s.key}"${s.key === lead.score ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
+          </select>
+        </div>
+        ${_crmDivisionFieldHtml(lead)}
+        <div class="po-field" style="grid-column:1/-1">
+          <label class="po-field-label">Products of Interest</label>
+          <div id="crm-lead-view-products" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>
+          <div style="position:relative">
+            <input id="crm-lead-view-product-search" class="po-field-input" type="search" autocomplete="off" placeholder="Search products by name or SKU…">
+            <div id="crm-lead-view-product-results" class="crm-lead-product-results" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:5;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-height:200px;overflow-y:auto"></div>
+          </div>
+          <textarea id="crm-lead-view-product-note" class="po-field-input" rows="2" style="resize:vertical;margin-top:6px" placeholder="Anything else they are interested in…">${escHtml(lead.product_interest_note || '')}</textarea>
+        </div>
         <div class="po-field" style="grid-column:1/-1">
           <label class="po-field-label">Notes</label>
           <textarea id="crm-lead-view-notes" class="po-field-input" rows="2" style="resize:vertical">${escHtml(lead.notes || '')}</textarea>
@@ -58724,6 +58817,14 @@ async function submitDsCreate() {
         <div class="crm-lead-view-section">Record</div>
         <div class="crm-lead-view-grid">
           ${item('Stage', stage?.name)}
+          ${item('Status', stage?.status_label)}
+          ${item('Score', (_crmPipeline?.scores || []).find(s => s.key === lead.score)?.label)}
+          ${lead.division_id ? item('Division', (_crmPipeline?.divisions || []).find(d => d.id === lead.division_id)?.name) : ''}
+          ${(stage?.is_lost || stage?.system_key === 'lost') ? item('Lost Reason', [(_crmPipeline?.lost_reasons || []).find(r => r.id === lead.lost_reason_id)?.label, lead.lost_reason].filter(Boolean).join(' — ')) : ''}
+          ${stage?.is_on_hold && lead.on_hold_from_stage_id ? item('On Hold From', (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id)?.name) : ''}
+          ${lead.closed_at ? item('Closed', _crmFmtDateTime(lead.closed_at)) : ''}
+          ${item('Products of Interest', (lead.product_items || []).map(p => p.name + (p.quantity != null ? ` × ${p.quantity}` : '')).join(', ')).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide')}
+          ${lead.product_interest_note ? item('Product Notes', lead.product_interest_note).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide') : ''}
           ${item('Assigned To', lead.assigned_to_name || 'Unassigned')}
           ${item('Entered By', lead.created_by_name)}
           ${item('Created', _crmFmtDateTime(lead.created_at))}
@@ -58751,9 +58852,128 @@ async function submitDsCreate() {
 
     if (editing) {
       _populateStageSelect('#crm-lead-view-stage', lead.stage_id);
+      _crmEditProducts = (lead.product_items || []).map(p => ({ ...p }));
+      _crmRenderEditProducts();
       if (_crmViewBlocksReady) $('#crm-lead-view-body .crm-lead-field-input')?.focus();
     }
   }
+
+  // Put on hold / Resume / Mark lost from the lead window, for those who may move the lead.
+  function _crmLeadStatusActionsHtml(lead, stage) {
+    if (!stage || !_crmLeadCan(lead, 'move')) return '';
+    const closed = stage.is_won || stage.is_lost;
+    const hasHold = (_crmPipeline?.stages || []).some(s => s.is_on_hold);
+    const btns = [];
+    if (stage.is_on_hold) {
+      const from = (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id);
+      btns.push(`<button class="po-btn-ghost" data-crm-lead-action="resume"><i class="fa fa-play"></i> Resume${from ? ` (back to ${escHtml(from.name)})` : ''}</button>`);
+    } else if (!closed && hasHold) {
+      btns.push('<button class="po-btn-ghost" data-crm-lead-action="hold"><i class="fa fa-pause"></i> Put on Hold</button>');
+    }
+    if (!closed) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
+    return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
+  }
+
+  $('#crm-lead-view-body')?.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-crm-lead-action]');
+    const lead = _crmViewLead;
+    if (!btn || !lead) return;
+    const action = btn.dataset.crmLeadAction;
+    let res;
+    if (action === 'resume') {
+      res = await API.crmResumeLead(lead.id);
+    } else if (action === 'hold') {
+      const extra = await _crmAskReason({ title: 'Put lead on hold', submitLabel: 'Put on Hold' });
+      if (extra === null) return;
+      res = await API.crmHoldLead(lead.id, extra.reason);
+    } else {
+      const lostCol = (_crmPipeline?.columns || []).find(c => c.is_lost);
+      if (!lostCol) { toast('This pipeline has no lost stage.', 'error'); return; }
+      const extra = await _crmMoveDetails(lostCol.id);
+      if (extra === null) return;
+      res = await API.crmMoveLead(lead.id, lostCol.id, extra);
+    }
+    if (res.status !== 200) {
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      toast(firstError || res.body?.message || 'Failed to update the lead.', 'error');
+      return;
+    }
+    toast(action === 'resume' ? 'Lead resumed.' : action === 'hold' ? 'Lead put on hold.' : 'Lead marked as lost.', 'success');
+    await loadCrmPipeline(_crmProjectId, { silent: true });
+    const fresh = _findLead(lead.id);
+    if (fresh && _crmViewLead?.id === lead.id) {
+      _crmViewLead = fresh;
+      _crmRenderLeadModal(false);
+      _crmLoadLeadHistory(fresh);
+    }
+  });
+
+  function _crmDivisionFieldHtml(lead) {
+    const divisions = _crmPipeline?.divisions || [];
+    if (!divisions.length || !_crmLeadCan(lead, 'assign')) return '';
+    return `<div class="po-field">
+      <label class="po-field-label">Division</label>
+      <select id="crm-lead-view-division" class="po-field-input" style="appearance:auto">
+        <option value="">— No division —</option>
+        ${divisions.map(d => `<option value="${d.id}"${d.id === lead.division_id ? ' selected' : ''}>${escHtml(d.name)}</option>`).join('')}
+      </select>
+    </div>`;
+  }
+
+  // Products of interest in the edit window: chips with an optional quantity, added from the catalog search.
+  let _crmEditProducts = [];
+  let _crmProductSearchTimer = null;
+
+  function _crmRenderEditProducts() {
+    const box = $('#crm-lead-view-products');
+    if (!box) return;
+    box.innerHTML = _crmEditProducts.map((p, i) => `
+      <span class="crm-lead-product-chip">
+        <span class="crm-lead-product-name" title="${escHtml(p.name)}">${escHtml(p.name)}</span>
+        <label class="crm-lead-product-qty" title="Quantity">×<input type="number" min="0" step="any" placeholder="qty" value="${p.quantity ?? ''}" data-crm-product-qty="${i}" onwheel="this.blur()"></label>
+        <button type="button" data-crm-product-remove="${i}" title="Remove"><i class="fa fa-xmark"></i></button>
+      </span>`).join('');
+  }
+
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    const qty = e.target.closest('[data-crm-product-qty]');
+    if (qty) {
+      const p = _crmEditProducts[+qty.dataset.crmProductQty];
+      if (p) p.quantity = qty.value === '' ? null : parseFloat(qty.value);
+      return;
+    }
+    if (e.target.id !== 'crm-lead-view-product-search') return;
+    clearTimeout(_crmProductSearchTimer);
+    const q = e.target.value.trim();
+    const results = $('#crm-lead-view-product-results');
+    if (!q) { results.style.display = 'none'; return; }
+    _crmProductSearchTimer = setTimeout(async () => {
+      const res = await API.productSearch(q, 8);
+      const rows = res.body?.data || [];
+      results.innerHTML = rows.length
+        ? rows.map(p => `<div class="qt-suggest-item" data-crm-product-pick="${p.id}" data-name="${escHtml(p.name)}" style="padding:6px 10px;cursor:pointer">
+            <i class="fa fa-box" style="opacity:.45;margin-right:5px;font-size:11px"></i>${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span></div>`).join('')
+        : '<div style="padding:8px 10px;font-size:12px;color:var(--text-muted)">No products found.</div>';
+      results.style.display = '';
+    }, 200);
+  });
+
+  $('#crm-lead-view-body')?.addEventListener('click', e => {
+    const pick = e.target.closest('[data-crm-product-pick]');
+    if (pick) {
+      const id = parseInt(pick.dataset.crmProductPick);
+      if (!_crmEditProducts.some(p => p.id === id)) _crmEditProducts.push({ id, name: pick.dataset.name, quantity: null });
+      _crmRenderEditProducts();
+      $('#crm-lead-view-product-search').value = '';
+      $('#crm-lead-view-product-results').style.display = 'none';
+      return;
+    }
+    const remove = e.target.closest('[data-crm-product-remove]');
+    if (remove) {
+      _crmEditProducts.splice(+remove.dataset.crmProductRemove, 1);
+      _crmRenderEditProducts();
+    }
+  });
 
   async function _openViewLeadModal(lead, { edit = false } = {}) {
     _crmViewLead        = lead;
@@ -58884,10 +59104,23 @@ async function submitDsCreate() {
       source:        $('#crm-lead-view-source').value || null,
       notes:         $('#crm-lead-view-notes').value.trim() || null,
       custom_fields: customFields,
+      score:         $('#crm-lead-view-score').value || null,
+      product_interest_note: $('#crm-lead-view-product-note').value.trim() || null,
+      products:      _crmEditProducts.map(p => ({ product_id: p.id, quantity: p.quantity })),
     };
     // Only sent when the picker is shown, so staff edits never touch the assignee
     const assigneeSel = $('#crm-lead-view-assignee');
     if (assigneeSel) payload.assigned_to = assigneeSel.value ? parseInt(assigneeSel.value) : null;
+    const divisionSel = $('#crm-lead-view-division');
+    if (divisionSel) payload.division_id = divisionSel.value ? parseInt(divisionSel.value) : null;
+
+    // A stage that asks for a reason gets it before saving
+    const newStageId = parseInt(payload.stage_id);
+    if (newStageId && newStageId !== lead.stage_id) {
+      const extra = await _crmMoveDetails(newStageId);
+      if (extra === null) return;
+      Object.assign(payload, extra);
+    }
 
     const btn = $('#crm-lead-view-save');
     btn.disabled = true;
@@ -58905,6 +59138,10 @@ async function submitDsCreate() {
         phone:         payload.phone,
         source:        payload.source,
         notes:         payload.notes,
+        score:         payload.score,
+        product_interest_note: payload.product_interest_note,
+        product_items: _crmEditProducts.map(p => ({ ...p })),
+        division_id:   saved.division_id ?? null,
         stage_id:      parseInt(saved.stage_id ?? payload.stage_id ?? lead.stage_id),
         assigned_to:   saved.assigned_to ?? null,
         assigned_to_name: (_crmPipeline?.assignable_users || []).find(u => u.id === saved.assigned_to)?.name
@@ -59696,8 +59933,11 @@ async function submitDsCreate() {
     }
     const pipelineAutoActive = !!(_pipelineFlow && _pipelineFlow.is_active);
     list.innerHTML = _stageListData.map((s, idx) => {
-      const wonTag  = s.is_won  ? '<span class="crm-stage-tag crm-stage-tag--won">Won</span>'  : '';
-      const lostTag = s.is_lost ? '<span class="crm-stage-tag crm-stage-tag--lost">Lost</span>' : '';
+      const wonTag  = s.is_won  ? '<span class="crm-stage-tag crm-stage-tag--won">Won</span>'
+        : s.is_lost ? '<span class="crm-stage-tag crm-stage-tag--lost">Lost</span>'
+        : `<span class="crm-stage-tag"${s.system_key ? '' : ' style="color:#f59e0b"'} title="Standard status">${escHtml(s.status_label || 'No status')}</span>`;
+      const lostTag = (s.is_reserved ? '<span class="crm-stage-tag" title="Set by the quotation workflow"><i class="fa fa-lock"></i></span>' : '')
+        + (s.requires_reason ? '<span class="crm-stage-tag" title="Asks for a reason"><i class="fa fa-comment"></i></span>' : '');
       const countBadge = s.leads_count > 0 ? `<span class="crm-stage-badge">${s.leads_count} lead${s.leads_count > 1 ? 's' : ''}</span>` : '';
       // While Pipeline Automation is on, matching stage templates fire automatically —
       // the manual send button is hidden so it isn't offered twice. When a template
@@ -59753,8 +59993,7 @@ async function submitDsCreate() {
         $('#crm-stage-edit-id').value    = s.id;
         $('#crm-stage-edit-name').value  = s.name;
         $('#crm-stage-edit-color').value = s.color || '#64748b';
-        $('#crm-stage-edit-won').checked  = s.is_won;
-        $('#crm-stage-edit-lost').checked = s.is_lost;
+        _crmFillStatusSelect('#crm-stage-edit-status', '#crm-stage-edit-reason', s.system_key || 'in_process', s.requires_reason);
         $('#crm-stage-edit-alert').style.display = 'none';
         $('#crm-stage-edit-modal').style.display = 'flex';
         $('#crm-stage-edit-name').focus();
@@ -59930,6 +60169,35 @@ async function submitDsCreate() {
     }
   });
 
+  // Every stage stands for one of the standard statuses; lost stages always ask for a lost reason.
+  const _CRM_STATUS_FALLBACK = [
+    ['new', 'New'], ['assigned', 'Assigned'], ['contacted', 'Contacted'], ['in_process', 'In Process'],
+    ['quotation_preparing', 'Quotation Preparing'], ['pending_approval', 'Pending Approval', true],
+    ['quotation_sent', 'Quotation Sent', true], ['negotiation', 'Negotiation'], ['on_hold', 'On Hold'],
+    ['won', 'Won'], ['lost', 'Lost'],
+  ].map(([key, label, reserved]) => ({ key, label, reserved: !!reserved }));
+
+  function _crmFillStatusSelect(selectSel, reasonSel, selected, requiresReason) {
+    const sel = $(selectSel), reason = $(reasonSel);
+    const statuses = _crmPipeline?.statuses?.length ? _crmPipeline.statuses : _CRM_STATUS_FALLBACK;
+    sel.innerHTML = statuses.map(s =>
+      `<option value="${s.key}"${s.key === selected ? ' selected' : ''}>${escHtml(s.label)}${s.reserved ? ' (automatic)' : ''}</option>`).join('');
+    reason.checked = !!requiresReason;
+    const sync = () => { const lost = sel.value === 'lost'; if (lost) reason.checked = true; reason.disabled = lost; };
+    sel.onchange = sync;
+    sync();
+  }
+
+  function _crmStagePayload(prefix) {
+    const key = $(`#crm-stage-${prefix}-status`).value;
+    return {
+      system_key:      key,
+      requires_reason: $(`#crm-stage-${prefix}-reason`).checked,
+      is_won:          key === 'won',
+      is_lost:         key === 'lost',
+    };
+  }
+
   // Stage management modal close/open
   $('#crm-stages-modal-close')?.addEventListener('click',  () => { $('#crm-stages-modal').style.display = 'none'; });
   $('#crm-stages-modal-cancel')?.addEventListener('click', () => { $('#crm-stages-modal').style.display = 'none'; });
@@ -59940,8 +60208,7 @@ async function submitDsCreate() {
     $('#crm-stage-add-alert').style.display = 'none';
     $('#crm-stage-new-name').value  = '';
     $('#crm-stage-new-color').value = '#64748b';
-    $('#crm-stage-new-won').checked  = false;
-    $('#crm-stage-new-lost').checked = false;
+    _crmFillStatusSelect('#crm-stage-new-status', '#crm-stage-new-reason', 'in_process', false);
     $('#crm-stage-add-modal').style.display = 'flex';
     $('#crm-stage-new-name')?.focus();
   }
@@ -59963,8 +60230,7 @@ async function submitDsCreate() {
     const res = await API.crmCreateStage(_crmProjectId, {
       name,
       color:   $('#crm-stage-new-color').value || '#64748b',
-      is_won:  $('#crm-stage-new-won').checked,
-      is_lost: $('#crm-stage-new-lost').checked,
+      ..._crmStagePayload('new'),
     });
     btn.disabled = false;
     if (res.status === 201) {
@@ -59995,8 +60261,7 @@ async function submitDsCreate() {
     const res = await API.crmUpdateStage(_crmProjectId, stageId, {
       name,
       color:   $('#crm-stage-edit-color').value || '#64748b',
-      is_won:  $('#crm-stage-edit-won').checked,
-      is_lost: $('#crm-stage-edit-lost').checked,
+      ..._crmStagePayload('edit'),
     });
     btn.disabled = false;
     if (res.status === 200) {

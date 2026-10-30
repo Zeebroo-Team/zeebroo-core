@@ -10,6 +10,11 @@
 .ld-detail-grid__field{min-width:0;border:1px solid var(--border);border-radius:9px;padding:8px 10px;background:var(--card);}
 .ld-detail-grid__label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin-bottom:4px;}
 .ld-detail-grid__value{font-size:13px;color:var(--text);overflow-wrap:break-word;word-break:break-word;}
+.ld-action-menu{position:relative;}
+.ld-action-menu summary{list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.ld-action-menu summary::-webkit-details-marker{display:none;}
+.ld-action-menu__panel{position:absolute;right:0;top:calc(100% + 6px);z-index:5;background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.18);padding:10px;width:260px;display:flex;flex-direction:column;gap:8px;font-size:12px;}
+.ld-action-menu__panel label{font-weight:700;color:var(--muted);font-size:11px;}
 </style>
 
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
@@ -18,8 +23,8 @@
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>
     @endif
-    @if($errors->has('lead'))
-        <div class="pcat-banner pcat-banner--err" role="alert">{{ $errors->first('lead') }}</div>
+    @if($errors->any())
+        <div class="pcat-banner pcat-banner--err" role="alert">{{ $errors->first() }}</div>
     @endif
 
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;">
@@ -32,6 +37,9 @@
             </div>
             <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                 <span class="ld-stage" style="border-color:{{ $lead->stageColor() }};color:{{ $lead->stageColor() }};">{{ $lead->stageLabel() }}</span>
+                @if($lead->score)
+                    <span class="ld-stage" style="border-color:{{ \Modules\CRM\Models\Lead::SCORES[$lead->score][1] }};color:{{ \Modules\CRM\Models\Lead::SCORES[$lead->score][1] }};">{{ \Modules\CRM\Models\Lead::scoreLabel($lead->score) }}</span>
+                @endif
                 @if($lead->estimated_value !== null)
                     <span class="muted" style="font-size:12px;">Est. value: <strong style="color:var(--text);">{{ number_format((float) $lead->estimated_value, 2) }}</strong></span>
                 @endif
@@ -55,13 +63,43 @@
                     </button>
                 </form>
                 @if($can['can_move'])
-                <form method="POST" action="{{ route('crm.leads.mark-lost', $lead) }}">
-                    @csrf
-                    <input type="hidden" name="lost_reason" value="">
-                    <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:#f97373;">
-                        <i class="fa fa-xmark"></i> Mark lost
-                    </button>
-                </form>
+                    @if($lead->isOnHold())
+                        <form method="POST" action="{{ route('crm.leads.resume', $lead) }}">
+                            @csrf
+                            <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);">
+                                <i class="fa fa-play"></i> Resume{{ $lead->onHoldFromStage ? ' (back to ' . $lead->onHoldFromStage->name . ')' : '' }}
+                            </button>
+                        </form>
+                    @elseif($hasOnHoldStage)
+                        <details class="ld-action-menu">
+                            <summary class="linkbtn" style="padding:7px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);">
+                                <i class="fa fa-pause"></i> Put on hold
+                            </summary>
+                            <form method="POST" action="{{ route('crm.leads.hold', $lead) }}" class="ld-action-menu__panel">
+                                @csrf
+                                <label for="ld-hold-reason">Reason (optional)</label>
+                                <input id="ld-hold-reason" type="text" name="reason" maxlength="500" placeholder="e.g. Customer travelling until next month">
+                                <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;">Put on hold</button>
+                            </form>
+                        </details>
+                    @endif
+                    <details class="ld-action-menu">
+                        <summary class="linkbtn" style="padding:7px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:#f97373;">
+                            <i class="fa fa-xmark"></i> Mark lost
+                        </summary>
+                        <form method="POST" action="{{ route('crm.leads.mark-lost', $lead) }}" class="ld-action-menu__panel">
+                            @csrf
+                            <label for="ld-lost-reason-id">Lost reason</label>
+                            <select id="ld-lost-reason-id" name="lost_reason_id" required>
+                                <option value="">— Pick a reason —</option>
+                                @foreach($lostReasons as $r)
+                                    <option value="{{ $r->id }}">{{ $r->label }}</option>
+                                @endforeach
+                            </select>
+                            <input type="text" name="lost_reason" maxlength="255" placeholder="Note (optional)">
+                            <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;background:#ef4444;">Mark lost</button>
+                        </form>
+                    </details>
                 @endif
             @elseif($can['can_move'] && $lead->isLost())
                 <form method="POST" action="{{ route('crm.leads.reopen', $lead) }}">
@@ -84,7 +122,8 @@
     </div>
 
     @php
-        $hasOverviewContent = $lead->customer || $lead->notes || $lead->customFieldValues->isNotEmpty();
+        $hasOverviewContent = $lead->customer || $lead->notes || $lead->customFieldValues->isNotEmpty()
+            || $lead->products->isNotEmpty() || $lead->product_interest_note;
     @endphp
 
     <nav class="ps-tabs" role="tablist">
@@ -123,7 +162,7 @@
                 </div>
                 <div class="ld-detail-grid__field">
                     <div class="ld-detail-grid__label">Source</div>
-                    <div class="ld-detail-grid__value">{{ \Modules\CRM\Models\Lead::sourceLabel($lead->source) ?? '—' }}</div>
+                    <div class="ld-detail-grid__value">{{ $lead->leadSource?->label ?? \Modules\CRM\Models\Lead::sourceLabel($lead->source) ?? '—' }}</div>
                 </div>
                 <div class="ld-detail-grid__field">
                     <div class="ld-detail-grid__label">Stage</div>
@@ -143,10 +182,36 @@
                     <div class="ld-detail-grid__label">Assigned to</div>
                     <div class="ld-detail-grid__value">{{ $lead->assignedTo?->name ?? '—' }}</div>
                 </div>
-                @if($lead->isLost() && $lead->lost_reason)
+                <div class="ld-detail-grid__field">
+                    <div class="ld-detail-grid__label">Status</div>
+                    <div class="ld-detail-grid__value">{{ \Modules\CRM\Models\LeadStage::statusLabel($lead->statusKey()) ?? '—' }}</div>
+                </div>
+                <div class="ld-detail-grid__field">
+                    <div class="ld-detail-grid__label">Score</div>
+                    <div class="ld-detail-grid__value">{{ \Modules\CRM\Models\Lead::scoreLabel($lead->score) ?? '—' }}</div>
+                </div>
+                @if($lead->department)
+                    <div class="ld-detail-grid__field">
+                        <div class="ld-detail-grid__label">Department</div>
+                        <div class="ld-detail-grid__value">{{ $lead->department->name }}{{ $lead->division ? ' · ' . $lead->division->name : '' }}</div>
+                    </div>
+                @endif
+                @if($lead->isLost() && ($lead->lostReason || $lead->lost_reason))
                     <div class="ld-detail-grid__field">
                         <div class="ld-detail-grid__label">Lost reason</div>
-                        <div class="ld-detail-grid__value">{{ $lead->lost_reason }}</div>
+                        <div class="ld-detail-grid__value">{{ collect([$lead->lostReason?->label, $lead->lost_reason])->filter()->implode(' — ') }}</div>
+                    </div>
+                @endif
+                @if($lead->isOnHold() && $lead->onHoldFromStage)
+                    <div class="ld-detail-grid__field">
+                        <div class="ld-detail-grid__label">On hold from</div>
+                        <div class="ld-detail-grid__value">{{ $lead->onHoldFromStage->name }}</div>
+                    </div>
+                @endif
+                @if($lead->closed_at)
+                    <div class="ld-detail-grid__field">
+                        <div class="ld-detail-grid__label">Closed</div>
+                        <div class="ld-detail-grid__value">{{ $lead->closed_at->format('M j, Y') }}</div>
                     </div>
                 @endif
                 <div class="ld-detail-grid__field">
@@ -161,6 +226,24 @@
                 Converted to customer <a href="{{ route('crm.contacts.show', $lead->customer) }}" class="pcat-link">{{ $lead->customer->name }}</a>
                 @if($lead->converted_at) on {{ $lead->converted_at->format('M j, Y') }} @endif.
             </p>
+        @endif
+
+        @if($lead->products->isNotEmpty() || $lead->product_interest_note)
+            <div class="pcat-inline" style="margin-bottom:16px;">
+                <h2 style="font-size:13px;">Products of interest</h2>
+                @if($lead->products->isNotEmpty())
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+                        @foreach($lead->products as $p)
+                            <span class="ld-stage" style="color:var(--text);">
+                                {{ $p->name }}@if($p->pivot->quantity !== null) × {{ rtrim(rtrim(number_format((float) $p->pivot->quantity, 2, '.', ''), '0'), '.') }}@endif
+                            </span>
+                        @endforeach
+                    </div>
+                @endif
+                @if($lead->product_interest_note)
+                    <p class="pcat-muted" style="white-space:pre-line;margin-top:8px;">{{ $lead->product_interest_note }}</p>
+                @endif
+            </div>
         @endif
 
         @if($lead->notes)

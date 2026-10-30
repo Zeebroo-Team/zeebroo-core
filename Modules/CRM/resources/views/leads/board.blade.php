@@ -61,12 +61,19 @@
                 <div class="ld-board__head">
                     <span class="swatch" style="background:{{ $stage->color }};"></span>
                     <strong title="{{ $stage->name }}">{{ $stage->name }}</strong>
+                    @if($stage->isReserved())
+                        <i class="fa fa-lock muted" style="font-size:10px;" title="Set by the quotation workflow — leads can't be dropped here"></i>
+                    @endif
                     <span class="ld-board__count">{{ $stageLeads->count() }}</span>
                 </div>
                 @if($stageValue > 0)
                     <div class="ld-board__value">{{ number_format($stageValue, 2) }}</div>
                 @endif
-                <div class="ld-board__body" data-stage-dropzone data-stage-id="{{ $stage->id }}">
+                <div class="ld-board__body" data-stage-dropzone data-stage-id="{{ $stage->id }}"
+                     data-stage-name="{{ $stage->name }}"
+                     data-reserved="{{ $stage->isReserved() ? 1 : 0 }}"
+                     data-lost="{{ $stage->isLostStage() ? 1 : 0 }}"
+                     data-reason="{{ $stage->requires_reason && !$stage->isLostStage() ? 1 : 0 }}">
                     @forelse($stageLeads as $lead)
                         <div class="ld-board__card" data-lead-id="{{ $lead->id }}">
                             <div class="ld-board__card-top">
@@ -83,11 +90,13 @@
                                                 @csrf
                                                 <button type="submit"><i class="fa fa-check"></i> Convert to customer</button>
                                             </form>
-                                            <form method="POST" action="{{ route('crm.leads.mark-lost', $lead) }}">
-                                                @csrf
-                                                <input type="hidden" name="lost_reason" value="">
-                                                <button type="submit" class="is-danger"><i class="fa fa-xmark"></i> Mark lost</button>
-                                            </form>
+                                            @if($stage->isOnHold())
+                                                <form method="POST" action="{{ route('crm.leads.resume', $lead) }}">
+                                                    @csrf
+                                                    <button type="submit"><i class="fa fa-play"></i> Resume</button>
+                                                </form>
+                                            @endif
+                                            <button type="button" class="is-danger" data-ld-mark-lost="{{ $lead->id }}"><i class="fa fa-xmark"></i> Mark lost</button>
                                         @elseif($stage->is_lost)
                                             <form method="POST" action="{{ route('crm.leads.reopen', $lead) }}">
                                                 @csrf
@@ -104,6 +113,11 @@
                             </div>
                             @if($lead->company)
                                 <div class="muted" style="font-size:11px;margin:4px 0 0 26px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $lead->company }}</div>
+                            @endif
+                            @if($lead->score)
+                                <div style="margin:4px 0 0 26px;font-size:10px;font-weight:700;color:{{ \Modules\CRM\Models\Lead::SCORES[$lead->score][1] }};">
+                                    <i class="fa fa-fire"></i> {{ \Modules\CRM\Models\Lead::scoreLabel($lead->score) }}
+                                </div>
                             @endif
                             <div class="ld-board__card-meta">
                                 <span>
@@ -124,6 +138,39 @@
                 </div>
             </div>
         @endforeach
+    </div>
+</div>
+
+{{-- Asks for the lost reason / stage reason when a move needs one --}}
+<div id="ld-move-modal" class="pcat-modal" role="dialog" aria-modal="true" aria-labelledby="ld-move-title" aria-hidden="true">
+    <div class="pcat-modal__backdrop" data-ld-move-cancel tabindex="-1"></div>
+    <div class="pcat-modal__panel" style="max-width:min(94vw,420px);">
+        <div class="pcat-modal__head">
+            <h2 id="ld-move-title">Move lead</h2>
+            <button type="button" class="pcat-modal__close" data-ld-move-cancel aria-label="Close">&times;</button>
+        </div>
+        <div class="pcat-modal__body">
+            <form id="ld-move-form" class="pcat-form-grid">
+                <div class="pcat-field" data-ld-move-lost>
+                    <label for="ld-move-lost-reason">Lost reason <span style="color:#ef4444;">*</span></label>
+                    <select id="ld-move-lost-reason">
+                        <option value="">— Pick a reason —</option>
+                        @foreach($lostReasons as $r)
+                            <option value="{{ $r->id }}">{{ $r->label }}</option>
+                        @endforeach
+                    </select>
+                    <input id="ld-move-lost-note" type="text" maxlength="255" placeholder="Note (optional)" style="margin-top:6px;">
+                </div>
+                <div class="pcat-field" data-ld-move-reason>
+                    <label for="ld-move-reason">Reason <span style="color:#ef4444;">*</span></label>
+                    <input id="ld-move-reason" type="text" maxlength="500">
+                </div>
+                <div style="display:flex;justify-content:flex-end;gap:8px;">
+                    <button type="button" class="pcat-btn-del" style="border-color:var(--border);color:var(--muted);background:transparent;" data-ld-move-cancel>Cancel</button>
+                    <button type="submit" class="linkbtn" style="padding:8px 18px;font-size:13px;">Move</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -172,9 +219,77 @@
         });
     });
 
+    // Lost stages need a lost reason, some stages a free-text reason: ask before saving the move.
+    // Resolves the extra payload, or null when cancelled.
+    var moveModal = document.getElementById('ld-move-modal');
+    function askMoveDetails(zone) {
+        var lost = zone.getAttribute('data-lost') === '1';
+        var needsReason = zone.getAttribute('data-reason') === '1';
+        if (!lost && !needsReason) return Promise.resolve({});
+
+        var form = document.getElementById('ld-move-form');
+        document.getElementById('ld-move-title').textContent = 'Move to ' + zone.getAttribute('data-stage-name');
+        moveModal.querySelector('[data-ld-move-lost]').hidden = !lost;
+        moveModal.querySelector('[data-ld-move-reason]').hidden = !needsReason;
+        form.reset();
+        moveModal.classList.add('pcat-modal--open');
+        moveModal.setAttribute('aria-hidden', 'false');
+        requestAnimationFrame(function () { (lost ? document.getElementById('ld-move-lost-reason') : document.getElementById('ld-move-reason')).focus(); });
+
+        return new Promise(function (resolve) {
+            function finish(value) {
+                moveModal.classList.remove('pcat-modal--open');
+                moveModal.setAttribute('aria-hidden', 'true');
+                form.removeEventListener('submit', onSubmit);
+                moveModal.querySelectorAll('[data-ld-move-cancel]').forEach(function (el) { el.removeEventListener('click', onCancel); });
+                resolve(value);
+            }
+            function onSubmit(e) {
+                e.preventDefault();
+                var data = {};
+                if (lost) {
+                    data.lost_reason_id = document.getElementById('ld-move-lost-reason').value;
+                    data.lost_reason = document.getElementById('ld-move-lost-note').value.trim();
+                    if (!data.lost_reason_id) { document.getElementById('ld-move-lost-reason').focus(); return; }
+                }
+                if (needsReason) {
+                    data.reason = document.getElementById('ld-move-reason').value.trim();
+                    if (!data.reason) { document.getElementById('ld-move-reason').focus(); return; }
+                }
+                finish(data);
+            }
+            function onCancel() { finish(null); }
+            form.addEventListener('submit', onSubmit);
+            moveModal.querySelectorAll('[data-ld-move-cancel]').forEach(function (el) { el.addEventListener('click', onCancel); });
+        });
+    }
+
+    function postMove(leadId, stageId, extra) {
+        return fetch(moveUrlBase + '/' + leadId + '/move-stage', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrf(),
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify(Object.assign({ stage_id: stageId }, extra || {})),
+        }).then(function (res) {
+            return res.json().catch(function () { return {}; }).then(function (body) {
+                if (!res.ok) {
+                    var first = body && body.errors ? Object.values(body.errors)[0] : null;
+                    throw new Error((first && first[0]) || (body && body.message) || 'Could not move lead.');
+                }
+                return body;
+            });
+        });
+    }
+
     document.querySelectorAll('[data-stage-dropzone]').forEach(function (col) {
         Sortable.create(col, {
-            group: 'ld-board',
+            // Reserved statuses (pending approval / quotation sent) only take leads from the quotation workflow
+            group: { name: 'ld-board', put: col.getAttribute('data-reserved') !== '1' },
             animation: 150,
             handle: '.pcat-drag-handle',
             ghostClass: 'pcat-sort-ghost',
@@ -185,32 +300,42 @@
                 var stageId  = evt.to.getAttribute('data-stage-id');
                 var fromCol  = evt.from;
                 var oldIndex = evt.oldIndex;
-
-                setStatus('Saving…', 'is-saving');
-                fetch(moveUrlBase + '/' + leadId + '/move-stage', {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-CSRF-TOKEN': csrf(),
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: JSON.stringify({ stage_id: stageId }),
-                })
-                .then(function (res) { if (!res.ok) throw new Error('failed'); return res.json(); })
-                .then(function () {
-                    bumpCount(evt.to, 1);
-                    bumpCount(fromCol, -1);
-                    setStatus('Saved', '');
-                    setTimeout(function () { setStatus('', ''); }, 1500);
-                })
-                .catch(function () {
+                function revert(message) {
                     var ref = fromCol.children[oldIndex] || null;
                     fromCol.insertBefore(item, ref);
-                    setStatus('Could not move lead.', 'is-error');
+                    setStatus(message || '', message ? 'is-error' : '');
+                }
+
+                askMoveDetails(evt.to).then(function (extra) {
+                    if (extra === null) { revert(''); return; }
+                    setStatus('Saving…', 'is-saving');
+                    return postMove(leadId, stageId, extra)
+                        .then(function () {
+                            // Won / lost / on hold change the card's actions, so reload for those
+                            if (evt.to.getAttribute('data-lost') === '1' || evt.to.getAttribute('data-reason') === '1') { window.location.reload(); return; }
+                            bumpCount(evt.to, 1);
+                            bumpCount(fromCol, -1);
+                            setStatus('Saved', '');
+                            setTimeout(function () { setStatus('', ''); }, 1500);
+                        })
+                        .catch(function (err) { revert(err.message); });
                 });
             },
+        });
+    });
+
+    document.querySelectorAll('[data-ld-mark-lost]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var lostZone = document.querySelector('[data-stage-dropzone][data-lost="1"]');
+            if (!lostZone) { setStatus('This pipeline has no lost stage.', 'is-error'); return; }
+            btn.closest('details')?.removeAttribute('open');
+            askMoveDetails(lostZone).then(function (extra) {
+                if (extra === null) return;
+                setStatus('Saving…', 'is-saving');
+                postMove(btn.getAttribute('data-ld-mark-lost'), lostZone.getAttribute('data-stage-id'), extra)
+                    .then(function () { window.location.reload(); })
+                    .catch(function (err) { setStatus(err.message, 'is-error'); });
+            });
         });
     });
 })();

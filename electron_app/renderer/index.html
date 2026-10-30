@@ -212,6 +212,16 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-src{display:inline-flex;align-items:center;gap:4px;max-width:100%;font-size:10px;font-weight:600;color:var(--src,#64748b);background:color-mix(in srgb,var(--src,#64748b) 11%,transparent);border-radius:4px;padding:1px 6px;white-space:nowrap}
 .crm-src i{font-size:10px}
 .crm-src-label{overflow:hidden;text-overflow:ellipsis}
+#crm-lead-view-products:empty{display:none!important}
+#crm-lead-view-products .crm-lead-product-chip{display:inline-flex;align-items:stretch;height:28px;max-width:100%;overflow:hidden;font-size:12px;line-height:1;color:var(--text);background:color-mix(in srgb,var(--accent,#4e8ef7) 7%,var(--surface,#fff));border:1px solid color-mix(in srgb,var(--accent,#4e8ef7) 28%,transparent);border-radius:999px}
+#crm-lead-view-products .crm-lead-product-name{display:flex;align-items:center;padding:0 10px 0 12px;font-weight:500;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#crm-lead-view-products .crm-lead-product-qty{display:flex;align-items:center;gap:2px;margin:0;padding:0 2px 0 8px;font-size:11px;font-weight:600;color:var(--text-muted);border-left:1px solid color-mix(in srgb,var(--accent,#4e8ef7) 22%,transparent);cursor:text}
+#crm-lead-view-products .crm-lead-product-qty input[type=number]{width:38px;height:100%;min-height:0;margin:0;padding:0 2px;font-size:12px;font-weight:600;line-height:1;text-align:left;color:var(--text);background:transparent;border:none;border-radius:0;box-shadow:none;outline:none;-moz-appearance:textfield;appearance:textfield}
+#crm-lead-view-products .crm-lead-product-qty input::placeholder{color:var(--text-muted);font-weight:400}
+#crm-lead-view-products .crm-lead-product-qty input::-webkit-outer-spin-button,#crm-lead-view-products .crm-lead-product-qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+#crm-lead-view-products .crm-lead-product-qty:focus-within{background:var(--surface,#fff)}
+#crm-lead-view-products .crm-lead-product-chip button{display:flex;align-items:center;justify-content:center;width:28px;padding:0;font-size:11px;color:var(--text-muted);background:none;border:none;border-left:1px solid color-mix(in srgb,var(--accent,#4e8ef7) 22%,transparent);cursor:pointer}
+#crm-lead-view-products .crm-lead-product-chip button:hover{background:color-mix(in srgb,#ef4444 12%,transparent);color:#ef4444}
 .crm-dash-src-row{cursor:pointer}
 .crm-dash-src-row:hover td{background:color-mix(in srgb,var(--accent,#4e8ef7) 5%,transparent)}
 .crm-dash-src-bar{height:5px;border-radius:3px;background:var(--surface2,#f1f5f9);margin:2px 0 4px;max-width:260px;overflow:hidden}
@@ -12251,6 +12261,32 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     </div>
   </div>
 
+  <!-- ── CRM: reason asked when a lead moves to a lost stage / a stage that needs a reason / on hold ── -->
+  <div class="modal-overlay" id="crm-move-reason-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:420px;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-comment-dots" style="color:#7c3aed"></i>
+        <span id="crm-move-reason-title">Move lead</span>
+        <button class="psm-close" id="crm-move-reason-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:10px">
+        <div id="crm-move-reason-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="po-field" id="crm-move-reason-lost-wrap">
+          <label class="po-field-label" for="crm-move-reason-lost">Lost reason *</label>
+          <select id="crm-move-reason-lost" class="po-field-input" style="appearance:auto"></select>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label" for="crm-move-reason-text" id="crm-move-reason-text-label">Reason</label>
+          <textarea id="crm-move-reason-text" class="po-field-input" rows="3" maxlength="500" style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-move-reason-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-move-reason-submit"><i class="fa fa-check"></i> Move</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── CRM: Relation History Flow (History tab → View more) ── -->
   <div class="modal-overlay" id="crm-history-flow-modal" style="display:none">
     <div class="po-aim-shell crm-hf-shell">
@@ -12454,14 +12490,13 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
           </div>
         </div>
-        <div style="display:flex;gap:16px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-new-won"> Mark as Won stage
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-new-lost"> Mark as Lost stage
-          </label>
+        <div class="po-field">
+          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
+          <select id="crm-stage-new-status" class="po-field-input" style="appearance:auto"></select>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" id="crm-stage-new-reason"> Ask for a reason when a lead moves here
+        </label>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-stage-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -12491,14 +12526,13 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <input type="color" id="crm-stage-edit-color" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
           </div>
         </div>
-        <div style="display:flex;gap:16px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-edit-won"> Mark as Won stage
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-edit-lost"> Mark as Lost stage
-          </label>
+        <div class="po-field">
+          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
+          <select id="crm-stage-edit-status" class="po-field-input" style="appearance:auto"></select>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" id="crm-stage-edit-reason"> Ask for a reason when a lead moves here
+        </label>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-stage-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>

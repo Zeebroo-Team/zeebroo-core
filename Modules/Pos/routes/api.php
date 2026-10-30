@@ -629,6 +629,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('crm/projects/{project}/leads',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createLead'])  ->name('crm.leads.store');
     Route::put   ('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateLead'])  ->name('crm.leads.update');
     Route::post  ('crm/leads/{lead}/move-stage',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'moveLead'])    ->name('crm.leads.move-stage');
+    Route::post  ('crm/leads/{lead}/hold',             [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'holdLead'])    ->name('crm.leads.hold');
+    Route::post  ('crm/leads/{lead}/resume',           [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'resumeLead'])  ->name('crm.leads.resume');
+    Route::get   ('crm/statuses',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'statuses'])    ->name('crm.statuses.index');
+    Route::get   ('crm/lost-reasons',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'lostReasons']) ->name('crm.lost-reasons.index');
+    Route::get   ('crm/lead-sources',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadSources']) ->name('crm.lead-sources.index');
     Route::delete('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteLead'])  ->name('crm.leads.destroy');
     Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');
     Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');

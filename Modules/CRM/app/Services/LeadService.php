@@ -6,6 +6,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Models\AutomationFlow;
+use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAuditLog;
 use Modules\CRM\Models\LeadCustomFieldValue;
@@ -14,6 +15,7 @@ use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\LeadStageLog;
 use Modules\CRM\Models\Project;
 use Modules\Pos\Models\Customer;
+use Modules\Product\Models\Product;
 
 class LeadService
 {
@@ -21,6 +23,8 @@ class LeadService
         private readonly LeadStageService $stages,
         private readonly LeadStageMailTemplateService $stageMailTemplates,
         private readonly LeadAuditService $audit,
+        private readonly LeadSourceService $sources,
+        private readonly LostReasonService $lostReasons,
     ) {}
 
     public function listForProject(
@@ -256,27 +260,45 @@ class LeadService
     public function create(Project $project, array $data, ?int $userId = null): Lead
     {
         $stageId = $this->nullableInt($data['stage_id'] ?? null) ?? $this->stages->defaultOpenStage($project)?->id;
+        $stage   = $stageId !== null ? $this->stageOfProject($project->id, $stageId) : null;
 
-        $lead = Lead::create([
-            'business_id'         => $project->business_id,
-            'project_id'          => $project->id,
-            'form_id'             => $this->nullableInt($data['form_id'] ?? null),
-            'name'                => $data['name'],
-            'company'             => filled($data['company'] ?? '') ? $data['company'] : null,
-            'email'               => filled($data['email'] ?? '') ? $data['email'] : null,
-            'phone'               => filled($data['phone'] ?? '') ? $data['phone'] : null,
-            'source'              => filled($data['source'] ?? '') ? $data['source'] : null,
-            'stage_id'            => $stageId,
-            'estimated_value'     => $this->nullableDecimal($data['estimated_value'] ?? null),
-            'expected_close_date' => filled($data['expected_close_date'] ?? '') ? $data['expected_close_date'] : null,
-            'notes'               => filled($data['notes'] ?? '') ? $data['notes'] : null,
-            'assigned_to'         => $this->nullableInt($data['assigned_to'] ?? null),
-            'created_by'          => $userId,
-        ]);
+        [$stageAttributes, $reason] = $stage ? $this->stageEntry(null, $project->business_id, null, $stage, $data) : [[], null];
+        $source = $this->sources->resolve($project->business_id, $data['source'] ?? null, $data['source_id'] ?? null);
+
+        $lead = DB::transaction(function () use ($project, $data, $userId, $stageId, $stageAttributes, $source) {
+            $lead = Lead::create([
+                'business_id'           => $project->business_id,
+                'project_id'            => $project->id,
+                'department_id'         => $project->department_id,
+                'division_id'           => $this->cleanDivisionId($project->business_id, $project->department_id, $data['division_id'] ?? null),
+                'form_id'               => $this->nullableInt($data['form_id'] ?? null),
+                'name'                  => $data['name'],
+                'company'               => filled($data['company'] ?? '') ? $data['company'] : null,
+                'email'                 => filled($data['email'] ?? '') ? $data['email'] : null,
+                'phone'                 => filled($data['phone'] ?? '') ? $data['phone'] : null,
+                'source'                => $source['source'],
+                'source_id'             => $source['source_id'],
+                'external_id'           => filled($data['external_id'] ?? '') ? $data['external_id'] : null,
+                'stage_id'              => $stageId,
+                'estimated_value'       => $this->nullableDecimal($data['estimated_value'] ?? null),
+                'score'                 => $this->cleanScore($data['score'] ?? null),
+                'expected_close_date'   => filled($data['expected_close_date'] ?? '') ? $data['expected_close_date'] : null,
+                'notes'                 => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'product_interest_note' => filled($data['product_interest_note'] ?? '') ? $data['product_interest_note'] : null,
+                'assigned_to'           => $this->nullableInt($data['assigned_to'] ?? null),
+                'created_by'            => $userId,
+            ] + $stageAttributes);
+
+            if (array_key_exists('products', $data)) {
+                $this->syncProducts($lead, (array) $data['products']);
+            }
+
+            return $lead;
+        });
 
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
         $this->audit->recordCreated($lead, $userId);
-        $this->logStageChange($lead, null, $stageId, $userId);
+        $this->logStageChange($lead, null, $stageId, $userId, reason: $reason);
         $this->dispatchLeadCreatedAutomation($lead);
 
         // logStageChange() skips the auto-send-mail check for a brand-new lead's
@@ -329,66 +351,129 @@ class LeadService
         $newStageId = $this->nullableInt($data['stage_id'] ?? null) ?? $lead->stage_id;
         $before     = $this->audit->snapshot($lead);
 
-        $lead->update([
-            'name'                => $data['name'],
-            'company'             => filled($data['company'] ?? '') ? $data['company'] : null,
-            'email'               => filled($data['email'] ?? '') ? $data['email'] : null,
-            'phone'               => filled($data['phone'] ?? '') ? $data['phone'] : null,
-            // Desktop's Edit Lead modal doesn't expose source / value / close date / assignee,
-            // so its requests omit those keys entirely — preserve the lead's current value
-            // rather than wiping it to null. Callers that do send the key (e.g. the web edit
-            // form) still control it.
-            'source'              => array_key_exists('source', $data)
-                ? (filled($data['source']) ? $data['source'] : null)
-                : $lead->source,
-            'stage_id'            => $newStageId,
-            'estimated_value'     => array_key_exists('estimated_value', $data)
-                ? $this->nullableDecimal($data['estimated_value'])
-                : $lead->estimated_value,
-            'expected_close_date' => array_key_exists('expected_close_date', $data)
-                ? (filled($data['expected_close_date']) ? $data['expected_close_date'] : null)
-                : $lead->expected_close_date,
-            'notes'               => filled($data['notes'] ?? '') ? $data['notes'] : null,
-            'assigned_to'         => array_key_exists('assigned_to', $data)
-                ? $this->nullableInt($data['assigned_to'])
-                : $lead->assigned_to,
-        ]);
+        $stageAttributes = [];
+        $reason          = null;
+        if ($newStageId !== $oldStageId) {
+            [$stageAttributes, $reason] = $this->stageEntry($lead, $lead->business_id, $lead->stage, $this->stageOfProject($lead->project_id, $newStageId), $data);
+        } elseif ($lead->isLost() && filled($data['lost_reason_id'] ?? null)) {
+            // Changing the reason of a lead that stays lost
+            $stageAttributes = [
+                'lost_reason_id' => $this->lostReasons->requireActive($lead->business_id, $data['lost_reason_id'])->id,
+                'lost_reason'    => array_key_exists('lost_reason', $data) ? $this->lostNote($data['lost_reason']) : $lead->lost_reason,
+            ];
+        }
+
+        $source = array_key_exists('source', $data) || array_key_exists('source_id', $data)
+            ? $this->sources->resolve($lead->business_id, $data['source'] ?? null, $data['source_id'] ?? null)
+            : ['source' => $lead->source, 'source_id' => $lead->source_id];
+
+        DB::transaction(function () use ($lead, $data, $newStageId, $stageAttributes, $source) {
+            $lead->update([
+                'name'                  => $data['name'],
+                'company'               => filled($data['company'] ?? '') ? $data['company'] : null,
+                'email'                 => filled($data['email'] ?? '') ? $data['email'] : null,
+                'phone'                 => filled($data['phone'] ?? '') ? $data['phone'] : null,
+                // Desktop's Edit Lead modal doesn't expose every field (value / close date / …),
+                // so its requests omit those keys entirely — preserve the lead's current value
+                // rather than wiping it to null. Callers that do send the key (e.g. the web edit
+                // form) still control it.
+                'source'                => $source['source'],
+                'source_id'             => $source['source_id'],
+                'stage_id'              => $newStageId,
+                'estimated_value'       => array_key_exists('estimated_value', $data)
+                    ? $this->nullableDecimal($data['estimated_value'])
+                    : $lead->estimated_value,
+                'score'                 => array_key_exists('score', $data)
+                    ? $this->cleanScore($data['score'])
+                    : $lead->score,
+                'division_id'           => array_key_exists('division_id', $data)
+                    ? $this->cleanDivisionId($lead->business_id, $lead->department_id, $data['division_id'])
+                    : $lead->division_id,
+                'expected_close_date'   => array_key_exists('expected_close_date', $data)
+                    ? (filled($data['expected_close_date']) ? $data['expected_close_date'] : null)
+                    : $lead->expected_close_date,
+                'notes'                 => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                'product_interest_note' => array_key_exists('product_interest_note', $data)
+                    ? (filled($data['product_interest_note']) ? $data['product_interest_note'] : null)
+                    : $lead->product_interest_note,
+                'assigned_to'           => array_key_exists('assigned_to', $data)
+                    ? $this->nullableInt($data['assigned_to'])
+                    : $lead->assigned_to,
+            ] + $stageAttributes);
+
+            if (array_key_exists('products', $data)) {
+                $this->syncProducts($lead, (array) $data['products']);
+            }
+        });
 
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
         $this->audit->recordUpdated($lead, $before, $userId);
-        $this->logStageChange($lead, $oldStageId, $newStageId, $userId);
+        $this->logStageChange($lead, $oldStageId, $newStageId, $userId, reason: $reason);
 
         return $lead->fresh();
     }
 
-    public function markLost(Lead $lead, ?string $reason = null, ?int $userId = null): Lead
+    /** Move the lead to its pipeline's lost stage; a lost reason is required. */
+    public function markLost(Lead $lead, mixed $lostReasonId, ?string $note = null, ?int $userId = null): Lead
     {
-        $oldStageId = $lead->stage_id;
-        $lostStage  = $this->stages->lostStage($lead->project);
+        $lostStage = $this->stages->lostStage($lead->project);
+        if ($lostStage === null) {
+            throw ValidationException::withMessages(['stage_id' => 'This pipeline has no lost stage.']);
+        }
 
-        $lead->update([
-            'stage_id'    => $lostStage?->id,
-            'lost_reason' => filled($reason) ? $reason : null,
-        ]);
-
-        $this->logStageChange($lead, $oldStageId, $lostStage?->id, $userId, LeadAuditLog::EVENT_LOST, array_filter(['reason' => $lead->lost_reason]));
-
-        return $lead;
+        return $this->moveTo($lead, $lostStage, $userId, ['lost_reason_id' => $lostReasonId, 'lost_reason' => $note], event: LeadAuditLog::EVENT_LOST);
     }
 
     public function reopen(Lead $lead, ?int $userId = null): Lead
     {
-        $oldStageId = $lead->stage_id;
-        $openStage  = $this->stages->defaultOpenStage($lead->project);
+        $openStage = $this->stages->defaultOpenStage($lead->project);
+        if ($openStage === null) {
+            throw ValidationException::withMessages(['stage_id' => 'This pipeline has no open stage.']);
+        }
 
-        $lead->update([
-            'stage_id'    => $openStage?->id,
-            'lost_reason' => null,
-        ]);
+        return $this->moveTo($lead, $openStage, $userId, system: true, event: LeadAuditLog::EVENT_REOPENED);
+    }
 
-        $this->logStageChange($lead, $oldStageId, $openStage?->id, $userId, LeadAuditLog::EVENT_REOPENED);
+    /** Put the lead on hold; resume() later returns it to the stage it was in. */
+    public function putOnHold(Lead $lead, ?string $reason = null, ?int $userId = null): Lead
+    {
+        $stage = $this->stages->stageForStatus($lead->project, LeadStage::STATUS_ON_HOLD);
+        if ($stage === null) {
+            throw ValidationException::withMessages(['stage_id' => 'This pipeline has no "On Hold" stage.']);
+        }
 
-        return $lead;
+        return $this->moveTo($lead, $stage, $userId, ['reason' => $reason]);
+    }
+
+    /** Take an on-hold lead back to the stage it was in before (or the default open stage). */
+    public function resume(Lead $lead, ?int $userId = null): Lead
+    {
+        $lead->loadMissing('stage');
+        if (! $lead->isOnHold()) {
+            throw ValidationException::withMessages(['stage_id' => 'Only a lead on hold can be resumed.']);
+        }
+
+        $target = $lead->on_hold_from_stage_id
+            ? LeadStage::query()->where('project_id', $lead->project_id)->find($lead->on_hold_from_stage_id)
+            : null;
+        $target ??= $this->stages->defaultOpenStage($lead->project);
+
+        // The stage it left may be one only the system sets (e.g. quotation sent) — returning there is fine
+        return $this->moveTo($lead, $target, $userId, system: true);
+    }
+
+    /**
+     * Move the lead to the pipeline's stage for a standard status. For the workflows that own the
+     * reserved statuses (quotation approval / sending), which pass $system = true.
+     */
+    public function moveToStatus(Lead $lead, string $statusKey, ?int $userId = null, array $context = [], bool $system = false): Lead
+    {
+        $stage = $this->stages->stageForStatus($lead->project, $statusKey);
+        if ($stage === null) {
+            throw ValidationException::withMessages(['stage_id' => 'This pipeline has no "' . (LeadStage::statusLabel($statusKey) ?? $statusKey) . '" stage.']);
+        }
+
+        return $this->moveTo($lead, $stage, $userId, $context, $system);
     }
 
     public function convertToCustomer(Lead $lead, ?int $userId = null): Lead
@@ -409,12 +494,13 @@ class LeadService
             ]);
 
             $wonStage = $this->stages->wonStage($lead->project);
+            [$stageAttributes] = $wonStage ? $this->stageEntry($lead, $lead->business_id, $lead->stage, $wonStage, [], true) : [[]];
 
             $lead->update([
                 'stage_id'     => $wonStage?->id,
                 'customer_id'  => $customer->id,
                 'converted_at' => now(),
-            ]);
+            ] + $stageAttributes);
 
             $this->logStageChange($lead, $oldStageId, $wonStage?->id, $userId, LeadAuditLog::EVENT_CONVERTED, ['customer_id' => $customer->id]);
 
@@ -422,15 +508,109 @@ class LeadService
         });
     }
 
-    public function moveStage(Lead $lead, int $stageId, ?int $userId = null): Lead
+    /**
+     * Move a lead to another stage of its pipeline by hand.
+     *
+     * @param  array{lost_reason_id?: int|string|null, lost_reason?: ?string, reason?: ?string}  $context
+     */
+    public function moveStage(Lead $lead, int $stageId, ?int $userId = null, array $context = []): Lead
     {
+        return $this->moveTo($lead, $this->stageOfProject($lead->project_id, $stageId), $userId, $context);
+    }
+
+    private function moveTo(
+        Lead $lead,
+        LeadStage $to,
+        ?int $userId,
+        array $context = [],
+        bool $system = false,
+        string $event = LeadAuditLog::EVENT_STAGE_CHANGED,
+    ): Lead {
+        $lead->loadMissing('stage');
         $oldStageId = $lead->stage_id;
+        if ((int) $oldStageId === (int) $to->id) {
+            return $lead;
+        }
 
-        $lead->update(['stage_id' => $stageId]);
+        [$attributes, $reason] = $this->stageEntry($lead, $lead->business_id, $lead->stage, $to, $context, $system);
 
-        $this->logStageChange($lead, $oldStageId, $stageId, $userId);
+        $lead->update(['stage_id' => $to->id] + $attributes);
+        $lead->setRelation('stage', $to);
+
+        $meta = $event === LeadAuditLog::EVENT_LOST ? array_filter(['reason' => $reason]) : [];
+        $this->logStageChange($lead, $oldStageId, $to->id, $userId, $event, $meta, $reason);
 
         return $lead;
+    }
+
+    /**
+     * The status rules for a lead entering a stage, as lead attributes to save with the move plus
+     * the reason to log. Reserved statuses are only set by the system; a lost stage needs a lost
+     * reason and other reason-requiring stages a free-text reason; won/lost close the lead;
+     * on hold remembers the stage the lead came from.
+     *
+     * @return array{0: array<string, mixed>, 1: ?string}
+     */
+    private function stageEntry(?Lead $lead, int $businessId, ?LeadStage $from, LeadStage $to, array $context, bool $system = false): array
+    {
+        if ($to->isReserved() && ! $system) {
+            throw ValidationException::withMessages([
+                'stage_id' => '"' . $to->name . '" is set by the quotation workflow and cannot be chosen by hand.',
+            ]);
+        }
+
+        $attributes = [];
+        $reason     = null;
+
+        if ($to->isLostStage()) {
+            $lostReason = $this->lostReasons->requireActive($businessId, $context['lost_reason_id'] ?? null);
+            $note       = $this->lostNote($context['lost_reason'] ?? null);
+
+            $attributes['lost_reason_id'] = $lostReason->id;
+            $attributes['lost_reason']    = $note;
+            $reason = $lostReason->label . ($note !== null ? ': ' . $note : '');
+        } else {
+            if ($to->requires_reason) {
+                $reason = trim((string) ($context['reason'] ?? ''));
+                if ($reason === '') {
+                    throw ValidationException::withMessages(['reason' => 'Give a reason for moving this lead to "' . $to->name . '".']);
+                }
+                $reason = mb_substr($reason, 0, 500);
+            }
+            if ($from?->isLostStage() || $lead?->lost_reason_id) {
+                $attributes['lost_reason_id'] = null;
+                $attributes['lost_reason']    = null;
+            }
+        }
+
+        // Won / lost close the lead; moving between the two keeps the original close time
+        if ($to->isTerminal()) {
+            if (! $from?->isTerminal() || ! $lead?->closed_at) {
+                $attributes['closed_at'] = now();
+            }
+        } elseif ($lead?->closed_at) {
+            $attributes['closed_at'] = null;
+        }
+
+        if ($to->isOnHold()) {
+            if (! $from?->isOnHold()) {
+                $attributes['on_hold_from_stage_id'] = $from?->id;
+            }
+        } elseif ($lead?->on_hold_from_stage_id) {
+            $attributes['on_hold_from_stage_id'] = null;
+        }
+
+        return [$attributes, $reason];
+    }
+
+    private function stageOfProject(int $projectId, int $stageId): LeadStage
+    {
+        $stage = LeadStage::query()->where('project_id', $projectId)->find($stageId);
+        if ($stage === null) {
+            throw ValidationException::withMessages(['stage_id' => 'This stage does not belong to the lead\'s pipeline.']);
+        }
+
+        return $stage;
     }
 
     /**
@@ -469,6 +649,7 @@ class LeadService
         ?int $userId,
         string $event = LeadAuditLog::EVENT_STAGE_CHANGED,
         array $meta = [],
+        ?string $reason = null,
     ): void {
         if ($fromStageId === $toStageId) {
             return;
@@ -480,6 +661,7 @@ class LeadService
             'from_stage_id' => $fromStageId,
             'to_stage_id'   => $toStageId,
             'changed_by'    => $userId,
+            'reason'        => $reason,
         ]);
 
         // A brand-new lead's first stage is already covered by its "created" audit entry.
@@ -590,6 +772,71 @@ class LeadService
                 ['value' => $value],
             );
         }
+    }
+
+    /**
+     * Replace the lead's products of interest. Items are product ids or
+     * ['product_id' => id, 'quantity' => n|null]; every product must belong to the lead's business.
+     */
+    private function syncProducts(Lead $lead, array $items): void
+    {
+        $rows = [];
+        foreach ($items as $item) {
+            $id  = (int) (is_array($item) ? ($item['product_id'] ?? $item['id'] ?? 0) : $item);
+            $qty = is_array($item) ? $this->nullableDecimal($item['quantity'] ?? null) : null;
+            if ($id > 0) {
+                $rows[$id] = ['quantity' => $qty];
+            }
+        }
+
+        $found = $rows === [] ? 0 : Product::query()
+            ->where('business_id', $lead->business_id)
+            ->whereIn('id', array_keys($rows))
+            ->count();
+        if ($found !== count($rows)) {
+            throw ValidationException::withMessages(['products' => 'One or more of the selected products were not found.']);
+        }
+
+        $lead->products()->sync($rows);
+    }
+
+    private function cleanScore(mixed $score): ?string
+    {
+        if ($score === null || $score === '') {
+            return null;
+        }
+        if (! array_key_exists($score, Lead::SCORES)) {
+            throw ValidationException::withMessages(['score' => 'The score must be hot, warm or cold.']);
+        }
+
+        return $score;
+    }
+
+    /** A division of the lead's department, or null. */
+    private function cleanDivisionId(int $businessId, ?int $departmentId, mixed $divisionId): ?int
+    {
+        $divisionId = $this->nullableInt($divisionId);
+        if ($divisionId === null) {
+            return null;
+        }
+
+        $exists = $departmentId !== null && Division::query()
+            ->where('business_id', $businessId)
+            ->where('department_id', $departmentId)
+            ->whereKey($divisionId)
+            ->exists();
+        if (! $exists) {
+            throw ValidationException::withMessages(['division_id' => 'Pick a division of the lead\'s department.']);
+        }
+
+        return $divisionId;
+    }
+
+    private function lostNote(mixed $note): ?string
+    {
+        $note = trim((string) $note);
+
+        return $note === '' ? null : mb_substr($note, 0, 255);
     }
 
     private function nullableInt(mixed $value): ?int

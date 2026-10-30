@@ -10,6 +10,7 @@ use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessMember;
 use Modules\CRM\Models\DepartmentSetting;
 use Modules\CRM\Models\Division;
+use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\Project;
 use Modules\HRManagement\Models\Department;
 use Modules\HRManagement\Models\Employee;
@@ -21,7 +22,10 @@ use Modules\HRManagement\Models\Employee;
  */
 class CrmOrgService
 {
-    public function __construct(private readonly ProjectService $projects) {}
+    public function __construct(
+        private readonly ProjectService $projects,
+        private readonly LeadStageService $stages,
+    ) {}
 
     /** Every department of the business with its divisions, pipeline, settings and warnings. */
     public function departments(Business $business): array
@@ -287,13 +291,21 @@ class CrmOrgService
                 ]);
             }
 
-            Project::query()
+            $previous = Project::query()
                 ->where('business_id', $business->id)
                 ->where('department_id', $department->id)
                 ->whereKeyNot($project->id)
-                ->update(['department_id' => null]);
+                ->pluck('id');
+            Project::query()->whereIn('id', $previous)->update(['department_id' => null]);
+            Lead::query()->whereIn('project_id', $previous)->update(['department_id' => null, 'division_id' => null]);
 
             $project->update(['department_id' => $department->id]);
+
+            // A department pipeline always carries every standard status
+            $this->stages->seedStandard($project);
+
+            // Its leads now belong to the department
+            Lead::query()->where('project_id', $project->id)->update(['department_id' => $department->id]);
 
             return $project->fresh();
         });
@@ -301,10 +313,13 @@ class CrmOrgService
 
     public function unlinkPipeline(Business $business, Department $department): void
     {
-        Project::query()
+        $projectIds = Project::query()
             ->where('business_id', $business->id)
             ->where('department_id', $department->id)
-            ->update(['department_id' => null]);
+            ->pluck('id');
+
+        Project::query()->whereIn('id', $projectIds)->update(['department_id' => null]);
+        Lead::query()->whereIn('project_id', $projectIds)->update(['department_id' => null, 'division_id' => null]);
     }
 
     // ── Settings ─────────────────────────────────────────────────────────

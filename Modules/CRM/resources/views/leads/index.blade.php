@@ -166,6 +166,9 @@
                             <tr>
                                 <td>
                                     <strong style="color:var(--text);">{{ $l->name }}</strong>
+                                    @if($l->score)
+                                        <span class="ld-stage" style="border-color:{{ \Modules\CRM\Models\Lead::SCORES[$l->score][1] }};color:{{ \Modules\CRM\Models\Lead::SCORES[$l->score][1] }};margin-left:4px;">{{ \Modules\CRM\Models\Lead::scoreLabel($l->score) }}</span>
+                                    @endif
                                     @if($l->email)<div class="muted" style="font-size:11px;">{{ $l->email }}</div>@endif
                                 </td>
                                 <td>{{ $l->company ?? '—' }}</td>

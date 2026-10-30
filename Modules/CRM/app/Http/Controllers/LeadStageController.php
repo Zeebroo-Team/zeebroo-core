@@ -204,9 +204,9 @@ class LeadStageController extends Controller
                     ->where(fn ($q) => $q->where('project_id', $project->id))
                     ->ignore($stage?->id),
             ],
-            'color'   => ['nullable', 'string', 'max:20'],
-            'is_won'  => ['nullable', 'boolean'],
-            'is_lost' => ['nullable', 'boolean'],
-        ]);
+            'color'           => ['nullable', 'string', 'max:20'],
+            'system_key'      => ['required', Rule::in(array_keys(LeadStage::STATUSES))],
+            'requires_reason' => ['nullable', 'boolean'],
+        ]) + ['requires_reason' => false];
     }
 }

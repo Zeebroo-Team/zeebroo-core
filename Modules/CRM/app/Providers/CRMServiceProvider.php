@@ -25,7 +25,9 @@ class CRMServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        \Modules\CRM\Console\Commands\MapStageStatusesCommand::class,
+    ];
 
     /**
      * Provider classes to register.

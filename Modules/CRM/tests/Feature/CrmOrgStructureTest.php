@@ -80,6 +80,20 @@ beforeEach(function () {
     });
     (require dirname(__DIR__, 2) . '/database/migrations/2026_07_10_099800_create_crm_projects_table.php')->up();
     (require dirname(__DIR__, 2) . '/database/migrations/2026_10_28_100000_create_crm_user_permissions_table.php')->up();
+    // Linking a pipeline seeds its standard stages and moves its leads into the department
+    (require dirname(__DIR__, 2) . '/database/migrations/2026_07_10_099900_create_crm_lead_stages_table.php')->up();
+    Schema::create('crm_leads', function (Blueprint $t) {
+        $t->id();
+        $t->unsignedBigInteger('business_id');
+        $t->unsignedBigInteger('project_id');
+        $t->unsignedBigInteger('department_id')->nullable();
+        $t->unsignedBigInteger('division_id')->nullable();
+        $t->string('name');
+        $t->unsignedBigInteger('stage_id')->nullable();
+        $t->timestamps();
+    });
+    (require dirname(__DIR__, 2) . '/database/migrations/2026_07_11_100000_create_crm_lead_stage_logs_table.php')->up();
+    (require dirname(__DIR__, 2) . '/database/migrations/2026_11_01_100000_add_system_key_to_crm_lead_stages_table.php')->up();
     foreach (crmOrgMigrations() as $file) {
         (require $file)->up();
     }

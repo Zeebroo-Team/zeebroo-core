@@ -64,6 +64,8 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/leads/{lead}/convert',    [LeadController::class, 'convert'])     ->name('crm.leads.convert');
     Route::post('/crm/leads/{lead}/mark-lost',  [LeadController::class, 'markLost'])    ->name('crm.leads.mark-lost');
     Route::post('/crm/leads/{lead}/reopen',     [LeadController::class, 'reopen'])      ->name('crm.leads.reopen');
+    Route::post('/crm/leads/{lead}/hold',       [LeadController::class, 'hold'])        ->name('crm.leads.hold');
+    Route::post('/crm/leads/{lead}/resume',     [LeadController::class, 'resume'])      ->name('crm.leads.resume');
     Route::delete('/crm/leads/{lead}',          [LeadController::class, 'destroy'])     ->name('crm.leads.destroy');
 
     Route::get('/crm/contacts',                 [ContactController::class, 'index'])    ->name('crm.contacts.index');
