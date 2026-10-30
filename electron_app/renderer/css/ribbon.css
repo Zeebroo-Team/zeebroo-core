@@ -10233,6 +10233,25 @@ body.dark .inv-status-out { background: #450a0a; color: #fca5a5; }
 .inv-hero.inv-hero--compact .inv-hero-meta { display: none; }
 .inv-hero.inv-hero--compact .inv-hero-info { flex-direction: row; align-items: center; gap: 10px; }
 
+/* Collapsible hero — slides shut while the tab body is scrolled; its badges move
+   into the header bar. JS drives max-height between the measured height and 0. */
+.inv-hero.inv-hero--collapsible {
+  overflow: hidden;
+  transition: max-height .3s cubic-bezier(.4, 0, .2, 1), padding .3s cubic-bezier(.4, 0, .2, 1),
+              opacity .2s ease, transform .3s cubic-bezier(.4, 0, .2, 1), border-color .3s ease;
+}
+.inv-hero.inv-hero--collapsible.inv-hero--hidden {
+  padding-top: 0;
+  padding-bottom: 0;
+  opacity: 0;
+  transform: translateY(-8px);
+  border-bottom-color: transparent;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) { .inv-hero.inv-hero--collapsible { transition: none; } }
+.inv-badges-inline { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; animation: invHeroFadeLeft .3s ease both; }
+@media (prefers-reduced-motion: reduce) { .inv-badges-inline { animation: none; } }
+
 /* Smooth compact ↔ full transition. Sizes ease; the parts that change layout
    (meta shown/hidden, badges moving beside the name) fade in after the swap. */
 .inv-hero,

@@ -43,6 +43,13 @@ class Business extends Model
 {
     use HasSettings;
 
+    /**
+     * Session flag that re-arms the Get Started page for team members. Their
+     * prompt can't live in platform_choice_shown_at — that column belongs to
+     * the owner's row, so a member's login would re-prompt the owner.
+     */
+    public const PLATFORM_CHOICE_SESSION_KEY = 'platform_choice_pending';
+
     /** Members (non-owner users assigned to this business). */
     public function members(): HasMany
     {

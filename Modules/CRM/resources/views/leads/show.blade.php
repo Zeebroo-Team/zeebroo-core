@@ -117,7 +117,7 @@
                 </div>
                 <div class="ld-detail-grid__field">
                     <div class="ld-detail-grid__label">Source</div>
-                    <div class="ld-detail-grid__value">{{ $lead->source ? ucfirst(str_replace('-', ' ', $lead->source)) : '—' }}</div>
+                    <div class="ld-detail-grid__value">{{ \Modules\CRM\Models\Lead::sourceLabel($lead->source) ?? '—' }}</div>
                 </div>
                 <div class="ld-detail-grid__field">
                     <div class="ld-detail-grid__label">Stage</div>

@@ -17,6 +17,9 @@ class ResetPlatformChoicePrompt
             return;
         }
 
+        // Covers team members, who own no business of their own.
+        session()->put(Business::PLATFORM_CHOICE_SESSION_KEY, true);
+
         $business = $event->user->businesses()->latest()->first();
         if ($business instanceof Business && $business->platform_choice_shown_at !== null) {
             $business->forceFill(['platform_choice_shown_at' => null])->save();

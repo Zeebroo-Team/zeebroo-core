@@ -207,6 +207,7 @@ class PosBackupRegistry
                     ['table' => 'crm_leads'],
                     ['table' => 'crm_lead_custom_field_values', 'parent' => ['lead_id', 'crm_leads']],
                     ['table' => 'crm_lead_stage_logs', 'parent' => ['lead_id', 'crm_leads']],
+                    ['table' => 'crm_lead_audit_logs'],
                     ['table' => 'crm_activities'],
                     ['table' => 'crm_tasks'],
                 ],

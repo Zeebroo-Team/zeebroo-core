@@ -262,7 +262,7 @@ class LeadFormService
      *
      * @param  array<string, string>  $input  keyed by block path (see LeadForm::fieldBlocksWithPaths())
      */
-    public function submit(LeadForm $form, array $input, string $source = 'public-form'): Lead
+    public function submit(LeadForm $form, array $input, string $source = 'public-form', ?int $userId = null): Lead
     {
         $mapped = $form->mapPathedInputsToLeadData($input);
         $name   = $mapped['core']['name'] ?: ($mapped['first_text'] ?: 'Website inquiry');
@@ -276,7 +276,7 @@ class LeadFormService
             'source'        => $source,
             'custom_fields' => $mapped['custom_fields'],
             'stage_id'      => $form->default_stage_id,
-        ]);
+        ], $userId);
     }
 
     /**

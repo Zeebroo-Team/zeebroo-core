@@ -56221,10 +56221,11 @@ async function submitDsCreate() {
   let _crmContactQ      = '';
   let _crmRelationSearch = '';
   let _crmDetailTab     = 'dashboard';
-  let _crmDetailLoaded  = { forms: false, customData: false, contacts: false };
+  let _crmDetailLoaded  = { forms: false, customData: false, contacts: false, history: false };
   let _crmRelationContacts       = [];   // rows for the relation-detail "Contacts" tab
   let _crmRelationContactsSearch = '';
   let _crmRelationContactsStage  = '';
+  let _crmRelationContactsSource = '';
   let _crmLeadFormId    = null;   // id of the default form backing the open lead modal, or null when using the fallback fields
   let _crmLeadFormBlocks = [];    // blocks currently rendered in the open lead modal (New or Edit)
   let _crmLeadFormCustomFields = {}; // custom field defs for the open lead modal, keyed by id
@@ -56418,12 +56419,16 @@ async function submitDsCreate() {
   async function openRelationDetail(id) {
     _crmProjectId    = +id;
     _crmDetailTab    = 'dashboard';
-    _crmDetailLoaded = { forms: false, customData: false, contacts: false };
+    _crmDetailLoaded = { forms: false, customData: false, contacts: false, history: false };
+    _crmRelationContactsSource = _crmCustomDataSourceFilter = '';
+    _crmHistoryFilters = { q: '', event: '', user_id: '', from: '', to: '', lead_source: '' };
+    _crmResetHistoryFilterInputs();
     const list   = $('#crm-relation-list');
     const detail = $('#crm-relation-detail');
     if (list)   list.style.display   = 'none';
     if (detail) detail.style.display = 'flex';
     _crmRenderDetailHero();
+    _crmResetPipelineView();
     await loadCrmPipeline(_crmProjectId);
     _crmSwitchDetailTab('dashboard');
   }
@@ -56444,7 +56449,44 @@ async function submitDsCreate() {
     if (metaEl) metaEl.innerHTML = relation.description ? `<span>${escHtml(relation.description)}</span>` : '';
     const count = relation.leads_count || 0;
     const badgesEl = $('#crm-relation-hero-badges');
-    if (badgesEl) badgesEl.innerHTML = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+    const badgeHtml = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+    if (badgesEl) badgesEl.innerHTML = badgeHtml;
+    const headerBadgesEl = $('#crm-relation-header-badges'); if (headerBadgesEl) headerBadgesEl.innerHTML = badgeHtml;
+  }
+
+  // Hide the hero while scrolled and surface its lead count in the header bar instead.
+  // max-height is animated between the measured height and 0, then cleared once
+  // open again so the hero still resizes with its content.
+  // The user can also collapse the hero by hand (header toggle); that choice is
+  // remembered and wins over the scroll-driven reopen.
+  let _crmHeroTimer = null;
+  let _crmHeroManual = (() => { try { return localStorage.getItem('crm.relation.heroHidden') === '1'; } catch { return false; } })();
+  function _crmSetHeroHidden(hidden) {
+    if (_crmHeroManual) hidden = true;
+    const toggle = $('#crm-relation-hero-toggle');
+    if (toggle) {
+      toggle.innerHTML = _crmHeroManual
+        ? '<i class="fa fa-chevron-down"></i> <span>Show details</span>'
+        : '<i class="fa fa-chevron-up"></i> <span>Hide details</span>';
+      toggle.title = _crmHeroManual ? 'Show relation details' : 'Hide relation details';
+    }
+    const hero = $('#crm-relation-hero');
+    if (hero && hero.classList.contains('inv-hero--hidden') !== hidden) {
+      clearTimeout(_crmHeroTimer);
+      if (hidden) {
+        hero.dataset.fullHeight = hero.offsetHeight;
+        hero.style.maxHeight = hero.offsetHeight + 'px';
+        void hero.offsetHeight; // commit the start height before transitioning
+        hero.classList.add('inv-hero--hidden');
+        hero.style.maxHeight = '0px';
+      } else {
+        hero.classList.remove('inv-hero--hidden');
+        hero.style.maxHeight = (+hero.dataset.fullHeight || hero.scrollHeight) + 'px';
+        _crmHeroTimer = setTimeout(() => { hero.style.maxHeight = ''; }, 320);
+      }
+    }
+    const headerBadgesEl = $('#crm-relation-header-badges');
+    if (headerBadgesEl) headerBadgesEl.style.display = hidden ? '' : 'none';
   }
 
   function _crmRenderDashboardPane() {
@@ -56456,6 +56498,27 @@ async function submitDsCreate() {
     const won  = cols.filter(c => c.is_won).reduce((s, c) => s + c.leads_count, 0);
     const lost = cols.filter(c => c.is_lost).reduce((s, c) => s + c.leads_count, 0);
     const relation = _crmProjects.find(p => p.id === _crmProjectId) || {};
+
+    // Per-source breakdown: how many leads each channel brings in, their value and how many were won.
+    const bySrc = {};
+    cols.forEach(c => c.leads.forEach(l => {
+      const r = bySrc[l.source || ''] ||= { count: 0, value: 0, won: 0 };
+      r.count++;
+      r.value += Number(l.estimated_value) || 0;
+      if (c.is_won) r.won++;
+    }));
+    const srcRows = Object.entries(bySrc).sort((a, b) => b[1].count - a[1].count);
+    const srcMax  = srcRows[0]?.[1].count || 1;
+    const srcHtml = srcRows.map(([key, r]) => {
+      const s = _crmSource(key);
+      const meta = [`${r.count} lead${r.count !== 1 ? 's' : ''}`, r.value ? formatMoney(r.value) : '', r.won ? `${r.won} won (${Math.round(r.won / r.count * 100)}%)` : '']
+        .filter(Boolean).join(' · ');
+      return `<tr${key ? ` class="crm-dash-src-row" data-dash-source="${escHtml(key)}" title="Show ${escHtml(s.label)} leads in the pipeline"` : ''}>
+        <td class="inv-dt-label">${key ? _crmSourceBadge(key) : '<span class="inv-detail-none">No source</span>'}</td>
+        <td class="inv-dt-val"><div class="crm-dash-src-bar"><span style="width:${Math.max(4, Math.round(r.count / srcMax * 100))}%;background:${escHtml(s?.color || '#94a3b8')}"></span></div>${meta}</td>
+      </tr>`;
+    }).join('');
+
     pane.innerHTML = `
       <div class="inv-section">
         <div class="inv-section-title"><i class="fa fa-chart-simple"></i> Pipeline Overview</div>
@@ -56473,6 +56536,12 @@ async function submitDsCreate() {
         </table>
       </div>
       <div class="inv-section">
+        <div class="inv-section-title"><i class="fa fa-bullhorn"></i> Lead Sources</div>
+        <table class="inv-detail-table">
+          ${srcHtml || '<tr><td class="inv-dt-val" colspan="2"><span class="inv-detail-none">No leads yet</span></td></tr>'}
+        </table>
+      </div>
+      <div class="inv-section">
         <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
         <table class="inv-detail-table">
           <tr><td class="inv-dt-label">Description</td><td class="inv-dt-val">${relation.description ? escHtml(relation.description) : '<span class="inv-detail-none">No description</span>'}</td></tr>
@@ -56481,13 +56550,24 @@ async function submitDsCreate() {
     `;
   }
 
+  // Dashboard → Lead Sources: clicking a source opens the Pipeline filtered to it.
+  $('#crm-relation-pane-dashboard')?.addEventListener('click', e => {
+    const row = e.target.closest('[data-dash-source]');
+    if (!row) return;
+    _crmPipeFilter.source = row.dataset.dashSource;
+    _crmColLimit = {};
+    _crmSwitchDetailTab('pipeline');
+    _crmRenderPipelineView();
+  });
+
   function _crmSwitchDetailTab(tab) {
     _crmDetailTab = tab;
     $$('#crm-relation-tabs .inv-tab').forEach(b => b.classList.toggle('active', b.dataset.crmdtab === tab));
     $$('#crm-relation-tab-body .inv-tab-pane').forEach(el => el.classList.remove('active'));
     $(`#crm-relation-pane-${tab}`)?.classList.add('active');
-    const body = $('#crm-relation-tab-body'); if (body) body.scrollTop = 0;
-    $('#crm-relation-hero')?.classList.remove('inv-hero--compact');
+    const body = $('#crm-relation-tab-body');
+    if (body) { body.scrollTop = 0; body.classList.toggle('crm-tab-body--fill', tab === 'pipeline'); }
+    _crmSetHeroHidden(false);
     if (tab === 'forms' && !_crmDetailLoaded.forms) {
       _crmDetailLoaded.forms = true;
       loadCrmForms();
@@ -56500,23 +56580,707 @@ async function submitDsCreate() {
       _crmDetailLoaded.contacts = true;
       loadCrmRelationContacts();
     }
+    if (tab === 'history' && !_crmDetailLoaded.history) {
+      loadCrmHistory();
+    }
   }
+
+  // ── Relation History tab — audit feed of every lead change in this relation ──
+  let _crmHistoryFilters = { q: '', event: '', user_id: '', from: '', to: '', lead_source: '' };
+  let _crmHistoryEntries = [];
+  let _crmHistoryPage    = 0;
+  let _crmHistoryLastPage = 1;
+  let _crmHistorySeq     = 0;
+
+  function _crmResetHistoryFilterInputs() {
+    ['#crm-history-search', '#crm-history-event', '#crm-history-user', '#crm-history-source', '#crm-history-from', '#crm-history-to']
+      .forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+  }
+
+  async function loadCrmHistory({ append = false } = {}) {
+    if (!_crmProjectId) return;
+    _crmDetailLoaded.history = true;
+    const list  = $('#crm-history-list');
+    const more  = $('#crm-history-more');
+    const total = $('#crm-history-total');
+    if (!list) return;
+
+    const seq  = ++_crmHistorySeq;
+    const page = append ? _crmHistoryPage + 1 : 1;
+    if (!append) list.innerHTML = '<span style="color:var(--text-muted);font-size:12px;padding:12px 0;display:block">Loading history…</span>';
+    if (more) more.disabled = true;
+
+    const res = await API.crmProjectHistory(_crmProjectId, { ..._crmHistoryFilters, page }).catch(() => ({ status: 0 }));
+    if (seq !== _crmHistorySeq) return; // a newer filter/refresh request superseded this one
+    if (more) more.disabled = false;
+
+    if (res.status !== 200) {
+      if (!append) list.innerHTML = `<span style="color:var(--text-muted);font-size:12px;padding:12px 0;display:block">${escHtml(res.body?.message || 'Failed to load history.')}</span>`;
+      else toast(res.body?.message || 'Failed to load more history.', 'error');
+      return;
+    }
+
+    const meta = res.body.meta || {};
+    _crmHistoryPage     = meta.current_page || page;
+    _crmHistoryLastPage = meta.last_page || 1;
+    _crmHistoryEntries  = append ? _crmHistoryEntries.concat(res.body.data || []) : (res.body.data || []);
+    _crmPopulateHistoryFilters(meta);
+
+    if (total) total.textContent = `${meta.total ?? _crmHistoryEntries.length} record${meta.total === 1 ? '' : 's'}`;
+    if (more)  more.style.display = _crmHistoryPage < _crmHistoryLastPage ? '' : 'none';
+
+    if (!_crmHistoryEntries.length) {
+      list.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:36px 0;text-align:center">
+        <i class="fa fa-clock-rotate-left" style="font-size:34px;color:var(--text-muted)"></i>
+        <p style="color:var(--text-muted);font-size:13px;margin:0">No activity matches these filters.</p></div>`;
+      return;
+    }
+
+    // Group by calendar day so a long feed stays scannable.
+    let html = '', lastDay = '';
+    _crmHistoryEntries.forEach(e => {
+      const day = new Date(e.created_at).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      if (day !== lastDay) {
+        if (lastDay) html += '</div>';
+        html += `<div class="crm-audit-day">${escHtml(day)}</div><div class="crm-audit-list">`;
+        lastDay = day;
+      }
+      html += _crmAuditEntryHtml(e, { showLead: true });
+    });
+    list.innerHTML = html + '</div>';
+  }
+
+  function _crmPopulateHistoryFilters(meta) {
+    const evSel = $('#crm-history-event');
+    if (evSel && meta.events && evSel.options.length <= 1) {
+      evSel.innerHTML = '<option value="">All actions</option>'
+        + Object.entries(meta.events).map(([k, v]) => `<option value="${escHtml(k)}">${escHtml(v)}</option>`).join('');
+      evSel.value = _crmHistoryFilters.event;
+    }
+    const userSel = $('#crm-history-user');
+    if (userSel && meta.users) {
+      userSel.innerHTML = '<option value="">All users</option>'
+        + meta.users.map(u => `<option value="${u.id}">${escHtml(u.name || 'User #' + u.id)}</option>`).join('');
+      userSel.value = _crmHistoryFilters.user_id;
+    }
+    _crmHistoryFilters.lead_source = _crmFillSourceSelect($('#crm-history-source'), _crmHistoryFilters.lead_source);
+  }
+
+  let _crmHistorySearchTimer = null;
+  $('#crm-history-search')?.addEventListener('input', e => {
+    clearTimeout(_crmHistorySearchTimer);
+    _crmHistorySearchTimer = setTimeout(() => { _crmHistoryFilters.q = e.target.value.trim(); loadCrmHistory(); }, 300);
+  });
+  [['#crm-history-event', 'event'], ['#crm-history-user', 'user_id'], ['#crm-history-source', 'lead_source'], ['#crm-history-from', 'from'], ['#crm-history-to', 'to']]
+    .forEach(([sel, key]) => $(sel)?.addEventListener('change', e => { _crmHistoryFilters[key] = e.target.value; loadCrmHistory(); }));
+  // The flow window's source picker drives the same filter as the History tab, so the feed
+  // behind the window matches what the flow shows once it is closed.
+  $('#crm-hf-source')?.addEventListener('change', e => {
+    _crmHistoryFilters.lead_source = e.target.value;
+    const tabSel = $('#crm-history-source');
+    if (tabSel) tabSel.value = e.target.value;
+    _crmHfLoad();
+    loadCrmHistory();
+  });
+  $('#crm-history-more')?.addEventListener('click', () => loadCrmHistory({ append: true }));
+  $('#crm-history-refresh')?.addEventListener('click', () => loadCrmHistory());
+
+  // ── History "View more" — 90% window drawing the trail as a React Flow diagram ──
+  // Two views over the same payload: "Stage flow" (stages as nodes, observed moves as
+  // weighted edges) and "Lead journeys" (one row per lead, each stage it passed through
+  // left → right). Clicking any node or edge lists the matching audit entries on the right.
+  const _CRM_HF_EVENT_COLORS = {
+    created: '#2563eb', stage_changed: '#0891b2', converted: '#16a34a',
+    lost: '#dc2626', reopened: '#d97706', deleted: '#b91c1c',
+  };
+  let _crmHfData = null;
+  let _crmHfView = 'stages';
+  let _crmHfSeq  = 0;
+
+  // macOS-style open/close: the window zooms out of (and back into) the "View more" button.
+  // The shell starts shrunk and offset onto the button; .is-open springs it to full size.
+  let _crmHfCloseTimer = null;
+  // Resolves once the open animation has finished; mounting hundreds of React Flow nodes
+  // mid-animation is what made the window stutter while it zoomed open.
+  let _crmHfOpenReady = Promise.resolve();
+
+  async function openCrmHistoryFlow() {
+    if (!_crmProjectId) return;
+    const relation = _crmProjects.find(p => p.id === _crmProjectId) || {};
+    $('#crm-history-flow-title').textContent = `History Flow — ${relation.name || 'Relation'}`;
+    const modal = $('#crm-history-flow-modal');
+    clearTimeout(_crmHfCloseTimer);
+    _crmHfSetOrigin();
+    modal.classList.remove('is-open');
+    modal.style.display = 'flex';
+    void modal.offsetWidth; // commit the collapsed state so the transition runs
+    modal.classList.add('is-open');
+    _crmHfOpenReady = new Promise(r => setTimeout(r, 480));
+    await _crmHfLoad();
+  }
+
+  function _crmHfSetOrigin() {
+    const btn   = $('#crm-history-flow-btn');
+    const shell = $('#crm-history-flow-modal .crm-hf-shell');
+    if (!shell) return;
+    const r = btn?.offsetParent ? btn.getBoundingClientRect() : null;
+    shell.style.setProperty('--hf-dx', r ? `${r.left + r.width / 2 - window.innerWidth / 2}px` : '0px');
+    shell.style.setProperty('--hf-dy', r ? `${r.top + r.height / 2 - window.innerHeight / 2}px` : '0px');
+  }
+
+  function _closeCrmHistoryFlow({ instant = false } = {}) {
+    const modal = $('#crm-history-flow-modal');
+    if (!modal || modal.style.display === 'none') return;
+    _crmHfSetOrigin();
+    modal.classList.remove('is-open');
+    clearTimeout(_crmHfCloseTimer);
+    if (instant) { modal.style.display = 'none'; return; }
+    _crmHfCloseTimer = setTimeout(() => { modal.style.display = 'none'; }, 360);
+  }
+
+  async function _crmHfLoad() {
+    const seq = ++_crmHfSeq;
+    _crmHfData = null;
+    _crmHfMsg('<i class="fa fa-spinner fa-spin"></i>Loading flow…');
+    _crmHfPanelDefault();
+    const hfSource = $('#crm-hf-source');
+    _crmFillSourceSelect(hfSource, _crmHistoryFilters.lead_source);
+    hfSource?.classList.toggle('active', !!_crmHistoryFilters.lead_source);
+    const { event: _ignored, ...filters } = _crmHistoryFilters; // the flow is built from stage events only
+    const res = await API.crmProjectHistoryFlow(_crmProjectId, filters).catch(() => ({ status: 0 }));
+    await _crmHfOpenReady;
+    if (seq !== _crmHfSeq) return;
+    if (res.status !== 200) {
+      _crmHfMsg(`<i class="fa fa-triangle-exclamation"></i>${escHtml(res.body?.message || 'Failed to load the flow.')}`);
+      return;
+    }
+    _crmHfData = res.body.data;
+    const m = _crmHfData.meta || {};
+    const summary = $('#crm-hf-summary');
+    if (summary) {
+      const active = Object.entries(filters).filter(([k, v]) => v && k !== 'lead_source').length; // source has its own picker in the header
+      summary.textContent = `${m.moves_total} move${m.moves_total === 1 ? '' : 's'} · ${m.leads_total} lead${m.leads_total === 1 ? '' : 's'}`
+        + (m.leads_shown < m.leads_total ? ` (journeys show latest ${m.leads_shown})` : '')
+        + (active ? ` · ${active} filter${active === 1 ? '' : 's'} from History applied` : '');
+    }
+    _crmHfRender();
+  }
+
+  // The canvas holds a React root plus a message overlay; both are created on first use.
+  function _crmHfMount() {
+    const canvas = $('#crm-hf-canvas');
+    if (!canvas.querySelector('#crm-hf-flow')) {
+      canvas.innerHTML = `<div id="crm-hf-flow" style="position:absolute;inset:0"></div><div class="crm-hf-msg" id="crm-hf-msg" style="display:none"></div>
+        <div class="crm-hf-legend">
+          <span><i class="crm-hf-line"></i>Moved forward</span>
+          <span><i class="crm-hf-line crm-hf-line--back"></i>Moved back</span>
+          <span><b>“7 moves · avg 10 min”</b>&nbsp;= moved 7 times, after 10 minutes (on average) in the stage the line starts from</span>
+          <span><i class="fa fa-hand-pointer"></i>Hover a line to explain it · click for full history</span>
+        </div>
+        <div class="crm-hf-tip" id="crm-hf-tip" style="display:none"></div>`;
+    }
+    return { flow: $('#crm-hf-flow'), msg: $('#crm-hf-msg') };
+  }
+
+  function _crmHfMsg(html) {
+    const { flow, msg } = _crmHfMount();
+    flow._rfRoot?.render(null);
+    msg.innerHTML = html;
+    msg.style.display = '';
+  }
+
+  function _crmHfRender() {
+    $$('#crm-hf-views .crm-hf-view').forEach(b => b.classList.toggle('active', b.dataset.hfview === _crmHfView));
+    if (!_crmHfData) return;
+    const RF = window.ReactFlow;
+    if (!RF || !RF.ReactFlow) return _crmHfMsg('<i class="fa fa-diagram-project"></i>Flow diagram not available');
+    if (!_crmHfData.journeys.length) return _crmHfMsg('<i class="fa fa-clock-rotate-left"></i>No stage activity matches these filters.');
+
+    const { flow, msg } = _crmHfMount();
+    msg.style.display = 'none';
+    _crmHfTip(null);
+    const graph = _crmHfView === 'journeys' ? _crmHfJourneyGraph(RF) : _crmHfStageGraph(RF);
+    if (!flow._rfRoot) flow._rfRoot = window.ReactDOM.createRoot(flow);
+    flow._rfRoot.render(React.createElement(_crmHfFlowApp(RF), { key: _crmHfView + '-' + _crmHfSeq, ...graph }));
+  }
+
+  // Shared React Flow shell — the graph builders supply nodes, edges, node types and click handlers.
+  function _crmHfFlowApp(RF) {
+    const { Controls, MiniMap, Background, useNodesState, useEdgesState } = RF;
+    const isDark = document.body.classList.contains('dark');
+    return ({ nodes: initNodes, edges: initEdges, nodeTypes, edgeTypes, edgeTip, onNodeClick, onEdgeClick }) => {
+      const [nodes, , onNodesChange] = useNodesState(initNodes);
+      const [edges, , onEdgesChange] = useEdgesState(initEdges);
+      const types = React.useMemo(() => nodeTypes, []);
+      const eTypes = React.useMemo(() => edgeTypes || {}, []);
+      return React.createElement(RF.ReactFlow, {
+        nodes, edges, onNodesChange, onEdgesChange, nodeTypes: types, edgeTypes: eTypes,
+        fitView: true, fitViewOptions: { padding: 0.15, maxZoom: 1.1 },
+        minZoom: 0.1, maxZoom: 2.5,
+        nodesDraggable: true, nodesConnectable: false, elementsSelectable: true,
+        zoomOnScroll: true, panOnDrag: true,
+        onlyRenderVisibleElements: initNodes.length > 120,
+        proOptions: { hideAttribution: true },
+        onNodeClick, onEdgeClick: (ev, edge) => { _crmHfTip(null); onEdgeClick(ev, edge); },
+        onEdgeMouseEnter: (ev, edge) => _crmHfTip(edgeTip?.(edge), ev),
+        onEdgeMouseMove:  ev => _crmHfTipMove(ev),
+        onEdgeMouseLeave: () => _crmHfTip(null),
+        onMoveStart:      () => _crmHfTip(null),
+        style: { background: isDark ? '#1a1b2e' : '#ffffff', width: '100%', height: '100%' },
+      },
+        Background && React.createElement(Background, { gap: 22, size: 1, color: isDark ? '#2a2c44' : '#e5e7eb' }),
+        MiniMap && React.createElement(MiniMap, {
+          pannable: true, zoomable: true,
+          nodeColor: n => n.data?.color || '#94a3b8',
+          style: { background: isDark ? '#111827' : '#f8fafc', width: 170, height: 110 },
+        }),
+        React.createElement(Controls, { showInteractive: false })
+      );
+    };
+  }
+
+  function _crmHfTheme() {
+    const isDark = document.body.classList.contains('dark');
+    return {
+      isDark,
+      card:  isDark ? '#0f172a' : '#ffffff',
+      text:  isDark ? '#e5e7eb' : '#111827',
+      muted: isDark ? '#9ca3af' : '#6b7280',
+      soft:  isDark ? '#1e293b' : '#f1f5f9',
+      font:  "'Segoe UI',sans-serif",
+    };
+  }
+
+  // Invisible handles, same trick as the Business Flow chart.
+  const _crmHfHandle = (RF, type, pos, id) => React.createElement(RF.Handle, {
+    type, position: RF.Position[pos], id,
+    style: { width: 1, height: 1, background: 'transparent', border: 'none', opacity: 0 },
+  });
+
+  // Every audit entry loaded for the window, newest first (journeys are capped server-side).
+  function _crmHfAllSteps() {
+    return _crmHfData.journeys.flatMap(j => j.steps)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at) || b.id - a.id);
+  }
+
+  // Line label in words: "7 moves · avg 10m", "12 moved back · avg 3d 23h", "7 new leads".
+  function _crmHfEdgeLabel(t, backward) {
+    const n = t.count;
+    if (!t.from_stage_id) return `${n} new lead${n === 1 ? '' : 's'}`;
+    if (!t.to_stage_id)   return `${n} deleted`;
+    const what = backward ? `${n} moved back` : `${n} move${n === 1 ? '' : 's'}`;
+    return t.avg_duration_seconds != null ? `${what} · avg ${_crmFmtDuration(t.avg_duration_seconds)}` : what;
+  }
+
+  // Floating tooltip inside the canvas, following the pointer.
+  function _crmHfTip(html, ev) {
+    const tip = $('#crm-hf-tip');
+    if (!tip) return;
+    if (!html) { tip.style.display = 'none'; return; }
+    tip.innerHTML = html;
+    tip.style.display = '';
+    _crmHfTipMove(ev);
+  }
+
+  function _crmHfTipMove(ev) {
+    const tip = $('#crm-hf-tip'), canvas = $('#crm-hf-canvas');
+    if (!tip || !ev || tip.style.display === 'none') return;
+    const r = canvas.getBoundingClientRect();
+    let x = ev.clientX - r.left + 16, y = ev.clientY - r.top + 16;
+    if (x + tip.offsetWidth > r.width - 8)  x = ev.clientX - r.left - tip.offsetWidth - 16;
+    if (y + tip.offsetHeight > r.height - 8) y = ev.clientY - r.top - tip.offsetHeight - 16;
+    tip.style.left = Math.max(8, x) + 'px';
+    tip.style.top  = Math.max(8, y) + 'px';
+  }
+
+  // ── View 1: Stage flow ─────────────────────────────────────────────────
+  function _crmHfStageGraph(RF) {
+    const h = React.createElement;
+    const T = _crmHfTheme();
+    const { stages, transitions } = _crmHfData;
+    const COL = 360; // room for the worded labels between adjacent stages
+
+    const isOpen = s => !s.is_won && !s.is_lost && !s.deleted;
+    const open   = stages.filter(isOpen);
+    const termX  = (open.length + 1) * COL;
+    const pos    = { start: { x: 0, y: 0 } };
+    open.forEach((s, i) => { pos[s.id] = { x: (i + 1) * COL, y: 0 }; });
+    stages.filter(s => s.is_won).forEach((s, i) => { pos[s.id] = { x: termX, y: -170 - i * 140 }; });
+    stages.filter(s => s.is_lost).forEach((s, i) => { pos[s.id] = { x: termX, y: 170 + i * 140 }; });
+    stages.filter(s => s.deleted).forEach((s, i) => { pos[s.id] = { x: (i + 1) * COL, y: 380 }; });
+    pos.end = { x: termX + COL, y: 0 };
+
+    // Per-stage in / out counts and count-weighted average stay before leaving.
+    const stats = {};
+    stages.forEach(s => { stats[s.id] = { entered: 0, left: 0, staySum: 0, stayN: 0 }; });
+    transitions.forEach(t => {
+      if (t.to_stage_id && stats[t.to_stage_id]) stats[t.to_stage_id].entered += t.count;
+      if (t.from_stage_id && stats[t.from_stage_id]) {
+        const st = stats[t.from_stage_id];
+        st.left += t.count;
+        if (t.avg_duration_seconds != null) { st.staySum += t.avg_duration_seconds * t.count; st.stayN += t.count; }
+      }
+    });
+    const created = transitions.filter(t => !t.from_stage_id).reduce((s, t) => s + t.count, 0);
+    const deleted = transitions.filter(t => !t.to_stage_id).reduce((s, t) => s + t.count, 0);
+
+    const StageNode = ({ data }) => {
+      const s = data.stage, c = s.color;
+      const stat = (label, value) => h('div', { style: { background: T.soft, borderRadius: 6, padding: '3px 6px', textAlign: 'center' } },
+        h('div', { style: { fontWeight: 800, fontSize: 13, color: T.text } }, value),
+        h('div', { style: { fontSize: 9, color: T.muted, textTransform: 'uppercase', letterSpacing: '.04em' } }, label));
+      return h('div', { style: {
+        width: 200, background: T.card, border: `1.5px solid ${c}`, borderLeft: `6px solid ${c}`, borderRadius: 11,
+        padding: '9px 11px', fontFamily: T.font, boxShadow: `0 6px 18px ${c}33`, cursor: 'pointer', opacity: s.deleted ? 0.75 : 1,
+      }},
+        _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
+        _crmHfHandle(RF, 'source', 'Bottom', 'src-b'), _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
+        _crmHfHandle(RF, 'source', 'Top', 'src-t'), _crmHfHandle(RF, 'target', 'Top', 'tgt-t'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 12.5, color: T.text } },
+          h('i', { className: `fa ${s.is_won ? 'fa-trophy' : s.is_lost ? 'fa-circle-xmark' : s.deleted ? 'fa-ghost' : 'fa-layer-group'}`, style: { color: c, fontSize: 11 } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name)),
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 7 } },
+          stat('Now', s.leads_count), stat('In', data.entered), stat('Out', data.left)),
+        h('div', { style: { marginTop: 6, fontSize: 10, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
+          h('i', { className: 'fa fa-hourglass-half' }),
+          data.avgStay != null ? `Avg stay ${_crmFmtDuration(data.avgStay)}` : 'No exits yet')
+      );
+    };
+
+    const TerminalNode = ({ data }) => h('div', { style: {
+      background: data.color, color: '#fff', borderRadius: 24, padding: '0 18px', height: 46,
+      display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 12.5, fontFamily: T.font,
+      boxShadow: `0 6px 16px ${data.color}66`, cursor: 'pointer', whiteSpace: 'nowrap',
+    }},
+      _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
+      _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
+      h('i', { className: `fa ${data.icon}` }), data.label,
+      h('span', { style: { background: 'rgba(255,255,255,.25)', borderRadius: 10, padding: '1px 8px', fontSize: 11 } }, data.count)
+    );
+
+    const nodes = [{ id: 'start', type: 'hfTerminal', position: pos.start, data: { label: 'New leads', icon: 'fa-plus', color: '#2563eb', count: created } }];
+    stages.forEach(s => {
+      const st = stats[s.id];
+      nodes.push({ id: String(s.id), type: 'hfStage', position: pos[s.id], data: {
+        stage: s, color: s.color, entered: st.entered, left: st.left, avgStay: st.stayN ? st.staySum / st.stayN : null,
+      }});
+    });
+    if (deleted) nodes.push({ id: 'end', type: 'hfTerminal', position: pos.end, data: { label: 'Deleted', icon: 'fa-trash', color: '#b91c1c', count: deleted } });
+
+    const maxCount = Math.max(1, ...transitions.map(t => t.count));
+    const stageById = new Map(stages.map(s => [s.id, s]));
+    const edges = [];
+    transitions.forEach(t => {
+      const src = t.from_stage_id ? String(t.from_stage_id) : 'start';
+      const tgt = t.to_stage_id ? String(t.to_stage_id) : 'end';
+      if (src === tgt || !nodes.some(n => n.id === src) || !nodes.some(n => n.id === tgt)) return;
+      const sp = pos[t.from_stage_id] || pos.start, tp = pos[t.to_stage_id] || pos.end;
+      const backward = tp.x <= sp.x;
+      // Moves that jump over stages on the same row would cut through the cards between them,
+      // so they arc over the top; moves back arc underneath. Adjacent moves stay straight.
+      const skip = !backward && sp.y === tp.y && tp.x - sp.x > COL;
+      const color = t.to_stage_id ? (stageById.get(t.to_stage_id)?.color || '#94a3b8') : '#b91c1c';
+      const lineColor = backward ? '#d97706' : color;
+      edges.push({
+        id: `t-${src}-${tgt}`, source: src, target: tgt,
+        sourceHandle: backward ? 'src-b' : skip ? 'src-t' : 'src-r',
+        targetHandle: backward ? 'tgt-b' : skip ? 'tgt-t' : 'tgt-l',
+        type: backward || skip ? 'hfArc' : 'default',
+        data: { transition: t, dir: backward ? 1 : -1 },
+        animated: t.count === maxCount && !backward,
+        style: { stroke: lineColor, strokeWidth: 1.5 + 4 * (t.count / maxCount), strokeDasharray: backward ? '6 4' : undefined, cursor: 'pointer' },
+        markerEnd: { type: RF.MarkerType.ArrowClosed, color: lineColor, width: 14, height: 14 },
+        label: _crmHfEdgeLabel(t, backward),
+        labelStyle: { fontSize: 10.5, fontWeight: 700, fill: T.text },
+        labelShowBg: true, labelBgPadding: [6, 3], labelBgBorderRadius: 6,
+        labelBgStyle: { fill: T.card, stroke: lineColor, strokeWidth: 1 },
+      });
+    });
+
+    // Hover tooltip: the same move spelled out in a sentence.
+    const edgeTip = edge => {
+      const t = edge.data?.transition;
+      if (!t) return null;
+      const from = t.from_stage_id ? stageById.get(t.from_stage_id) : null;
+      const to   = t.to_stage_id ? stageById.get(t.to_stage_id) : null;
+      const name = s => `<strong style="color:${escHtml(s.color)}">${escHtml(s.name)}</strong>`;
+      const leads = `${t.leads_count} different lead${t.leads_count === 1 ? '' : 's'}`;
+      let head, body;
+      if (!from) {
+        head = `New lead → ${name(to)}`;
+        body = `${t.count} lead${t.count === 1 ? ' was' : 's were'} created straight into ${name(to)}.`;
+      } else if (!to) {
+        head = `${name(from)} → Deleted`;
+        body = `${t.count} lead${t.count === 1 ? ' was' : 's were'} deleted while in ${name(from)}.`;
+      } else {
+        head = `${name(from)} → ${name(to)}${edge.data.dir === 1 ? ' <span style="color:#d97706">(moved back)</span>' : ''}`;
+        body = `Leads were moved from ${name(from)} to ${name(to)} <strong>${t.count} time${t.count === 1 ? '' : 's'}</strong> (${leads}).`;
+      }
+      const wait = from && t.avg_duration_seconds != null
+        ? `<div>On average they had been in ${name(from)} for <strong>${escHtml(_crmFmtDuration(t.avg_duration_seconds))}</strong> before this move.</div>` : '';
+      const last = t.last_at ? `<div class="crm-hf-tip-muted">Last time: ${escHtml(_crmFmtDateTime(t.last_at))} · ${escHtml(_crmFmtAgo(t.last_at))}</div>` : '';
+      return `<div class="crm-hf-tip-head">${head}</div><div>${body}</div>${wait}${last}<div class="crm-hf-tip-muted">Click the line to see every move.</div>`;
+    };
+
+    // Arc whose depth grows with the distance it spans, so overlapping moves nest instead of stacking.
+    const ArcEdge = p => {
+      const { sourceX: sx, sourceY: sy, targetX: tx, targetY: ty } = p;
+      const d = p.data.dir * (60 + Math.abs(tx - sx) * 0.2);
+      return h(RF.BaseEdge, {
+        path: `M${sx},${sy} C${sx},${sy + d} ${tx},${ty + d} ${tx},${ty}`,
+        labelX: (sx + tx) / 2, labelY: (sy + ty) / 2 + 0.75 * d,
+        markerEnd: p.markerEnd, style: p.style, interactionWidth: 18,
+        label: p.label, labelStyle: p.labelStyle, labelShowBg: p.labelShowBg,
+        labelBgStyle: p.labelBgStyle, labelBgPadding: p.labelBgPadding, labelBgBorderRadius: p.labelBgBorderRadius,
+      });
+    };
+
+    return {
+      nodes, edges, edgeTip,
+      edgeTypes: { hfArc: ArcEdge },
+      nodeTypes: { hfStage: StageNode, hfTerminal: TerminalNode },
+      onNodeClick: (_e, n) => {
+        if (n.id === 'start') return _crmHfPanelEntries('New leads', 'fa-plus', '#2563eb', _crmHfAllSteps().filter(e => !e.from_stage), `${created} lead${created === 1 ? '' : 's'} entered this relation.`);
+        if (n.id === 'end')   return _crmHfPanelEntries('Deleted leads', 'fa-trash', '#b91c1c', _crmHfAllSteps().filter(e => !e.to_stage), `${deleted} lead${deleted === 1 ? '' : 's'} removed.`);
+        _crmHfPanelStage(n.data);
+      },
+      onEdgeClick: (_e, edge) => _crmHfPanelTransition(edge.data.transition),
+    };
+  }
+
+  // ── View 2: Lead journeys ──────────────────────────────────────────────
+  function _crmHfJourneyGraph(RF) {
+    const h = React.createElement;
+    const T = _crmHfTheme();
+    const stageById = new Map(_crmHfData.stages.map(s => [s.id, s]));
+    // Long journeys wrap onto extra lines (snake layout) so the diagram stays roughly as wide
+    // as the canvas and fitView keeps the cards readable instead of zooming out to a sliver.
+    const LINE = 104, LEAD_GAP = 34, STEP = 214, FIRST = 250;
+    const canvasW = $('#crm-hf-canvas')?.clientWidth || 1200;
+    const perLine = Math.max(3, Math.min(12, Math.floor((canvasW / 0.9 - FIRST - 40) / STEP)));
+
+    const LeadNode = ({ data }) => {
+      const j = data.journey;
+      const cur = stageById.get(j.current_stage_id);
+      const src = _crmSource(j.lead.source);
+      return h('div', { style: {
+        width: 210, background: T.card, border: `1.5px solid ${data.color}`, borderRadius: 12, padding: '8px 11px',
+        fontFamily: T.font, boxShadow: `0 4px 14px ${data.color}33`, cursor: 'pointer',
+      }},
+        _crmHfHandle(RF, 'source', 'Right', 'src-r'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
+          h('div', { style: { width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 800, fontSize: 12, color: '#7c3aed', background: 'rgba(124,58,237,.12)' } }, (j.lead.name || '?').trim().charAt(0).toUpperCase()),
+          h('div', { style: { minWidth: 0 } },
+            h('div', { style: { fontWeight: 700, fontSize: 12.5, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, j.lead.name || `Lead #${j.lead.id}`),
+            h('div', { style: { fontSize: 10, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
+              src ? h('i', { className: src.icon, title: `Source: ${src.label}`, style: { color: src.color } }) : null,
+              `${j.steps.length} move${j.steps.length === 1 ? '' : 's'}${src ? ' · ' + src.label : ''}`))),
+        h('div', { style: { marginTop: 6, fontSize: 10.5, display: 'flex', alignItems: 'center', gap: 5, color: j.exists ? T.text : '#b91c1c', fontWeight: 600 } },
+          j.exists
+            ? [h('span', { key: 's', style: { width: 8, height: 8, borderRadius: 2, background: cur?.color || '#94a3b8' } }), `Now in ${cur?.name || '—'}`]
+            : [h('i', { key: 'i', className: 'fa fa-trash' }), 'Lead deleted'])
+      );
+    };
+
+    const StepNode = ({ data }) => {
+      const e = data.entry;
+      const ev = _CRM_HF_EVENT_COLORS[e.event] || '#64748b';
+      const stage = e.to_stage || e.from_stage;
+      const d = new Date(e.created_at);
+      return h('div', { style: {
+        width: 180, background: T.card, border: `1.5px solid ${data.color}`, borderRadius: 10, padding: '7px 10px',
+        fontFamily: T.font, cursor: 'pointer',
+        boxShadow: data.current ? `0 0 0 3px ${data.color}44, 0 4px 12px ${data.color}44` : '0 2px 8px rgba(0,0,0,.08)',
+      }},
+        _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: ev, textTransform: 'uppercase', letterSpacing: '.04em' } },
+          h('i', { className: `fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}` }), e.event_label,
+          data.current && h('span', { style: { marginLeft: 'auto', color: data.color } }, 'Current')),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontWeight: 700, fontSize: 12, color: T.text } },
+          h('span', { style: { width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: stage?.color || '#94a3b8' } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: e.to_stage ? 'none' : 'line-through' } }, stage?.name || 'No stage')),
+        h('div', { style: { marginTop: 4, fontSize: 9.5, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
+          `${d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} ${d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })} · ${e.user?.name || 'System'}`),
+        // Time spent before this move lives on the card — edge labels were clipped between cards.
+        h('div', { style: { marginTop: 3, fontSize: 9.5, fontWeight: 600, color: data.spent ? T.muted : 'transparent',
+          display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap', overflow: 'hidden' } },
+          h('i', { className: 'fa fa-hourglass-half', style: { fontSize: 8.5 } }),
+          h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis' } }, data.spent || '—'))
+      );
+    };
+
+    const nodes = [], edges = [];
+    let y = 0;
+    _crmHfData.journeys.forEach(j => {
+      const leadColor = j.exists ? (stageById.get(j.current_stage_id)?.color || '#7c3aed') : '#b91c1c';
+      const leadId = `l-${j.lead.id}`;
+      nodes.push({ id: leadId, type: 'hfLead', position: { x: 0, y }, data: { journey: j, color: leadColor } });
+
+      let prev = leadId;
+      j.steps.forEach((e, i) => {
+        const id = `s-${e.id}`;
+        const line = Math.floor(i / perLine), col = i % perLine;
+        const color = e.to_stage?.color || _CRM_HF_EVENT_COLORS[e.event] || '#94a3b8';
+        const current = j.exists && i === j.steps.length - 1;
+        const spent = i > 0 && e.stage_duration_seconds != null && e.from_stage
+          ? `${_crmFmtDuration(e.stage_duration_seconds) || '<1 min'} in ${e.from_stage.name}` : '';
+        nodes.push({ id, type: 'hfStep', position: { x: FIRST + col * STEP, y: y + line * LINE }, data: { entry: e, journey: j, color, current, spent } });
+        const lineColor = e.from_stage?.color || '#94a3b8';
+        const wraps = i > 0 && col === 0;
+        edges.push({
+          id: `e-${e.id}`, source: prev, target: id, sourceHandle: 'src-r', targetHandle: 'tgt-l',
+          // Wrapping to the next line routes back through the gap between lines.
+          type: wraps ? 'smoothstep' : 'straight', ...(wraps ? { pathOptions: { borderRadius: 10 } } : {}),
+          style: { stroke: lineColor, strokeWidth: 2 }, animated: current,
+          markerEnd: { type: RF.MarkerType.ArrowClosed, color: lineColor, width: 12, height: 12 },
+        });
+        prev = id;
+      });
+      y += Math.max(1, Math.ceil(j.steps.length / perLine)) * LINE + LEAD_GAP;
+    });
+
+    return {
+      nodes, edges,
+      nodeTypes: { hfLead: LeadNode, hfStep: StepNode },
+      onNodeClick: (_e, n) => n.type === 'hfLead' ? _crmHfPanelLead(n.data.journey) : _crmHfPanelStep(n.data.entry, n.data.journey),
+      onEdgeClick: () => {},
+    };
+  }
+
+  // ── Detail panel ───────────────────────────────────────────────────────
+  // The panel stays collapsed (giving the diagram the full width) until something is clicked.
+  function _crmHfPanel(html) {
+    const panel = $('#crm-hf-panel');
+    if (!panel) return;
+    panel.innerHTML = `<button class="psm-close crm-hf-panel-close" data-hf-panel-close title="Close details"><i class="fa fa-xmark"></i></button>${html}`;
+    panel.scrollTop = 0;
+    $('#crm-hf-panel-wrap')?.classList.add('open');
+  }
+
+  function _crmHfPanelDefault() {
+    $('#crm-hf-panel-wrap')?.classList.remove('open');
+  }
+
+  function _crmHfEntriesHtml(entries, limit = 100) {
+    if (!entries.length) return '<p class="crm-hf-hint">No matching entries among the loaded leads.</p>';
+    const more = entries.length > limit ? `<p class="crm-hf-hint">Showing the latest ${limit} of ${entries.length}.</p>` : '';
+    return `<div class="crm-audit-list">${entries.slice(0, limit).map(e => _crmAuditEntryHtml(e, { showLead: true })).join('')}</div>${more}`;
+  }
+
+  function _crmHfPanelEntries(title, icon, color, entries, sub) {
+    _crmHfPanel(`<div class="crm-hf-panel-title"><i class="fa ${icon}" style="color:${escHtml(color)}"></i>${escHtml(title)}</div>
+      <div class="crm-hf-panel-sub">${escHtml(sub)}</div>${_crmHfEntriesHtml(entries)}`);
+  }
+
+  function _crmHfPanelStage({ stage: s, entered, left, avgStay }) {
+    const entries = _crmHfAllSteps().filter(e => e.from_stage?.id === s.id || e.to_stage?.id === s.id);
+    _crmHfPanel(`<div class="crm-hf-panel-title"><span class="crm-col-swatch" style="background:${escHtml(s.color)}"></span>${escHtml(s.name)}</div>
+      <div class="crm-hf-panel-sub">${s.is_won ? 'Won stage' : s.is_lost ? 'Lost stage' : s.deleted ? 'Stage no longer exists' : 'Pipeline stage'}</div>
+      <div class="crm-hf-stats">
+        <div class="crm-hf-stat"><b>${s.leads_count}</b><span>Leads here now</span></div>
+        <div class="crm-hf-stat"><b>${avgStay != null ? escHtml(_crmFmtDuration(avgStay)) : '—'}</b><span>Average stay</span></div>
+        <div class="crm-hf-stat"><b>${entered}</b><span>Moves in</span></div>
+        <div class="crm-hf-stat"><b>${left}</b><span>Moves out</span></div>
+      </div>
+      ${_crmHfEntriesHtml(entries)}`);
+  }
+
+  function _crmHfPanelTransition(t) {
+    const stageById = new Map(_crmHfData.stages.map(s => [s.id, s]));
+    const from = t.from_stage_id ? stageById.get(t.from_stage_id) : null;
+    const to   = t.to_stage_id ? stageById.get(t.to_stage_id) : null;
+    const entries = _crmHfAllSteps().filter(e => (e.from_stage?.id ?? null) === t.from_stage_id && (e.to_stage?.id ?? null) === t.to_stage_id);
+    const fromChip = from ? _crmAuditStageChip(from) : '<span class="crm-audit-stage">New lead</span>';
+    const toChip   = to ? _crmAuditStageChip(to) : '<span class="crm-audit-stage">Deleted</span>';
+    _crmHfPanel(`<div class="crm-hf-panel-title">${fromChip}<i class="fa fa-arrow-right crm-audit-arrow"></i>${toChip}</div>
+      <div class="crm-hf-panel-sub">Last move ${t.last_at ? escHtml(_crmFmtDateTime(t.last_at)) : '—'}</div>
+      <div class="crm-hf-stats">
+        <div class="crm-hf-stat"><b>${t.count}</b><span>Moves</span></div>
+        <div class="crm-hf-stat"><b>${t.leads_count}</b><span>Distinct leads</span></div>
+        <div class="crm-hf-stat" style="grid-column:1/-1"><b>${t.avg_duration_seconds != null && t.from_stage_id ? escHtml(_crmFmtDuration(t.avg_duration_seconds)) : '—'}</b><span>Average time before moving</span></div>
+      </div>
+      ${_crmHfEntriesHtml(entries)}`);
+  }
+
+  function _crmHfPanelLead(j) {
+    const stageById = new Map(_crmHfData.stages.map(s => [s.id, s]));
+    const first = j.steps[0], last = j.steps[j.steps.length - 1];
+    const span  = first && last ? (new Date(last.created_at) - new Date(first.created_at)) / 1000 : null;
+    const cur   = stageById.get(j.current_stage_id);
+    const canOpen = j.exists && (_crmPipeline?.columns || []).some(c => (c.leads || []).some(l => l.id === j.lead.id));
+    _crmHfPanel(`<div class="crm-hf-panel-title"><i class="fa fa-user" style="color:#7c3aed"></i>${escHtml(j.lead.name || 'Lead #' + j.lead.id)}</div>
+      <div class="crm-hf-panel-sub">${j.exists ? `Now in ${cur ? _crmAuditStageChip(cur) : '—'}` : '<span style="color:#b91c1c">Lead deleted</span>'}${j.lead.source ? ' ' + _crmSourceBadge(j.lead.source) : ''}</div>
+      <div class="crm-hf-stats">
+        <div class="crm-hf-stat"><b>${j.steps.length}</b><span>Stage moves</span></div>
+        <div class="crm-hf-stat"><b>${span != null ? escHtml(_crmFmtDuration(span) || '<1 min') : '—'}</b><span>First → last move</span></div>
+      </div>
+      ${canOpen ? `<button class="po-btn-primary" data-hf-open-lead="${j.lead.id}" style="width:100%;margin-bottom:12px"><i class="fa fa-id-card"></i> Open lead</button>` : ''}
+      ${_crmHfEntriesHtml(j.steps.slice().reverse())}`);
+  }
+
+  function _crmHfPanelStep(e, j) {
+    _crmHfPanel(`<div class="crm-hf-panel-title"><i class="fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}" style="color:${_CRM_HF_EVENT_COLORS[e.event] || '#64748b'}"></i>${escHtml(e.event_label)}</div>
+      <div class="crm-hf-panel-sub">${escHtml(j.lead.name || 'Lead #' + j.lead.id)} · step ${j.steps.indexOf(e) + 1} of ${j.steps.length}</div>
+      ${_crmHfEntriesHtml([e])}
+      <button class="po-btn-ghost" data-hf-lead-journey="${j.lead.id}" style="width:100%;margin-top:10px"><i class="fa fa-route"></i> Whole journey of this lead</button>`);
+  }
+
+  $('#crm-history-flow-btn')?.addEventListener('click', () => openCrmHistoryFlow());
+  $('#crm-history-flow-close')?.addEventListener('click', _closeCrmHistoryFlow);
+  $('#crm-history-flow-modal')?.addEventListener('click', e => { if (e.target === $('#crm-history-flow-modal')) _closeCrmHistoryFlow(); });
+  $('#crm-hf-refresh')?.addEventListener('click', () => _crmHfLoad());
+  $('#crm-hf-views')?.addEventListener('click', e => {
+    const btn = e.target.closest('.crm-hf-view');
+    if (!btn || btn.dataset.hfview === _crmHfView) return;
+    _crmHfView = btn.dataset.hfview;
+    _crmHfPanelDefault();
+    _crmHfRender();
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && $('#crm-history-flow-modal')?.classList.contains('is-open')) _closeCrmHistoryFlow();
+  });
+  $('#crm-hf-panel')?.addEventListener('click', e => {
+    if (e.target.closest('[data-hf-panel-close]')) return _crmHfPanelDefault();
+    const openBtn = e.target.closest('[data-hf-open-lead]');
+    if (openBtn) {
+      const lead = (_crmPipeline?.columns || []).flatMap(c => c.leads || []).find(l => l.id === +openBtn.dataset.hfOpenLead);
+      if (lead) { _closeCrmHistoryFlow({ instant: true }); _openViewLeadModal(lead); }
+      return;
+    }
+    const journeyBtn = e.target.closest('[data-hf-lead-journey]');
+    if (journeyBtn) {
+      const j = _crmHfData?.journeys.find(x => x.lead.id === +journeyBtn.dataset.hfLeadJourney);
+      if (j) _crmHfPanelLead(j);
+    }
+  });
 
   $('#crm-relation-tabs')?.addEventListener('click', e => {
     const btn = e.target.closest('.inv-tab');
     if (btn) _crmSwitchDetailTab(btn.dataset.crmdtab);
   });
   $('#crm-relation-back-btn')?.addEventListener('click', () => closeRelationDetail());
+  $('#crm-relation-hero-toggle')?.addEventListener('click', () => {
+    _crmHeroManual = !_crmHeroManual;
+    try { localStorage.setItem('crm.relation.heroHidden', _crmHeroManual ? '1' : '0'); } catch {}
+    _crmSetHeroHidden(_crmHeroManual);
+  });
 
-  // Shrink the hero while the tab body is scrolled; hysteresis avoids flicker
-  // caused by the body growing when the hero collapses.
+  // Hide the hero while the tab body (or, on the pipeline tab, a stage column) is
+  // scrolled; hysteresis avoids flicker caused by the area growing when the hero
+  // disappears. Only hide when there is enough overflow that the scroll position
+  // survives that growth, and only reopen once every scroller is back at the top.
   $('#crm-relation-tab-body')?.addEventListener('scroll', e => {
     const hero = $('#crm-relation-hero');
     const el   = e.target;
-    if (!hero || el.id !== 'crm-relation-tab-body') return;
+    if (!hero || !(el.id === 'crm-relation-tab-body' || el.classList?.contains('crm-col-body') || el.id === 'crm-pipeline-list')) return;
     const top = el.scrollTop;
-    if (top > 40) hero.classList.add('inv-hero--compact');
-    else if (top < 8) hero.classList.remove('inv-hero--compact');
+    const hidden = hero.classList.contains('inv-hero--hidden');
+    if (!hidden && top > 40 && el.scrollHeight - el.clientHeight > hero.offsetHeight + 40) _crmSetHeroHidden(true);
+    else if (hidden && top < 8) {
+      const scrollers = [$('#crm-relation-tab-body'), $('#crm-pipeline-list'), ...$$('#crm-relation-pane-pipeline .crm-col-body')];
+      if (scrollers.every(s => !s || s.scrollTop < 8)) _crmSetHeroHidden(false);
+    }
   }, { passive: true, capture: true });
 
   $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
@@ -56547,10 +57311,13 @@ async function submitDsCreate() {
     }
     _crmPipeline = res.body.data;
     _updateNewLeadBtnState();
-    _renderBoard();
+    _crmRenderPipelineView();
     _crmRenderDashboardPane();
     _crmUpdateCustomDataTabVisibility();
     _crmUpdateContactsTabVisibility();
+    // Every lead mutation ends in a pipeline reload, so this keeps the History tab current.
+    if (_crmDetailTab === 'history') loadCrmHistory();
+    else _crmDetailLoaded.history = false;
   }
 
   // The "Custom Data" tab only makes sense once this relation has at least one lead
@@ -56598,47 +57365,371 @@ async function submitDsCreate() {
     const countEl = $('#crm-pipeline-board')?.querySelector(`.crm-col[data-stage-id="${stageId}"] .crm-col-count`);
     if (countEl) countEl.textContent = String(Math.max(0, (parseInt(countEl.textContent) || 0) + delta));
     if (bodyEl && !bodyEl.querySelector('.crm-card') && !bodyEl.querySelector('.crm-col-empty')) {
-      bodyEl.insertAdjacentHTML('beforeend', '<p class="crm-col-empty">No leads</p>');
+      bodyEl.insertAdjacentHTML('beforeend', _crmColEmptyHtml('No leads'));
     }
   }
+
+  function _crmColEmptyHtml(text) {
+    return `<div class="crm-col-empty"><i class="fa fa-arrow-down-to-bracket"></i>${escHtml(text)}<span>Drop a lead here to move it</span></div>`;
+  }
+
+  // ── Board card helpers: initials avatar, stable colour per name, "3d ago" ──
+  const CRM_AVATAR_COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#64748b'];
+  function _crmInitials(name) {
+    const parts = String(name || '?').trim().split(/\s+/).filter(Boolean);
+    return ((parts[0]?.[0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  }
+  function _crmAvatarColor(name) {
+    let h = 0;
+    for (const ch of String(name || '')) h = (h * 31 + ch.charCodeAt(0)) | 0;
+    return CRM_AVATAR_COLORS[Math.abs(h) % CRM_AVATAR_COLORS.length];
+  }
+  function _crmAgo(iso) {
+    const s = (Date.now() - new Date(iso).getTime()) / 1000;
+    if (!isFinite(s)) return '';
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+    if (s < 86400 * 30) return `${Math.floor(s / 86400)}d ago`;
+    return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  // ── Pipeline view state: search/filters, Board/List, compact cards ─────
+  // View + density are per-user preferences; search/filters reset per relation.
+  const CRM_COL_PAGE = 20;
+  const _crmPrefGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+  const _crmPrefSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let _crmPipeView    = _crmPrefGet('crm.pipeline.view', 'board');
+  let _crmPipeCompact = _crmPrefGet('crm.pipeline.compact', '0') === '1';
+  let _crmPipeFilter  = { q: '', customers: false, hasValue: false, source: '' };
+  let _crmColLimit    = {};
+  let _crmListSort    = { key: 'created', dir: 'desc' };
+
+  // ── Lead sources (Facebook, WhatsApp, manual, CSV, …) ──────────────────
+  // The list comes from the server (Lead::SOURCES) with the pipeline payload; a value the
+  // list doesn't know (older data) still renders, with a generic tag icon.
+  function _crmSource(key) {
+    if (!key) return null;
+    return (_crmPipeline?.sources || []).find(s => s.key === key)
+      || { key, label: key.charAt(0).toUpperCase() + key.slice(1).replace(/-/g, ' '), icon: 'fa fa-tag', color: '#94a3b8' };
+  }
+
+  function _crmSourceBadge(key) {
+    const s = _crmSource(key);
+    if (!s) return '';
+    return `<span class="crm-src" style="--src:${escHtml(s.color)}" title="Source: ${escHtml(s.label)}"><i class="${escHtml(s.icon)}"></i><span class="crm-src-label">${escHtml(s.label)}</span></span>`;
+  }
+
+  function _crmSourceFieldHtml(id, selected) {
+    const sources = _crmPipeline?.sources || [];
+    const unknown = !selected || !sources.some(s => s.key === selected)
+      ? `<option value=""${selected ? '' : ' selected'}>— Unknown —</option>` : '';
+    return `<div class="po-field">
+      <label class="po-field-label">Lead Source</label>
+      <select id="${id}" class="po-field-input" style="appearance:auto">${unknown}${
+        sources.map(s => `<option value="${escHtml(s.key)}"${s.key === selected ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')
+      }</select>
+    </div>`;
+  }
+
+  function _crmFilterActive() {
+    return !!(_crmPipeFilter.q || _crmPipeFilter.customers || _crmPipeFilter.hasValue || _crmPipeFilter.source);
+  }
+
+  function _crmLeadMatches(lead) {
+    if (_crmPipeFilter.customers && !lead.is_customer) return false;
+    if (_crmPipeFilter.hasValue && !(Number(lead.estimated_value) > 0)) return false;
+    if (_crmPipeFilter.source && (lead.source || '') !== _crmPipeFilter.source) return false;
+    if (!_crmPipeFilter.q) return true;
+    const hay = [lead.name, lead.company, lead.email, lead.phone, _crmSource(lead.source)?.label].filter(Boolean).join(' ').toLowerCase();
+    return _crmPipeFilter.q.split(/\s+/).every(t => hay.includes(t));
+  }
+
+  // Lead count per source across this relation's pipeline ('' = no source recorded).
+  function _crmSourceCounts() {
+    const counts = {};
+    (_crmPipeline?.columns || []).forEach(c => c.leads.forEach(l => { const k = l.source || ''; counts[k] = (counts[k] || 0) + 1; }));
+    return counts;
+  }
+
+  // Source filters (Pipeline, Contacts, Custom Data) only offer sources that actually occur
+  // in this relation, with counts. Returns the value left selected.
+  function _crmFillSourceSelect(sel, current) {
+    if (!sel || !_crmPipeline) return current || '';
+    const counts = _crmSourceCounts();
+    const keys = Object.keys(counts).filter(k => k);
+    if (current && !keys.includes(current)) keys.push(current);
+    const order = (_crmPipeline.sources || []).map(s => s.key);
+    keys.sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999));
+    sel.innerHTML = '<option value="">All sources</option>'
+      + keys.map(k => `<option value="${escHtml(k)}">${escHtml(_crmSource(k).label)} (${counts[k] || 0})</option>`).join('');
+    sel.value = current || '';
+    return sel.value;
+  }
+
+  function _crmRenderSourceFilter() {
+    const sel = $('#crm-pipe-source');
+    _crmFillSourceSelect(sel, _crmPipeFilter.source);
+    sel?.classList.toggle('active', !!_crmPipeFilter.source);
+  }
+
+  function _crmResetPipelineView() {
+    _crmPipeFilter = { q: '', customers: false, hasValue: false, source: '' };
+    _crmColLimit = {};
+    const input = $('#crm-pipe-search'); if (input) input.value = '';
+    $$('#crm-relation-pane-pipeline [data-crm-filter]').forEach(b => b.classList.remove('active'));
+  }
+
+  // Renders whichever view is active and syncs the toolbar controls with state.
+  function _crmRenderPipelineView() {
+    const board = $('#crm-pipeline-board');
+    const list  = $('#crm-pipeline-list');
+    if (board) board.style.display = _crmPipeView === 'board' ? '' : 'none';
+    if (list)  list.style.display  = _crmPipeView === 'list'  ? '' : 'none';
+    $$('#crm-relation-pane-pipeline [data-crm-view]').forEach(b => b.classList.toggle('active', b.dataset.crmView === _crmPipeView));
+    const density = $('#crm-pipe-density');
+    if (density) {
+      density.classList.toggle('active', _crmPipeCompact);
+      density.style.display = _crmPipeView === 'board' ? '' : 'none';
+      density.title = _crmPipeCompact ? 'Detailed cards' : 'Compact cards';
+    }
+    if (_crmPipeView === 'list') _renderLeadList(); else _renderBoard();
+    _crmRenderSourceFilter();
+
+    const resultEl = $('#crm-pipe-result');
+    if (resultEl && _crmPipeline) {
+      const all = _crmPipeline.columns.flatMap(c => c.leads);
+      resultEl.textContent = _crmFilterActive() ? `${all.filter(_crmLeadMatches).length} of ${all.length} leads` : '';
+    }
+  }
+
+  function _crmCardActionsHtml(leadId) {
+    return `<div class="crm-card-actions">
+      <button class="crm-card-btn crm-card-edit" data-lead-id="${leadId}" title="Edit"><i class="fa fa-pen"></i></button>
+      <button class="crm-card-btn crm-card-del" data-lead-id="${leadId}" title="Delete"><i class="fa fa-trash"></i></button>
+    </div>`;
+  }
+
+  async function _crmDeleteLead(leadId) {
+    if (!confirm('Delete this lead?')) return;
+    const res = await API.crmDeleteLead(leadId);
+    if (res.status === 200) {
+      toast('Lead deleted.', 'success');
+      loadCrmPipeline();
+      if (_crmDetailLoaded.customData) loadCrmCustomData();
+      if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
+    } else toast(res.body?.message || 'Failed to delete.', 'error');
+  }
+
+  function _renderLeadList() {
+    const list = $('#crm-pipeline-list');
+    if (!list || !_crmPipeline) return;
+    const cols = _crmPipeline.columns;
+    const stageOrder = new Map(cols.map((c, i) => [c.id, i]));
+    const canMove = _crmCan('leads_move');
+    const rows = cols.flatMap(c => c.leads.filter(_crmLeadMatches).map(l => ({ ...l, stage_id: c.id })));
+
+    const { key, dir } = _crmListSort;
+    const val = r => key === 'name'    ? (r.name || '').toLowerCase()
+                   : key === 'company' ? (r.company || '').toLowerCase()
+                   : key === 'stage'   ? stageOrder.get(r.stage_id)
+                   : key === 'source'  ? (_crmSource(r.source)?.label || '').toLowerCase()
+                   : key === 'value'   ? Number(r.estimated_value) || 0
+                   : r.id; // created: ids are sequential, and always present
+    rows.sort((a, b) => {
+      const va = val(a), vb = val(b);
+      return (va < vb ? -1 : va > vb ? 1 : 0) * (dir === 'asc' ? 1 : -1);
+    });
+
+    const th = (k, label) => {
+      const icon = _crmListSort.key === k ? `<i class="fa fa-arrow-${_crmListSort.dir === 'asc' ? 'up' : 'down'}"></i>` : '';
+      return `<th data-sort="${k}">${label}${icon}</th>`;
+    };
+    const stageCell = r => {
+      const col = cols[stageOrder.get(r.stage_id)];
+      const dot = `<span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>`;
+      if (!canMove) return `<span class="crm-list-stage">${dot}${escHtml(col.name)}</span>`;
+      return `<span class="crm-list-stage">${dot}<select data-move-lead="${r.id}" data-from-stage="${r.stage_id}">
+        ${cols.map(c => `<option value="${c.id}"${c.id === r.stage_id ? ' selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+      </select></span>`;
+    };
+
+    list.innerHTML = rows.length ? `
+      <table class="crm-table">
+        <thead><tr>
+          ${th('name', 'Lead')}${th('company', 'Company')}<th>Contact</th>${th('source', 'Source')}${th('stage', 'Stage')}${th('value', 'Value')}${th('created', 'Created')}<th></th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr data-lead-id="${r.id}">
+            <td><div class="crm-list-name">${escHtml(r.name)}</div>${r.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}</td>
+            <td>${r.company ? escHtml(r.company) : '<span class="crm-list-sub">—</span>'}</td>
+            <td>${r.email ? `<div>${escHtml(r.email)}</div>` : ''}${r.phone ? `<div class="crm-list-sub">${escHtml(r.phone)}</div>` : ''}${!r.email && !r.phone ? '<span class="crm-list-sub">—</span>' : ''}</td>
+            <td>${_crmSourceBadge(r.source) || '<span class="crm-list-sub">—</span>'}</td>
+            <td>${stageCell(r)}</td>
+            <td>${r.estimated_value ? formatMoney(r.estimated_value) : '<span class="crm-list-sub">—</span>'}</td>
+            <td class="crm-list-sub">${r.created_at ? escHtml(new Date(r.created_at).toLocaleDateString()) : '—'}</td>
+            <td>${_crmCardActionsHtml(r.id)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`
+      : `<div class="crm-list-empty">${_crmFilterActive() ? 'No leads match your search or filters.' : 'No leads yet.'}</div>`;
+  }
+
+  $('#crm-pipeline-list')?.addEventListener('click', e => {
+    const sortTh = e.target.closest('th[data-sort]');
+    if (sortTh) {
+      const k = sortTh.dataset.sort;
+      _crmListSort = _crmListSort.key === k
+        ? { key: k, dir: _crmListSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key: k, dir: k === 'value' || k === 'created' ? 'desc' : 'asc' };
+      _renderLeadList();
+      return;
+    }
+    if (e.target.closest('select')) return;
+    const editBtn = e.target.closest('.crm-card-edit');
+    const delBtn  = e.target.closest('.crm-card-del');
+    if (delBtn) { _crmDeleteLead(parseInt(delBtn.dataset.leadId)); return; }
+    const row = e.target.closest('tr[data-lead-id]');
+    const id  = parseInt((editBtn || row)?.dataset.leadId);
+    const lead = id ? _findLead(id) : null;
+    if (!lead) return;
+    if (editBtn) _openEditLeadModal(lead);
+    else _openViewLeadModal(lead);
+  });
+
+  $('#crm-pipeline-list')?.addEventListener('change', async e => {
+    const sel = e.target.closest('select[data-move-lead]');
+    if (!sel) return;
+    sel.disabled = true;
+    const res = await API.crmMoveLead(parseInt(sel.dataset.moveLead), parseInt(sel.value));
+    if (res.status === 200) {
+      loadCrmPipeline(_crmProjectId, { silent: true });
+    } else {
+      sel.value = sel.dataset.fromStage;
+      sel.disabled = false;
+      toast(res.body?.message || 'Failed to move lead.', 'error');
+    }
+  });
+
+  let _crmSearchTimer = null;
+  $('#crm-pipe-search')?.addEventListener('input', e => {
+    clearTimeout(_crmSearchTimer);
+    _crmSearchTimer = setTimeout(() => {
+      _crmPipeFilter.q = e.target.value.trim().toLowerCase();
+      _crmColLimit = {};
+      _crmRenderPipelineView();
+    }, 150);
+  });
+  $$('#crm-relation-pane-pipeline [data-crm-filter]').forEach(btn => btn.addEventListener('click', () => {
+    const k = btn.dataset.crmFilter;
+    _crmPipeFilter[k] = !_crmPipeFilter[k];
+    btn.classList.toggle('active', _crmPipeFilter[k]);
+    _crmColLimit = {};
+    _crmRenderPipelineView();
+  }));
+  $('#crm-pipe-source')?.addEventListener('change', e => {
+    _crmPipeFilter.source = e.target.value;
+    _crmColLimit = {};
+    _crmRenderPipelineView();
+  });
+  $$('#crm-relation-pane-pipeline [data-crm-view]').forEach(btn => btn.addEventListener('click', () => {
+    if (_crmPipeView === btn.dataset.crmView) return;
+    _crmPipeView = btn.dataset.crmView;
+    _crmPrefSet('crm.pipeline.view', _crmPipeView);
+    _crmSetHeroHidden(false);
+    _crmRenderPipelineView();
+  }));
+  $('#crm-pipe-density')?.addEventListener('click', () => {
+    _crmPipeCompact = !_crmPipeCompact;
+    _crmPrefSet('crm.pipeline.compact', _crmPipeCompact ? '1' : '0');
+    _crmRenderPipelineView();
+  });
 
   function _renderBoard() {
     const board = $('#crm-pipeline-board');
     if (!board || !_crmPipeline) return;
+    board.classList.toggle('crm-board--compact', _crmPipeCompact);
+
+    // Keep scroll positions across re-renders (silent resyncs, "Show more").
+    const scrollLeft = board.scrollLeft;
+    const colScroll = {};
+    board.querySelectorAll('.crm-col-body').forEach(b => { colScroll[b.dataset.dropStage] = b.scrollTop; });
+
+    const filtering = _crmFilterActive();
     board.innerHTML = _crmPipeline.columns.map(col => {
-      const cards = col.leads.map(lead => `
-        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmCan('leads_move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}">
-          <div class="crm-card-name">${escHtml(lead.name)}</div>
-          ${lead.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}
-          ${lead.company ? `<div class="crm-card-company"><i class="fa fa-building" style="margin-right:3px;opacity:.6"></i>${escHtml(lead.company)}</div>` : ''}
-          <div class="crm-card-footer">
-            <span class="crm-card-value">${lead.estimated_value ? formatMoney(lead.estimated_value) : ''}</span>
-            <div class="crm-card-actions">
-              <button class="crm-card-btn crm-card-edit" data-lead-id="${lead.id}" title="Edit"><i class="fa fa-pen"></i></button>
-              <button class="crm-card-btn crm-card-del" data-lead-id="${lead.id}" title="Delete"><i class="fa fa-trash"></i></button>
+      const matched = filtering ? col.leads.filter(_crmLeadMatches) : col.leads;
+      const shown   = matched.slice(0, _crmColLimit[col.id] || CRM_COL_PAGE);
+      const remaining = matched.length - shown.length;
+      const closed  = col.is_won || col.is_lost;
+      const cards = shown.map(lead => {
+        const close = lead.expected_close_date ? new Date(lead.expected_close_date) : null;
+        const overdue = close && !closed && close < new Date(new Date().toDateString());
+        const dateHtml = close && !isNaN(close)
+          ? `<span class="crm-card-date${overdue ? ' crm-card-date--overdue' : ''}" title="Expected close ${close.toLocaleDateString()}"><i class="fa fa-flag-checkered"></i>${close.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`
+          : (lead.created_at ? `<span class="crm-card-date" title="Created ${new Date(lead.created_at).toLocaleString()}"><i class="fa fa-clock"></i>${_crmAgo(lead.created_at)}</span>` : '');
+        const tags = (lead.is_customer ? `<span class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Customer</span>` : '')
+          + _crmSourceBadge(lead.source);
+        return `
+        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmCan('leads_move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}"${lead.company ? ` title="${escHtml(lead.name)} · ${escHtml(lead.company)}"` : ''}>
+          <div class="crm-card-top">
+            <span class="crm-card-avatar" style="--av:${_crmAvatarColor(lead.name)}">${escHtml(_crmInitials(lead.name))}</span>
+            <div class="crm-card-id">
+              <div class="crm-card-name">${escHtml(lead.name)}${lead.is_customer ? '<i class="fa fa-circle-check crm-card-cust-ico" title="Already a Customer"></i>' : ''}</div>
+              ${lead.company ? `<div class="crm-card-company">${escHtml(lead.company)}</div>` : ''}
             </div>
+            ${lead.estimated_value ? `<span class="crm-card-value">${formatMoney(lead.estimated_value)}</span>` : ''}
           </div>
-        </div>`).join('');
-
-      const valueLine = col.value_total > 0
-        ? `<span style="font-size:10px;color:var(--text-muted);padding:2px 12px 6px;display:block">${formatMoney(col.value_total)}</span>`
+          ${tags ? `<div class="crm-card-tags">${tags}</div>` : ''}
+          <div class="crm-card-footer">
+            <span class="crm-card-meta">
+              ${dateHtml}
+              ${lead.email ? `<i class="fa fa-envelope crm-card-contact" title="${escHtml(lead.email)}"></i>` : ''}
+              ${lead.phone ? `<i class="fa fa-phone crm-card-contact" title="${escHtml(lead.phone)}"></i>` : ''}
+            </span>
+            ${_crmCardActionsHtml(lead.id)}
+          </div>
+        </div>`;
+      }).join('');
+      const moreBtn = remaining > 0
+        ? `<button class="crm-col-more" data-more-stage="${col.id}">Show ${Math.min(CRM_COL_PAGE, remaining)} more <span>· ${remaining} left</span></button>`
         : '';
+      const countHtml = filtering
+        ? `<span class="crm-col-count crm-col-count--filtered" title="${matched.length} of ${col.leads_count} match">${matched.length}</span>`
+        : `<span class="crm-col-count">${col.leads_count}</span>`;
+      const stateIcon = col.is_won ? '<i class="fa fa-trophy crm-col-state" title="Won stage"></i>'
+        : col.is_lost ? '<i class="fa fa-circle-xmark crm-col-state" title="Lost stage"></i>' : '';
 
-      return `<div class="crm-col" data-stage-id="${col.id}">
+      return `<div class="crm-col${col.is_won ? ' crm-col--won' : ''}${col.is_lost ? ' crm-col--lost' : ''}" data-stage-id="${col.id}" style="--stage:${escHtml(col.color)}">
         <div class="crm-col-head">
-          <span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>
-          <span class="crm-col-name">${escHtml(col.name)}</span>
-          <span class="crm-col-count">${col.leads_count}</span>
-          ${!col.is_won && !col.is_lost
-            ? `<button class="crm-card-btn" data-add-stage="${col.id}" title="${_crmPipeline.default_form ? 'Add lead (via default form)' : 'Set a default form in the Forms tab before adding leads'}" style="opacity:1;margin-left:2px"${_crmPipeline.default_form ? '' : ' disabled'}><i class="fa fa-plus"></i></button>`
-            : ''}
+          <div class="crm-col-title">
+            <span class="crm-col-swatch"></span>
+            <span class="crm-col-name">${escHtml(col.name)}</span>
+            ${stateIcon}
+            ${countHtml}
+            ${!closed
+              ? `<button class="crm-card-btn crm-col-add" data-add-stage="${col.id}" title="${_crmPipeline.default_form ? 'Add lead (via default form)' : 'Set a default form in the Forms tab before adding leads'}"${_crmPipeline.default_form ? '' : ' disabled'}><i class="fa fa-plus"></i></button>`
+              : ''}
+          </div>
+          <div class="crm-col-total${col.value_total > 0 ? '' : ' crm-col-total--empty'}">${formatMoney(col.value_total || 0, { decimals: 0 })}</div>
         </div>
-        ${valueLine}
         <div class="crm-col-body" data-drop-stage="${col.id}">
-          ${cards || `<p class="crm-col-empty">No leads</p>`}
+          ${cards || _crmColEmptyHtml(filtering ? 'No matches' : 'No leads')}
+          ${moreBtn}
         </div>
       </div>`;
     }).join('');
+
+    board.scrollLeft = scrollLeft;
+    board.querySelectorAll('.crm-col-body').forEach(b => { b.scrollTop = colScroll[b.dataset.dropStage] || 0; });
+
+    board.querySelectorAll('[data-more-stage]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.moreStage;
+        _crmColLimit[id] = (_crmColLimit[id] || CRM_COL_PAGE) + CRM_COL_PAGE;
+        _renderBoard();
+      });
+    });
 
     // ── Drag-and-drop ────────────────────────────────────────────────────
     board.querySelectorAll('.crm-card').forEach(card => {
@@ -56685,7 +57776,7 @@ async function submitDsCreate() {
         // if the server rejects the move.
         const fromBody = board.querySelector(`.crm-col-body[data-drop-stage="${fromStage}"]`);
         col.querySelector('.crm-col-empty')?.remove();
-        col.appendChild(cardEl);
+        col.insertBefore(cardEl, col.querySelector('.crm-col-more'));
         cardEl.dataset.stageId = toStage;
         _crmAdjustColCount(fromStage, -1, fromBody);
         _crmAdjustColCount(toStage, 1, col);
@@ -56698,7 +57789,7 @@ async function submitDsCreate() {
         } else {
           // Revert: move the card back to its original column.
           fromBody?.querySelector('.crm-col-empty')?.remove();
-          fromBody?.appendChild(cardEl);
+          fromBody?.insertBefore(cardEl, fromBody.querySelector('.crm-col-more'));
           cardEl.dataset.stageId = fromStage;
           _crmAdjustColCount(toStage, -1, col);
           _crmAdjustColCount(fromStage, 1, fromBody);
@@ -56726,24 +57817,17 @@ async function submitDsCreate() {
 
     // ── Delete card ───────────────────────────────────────────────────────
     board.querySelectorAll('.crm-card-del').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (!confirm('Delete this lead?')) return;
-        const res = await API.crmDeleteLead(parseInt(btn.dataset.leadId));
-        if (res.status === 200) {
-          toast('Lead deleted.', 'success');
-          loadCrmPipeline();
-          if (_crmDetailLoaded.customData) loadCrmCustomData();
-          if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
-        } else toast(res.body?.message || 'Failed to delete.', 'error');
+        _crmDeleteLead(parseInt(btn.dataset.leadId));
       });
     });
 
-    // ── Click card (edit) ─────────────────────────────────────────────────
+    // ── Click card (view details) ─────────────────────────────────────────
     board.querySelectorAll('.crm-card').forEach(card => {
       card.addEventListener('click', () => {
         const lead = _findLead(parseInt(card.dataset.leadId));
-        if (lead) _openEditLeadModal(lead);
+        if (lead) _openViewLeadModal(lead);
       });
     });
   }
@@ -56780,9 +57864,12 @@ async function submitDsCreate() {
       $('#crm-lead-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Failed to load form.</span>';
       return;
     }
-    $('#crm-lead-form-fields').innerHTML = blocks.length
+    // Source sits outside the form's own blocks. It defaults to the last one used, since staff
+    // tend to key in a batch from one channel (e.g. a run of WhatsApp enquiries) at a time.
+    $('#crm-lead-form-fields').innerHTML = (blocks.length
       ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i)).join('')
-      : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>';
+      : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>')
+      + _crmSourceFieldHtml('crm-lead-new-source', _crmPrefGet('crm.lead.lastSource', 'manual'));
     $('#crm-lead-modal-save').disabled = false;
     $('#crm-lead-form-fields').querySelector('.crm-lead-field-input')?.focus();
   }
@@ -56925,11 +58012,14 @@ async function submitDsCreate() {
     btn.disabled = true;
     $('#crm-lead-alert').style.display = 'none';
 
-    const input = _crmCollectLeadFieldValues($('#crm-lead-form-fields'));
+    const input  = _crmCollectLeadFieldValues($('#crm-lead-form-fields'));
+    const source = $('#crm-lead-new-source')?.value || '';
+    if (source) input.source = source;
 
     const res = await API.crmSubmitFormLead(_crmProjectId, _crmLeadFormId, input);
     btn.disabled = false;
     if (res.status === 201) {
+      if (source) _crmPrefSet('crm.lead.lastSource', source);
       $('#crm-lead-modal').style.display = 'none';
       toast('Lead created.', 'success');
       loadCrmPipeline();
@@ -56940,45 +58030,395 @@ async function submitDsCreate() {
     }
   });
 
-  // ── Edit Lead Modal ───────────────────────────────────────────────────────
-  // Shows the fields of whichever form the lead was actually created from (falling back to
-  // the project's current default form, then to core fields, if the lead has none recorded
-  // — e.g. it predates this tracking, or that form was since deleted). This is deliberate:
+  // ── Lead Details Modal (view + inline edit) ───────────────────────────────
+  // Opened by clicking a lead card / list row (view mode) or by any Edit action (edit mode).
+  // Fields come from whichever form the lead was actually created from (falling back to the
+  // project's current default form, then to core fields, if the lead has none recorded —
+  // e.g. it predates this tracking, or that form was since deleted). This is deliberate:
   // if the default form is later swapped for a different one, older leads must keep showing
-  // (and stay editable on) the fields their data was actually captured with, not whatever
-  // form happens to be default today.
-  async function _openEditLeadModal(lead) {
-    _populateStageSelect('#crm-lead-edit-stage', lead.stage_id);
-    $('#crm-lead-edit-id').value      = lead.id;
-    $('#crm-lead-edit-notes').value   = lead.notes || '';
-    $('#crm-lead-edit-alert').style.display = 'none';
-    $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Loading…</span>';
-    $('#crm-lead-edit-save').disabled = true;
-    $('#crm-lead-edit-modal').style.display = 'flex';
+  // (and stay editable on) the fields their data was actually captured with.
+  // Edit swaps the body to inputs in place and Save drops back to view mode with the
+  // updated lead, so the user never has to close the modal and find the lead again.
+  let _crmViewLead        = null;
+  let _crmViewEditing     = false;
+  let _crmViewBlocksReady = false;
+
+  const _crmFmtDateTime = d => d ? new Date(d).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+  // ── Lead audit trail (shared by the Lead Details modal and the relation History tab) ──
+  // Every create / edit / stage move / win / loss / delete is recorded server-side with the
+  // user, time, source (desktop / web / form / system) and a field-by-field diff.
+  let _crmViewHistory = null; // null = loading, false = failed, [] = entries (newest first)
+
+  const _CRM_AUDIT_ICONS = {
+    created: 'fa-plus', updated: 'fa-pen', stage_changed: 'fa-arrow-right-arrow-left',
+    converted: 'fa-trophy', lost: 'fa-circle-xmark', reopened: 'fa-rotate-left', deleted: 'fa-trash',
+  };
+  const _CRM_AUDIT_SOURCES = {
+    desktop: ['fa-desktop', 'Desktop app'], web: ['fa-globe', 'Web'], system: ['fa-robot', 'Automation / system'],
+    'public-form': ['fa-file-lines', 'Public form'],
+  };
+
+  function _crmFmtDuration(seconds) {
+    if (seconds == null) return '';
+    const s = Math.max(0, Math.round(seconds));
+    // "min", not "m" — a bare "m" reads as metres (or months)
+    if (s < 60) return '<1 min';
+    const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
+    if (d) return h ? `${d}d ${h}h` : `${d}d`;
+    if (h) return m ? `${h}h ${m} min` : `${h}h`;
+    return `${m} min`;
+  }
+
+  function _crmFmtAgo(iso) {
+    const secs = (Date.now() - new Date(iso).getTime()) / 1000;
+    return secs < 60 ? 'just now' : `${_crmFmtDuration(secs)} ago`;
+  }
+
+  // User photo with their initial underneath — if the image fails to load it removes itself.
+  function _crmAvatarHtml(user, size = 22) {
+    const initial = escHtml((user?.name || 'S').trim().charAt(0).toUpperCase() || 'S');
+    const img = user?.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="" onerror="this.remove()">` : '';
+    const icon = user ? initial : '<i class="fa fa-robot"></i>';
+    return `<span class="crm-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px">${icon}${img}</span>`;
+  }
+
+  function _crmAuditStageChip(stage) {
+    if (!stage) return '<span class="crm-audit-stage crm-audit-stage--none">No stage</span>';
+    return `<span class="crm-audit-stage"><span class="crm-col-swatch" style="background:${escHtml(stage.color)}"></span>${escHtml(stage.name)}</span>`;
+  }
+
+  function _crmAuditEntryHtml(e, { showLead = false } = {}) {
+    const who  = `${_crmAvatarHtml(e.user, 20)}<strong>${escHtml(e.user?.name || 'System')}</strong>`;
+    const lead = showLead ? ` <span class="crm-audit-lead">${escHtml(e.lead?.name || 'Lead #' + e.lead?.id)}</span>` : '';
+    const move = `${_crmAuditStageChip(e.from_stage)}<i class="fa fa-arrow-right crm-audit-arrow"></i>${_crmAuditStageChip(e.to_stage)}`;
+
+    let title;
+    switch (e.event) {
+      case 'created':       title = `${who} created${lead || ' this lead'} in ${_crmAuditStageChip(e.to_stage)}`; break;
+      case 'updated':       title = `${who} updated ${e.changes.length} field${e.changes.length !== 1 ? 's' : ''}${lead ? ' on' + lead : ''}`; break;
+      case 'stage_changed': title = `${who} moved${lead} ${move}`; break;
+      case 'converted':     title = `${who} converted${lead} to a customer ${move}`; break;
+      case 'lost':          title = `${who} marked${lead || ' this lead'} as lost ${move}`; break;
+      case 'reopened':      title = `${who} reopened${lead} ${move}`; break;
+      case 'deleted':       title = `${who} deleted${lead || ' this lead'}${e.from_stage ? ' from ' + _crmAuditStageChip(e.from_stage) : ''}`; break;
+      default:              title = `${who} — ${escHtml(e.event_label)}${lead}`;
+    }
+
+    const [srcIcon, srcLabel] = _CRM_AUDIT_SOURCES[e.source] || (e.source ? ['fa-tag', e.source] : [null, null]);
+    const meta = [
+      `<span title="${escHtml(_crmFmtDateTime(e.created_at))}"><i class="fa fa-clock"></i>${escHtml(_crmFmtDateTime(e.created_at))} · ${escHtml(_crmFmtAgo(e.created_at))}</span>`,
+      srcLabel ? `<span><i class="fa ${srcIcon}"></i>${escHtml(srcLabel)}</span>` : '',
+      e.ip_address ? `<span><i class="fa fa-network-wired"></i>${escHtml(e.ip_address)}</span>` : '',
+    ].join('');
+
+    const extras = [];
+    if (e.stage_duration_seconds != null && e.from_stage) {
+      extras.push(`<div class="crm-audit-note"><i class="fa fa-hourglass-half"></i>Spent <strong>${_crmFmtDuration(e.stage_duration_seconds)}</strong> in ${escHtml(e.from_stage.name)}</div>`);
+    }
+    if (e.meta?.reason) extras.push(`<div class="crm-audit-note"><i class="fa fa-comment"></i>Reason: ${escHtml(e.meta.reason)}</div>`);
+    if (e.changes?.length) {
+      const val = v => v == null || v === '' ? '<span class="crm-audit-empty">empty</span>' : escHtml(String(v));
+      extras.push(`<table class="crm-audit-diff"><thead><tr><th>Field</th><th>Before</th><th>After</th></tr></thead><tbody>${
+        e.changes.map(c => `<tr><td>${escHtml(c.label)}</td><td class="crm-audit-old">${val(c.old)}</td><td class="crm-audit-new">${val(c.new)}</td></tr>`).join('')
+      }</tbody></table>`);
+    }
+
+    return `<div class="crm-audit-item crm-audit--${escHtml(e.event)}">
+      <div class="crm-audit-dot"><i class="fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}"></i></div>
+      <div class="crm-audit-content">
+        <div class="crm-audit-title">${title}</div>
+        <div class="crm-audit-meta">${meta}</div>
+        ${extras.join('')}
+      </div>
+    </div>`;
+  }
+
+  // ── Horizontal lead timeline, pinned above the Lead Details body ──
+  // Oldest → newest left to right, cards alternating above/below the line and joined to it
+  // by flowing dashed connectors. Clicking a card shows that event's full record underneath.
+  let _crmTimelineSelected = null;
+
+  function _crmTimelineCardAction(e) {
+    switch (e.event) {
+      case 'created':       return `Created in ${_crmAuditStageChip(e.to_stage)}`;
+      case 'updated':       return `Edited ${e.changes.length} field${e.changes.length !== 1 ? 's' : ''}`;
+      case 'stage_changed': return `Moved to ${_crmAuditStageChip(e.to_stage)}`;
+      case 'converted':     return `Converted to customer`;
+      case 'lost':          return `Marked as lost`;
+      case 'reopened':      return `Reopened in ${_crmAuditStageChip(e.to_stage)}`;
+      case 'deleted':       return `Deleted`;
+      default:              return escHtml(e.event_label);
+    }
+  }
+
+  function _crmRenderLeadHistory() {
+    const box = $('#crm-lead-view-timeline');
+    if (!box) return;
+    box.style.display = _crmViewEditing ? 'none' : '';
+    const msg = text => { box.innerHTML = `<div class="crm-tl-msg">${text}</div>`; };
+    if (_crmViewHistory === null)  return msg('<i class="fa fa-spinner fa-spin"></i> Loading timeline…');
+    if (_crmViewHistory === false) return msg('Failed to load timeline.');
+    if (!_crmViewHistory.length)   return msg('No recorded activity yet.');
+
+    const entries = _crmViewHistory.slice().reverse(); // oldest first
+    if (!entries.some(e => e.id === _crmTimelineSelected)) _crmTimelineSelected = entries[entries.length - 1].id;
+
+    const nodes = entries.map((e, i) => {
+      const up   = i % 2 === 0;
+      const d    = new Date(e.created_at);
+      const date = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+      const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      const dotColor = (e.event === 'stage_changed' || e.event === 'created' || e.event === 'reopened') && e.to_stage ? e.to_stage.color : '';
+      return `<div class="crm-tl-node crm-audit--${escHtml(e.event)} ${up ? 'crm-tl-node--up' : 'crm-tl-node--down'}${e.id === _crmTimelineSelected ? ' crm-tl-node--active' : ''}" data-tl-id="${e.id}">
+        <button type="button" class="crm-tl-card">
+          <div class="crm-tl-card-user">${_crmAvatarHtml(e.user, 22)}<span class="crm-tl-card-name">${escHtml(e.user?.name || 'System')}</span></div>
+          <div class="crm-tl-card-action">${_crmTimelineCardAction(e)}</div>
+          <div class="crm-tl-card-time">${escHtml(time)} · ${escHtml(_crmFmtAgo(e.created_at))}</div>
+        </button>
+        <span class="crm-tl-stem"><span class="crm-tl-flow"></span></span>
+        <span class="crm-tl-dot"${dotColor ? ` style="--audit:${escHtml(dotColor)}"` : ''}><i class="fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}"></i></span>
+        <span class="crm-tl-date">${escHtml(date)}</span>
+      </div>`;
+    }).join('');
+
+    const selected = entries.find(e => e.id === _crmTimelineSelected);
+    box.classList.toggle('crm-tl-wrap--collapsed', _crmTimelineCollapsed());
+    box.innerHTML = `
+      <div class="crm-tl-head">
+        <span><i class="fa fa-timeline"></i> Lead Timeline <span class="crm-tl-count">· ${entries.length} event${entries.length !== 1 ? 's' : ''}</span></span>
+        <button type="button" class="crm-tl-toggle" title="Show / hide timeline">
+          <span class="crm-tl-toggle-label">${_crmTimelineCollapsed() ? 'Show' : 'Hide'}</span><i class="fa fa-chevron-up"></i>
+        </button>
+      </div>
+      <div class="crm-tl-collapse"><div class="crm-tl-collapse-inner">
+        <div class="crm-tl-scroll"><div class="crm-tl-track">${nodes}<span class="crm-tl-end"><i class="fa fa-caret-right"></i></span></div></div>
+        <div class="crm-tl-detail">${selected ? _crmAuditEntryHtml(selected) : ''}</div>
+      </div></div>`;
+
+    const scroller = box.querySelector('.crm-tl-scroll');
+    scroller.scrollLeft = scroller.scrollWidth; // latest event in view
+  }
+
+  // Wheel scrolls the timeline sideways; clicking a card selects it.
+  $('#crm-lead-view-timeline')?.addEventListener('wheel', e => {
+    const scroller = e.target.closest('.crm-tl-scroll');
+    if (!scroller || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    scroller.scrollLeft += e.deltaY;
+  }, { passive: false });
+  function _crmTimelineCollapsed() {
+    try { return localStorage.getItem('crm.leadTimeline.collapsed') === '1'; } catch { return false; }
+  }
+
+  $('#crm-lead-view-timeline')?.addEventListener('click', e => {
+    if (e.target.closest('.crm-tl-toggle')) {
+      const collapsed = !_crmTimelineCollapsed();
+      try { localStorage.setItem('crm.leadTimeline.collapsed', collapsed ? '1' : '0'); } catch {}
+      const box = $('#crm-lead-view-timeline');
+      box.classList.toggle('crm-tl-wrap--collapsed', collapsed);
+      box.querySelector('.crm-tl-toggle-label').textContent = collapsed ? 'Show' : 'Hide';
+      return;
+    }
+    const node = e.target.closest('.crm-tl-node');
+    if (!node) return;
+    _crmTimelineSelected = +node.dataset.tlId;
+    const box = $('#crm-lead-view-timeline');
+    box.querySelectorAll('.crm-tl-node').forEach(n => n.classList.toggle('crm-tl-node--active', n === node));
+    const entry = _crmViewHistory?.find(x => x.id === _crmTimelineSelected);
+    box.querySelector('.crm-tl-detail').innerHTML = entry ? _crmAuditEntryHtml(entry) : '';
+  });
+
+  async function _crmLoadLeadHistory(lead) {
+    _crmTimelineSelected = null; // re-select the newest event once loaded
+    _crmViewHistory = null;
+    _crmRenderLeadHistory();
+    const res = await API.crmLeadHistory(lead.id).catch(() => ({ status: 0 }));
+    if (_crmViewLead?.id !== lead.id) return;
+    _crmViewHistory = res.status === 200 ? (res.body?.data || []) : false;
+    _crmRenderLeadHistory();
+  }
+
+  function _crmLeadViewItem(label, value) {
+    const empty = value == null || String(value).trim() === '';
+    return `<div class="crm-lead-view-item"><div class="crm-lead-view-label">${escHtml(label)}</div>`
+      + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}</div></div>`;
+  }
+
+  function _crmRenderLeadModal(editing) {
+    const lead = _crmViewLead;
+    if (!lead) return;
+    _crmViewEditing = editing;
+    const item  = _crmLeadViewItem;
+    const stage = _crmPipeline?.columns.find(c => c.id === lead.stage_id);
+    const loading = '<span style="color:var(--text-muted);font-size:12px">Loading…</span>';
+
+    const head = `
+      <div class="crm-lead-view-head">
+        <div class="crm-lead-view-avatar">${escHtml((lead.name || '?').trim().charAt(0).toUpperCase())}</div>
+        <div style="min-width:0">
+          <div class="crm-lead-view-name">${escHtml(lead.name || '')}</div>
+          <div class="crm-lead-view-sub">
+            ${stage ? `<span class="crm-lead-view-stage"><span class="crm-col-swatch" style="background:${escHtml(stage.color)}"></span>${escHtml(stage.name)}</span>` : ''}
+            ${lead.is_customer ? `<span class="crm-card-customer-badge" style="margin-top:0"><i class="fa fa-circle-check"></i> Already a Customer</span>` : ''}
+            <span><i class="fa fa-user-pen" style="margin-right:4px"></i>Entered by <strong>${escHtml(lead.created_by_name || 'Web form / unknown')}</strong></span>
+            ${lead.created_at ? `<span><i class="fa fa-clock" style="margin-right:4px"></i>${escHtml(_crmFmtDateTime(lead.created_at))}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div id="crm-lead-view-alert" class="svc-form-alert" style="display:none"></div>`;
+
+    let fields;
+    if (!_crmViewBlocksReady) {
+      fields = loading;
+    } else if (editing) {
+      // Field blocks only — the form's headings/description text are decoration for the
+      // public form and just add noise here. Stage + Notes share the same grid.
+      const inputs = _crmLeadFormBlocks
+        .map((b, i) => b.type === 'field' ? _crmLeadFormBlockHtml(b, i, _crmLeadFieldValue(b, lead)) : '')
+        .join('');
+      fields = `<div class="crm-lead-view-grid crm-lead-view-grid--edit">
+        ${inputs}
+        <div class="po-field">
+          <label class="po-field-label">Stage</label>
+          <select id="crm-lead-view-stage" class="po-field-input" style="appearance:auto"></select>
+        </div>
+        ${_crmSourceFieldHtml('crm-lead-view-source', lead.source)}
+        <div class="po-field" style="grid-column:1/-1">
+          <label class="po-field-label">Notes</label>
+          <textarea id="crm-lead-view-notes" class="po-field-input" rows="2" style="resize:vertical">${escHtml(lead.notes || '')}</textarea>
+        </div>
+      </div>`;
+    } else {
+      const items = _crmLeadFormBlocks.filter(b => b.type === 'field')
+        .map(b => item(b.label || b.field || 'Field', _crmLeadFieldValue(b, lead))).join('');
+      fields = `<div class="crm-lead-view-grid">${items || item('Name', lead.name)}</div>`;
+    }
+
+    const rest = editing ? '' : `
+      <div>
+        <div class="crm-lead-view-section">Record</div>
+        <div class="crm-lead-view-grid">
+          ${item('Stage', stage?.name)}
+          ${item('Entered By', lead.created_by_name)}
+          ${item('Created', _crmFmtDateTime(lead.created_at))}
+          ${item('Last Updated', _crmFmtDateTime(lead.updated_at))}
+          ${item('Source', _crmSource(lead.source)?.label)}
+          ${lead.estimated_value ? item('Estimated Value', formatMoney(lead.estimated_value)) : ''}
+          ${lead.expected_close_date ? item('Expected Close', new Date(lead.expected_close_date).toLocaleDateString()) : ''}
+          ${item('Notes', lead.notes).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide')}
+        </div>
+      </div>`;
+
+    $('#crm-lead-view-body').innerHTML = head
+      + `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
+      + rest;
+    // Only show/hide the timeline here — rebuilding it on every body render (e.g. when the
+    // form fields finish loading) re-laid it out and re-scrolled it for nothing.
+    const tl = $('#crm-lead-view-timeline');
+    if (tl) tl.style.display = editing ? 'none' : '';
+
+    $('#crm-lead-view-title').textContent = editing ? 'Edit Lead' : 'Lead Details';
+    $('#crm-lead-view-cancel').innerHTML  = editing ? '<i class="fa fa-arrow-left"></i> Back to Details' : '<i class="fa fa-xmark"></i> Close';
+    $('#crm-lead-view-edit').style.display = !editing && _crmCan('leads_edit') ? '' : 'none';
+    $('#crm-lead-view-save').style.display = editing ? '' : 'none';
+    $('#crm-lead-view-save').disabled      = !_crmViewBlocksReady;
+
+    if (editing) {
+      _populateStageSelect('#crm-lead-view-stage', lead.stage_id);
+      if (_crmViewBlocksReady) $('#crm-lead-view-body .crm-lead-field-input')?.focus();
+    }
+  }
+
+  async function _openViewLeadModal(lead, { edit = false } = {}) {
+    _crmViewLead        = lead;
+    _crmViewBlocksReady = false;
+    $('#crm-lead-view-modal').style.display = 'flex';
+    _crmAnimateLeadModal(true);
+    _crmRenderLeadModal(edit);
+    _crmLoadLeadHistory(lead);
 
     const formId = lead.form_id || _crmPipeline?.default_form?.id || null;
     const blocks = await _crmLoadLeadFormBlocks(formId);
+    if (_crmViewLead !== lead) return; // another lead was opened (or the modal closed) meanwhile
     if (blocks === null) {
-      $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Failed to load form.</span>';
+      $('#crm-lead-view-body').querySelector('.crm-lead-view-section + span').textContent = 'Failed to load form fields.';
       return;
     }
-    $('#crm-lead-edit-form-fields').innerHTML = blocks.length
-      ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i, _crmLeadFieldValue(b, lead))).join('')
-      : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>';
-    $('#crm-lead-edit-save').disabled = false;
-    $('#crm-lead-edit-form-fields').querySelector('.crm-lead-field-input')?.focus();
+    _crmViewBlocksReady = true;
+    _crmRenderLeadModal(_crmViewEditing);
   }
 
-  $('#crm-lead-edit-close')?.addEventListener('click',  () => { $('#crm-lead-edit-modal').style.display = 'none'; });
-  $('#crm-lead-edit-cancel')?.addEventListener('click', () => { $('#crm-lead-edit-modal').style.display = 'none'; });
-  $('#crm-lead-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-lead-edit-modal')) $('#crm-lead-edit-modal').style.display = 'none'; });
+  function _openEditLeadModal(lead) {
+    return _openViewLeadModal(lead, { edit: true });
+  }
 
-  $('#crm-lead-edit-save')?.addEventListener('click', async () => {
-    const id = parseInt($('#crm-lead-edit-id').value);
+  // macOS-style open/close: the window zooms out of the point that opened it (the clicked
+  // lead card) with a soft spring, and shrinks back into it on close.
+  let _crmLeadModalOrigin = null;
+  let _crmLeadModalAnim   = null;
+  document.addEventListener('pointerdown', e => { _crmLeadModalOrigin = { x: e.clientX, y: e.clientY, t: Date.now() }; }, true);
+
+  function _crmAnimateLeadModal(opening, done) {
+    const overlay = $('#crm-lead-view-modal');
+    const shell   = overlay?.querySelector('.crm-lead-view-shell');
+    const reduce  = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!shell || reduce || !shell.animate) { done?.(); return; }
+
+    _crmLeadModalAnim?.forEach(a => a.cancel());
+    const rect = shell.getBoundingClientRect();
+    // Use the last click only if it just happened (keyboard / programmatic opens zoom from centre).
+    const o  = opening && _crmLeadModalOrigin && Date.now() - _crmLeadModalOrigin.t < 1500 ? _crmLeadModalOrigin : null;
+    if (opening) {
+      shell.dataset.originX = o ? o.x : '';
+      shell.dataset.originY = o ? o.y : '';
+    }
+    const ox = shell.dataset.originX ? +shell.dataset.originX : rect.left + rect.width / 2;
+    const oy = shell.dataset.originY ? +shell.dataset.originY : rect.top + rect.height / 2;
+    const from = {
+      transform: `translate(${ox - (rect.left + rect.width / 2)}px, ${oy - (rect.top + rect.height / 2)}px) scale(.12)`,
+      opacity: 0, // no filter/borderRadius here — both repaint the whole window every frame
+    };
+    const to = { transform: 'none', opacity: 1 };
+
+    const shellAnim = shell.animate(opening ? [from, to] : [to, from], opening
+      ? { duration: 460, easing: 'cubic-bezier(.16, 1.12, .3, 1)' } // gentle overshoot, like a spring
+      : { duration: 280, easing: 'cubic-bezier(.55, 0, .75, .3)' });
+    const fadeAnim = overlay.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: opening ? 300 : 260, easing: 'ease', direction: opening ? 'normal' : 'reverse', fill: 'forwards',
+    });
+    _crmLeadModalAnim = [shellAnim, fadeAnim];
+    shellAnim.onfinish = () => { _crmLeadModalAnim = null; if (!opening) fadeAnim.cancel(); done?.(); };
+  }
+
+  function _closeViewLeadModal() {
+    if (!_crmViewLead) return; // already closing
+    _crmAnimateLeadModal(false, () => {
+      if (!_crmViewLead) $('#crm-lead-view-modal').style.display = 'none';
+    });
+    _crmViewLead = null;
+  }
+
+  $('#crm-lead-view-close')?.addEventListener('click', _closeViewLeadModal);
+  $('#crm-lead-view-cancel')?.addEventListener('click', () => {
+    if (_crmViewEditing) _crmRenderLeadModal(false);
+    else _closeViewLeadModal();
+  });
+  // Ignore backdrop clicks while editing so a stray click can't throw away unsaved changes.
+  $('#crm-lead-view-modal')?.addEventListener('click', e => {
+    if (e.target === $('#crm-lead-view-modal') && !_crmViewEditing) _closeViewLeadModal();
+  });
+  $('#crm-lead-view-edit')?.addEventListener('click', () => _crmRenderLeadModal(true));
+
+  $('#crm-lead-view-save')?.addEventListener('click', async () => {
+    const lead = _crmViewLead;
+    if (!lead || !_crmViewBlocksReady) return;
+    const alertEl = $('#crm-lead-view-alert');
+    alertEl.style.display = 'none';
 
     const core = { name: '', company: '', email: '', phone: '' };
     const customFields = {};
-    const values = _crmCollectLeadFieldValues($('#crm-lead-edit-form-fields'));
+    const values = _crmCollectLeadFieldValues($('#crm-lead-view-body'));
     _crmLeadFormBlocks.forEach((block, idx) => {
       if (block.type !== 'field') return;
       const field = String(block.field || '');
@@ -56986,30 +58426,53 @@ async function submitDsCreate() {
       if (field in core) core[field] = value;
       else if (field.startsWith('custom:')) customFields[field.slice(7)] = value;
     });
+    // Forms without a name field keep the lead's existing name.
+    const hasNameField = _crmLeadFormBlocks.some(b => b.type === 'field' && b.field === 'name');
+    if (!hasNameField) core.name = lead.name || '';
 
-    if (!core.name) { $('#crm-lead-edit-alert').textContent = 'Name is required.'; $('#crm-lead-edit-alert').style.display = ''; return; }
+    if (!core.name) { alertEl.textContent = 'Name is required.'; alertEl.style.display = ''; return; }
 
-    const btn = $('#crm-lead-edit-save');
+    const payload = {
+      name:          core.name,
+      company:       core.company || null,
+      email:         core.email || null,
+      phone:         core.phone || null,
+      stage_id:      $('#crm-lead-view-stage').value || null,
+      source:        $('#crm-lead-view-source').value || null,
+      notes:         $('#crm-lead-view-notes').value.trim() || null,
+      custom_fields: customFields,
+    };
+
+    const btn = $('#crm-lead-view-save');
     btn.disabled = true;
-    const res = await API.crmUpdateLead(id, {
-      name:            core.name,
-      company:         core.company || null,
-      email:           core.email || null,
-      phone:           core.phone || null,
-      stage_id:        $('#crm-lead-edit-stage').value || null,
-      notes:           $('#crm-lead-edit-notes').value.trim() || null,
-      custom_fields:   customFields,
-    });
+    const res = await API.crmUpdateLead(lead.id, payload);
     btn.disabled = false;
+    if (_crmViewLead !== lead) return;
+
     if (res.status === 200) {
-      $('#crm-lead-edit-modal').style.display = 'none';
+      const saved = res.body?.data || {};
+      _crmViewLead = {
+        ...lead,
+        name:          payload.name,
+        company:       payload.company,
+        email:         payload.email,
+        phone:         payload.phone,
+        source:        payload.source,
+        notes:         payload.notes,
+        stage_id:      parseInt(saved.stage_id ?? payload.stage_id ?? lead.stage_id),
+        updated_at:    saved.updated_at || lead.updated_at,
+        custom_fields: { ...(lead.custom_fields || {}), ...customFields },
+      };
+      _crmRenderLeadModal(false);
+      _crmLoadLeadHistory(_crmViewLead);
       toast('Lead updated.', 'success');
-      loadCrmPipeline();
+      loadCrmPipeline(_crmProjectId, { silent: true });
       if (_crmDetailLoaded.customData) loadCrmCustomData();
       if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
     } else {
-      $('#crm-lead-edit-alert').textContent = res.body?.message || 'Failed to update lead.';
-      $('#crm-lead-edit-alert').style.display = '';
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      alertEl.textContent = firstError || res.body?.message || 'Failed to update lead.';
+      alertEl.style.display = '';
     }
   });
 
@@ -58015,6 +59478,7 @@ async function submitDsCreate() {
   let _crmCustomDataLeadById   = {};   // flat id -> lead, for opening the edit modal from a row
   let _crmCustomDataSearch     = '';
   let _crmCustomDataFormFilter = '';
+  let _crmCustomDataSourceFilter = '';
 
   async function loadCrmCustomData() {
     if (!_crmProjectId) { _showCustomDataEmpty(); return; }
@@ -58033,6 +59497,7 @@ async function submitDsCreate() {
       filterSelect.value = _crmCustomDataGroups.some(g => String(g.form.id) === current) ? current : '';
       _crmCustomDataFormFilter = filterSelect.value;
     }
+    _crmCustomDataSourceFilter = _crmFillSourceSelect($('#crm-customdata-source-filter'), _crmCustomDataSourceFilter);
 
     _renderCustomDataGroups();
   }
@@ -58059,20 +59524,22 @@ async function submitDsCreate() {
 
       const fieldBlocks = (g.form.blocks || []).filter(b => b.type === 'field');
       const rows = g.leads.map(lead => {
+        if (_crmCustomDataSourceFilter && (lead.source || '') !== _crmCustomDataSourceFilter) return '';
         const cells = fieldBlocks.map(b => _crmLeadFieldValue(b, lead));
         const submitted = lead.created_at ? new Date(lead.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
-        const searchText = [...cells, lead.stage_name, submitted].join(' ').toLowerCase();
+        const searchText = [...cells, lead.stage_name, _crmSource(lead.source)?.label, submitted].join(' ').toLowerCase();
         if (q && !searchText.includes(q)) return '';
         return `
           <tr data-lead-id="${lead.id}" style="cursor:pointer">
             ${cells.map(v => `<td>${v ? escHtml(v) : '<span style="color:var(--text-muted)">—</span>'}</td>`).join('')}
+            <td>${_crmSourceBadge(lead.source) || '<span style="color:var(--text-muted)">—</span>'}</td>
             <td>${lead.stage_name ? escHtml(lead.stage_name) : '<span style="color:var(--text-muted)">Unstaged</span>'}</td>
             <td style="color:var(--text-muted);font-size:11px;white-space:nowrap">${submitted}</td>
             <td style="text-align:right"><button class="crm-card-btn" data-customdata-view="${lead.id}" title="View / edit"><i class="fa fa-pen"></i></button></td>
           </tr>`;
       }).join('');
 
-      if (!rows) return ''; // every row in this group was filtered out by the search box
+      if (!rows) return ''; // every row in this group was filtered out by the search box / source filter
 
       visibleGroups++;
       return `
@@ -58082,7 +59549,7 @@ async function submitDsCreate() {
             <table class="crm-table">
               <thead><tr>
                 ${fieldBlocks.map(b => `<th>${escHtml(b.label || b.field)}</th>`).join('')}
-                <th>Stage</th><th>Submitted</th><th></th>
+                <th>Source</th><th>Stage</th><th>Submitted</th><th></th>
               </tr></thead>
               <tbody>${rows}</tbody>
             </table>
@@ -58091,7 +59558,7 @@ async function submitDsCreate() {
     }).join('');
 
     if (visibleGroups === 0) {
-      container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">No entries match your search.</p>';
+      container.innerHTML = '<p style="text-align:center;color:var(--text-muted);font-size:12px;padding:24px 0">No entries match your search or filters.</p>';
     }
 
     container.querySelectorAll('tr[data-lead-id]').forEach(row => {
@@ -58128,6 +59595,10 @@ async function submitDsCreate() {
     _crmCustomDataFormFilter = e.target.value;
     _renderCustomDataGroups();
   });
+  $('#crm-customdata-source-filter')?.addEventListener('change', e => {
+    _crmCustomDataSourceFilter = e.target.value;
+    _renderCustomDataGroups();
+  });
 
   // ── Relation Contacts tab ────────────────────────────────────────────────
   // Contacts derived from this relation's own leads (each lead already carries its own
@@ -58147,13 +59618,14 @@ async function submitDsCreate() {
   async function loadCrmRelationContacts() {
     if (!_crmProjectId) return;
     _populateRelationContactsStageFilter();
+    _crmRelationContactsSource = _crmFillSourceSelect($('#crm-relation-contacts-source-filter'), _crmRelationContactsSource);
 
     const table = $('#crm-relation-contacts-table');
     const body  = $('#crm-relation-contacts-body');
     const empty = $('#crm-relation-contacts-empty');
     const alert = $('#crm-relation-contacts-alert');
 
-    const res = await API.crmProjectContacts(_crmProjectId, _crmRelationContactsSearch, _crmRelationContactsStage);
+    const res = await API.crmProjectContacts(_crmProjectId, _crmRelationContactsSearch, _crmRelationContactsStage, _crmRelationContactsSource);
     if (res.status !== 200) {
       _crmRelationContacts = [];
       if (alert) { alert.textContent = res.body?.message || 'Failed to load contacts.'; alert.style.display = ''; }
@@ -58177,6 +59649,7 @@ async function submitDsCreate() {
           <td>${c.company ? escHtml(c.company) : '<span style="color:var(--text-muted)">—</span>'}</td>
           <td>${c.phone ? escHtml(c.phone) : '<span style="color:var(--text-muted)">—</span>'}</td>
           <td>${c.email ? escHtml(c.email) : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td>${_crmSourceBadge(c.source) || '<span style="color:var(--text-muted)">—</span>'}</td>
           <td>${c.stage_name ? escHtml(c.stage_name) : '<span style="color:var(--text-muted)">Unstaged</span>'}</td>
           <td>${c.open_tasks > 0 ? `<span class="crm-badge-open">${c.open_tasks}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
           <td style="color:var(--text-muted);font-size:11px">${c.last_activity ? new Date(c.last_activity).toLocaleDateString(undefined, {day:'numeric',month:'short',year:'numeric'}) : '—'}</td>
@@ -58194,6 +59667,10 @@ async function submitDsCreate() {
   });
   $('#crm-relation-contacts-stage-filter')?.addEventListener('change', e => {
     _crmRelationContactsStage = e.target.value;
+    loadCrmRelationContacts();
+  });
+  $('#crm-relation-contacts-source-filter')?.addEventListener('change', e => {
+    _crmRelationContactsSource = e.target.value;
     loadCrmRelationContacts();
   });
 
