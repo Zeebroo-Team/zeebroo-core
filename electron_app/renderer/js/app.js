@@ -54604,6 +54604,7 @@ async function submitDsCreate() {
       { key: 'crm_contacts', label: 'Contacts',           desc: 'View and manage CRM contact records' },
       { key: 'crm_tasks',    label: 'Tasks',              desc: 'Create and manage CRM tasks and follow-ups' },
       { key: 'crm_forms',    label: 'Lead Capture Forms', desc: 'Design and manage web forms for capturing leads from your website' },
+      { key: 'crm_all_leads', label: 'All Departments',   desc: 'Work every pipeline and lead, not only those of your own department' },
     ]},
     { key: 'automations', label: 'Automations', icon: 'fa-robot', color: '#f97316', items: [
       { key: 'automations_access', label: 'Access Automations', desc: 'View and manage automation workflows' },
@@ -56644,10 +56645,26 @@ async function submitDsCreate() {
   // ── Per-user CRM access ──────────────────────────────────────────────────
   // Set from /crm/permissions/me. The server enforces every rule; this only hides
   // the controls a user can't use (via crm-deny-<key> classes on <body>).
-  let _crmAccess = null;   // { is_admin, permissions: { key: bool }, stage_access }
+  // Department/role rules come on top: the open pipeline carries `can` (manage, create_leads)
+  // and every lead its own `can` (edit, move, delete, assign, …), so a staff member sees
+  // their department's board but only works the leads assigned to them.
+  let _crmAccess = null;   // { is_admin, role, department_ids, is_head, read_only, permissions: { key: bool }, stage_access }
 
   function _crmCan(key) {
     return !_crmAccess || _crmAccess.permissions?.[key] !== false;
+  }
+
+  const _CRM_LEAD_KEYS = { edit: 'leads_edit', move: 'leads_move', delete: 'leads_delete' };
+
+  /** Function toggle AND the lead's own flag from the pipeline response. */
+  function _crmLeadCan(lead, action) {
+    if (_CRM_LEAD_KEYS[action] && !_crmCan(_CRM_LEAD_KEYS[action])) return false;
+    return !lead?.can || lead.can[action] !== false;
+  }
+
+  /** A flag of the open pipeline (manage, create_leads, work_all). */
+  function _crmProjectCan(action) {
+    return !_crmPipeline?.can || _crmPipeline.can[action] !== false;
   }
 
   async function loadCrmAccess() {
@@ -57712,6 +57729,9 @@ async function submitDsCreate() {
       return;
     }
     _crmPipeline = res.body.data;
+    // Pipeline-level rules: only its department head (or marketing, admin) changes stages and forms
+    document.body.classList.toggle('crm-proj-deny-manage', !_crmProjectCan('manage'));
+    document.body.classList.toggle('crm-proj-deny-create', !_crmProjectCan('create_leads'));
     _updateNewLeadBtnState();
     _crmRenderPipelineView();
     _crmRenderDashboardPane();
@@ -57905,11 +57925,12 @@ async function submitDsCreate() {
     }
   }
 
-  function _crmCardActionsHtml(leadId) {
-    return `<div class="crm-card-actions">
-      <button class="crm-card-btn crm-card-edit" data-lead-id="${leadId}" title="Edit"><i class="fa fa-pen"></i></button>
-      <button class="crm-card-btn crm-card-del" data-lead-id="${leadId}" title="Delete"><i class="fa fa-trash"></i></button>
-    </div>`;
+  function _crmCardActionsHtml(lead) {
+    const edit = _crmLeadCan(lead, 'edit')
+      ? `<button class="crm-card-btn crm-card-edit" data-lead-id="${lead.id}" title="Edit"><i class="fa fa-pen"></i></button>` : '';
+    const del = _crmLeadCan(lead, 'delete')
+      ? `<button class="crm-card-btn crm-card-del" data-lead-id="${lead.id}" title="Delete"><i class="fa fa-trash"></i></button>` : '';
+    return edit || del ? `<div class="crm-card-actions">${edit}${del}</div>` : '';
   }
 
   async function _crmDeleteLead(leadId) {
@@ -57928,7 +57949,6 @@ async function submitDsCreate() {
     if (!list || !_crmPipeline) return;
     const cols = _crmPipeline.columns;
     const stageOrder = new Map(cols.map((c, i) => [c.id, i]));
-    const canMove = _crmCan('leads_move');
     const rows = cols.flatMap(c => c.leads.filter(_crmLeadMatches).map(l => ({ ...l, stage_id: c.id })));
 
     const { key, dir } = _crmListSort;
@@ -57950,7 +57970,7 @@ async function submitDsCreate() {
     const stageCell = r => {
       const col = cols[stageOrder.get(r.stage_id)];
       const dot = `<span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>`;
-      if (!canMove) return `<span class="crm-list-stage">${dot}${escHtml(col.name)}</span>`;
+      if (!_crmLeadCan(r, 'move')) return `<span class="crm-list-stage">${dot}${escHtml(col.name)}</span>`;
       return `<span class="crm-list-stage">${dot}<select data-move-lead="${r.id}" data-from-stage="${r.stage_id}">
         ${cols.map(c => `<option value="${c.id}"${c.id === r.stage_id ? ' selected' : ''}>${escHtml(c.name)}</option>`).join('')}
       </select></span>`;
@@ -57970,7 +57990,7 @@ async function submitDsCreate() {
             <td>${stageCell(r)}</td>
             <td>${r.estimated_value ? formatMoney(r.estimated_value) : '<span class="crm-list-sub">—</span>'}</td>
             <td class="crm-list-sub">${r.created_at ? escHtml(new Date(r.created_at).toLocaleDateString()) : '—'}</td>
-            <td>${_crmCardActionsHtml(r.id)}</td>
+            <td>${_crmCardActionsHtml(r)}</td>
           </tr>`).join('')}
         </tbody>
       </table>`
@@ -58070,9 +58090,10 @@ async function submitDsCreate() {
           ? `<span class="crm-card-date${overdue ? ' crm-card-date--overdue' : ''}" title="Expected close ${close.toLocaleDateString()}"><i class="fa fa-flag-checkered"></i>${close.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`
           : (lead.created_at ? `<span class="crm-card-date" title="Created ${new Date(lead.created_at).toLocaleString()}"><i class="fa fa-clock"></i>${_crmAgo(lead.created_at)}</span>` : '');
         const tags = (lead.is_customer ? `<span class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Customer</span>` : '')
-          + _crmSourceBadge(lead.source);
+          + _crmSourceBadge(lead.source)
+          + (lead.assigned_to_name ? `<span class="crm-card-assignee" title="Assigned to ${escHtml(lead.assigned_to_name)}"><i class="fa fa-user"></i> ${escHtml(lead.assigned_to_name)}</span>` : '');
         return `
-        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmCan('leads_move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}"${lead.company ? ` title="${escHtml(lead.name)} · ${escHtml(lead.company)}"` : ''}>
+        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmLeadCan(lead, 'move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}"${lead.company ? ` title="${escHtml(lead.name)} · ${escHtml(lead.company)}"` : ''}>
           <div class="crm-card-top">
             <span class="crm-card-avatar" style="--av:${_crmAvatarColor(lead.name)}">${escHtml(_crmInitials(lead.name))}</span>
             <div class="crm-card-id">
@@ -58088,7 +58109,7 @@ async function submitDsCreate() {
               ${lead.email ? `<i class="fa fa-envelope crm-card-contact" title="${escHtml(lead.email)}"></i>` : ''}
               ${lead.phone ? `<i class="fa fa-phone crm-card-contact" title="${escHtml(lead.phone)}"></i>` : ''}
             </span>
-            ${_crmCardActionsHtml(lead.id)}
+            ${_crmCardActionsHtml(lead)}
           </div>
         </div>`;
       }).join('');
@@ -58686,6 +58707,7 @@ async function submitDsCreate() {
           <select id="crm-lead-view-stage" class="po-field-input" style="appearance:auto"></select>
         </div>
         ${_crmSourceFieldHtml('crm-lead-view-source', lead.source)}
+        ${_crmAssigneeFieldHtml(lead)}
         <div class="po-field" style="grid-column:1/-1">
           <label class="po-field-label">Notes</label>
           <textarea id="crm-lead-view-notes" class="po-field-input" rows="2" style="resize:vertical">${escHtml(lead.notes || '')}</textarea>
@@ -58702,6 +58724,7 @@ async function submitDsCreate() {
         <div class="crm-lead-view-section">Record</div>
         <div class="crm-lead-view-grid">
           ${item('Stage', stage?.name)}
+          ${item('Assigned To', lead.assigned_to_name || 'Unassigned')}
           ${item('Entered By', lead.created_by_name)}
           ${item('Created', _crmFmtDateTime(lead.created_at))}
           ${item('Last Updated', _crmFmtDateTime(lead.updated_at))}
@@ -58722,7 +58745,7 @@ async function submitDsCreate() {
 
     $('#crm-lead-view-title').textContent = editing ? 'Edit Lead' : 'Lead Details';
     $('#crm-lead-view-cancel').innerHTML  = editing ? '<i class="fa fa-arrow-left"></i> Back to Details' : '<i class="fa fa-xmark"></i> Close';
-    $('#crm-lead-view-edit').style.display = !editing && _crmCan('leads_edit') ? '' : 'none';
+    $('#crm-lead-view-edit').style.display = !editing && _crmLeadCan(lead, 'edit') ? '' : 'none';
     $('#crm-lead-view-save').style.display = editing ? '' : 'none';
     $('#crm-lead-view-save').disabled      = !_crmViewBlocksReady;
 
@@ -58753,6 +58776,24 @@ async function submitDsCreate() {
 
   function _openEditLeadModal(lead) {
     return _openViewLeadModal(lead, { edit: true });
+  }
+
+  // "Assigned to" picker — only for those who may assign (department head / admin). The list
+  // (pipeline.assignable_users) is the department's staff, so nobody outside it can be picked.
+  function _crmAssigneeFieldHtml(lead) {
+    if (!_crmLeadCan(lead, 'assign')) return '';
+    const users = _crmPipeline?.assignable_users || [];
+    const options = users.map(u =>
+      `<option value="${u.id}"${u.id === lead.assigned_to ? ' selected' : ''}>${escHtml(u.name)}</option>`).join('');
+    // Keep a current assignee who is no longer in the department visible rather than silently dropping them
+    const stale = lead.assigned_to && !users.some(u => u.id === lead.assigned_to)
+      ? `<option value="${lead.assigned_to}" selected>${escHtml(lead.assigned_to_name || 'Current assignee')}</option>` : '';
+    return `<div class="po-field">
+      <label class="po-field-label">Assigned To</label>
+      <select id="crm-lead-view-assignee" class="po-field-input" style="appearance:auto">
+        <option value="">— Unassigned —</option>${stale}${options}
+      </select>
+    </div>`;
   }
 
   // macOS-style open/close: the window zooms out of the point that opened it (the clicked
@@ -58844,6 +58885,9 @@ async function submitDsCreate() {
       notes:         $('#crm-lead-view-notes').value.trim() || null,
       custom_fields: customFields,
     };
+    // Only sent when the picker is shown, so staff edits never touch the assignee
+    const assigneeSel = $('#crm-lead-view-assignee');
+    if (assigneeSel) payload.assigned_to = assigneeSel.value ? parseInt(assigneeSel.value) : null;
 
     const btn = $('#crm-lead-view-save');
     btn.disabled = true;
@@ -58862,6 +58906,9 @@ async function submitDsCreate() {
         source:        payload.source,
         notes:         payload.notes,
         stage_id:      parseInt(saved.stage_id ?? payload.stage_id ?? lead.stage_id),
+        assigned_to:   saved.assigned_to ?? null,
+        assigned_to_name: (_crmPipeline?.assignable_users || []).find(u => u.id === saved.assigned_to)?.name
+          || (saved.assigned_to === lead.assigned_to ? lead.assigned_to_name : null),
         updated_at:    saved.updated_at || lead.updated_at,
         custom_fields: { ...(lead.custom_fields || {}), ...customFields },
       };
@@ -60878,6 +60925,10 @@ async function submitDsCreate() {
 
     function showMenu(x, y, lead) {
       _ctxLead = lead;
+      // Only the actions this user may take on this lead
+      menu.querySelector('#crm-ctx-edit').style.display    = _crmLeadCan(lead, 'edit') ? '' : 'none';
+      menu.querySelector('#crm-ctx-convert').style.display = _crmLeadCan(lead, 'edit') ? '' : 'none';
+      menu.querySelector('#crm-ctx-delete').style.display  = _crmLeadCan(lead, 'delete') ? '' : 'none';
       // Grey out "Convert" when already a customer
       const convertItem = menu.querySelector('#crm-ctx-convert');
       if (lead.is_customer) {

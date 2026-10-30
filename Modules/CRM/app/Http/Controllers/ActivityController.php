@@ -36,6 +36,7 @@ class ActivityController extends Controller
 
         $subject = $this->resolveSubject($business, $data['subject_type'], (int) $data['subject_id']);
         abort_unless($subject, 404);
+        abort_unless($this->canWorkSubject($this->crmAccess($request, $business), $subject), 403);
 
         $this->activityService->create($business, $subject, $data, $request->user()?->id);
 
@@ -53,6 +54,7 @@ class ActivityController extends Controller
         abort_unless($this->activityService->activityForBusiness($business, $activity) instanceof Activity, 404);
 
         $subject = $activity->subject;
+        abort_unless($this->canWorkSubject($this->crmAccess($request, $business), $subject), 403);
         $subjectType = $activity->subject_type === Customer::class ? 'customer' : 'lead';
 
         $this->activityService->delete($activity);

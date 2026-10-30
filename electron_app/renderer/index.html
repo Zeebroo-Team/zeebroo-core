@@ -119,7 +119,12 @@ body.crm-deny-tasks_create #rb-crm-new-task, body.crm-deny-tasks_create #crm-tas
 body.crm-deny-tasks_delete .crm-task-del-btn,
 body.crm-deny-forms_view #rb-crm-forms, body.crm-deny-forms_view [data-crmdtab="forms"],
 body.crm-deny-forms_manage #rb-crm-new-form, body.crm-deny-forms_manage #crm-forms-new-btn,
-body.crm-deny-custom_data_view #crm-tab-customdata{display:none !important}
+body.crm-deny-custom_data_view #crm-tab-customdata,
+/* Per-pipeline rules from the open pipeline's `can` (department head / marketing / admin) */
+body.crm-proj-deny-create #rb-crm-new-lead, body.crm-proj-deny-create #crm-relation-new-lead-btn,
+body.crm-proj-deny-manage #rb-crm-stages, body.crm-proj-deny-manage #crm-relation-stages-btn, body.crm-proj-deny-manage [data-add-stage],
+body.crm-proj-deny-manage #crm-stage-add-open-btn, body.crm-proj-deny-manage [data-edit-stage], body.crm-proj-deny-manage [data-del-stage],
+body.crm-proj-deny-manage [data-mail-stage], body.crm-proj-deny-manage #rb-crm-new-form, body.crm-proj-deny-manage #crm-forms-new-btn{display:none !important}
 body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 /* ── CRM Kanban ── */
 .crm-board{display:flex;gap:12px;padding:10px;overflow-x:auto;flex:1;align-items:flex-start;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--text-muted,#6b7280) 35%,transparent) transparent}
@@ -270,6 +275,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-card-value{flex-shrink:0;font-size:11.5px;font-weight:700;color:var(--text,#111827);font-variant-numeric:tabular-nums;padding-top:1px}
 .crm-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 0 39px}
 .crm-card-tags .crm-card-customer-badge{margin-top:0}
+.crm-card-assignee{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:var(--text-muted);border:1px solid var(--border);border-radius:4px;padding:1px 6px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-card-footer{display:flex;justify-content:space-between;align-items:center;gap:4px;margin-top:8px;padding-top:7px;min-height:22px;border-top:1px solid color-mix(in srgb,var(--border,#e5e7eb) 70%,transparent)}
 .crm-card-meta{display:inline-flex;align-items:center;gap:9px;min-width:0;font-size:10.5px;color:var(--text-muted,#6b7280)}
 .crm-card-date{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}

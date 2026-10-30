@@ -108,10 +108,12 @@
                    style="padding:8px 16px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                     <i class="fa fa-table-columns"></i> Board view
                 </a>
+                @if($canCreateLead)
                 <button type="button" id="ld-modal-open" class="linkbtn"
                         style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
                     <i class="fa fa-plus"></i> New lead
                 </button>
+                @endif
             @endif
         </div>
     </div>
@@ -129,7 +131,7 @@
                     <i class="fa fa-plus"></i> Create a lead form
                 </a>
             </section>
-        @else
+        @elseif($canCreateLead)
             <section class="pcat-inline">
                 <h2>New lead</h2>
                 <p class="pcat-muted">Capture a prospect, then move it through the pipeline as you follow up.</p>

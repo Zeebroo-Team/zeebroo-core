@@ -39,7 +39,7 @@ class LeadCustomFieldController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse|JsonResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'custom_fields_manage');
         if ($business instanceof RedirectResponse) {
             if ($request->wantsJson()) {
                 abort(403);
@@ -91,7 +91,7 @@ class LeadCustomFieldController extends Controller
 
     public function reorder(Request $request, Project $project): JsonResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'custom_fields_manage');
         if ($business instanceof RedirectResponse) {
             abort(403);
         }
@@ -104,7 +104,7 @@ class LeadCustomFieldController extends Controller
 
     private function requireField(Request $request, Project $project, LeadCustomField $field): Business|RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'custom_fields_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }

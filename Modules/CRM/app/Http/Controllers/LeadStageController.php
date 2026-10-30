@@ -63,7 +63,7 @@ class LeadStageController extends Controller
      */
     public function createAutomation(Request $request, Project $project): RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -130,7 +130,7 @@ class LeadStageController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -172,7 +172,7 @@ class LeadStageController extends Controller
 
     public function reorder(Request $request, Project $project): JsonResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             abort(403);
         }
@@ -185,7 +185,7 @@ class LeadStageController extends Controller
 
     private function requireStage(Request $request, Project $project, LeadStage $stage): Business|RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }

@@ -4,6 +4,9 @@ namespace Modules\CRM\Providers;
 
 use Nwidart\Modules\Support\ModuleServiceProvider;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Support\Facades\Gate;
+use Modules\CRM\Models\Lead;
+use Modules\CRM\Policies\LeadPolicy;
 
 class CRMServiceProvider extends ModuleServiceProvider
 {
@@ -33,6 +36,13 @@ class CRMServiceProvider extends ModuleServiceProvider
         EventServiceProvider::class,
         RouteServiceProvider::class,
     ];
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        Gate::policy(Lead::class, LeadPolicy::class);
+    }
 
     /**
      * Define module schedules.

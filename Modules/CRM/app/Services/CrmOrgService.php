@@ -132,6 +132,70 @@ class CrmOrgService
             ->all();
     }
 
+    /**
+     * Who a pipeline's leads can be assigned to: the department's staff with a login plus its
+     * head, or every business user for a pipeline no department owns.
+     *
+     * @return Collection<int, User>
+     */
+    public function assignableUsers(Business $business, ?int $departmentId): Collection
+    {
+        $department = $departmentId !== null
+            ? Department::query()->where('business_id', $business->id)->find($departmentId)
+            : null;
+
+        if ($department === null) {
+            return $this->businessUsers($business);
+        }
+
+        $ids = $this->memberUserIds($department);
+        if ($headId = $this->headUserId($department)) {
+            $ids[] = $headId;
+        }
+
+        return User::query()->whereIn('id', array_unique($ids))->orderBy('name')->get(['id', 'name', 'email']);
+    }
+
+    /** Departments the user works in through their HR employee record. @return int[] */
+    public function departmentIdsForUser(Business $business, int $userId): array
+    {
+        return Employee::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->whereNotNull('department_id')
+            ->pluck('department_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /** Departments whose head user (see headUserId) is this user. @return int[] */
+    public function headedDepartmentIds(Business $business, int $userId): array
+    {
+        return Department::query()
+            ->where('business_id', $business->id)
+            ->with(['headEmployee', 'coHeadEmployee'])
+            ->get()
+            ->filter(fn (Department $d) => $this->headUserIdFromLoaded($d) === $userId)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    /** Active divisions this user heads. @return array<int, int> division id => department id */
+    public function headedDivisions(Business $business, int $userId): array
+    {
+        return Division::query()
+            ->where('business_id', $business->id)
+            ->where('head_user_id', $userId)
+            ->where('is_active', true)
+            ->pluck('department_id', 'id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
     /** The department every new lead lands in first, if one is marked. */
     public function marketingIntakeDepartment(Business $business): ?Department
     {

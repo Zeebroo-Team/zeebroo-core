@@ -84,7 +84,7 @@
 
         <div class="pcat-field">
             <label for="ld-assignee">Assigned to</label>
-            <select id="ld-assignee" name="assigned_to">
+            <select id="ld-assignee" name="assigned_to" @disabled(! ($canAssign ?? true)) @if(! ($canAssign ?? true)) title="Only the department head can assign this lead." @endif>
                 <option value="">— Unassigned —</option>
                 @foreach($assignableUsers as $u)
                     <option value="{{ $u->id }}" @selected(old('assigned_to', $lead->assigned_to) == $u->id)>{{ $u->name }}</option>

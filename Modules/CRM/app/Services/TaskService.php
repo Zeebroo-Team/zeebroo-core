@@ -5,15 +5,24 @@ namespace Modules\CRM\Services;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Modules\Business\Models\Business;
+use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\Task;
 
 class TaskService
 {
-    public function listForBusiness(Business $business, string $filter = 'open'): Collection
+    /** With an access, tasks on leads the user cannot see are left out; other tasks stay. */
+    public function listForBusiness(Business $business, string $filter = 'open', ?CrmAccess $access = null): Collection
     {
         $query = Task::query()
             ->where('business_id', $business->id)
             ->with(['assignedTo', 'subject']);
+
+        if ($access !== null) {
+            $leadType = (new Lead)->getMorphClass();
+            $query->where(fn ($q) => $q->whereNull('subject_type')
+                ->orWhere('subject_type', '!=', $leadType)
+                ->orWhereIn('subject_id', Lead::query()->visibleWith($access)->select('crm_leads.id')));
+        }
 
         match ($filter) {
             'overdue'   => $query->where('status', Task::STATUS_PENDING)->whereNotNull('due_at')->where('due_at', '<', now()),

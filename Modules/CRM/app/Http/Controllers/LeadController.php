@@ -60,6 +60,8 @@ class LeadController extends Controller
             'customFields'    => $this->customFieldService->listKeyedById($project),
             'statusTabs'      => ['open' => 'Open', 'won' => 'Won', 'lost' => 'Lost', 'all' => 'All'],
             'assignableUsers' => $this->assignableUsers($business),
+            'canCreateLead'   => $this->leadPolicy()->canCreateLeadIn($this->crmAccess($request, $business), $project),
+            'canAssign'       => $this->leadPolicy()->canAssignIn($this->crmAccess($request, $business), $project),
         ]);
     }
 
@@ -104,8 +106,15 @@ class LeadController extends Controller
             return $business;
         }
 
+        $access = $this->crmAccess($request, $business);
+        abort_unless($this->leadPolicy()->canCreateLeadIn($access, $project), 403);
+
         $leadForm = $this->formService->defaultOrFirstForProject($project);
         $data     = $this->validated($request, $project, $leadForm) + ['form_id' => $leadForm?->id];
+        // Only those who may assign pick an assignee
+        if (! $this->leadPolicy()->canAssignIn($access, $project)) {
+            $data['assigned_to'] = null;
+        }
         $lead     = $this->leadService->create($project, $data, $request->user()?->id);
 
         return redirect()->route('crm.leads.show', $lead)->with('status', 'Lead "' . $lead->name . '" created.');
@@ -125,12 +134,13 @@ class LeadController extends Controller
             'lead'            => $lead,
             'assignableUsers' => $this->assignableUsers($business),
             'stageLogs'       => $this->leadService->stageLogsForLead($lead),
+            'can'             => $this->leadPolicy()->abilities($this->crmAccess($request, $business), $lead),
         ]);
     }
 
     public function edit(Request $request, Lead $lead): View|RedirectResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canEdit');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -146,19 +156,29 @@ class LeadController extends Controller
             'stageOptions'    => $this->stageService->listForProject($project),
             'customFields'    => $this->customFieldService->listKeyedById($project),
             'assignableUsers' => $this->assignableUsers($business),
+            'canAssign'       => $this->leadPolicy()->canAssign($this->crmAccess($request, $business), $lead),
         ]);
     }
 
     public function update(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canEdit');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
 
+        $access   = $this->crmAccess($request, $business);
         $project  = $lead->project;
         $leadForm = $lead->form ?? $this->formService->defaultOrFirstForProject($project);
         $data     = $this->validated($request, $project, $leadForm, $lead);
+
+        if ((int) ($data['assigned_to'] ?? 0) !== (int) $lead->assigned_to && ! $this->leadPolicy()->canAssign($access, $lead)) {
+            $data['assigned_to'] = $lead->assigned_to;
+        }
+        if (isset($data['stage_id']) && (int) $data['stage_id'] !== (int) $lead->stage_id) {
+            abort_unless($this->leadPolicy()->canMove($access, $lead), 403);
+        }
+
         $this->leadService->update($lead, $data, $request->user()?->id);
 
         return redirect()->route('crm.leads.show', $lead)->with('status', 'Lead updated.');
@@ -166,7 +186,7 @@ class LeadController extends Controller
 
     public function convert(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canEdit');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -182,7 +202,7 @@ class LeadController extends Controller
 
     public function markLost(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canMove');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -194,7 +214,7 @@ class LeadController extends Controller
 
     public function reopen(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canMove');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -206,7 +226,7 @@ class LeadController extends Controller
 
     public function moveStage(Request $request, Lead $lead): JsonResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canMove');
         if ($business instanceof RedirectResponse) {
             abort(403);
         }
@@ -222,7 +242,7 @@ class LeadController extends Controller
 
     public function destroy(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead);
+        $business = $this->requireLead($request, $lead, 'canDelete');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -233,7 +253,8 @@ class LeadController extends Controller
         return redirect()->route('crm.projects.leads.index', $project)->with('status', 'Lead deleted.');
     }
 
-    private function requireLead(Request $request, Lead $lead): Business|RedirectResponse
+    /** A lead of the current business the user may see (404 otherwise) and, given an ability, act on (403). */
+    private function requireLead(Request $request, Lead $lead, ?string $ability = null): Business|RedirectResponse
     {
         $business = $this->requireBusiness($request);
         if ($business instanceof RedirectResponse) {
@@ -241,6 +262,12 @@ class LeadController extends Controller
         }
 
         abort_unless((int) $lead->business_id === (int) $business->id, 404);
+
+        $access = $this->crmAccess($request, $business);
+        abort_unless($this->leadPolicy()->canView($access, $lead), 404);
+        if ($ability !== null) {
+            abort_unless($this->leadPolicy()->{$ability}($access, $lead), 403);
+        }
 
         return $business;
     }

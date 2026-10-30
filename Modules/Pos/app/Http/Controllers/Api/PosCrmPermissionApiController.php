@@ -75,7 +75,7 @@ class PosCrmPermissionApiController extends Controller
         ]);
     }
 
-    /** DELETE /api/pos/crm/permissions/users/{userId} — back to full access. */
+    /** DELETE /api/pos/crm/permissions/users/{userId} — back to what their role allows. */
     public function reset(Request $request, int $userId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -84,7 +84,7 @@ class PosCrmPermissionApiController extends Controller
 
         $this->permissions->resetForUser($business, $userId);
 
-        return response()->json(['message' => 'CRM permissions reset to full access.']);
+        return response()->json(['message' => 'CRM permissions reset to the role defaults.']);
     }
 
     private function abortUnlessCrmAdmin(Request $request, Business $business): void

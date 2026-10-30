@@ -42,16 +42,19 @@
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            @if($can['can_edit'])
             <a href="{{ route('crm.leads.edit', $lead) }}" class="linkbtn" style="padding:7px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">
                 <i class="fa fa-pen"></i> Edit
             </a>
-            @if($lead->isOpen())
+            @endif
+            @if($can['can_edit'] && $lead->isOpen())
                 <form method="POST" action="{{ route('crm.leads.convert', $lead) }}" onsubmit="return confirm('Convert this lead to a customer?');">
                     @csrf
                     <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;">
                         <i class="fa fa-check"></i> Convert to customer
                     </button>
                 </form>
+                @if($can['can_move'])
                 <form method="POST" action="{{ route('crm.leads.mark-lost', $lead) }}">
                     @csrf
                     <input type="hidden" name="lost_reason" value="">
@@ -59,7 +62,8 @@
                         <i class="fa fa-xmark"></i> Mark lost
                     </button>
                 </form>
-            @elseif($lead->isLost())
+                @endif
+            @elseif($can['can_move'] && $lead->isLost())
                 <form method="POST" action="{{ route('crm.leads.reopen', $lead) }}">
                     @csrf
                     <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--text);">
@@ -67,6 +71,7 @@
                     </button>
                 </form>
             @endif
+            @if($can['can_delete'])
             <form method="POST" action="{{ route('crm.leads.destroy', $lead) }}" onsubmit="return confirm('Delete this lead? This cannot be undone.');">
                 @csrf
                 @method('DELETE')
@@ -74,6 +79,7 @@
                     <i class="fa fa-trash"></i>
                 </button>
             </form>
+            @endif
         </div>
     </div>
 

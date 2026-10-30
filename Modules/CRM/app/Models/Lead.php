@@ -2,12 +2,18 @@
 
 namespace Modules\CRM\Models;
 
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Modules\Business\Models\Business;
+use Modules\CRM\Policies\LeadPolicy;
+use Modules\CRM\Services\CrmAccess;
+use Modules\CRM\Services\CrmPermissionService;
 use Modules\Pos\Models\Customer;
+use Modules\Pos\Models\PosCashier;
 
 class Lead extends Model
 {
@@ -126,6 +132,19 @@ class Lead extends Model
     public function tasks(): MorphMany
     {
         return $this->morphMany(Task::class, 'subject')->orderBy('due_at');
+    }
+
+    /** Leads of this business the user may see (see LeadPolicy). */
+    public function scopeVisibleTo(Builder $query, Authenticatable|PosCashier|null $user, Business $business): Builder
+    {
+        return $query->where('crm_leads.business_id', $business->id)
+            ->visibleWith(app(CrmPermissionService::class)->accessFor($business, $user));
+    }
+
+    /** Same as visibleTo() for a caller that already resolved the user's CRM access. */
+    public function scopeVisibleWith(Builder $query, CrmAccess $access): Builder
+    {
+        return app(LeadPolicy::class)->scopeVisible($query, $access);
     }
 
     public function isWon(): bool

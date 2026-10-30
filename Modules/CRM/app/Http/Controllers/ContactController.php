@@ -23,6 +23,8 @@ class ContactController extends Controller
             return $business;
         }
 
+        abort_unless($this->crmAccess($request, $business)->can('contacts_view'), 403);
+
         $search = trim((string) $request->query('q', ''));
 
         $customers = Customer::query()
@@ -69,6 +71,8 @@ class ContactController extends Controller
         if ($business instanceof RedirectResponse) {
             return $business;
         }
+
+        abort_unless($this->crmAccess($request, $business)->can('contacts_view'), 403);
 
         abort_unless((int) $customer->business_id === (int) $business->id, 404);
 
