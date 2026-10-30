@@ -97,6 +97,7 @@ beforeEach(function () {
         $t->unsignedBigInteger('business_id');
         $t->string('name');
         $t->string('phone')->nullable();
+        $t->string('normalized_phone', 32)->nullable();
         $t->string('email')->nullable();
         $t->text('notes')->nullable();
         $t->timestamps();

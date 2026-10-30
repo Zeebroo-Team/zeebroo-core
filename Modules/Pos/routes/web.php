@@ -39,6 +39,7 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('/pos/products', [PosProductController::class, 'store'])->name('pos.products.store');
 
     Route::get('/pos/customers/search', [CustomerController::class, 'search'])->name('pos.customers.search');
+    Route::get('/pos/customers/duplicates', [CustomerController::class, 'duplicates'])->name('pos.customers.duplicates');
     Route::get('/pos/customers', [CustomerController::class, 'index'])->name('pos.customers.index');
     Route::post('/pos/customers', [CustomerController::class, 'store'])->name('pos.customers.store');
     Route::put('/pos/customers/{customer}', [CustomerController::class, 'update'])->name('pos.customers.update');

@@ -12380,6 +12380,18 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     </div>
   </div>
 
+  <!-- ── CRM: 360° customer — leads, quotations, files, follow-ups, invoices / orders, timeline ── -->
+  <div class="modal-overlay" id="crm-customer-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:860px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-address-card" style="color:#4e8ef7"></i>
+        <span id="crm-customer-title">Customer</span>
+        <button class="psm-close" id="crm-customer-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="crm-customer-body" style="flex:1;overflow-y:auto"></div>
+    </div>
+  </div>
+
   <!-- ── CRM: assign a lead to department staff (one primary) + assignment history ── -->
   <div class="modal-overlay" id="crm-assign-modal" style="display:none;z-index:2050">
     <div class="po-aim-shell" style="width:480px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column">
@@ -16488,6 +16500,13 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <!-- Step 2: Preview -->
     <div class="csv-import-body" id="cust-csv-step-2" style="display:none">
       <div class="csv-preview-summary" id="cust-csv-preview-summary"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);margin:0 0 8px">
+        When the phone or email is already a customer:
+        <select id="cust-csv-dup-mode" class="po-field-input" style="appearance:auto;width:auto;padding:4px 8px;font-size:12px">
+          <option value="skip">Skip the row</option>
+          <option value="update">Update the existing customer</option>
+        </select>
+      </label>
       <div class="csv-preview-wrap">
         <table class="csv-preview-tbl" id="cust-csv-preview-tbl">
           <thead id="cust-csv-preview-thead"></thead>
@@ -16504,10 +16523,11 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <div class="csv-import-body" id="cust-csv-step-3" style="display:none">
       <div class="csv-result-summary" id="cust-csv-result-summary"></div>
       <div class="csv-result-errors" id="cust-csv-result-errors" style="display:none">
-        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows not imported</div>
         <div class="csv-result-errors-list" id="cust-csv-result-errors-list"></div>
       </div>
       <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="cust-csv-download-errors" style="display:none;margin-right:auto"><i class="fa fa-download"></i> Download rows not imported</button>
         <button class="psm-btn-cancel" id="cust-csv-done-btn">Done</button>
         <button class="eod-settle-btn" id="cust-csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
       </div>

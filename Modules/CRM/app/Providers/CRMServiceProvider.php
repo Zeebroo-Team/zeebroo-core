@@ -7,7 +7,9 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Gate;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Policies\LeadPolicy;
+use Modules\CRM\Services\CustomerService;
 use Modules\CRM\Services\Timeline;
+use Modules\Pos\Models\Customer;
 
 class CRMServiceProvider extends ModuleServiceProvider
 {
@@ -29,6 +31,7 @@ class CRMServiceProvider extends ModuleServiceProvider
     protected array $commands = [
         \Modules\CRM\Console\Commands\MapStageStatusesCommand::class,
         \Modules\CRM\Console\Commands\NormalizeLeadPhonesCommand::class,
+        \Modules\CRM\Console\Commands\NormalizeCustomerPhonesCommand::class,
     ];
 
     /**
@@ -64,6 +67,10 @@ class CRMServiceProvider extends ModuleServiceProvider
         parent::boot();
 
         Gate::policy(Lead::class, LeadPolicy::class);
+
+        // Every write path of pos_customers (web, desktop, POS sync, lead convert) keeps the
+        // normalised phone the duplicate check matches on
+        Customer::saving(fn (Customer $customer) => $this->app->make(CustomerService::class)->normalizeContact($customer));
     }
 
     /**

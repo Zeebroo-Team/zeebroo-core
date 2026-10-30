@@ -14,7 +14,6 @@ use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\LeadStageLog;
 use Modules\CRM\Models\Project;
-use Modules\Pos\Models\Customer;
 use Modules\Product\Models\Product;
 
 class LeadService
@@ -26,6 +25,7 @@ class LeadService
         private readonly LeadSourceService $sources,
         private readonly LostReasonService $lostReasons,
         private readonly CrmSettingsService $settings,
+        private readonly CustomerService $customers,
     ) {}
 
     public function listForProject(
@@ -553,13 +553,8 @@ class LeadService
         return DB::transaction(function () use ($lead, $userId) {
             $oldStageId = $lead->stage_id;
 
-            $customer = Customer::create([
-                'business_id' => $lead->business_id,
-                'name'        => $lead->company ?: $lead->name,
-                'phone'       => $lead->phone,
-                'email'       => $lead->email,
-                'notes'       => $lead->notes,
-            ]);
+            // The customer it is linked to, or one with the same phone / email, or a new one
+            $customer = $this->customers->forLead($lead);
 
             $wonStage = $this->stages->wonStage($lead->project);
             [$stageAttributes] = $wonStage ? $this->stageEntry($lead, $lead->business_id, $lead->stage, $wonStage, [], true) : [[]];
@@ -570,9 +565,13 @@ class LeadService
                 'converted_at' => now(),
             ] + $stageAttributes);
 
-            $this->logStageChange($lead, $oldStageId, $wonStage?->id, $userId, LeadAuditLog::EVENT_CONVERTED, ['customer_id' => $customer->id]);
+            $this->logStageChange($lead, $oldStageId, $wonStage?->id, $userId, LeadAuditLog::EVENT_CONVERTED, [
+                'customer_id'     => $customer->id,
+                'linked_existing' => ! $customer->wasRecentlyCreated,
+            ]);
 
-            return $lead->fresh();
+            // Keeps wasRecentlyCreated, so callers can say whether a customer was made
+            return $lead->fresh()->setRelation('customer', $customer);
         });
     }
 

@@ -10,6 +10,7 @@ use Modules\Business\Models\Business;
 use Modules\CRM\Http\Controllers\Concerns\ResolvesCrmBusiness;
 use Modules\CRM\Models\Activity;
 use Modules\CRM\Models\Task;
+use Modules\CRM\Services\CustomerProfileService;
 use Modules\Pos\Models\Customer;
 
 class ContactController extends Controller
@@ -62,17 +63,20 @@ class ContactController extends Controller
             'openTaskCounts' => $openTaskCounts,
             'lastActivityAt' => $lastActivityAt,
             'search'         => $search,
+            'canImport'      => CustomerImportController::canImport($this->crmAccess($request, $business)),
         ]);
     }
 
-    public function show(Request $request, Customer $customer): View|RedirectResponse
+    /** The 360° customer page: leads, quotations, files, follow-ups, invoices / orders and the timeline. */
+    public function show(Request $request, Customer $customer, CustomerProfileService $profiles): View|RedirectResponse
     {
         $business = $this->requireBusiness($request);
         if ($business instanceof RedirectResponse) {
             return $business;
         }
 
-        abort_unless($this->crmAccess($request, $business)->can('contacts_view'), 403);
+        $access = $this->crmAccess($request, $business);
+        abort_unless($access->can('contacts_view'), 403);
 
         abort_unless((int) $customer->business_id === (int) $business->id, 404);
 
@@ -94,6 +98,7 @@ class ContactController extends Controller
         return view('crm::contacts.show', [
             'business'        => $business,
             'customer'        => $customer,
+            'profile'         => $profiles->build($customer, $access),
             'assignableUsers' => $this->assignableUsers($business),
         ]);
     }

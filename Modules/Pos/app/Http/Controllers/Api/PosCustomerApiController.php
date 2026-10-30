@@ -9,9 +9,10 @@ use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\CRM\Services\CustomerImportService;
+use Modules\CRM\Services\CustomerService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Customer;
-use Modules\Pos\Models\CustomerCategory;
 use Modules\Pos\Models\PosCashier;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Models\SaleItem;
@@ -24,6 +25,8 @@ class PosCustomerApiController extends Controller
 
     public function __construct(
         private readonly CustomerCreditService $credit,
+        private readonly CustomerImportService $imports,
+        private readonly CustomerService $customers,
     ) {
     }
 
@@ -236,79 +239,84 @@ class PosCustomerApiController extends Controller
         return response()->json(['message' => 'Customer deleted.']);
     }
 
+    /**
+     * Older desktop builds send only `rows` and read imported / skipped / errors back; they now get
+     * the duplicate check, with duplicates skipped and listed in errors. Newer builds add
+     * `duplicates` (skip|update) and also read updated / totals / rows.
+     */
     public function import(Request $request): JsonResponse
+    {
+        return $this->runImport($request, preview: false);
+    }
+
+    /** Same request and response as import(), but only checks the rows — nothing is saved. */
+    public function importPreview(Request $request): JsonResponse
+    {
+        return $this->runImport($request, preview: true);
+    }
+
+    private function runImport(Request $request, bool $preview): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'pos_customers');
 
         $request->validate([
-            'rows'                => ['required', 'array', 'min:1', 'max:500'],
-            'rows.*.name'         => ['required', 'string', 'max:255'],
-            'rows.*.phone'        => ['nullable', 'string', 'max:50'],
-            'rows.*.email'        => ['nullable', 'email', 'max:255'],
-            'rows.*.address'      => ['nullable', 'string', 'max:500'],
-            'rows.*.notes'        => ['nullable', 'string', 'max:1000'],
-            'rows.*.category'     => ['nullable', 'string', 'max:120'],
-            'rows.*.customer_type' => ['nullable', 'string', 'in:retail,wholesale'],
+            'rows'       => ['required', 'array', 'min:1', 'max:500'],
+            'rows.*'     => ['array'],
+            'duplicates' => ['nullable', 'string', Rule::in(array_keys(CustomerImportService::DUPLICATE_MODES))],
         ]);
 
-        $settings = app(PosSettingsService::class)->forBusiness($business);
-        $rows     = $request->input('rows');
-        $imported = 0;
-        $skipped  = 0;
-        $errors   = [];
-        $catCache = [];
-
-        foreach ($rows as $idx => $row) {
-            try {
-                if (!empty($settings['customer_require_phone']) && empty($row['phone'])) {
-                    throw new \RuntimeException('Phone number is required.');
-                }
-                if (!empty($settings['customer_require_email']) && empty($row['email'])) {
-                    throw new \RuntimeException('Email is required.');
-                }
-                if (!empty($settings['customer_require_address']) && empty($row['address'])) {
-                    throw new \RuntimeException('Address is required.');
-                }
-
-                $categoryId = null;
-                if (!empty($row['category'])) {
-                    $catName = trim($row['category']);
-                    if (!isset($catCache[$catName])) {
-                        $cat = CustomerCategory::firstOrCreate(
-                            ['business_id' => $business->id, 'name' => $catName],
-                        );
-                        $catCache[$catName] = $cat->id;
-                    }
-                    $categoryId = $catCache[$catName];
-                }
-
-                Customer::create([
-                    'business_id'           => $business->id,
-                    'name'                  => $row['name'],
-                    'phone'                 => $row['phone'] ?? null,
-                    'email'                 => $row['email'] ?? null,
-                    'address'               => $row['address'] ?? null,
-                    'notes'                 => $row['notes'] ?? null,
-                    'customer_type'         => $row['customer_type'] ?? 'retail',
-                    'customer_category_id'  => $categoryId,
-                ]);
-
-                $imported++;
-            } catch (\Throwable $e) {
-                $skipped++;
-                $errors[] = [
-                    'row'     => $idx + 1,
-                    'name'    => $row['name'] ?? '',
-                    'message' => $e->getMessage(),
-                ];
-            }
+        // Rows are numbered from 1 in the order sent, as before
+        $rows = [];
+        foreach (array_values($request->input('rows')) as $idx => $row) {
+            $rows[] = ['row' => $idx + 1] + $row;
         }
+        $mode = $request->input('duplicates') ?: 'skip';
+
+        $result = $preview
+            ? $this->imports->preview($business, $rows, $mode)
+            : $this->imports->import($business, $rows, $mode);
+
+        $notImported = array_values(array_filter($result['rows'], fn ($r) => in_array($r['status'], ['skip', 'error'], true)));
 
         return response()->json([
-            'imported' => $imported,
-            'skipped'  => $skipped,
-            'errors'   => $errors,
+            'imported'   => $preview ? 0 : $result['totals']['create'],
+            'updated'    => $preview ? 0 : $result['totals']['update'],
+            'skipped'    => $result['totals']['skip'] + $result['totals']['error'],
+            'errors'     => array_map(fn ($r) => [
+                'row'     => $r['row'],
+                'name'    => $r['name'] ?? '',
+                'message' => $r['reason'],
+                'type'    => $r['status'] === 'skip' ? 'duplicate' : 'error',
+            ], $notImported),
+            'preview'    => $preview,
+            'duplicates' => $mode,
+            'totals'     => $result['totals'],
+            'rows'       => $result['rows'],
+        ]);
+    }
+
+    /** Customers sharing a phone (normalised) or email with the form, so the desktop can warn before saving. */
+    public function duplicates(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $validated = $request->validate([
+            'phone'     => ['nullable', 'string', 'max:50'],
+            'email'     => ['nullable', 'string', 'max:255'],
+            'ignore_id' => ['nullable', 'integer'],
+        ]);
+
+        $duplicates = $this->customers->presentDuplicates(
+            $business->id,
+            $validated['phone'] ?? null,
+            $validated['email'] ?? null,
+            isset($validated['ignore_id']) ? (int) $validated['ignore_id'] : null,
+        );
+
+        return response()->json([
+            'data'    => $duplicates,
+            'message' => $this->customers->duplicateWarning($duplicates),
         ]);
     }
 

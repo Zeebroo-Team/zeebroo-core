@@ -27349,6 +27349,15 @@ async function _cmSave() {
   const btn = $('#cm-form-save');
   btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
+  // Warn when the phone / email already belongs to another customer (saving stays possible)
+  if (phone || email) {
+    const dup = await API.customerDuplicates(phone, email, _cm.editingId).catch(() => ({ status: 0 }));
+    if (dup.status === 200 && dup.body?.data?.length && !confirm(`${dup.body.message}\n\nSave this customer anyway?`)) {
+      btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save';
+      return;
+    }
+  }
+
   const payload = { name, phone, email, address, notes, customer_type, customer_category_id, credit_limit };
   let res;
   if (_cm.editingId) {
@@ -27766,16 +27775,63 @@ function _custCsvSetStep(n) {
   });
 }
 
+const _CUST_CSV_COLUMNS = ['name', 'phone', 'email', 'address', 'notes', 'category', 'customer_type'];
+let _custCsvServerChecked = false;   // false when the server has no preview endpoint (older server)
+let _custCsvNotImported   = [];      // rows for the "Download rows not imported" CSV
+
+function _custCsvPayload(rows) {
+  return rows.map(r => ({
+    name:          r.name,
+    phone:         r.phone   || undefined,
+    email:         r.email   || undefined,
+    address:       r.address || undefined,
+    notes:         r.notes   || undefined,
+    category:      r.category || undefined,
+    customer_type: r.customer_type || 'retail',
+  }));
+}
+
+// The server checks the valid rows for duplicates (existing customers and repeats in the file)
+async function _custCsvServerCheck() {
+  const valid = _custCsvParsedRows.filter(r => !r._errors.length);
+  valid.forEach(r => { delete r._server; });
+  _custCsvServerChecked = false;
+  if (valid.length) {
+    $('#cust-csv-import-btn').disabled = true;
+    const res = await API.previewCustomerImport(_custCsvPayload(valid), { duplicates: $('#cust-csv-dup-mode').value }).catch(() => ({ status: 0 }));
+    if (res.status === 200 && Array.isArray(res.body?.rows)) {
+      res.body.rows.forEach((s, i) => { if (valid[i]) valid[i]._server = s; });
+      _custCsvServerChecked = true;
+    }
+  }
+  _custCsvRenderPreview();
+}
+
 function _custCsvShowPreview(rows) {
+  $('#cust-csv-dup-mode').value = 'skip';
+  _custCsvRenderPreview();
+  _custCsvSetStep(2);
+  _custCsvServerCheck();
+}
+
+function _custCsvRenderPreview() {
+  const rows  = _custCsvParsedRows;
   const valid = rows.filter(r => !r._errors.length);
   const bad   = rows.filter(r => r._errors.length);
+  const count = s => valid.filter(r => r._server?.status === s).length;
+  const toImport = _custCsvServerChecked ? count('create') + count('update') : valid.length;
   _custCsvValidRows = valid;
 
   // Summary badges
   const sumEl = $('#cust-csv-preview-summary');
   sumEl.innerHTML = `
     <b>${rows.length} row${rows.length !== 1 ? 's' : ''} found</b>
-    <span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>
+    ${_custCsvServerChecked
+      ? `<span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${count('create')} new</span>
+         ${count('update') ? `<span class="csv-preview-badge warn"><i class="fa fa-pen"></i> ${count('update')} update existing</span>` : ''}
+         ${count('skip') ? `<span class="csv-preview-badge warn"><i class="fa fa-user-check"></i> ${count('skip')} already customers</span>` : ''}
+         ${count('error') ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${count('error')} rejected</span>` : ''}`
+      : `<span class="csv-preview-badge ok"><i class="fa fa-circle-check"></i> ${valid.length} valid</span>`}
     ${bad.length ? `<span class="csv-preview-badge error"><i class="fa fa-triangle-exclamation"></i> ${bad.length} with errors</span>` : ''}
     ${rows.length > 100 ? `<span class="csv-preview-badge warn"><i class="fa fa-eye"></i> Showing first 100 rows</span>` : ''}`;
 
@@ -27786,10 +27842,14 @@ function _custCsvShowPreview(rows) {
     <th>Category</th><th>Type</th><th>Status</th>
   </tr>`;
   $('#cust-csv-preview-tbody').innerHTML = display.map(r => {
-    const isErr = r._errors.length > 0;
-    const status = isErr
-      ? `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`
-      : `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> OK</span>`;
+    const s = r._server;
+    const isErr = r._errors.length > 0 || s?.status === 'error';
+    let status;
+    if (r._errors.length)          status = `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(r._errors.join('; '))}</span>`;
+    else if (s?.status === 'error')  status = `<span class="csv-row-error-msg"><i class="fa fa-triangle-exclamation"></i> ${escHtml(s.reason || 'Rejected')}</span>`;
+    else if (s?.status === 'skip')   status = `<span style="color:#f59e0b;font-size:11px"><i class="fa fa-user-check"></i> Skip — ${escHtml(s.reason || '')}</span>`;
+    else if (s?.status === 'update') status = `<span style="color:#3b82f6;font-size:11px"><i class="fa fa-pen"></i> ${escHtml(s.reason || 'Update')}</span>`;
+    else                             status = `<span style="color:#10b981;font-size:11px"><i class="fa fa-circle-check"></i> ${s ? 'New' : 'OK'}</span>`;
     return `<tr class="${isErr ? 'csv-row-error' : ''}">
       <td style="color:var(--text-muted)">${r._rowNum}</td>
       <td><strong>${escHtml(r.name || '—')}</strong></td>
@@ -27802,14 +27862,28 @@ function _custCsvShowPreview(rows) {
     </tr>`;
   }).join('');
 
-  $('#cust-csv-import-count').textContent = valid.length;
-  $('#cust-csv-import-btn').disabled = valid.length === 0;
-  _custCsvSetStep(2);
+  $('#cust-csv-import-count').textContent = toImport;
+  $('#cust-csv-import-btn').disabled = toImport === 0;
+}
+
+function _custCsvDownloadNotImported() {
+  const cell = v => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+  const lines = [['row', ..._CUST_CSV_COLUMNS, 'error'].join(',')]
+    .concat(_custCsvNotImported.map(r => [r._rowNum, ..._CUST_CSV_COLUMNS.map(c => r[c]), r._reason].map(cell).join(',')));
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'customers-not-imported.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 function _custCsvReset() {
   _custCsvParsedRows = [];
   _custCsvValidRows  = [];
+  _custCsvNotImported = [];
+  _custCsvServerChecked = false;
   $('#cust-csv-file-input').value = '';
   _custCsvSetStep(1);
 }
@@ -27866,6 +27940,8 @@ $('#cust-csv-back-btn')?.addEventListener('click',      _custCsvReset);
 $('#cust-csv-done-btn')?.addEventListener('click',      _custCsvCloseModal);
 $('#cust-csv-import-more-btn')?.addEventListener('click', _custCsvReset);
 $('#cst-import-csv-btn')?.addEventListener('click', _custCsvOpenModal);
+$('#cust-csv-dup-mode')?.addEventListener('change', _custCsvServerCheck);
+$('#cust-csv-download-errors')?.addEventListener('click', _custCsvDownloadNotImported);
 
 $('#cust-csv-import-btn')?.addEventListener('click', async () => {
   if (!_custCsvValidRows.length) return;
@@ -27873,46 +27949,49 @@ $('#cust-csv-import-btn')?.addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
 
-  const payload = _custCsvValidRows.map(r => ({
-    name:          r.name,
-    phone:         r.phone   || undefined,
-    email:         r.email   || undefined,
-    address:       r.address || undefined,
-    notes:         r.notes   || undefined,
-    category:      r.category || undefined,
-    customer_type: r.customer_type || 'retail',
-  }));
-
-  const res = await API.importCustomers(payload);
+  const sent = _custCsvValidRows;
+  const res  = await API.importCustomers(_custCsvPayload(sent), { duplicates: $('#cust-csv-dup-mode').value });
   btn.disabled = false;
-  btn.innerHTML = '<i class="fa fa-file-import"></i> Import Customers';
+  btn.innerHTML = '<i class="fa fa-file-import"></i> Import <span id="cust-csv-import-count"></span> Customers';
 
   if (res.status !== 200) { toast(res.body?.message || 'Import failed', 'error'); return; }
 
   const { imported, skipped, errors } = res.body;
+  const updated = res.body.updated || 0;
   const resSum = $('#cust-csv-result-summary');
   resSum.innerHTML = `
     <div class="csv-result-stat">
       <div class="csv-result-stat-num green">${imported}</div>
       <div class="csv-result-stat-label"><i class="fa fa-circle-check"></i> Customers imported</div>
     </div>
+    ${updated ? `<div class="csv-result-stat">
+      <div class="csv-result-stat-num">${updated}</div>
+      <div class="csv-result-stat-label"><i class="fa fa-pen"></i> Existing customers updated</div>
+    </div>` : ''}
     <div class="csv-result-stat">
       <div class="csv-result-stat-num ${skipped > 0 ? 'red' : ''}">${skipped}</div>
       <div class="csv-result-stat-label"><i class="fa fa-triangle-exclamation"></i> Rows skipped</div>
     </div>`;
 
+  // Rows not imported: rejected here before sending, plus the ones the server skipped or rejected
+  _custCsvNotImported = [
+    ..._custCsvParsedRows.filter(r => r._errors.length).map(r => ({ ...r, _reason: r._errors.join('; ') })),
+    ...(errors || []).map(e => ({ ...sent[e.row - 1], _reason: e.message })),
+  ].sort((a, b) => a._rowNum - b._rowNum);
+
   const errWrap = $('#cust-csv-result-errors');
   if (errors && errors.length) {
     errWrap.style.display = '';
     $('#cust-csv-result-errors-list').innerHTML = errors.map(e =>
-      `<div class="csv-result-error-row"><b>Row ${e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
+      `<div class="csv-result-error-row"><b>Row ${sent[e.row - 1]?._rowNum ?? e.row}${e.name ? ' — ' + escHtml(e.name) : ''}:</b><span>${escHtml(e.message)}</span></div>`
     ).join('');
   } else {
     errWrap.style.display = 'none';
   }
+  $('#cust-csv-download-errors').style.display = _custCsvNotImported.length ? '' : 'none';
 
   _custCsvSetStep(3);
-  if (imported > 0) _cmLoadList();
+  if (imported > 0 || updated > 0) _cmLoadList();
 });
 // ── End CSV Customer Import ──────────────────────────────────────────────────
 
@@ -58785,7 +58864,9 @@ async function submitDsCreate() {
           <div class="crm-lead-view-sub">
             ${stage ? `<span class="crm-lead-view-stage"><span class="crm-col-swatch" style="background:${escHtml(stage.color)}"></span>${escHtml(stage.name)}</span>` : ''}
             ${_crmScoreBadge(lead.score)}
-            ${lead.is_customer ? `<span class="crm-card-customer-badge" style="margin-top:0"><i class="fa fa-circle-check"></i> Already a Customer</span>` : ''}
+            ${lead.is_customer ? (lead.customer_id
+              ? `<button type="button" class="crm-card-customer-badge" style="margin-top:0;cursor:pointer;border:none" data-crm-open-customer="${lead.customer_id}" title="Open the customer"><i class="fa fa-circle-check"></i> Customer — open</button>`
+              : `<span class="crm-card-customer-badge" style="margin-top:0"><i class="fa fa-circle-check"></i> Already a Customer</span>`) : ''}
             <span><i class="fa fa-user-pen" style="margin-right:4px"></i>Entered by <strong>${escHtml(lead.created_by_name || 'Web form / unknown')}</strong></span>
             ${lead.created_at ? `<span><i class="fa fa-clock" style="margin-right:4px"></i>${escHtml(_crmFmtDateTime(lead.created_at))}</span>` : ''}
           </div>
@@ -58893,10 +58974,15 @@ async function submitDsCreate() {
 
   // Put on hold / Resume / Mark lost from the lead window, for those who may move the lead.
   function _crmLeadStatusActionsHtml(lead, stage) {
-    if (!stage || !_crmLeadCan(lead, 'move')) return '';
+    if (!stage) return '';
     const closed = stage.is_won || stage.is_lost;
-    const hasHold = (_crmPipeline?.stages || []).some(s => s.is_on_hold);
     const btns = [];
+    // Convert: links the lead to its customer (existing match by phone / email, or a new one) and marks it won
+    if (!closed && lead.can?.convert === true) {
+      btns.push('<button class="po-btn-ghost" data-crm-lead-action="convert" style="color:#10b981"><i class="fa fa-user-check"></i> Convert to Customer</button>');
+    }
+    if (!_crmLeadCan(lead, 'move')) return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
+    const hasHold = (_crmPipeline?.stages || []).some(s => s.is_on_hold);
     if (stage.is_on_hold) {
       const from = (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id);
       btns.push(`<button class="po-btn-ghost" data-crm-lead-action="resume"><i class="fa fa-play"></i> Resume${from ? ` (back to ${escHtml(from.name)})` : ''}</button>`);
@@ -58913,7 +58999,10 @@ async function submitDsCreate() {
     if (!btn || !lead) return;
     const action = btn.dataset.crmLeadAction;
     let res;
-    if (action === 'resume') {
+    if (action === 'convert') {
+      if (!confirm('Convert this lead to a customer?\n\nA customer with the same phone or email is reused; otherwise a new customer is created. The lead is marked won.')) return;
+      res = await API.crmConvertLead(lead.id);
+    } else if (action === 'resume') {
       res = await API.crmResumeLead(lead.id);
     } else if (action === 'hold') {
       const extra = await _crmAskReason({ title: 'Put lead on hold', submitLabel: 'Put on Hold' });
@@ -58931,7 +59020,8 @@ async function submitDsCreate() {
       toast(firstError || res.body?.message || 'Failed to update the lead.', 'error');
       return;
     }
-    toast(action === 'resume' ? 'Lead resumed.' : action === 'hold' ? 'Lead put on hold.' : 'Lead marked as lost.', 'success');
+    toast(action === 'convert' ? res.body.message
+      : action === 'resume' ? 'Lead resumed.' : action === 'hold' ? 'Lead put on hold.' : 'Lead marked as lost.', 'success');
     await loadCrmPipeline(_crmProjectId, { silent: true });
     const fresh = _findLead(lead.id);
     if (fresh && _crmViewLead?.id === lead.id) {
@@ -59755,7 +59845,7 @@ async function submitDsCreate() {
       return;
     }
     tbody.innerHTML = contacts.map(c => `
-      <tr>
+      <tr data-crm-open-customer="${c.id}" style="cursor:pointer" title="Open customer">
         <td><strong>${escHtml(c.name)}</strong></td>
         <td>${escHtml(c.phone || '—')}</td>
         <td>${escHtml(c.email || '—')}</td>
@@ -59763,6 +59853,118 @@ async function submitDsCreate() {
         <td style="color:var(--text-muted);font-size:11px">${c.last_activity ? new Date(c.last_activity).toLocaleDateString(undefined, {day:'numeric',month:'short',year:'numeric'}) : '—'}</td>
       </tr>`).join('');
   }
+
+  // ── Customer 360° window ──────────────────────────────────────────────────
+  let _crmCust = null;          // { id, data, tab }
+
+  async function openCrmCustomer(customerId) {
+    _crmCust = { id: customerId, data: null, tab: 'leads' };
+    $('#crm-customer-title').textContent = 'Customer';
+    $('#crm-customer-body').innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    $('#crm-customer-modal').style.display = 'flex';
+    const res = await API.crmCustomer(customerId).catch(() => ({ status: 0 }));
+    if (_crmCust?.id !== customerId) return;
+    if (res.status !== 200) {
+      $('#crm-customer-body').innerHTML = _crmWsPanelHtml(escHtml(res.body?.message || 'Failed to load the customer.'));
+      return;
+    }
+    _crmCust.data = res.body.data;
+    _crmRenderCustomer();
+  }
+
+  function _crmCustTable(head, rows, empty) {
+    return rows.length
+      ? `<table class="crm-table"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`
+      : _crmWsPanelHtml(empty);
+  }
+
+  function _crmRenderCustomer() {
+    const { data: d, tab } = _crmCust;
+    const c = d.customer, s = d.summary;
+    const money = v => Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const date  = v => v ? new Date(v).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+    const pill  = (text, color) => `<span style="font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;border:1px solid ${color || 'var(--border)'};color:${color || 'inherit'}">${escHtml(text || '—')}</span>`;
+    $('#crm-customer-title').textContent = c.name;
+
+    const tabs = [
+      ['leads', 'fa-bullseye', 'Leads', d.leads.length],
+      ['quotations', 'fa-file-invoice', 'Quotations', d.quotations.length],
+      ['orders', 'fa-receipt', 'Invoices & Orders', d.orders.length],
+      ['documents', 'fa-paperclip', 'Documents', d.documents.length],
+      ['tasks', 'fa-list-check', 'Follow-ups', s.open_tasks],
+      ['timeline', 'fa-clock-rotate-left', 'Timeline', 0],
+    ];
+
+    const panels = {
+      leads: () => _crmCustTable(['Lead', 'Relation', 'Status', 'Value', 'Created'], d.leads.map(l => `<tr>
+          <td><strong>${escHtml(l.name)}</strong>${l.company ? `<div class="crm-ws-muted">${escHtml(l.company)}</div>` : ''}</td>
+          <td>${escHtml(l.relation || '—')}</td>
+          <td>${pill(l.status_label, l.is_open ? '#7c3aed' : null)}</td>
+          <td>${l.estimated_value != null ? money(l.estimated_value) : '—'}</td>
+          <td>${date(l.created_at)}</td></tr>`), 'No leads are linked to this customer.'),
+      quotations: () => _crmCustTable(['Number', 'Date', 'Status', 'Items', 'Total'], d.quotations.map(q => `<tr>
+          <td><strong>${escHtml(q.number)}</strong>${q.reference ? `<div class="crm-ws-muted">${escHtml(q.reference)}</div>` : ''}</td>
+          <td>${date(q.date)}</td><td>${pill(q.status_label)}</td><td>${q.items_count}</td><td>${money(q.total)}</td></tr>`), 'No quotations yet.'),
+      orders: () => _crmCustTable(['Type', 'Number', 'Date', 'Status', 'Total'], d.orders.map(o => `<tr>
+          <td>${escHtml(o.type_label)}</td><td><strong>${escHtml(o.number || '—')}</strong></td>
+          <td>${date(o.date)}</td><td>${pill(o.status_label)}</td><td>${money(o.total)}</td></tr>`), 'No invoices, orders or POS sales yet.'),
+      documents: () => _crmCustTable(['File', 'Lead', 'Size', 'Uploaded', ''], d.documents.map(f => `<tr>
+          <td><i class="fa ${f.is_image ? 'fa-image' : 'fa-file'}"></i> ${escHtml(f.name)}</td>
+          <td>${escHtml(f.lead?.name || '—')}</td><td>${escHtml(f.size || '—')}</td>
+          <td>${escHtml(f.uploaded_by?.name || '—')}, ${date(f.created_at)}</td>
+          <td><button type="button" class="crm-ws-link" data-cust-file="${f.id}" data-cust-file-lead="${f.lead?.id}" data-cust-file-name="${escHtml(f.name)}"><i class="fa fa-download"></i> Download</button></td></tr>`), 'No files on this customer\'s leads.'),
+      tasks: () => _crmCustTable(['Task', 'On', 'Due', 'Assigned', 'Status'], d.tasks.map(t => `<tr>
+          <td>${escHtml(t.title)}</td><td>${escHtml(t.lead ? `Lead: ${t.lead.name}` : 'Customer')}</td>
+          <td>${date(t.due_at)}</td><td>${escHtml(t.assigned_to?.name || '—')}</td>
+          <td>${t.status === 'completed' ? pill('Done') : t.is_overdue ? pill('Overdue', '#ef4444') : pill('Open', '#7c3aed')}</td></tr>`), 'No follow-ups.'),
+      timeline: () => d.timeline.length ? `<div class="crm-ws-tl">${d.timeline.map(e => `
+          <div class="crm-ws-tl-item">
+            <span class="crm-ws-tl-icon" style="--ic:${escHtml(e.color)}"><i class="fa ${escHtml(e.icon)}"></i></span>
+            <div class="crm-ws-tl-content">
+              <div><strong>${escHtml(e.user?.name || 'System')}</strong> · ${escHtml(e.title)}${e.lead ? ` <span class="crm-ws-muted">· lead ${escHtml(e.lead.name)}</span>` : ''}</div>
+              ${e.body ? `<div class="crm-ws-tl-body">${escHtml(e.body)}</div>` : ''}
+              <div class="crm-ws-muted">${escHtml(_crmFmtDateTime(e.at))}</div>
+            </div>
+          </div>`).join('')}</div>` : _crmWsPanelHtml('Nothing has happened with this customer yet.'),
+    };
+
+    const stat = (value, label) => `<div style="flex:1;min-width:110px;border:1px solid var(--border);border-radius:8px;padding:8px 10px">
+        <div style="font-size:16px;font-weight:700">${value}</div><div class="crm-ws-muted" style="font-size:11px">${label}</div></div>`;
+
+    $('#crm-customer-body').innerHTML = `
+      <div class="crm-ws-muted" style="margin-bottom:10px">${[c.phone, c.email, c.address].filter(Boolean).map(escHtml).join(' · ') || 'No contact details'}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        ${stat(`${s.open_leads} / ${s.leads}`, 'Open leads')}
+        ${stat(`${s.open_quotations} / ${s.quotations}`, 'Open quotations')}
+        ${stat(s.open_tasks + (s.overdue_tasks ? ` <span style="color:#ef4444;font-size:12px">(${s.overdue_tasks} overdue)</span>` : ''), 'Open follow-ups')}
+        ${stat(money(s.total_sales), 'Total sales')}
+      </div>
+      <div class="crm-ws-tabs">${tabs.map(([key, icon, label, n]) =>
+        `<button type="button" class="crm-ws-tab${tab === key ? ' active' : ''}" data-cust-tab="${key}"><i class="fa ${icon}"></i>${label}${n ? `<span class="crm-ws-tab-count">${n}</span>` : ''}</button>`).join('')}</div>
+      <div style="padding-top:10px">${panels[tab]()}</div>`;
+  }
+
+  $('#crm-customer-body')?.addEventListener('click', async e => {
+    const tabBtn = e.target.closest('[data-cust-tab]');
+    if (tabBtn && _crmCust?.data) { _crmCust.tab = tabBtn.dataset.custTab; _crmRenderCustomer(); return; }
+    const fileBtn = e.target.closest('[data-cust-file]');
+    if (fileBtn) {
+      const name = fileBtn.dataset.custFileName || 'file';
+      const res = await window.electronAPI.downloadFile(API.crmLeadAttachmentDownloadPath(+fileBtn.dataset.custFileLead, +fileBtn.dataset.custFile), name);
+      if (res?.canceled) return;
+      if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+      toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+    }
+  });
+  const _crmCloseCustomer = () => { _crmCust = null; $('#crm-customer-modal').style.display = 'none'; };
+  $('#crm-customer-close')?.addEventListener('click', _crmCloseCustomer);
+  $('#crm-customer-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseCustomer(); });
+
+  // Contact rows and the lead window's customer badge open the customer
+  document.addEventListener('click', e => {
+    const el = e.target.closest('[data-crm-open-customer]');
+    if (el && +el.dataset.crmOpenCustomer) openCrmCustomer(+el.dataset.crmOpenCustomer);
+  });
 
   let _crmContactSearchTimer = null;
   $('#crm-contacts-search')?.addEventListener('input', e => {

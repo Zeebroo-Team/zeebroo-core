@@ -390,7 +390,10 @@ const API = (() => {
     customers:      (q, page, categoryId) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
-    importCustomers:(rows) => request('POST', '/customers/import', { rows }),
+    // opts: { duplicates: 'skip'|'update' } — duplicates of existing customers are skipped by default
+    importCustomers:(rows, opts = {}) => request('POST', '/customers/import', { rows, ...opts }),
+    previewCustomerImport: (rows, opts = {}) => request('POST', '/customers/import/preview', { rows, ...opts }),
+    customerDuplicates: (phone, email, ignoreId) => request('GET', `/customers/duplicates?phone=${encodeURIComponent(phone || '')}&email=${encodeURIComponent(email || '')}${ignoreId ? `&ignore_id=${ignoreId}` : ''}`),
     updateCustomer: (id, body) => request('PATCH',  `/customers/${id}`, body),
     deleteCustomer: (id)   => request('DELETE', `/customers/${id}`),
 
@@ -676,6 +679,7 @@ const API = (() => {
     crmMoveLead:     (leadId, stageId, extra = {}) => request('POST', `/crm/leads/${leadId}/move-stage`, { stage_id: stageId, ...extra }),
     crmHoldLead:     (leadId, reason)     => request('POST',   `/crm/leads/${leadId}/hold`, { reason: reason || null }),
     crmResumeLead:   (leadId)             => request('POST',   `/crm/leads/${leadId}/resume`),
+    crmConvertLead:  (leadId)             => request('POST',   `/crm/leads/${leadId}/convert`),
     crmStatuses:     ()                   => request('GET',    '/crm/statuses'),
     crmLostReasons:  ()                   => request('GET',    '/crm/lost-reasons'),
     crmLeadSources:  ()                   => request('GET',    '/crm/lead-sources'),
@@ -706,6 +710,7 @@ const API = (() => {
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistoryFlow: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history/flow?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmContacts:     (q)                => request('GET',    `/crm/contacts?q=${encodeURIComponent(q||'')}`),
+    crmCustomer:     (customerId)       => request('GET',    `/crm/customers/${customerId}`),
     crmTasks:        (filter)             => request('GET',    `/crm/tasks?filter=${filter||'open'}`),
     crmCreateTask:   (body)               => request('POST',   '/crm/tasks', body),
     crmCompleteTask: (taskId)             => request('POST',   `/crm/tasks/${taskId}/complete`),

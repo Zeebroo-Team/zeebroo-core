@@ -6,6 +6,7 @@ use Modules\CRM\Http\Controllers\ContactController;
 use Modules\CRM\Http\Controllers\CrmAuditLogController;
 use Modules\CRM\Http\Controllers\CrmImageController;
 use Modules\CRM\Http\Controllers\CrmOrgController;
+use Modules\CRM\Http\Controllers\CustomerImportController;
 use Modules\CRM\Http\Controllers\LeadController;
 use Modules\CRM\Http\Controllers\LeadCustomFieldController;
 use Modules\CRM\Http\Controllers\LeadFormController;
@@ -86,6 +87,17 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::get('/crm/audit',                    [CrmAuditLogController::class, 'index']) ->name('crm.audit.index');
 
     Route::get('/crm/contacts',                 [ContactController::class, 'index'])    ->name('crm.contacts.index');
+
+    // Customer import: upload → preview (skip / update duplicates) → run → rows not imported
+    Route::get('/crm/contacts/import',                  [CustomerImportController::class, 'index'])   ->name('crm.contacts.import.index');
+    Route::get('/crm/contacts/import/template',         [CustomerImportController::class, 'template'])->name('crm.contacts.import.template');
+    Route::post('/crm/contacts/import',                 [CustomerImportController::class, 'store'])   ->name('crm.contacts.import.store');
+    Route::get('/crm/contacts/import/{token}',          [CustomerImportController::class, 'preview']) ->name('crm.contacts.import.preview');
+    Route::post('/crm/contacts/import/{token}/run',     [CustomerImportController::class, 'run'])     ->name('crm.contacts.import.run');
+    Route::get('/crm/contacts/import/{token}/result',   [CustomerImportController::class, 'result'])  ->name('crm.contacts.import.result');
+    Route::get('/crm/contacts/import/{token}/errors',   [CustomerImportController::class, 'errors'])  ->name('crm.contacts.import.errors');
+    Route::delete('/crm/contacts/import/{token}',       [CustomerImportController::class, 'destroy']) ->name('crm.contacts.import.destroy');
+
     Route::get('/crm/contacts/{customer}',      [ContactController::class, 'show'])     ->name('crm.contacts.show');
 
     Route::post('/crm/activities',              [ActivityController::class, 'store'])   ->name('crm.activities.store');

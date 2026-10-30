@@ -23,6 +23,7 @@ use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\CustomerProfileService;
 use Modules\CRM\Services\IntakeResult;
 use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadAuditService;
@@ -59,6 +60,7 @@ class PosCrmApiController extends Controller
         private readonly LeadSourceService           $leadSources,
         private readonly LeadIntakeService           $intake,
         private readonly LeadAssignmentService       $assignments,
+        private readonly CustomerProfileService      $customerProfiles,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -146,7 +148,7 @@ class PosCrmApiController extends Controller
             ->get(['id', 'project_id', 'department_id', 'division_id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'source_id',
                 'estimated_value', 'score', 'expected_close_date', 'notes', 'product_interest_note', 'lost_reason_id', 'lost_reason',
                 'on_hold_from_stage_id', 'closed_at', 'assigned_to', 'created_by', 'created_at', 'updated_at',
-                'needs_review', 'review_reason', 'verified_at', 'forwarded_at']);
+                'needs_review', 'review_reason', 'verified_at', 'forwarded_at', 'customer_id', 'converted_at']);
 
         $editable = $this->policy->editableLeadIds($access, $leads);
 
@@ -164,7 +166,7 @@ class PosCrmApiController extends Controller
         $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
-            $lead->is_customer    = $byEmail || $byPhone;
+            $lead->is_customer    = $lead->customer_id !== null || $byEmail || $byPhone;
             $lead->custom_fields  = $lead->customFieldValues->pluck('value', 'custom_field_id');
             $lead->created_by_name = $lead->createdBy?->name;
             $lead->assigned_to_name = $lead->assignedTo?->name;
@@ -179,6 +181,7 @@ class PosCrmApiController extends Controller
                 'approve'    => $this->policy->canApprove($access, $lead),
                 'forward'    => $this->policy->canForward($access, $lead),
                 'contribute' => $this->policy->canContribute($access, $lead),
+                'convert'    => isset($editable[$lead->id]) && $access->can('leads_edit'),
             ];
             unset($lead->customFieldValues);
             $lead->unsetRelation('createdBy');
@@ -524,6 +527,34 @@ class PosCrmApiController extends Controller
         return response()->json(['data' => $lead->load('stage')]);
     }
 
+    /**
+     * Convert an open lead: it is marked won and linked to its customer — the one it is already
+     * linked to, else one with the same phone / email, else a new one (same as the web action).
+     */
+    public function convertLead(Request $request, int $leadId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_edit');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canEdit($access, $lead));
+
+        $lead     = $this->leads->convertToCustomer($lead, $request->user()?->id);
+        $customer = $lead->customer;
+
+        return response()->json([
+            'message' => $customer->wasRecentlyCreated
+                ? 'Lead converted to a new customer.'
+                : "Lead converted and linked to the existing customer \"{$customer->name}\".",
+            'data'    => [
+                'lead'     => $lead->load('stage'),
+                'customer' => ['id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone, 'email' => $customer->email],
+                'created'  => $customer->wasRecentlyCreated,
+            ],
+        ]);
+    }
+
     public function deleteLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -646,6 +677,17 @@ class PosCrmApiController extends Controller
         ]);
 
         return response()->json(['data' => $data]);
+    }
+
+    /** The 360° customer page: leads, quotations, files, follow-ups, invoices / orders and the timeline. */
+    public function customer(Request $request, int $customerId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->abortUnlessCrm($request, $business, 'contacts_view');
+
+        $customer = Customer::where('business_id', $business->id)->findOrFail($customerId);
+
+        return response()->json(['data' => $this->customerProfiles->build($customer, $access)]);
     }
 
     // ── Tasks ─────────────────────────────────────────────────────────────

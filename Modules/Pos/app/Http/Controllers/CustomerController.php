@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
+use Modules\CRM\Services\CustomerService;
 use Modules\Pos\Http\Controllers\Concerns\ResolvesPosBusiness;
 use Modules\Pos\Models\Customer;
 
@@ -100,6 +101,30 @@ class CustomerController extends Controller
         $customer->delete();
 
         return redirect()->route('pos.customers.index')->with('status', 'Customer deleted.');
+    }
+
+    /** Customers sharing the phone (normalised) or email typed in the add / edit form, for the warning. */
+    public function duplicates(Request $request, CustomerService $customers): JsonResponse
+    {
+        $business = $this->requireBusiness($request);
+        if ($business instanceof RedirectResponse) {
+            return response()->json(['data' => [], 'message' => null]);
+        }
+
+        $data = $request->validate([
+            'phone'     => ['nullable', 'string', 'max:50'],
+            'email'     => ['nullable', 'string', 'max:255'],
+            'ignore_id' => ['nullable', 'integer'],
+        ]);
+
+        $duplicates = $customers->presentDuplicates(
+            $business->id,
+            $data['phone'] ?? null,
+            $data['email'] ?? null,
+            isset($data['ignore_id']) ? (int) $data['ignore_id'] : null,
+        );
+
+        return response()->json(['data' => $duplicates, 'message' => $customers->duplicateWarning($duplicates)]);
     }
 
     public function search(Request $request): JsonResponse

@@ -346,6 +346,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('customers', [PosCustomerApiController::class, 'index'])->name('customers.index');
     Route::post('customers', [PosCustomerApiController::class, 'store'])->name('customers.store');
     Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
+    Route::post('customers/import/preview', [PosCustomerApiController::class, 'importPreview'])->name('customers.import.preview');
+    Route::get('customers/duplicates', [PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');
@@ -673,6 +675,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('crm/leads/{lead}/move-stage',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'moveLead'])    ->name('crm.leads.move-stage');
     Route::post  ('crm/leads/{lead}/hold',             [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'holdLead'])    ->name('crm.leads.hold');
     Route::post  ('crm/leads/{lead}/resume',           [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'resumeLead'])  ->name('crm.leads.resume');
+    Route::post  ('crm/leads/{lead}/convert',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'convertLead']) ->name('crm.leads.convert');
     Route::get   ('crm/statuses',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'statuses'])    ->name('crm.statuses.index');
     Route::get   ('crm/lost-reasons',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'lostReasons']) ->name('crm.lost-reasons.index');
     Route::get   ('crm/lead-sources',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadSources']) ->name('crm.lead-sources.index');
@@ -681,6 +684,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');
     Route::get   ('crm/projects/{project}/history/flow', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistoryFlow'])->name('crm.projects.history.flow');
     Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
+    Route::get   ('crm/customers/{customer}',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customer'])    ->whereNumber('customer')->name('crm.customers.show');
     Route::get   ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'tasksList'])   ->name('crm.tasks.index');
     Route::post  ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createTask'])  ->name('crm.tasks.store');
     Route::post  ('crm/tasks/{task}/complete',         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'completeTask'])->name('crm.tasks.complete');

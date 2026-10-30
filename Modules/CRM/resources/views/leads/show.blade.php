@@ -99,7 +99,10 @@
             </a>
             @endif
             @if($can['can_edit'] && $lead->isOpen())
-                <form method="POST" action="{{ route('crm.leads.convert', $lead) }}" onsubmit="return confirm('Convert this lead to a customer?');">
+                <form method="POST" action="{{ route('crm.leads.convert', $lead) }}"
+                      onsubmit="return confirm(@js($lead->customer
+                          ? 'Mark this lead won and keep it on the customer "' . $lead->customer->name . '"?'
+                          : 'Convert this lead to a customer? A customer with the same phone or email is reused; otherwise a new one is created.'));">
                     @csrf
                     <button type="submit" class="linkbtn" style="padding:7px 14px;font-size:12px;">
                         <i class="fa fa-check"></i> Convert to customer
@@ -336,8 +339,12 @@
 
         @if($lead->customer)
             <p class="muted" style="font-size:13px;margin-bottom:14px;">
-                Converted to customer <a href="{{ route('crm.contacts.show', $lead->customer) }}" class="pcat-link">{{ $lead->customer->name }}</a>
-                @if($lead->converted_at) on {{ $lead->converted_at->format('M j, Y') }} @endif.
+                @if($lead->converted_at)
+                    Converted to customer <a href="{{ route('crm.contacts.show', $lead->customer) }}" class="pcat-link">{{ $lead->customer->name }}</a>
+                    on {{ $lead->converted_at->format('M j, Y') }}.
+                @else
+                    Linked to the existing customer <a href="{{ route('crm.contacts.show', $lead->customer) }}" class="pcat-link">{{ $lead->customer->name }}</a>.
+                @endif
             </p>
         @endif
 

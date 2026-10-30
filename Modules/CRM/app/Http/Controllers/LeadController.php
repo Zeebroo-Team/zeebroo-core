@@ -257,12 +257,14 @@ class LeadController extends Controller
         }
 
         try {
-            $this->leadService->convertToCustomer($lead, $request->user()?->id);
+            $customer = $this->leadService->convertToCustomer($lead, $request->user()?->id)->customer;
         } catch (ValidationException $e) {
             return redirect()->route('crm.leads.show', $lead)->withErrors($e->errors());
         }
 
-        return redirect()->route('crm.leads.show', $lead)->with('status', 'Lead converted to a customer.');
+        return redirect()->route('crm.leads.show', $lead)->with('status', $customer->wasRecentlyCreated
+            ? 'Lead converted to a new customer.'
+            : "Lead converted and linked to the existing customer \"{$customer->name}\".");
     }
 
     public function markLost(Request $request, Lead $lead): RedirectResponse
