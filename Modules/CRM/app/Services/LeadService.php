@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Models\AutomationFlow;
 use Modules\CRM\Models\Lead;
+use Modules\CRM\Models\LeadAuditLog;
 use Modules\CRM\Models\LeadCustomFieldValue;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
@@ -19,6 +20,7 @@ class LeadService
     public function __construct(
         private readonly LeadStageService $stages,
         private readonly LeadStageMailTemplateService $stageMailTemplates,
+        private readonly LeadAuditService $audit,
     ) {}
 
     public function listForProject(
@@ -26,6 +28,7 @@ class LeadService
         ?string $search = null,
         ?int $stageId = null,
         ?string $status = null,
+        ?string $source = null,
     ): Collection {
         $query = Lead::query()
             ->where('project_id', $project->id)
@@ -42,6 +45,10 @@ class LeadService
 
         if ($stageId !== null) {
             $query->where('stage_id', $stageId);
+        }
+
+        if (filled($source)) {
+            $query->where('source', $source);
         }
 
         if (filled($status) && $status !== 'all') {
@@ -268,6 +275,7 @@ class LeadService
         ]);
 
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
+        $this->audit->recordCreated($lead, $userId);
         $this->logStageChange($lead, null, $stageId, $userId);
         $this->dispatchLeadCreatedAutomation($lead);
 
@@ -319,26 +327,35 @@ class LeadService
     {
         $oldStageId = $lead->stage_id;
         $newStageId = $this->nullableInt($data['stage_id'] ?? null) ?? $lead->stage_id;
+        $before     = $this->audit->snapshot($lead);
 
         $lead->update([
             'name'                => $data['name'],
             'company'             => filled($data['company'] ?? '') ? $data['company'] : null,
             'email'               => filled($data['email'] ?? '') ? $data['email'] : null,
             'phone'               => filled($data['phone'] ?? '') ? $data['phone'] : null,
-            'source'              => filled($data['source'] ?? '') ? $data['source'] : null,
+            // Desktop's Edit Lead modal doesn't expose source / value / close date / assignee,
+            // so its requests omit those keys entirely — preserve the lead's current value
+            // rather than wiping it to null. Callers that do send the key (e.g. the web edit
+            // form) still control it.
+            'source'              => array_key_exists('source', $data)
+                ? (filled($data['source']) ? $data['source'] : null)
+                : $lead->source,
             'stage_id'            => $newStageId,
-            // Desktop's Edit Lead modal doesn't expose this field, so its requests omit
-            // the key entirely — preserve the lead's current value rather than wiping it
-            // to null. Callers that do send the key (e.g. the web edit form) still control it.
             'estimated_value'     => array_key_exists('estimated_value', $data)
                 ? $this->nullableDecimal($data['estimated_value'])
                 : $lead->estimated_value,
-            'expected_close_date' => filled($data['expected_close_date'] ?? '') ? $data['expected_close_date'] : null,
+            'expected_close_date' => array_key_exists('expected_close_date', $data)
+                ? (filled($data['expected_close_date']) ? $data['expected_close_date'] : null)
+                : $lead->expected_close_date,
             'notes'               => filled($data['notes'] ?? '') ? $data['notes'] : null,
-            'assigned_to'         => $this->nullableInt($data['assigned_to'] ?? null),
+            'assigned_to'         => array_key_exists('assigned_to', $data)
+                ? $this->nullableInt($data['assigned_to'])
+                : $lead->assigned_to,
         ]);
 
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
+        $this->audit->recordUpdated($lead, $before, $userId);
         $this->logStageChange($lead, $oldStageId, $newStageId, $userId);
 
         return $lead->fresh();
@@ -354,7 +371,7 @@ class LeadService
             'lost_reason' => filled($reason) ? $reason : null,
         ]);
 
-        $this->logStageChange($lead, $oldStageId, $lostStage?->id, $userId);
+        $this->logStageChange($lead, $oldStageId, $lostStage?->id, $userId, LeadAuditLog::EVENT_LOST, array_filter(['reason' => $lead->lost_reason]));
 
         return $lead;
     }
@@ -369,7 +386,7 @@ class LeadService
             'lost_reason' => null,
         ]);
 
-        $this->logStageChange($lead, $oldStageId, $openStage?->id, $userId);
+        $this->logStageChange($lead, $oldStageId, $openStage?->id, $userId, LeadAuditLog::EVENT_REOPENED);
 
         return $lead;
     }
@@ -399,7 +416,7 @@ class LeadService
                 'converted_at' => now(),
             ]);
 
-            $this->logStageChange($lead, $oldStageId, $wonStage?->id, $userId);
+            $this->logStageChange($lead, $oldStageId, $wonStage?->id, $userId, LeadAuditLog::EVENT_CONVERTED, ['customer_id' => $customer->id]);
 
             return $lead->fresh();
         });
@@ -441,8 +458,18 @@ class LeadService
             ->get();
     }
 
-    private function logStageChange(Lead $lead, ?int $fromStageId, ?int $toStageId, ?int $userId): void
-    {
+    /**
+     * @param  string  $event  audit event for the move — lost/reopened/converted moves are
+     *                         recorded under their own event so the history reads naturally
+     */
+    private function logStageChange(
+        Lead $lead,
+        ?int $fromStageId,
+        ?int $toStageId,
+        ?int $userId,
+        string $event = LeadAuditLog::EVENT_STAGE_CHANGED,
+        array $meta = [],
+    ): void {
         if ($fromStageId === $toStageId) {
             return;
         }
@@ -454,6 +481,11 @@ class LeadService
             'to_stage_id'   => $toStageId,
             'changed_by'    => $userId,
         ]);
+
+        // A brand-new lead's first stage is already covered by its "created" audit entry.
+        if ($fromStageId !== null) {
+            $this->audit->recordStageChange($lead, $fromStageId, $toStageId, $userId, $event, $meta);
+        }
 
         if ($fromStageId !== null && $toStageId !== null) {
             $this->dispatchLeadStageChangedAutomation($lead, $fromStageId, $toStageId);
@@ -534,8 +566,9 @@ class LeadService
         } catch (\Throwable) {}
     }
 
-    public function delete(Lead $lead): void
+    public function delete(Lead $lead, ?int $userId = null): void
     {
+        $this->audit->recordDeleted($lead, $userId);
         $lead->delete();
     }
 

@@ -75,8 +75,8 @@
             <label for="ld-source">Source</label>
             <select id="ld-source" name="source">
                 <option value="">— Unknown —</option>
-                @foreach(['website' => 'Website', 'referral' => 'Referral', 'walk-in' => 'Walk-in', 'social' => 'Social media', 'phone' => 'Phone', 'other' => 'Other'] as $key => $label)
-                    <option value="{{ $key }}" @selected(old('source', $lead->source) === $key)>{{ $label }}</option>
+                @foreach(\Modules\CRM\Models\Lead::SOURCES as $key => [$label])
+                    <option value="{{ $key }}" @selected(old('source', $editing ? $lead->source : 'manual') === $key)>{{ $label }}</option>
                 @endforeach
             </select>
             @error('source')<div style="color:#f87171;font-size:12px;margin-top:4px;">{{ $message }}</div>@enderror

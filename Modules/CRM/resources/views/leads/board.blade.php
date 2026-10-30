@@ -106,7 +106,15 @@
                                 <div class="muted" style="font-size:11px;margin:4px 0 0 26px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ $lead->company }}</div>
                             @endif
                             <div class="ld-board__card-meta">
-                                <span>{{ $lead->estimated_value !== null ? number_format((float) $lead->estimated_value, 2) : '' }}</span>
+                                <span>
+                                    @if($lead->source)
+                                        @php
+                                            [$srcLabel, $srcIcon, $srcColor] = \Modules\CRM\Models\Lead::SOURCES[$lead->source] ?? [\Modules\CRM\Models\Lead::sourceLabel($lead->source), 'fa fa-tag', '#94a3b8'];
+                                        @endphp
+                                        <i class="{{ $srcIcon }}" style="color:{{ $srcColor }};" title="Source: {{ $srcLabel }}"></i>
+                                    @endif
+                                    {{ $lead->estimated_value !== null ? number_format((float) $lead->estimated_value, 2) : '' }}
+                                </span>
                                 <span>{{ $lead->assignedTo?->name }}</span>
                             </div>
                         </div>

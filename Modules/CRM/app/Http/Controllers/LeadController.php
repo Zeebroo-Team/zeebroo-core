@@ -41,6 +41,7 @@ class LeadController extends Controller
         $stageFilter  = $request->query('stage');
         $stageId      = filled($stageFilter) && $stageFilter !== 'all' ? (int) $stageFilter : null;
         $statusFilter = (string) $request->query('status', 'open');
+        $sourceFilter = array_key_exists((string) $request->query('source'), Lead::SOURCES) ? (string) $request->query('source') : null;
         $leadForm     = $this->formService->defaultOrFirstForProject($project);
 
         return view('crm::leads.index', [
@@ -49,11 +50,12 @@ class LeadController extends Controller
             'hasLeads'        => $this->leadService->projectHasLeads($project),
             'hasForms'        => $leadForm !== null,
             'leadForm'        => $leadForm,
-            'leads'           => $this->leadService->listForProject($project, $search, $stageId, $statusFilter),
+            'leads'           => $this->leadService->listForProject($project, $search, $stageId, $statusFilter, $sourceFilter),
             'pipeline'        => $this->leadService->pipelineSummary($project),
             'search'          => $search,
             'stageFilter'     => $stageFilter ?? 'all',
             'statusFilter'    => $statusFilter,
+            'sourceFilter'    => $sourceFilter,
             'stageOptions'    => $this->stageService->listForProject($project),
             'customFields'    => $this->customFieldService->listKeyedById($project),
             'statusTabs'      => ['open' => 'Open', 'won' => 'Won', 'lost' => 'Lost', 'all' => 'All'],
@@ -226,7 +228,7 @@ class LeadController extends Controller
         }
 
         $project = $lead->project;
-        $this->leadService->delete($lead);
+        $this->leadService->delete($lead, $request->user()?->id);
 
         return redirect()->route('crm.projects.leads.index', $project)->with('status', 'Lead deleted.');
     }
@@ -252,7 +254,7 @@ class LeadController extends Controller
     {
         $rules = [
             'name'                => ['required', 'string', 'max:150'],
-            'source'              => ['nullable', 'string', 'max:60'],
+            'source'              => ['nullable', Rule::in(array_keys(Lead::SOURCES))],
             'stage_id'            => ['nullable', 'integer', Rule::exists('crm_lead_stages', 'id')->where(fn ($q) => $q->where('project_id', $project->id))],
             'estimated_value'     => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'expected_close_date' => ['nullable', 'date'],

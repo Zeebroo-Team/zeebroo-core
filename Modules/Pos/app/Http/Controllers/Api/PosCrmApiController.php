@@ -11,6 +11,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\CRM\Models\Activity;
 use Modules\CRM\Models\Lead;
+use Modules\CRM\Models\LeadAuditLog;
 use Modules\CRM\Models\LeadCustomField;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
@@ -19,6 +20,7 @@ use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\LeadAuditService;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
 use Modules\CRM\Services\LeadService;
@@ -42,6 +44,7 @@ class PosCrmApiController extends Controller
         private readonly LeadCustomFieldService      $customFields,
         private readonly LeadStageMailTemplateService $stageMailTemplates,
         private readonly CrmPermissionService        $crmPermissions,
+        private readonly LeadAuditService            $audit,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -173,6 +176,7 @@ class PosCrmApiController extends Controller
                     'default_stage_id' => $defaultForm->default_stage_id,
                 ] : null,
                 'custom_data_count'  => $access->can('custom_data_view') ? $this->leads->customDataLeadCount($project) : 0,
+                'sources'            => Lead::sourceOptions(),
             ],
         ]);
     }
@@ -210,6 +214,7 @@ class PosCrmApiController extends Controller
                         'company'             => $lead->company,
                         'email'               => $lead->email,
                         'phone'               => $lead->phone,
+                        'source'              => $lead->source,
                         'estimated_value'     => $lead->estimated_value,
                         'expected_close_date' => $lead->expected_close_date,
                         'notes'               => $lead->notes,
@@ -236,6 +241,7 @@ class PosCrmApiController extends Controller
 
         $search  = trim((string) $request->query('q', ''));
         $stageId = $request->query('stage_id');
+        $source  = (string) $request->query('source', '');
         $visibleStageIds = $access->visibleStageIds($project->id);
 
         $leads = Lead::query()
@@ -248,9 +254,10 @@ class PosCrmApiController extends Controller
                   ->orWhere('phone', 'like', "%{$search}%");
             }))
             ->when(filled($stageId), fn ($q) => $q->where('stage_id', $stageId))
+            ->when(filled($source), fn ($q) => $q->where('source', $source))
             ->with('stage:id,name,color')
             ->orderByDesc('id')
-            ->get(['id', 'stage_id', 'customer_id', 'name', 'company', 'email', 'phone']);
+            ->get(['id', 'stage_id', 'customer_id', 'name', 'company', 'email', 'phone', 'source']);
 
         $leadIds = $leads->pluck('id');
 
@@ -277,6 +284,7 @@ class PosCrmApiController extends Controller
             'company'       => $lead->company,
             'email'         => $lead->email,
             'phone'         => $lead->phone,
+            'source'        => $lead->source,
             'is_customer'   => (bool) $lead->customer_id,
             'stage_id'      => $lead->stage_id,
             'stage_name'    => $lead->stage?->name,
@@ -303,11 +311,13 @@ class PosCrmApiController extends Controller
             'company'             => ['nullable', 'string', 'max:255'],
             'email'               => ['nullable', 'email', 'max:255'],
             'phone'               => ['nullable', 'string', 'max:50'],
+            'source'              => ['nullable', Rule::in(array_keys(Lead::SOURCES))],
             'stage_id'            => ['nullable', 'integer'],
             'estimated_value'     => ['nullable', 'numeric', 'min:0'],
             'expected_close_date' => ['nullable', 'date'],
             'notes'               => ['nullable', 'string', 'max:2000'],
         ]);
+        $validated['source'] = ($validated['source'] ?? null) ?: Lead::SOURCE_MANUAL;
 
         $this->abortUnlessStageVisible($request, $business, $project->id, $validated['stage_id'] ?? null);
 
@@ -330,6 +340,7 @@ class PosCrmApiController extends Controller
             'company'             => ['nullable', 'string', 'max:255'],
             'email'               => ['nullable', 'email', 'max:255'],
             'phone'               => ['nullable', 'string', 'max:50'],
+            'source'              => ['sometimes', 'nullable', Rule::in(array_keys(Lead::SOURCES))],
             'stage_id'            => ['nullable', 'integer'],
             'estimated_value'     => ['nullable', 'numeric', 'min:0'],
             'expected_close_date' => ['nullable', 'date'],
@@ -379,9 +390,71 @@ class PosCrmApiController extends Controller
         $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
         $this->abortUnlessStageVisible($request, $business, $lead->project_id, $lead->stage_id);
 
-        $this->leads->delete($lead);
+        $this->leads->delete($lead, $request->user()?->id);
 
         return response()->json(['message' => 'Lead deleted.']);
+    }
+
+    /** Full audit trail for one lead — every create/edit/stage move with who, when and from where. */
+    public function leadHistory(Request $request, int $leadId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
+        $this->visibleProject($request, $business, $lead->project_id);
+        $this->abortUnlessStageVisible($request, $business, $lead->project_id, $lead->stage_id);
+
+        return response()->json(['data' => $this->audit->present($this->audit->forLead($lead))]);
+    }
+
+    /** Relation-wide audit feed (paginated, filterable by event / user / date range / lead name). */
+    public function projectHistory(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->abortUnlessCrm($request, $business, 'leads_view');
+        $project  = $this->visibleProject($request, $business, $projectId);
+
+        $filters = $request->validate([
+            'event'    => ['nullable', 'string', Rule::in(array_keys(LeadAuditLog::events()))],
+            'user_id'  => ['nullable', 'integer'],
+            'from'     => ['nullable', 'date'],
+            'to'       => ['nullable', 'date'],
+            'q'        => ['nullable', 'string', 'max:255'],
+            'lead_source' => ['nullable', Rule::in(array_keys(Lead::SOURCES))],
+            'per_page' => ['nullable', 'integer', 'min:10', 'max:200'],
+        ]);
+
+        $page = $this->audit->forProject($project, $filters, $access->visibleStageIds($project->id), (int) ($filters['per_page'] ?? 50));
+
+        return response()->json([
+            'data' => $this->audit->present(collect($page->items())),
+            'meta' => [
+                'current_page' => $page->currentPage(),
+                'last_page'    => $page->lastPage(),
+                'total'        => $page->total(),
+                'events'       => LeadAuditLog::events(),
+                'users'        => $this->audit->actorsForProject($project),
+            ],
+        ]);
+    }
+
+    /** Stage-movement graph + per-lead journeys for the History "View more" flow window. */
+    public function projectHistoryFlow(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->abortUnlessCrm($request, $business, 'leads_view');
+        $project  = $this->visibleProject($request, $business, $projectId);
+
+        $filters = $request->validate([
+            'user_id' => ['nullable', 'integer'],
+            'from'    => ['nullable', 'date'],
+            'to'      => ['nullable', 'date'],
+            'q'       => ['nullable', 'string', 'max:255'],
+            'lead_source' => ['nullable', Rule::in(array_keys(Lead::SOURCES))],
+        ]);
+
+        return response()->json(['data' => $this->audit->flowForProject($project, $filters, $access->visibleStageIds($project->id))]);
     }
 
     // ── Contacts ──────────────────────────────────────────────────────────
@@ -854,8 +927,14 @@ class PosCrmApiController extends Controller
             }
         }
 
-        $data = $request->validate($rules);
-        $lead = $this->forms->submit($form, $data, 'pipeline-form', $request->user()?->id);
+        // Block paths are numeric ("0", "1.2", …), so a 'source' key can't collide with one.
+        $rules['source'] = ['nullable', Rule::in(array_keys(Lead::SOURCES))];
+
+        $data   = $request->validate($rules);
+        $source = ($data['source'] ?? null) ?: Lead::SOURCE_MANUAL;
+        unset($data['source']);
+
+        $lead = $this->forms->submit($form, $data, $source, $request->user()?->id);
 
         return response()->json(['data' => $lead->load('stage')], 201);
     }

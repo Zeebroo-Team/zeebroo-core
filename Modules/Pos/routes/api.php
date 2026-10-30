@@ -616,6 +616,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::put   ('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateLead'])  ->name('crm.leads.update');
     Route::post  ('crm/leads/{lead}/move-stage',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'moveLead'])    ->name('crm.leads.move-stage');
     Route::delete('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteLead'])  ->name('crm.leads.destroy');
+    Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');
+    Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');
+    Route::get   ('crm/projects/{project}/history/flow', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistoryFlow'])->name('crm.projects.history.flow');
     Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
     Route::get   ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'tasksList'])   ->name('crm.tasks.index');
     Route::post  ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createTask'])  ->name('crm.tasks.store');
