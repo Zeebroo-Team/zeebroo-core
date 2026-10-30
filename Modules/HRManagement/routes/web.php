@@ -8,6 +8,7 @@ use Modules\HRManagement\Http\Controllers\HrComplaintController;
 use Modules\HRManagement\Http\Controllers\HrDepartmentController;
 use Modules\HRManagement\Http\Controllers\HrEmployeeController;
 use Modules\HRManagement\Http\Controllers\HrEmployeePortalController;
+use Modules\HRManagement\Http\Controllers\HrEmployeeSystemAccessController;
 use Modules\HRManagement\Http\Controllers\HrJobTitleController;
 use Modules\HRManagement\Http\Controllers\HrLeaveRequestController;
 use Modules\HRManagement\Http\Controllers\HRManagementController;
@@ -53,6 +54,9 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('hr-management/employees', [HrEmployeeController::class, 'store'])->name('hr.employees.store');
     Route::get('hr-management/employees/{employee}', [HrEmployeeController::class, 'show'])->name('hr.employees.show');
     Route::patch('hr-management/employees/{employee}', [HrEmployeeController::class, 'update'])->name('hr.employees.update');
+    Route::post('hr-management/employees/{employee}/system-access', [HrEmployeeSystemAccessController::class, 'store'])->name('hr.employees.system-access.store');
+    Route::post('hr-management/employees/{employee}/system-access/resend', [HrEmployeeSystemAccessController::class, 'resend'])->middleware('throttle:10,1')->name('hr.employees.system-access.resend');
+    Route::delete('hr-management/employees/{employee}/system-access', [HrEmployeeSystemAccessController::class, 'destroy'])->name('hr.employees.system-access.destroy');
     Route::post('hr-management/employees/{employee}/profile-photo', [HrEmployeeController::class, 'storeProfilePhoto'])->name('hr.employees.profile-photo.store');
     Route::delete('hr-management/employees/{employee}/profile-photo', [HrEmployeeController::class, 'destroyProfilePhoto'])->name('hr.employees.profile-photo.destroy');
     Route::post('hr-management/employees/{employee}/documents', [HrEmployeeController::class, 'storeDocument'])->name('hr.employees.documents.store');

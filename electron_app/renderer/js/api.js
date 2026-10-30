@@ -298,6 +298,12 @@ const API = (() => {
     employeeLeave:  (id, year) => request('GET', `/hr/employees/${id}/leave${year ? '?year=' + year : ''}`),
     employeeBills:  (id)   => request('GET',  `/hr/employees/${id}/bills`),
     createEmployee: (body) => request('POST', '/hr/employees', body),
+    updateEmployeeField: (id, body) => request('PATCH', `/hr/employees/${id}`, body),
+    // HR — employee system access (team invitation to sign in to this business)
+    employeeAccess:       (id)       => request('GET',    `/hr/employees/${id}/access`),
+    grantEmployeeAccess:  (id, role) => request('POST',   `/hr/employees/${id}/access`, { role }),
+    resendEmployeeAccess: (id)       => request('POST',   `/hr/employees/${id}/access/resend`),
+    revokeEmployeeAccess: (id)       => request('DELETE', `/hr/employees/${id}/access`),
     departments:      ()     => request('GET',    '/hr/departments'),
     createDepartment: (body) => request('POST',   '/hr/departments', body),
     deleteDepartment: (id)   => request('DELETE', `/hr/departments/${id}`),

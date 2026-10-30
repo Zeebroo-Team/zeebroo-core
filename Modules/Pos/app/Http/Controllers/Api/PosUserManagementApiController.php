@@ -5,10 +5,12 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Modules\Business\Models\BusinessInvitation;
 use Modules\Business\Models\BusinessMember;
 use Modules\Business\Models\BusinessRole;
 use Modules\Business\Services\BusinessInvitationService;
+use Modules\HRManagement\Services\EmployeeSystemAccessService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\PosCashier;
 
@@ -83,11 +85,16 @@ class PosUserManagementApiController extends Controller
         ]);
     }
 
-    public function index(Request $request, BusinessInvitationService $invitations): JsonResponse
+    public function index(Request $request, BusinessInvitationService $invitations, EmployeeSystemAccessService $employeeAccess): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
         BusinessRole::seedForBusiness($business->id);
+
+        // Mark users who are also HR employees of this business
+        $hasHr            = Schema::hasTable('hr_employees');
+        $employeesByUser  = $hasHr ? $employeeAccess->employeesByUserId($business) : collect();
+        $employeesByEmail = $hasHr ? $employeeAccess->employeesByEmail($business) : collect();
 
         $owner = $business->user;
         $users = [[
@@ -100,6 +107,7 @@ class PosUserManagementApiController extends Controller
             'status'      => 'active',
             'is_owner'    => true,
             'joined_at'   => $business->created_at?->toIso8601String(),
+            'employee'    => $employeeAccess->employeeTag($employeesByUser->get($owner->id)),
         ]];
 
         $members = BusinessMember::query()
@@ -122,6 +130,7 @@ class PosUserManagementApiController extends Controller
                 'status'      => $member->status,
                 'is_owner'    => false,
                 'joined_at'   => $member->created_at?->toIso8601String(),
+                'employee'    => $employeeAccess->employeeTag($employeesByUser->get($member->user_id)),
             ];
         }
 
@@ -134,7 +143,9 @@ class PosUserManagementApiController extends Controller
 
         return response()->json([
             'data'        => $users,
-            'invitations' => $pending->map(fn (BusinessInvitation $i) => $invitations->payload($i))->values(),
+            'invitations' => $pending->map(fn (BusinessInvitation $i) => $invitations->payload($i) + [
+                'employee' => $employeeAccess->employeeTag($employeesByEmail->get($i->email)),
+            ])->values(),
             'permissions' => BusinessMember::availablePermissions(),
         ]);
     }

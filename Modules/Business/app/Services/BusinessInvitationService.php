@@ -5,12 +5,14 @@ namespace Modules\Business\Services;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessInvitation;
 use Modules\Business\Models\BusinessMember;
 use Modules\Business\Models\BusinessRole;
+use Modules\HRManagement\Models\Employee;
 use Modules\Mail\Mail\AdminMarketingMail;
 use Modules\Mail\Services\AutomatedEmailService;
 use Spatie\Permission\Models\Role;
@@ -149,6 +151,15 @@ class BusinessInvitationService
                     'invited_by' => $invitation->invited_by,
                 ],
             );
+
+            // HR → "Give system access" invites go to the employee's email: link that profile to the account.
+            if (Schema::hasTable('hr_employees')) {
+                Employee::query()
+                    ->where('business_id', $invitation->business_id)
+                    ->whereNull('user_id')
+                    ->whereRaw('LOWER(personal_email) = ?', [$invitation->email])
+                    ->update(['user_id' => $user->id]);
+            }
 
             $invitation->update([
                 'status' => BusinessInvitation::STATUS_ACCEPTED,
