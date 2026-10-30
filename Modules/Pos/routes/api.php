@@ -610,6 +610,18 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
     Route::delete('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
 
+    Route::get   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'crmSettings'])    ->name('crm.settings.show');
+    Route::put   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'saveCrmSettings'])->name('crm.settings.update');
+
+    // CRM marketing inbox (verify, forward, review flags, merge duplicates)
+    Route::get   ('crm/inbox',                         [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'index'])  ->name('crm.inbox.index');
+    Route::get   ('crm/inbox/leads/{lead}',            [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'show'])   ->whereNumber('lead')->name('crm.inbox.show');
+    Route::put   ('crm/inbox/leads/{lead}',            [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'update']) ->whereNumber('lead')->name('crm.inbox.update');
+    Route::post  ('crm/inbox/leads/{lead}/verify',     [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'verify']) ->whereNumber('lead')->name('crm.inbox.verify');
+    Route::post  ('crm/inbox/leads/{lead}/review',     [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'review']) ->whereNumber('lead')->name('crm.inbox.review');
+    Route::post  ('crm/inbox/leads/{lead}/forward',    [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'forward'])->whereNumber('lead')->name('crm.inbox.forward');
+    Route::post  ('crm/inbox/leads/{lead}/merge',      [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'merge'])  ->whereNumber('lead')->name('crm.inbox.merge');
+
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');

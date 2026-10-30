@@ -6,6 +6,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Modules\CRM\Models\Lead;
+use Modules\CRM\Models\LeadAssignmentLog;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
@@ -15,8 +16,8 @@ use Modules\CRM\Services\CrmPermissionService;
  *
  * - Admin/owner: everything.
  * - CEO: views every lead; changes nothing.
- * - Marketing: views and works the marketing intake pipeline and views the leads they
- *   forwarded; forwards intake leads.
+ * - Marketing: views and works the marketing intake pipeline and views (read-only) the leads
+ *   they forwarded; forwards intake leads, clears review flags and merges duplicates.
  * - Department head (HR head, or a division head for that division): views, edits, assigns
  *   and approves everything in their department, and runs its pipeline.
  * - Staff (and any other member): views their department's leads, edits the ones assigned
@@ -173,6 +174,17 @@ class LeadPolicy
             && ($access->unrestricted || $access->worksIntake($access->departmentOfProject($lead->project_id)));
     }
 
+    /**
+     * Clearing a "needs review" flag and merging a flagged duplicate into another lead: admin,
+     * "All Departments", or Marketing on a lead they can see. Merging may target a lead of
+     * another department — it only adds to that lead, like a repeat enquiry does.
+     */
+    public function canReview(CrmAccess $access, Lead $lead): bool
+    {
+        return $this->mayEdit($access, $lead)
+            && ($access->worksAllLeads() || $access->isMarketing());
+    }
+
     /** The per-lead flags the desktop board uses to show or hide actions. */
     public function abilities(CrmAccess $access, Lead $lead): array
     {
@@ -183,6 +195,7 @@ class LeadPolicy
             'can_assign'  => $this->canAssign($access, $lead),
             'can_approve' => $this->canApprove($access, $lead),
             'can_forward' => $this->canForward($access, $lead),
+            'can_review'  => $this->canReview($access, $lead),
         ];
     }
 
@@ -253,10 +266,14 @@ class LeadPolicy
         return $this->whereAssigned(Lead::query()->whereKey($lead->id), $userId)->exists();
     }
 
-    /** Leads this user forwarded out of the marketing inbox. Forwarding is not recorded yet. */
+    /** Leads this user forwarded out of the marketing inbox (crm_lead_assignment_logs). */
     public function whereForwardedBy(Builder $query, int $userId): Builder
     {
-        return $query->whereRaw('1 = 0');
+        return $query->whereExists(fn ($q) => $q->selectRaw('1')
+            ->from('crm_lead_assignment_logs')
+            ->whereColumn('crm_lead_assignment_logs.lead_id', 'crm_leads.id')
+            ->where('crm_lead_assignment_logs.action', LeadAssignmentLog::ACTION_FORWARDED)
+            ->where('crm_lead_assignment_logs.by_user_id', $userId));
     }
 
     private function forwardedBy(Lead $lead, ?int $userId): bool

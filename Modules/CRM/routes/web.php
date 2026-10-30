@@ -9,6 +9,7 @@ use Modules\CRM\Http\Controllers\LeadController;
 use Modules\CRM\Http\Controllers\LeadCustomFieldController;
 use Modules\CRM\Http\Controllers\LeadFormController;
 use Modules\CRM\Http\Controllers\LeadStageController;
+use Modules\CRM\Http\Controllers\MarketingInboxController;
 use Modules\CRM\Http\Controllers\OverviewController;
 use Modules\CRM\Http\Controllers\ProjectController;
 use Modules\CRM\Http\Controllers\PublicLeadFormController;
@@ -81,6 +82,14 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/tasks/{task}/reopen',     [TaskController::class, 'reopen'])      ->name('crm.tasks.reopen');
     Route::delete('/crm/tasks/{task}',          [TaskController::class, 'destroy'])     ->name('crm.tasks.destroy');
 
+    Route::get('/crm/inbox',                     [MarketingInboxController::class, 'index'])  ->name('crm.inbox.index');
+    Route::put('/crm/inbox/{lead}',              [MarketingInboxController::class, 'update']) ->name('crm.inbox.update');
+    Route::post('/crm/inbox/{lead}/verify',      [MarketingInboxController::class, 'verify']) ->name('crm.inbox.verify');
+    Route::post('/crm/inbox/{lead}/review',      [MarketingInboxController::class, 'review']) ->name('crm.inbox.review');
+    Route::post('/crm/inbox/{lead}/forward',     [MarketingInboxController::class, 'forward'])->name('crm.inbox.forward');
+    Route::post('/crm/inbox/{lead}/merge',       [MarketingInboxController::class, 'merge'])  ->name('crm.inbox.merge');
+
+    Route::put('/crm/settings/intake',                                   [CrmOrgController::class, 'updateCrmSettings'])->name('crm.settings.update');
     Route::get('/crm/settings/org',                                      [CrmOrgController::class, 'index'])          ->name('crm.org.index');
     Route::post('/crm/settings/org/departments/{department}/divisions',  [CrmOrgController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
     Route::put('/crm/settings/org/divisions/{division}',                 [CrmOrgController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');

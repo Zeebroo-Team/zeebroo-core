@@ -18,6 +18,7 @@ use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
+use Modules\CRM\Services\LeadIntakeService;
 use Modules\CRM\Services\LeadService;
 use Modules\CRM\Services\LeadStageService;
 use Modules\CRM\Services\LostReasonService;
@@ -32,6 +33,7 @@ class LeadController extends Controller
         private readonly LeadCustomFieldService $customFieldService,
         private readonly LeadFormService $formService,
         private readonly LostReasonService $lostReasons,
+        private readonly LeadIntakeService $intake,
     ) {}
 
     public function index(Request $request, Project $project): View|RedirectResponse
@@ -121,9 +123,14 @@ class LeadController extends Controller
         if (! $this->leadPolicy()->canAssignIn($access, $project)) {
             $data['assigned_to'] = null;
         }
-        $lead     = $this->leadService->create($project, $data, $request->user()?->id);
+        $result = $this->intake->capture($data, $data['source'] ?? Lead::SOURCE_MANUAL, $project, $request->user()?->id);
 
-        return redirect()->route('crm.leads.show', $lead)->with('status', 'Lead "' . $lead->name . '" created.');
+        // The lead may have gone to the marketing inbox, or be another department's existing lead
+        if (! $this->leadPolicy()->canView($access, $result->lead->fresh(['stage']))) {
+            return redirect()->route('crm.projects.leads.index', $project)->with('status', $result->message());
+        }
+
+        return redirect()->route('crm.leads.show', $result->lead)->with('status', $result->message());
     }
 
     public function show(Request $request, Lead $lead): View|RedirectResponse
@@ -134,7 +141,8 @@ class LeadController extends Controller
         }
 
         $lead->load(['assignedTo', 'customer', 'stage', 'project', 'activities.createdBy', 'tasks.assignedTo', 'customFieldValues.customField',
-            'products:id,name,sku', 'lostReason', 'division', 'department', 'leadSource', 'onHoldFromStage']);
+            'products:id,name,sku', 'lostReason', 'division', 'department', 'leadSource', 'onHoldFromStage',
+            'verifiedBy:id,name', 'forwardedBy:id,name', 'requestedDepartment:id,name']);
 
         return view('crm::leads.show', [
             'business'        => $business,

@@ -19,6 +19,9 @@ class LeadForm extends Model
     const TYPE_CUSTOM_DATA = 'generic';
     const TYPE_EMPLOYEE    = 'employee';
 
+    /** Forms that collect records rather than sales enquiries — kept out of marketing intake and duplicate checks. */
+    const NON_SALES_TYPES = [self::TYPE_SUPPLIER, self::TYPE_EMPLOYEE];
+
     protected $fillable = [
         'project_id',
         'name',

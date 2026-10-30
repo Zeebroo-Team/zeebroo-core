@@ -634,6 +634,16 @@ const API = (() => {
     crmSaveDepartmentSettings:   (departmentId, body)  => request('PUT',    `/crm/org/departments/${departmentId}/settings`, body),
     crmLinkDepartmentPipeline:   (departmentId, projectId) => request('POST', `/crm/org/departments/${departmentId}/pipeline`, { project_id: projectId || null }),
     crmUnlinkDepartmentPipeline: (departmentId)        => request('DELETE', `/crm/org/departments/${departmentId}/pipeline`),
+    crmSettings:                 ()                    => request('GET',    '/crm/settings'),
+    crmSaveSettings:             (body)                => request('PUT',    '/crm/settings', body),
+    // Marketing inbox
+    crmInbox:             (filter, q)          => request('GET',    `/crm/inbox?filter=${encodeURIComponent(filter||'all')}&q=${encodeURIComponent(q||'')}`),
+    crmInboxLead:         (leadId)             => request('GET',    `/crm/inbox/leads/${leadId}`),
+    crmInboxUpdateLead:   (leadId, body)       => request('PUT',    `/crm/inbox/leads/${leadId}`, body),
+    crmInboxVerify:       (leadId)             => request('POST',   `/crm/inbox/leads/${leadId}/verify`),
+    crmInboxClearReview:  (leadId)             => request('POST',   `/crm/inbox/leads/${leadId}/review`),
+    crmInboxForward:      (leadId, body)       => request('POST',   `/crm/inbox/leads/${leadId}/forward`, body),
+    crmInboxMerge:        (leadId, targetId)   => request('POST',   `/crm/inbox/leads/${leadId}/merge`, { target_lead_id: targetId }),
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
     crmCreateProject:(body)               => request('POST',   '/crm/projects', body),

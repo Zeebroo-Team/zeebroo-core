@@ -25,6 +25,7 @@ class LeadService
         private readonly LeadAuditService $audit,
         private readonly LeadSourceService $sources,
         private readonly LostReasonService $lostReasons,
+        private readonly CrmSettingsService $settings,
     ) {}
 
     public function listForProject(
@@ -276,9 +277,16 @@ class LeadService
                 'company'               => filled($data['company'] ?? '') ? $data['company'] : null,
                 'email'                 => filled($data['email'] ?? '') ? $data['email'] : null,
                 'phone'                 => filled($data['phone'] ?? '') ? $data['phone'] : null,
+                'normalized_phone'      => $this->settings->normalizePhone($project->business_id, $data['phone'] ?? null),
                 'source'                => $source['source'],
                 'source_id'             => $source['source_id'],
                 'external_id'           => filled($data['external_id'] ?? '') ? $data['external_id'] : null,
+                // Set by LeadIntakeService when the contact is already known
+                'customer_id'           => $this->nullableInt($data['customer_id'] ?? null),
+                'needs_review'          => (bool) ($data['needs_review'] ?? false),
+                'review_reason'         => filled($data['review_reason'] ?? '') ? $data['review_reason'] : null,
+                'duplicate_of_lead_id'  => $this->nullableInt($data['duplicate_of_lead_id'] ?? null),
+                'requested_department_id' => $this->nullableInt($data['requested_department_id'] ?? null),
                 'stage_id'              => $stageId,
                 'estimated_value'       => $this->nullableDecimal($data['estimated_value'] ?? null),
                 'score'                 => $this->cleanScore($data['score'] ?? null),
@@ -373,6 +381,7 @@ class LeadService
                 'company'               => filled($data['company'] ?? '') ? $data['company'] : null,
                 'email'                 => filled($data['email'] ?? '') ? $data['email'] : null,
                 'phone'                 => filled($data['phone'] ?? '') ? $data['phone'] : null,
+                'normalized_phone'      => $this->settings->normalizePhone($lead->business_id, $data['phone'] ?? null),
                 // Desktop's Edit Lead modal doesn't expose every field (value / close date / …),
                 // so its requests omit those keys entirely — preserve the lead's current value
                 // rather than wiping it to null. Callers that do send the key (e.g. the web edit
@@ -474,6 +483,52 @@ class LeadService
         }
 
         return $this->moveTo($lead, $stage, $userId, $context, $system);
+    }
+
+    /**
+     * Move a lead into another pipeline's "new" stage (forwarding from the marketing inbox).
+     * Writes the stage log and a "forwarded" audit entry; the lead enters the new pipeline
+     * like a new arrival, so that pipeline's stage mail and automations apply.
+     *
+     * @param  array<string, mixed>  $attributes  extra lead attributes saved with the move
+     */
+    public function moveToProject(Lead $lead, Project $project, ?int $userId, array $attributes = [], array $meta = []): Lead
+    {
+        $to = $this->stages->defaultOpenStage($project);
+        if ($to === null) {
+            throw ValidationException::withMessages(['department_id' => 'The pipeline "' . $project->name . '" has no open stage.']);
+        }
+
+        $lead->loadMissing(['stage', 'project']);
+        $from        = $lead->stage;
+        $fromProject = $lead->project;
+
+        $lead->update([
+            'project_id'            => $project->id,
+            'department_id'         => $project->department_id,
+            'stage_id'              => $to->id,
+            'on_hold_from_stage_id' => null,
+        ] + $attributes);
+        $lead->setRelation('stage', $to);
+        $lead->setRelation('project', $project);
+
+        LeadStageLog::create([
+            'lead_id'       => $lead->id,
+            'project_id'    => $project->id,
+            'from_stage_id' => $from?->id,
+            'to_stage_id'   => $to->id,
+            'changed_by'    => $userId,
+            'reason'        => 'Forwarded from ' . ($fromProject?->name ?? 'another pipeline'),
+        ]);
+
+        $this->audit->recordForwarded($lead, $to, $userId, $meta + array_filter([
+            'from_project'    => $fromProject?->name,
+            'from_stage_name' => $from?->name,
+        ]));
+        $this->dispatchLeadCreatedAutomation($lead);
+        $this->autoSendStageMail($lead, $to);
+
+        return $lead;
     }
 
     public function convertToCustomer(Lead $lead, ?int $userId = null): Lead
@@ -748,9 +803,9 @@ class LeadService
         } catch (\Throwable) {}
     }
 
-    public function delete(Lead $lead, ?int $userId = null): void
+    public function delete(Lead $lead, ?int $userId = null, array $auditMeta = []): void
     {
-        $this->audit->recordDeleted($lead, $userId);
+        $this->audit->recordDeleted($lead, $userId, $auditMeta);
         $lead->delete();
     }
 

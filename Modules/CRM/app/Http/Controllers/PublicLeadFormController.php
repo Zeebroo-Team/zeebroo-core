@@ -40,7 +40,9 @@ class PublicLeadFormController extends Controller
 
         $data = $request->validate($this->validationRules($form));
 
-        $this->forms->submit($form, $data);
+        // Lead intake decides where it goes; a repeat enquiry is logged on the existing lead.
+        // The visitor sees the same thank-you either way.
+        $this->forms->submit($form, $data, 'web_form');
 
         return redirect()->route('crm.public-forms.show', $token)->with('crm_form_submitted', true);
     }

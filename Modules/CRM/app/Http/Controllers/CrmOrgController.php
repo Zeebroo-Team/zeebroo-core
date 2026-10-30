@@ -12,8 +12,9 @@ use Modules\CRM\Http\Controllers\Concerns\ResolvesCrmBusiness;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\CrmSettingsService;
 
-/** CRM settings: departments → divisions, department pipeline and department settings. Admin only. */
+/** CRM settings: departments → divisions, department pipeline, department and business-wide settings. Admin only. */
 class CrmOrgController extends Controller
 {
     use ResolvesCrmBusiness;
@@ -21,6 +22,7 @@ class CrmOrgController extends Controller
     public function __construct(
         private readonly CrmOrgService $org,
         private readonly CrmPermissionService $permissions,
+        private readonly CrmSettingsService $settings,
     ) {}
 
     public function index(Request $request): View|RedirectResponse
@@ -35,7 +37,21 @@ class CrmOrgController extends Controller
             'departments' => $this->org->departments($business),
             'pipelines'   => Project::query()->where('business_id', $business->id)->orderBy('name')->get(['id', 'name', 'department_id']),
             'users'       => $this->org->businessUsers($business),
+            'crmSettings' => $this->settings->present($business),
         ]);
+    }
+
+    /** Business-wide CRM settings (phone country code for the duplicate check). */
+    public function updateCrmSettings(Request $request): RedirectResponse
+    {
+        $business = $this->requireAdmin($request);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $validated = $request->validate(['phone_country_code' => ['nullable', 'string', 'max:6', 'regex:/^\+?\d{0,4}$/']]);
+
+        return $this->attempt(fn () => $this->settings->save($business, $validated), 'CRM settings saved.');
     }
 
     public function storeDivision(Request $request, int $department): RedirectResponse

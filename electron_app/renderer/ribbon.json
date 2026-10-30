@@ -460,7 +460,8 @@
           "label": "Relations",
           "items": [
             { "type": "lg", "id": "rb-crm-pipeline",      "icon": "fa-handshake",          "label": "Relations" },
-            { "type": "lg", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",          "label": "New Lead",        "primary": true }
+            { "type": "lg", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",          "label": "New Lead",        "primary": true },
+            { "type": "lg", "id": "rb-crm-inbox",         "icon": "fa-inbox",              "label": "Marketing Inbox" }
           ]
         },
         {

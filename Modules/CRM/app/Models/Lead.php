@@ -50,6 +50,22 @@ class Lead extends Model
         'cold' => ['Cold', '#3b82f6'],
     ];
 
+    /** Why a lead is flagged for Marketing to look at: key => label. */
+    public const REVIEW_REASONS = [
+        'duplicate_enquiry'  => 'Repeat enquiry',
+        'existing_customer'  => 'Existing customer',
+        'possible_duplicate' => 'Possible duplicate',
+    ];
+
+    public const REVIEW_DUPLICATE_ENQUIRY  = 'duplicate_enquiry';
+    public const REVIEW_EXISTING_CUSTOMER  = 'existing_customer';
+    public const REVIEW_POSSIBLE_DUPLICATE = 'possible_duplicate';
+
+    public static function reviewReasonLabel(?string $reason): ?string
+    {
+        return $reason !== null ? (self::REVIEW_REASONS[$reason] ?? ucfirst(str_replace('_', ' ', $reason))) : null;
+    }
+
     public static function scoreLabel(?string $score): ?string
     {
         return $score !== null ? (self::SCORES[$score][0] ?? null) : null;
@@ -84,6 +100,7 @@ class Lead extends Model
         'company',
         'email',
         'phone',
+        'normalized_phone',
         'source',
         'source_id',
         'external_id',
@@ -104,6 +121,12 @@ class Lead extends Model
         'first_response_at',
         'closed_at',
         'on_hold_from_stage_id',
+        'needs_review',
+        'review_reason',
+        'duplicate_of_lead_id',
+        'requested_department_id',
+        'forwarded_at',
+        'forwarded_by',
     ];
 
     protected $casts = [
@@ -113,6 +136,8 @@ class Lead extends Model
         'verified_at'         => 'datetime',
         'first_response_at'   => 'datetime',
         'closed_at'           => 'datetime',
+        'forwarded_at'        => 'datetime',
+        'needs_review'        => 'boolean',
     ];
 
     public function business(): BelongsTo
@@ -186,6 +211,31 @@ class Lead extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class, 'customer_id');
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'verified_by');
+    }
+
+    public function forwardedBy(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'forwarded_by');
+    }
+
+    public function requestedDepartment(): BelongsTo
+    {
+        return $this->belongsTo(Department::class, 'requested_department_id');
+    }
+
+    public function duplicateOf(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'duplicate_of_lead_id');
+    }
+
+    public function assignmentLogs(): HasMany
+    {
+        return $this->hasMany(LeadAssignmentLog::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
     public function activities(): MorphMany

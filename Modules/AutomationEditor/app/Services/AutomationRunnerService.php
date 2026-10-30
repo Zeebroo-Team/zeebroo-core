@@ -257,6 +257,8 @@ class AutomationRunnerService
             'name'        => $name,
             'email'       => filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null,
             'phone'       => $phone ?: null,
+            // So CRM lead intake's duplicate check finds this lead too
+            'normalized_phone' => app(\Modules\CRM\Services\CrmSettingsService::class)->normalizePhone($business, $phone),
             'source'      => 'automation',
         ]);
 

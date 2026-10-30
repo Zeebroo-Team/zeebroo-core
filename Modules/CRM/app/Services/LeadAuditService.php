@@ -107,7 +107,7 @@ class LeadAuditService
         ]);
     }
 
-    public function recordDeleted(Lead $lead, ?int $userId): void
+    public function recordDeleted(Lead $lead, ?int $userId, array $meta = []): void
     {
         $lead->loadMissing('stage');
 
@@ -119,8 +119,27 @@ class LeadAuditService
                 'phone'           => $lead->phone,
                 'company'         => $lead->company,
                 'estimated_value' => $this->normalise($lead->estimated_value),
-            ]),
+            ]) + $meta,
         ]);
+    }
+
+    /**
+     * The lead entered its (new) pipeline from another one. Logged against the new pipeline as an
+     * arrival — no from-stage, since that stage belongs to the pipeline it left (named in meta).
+     */
+    public function recordForwarded(Lead $lead, LeadStage $to, ?int $userId, array $meta = []): void
+    {
+        $this->write($lead, LeadAuditLog::EVENT_FORWARDED, $userId, [
+            'to_stage_id'   => $to->id,
+            'to_stage_name' => $to->name,
+            'meta'          => $meta ?: null,
+        ]);
+    }
+
+    /** An event with no stage move or field diff (verified, repeat enquiry, merged, …). */
+    public function recordEvent(Lead $lead, string $event, ?int $userId, array $meta = []): void
+    {
+        $this->write($lead, $event, $userId, ['meta' => $meta ?: null]);
     }
 
     // ── Reading ──────────────────────────────────────────────────────────

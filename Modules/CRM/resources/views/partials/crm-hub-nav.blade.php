@@ -14,6 +14,11 @@
     @php
         $crmNavBusiness = $business ?? null;
     @endphp
+    @if($crmNavBusiness && app(\Modules\CRM\Services\CrmPermissionService::class)->accessFor($crmNavBusiness, auth()->user())->usesInbox())
+        <a href="{{ route('crm.inbox.index') }}" @class(['is-active' => request()->routeIs('crm.inbox.*')])>
+            <i class="fa fa-inbox"></i> Inbox
+        </a>
+    @endif
     @if($crmNavBusiness && app(\Modules\CRM\Services\CrmPermissionService::class)->isAdmin($crmNavBusiness, (int) auth()->id()))
         <a href="{{ route('crm.org.index') }}" @class(['is-active' => request()->routeIs('crm.org.*')])>
             <i class="fa fa-sitemap"></i> Org Structure

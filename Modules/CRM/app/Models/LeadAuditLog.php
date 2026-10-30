@@ -21,11 +21,16 @@ class LeadAuditLog extends Model
     const EVENT_LOST          = 'lost';
     const EVENT_REOPENED      = 'reopened';
     const EVENT_DELETED       = 'deleted';
+    const EVENT_ENQUIRY       = 'enquiry';
+    const EVENT_VERIFIED      = 'verified';
+    const EVENT_REVIEWED      = 'reviewed';
+    const EVENT_FORWARDED     = 'forwarded';
+    const EVENT_MERGED        = 'merged';
 
     /** Events that move a lead into, between or out of stages — the History flow view's edges. */
     const STAGE_EVENTS = [
         self::EVENT_CREATED, self::EVENT_STAGE_CHANGED, self::EVENT_CONVERTED,
-        self::EVENT_LOST, self::EVENT_REOPENED, self::EVENT_DELETED,
+        self::EVENT_LOST, self::EVENT_REOPENED, self::EVENT_DELETED, self::EVENT_FORWARDED,
     ];
 
     const SOURCE_DESKTOP = 'desktop';
@@ -68,6 +73,11 @@ class LeadAuditLog extends Model
             self::EVENT_LOST          => 'Marked as lost',
             self::EVENT_REOPENED      => 'Reopened',
             self::EVENT_DELETED       => 'Lead deleted',
+            self::EVENT_ENQUIRY       => 'Repeat enquiry',
+            self::EVENT_VERIFIED      => 'Verified',
+            self::EVENT_REVIEWED      => 'Review cleared',
+            self::EVENT_FORWARDED     => 'Forwarded',
+            self::EVENT_MERGED        => 'Merged',
         ];
     }
 

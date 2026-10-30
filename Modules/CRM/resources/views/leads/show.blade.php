@@ -26,6 +26,20 @@
     @if($errors->any())
         <div class="pcat-banner pcat-banner--err" role="alert">{{ $errors->first() }}</div>
     @endif
+    @if($lead->needs_review)
+        <div class="pcat-banner" style="background:#fef3c7;color:#92400e;">
+            <i class="fa fa-flag"></i> {{ \Modules\CRM\Models\Lead::reviewReasonLabel($lead->review_reason) ?? 'Needs review' }} — flagged for Marketing.
+            @if($can['can_review'])
+                <a href="{{ route('crm.inbox.index', ['filter' => 'review']) }}#lead-{{ $lead->id }}" class="pcat-link">Review in the inbox</a>
+            @endif
+        </div>
+    @endif
+    @if($lead->forwarded_at || $lead->verified_at)
+        <p class="muted" style="margin:0 0 10px;font-size:12px;">
+            @if($lead->verified_at)<i class="fa fa-circle-check"></i> Verified {{ $lead->verified_at->diffForHumans() }}{{ $lead->verifiedBy ? ' by ' . $lead->verifiedBy->name : '' }}.@endif
+            @if($lead->forwarded_at)<i class="fa fa-share"></i> Forwarded {{ $lead->forwarded_at->diffForHumans() }}{{ $lead->forwardedBy ? ' by ' . $lead->forwardedBy->name : '' }}.@endif
+        </p>
+    @endif
 
     <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;">
         <div>

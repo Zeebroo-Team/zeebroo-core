@@ -127,6 +127,7 @@ function appConfirm(opts) {
   } = opts;
   return new Promise(resolve => {
     _appConfirmResolve = resolve;
+    $('#app-confirm-cancel-btn').style.display = '';
     $('#app-confirm-box').classList.toggle('danger', !!danger);
     $('#app-confirm-icon').innerHTML = `<i class="fa ${icon}"></i>`;
     $('#app-confirm-title').textContent = title;
@@ -136,6 +137,14 @@ function appConfirm(opts) {
     $('#app-confirm-modal').style.display = 'flex';
     setTimeout(() => $('#app-confirm-submit-btn')?.focus(), 30);
   });
+}
+// Centred message box with a single OK button (same dialog as appConfirm). Resolves when closed.
+function appAlert(opts) {
+  if (typeof opts === 'string') opts = { message: opts };
+  const { title = 'Notice', message = '', okText = '<i class="fa fa-check"></i> OK', icon = 'fa-circle-info' } = opts;
+  const done = appConfirm({ title, message, icon, confirmText: okText });
+  $('#app-confirm-cancel-btn').style.display = 'none';
+  return done;
 }
 function _appConfirmClose(result) {
   $('#app-confirm-modal').style.display = 'none';
@@ -56677,6 +56686,7 @@ async function submitDsCreate() {
     const perms = _crmAccess?.permissions || {};
     Object.keys(perms).forEach(k => document.body.classList.toggle(`crm-deny-${k}`, perms[k] === false));
     document.body.classList.toggle('crm-is-admin', !!_crmAccess?.is_admin);
+    document.body.classList.toggle('crm-uses-inbox', !!_crmAccess?.uses_inbox);
     // A ribbon group whose buttons are all hidden would otherwise show as an empty box
     $$('.ribbon-page[data-page="crm"] .ribbon-group').forEach(grp => {
       grp.classList.remove('crm-perm-hidden');
@@ -58157,6 +58167,7 @@ async function submitDsCreate() {
           ? `<span class="crm-card-date${overdue ? ' crm-card-date--overdue' : ''}" title="Expected close ${close.toLocaleDateString()}"><i class="fa fa-flag-checkered"></i>${close.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>`
           : (lead.created_at ? `<span class="crm-card-date" title="Created ${new Date(lead.created_at).toLocaleString()}"><i class="fa fa-clock"></i>${_crmAgo(lead.created_at)}</span>` : '');
         const tags = (lead.is_customer ? `<span class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Customer</span>` : '')
+          + (lead.needs_review ? `<span class="crm-inbox-flag" title="Flagged for Marketing to review"><i class="fa fa-flag"></i> Review</span>` : '')
           + _crmScoreBadge(lead.score)
           + _crmSourceBadge(lead.source)
           + (lead.assigned_to_name ? `<span class="crm-card-assignee" title="Assigned to ${escHtml(lead.assigned_to_name)}"><i class="fa fa-user"></i> ${escHtml(lead.assigned_to_name)}</span>` : '');
@@ -58518,8 +58529,23 @@ async function submitDsCreate() {
     if (res.status === 201) {
       if (source) _crmPrefSet('crm.lead.lastSource', source);
       $('#crm-lead-modal').style.display = 'none';
-      toast('Lead created.', 'success');
       loadCrmPipeline();
+      // Lead intake may have sent it to the marketing inbox, or added the enquiry to an existing
+      // lead. Either way it won't appear on this board, so say so in a dialog.
+      const intake = res.body?.intake;
+      if (intake?.duplicate || intake?.routed_to_intake) {
+        const title = intake.duplicate ? 'Existing lead found' : 'Sent to the Marketing inbox';
+        const icon  = intake.duplicate ? 'fa-code-merge' : 'fa-inbox';
+        const message = res.body.message
+          + (intake.duplicate ? '' : ' Marketing will verify it and forward it to the right department.');
+        if (_crmAccess?.uses_inbox) {
+          if (await appConfirm({ title, message, icon, confirmText: '<i class="fa fa-inbox"></i> Open Marketing Inbox', cancelText: 'OK' })) openCrmInboxModal();
+        } else {
+          appAlert({ title, message, icon });
+        }
+      } else {
+        toast(res.body?.message || 'Lead created.', 'success');
+      }
     } else {
       const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
       $('#crm-lead-alert').textContent = firstError || res.body?.message || 'Failed to create lead.';
@@ -58983,8 +59009,13 @@ async function submitDsCreate() {
     _crmRenderLeadModal(edit);
     _crmLoadLeadHistory(lead);
 
-    const formId = lead.form_id || _crmPipeline?.default_form?.id || null;
-    const blocks = await _crmLoadLeadFormBlocks(formId);
+    const defaultFormId = _crmPipeline?.default_form?.id || null;
+    const formId = lead.form_id || defaultFormId;
+    let blocks = await _crmLoadLeadFormBlocks(formId);
+    // A lead forwarded from / routed to another pipeline keeps the form it was entered with,
+    // which belongs to that other pipeline — fall back to this pipeline's form, then core fields.
+    if (blocks === null && formId !== defaultFormId) blocks = await _crmLoadLeadFormBlocks(defaultFormId);
+    if (blocks === null) blocks = await _crmLoadLeadFormBlocks(null);
     if (_crmViewLead !== lead) return; // another lead was opened (or the modal closed) meanwhile
     if (blocks === null) {
       $('#crm-lead-view-body').querySelector('.crm-lead-view-section + span').textContent = 'Failed to load form fields.';
@@ -59348,6 +59379,7 @@ async function submitDsCreate() {
   });
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
   $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
+  $('#rb-crm-inbox')?.addEventListener('click',       () => { activateTab('crm'); openCrmInboxModal(); });
 
   // ── Permissions modal ─────────────────────────────────────────────────────
   // Owner/admins pick a user, then toggle CRM functions and choose which stages
@@ -59723,6 +59755,15 @@ async function submitDsCreate() {
           <select class="po-field-input" data-f="head_user_id">${_crmOrgUserOptions(null)}</select>
           <button type="button" class="po-btn-primary" data-org-div-add><i class="fa fa-plus"></i> Add division</button>
         </div>
+      </div>
+
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Lead intake (whole business)</div>
+        <div class="crm-org-row"><span style="min-width:180px">Phone country code</span>
+          <input type="text" class="po-field-input" id="crm-org-phone-cc" maxlength="6" style="width:80px"
+            placeholder="${escHtml(_crmOrg.crm_settings?.default_phone_country_code || '')}" value="${escHtml(_crmOrg.crm_settings?.phone_country_code || '')}">
+          <button type="button" class="po-btn-primary" data-org-save-cc><i class="fa fa-check"></i> Save</button></div>
+        <div class="crm-perms-muted">Local numbers (077…) are matched as +${escHtml(_crmOrg.crm_settings?.effective_phone_country_code || '')} when checking new leads for duplicates.</div>
       </div>`;
   }
 
@@ -59783,6 +59824,10 @@ async function submitDsCreate() {
       const divId = Number(t.closest('[data-org-div]').dataset.orgDiv);
       call = () => API.crmDeleteDivision(divId);
       msg = 'Division deleted.';
+    } else if (t.matches('[data-org-save-cc]')) {
+      const cc = $('#crm-org-phone-cc').value.trim();
+      call = () => API.crmSaveSettings({ phone_country_code: cc || null });
+      msg = 'CRM settings saved.';
     } else {
       return;
     }
@@ -59800,6 +59845,252 @@ async function submitDsCreate() {
 
   $('#crm-org-modal-close')?.addEventListener('click', () => { $('#crm-org-modal').style.display = 'none'; });
   $('#crm-org-close-btn')?.addEventListener('click',   () => { $('#crm-org-modal').style.display = 'none'; });
+
+  // ── Marketing inbox modal ─────────────────────────────────────────────────
+  // New leads in the intake pipeline plus every lead flagged "needs review".
+  // Marketing cleans the details, verifies, forwards to a department / division,
+  // clears review flags and merges duplicates. Every action saves straight away.
+  let _crmInbox       = null;   // { leads, counts, filters, intake_project, forward_targets, sources } from /crm/inbox
+  let _crmInboxFilter = 'all';
+  let _crmInboxQ      = '';
+  let _crmInboxLeadId = null;
+  let _crmInboxLead   = null;   // selected lead with its matches, from /crm/inbox/leads/{id}
+  let _crmInboxSearchTimer = null;
+
+  async function openCrmInboxModal() {
+    $('#crm-inbox-modal').style.display = 'flex';
+    await _crmLoadInbox();
+  }
+
+  function _crmCloseInbox() {
+    $('#crm-inbox-modal').style.display = 'none';
+    // Forwarded leads move between pipelines; refresh the board if one is open
+    if (_crmView === 'relation' && $('#crm-relation-detail')?.style.display === 'flex') loadCrmPipeline();
+  }
+
+  function _crmInboxAlert(msg) {
+    const el = $('#crm-inbox-alert');
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
+  }
+
+  function _crmInboxError(res, fallback) {
+    _crmInboxAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || fallback));
+  }
+
+  async function _crmLoadInbox() {
+    _crmInboxAlert('');
+    const res = await API.crmInbox(_crmInboxFilter, _crmInboxQ);
+    if (res.status !== 200) {
+      $('#crm-inbox-list').innerHTML = `<span class="crm-perms-muted">${escHtml(res.body?.message || 'Failed to load the inbox.')}</span>`;
+      $('#crm-inbox-editor-body').innerHTML = '';
+      return;
+    }
+    _crmInbox = res.body.data;
+    $('#crm-inbox-pipeline').textContent = _crmInbox.intake_project
+      ? `Intake pipeline: ${_crmInbox.intake_project.name}`
+      : 'No intake pipeline set — new leads stay where they are entered';
+    _crmRenderInboxTabs();
+    _crmRenderInboxList();
+    if (!_crmInbox.leads.some(l => l.id === _crmInboxLeadId)) _crmInboxLeadId = _crmInbox.leads[0]?.id ?? null;
+    await _crmSelectInboxLead(_crmInboxLeadId);
+  }
+
+  function _crmRenderInboxTabs() {
+    $('#crm-inbox-tabs').innerHTML = _crmInbox.filters.map(f =>
+      `<button type="button" class="crm-inbox-tab${f.key === _crmInboxFilter ? ' active' : ''}" data-inbox-filter="${f.key}">${escHtml(f.label)} (${_crmInbox.counts[f.key] ?? 0})</button>`).join('');
+  }
+
+  function _crmRenderInboxList() {
+    const list = $('#crm-inbox-list');
+    if (!_crmInbox.leads.length) {
+      list.innerHTML = `<span class="crm-perms-muted">${_crmInboxQ ? 'No leads match your search.' : 'Nothing waiting — the inbox is empty.'}</span>`;
+      return;
+    }
+    list.innerHTML = _crmInbox.leads.map(l => {
+      const tag = l.needs_review ? `<span class="crm-inbox-flag" title="${escHtml(l.review_reason_label || 'Needs review')}"><i class="fa fa-flag"></i></span>`
+                : l.verified_at ? '<span class="crm-inbox-ok"><i class="fa fa-check"></i></span>' : '';
+      return `<button type="button" class="crm-perms-user${l.id === _crmInboxLeadId ? ' active' : ''}" data-inbox-lead="${l.id}">
+        <span class="crm-perms-avatar" style="background:${_crmAvatarColor(l.name)};color:#fff">${escHtml(_crmInitials(l.name))}</span>
+        <span class="crm-perms-user-info">
+          <span class="crm-perms-user-name" style="display:block">${escHtml(l.name)}</span>
+          <span class="crm-perms-user-sub" style="display:block">${escHtml(l.phone || l.email || '—')} · ${escHtml(l.source_label || '')} · ${_crmAgo(l.created_at)}</span>
+        </span>
+        ${tag}
+      </button>`;
+    }).join('');
+  }
+
+  async function _crmSelectInboxLead(id) {
+    _crmInboxLeadId = id;
+    _crmInboxLead = null;
+    $$('#crm-inbox-list [data-inbox-lead]').forEach(b => b.classList.toggle('active', Number(b.dataset.inboxLead) === id));
+    if (!id) { $('#crm-inbox-editor-body').innerHTML = '<span class="crm-perms-muted">Select a lead.</span>'; return; }
+    $('#crm-inbox-editor-body').innerHTML = '<span class="crm-perms-muted">Loading…</span>';
+    const res = await API.crmInboxLead(id);
+    if (_crmInboxLeadId !== id) return;
+    if (res.status !== 200) { _crmInboxError(res, 'Failed to load the lead.'); return; }
+    _crmInboxLead = res.body.data;
+    _crmRenderInboxEditor();
+  }
+
+  function _crmInboxDivisionOptions(deptId) {
+    const dept = _crmInbox.forward_targets.find(d => d.id === Number(deptId));
+    return '<option value="">Whole department</option>' + (dept?.divisions || []).map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
+  }
+
+  function _crmRenderInboxEditor() {
+    const body = $('#crm-inbox-editor-body');
+    const l = _crmInboxLead;
+    if (!l) { body.innerHTML = '<span class="crm-perms-muted">Select a lead.</span>'; return; }
+
+    const can = l.can || {};
+    const ro = can.edit ? '' : ' disabled';
+    const field = (label, key, type = 'text', max = 255) =>
+      `<label>${label}<input type="${type}" class="po-field-input" data-f="${key}" maxlength="${max}" value="${escHtml(l[key] || '')}"${ro}></label>`;
+    const area = (label, key, max) =>
+      `<label>${label}<textarea class="po-field-input" data-f="${key}" rows="2" maxlength="${max}"${ro}>${escHtml(l[key] || '')}</textarea></label>`;
+    // Never offer the pipeline the lead is already in (e.g. a repeat enquiry on a Sales lead)
+    const targets = _crmInbox.forward_targets.filter(d => d.pipeline.id !== l.project?.id);
+    const askedFor = l.requested_department?.id;
+    const firstDept = targets.some(d => d.id === askedFor) ? askedFor : '';
+    const matches = l.duplicates || { leads: [], customers: [] };
+
+    body.innerHTML = `
+      <div>
+        <div style="font-size:15px;font-weight:700;display:flex;gap:8px;align-items:center;flex-wrap:wrap">${escHtml(l.name)}
+          ${l.needs_review ? `<span class="crm-inbox-flag"><i class="fa fa-flag"></i> ${escHtml(l.review_reason_label || 'Needs review')}</span>` : ''}
+          ${l.verified_at ? `<span class="crm-inbox-ok"><i class="fa fa-check"></i> Verified${l.verified_by_name ? ' by ' + escHtml(l.verified_by_name) : ''}</span>` : ''}
+        </div>
+        <div class="crm-perms-muted">
+          ${escHtml(l.project?.name || '')} · ${escHtml(l.stage?.name || '')}
+          ${l.requested_department ? ` · Asked for <strong>${escHtml(l.requested_department.name)}</strong>` : ''}
+          ${l.customer ? ` · Customer: ${escHtml(l.customer.name)}` : ''}
+          · Added ${_crmAgo(l.created_at)}${l.created_by_name ? ' by ' + escHtml(l.created_by_name) : ''}
+        </div>
+      </div>
+
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Details</div>
+        <div class="crm-inbox-grid">
+          ${field('Name', 'name', 'text', 150)}
+          ${field('Company', 'company')}
+          ${field('Phone', 'phone', 'text', 50)}
+          ${field('Email', 'email', 'email')}
+          <label>Source<select class="po-field-input" data-f="source"${ro}>
+            ${_crmInbox.sources.map(s => `<option value="${s.key}"${s.key === l.source ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
+          </select></label>
+        </div>
+        ${area('Product interest', 'product_interest_note', 2000)}
+        ${area('Notes', 'notes', 5000)}
+        <div class="crm-org-row">
+          ${can.edit ? '<button type="button" class="po-btn-primary" data-inbox-save><i class="fa fa-floppy-disk"></i> Save details</button>' : ''}
+          ${can.edit && !l.verified_at ? '<button type="button" class="po-btn-ghost" data-inbox-verify><i class="fa fa-circle-check"></i> Mark verified</button>' : ''}
+          ${can.review && l.needs_review ? '<button type="button" class="po-btn-ghost" data-inbox-review><i class="fa fa-flag-checkered"></i> Mark reviewed</button>' : ''}
+        </div>
+      </div>
+
+      ${can.forward ? `<div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">${l.in_intake ? 'Forward' : 'Move to another department'}</div>
+        ${l.in_intake ? '' : `<div class="crm-perms-muted"><i class="fa fa-circle-info"></i> Already forwarded — this lead is in the
+          <strong>${escHtml(l.project?.name || '')}</strong> pipeline. It is here only to review the flag; use <em>Mark reviewed</em> or <em>Merge</em>.</div>`}
+        ${targets.length ? `<div class="crm-inbox-grid">
+          <label>Department<select class="po-field-input" id="crm-inbox-dept">
+            <option value="">Choose…</option>
+            ${targets.map(d => `<option value="${d.id}"${d.id === firstDept ? ' selected' : ''}>${escHtml(d.name)}</option>`).join('')}
+          </select></label>
+          <label>Division<select class="po-field-input" id="crm-inbox-div">${_crmInboxDivisionOptions(firstDept)}</select></label>
+        </div>
+        <label style="display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted,#6b7280)">Note for the department (optional)
+          <textarea class="po-field-input" id="crm-inbox-note" rows="2" maxlength="2000"></textarea></label>
+        <div class="crm-org-row"><button type="button" class="po-btn-primary" data-inbox-forward><i class="fa fa-share"></i> Forward</button></div>`
+        : '<span class="crm-perms-muted">No other department has a pipeline. Link pipelines in CRM → Org Structure.</span>'}
+      </div>` : ''}
+
+      ${matches.leads.length || matches.customers.length ? `<div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Matches (same phone or email)</div>
+        <div>
+          ${matches.leads.map(m => `<div class="crm-inbox-match">
+            <span><strong>${escHtml(m.name)}</strong> #${m.id}<br>
+              <span class="crm-perms-muted">${escHtml(m.project_name || '')} · ${escHtml(m.stage_name || '')}${m.is_open ? '' : ' (closed)'} · ${escHtml(m.phone || m.email || '')}</span></span>
+            ${can.review ? `<button type="button" class="po-btn-ghost" data-inbox-merge="${m.id}"><i class="fa fa-code-merge"></i> Merge into</button>` : ''}
+          </div>`).join('')}
+          ${matches.customers.map(c => `<div class="crm-inbox-match"><span><i class="fa fa-user-check"></i> Customer <strong>${escHtml(c.name)}</strong> · ${escHtml(c.phone || c.email || '')}</span></div>`).join('')}
+        </div>
+      </div>` : ''}`;
+  }
+
+  /** Run an inbox action, then reload the list (the lead may have left it). */
+  async function _crmInboxRun(btn, call, okMsg) {
+    btn.disabled = true;
+    _crmInboxAlert('');
+    const res = await call();
+    if (res.status === 200 || res.status === 201) {
+      // 'info', not 'success': success toasts are silent and these actions move leads out of view
+      toast(res.body?.message || okMsg, 'info');
+      await _crmLoadInbox();
+    } else {
+      btn.disabled = false;
+      _crmInboxError(res, 'Failed to save.');
+    }
+  }
+
+  $('#crm-inbox-tabs')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-inbox-filter]');
+    if (!b) return;
+    _crmInboxFilter = b.dataset.inboxFilter;
+    _crmLoadInbox();
+  });
+
+  $('#crm-inbox-search')?.addEventListener('input', e => {
+    clearTimeout(_crmInboxSearchTimer);
+    _crmInboxSearchTimer = setTimeout(() => { _crmInboxQ = e.target.value.trim(); _crmLoadInbox(); }, 300);
+  });
+
+  $('#crm-inbox-list')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-inbox-lead]');
+    if (!b) return;
+    _crmInboxAlert('');
+    _crmSelectInboxLead(Number(b.dataset.inboxLead));
+  });
+
+  $('#crm-inbox-editor-body')?.addEventListener('change', e => {
+    if (e.target.id === 'crm-inbox-dept') $('#crm-inbox-div').innerHTML = _crmInboxDivisionOptions(e.target.value);
+  });
+
+  $('#crm-inbox-editor-body')?.addEventListener('click', e => {
+    const t = e.target.closest('button');
+    const id = _crmInboxLeadId;
+    if (!t || !id) return;
+
+    if (t.matches('[data-inbox-save]')) {
+      const body = {};
+      $$('#crm-inbox-editor-body [data-f]').forEach(el => { body[el.dataset.f] = el.value.trim() || null; });
+      if (!body.name) { _crmInboxAlert('Enter a name.'); return; }
+      _crmInboxRun(t, () => API.crmInboxUpdateLead(id, body), 'Lead details saved.');
+    } else if (t.matches('[data-inbox-verify]')) {
+      _crmInboxRun(t, () => API.crmInboxVerify(id), 'Lead verified.');
+    } else if (t.matches('[data-inbox-review]')) {
+      _crmInboxRun(t, () => API.crmInboxClearReview(id), 'Review flag cleared.');
+    } else if (t.matches('[data-inbox-forward]')) {
+      const dept = $('#crm-inbox-dept').value;
+      if (!dept) { _crmInboxAlert('Choose a department to forward to.'); return; }
+      const div = $('#crm-inbox-div').value;
+      _crmInboxRun(t, () => API.crmInboxForward(id, {
+        department_id: Number(dept),
+        division_id: div ? Number(div) : null,
+        note: $('#crm-inbox-note').value.trim() || null,
+      }), 'Lead forwarded.');
+    } else if (t.matches('[data-inbox-merge]')) {
+      const targetId = Number(t.dataset.inboxMerge);
+      if (!confirm(`Merge this lead into lead #${targetId}? Its activities and tasks move there and this lead is deleted.`)) return;
+      _crmInboxRun(t, () => API.crmInboxMerge(id, targetId), 'Leads merged.');
+    }
+  });
+
+  $('#crm-inbox-refresh-btn')?.addEventListener('click', () => _crmLoadInbox());
+  $('#crm-inbox-modal-close')?.addEventListener('click', _crmCloseInbox);
+  $('#crm-inbox-close-btn')?.addEventListener('click',   _crmCloseInbox);
 
   // ── Subnav ────────────────────────────────────────────────────────────────
   $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));

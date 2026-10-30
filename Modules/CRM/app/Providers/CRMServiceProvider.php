@@ -27,6 +27,7 @@ class CRMServiceProvider extends ModuleServiceProvider
      */
     protected array $commands = [
         \Modules\CRM\Console\Commands\MapStageStatusesCommand::class,
+        \Modules\CRM\Console\Commands\NormalizeLeadPhonesCommand::class,
     ];
 
     /**
@@ -38,6 +39,14 @@ class CRMServiceProvider extends ModuleServiceProvider
         EventServiceProvider::class,
         RouteServiceProvider::class,
     ];
+
+    public function register(): void
+    {
+        parent::register();
+
+        // Caches each business's settings for the request / queued job
+        $this->app->scoped(\Modules\CRM\Services\CrmSettingsService::class);
+    }
 
     public function boot(): void
     {

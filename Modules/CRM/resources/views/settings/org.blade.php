@@ -35,6 +35,22 @@
         department head is the CRM department head; a division head overrides it for that division.
     </p>
 
+    <section class="crm-org-dept">
+        <div class="crm-org-dept__head"><h2><i class="fa fa-inbox"></i> Lead intake</h2></div>
+        <form method="POST" action="{{ route('crm.settings.update') }}" class="crm-org-row">
+            @csrf @method('PUT')
+            <label for="crm-phone-cc">Phone country code</label>
+            <input type="text" id="crm-phone-cc" name="phone_country_code" maxlength="6" style="width:90px"
+                   value="{{ old('phone_country_code', $crmSettings['phone_country_code']) }}"
+                   placeholder="{{ $crmSettings['default_phone_country_code'] }}">
+            <button class="crm-org-btn crm-org-btn--primary" type="submit"><i class="fa fa-check"></i> Save</button>
+            <span class="muted" style="font-size:12px;">
+                Local numbers like 077 123 4567 are matched as +{{ $crmSettings['effective_phone_country_code'] }} 77 123 4567 when checking for duplicate leads.
+                Mark one department below as the marketing intake to send every new lead to its inbox first.
+            </span>
+        </form>
+    </section>
+
     @if(empty($departments))
         <section class="pcat-inline">
             <h2>No departments yet</h2>

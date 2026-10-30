@@ -23,7 +23,9 @@ use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\IntakeResult;
 use Modules\CRM\Services\LeadAuditService;
+use Modules\CRM\Services\LeadIntakeService;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
 use Modules\CRM\Services\LeadService;
@@ -54,6 +56,7 @@ class PosCrmApiController extends Controller
         private readonly CrmOrgService               $org,
         private readonly LostReasonService           $lostReasons,
         private readonly LeadSourceService           $leadSources,
+        private readonly LeadIntakeService           $intake,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -140,7 +143,8 @@ class PosCrmApiController extends Controller
             ->orderByDesc('id')
             ->get(['id', 'project_id', 'department_id', 'division_id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'source_id',
                 'estimated_value', 'score', 'expected_close_date', 'notes', 'product_interest_note', 'lost_reason_id', 'lost_reason',
-                'on_hold_from_stage_id', 'closed_at', 'assigned_to', 'created_by', 'created_at', 'updated_at']);
+                'on_hold_from_stage_id', 'closed_at', 'assigned_to', 'created_by', 'created_at', 'updated_at',
+                'needs_review', 'review_reason', 'verified_at', 'forwarded_at']);
 
         $editable = $this->policy->editableLeadIds($access, $leads);
 
@@ -395,9 +399,9 @@ class PosCrmApiController extends Controller
 
         $this->abortUnlessStageVisible($request, $business, $project->id, $validated['stage_id'] ?? null);
 
-        $lead = $this->leads->create($project, $validated, $request->user()?->id);
+        $result = $this->intake->capture($validated, $validated['source'], $project, $request->user()?->id);
 
-        return response()->json(['data' => $lead->load('stage')], 201);
+        return $this->intakeResponse($request, $business, $result);
     }
 
     public function updateLead(Request $request, int $leadId): JsonResponse
@@ -1043,9 +1047,9 @@ class PosCrmApiController extends Controller
         $source = ($data['source'] ?? null) ?: Lead::SOURCE_MANUAL;
         unset($data['source']);
 
-        $lead = $this->forms->submit($form, $data, $source, $request->user()?->id);
+        $result = $this->forms->submit($form, $data, $source, $request->user()?->id);
 
-        return response()->json(['data' => $lead->load('stage')], 201);
+        return $this->intakeResponse($request, $business, $result);
     }
 
     public function setDefaultForm(Request $request, int $projectId, int $formId): JsonResponse
@@ -1203,6 +1207,24 @@ class PosCrmApiController extends Controller
             'lost_reason'           => ['sometimes', 'nullable', 'string', 'max:255'],
             'reason'                => ['sometimes', 'nullable', 'string', 'max:500'],
         ];
+    }
+
+    /**
+     * 201 for every accepted lead, so older desktop builds keep showing success. `data` is the
+     * lead when the user may still see it — it may have gone to the marketing inbox, or be
+     * another department's existing lead the enquiry was added to — and null otherwise;
+     * `intake` says what happened.
+     */
+    private function intakeResponse(Request $request, Business $business, IntakeResult $result): JsonResponse
+    {
+        $lead    = $result->lead->fresh(['stage']);
+        $visible = $this->policy->canView($this->crmAccess($request, $business), $lead);
+
+        return response()->json([
+            'data'    => $visible ? $lead : null,
+            'intake'  => $result->toArray(),
+            'message' => $result->message(),
+        ], 201);
     }
 
     /** @return list<array{id:int,name:string,quantity:?float}> */

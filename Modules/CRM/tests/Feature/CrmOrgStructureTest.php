@@ -97,6 +97,7 @@ beforeEach(function () {
     foreach (crmOrgMigrations() as $file) {
         (require $file)->up();
     }
+    (require dirname(__DIR__, 2) . '/database/migrations/2026_11_02_100000_create_crm_settings_table.php')->up();
 
     DB::table('users')->insert([
         ['id' => 1, 'name' => 'Owner',  'email' => 'owner@example.com'],
@@ -307,7 +308,7 @@ test('the department list shows pipeline, settings, divisions and missing-user w
 
 function crmOrgApi(): PosCrmOrgApiController
 {
-    return new class(app(CrmOrgService::class), app(CrmPermissionService::class)) extends PosCrmOrgApiController {
+    return new class(app(CrmOrgService::class), app(CrmPermissionService::class), app(\Modules\CRM\Services\CrmSettingsService::class)) extends PosCrmOrgApiController {
         protected function businessOrAbort(Request $request): Business
         {
             return Business::find(7);

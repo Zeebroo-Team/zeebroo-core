@@ -99,7 +99,19 @@
 .crm-org-row .po-field-input{width:auto;padding:5px 8px;font-size:12.5px}
 .crm-org-row label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
 .crm-org-row input[type=checkbox]{accent-color:#7c3aed}
+/* CRM marketing inbox modal — same two-pane layout */
+.crm-inbox-tabs{display:flex;flex-wrap:wrap;gap:4px}
+.crm-inbox-tab{border:1px solid var(--border,#e5e7eb);background:transparent;border-radius:999px;padding:3px 9px;font-size:11.5px;cursor:pointer;color:var(--text-muted,#6b7280)}
+.crm-inbox-tab.active{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.crm-inbox-flag{background:rgba(245,158,11,.16);color:#b45309;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-inbox-ok{background:rgba(22,163,74,.14);color:#15803d;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-inbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.crm-inbox-grid label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted,#6b7280)}
+.crm-inbox-grid .po-field-input{width:100%;padding:5px 8px;font-size:12.5px}
+.crm-inbox-match{display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:12px;padding:6px 0;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-inbox-match:first-child{border-top:0}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
+body:not(.crm-uses-inbox) #rb-crm-inbox,
 body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
@@ -1925,6 +1937,9 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             </button>
             <button class="ribbon-btn-lg primary" id="rb-crm-new-lead">
               <i class="fa fa-plus"></i>New Lead
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-inbox">
+              <i class="fa fa-inbox"></i>Marketing<br>Inbox
             </button>
           </div>
           <div class="ribbon-group-label">Pipeline</div>
@@ -12466,6 +12481,38 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-org-close-btn"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Marketing Inbox Modal ── -->
+  <div class="modal-overlay" id="crm-inbox-modal" style="display:none">
+    <div class="po-aim-shell" style="width:1150px;max-width:96vw;height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-inbox" style="color:#7c3aed"></i>
+        <span>Marketing Inbox</span>
+        <span class="crm-perms-muted" id="crm-inbox-pipeline" style="margin-left:8px;font-size:12px"></span>
+        <button class="psm-close" id="crm-inbox-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="po-aim-body crm-perms-body">
+        <aside class="crm-perms-users">
+          <div class="crm-inbox-tabs" id="crm-inbox-tabs"></div>
+          <input type="search" class="po-field-input" id="crm-inbox-search" placeholder="Search name, phone, email…">
+          <div id="crm-inbox-list" class="crm-perms-user-list">
+            <span class="crm-perms-muted">Loading…</span>
+          </div>
+        </aside>
+
+        <section class="crm-perms-editor">
+          <div id="crm-inbox-alert" class="svc-form-alert" style="display:none"></div>
+          <div id="crm-inbox-editor-body" style="display:flex;flex-direction:column;gap:14px"><span class="crm-perms-muted">Select a lead.</span></div>
+        </section>
+      </div>
+
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-inbox-refresh-btn"><i class="fa fa-rotate"></i> Refresh</button>
+        <button class="po-btn-ghost" id="crm-inbox-close-btn"><i class="fa fa-xmark"></i> Close</button>
       </div>
     </div>
   </div>

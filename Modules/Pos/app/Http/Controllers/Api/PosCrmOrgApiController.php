@@ -10,6 +10,7 @@ use Modules\Business\Models\Business;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\CrmSettingsService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
 /** CRM org structure (departments, divisions, pipeline link, department settings) — admin only. */
@@ -20,6 +21,7 @@ class PosCrmOrgApiController extends Controller
     public function __construct(
         private readonly CrmOrgService $org,
         private readonly CrmPermissionService $permissions,
+        private readonly CrmSettingsService $settings,
     ) {}
 
     /** GET /api/v1/pos/crm/org — everything the org-structure modal needs. */
@@ -37,8 +39,30 @@ class PosCrmOrgApiController extends Controller
                     ->get(['id', 'name', 'status', 'department_id']),
                 'users'       => $this->org->businessUsers($business),
                 'marketing_intake_department_id' => $this->org->marketingIntakeDepartment($business)?->id,
+                'crm_settings' => $this->settings->present($business),
             ],
         ]);
+    }
+
+    /** GET /api/v1/pos/crm/settings — business-wide CRM settings. */
+    public function crmSettings(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrmAdmin($request, $business);
+
+        return response()->json(['data' => $this->settings->present($business)]);
+    }
+
+    /** PUT /api/v1/pos/crm/settings — phone_country_code (digits, e.g. "94"; empty = the default). */
+    public function saveCrmSettings(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrmAdmin($request, $business);
+
+        $validated = $request->validate(['phone_country_code' => ['nullable', 'string', 'max:6', 'regex:/^\+?\d{0,4}$/']]);
+        $this->settings->save($business, $validated);
+
+        return response()->json(['message' => 'CRM settings saved.', 'data' => $this->settings->present($business)]);
     }
 
     /** POST /api/v1/pos/crm/org/departments/{department}/divisions */

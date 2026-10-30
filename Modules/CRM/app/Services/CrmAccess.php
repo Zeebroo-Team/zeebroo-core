@@ -136,6 +136,12 @@ final class CrmAccess
         return $departmentId !== null && in_array($departmentId, $this->departmentIds, true);
     }
 
+    /** Opens the marketing inbox: Marketing (once an intake department is set) and those who see every lead. */
+    public function usesInbox(): bool
+    {
+        return $this->viewsAllLeads() || ($this->isMarketing() && $this->intakeDepartmentId !== null);
+    }
+
     /** Marketing working the intake department's pipeline. */
     public function worksIntake(?int $departmentId): bool
     {
@@ -223,6 +229,7 @@ final class CrmAccess
             'can_view_all_leads'   => $this->viewsAllLeads(),
             'can_work_all_leads'   => $this->worksAllLeads(),
             'can_forward'          => $this->unrestricted || ($this->isMarketing() && $this->intakeDepartmentId !== null),
+            'uses_inbox'           => $this->usesInbox(),
             'can_assign'           => $this->worksAllLeads() || $this->isHead(),
             'can_approve'          => $this->unrestricted || $this->isHead(),
             'permissions'          => $permissions,
