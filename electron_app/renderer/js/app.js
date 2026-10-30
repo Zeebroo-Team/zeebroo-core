@@ -46076,6 +46076,7 @@ function buildEmployeeCard(e) {
           <div class="lm-card-pills">
             <span class="lm-pill" style="background:${color}18;color:${color}">${escHtml(e.type_label || e.employment_type || '—')}</span>
             ${meta ? `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)">${meta}</span>` : ''}
+            ${_empAccessBadgeHtml(e.system_access)}
           </div>
         </div>
         ${e.basic_salary_fmt ? `<span style="font-size:13px;font-weight:700;color:var(--accent);margin-left:auto;white-space:nowrap">${escHtml(_hrMoney(e.basic_salary_fmt))}</span>` : ''}
@@ -46100,35 +46101,8 @@ async function openEmployeeDetailPage(emp, from = 'employees') {
   $('#department-detail-view').style.display = 'none';
   $('#employee-detail-view').style.display   = 'flex';
 
-  const typeColor = { full_time: '#4caf7d', part_time: '#f7a54e', contract: '#9c6ef7' };
-  const color = typeColor[emp.employment_type] || '#90a4ae';
-
-  $('#emp-detail-name').textContent        = emp.name || '—';
-  $('#emp-detail-breadcrumb').textContent  = emp.name || 'Employee Detail';
-  $('#emp-detail-meta').textContent        = [emp.employee_id ? '#' + emp.employee_id : '', emp.date_of_joining || ''].filter(Boolean).join(' · ');
-  $('#emp-detail-badges').innerHTML = [
-    `<span class="lm-badge" style="background:${color}20;color:${color};border:1px solid ${color}40">${escHtml(emp.type_label || emp.employment_type || '—')}</span>`,
-    emp.department ? `<span class="lm-badge" style="background:var(--sidebar-bg);color:var(--text-muted)">${escHtml(emp.department)}</span>` : '',
-    emp.job_title  ? `<span class="lm-badge" style="background:var(--sidebar-bg);color:var(--text-muted)">${escHtml(emp.job_title)}</span>`  : '',
-  ].join('');
-
-  // Overview pane — daily / hourly rates come from basic salary ÷ the Settings → HR working schedule
-  const rateBasis = emp.working_days_per_week
-    ? `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Based on ${emp.working_days_per_week} working day${emp.working_days_per_week !== 1 ? 's' : ''} · ${_psmHrFmtHours(emp.working_minutes_per_week || 0)} per week</div>`
-    : `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Set the working schedule in Settings → HR</div>`;
-  const ovPane = $('#emp-pane-overview');
-  ovPane.innerHTML = `
-    <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      ${empDetailRow('Employee ID', '#' + (emp.employee_id || '—'))}
-      ${empDetailRow('Employment Type', emp.type_label || '—')}
-      ${empDetailRow('Department', emp.department || '—')}
-      ${empDetailRow('Job Title', emp.job_title || '—')}
-      ${empDetailRow('Basic Salary', emp.basic_salary_fmt ? _hrMoney(emp.basic_salary_fmt) : '—')}
-      ${empDetailRow('Date of Joining', emp.date_of_joining || '—')}
-      ${empDetailRow('Average Daily Salary', (emp.daily_rate_fmt ? escHtml(_hrMoney(emp.daily_rate_fmt)) : '—') + rateBasis)}
-      ${empDetailRow('Hourly Rate', (emp.hourly_rate_fmt ? escHtml(_hrMoney(emp.hourly_rate_fmt)) : '—') + rateBasis)}
-      ${empDetailRow('Phone', emp.phone_number || '—')}
-    </div>`;
+  _empDetailFull = null;
+  _renderEmployeeSummary(emp);
 
   // Switch to overview tab
   $$('#employee-detail-view .inv-tab').forEach(t => t.classList.remove('active'));
@@ -46139,13 +46113,210 @@ async function openEmployeeDetailPage(emp, from = 'employees') {
   $('#emp-pane-leave').innerHTML = '';
   $('#emp-pane-attendance').innerHTML = '';
   $('#emp-pane-bills').innerHTML = '';
+  $('#emp-pane-access').innerHTML = '';
 
-  // Lazy-load personal details + leave + attendance (current month) + assigned bills
+  // Lazy-load personal details + leave + attendance (current month) + assigned bills + system access
   _empDetailCurrent = emp;
   loadEmployeePersonalTab(emp.id);
   loadEmployeeLeaveTab(emp.id);
   loadEmployeeAttendanceTab(emp);
   loadEmployeeBillsTab(emp.id);
+  loadEmployeeAccessTab(emp.id);
+}
+
+// Hero (name, meta, badges) + Overview pane — re-rendered after an inline edit
+function _renderEmployeeSummary(emp) {
+  const typeColor = { full_time: '#4caf7d', part_time: '#f7a54e', contract: '#9c6ef7' };
+  const color = typeColor[emp.employment_type] || '#90a4ae';
+
+  $('#emp-detail-name').textContent        = emp.name || '—';
+  $('#emp-detail-breadcrumb').textContent  = emp.name || 'Employee Detail';
+  $('#emp-detail-meta').textContent        = [emp.employee_id ? '#' + emp.employee_id : '', emp.date_of_joining || ''].filter(Boolean).join(' · ');
+  // Keep the System Access badge (added by the access tab) when re-rendering for the same employee
+  const accessBadge = emp.id === _empDetailCurrent?.id ? ($('#emp-detail-badges .emp-access-badge')?.outerHTML || '') : '';
+  $('#emp-detail-badges').innerHTML = [
+    `<span class="lm-badge" style="background:${color}20;color:${color};border:1px solid ${color}40">${escHtml(emp.type_label || emp.employment_type || '—')}</span>`,
+    emp.department ? `<span class="lm-badge" style="background:var(--sidebar-bg);color:var(--text-muted)">${escHtml(emp.department)}</span>` : '',
+    emp.job_title  ? `<span class="lm-badge" style="background:var(--sidebar-bg);color:var(--text-muted)">${escHtml(emp.job_title)}</span>`  : '',
+    accessBadge,
+  ].join('');
+
+  // Overview pane — daily / hourly rates come from basic salary ÷ the Settings → HR working schedule
+  const rateBasis = emp.working_days_per_week
+    ? `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Based on ${emp.working_days_per_week} working day${emp.working_days_per_week !== 1 ? 's' : ''} · ${_psmHrFmtHours(emp.working_minutes_per_week || 0)} per week</div>`
+    : `<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Set the working schedule in Settings → HR</div>`;
+  const ovPane = $('#emp-pane-overview');
+  ovPane.innerHTML = `
+    <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      ${empEditRow('Employee ID', '#' + escHtml(emp.employee_id || '—'), 'employee_id')}
+      ${empEditRow('Employment Type', escHtml(emp.type_label || '—'), 'employment_type')}
+      ${empEditRow('Department', escHtml(emp.department || '—'), 'department_id')}
+      ${empEditRow('Job Title', escHtml(emp.job_title || '—'), 'job_title_id')}
+      ${empEditRow('Basic Salary', emp.basic_salary_fmt ? escHtml(_hrMoney(emp.basic_salary_fmt)) : '—', 'basic_salary')}
+      ${empEditRow('Date of Joining', escHtml(emp.date_of_joining || '—'), 'date_of_joining')}
+      ${empDetailRow('Average Daily Salary', (emp.daily_rate_fmt ? escHtml(_hrMoney(emp.daily_rate_fmt)) : '—') + rateBasis)}
+      ${empDetailRow('Hourly Rate', (emp.hourly_rate_fmt ? escHtml(_hrMoney(emp.hourly_rate_fmt)) : '—') + rateBasis)}
+      ${empEditRow('Phone', escHtml(emp.phone_number || '—'), 'phone_number')}
+    </div>`;
+}
+
+// ── Employee detail: System Access tab ──────────────────────────────────────
+// Lets the employee sign in to this business (web + desktop) as a team member.
+// Granting sends the normal team invitation to their email; accepting links the account to this profile.
+
+let _empAccessSeq = 0;
+
+const EMP_ACCESS_BADGE = {
+  active:  { label: 'Has login', color: '#16a34a', icon: 'fa-circle-check' },
+  invited: { label: 'Invited',   color: '#d97706', icon: 'fa-envelope' },
+};
+
+function _empAccessBadgeHtml(status, cls = 'lm-pill') {
+  const b = EMP_ACCESS_BADGE[status];
+  return b ? `<span class="${cls}" style="background:${b.color}18;color:${b.color}"><i class="fa ${b.icon}"></i> ${b.label}</span>` : '';
+}
+
+async function loadEmployeeAccessTab(empId) {
+  const pane = $('#emp-pane-access');
+  const seq  = ++_empAccessSeq;
+  pane.innerHTML = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading access…</p>';
+
+  const [res, rolesRes] = await Promise.all([API.employeeAccess(empId), API.rolesList()]);
+  if (seq !== _empAccessSeq) return;
+  if (res.status !== 200) {
+    pane.innerHTML = `<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> ${escHtml(res.body?.message || 'Failed to load system access.')}</p>`;
+    return;
+  }
+
+  const roles = rolesRes.status === 200 ? (rolesRes.body.data || []) : [];
+  _renderEmployeeAccess(pane, empId, res.body.data, roles, Boolean(res.body.can_manage));
+}
+
+function _renderEmployeeAccess(pane, empId, a, roles, canManage) {
+  // Hero badge mirrors the tab state
+  $('#emp-detail-badges').querySelector('.emp-access-badge')?.remove();
+  if (EMP_ACCESS_BADGE[a.status]) {
+    $('#emp-detail-badges').insertAdjacentHTML('beforeend', _empAccessBadgeHtml(a.status, 'lm-badge emp-access-badge'));
+  }
+
+  // Role picker: selectable cards (name + description + access level) instead of a native <select>
+  const roleCards = sel => roles.map(r => {
+    const c      = r.color || '#64748b';
+    const scope  = r.permissions === null ? 'Full access' : `${(r.permissions || []).length} permission${(r.permissions || []).length === 1 ? '' : 's'}`;
+    const active = r.slug === sel;
+    return `
+      <button type="button" class="emp-access-role${active ? ' active' : ''}" data-slug="${escHtml(r.slug)}" style="--rc:${escHtml(c)}" aria-pressed="${active}">
+        <span class="emp-access-role-top">
+          <span class="emp-access-role-dot"></span>
+          <b>${escHtml(r.name)}</b>
+          <i class="fa fa-circle-check emp-access-role-check"></i>
+        </span>
+        <span class="emp-access-role-desc">${escHtml(r.description || 'Custom role')}</span>
+        <span class="emp-access-role-scope${r.permissions === null ? ' full' : ''}">${scope}</span>
+      </button>`;
+  }).join('');
+  const fmt = d => d ? new Date(d).toLocaleString() : '—';
+
+  const head = {
+    none:    { icon: 'fa-lock',         color: '#64748b', title: 'No system access',
+               text: 'This employee cannot sign in to the business yet. Give access to send them a team invitation by email — they choose their own password when they accept.' },
+    invited: { icon: 'fa-envelope',     color: '#d97706', title: a.invitation_expired ? 'Invitation expired' : 'Invitation sent',
+               text: a.invitation_expired ? 'The invitation link has expired. Resend it to give them a new link.' : 'Waiting for the employee to accept the invitation in their email.' },
+    active:  { icon: 'fa-circle-check', color: '#16a34a', title: 'Has system access',
+               text: 'This employee signs in to the business with their own account. What they can open is controlled by their role (Settings → Roles).' },
+  }[a.status] || {};
+
+  const info = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">
+      ${empDetailRow('Sign-in email', escHtml(a.email || '—'))}
+      ${empDetailRow('Role', a.role_name ? escHtml(a.role_name) : '—')}
+      ${a.status === 'invited' ? empDetailRow('Invitation sent', escHtml(fmt(a.sent_at))) : ''}
+      ${a.status === 'active' ? empDetailRow('Account status', escHtml(a.member_status || 'active')) : ''}
+    </div>`;
+
+  let actions = '';
+  if (!canManage) {
+    actions = '<p style="margin-top:18px;font-size:12px;color:var(--text-muted)"><i class="fa fa-circle-info"></i> Only the business owner or an admin can change system access.</p>';
+  } else if (!roles.length) {
+    actions = '<p style="margin-top:18px;font-size:12px;color:#e74c3c">Could not load roles.</p>';
+  } else {
+    const btnLabel = { none: '<i class="fa fa-paper-plane"></i> Give access', invited: '<i class="fa fa-paper-plane"></i> Update &amp; resend', active: '<i class="fa fa-floppy-disk"></i> Change role' }[a.status];
+    actions = `
+      <div class="bf-label" style="margin-top:22px">${a.status === 'none' ? 'CHOOSE A ROLE' : 'ROLE'}</div>
+      <div class="emp-access-roles" id="emp-access-roles">${roleCards(a.role || 'staff')}</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:16px">
+        <button class="bill-save-btn" id="emp-access-grant">${btnLabel}</button>
+        ${a.status === 'invited' ? '<button class="btn-secondary" id="emp-access-resend"><i class="fa fa-rotate-right"></i> Resend</button>' : ''}
+        ${a.status !== 'none' ? `<button class="btn-secondary" id="emp-access-revoke" style="color:#dc2626;margin-left:auto"><i class="fa fa-user-slash"></i> ${a.status === 'active' ? 'Remove access' : 'Cancel invitation'}</button>` : ''}
+      </div>`;
+  }
+
+  pane.innerHTML = `
+    <div style="padding:20px;max-width:760px">
+      <div style="display:flex;gap:14px;align-items:flex-start;padding:16px;border:1px solid var(--border);border-radius:10px;background:${head.color}0d">
+        <div style="width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:${head.color}1f;color:${head.color};flex-shrink:0"><i class="fa ${head.icon}"></i></div>
+        <div>
+          <div style="font-weight:700;font-size:15px;color:${head.color}">${head.title}</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:4px">${head.text}</div>
+        </div>
+      </div>
+      ${info}
+      ${actions}
+    </div>`;
+
+  const busy = (btn, html) => { btn.disabled = true; btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${html}`; };
+  const after = res => {
+    if (res.status === 200) {
+      toast(res.body?.message || 'Saved.', 'success');
+      _renderEmployeeAccess(pane, empId, res.body.data, roles, canManage);
+    } else {
+      toast(res.body?.message || res.body?.errors?.[Object.keys(res.body?.errors || {})[0]]?.[0] || 'Something went wrong.', 'error');
+      loadEmployeeAccessTab(empId);
+    }
+  };
+
+  pane.querySelectorAll('.emp-access-role').forEach(card => card.addEventListener('click', () => {
+    pane.querySelectorAll('.emp-access-role').forEach(c => { c.classList.remove('active'); c.setAttribute('aria-pressed', 'false'); });
+    card.classList.add('active');
+    card.setAttribute('aria-pressed', 'true');
+  }));
+
+  $('#emp-access-grant')?.addEventListener('click', async e => {
+    const role = pane.querySelector('.emp-access-role.active')?.dataset.slug;
+    if (!role) { toast('Choose a role first.', 'error'); return; }
+    const r    = roles.find(x => x.slug === role);
+    const btn  = e.currentTarget;
+    if (r && r.permissions === null && !(await appConfirm({
+      title:       'Give full access?',
+      message:     `"${r.name}" has full access to everything in this business, including settings and users.`,
+      confirmText: '<i class="fa fa-paper-plane"></i> Give access',
+      icon:        'fa-triangle-exclamation',
+      danger:      true,
+    }))) return;
+    busy(btn, 'Saving…');
+    after(await API.grantEmployeeAccess(empId, role));
+  });
+  $('#emp-access-resend')?.addEventListener('click', async e => {
+    busy(e.currentTarget, 'Sending…');
+    after(await API.resendEmployeeAccess(empId));
+  });
+  $('#emp-access-revoke')?.addEventListener('click', async e => {
+    const btn    = e.currentTarget;
+    const active = a.status === 'active';
+    const ok = await appConfirm({
+      title:       active ? 'Remove system access?' : 'Cancel invitation?',
+      message:     active
+        ? 'This employee will no longer be able to sign in to the business. Their HR record and self-service portal stay as they are.'
+        : `The invitation link sent to ${a.email} will stop working.`,
+      confirmText: active ? '<i class="fa fa-user-slash"></i> Remove access' : '<i class="fa fa-xmark"></i> Cancel invitation',
+      cancelText:  active ? 'Cancel' : 'Keep invitation',
+      icon:        active ? 'fa-user-slash' : 'fa-envelope-circle-check',
+      danger:      true,
+    });
+    if (!ok) return;
+    busy(btn, 'Removing…');
+    after(await API.revokeEmployeeAccess(empId));
+  });
 }
 
 // ── Employee detail: Bills tab ──────────────────────────────────────────────
@@ -46520,23 +46691,221 @@ function empDetailRow(label, value) {
     </div>`;
 }
 
+// Detail card with a pencil that opens the single-field edit popup (PATCH /hr/employees/{id})
+function empEditRow(label, value, field) {
+  return `
+    <div style="background:var(--surface);border:1px solid var(--border-light);border-radius:8px;padding:14px 16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em">${label}</div>
+        <button class="emp-field-edit" data-field="${field}" title="Edit ${label.toLowerCase()}"
+          style="border:none;background:none;color:var(--text-muted);cursor:pointer;padding:2px 4px;font-size:13px"><i class="fa fa-pencil"></i></button>
+      </div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);white-space:pre-line">${value}</div>
+    </div>`;
+}
+
+// Full employee record (GET /hr/employees/{id}) — source of current values for the edit popup
+let _empDetailFull = null;
+
 async function loadEmployeePersonalTab(empId) {
   const pane = $('#emp-pane-personal');
   pane.innerHTML = '<p style="padding:20px;color:var(--text-muted)"><i class="fa fa-spinner fa-spin"></i> Loading…</p>';
   const res = await API.employee(empId);
+  if (_empDetailCurrent?.id !== empId) return;
   if (res.status !== 200) {
     pane.innerHTML = '<p style="padding:20px;color:#e74c3c"><i class="fa fa-circle-exclamation"></i> Failed to load details.</p>';
     return;
   }
-  const e = res.body.data || {};
-  pane.innerHTML = `
+  _empDetailFull = res.body.data || {};
+  _renderEmployeePersonal(_empDetailFull);
+}
+
+function _renderEmployeePersonal(e) {
+  const v   = x => escHtml(x || '—');
+  const ec  = e.emergency_contact || {};
+  const bk  = e.bank || {};
+  const sec = title => `<div style="grid-column:1/-1;font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em;margin-top:6px">${title}</div>`;
+  $('#emp-pane-personal').innerHTML = `
     <div style="padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      ${empDetailRow('Personal Email',    e.personal_email    || '—')}
-      ${empDetailRow('Permanent Address', e.permanent_address || '—')}
-      ${empDetailRow('EPF Number',        e.epf_number        || '—')}
-      ${empDetailRow('ETF Number',        e.etf_number        || '—')}
+      ${sec('Personal')}
+      ${empEditRow('Full Name',         v(e.name),                'full_name')}
+      ${empEditRow('Date of Birth',     v(e.date_of_birth),       'date_of_birth')}
+      ${empEditRow('NIC / Passport',    v(e.nic_passport_number), 'nic_passport_number')}
+      ${empEditRow('Personal Email',    v(e.personal_email) + (e.login_email && e.login_email.toLowerCase() !== (e.personal_email || '').toLowerCase()
+        ? `<div style="font-size:11px;font-weight:500;color:#d97706;margin-top:4px"><i class="fa fa-triangle-exclamation"></i> Login email is ${escHtml(e.login_email)}. Save this field to use one email for both.</div>`
+        : (e.login_email ? '<div style="font-size:11px;font-weight:500;color:var(--text-muted);margin-top:4px">Also their login email</div>' : '')), 'personal_email')}
+      ${empEditRow('Phone',             v(e.phone_number),        'phone_number')}
+      ${empEditRow('Permanent Address', v(e.permanent_address),   'permanent_address')}
+      ${empEditRow('Current Address',   v(e.current_address),     'current_address')}
+      ${sec('Emergency Contact')}
+      ${empEditRow('Contact Name',      v(ec.name),               'emergency_contact_name')}
+      ${empEditRow('Relationship',      v(ec.relationship),       'emergency_contact_relationship')}
+      ${empEditRow('Contact Phone',     v(ec.phone),              'emergency_contact_phone')}
+      ${sec('Bank')}
+      ${empEditRow('Bank',              v(bk.name),               'bank_id')}
+      ${empEditRow('Branch',            v(bk.branch),             'bank_branch')}
+      ${empEditRow('Account Holder',    v(bk.holder),             'bank_account_holder_name')}
+      ${empEditRow('Account Number',    v(bk.account_masked),     'bank_account_number')}
+      ${sec('Statutory')}
+      ${empEditRow('EPF Number',        v(e.epf_number),          'epf_number')}
+      ${empEditRow('ETF Number',        v(e.etf_number),          'etf_number')}
+      ${empEditRow('Tax TIN',           v(e.tax_tin),             'tax_tin')}
     </div>`;
 }
+
+// ── Employee detail: single-field edit popup ────────────────────────────────
+// Same fields and server rules as the web employee page (EmployeeService::patchFieldRules).
+
+const EMP_EDIT_FIELDS = {
+  full_name:                      { label: 'Full Name',            type: 'text',     get: e => e.name },
+  employee_id:                    { label: 'Employee ID',          type: 'text',     get: e => e.employee_id },
+  employment_type:                { label: 'Employment Type',      type: 'select',   get: e => e.employment_type,
+    options: async () => [['full_time', 'Full Time'], ['part_time', 'Part Time'], ['contract', 'Contract']] },
+  department_id:                  { label: 'Department',           type: 'select',   get: e => e.department_id,
+    options: async () => _empEditOptions(API.departments()) },
+  job_title_id:                   { label: 'Job Title',            type: 'select',   get: e => e.job_title_id,
+    options: async () => _empEditOptions(API.jobTitles()) },
+  basic_salary:                   { label: 'Basic Salary',         type: 'number',   get: e => e.basic_salary,
+    hint: 'Monthly gross is recalculated as basic salary + allowances.' },
+  date_of_joining:                { label: 'Date of Joining',      type: 'date',     get: e => e.date_of_joining },
+  phone_number:                   { label: 'Phone',                type: 'text',     get: e => e.phone_number },
+  date_of_birth:                  { label: 'Date of Birth',        type: 'date',     get: e => e.date_of_birth },
+  nic_passport_number:            { label: 'NIC / Passport',       type: 'text',     get: e => e.nic_passport_number },
+  personal_email:                 { label: 'Personal Email',       type: 'email',    get: e => e.personal_email,
+    hint: 'If this employee has system access, their login email (or pending invitation) changes too.' },
+  permanent_address:              { label: 'Permanent Address',    type: 'textarea', get: e => e.permanent_address },
+  current_address:                { label: 'Current Address',      type: 'textarea', get: e => e.current_address },
+  emergency_contact_name:         { label: 'Emergency Contact Name', type: 'text',   get: e => e.emergency_contact?.name },
+  emergency_contact_relationship: { label: 'Relationship',         type: 'text',     get: e => e.emergency_contact?.relationship },
+  emergency_contact_phone:        { label: 'Emergency Contact Phone', type: 'text',  get: e => e.emergency_contact?.phone },
+  bank_id:                        { label: 'Bank',                 type: 'select',   get: e => e.bank?.id,
+    options: async () => _empEditOptions(API.banks()) },
+  bank_branch:                    { label: 'Branch',               type: 'text',     get: e => e.bank?.branch },
+  bank_account_holder_name:       { label: 'Account Holder',       type: 'text',     get: e => e.bank?.holder },
+  // Only the masked number reaches the client, so the full number is always re-entered
+  bank_account_number:            { label: 'Account Number',       type: 'text',     get: () => '',
+    hint: 'Enter the full account number.' },
+  epf_number:                     { label: 'EPF Number',           type: 'text',     get: e => e.epf_number, nullable: true },
+  etf_number:                     { label: 'ETF Number',           type: 'text',     get: e => e.etf_number, nullable: true },
+  tax_tin:                        { label: 'Tax TIN',              type: 'text',     get: e => e.tax_tin,    nullable: true },
+};
+
+async function _empEditOptions(promise) {
+  const res = await promise;
+  return res.status === 200 ? (res.body?.data || []).map(r => [r.id, r.name]) : [];
+}
+
+let _empEditField = null;
+let _empEditSeq   = 0;
+
+async function openEmployeeEditModal(field) {
+  const cfg = EMP_EDIT_FIELDS[field];
+  const emp = _empDetailCurrent;
+  if (!cfg || !emp) return;
+  const seq = ++_empEditSeq;
+  _empEditField = field;
+
+  const src = _empDetailFull?.id === emp.id ? _empDetailFull : emp;
+  const cur = cfg.get(src) ?? '';
+  $('#emp-edit-title').textContent = `Edit ${cfg.label}`;
+  $('#emp-edit-label').textContent = cfg.label.toUpperCase();
+  $('#emp-edit-hint').textContent  = cfg.hint || (cfg.nullable ? 'Leave blank to clear.' : '');
+  $('#emp-edit-hint').style.display = $('#emp-edit-hint').textContent ? '' : 'none';
+  _empEditAlert('');
+
+  const wrap = $('#emp-edit-input-wrap');
+  if (cfg.type === 'select') {
+    wrap.innerHTML = '<select id="emp-edit-input" class="bf-input" disabled><option>Loading…</option></select>';
+  } else if (cfg.type === 'textarea') {
+    wrap.innerHTML = '<textarea id="emp-edit-input" class="bf-input" rows="3"></textarea>';
+  } else {
+    wrap.innerHTML = `<input id="emp-edit-input" class="bf-input" type="${cfg.type}"${cfg.type === 'number' ? ' min="0" step="0.01"' : ''}>`;
+  }
+  const input = $('#emp-edit-input');
+  if (cfg.type !== 'select') input.value = cur;
+  $('#emp-edit-save').disabled = cfg.type === 'select';
+  $('#emp-edit-modal').style.display = '';
+  if (cfg.type !== 'select') input.focus();
+
+  if (cfg.type === 'select') {
+    const opts = await cfg.options();
+    if (seq !== _empEditSeq) return;
+    input.innerHTML = '<option value="">Choose…</option>' + opts.map(([val, text]) =>
+      `<option value="${escHtml(String(val))}"${String(val) === String(cur) ? ' selected' : ''}>${escHtml(text)}</option>`).join('');
+    input.disabled = false;
+    $('#emp-edit-save').disabled = false;
+    if (!opts.length) _empEditAlert('Failed to load options.');
+  }
+}
+
+function _empEditAlert(msg) {
+  $('#emp-edit-alert-text').textContent = msg;
+  $('#emp-edit-alert').style.display = msg ? 'flex' : 'none';
+  const input = $('#emp-edit-input');
+  if (input) input.style.borderColor = msg ? '#ef4444' : '';
+}
+
+// Clear the error as soon as the user starts correcting the value
+$('#emp-edit-input-wrap').addEventListener('input', () => _empEditAlert(''));
+$('#emp-edit-input-wrap').addEventListener('change', () => _empEditAlert(''));
+
+function closeEmployeeEditModal() {
+  _empEditSeq++;
+  $('#emp-edit-modal').style.display = 'none';
+}
+
+$('#emp-edit-close').addEventListener('click', closeEmployeeEditModal);
+$('#emp-edit-cancel').addEventListener('click', closeEmployeeEditModal);
+$('#emp-edit-modal').addEventListener('click', e => { if (e.target === $('#emp-edit-modal')) closeEmployeeEditModal(); });
+
+$('#employee-detail-view').addEventListener('click', e => {
+  const btn = e.target.closest('.emp-field-edit');
+  if (btn) openEmployeeEditModal(btn.dataset.field);
+});
+
+async function saveEmployeeEdit() {
+  const emp   = _empDetailCurrent;
+  const field = _empEditField;
+  const cfg   = EMP_EDIT_FIELDS[field];
+  if (!emp || !cfg) return;
+
+  const val = $('#emp-edit-input').value.trim();
+  if (val === '' && !cfg.nullable) {
+    _empEditAlert(`${cfg.label} is required.`);
+    return;
+  }
+
+  const btn = $('#emp-edit-save');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+  const res = await API.updateEmployeeField(emp.id, { field, [field]: val === '' ? null : val });
+  btn.disabled = false;
+  btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save';
+
+  if (res.status !== 200) {
+    _empEditAlert(res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to update.'));
+    $('#emp-edit-input').focus();
+    return;
+  }
+
+  closeEmployeeEditModal();
+  toast(res.body?.synced ? res.body.message : `${cfg.label} updated`, 'success');
+  if (_empDetailCurrent?.id !== emp.id) return;
+
+  const fresh = res.body.data || {};
+  _empDetailCurrent = { ...emp, ...fresh };
+  _empDetailFull    = fresh;
+  _renderEmployeeSummary(_empDetailCurrent);
+  _renderEmployeePersonal(fresh);
+  if (res.body?.synced) loadEmployeeAccessTab(emp.id);
+  // Keep the list (names, departments, counts) in sync for when the user goes back
+  loadEmployees($('#emp-search')?.value || '');
+}
+
+$('#emp-edit-save').addEventListener('click', saveEmployeeEdit);
+$('#emp-edit-modal').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); saveEmployeeEdit(); }
+});
 
 $('#emp-back-btn').addEventListener('click', () => {
   $('#employee-detail-view').style.display = 'none';
@@ -47407,11 +47776,29 @@ function resetEmpCreateForm() {
   $('#ec-new-job-title-wrap').style.display = 'none';
   $('#ec-new-dept-wrap').style.display      = 'none';
   $('#ec-salary-hint').textContent          = '';
+  $('#ec-grant-access').checked             = false;
+  $('#ec-access-role-wrap').style.display   = 'none';
+  // Granting access is owner / admin only (same as Settings → Users)
+  const canManageUsers = state.memberIsOwner || state.memberRole === 'admin' || state.memberPermissions === null;
+  $('#ec-access-section').style.display     = canManageUsers ? '' : 'none';
   showEcError('');
 }
 
+$('#ec-grant-access').addEventListener('change', () => {
+  $('#ec-access-role-wrap').style.display = $('#ec-grant-access').checked ? '' : 'none';
+});
+
 async function populateEmpCreateDropdowns() {
-  const [jtRes, deptRes, bankRes] = await Promise.all([API.jobTitles(), API.departments(), API.banks()]);
+  const [jtRes, deptRes, bankRes, rolesRes] = await Promise.all([API.jobTitles(), API.departments(), API.banks(), API.rolesList()]);
+
+  const roleSel = $('#ec-access-role');
+  roleSel.innerHTML = '';
+  if (rolesRes.status === 200) {
+    (rolesRes.body.data || []).forEach(r => {
+      roleSel.insertAdjacentHTML('beforeend',
+        `<option value="${escHtml(r.slug)}"${r.slug === 'staff' ? ' selected' : ''}>${escHtml(r.name)}${r.permissions === null ? ' — full access' : ''}</option>`);
+    });
+  }
 
   const jtSel = $('#ec-job-title-id');
   jtSel.innerHTML = '<option value="">Choose…</option>';
@@ -47505,6 +47892,8 @@ async function submitEmpCreate() {
     epf_number:                      $('#ec-epf').value.trim() || null,
     etf_number:                      $('#ec-etf').value.trim() || null,
     tax_tin:                         $('#ec-tin').value.trim() || null,
+    grant_access:                    $('#ec-grant-access').checked,
+    access_role:                     $('#ec-grant-access').checked ? $('#ec-access-role').value : null,
   };
 
   // Basic client-side checks
@@ -47526,6 +47915,7 @@ async function submitEmpCreate() {
   if (!body.bank_id)             { showEcError('Bank name is required.'); return; }
   if (!body.bank_branch)         { showEcError('Bank branch is required.'); return; }
   if (!body.bank_account_number) { showEcError('Bank account number is required.'); return; }
+  if (body.grant_access && !body.access_role) { showEcError('Choose a role for system access.'); return; }
 
   const btn = $('#emp-create-modal-save');
   btn.disabled = true;
@@ -47539,6 +47929,8 @@ async function submitEmpCreate() {
   if (res.status === 201 || res.status === 200) {
     closeEmpCreateModal();
     toast('Employee created successfully', 'success');
+    const access = res.body?.access;
+    if (access) toast(access.message, access.ok ? 'success' : 'error');
     await loadEmployees();
   } else {
     const msg = res.body?.message || res.body?.errors?.[Object.keys(res.body?.errors || {})[0]]?.[0] || 'Failed to create employee.';
@@ -54343,6 +54735,7 @@ async function submitDsCreate() {
             <div class="um-card-badges">
               ${_roleBadgeHtml(u.role)}
               ${!u.is_owner ? _statusBadgeHtml(u.status) : ''}
+              ${_employeeTagHtml(u.employee)}
             </div>
           </div>
         </div>`;
@@ -54377,9 +54770,16 @@ async function submitDsCreate() {
             <div class="um-card-badges">
               <span class="um-role-badge um-role-${_esc(inv.role)}">${_esc(inv.role_name || inv.role)}</span>
               ${_statusBadgeHtml(inv.status === 'expired' ? 'expired' : 'pending')}
+              ${_employeeTagHtml(inv.employee)}
             </div>
           </div>
         </div>`).join('');
+  }
+
+  /** "Employee #EMP-1002" tag for users that are linked to an HR employee profile. */
+  function _employeeTagHtml(emp) {
+    if (!emp) return '';
+    return `<span class="um-role-badge" style="background:#0ea5e91a;color:#0284c7" title="HR employee: ${_esc(emp.name)}"><i class="fa fa-id-badge"></i> Employee${emp.employee_id ? ' #' + _esc(emp.employee_id) : ''}</span>`;
   }
 
   function selectInvite(inv, cardEl, detailId) {

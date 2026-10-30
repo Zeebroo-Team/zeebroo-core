@@ -4,7 +4,8 @@
       "Bash(node --check app.js)",
       "WebSearch",
       "Bash(php -l Modules/Pos/app/Http/Controllers/Api/PosProductRentalApiController.php)",
-      "Bash(composer dump-autoload *)"
+      "Bash(composer dump-autoload *)",
+      "Bash(node --check electron_app/renderer/js/app.js)"
     ]
   }
 }

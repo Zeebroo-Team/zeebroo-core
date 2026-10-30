@@ -739,6 +739,10 @@
                 </section>
             </div>
 
+            <div id="emp-show-panel-access" class="emp-show-pane" role="tabpanel" aria-labelledby="emp-show-tab-access" aria-hidden="true">
+                @include('hrmanagement::employees.partials.system-access')
+            </div>
+
             <div id="emp-show-panel-documents" class="emp-show-pane" role="tabpanel" aria-labelledby="emp-show-tab-documents" aria-hidden="true">
                 <p class="emp-show-pane-head">{{ __('Documents') }}</p>
                 <p class="emp-show-prose">{{ __('Upload files by category (certifications, personal files, applications, contracts, etc.). Original file names are kept on record; files are stored securely for this business.') }}</p>
@@ -1224,6 +1228,9 @@
             <button type="button" class="emp-show-tab" id="emp-show-tab-leave" role="tab" aria-selected="false" aria-controls="emp-show-panel-leave" data-emp-show-tab="leave">
                 <i class="fa fa-calendar-days" aria-hidden="true"></i>{{ __('Leave') }}
             </button>
+            <button type="button" class="emp-show-tab" id="emp-show-tab-access" role="tab" aria-selected="false" aria-controls="emp-show-panel-access" data-emp-show-tab="access">
+                <i class="fa fa-key" aria-hidden="true"></i>{{ __('System access') }}
+            </button>
         </nav>
     </div>
 </div>
@@ -1242,6 +1249,7 @@
         certifications: document.getElementById('emp-show-panel-certifications'),
         salary: document.getElementById('emp-show-panel-salary'),
         leave: document.getElementById('emp-show-panel-leave'),
+        access: document.getElementById('emp-show-panel-access'),
     };
     var VALID_TABS = Object.keys(panes);
 

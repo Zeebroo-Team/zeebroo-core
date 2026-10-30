@@ -417,8 +417,13 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'index'])->name('hr.employees.index');
     Route::post('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'store'])->name('hr.employees.store');
     Route::get('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'show'])->name('hr.employees.show');
+    Route::patch('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'update'])->name('hr.employees.update');
     Route::get('hr/employees/{employee}/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'forEmployee'])->name('hr.employees.bills');
     Route::get('hr/employees/{employee}/leave',[\Modules\Pos\Http\Controllers\Api\PosHrEmployeeLeaveApiController::class, 'show'])->name('hr.employees.leave');
+    Route::get('hr/employees/{employee}/access', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'show'])->name('hr.employees.access.show');
+    Route::post('hr/employees/{employee}/access', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'store'])->name('hr.employees.access.store');
+    Route::post('hr/employees/{employee}/access/resend', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'resend'])->middleware('throttle:10,1')->name('hr.employees.access.resend');
+    Route::delete('hr/employees/{employee}/access', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'destroy'])->name('hr.employees.access.destroy');
     Route::get('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'index'])->name('hr.departments.index');
     Route::post('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'store'])->name('hr.departments.store');
     Route::get('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'show'])->name('hr.departments.show');

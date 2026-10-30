@@ -6734,6 +6734,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
           <button class="inv-tab"        data-tab="emp-leave"><i class="fa fa-umbrella-beach"></i> Leave</button>
           <button class="inv-tab"        data-tab="emp-attendance"><i class="fa fa-clock"></i> Attendance</button>
           <button class="inv-tab"        data-tab="emp-bills"><i class="fa fa-file-invoice-dollar"></i> Bills</button>
+          <button class="inv-tab"        data-tab="emp-access"><i class="fa fa-key"></i> System Access</button>
         </div>
 
         <div class="inv-tab-body" style="flex:1;overflow-y:auto;background:var(--surface)">
@@ -6742,6 +6743,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
           <div class="inv-tab-pane"        id="emp-pane-leave"></div>
           <div class="inv-tab-pane"        id="emp-pane-attendance"></div>
           <div class="inv-tab-pane"        id="emp-pane-bills"></div>
+          <div class="inv-tab-pane"        id="emp-pane-access"></div>
         </div>
 
       </div>
@@ -13253,6 +13255,26 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
         </div>
       </div>
 
+      <!-- 7. System Access (optional) -->
+      <div class="bill-section" id="ec-access-section">
+        <div class="bsec-hdr">
+          <div class="bsec-icon" style="--si:#0ea5e9;--sb:#e0f2fe"><i class="fa fa-key"></i></div>
+          <span class="bsec-title">7. System Access <span style="font-weight:400;opacity:.65">(optional)</span></span>
+        </div>
+
+        <label style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;font-size:13px">
+          <input type="checkbox" id="ec-grant-access" style="margin-top:3px">
+          <span>
+            <b>Let this employee sign in to the business</b>
+            <span style="display:block;color:var(--text-muted);margin-top:2px">An invitation is emailed to their personal email. They set their own password when they accept.</span>
+          </span>
+        </label>
+        <div class="bf-group" id="ec-access-role-wrap" style="display:none;margin-top:10px">
+          <label class="bf-label">ROLE <span class="bf-req">*</span></label>
+          <select id="ec-access-role" class="bf-input"></select>
+        </div>
+      </div>
+
     </div><!-- /bill-modal-body -->
 
     <div class="bill-modal-footer">
@@ -13322,6 +13344,32 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <div class="bill-modal-footer">
       <button class="bill-save-btn" id="dept-lead-save"><i class="fa fa-floppy-disk"></i> Save</button>
       <button class="btn-secondary" id="dept-lead-cancel" style="margin-left:auto">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Employee: Edit Field Modal ───────────────────────────────────── -->
+<div class="modal-overlay" id="emp-edit-modal" style="display:none">
+  <div class="modal bill-modal-inner" style="max-width:440px">
+    <div class="bill-modal-header">
+      <h3><i class="fa fa-pencil"></i> <span id="emp-edit-title">Edit</span></h3>
+      <button class="bill-modal-close" id="emp-edit-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="bill-modal-body">
+      <div class="bill-section">
+        <div class="bf-group">
+          <label class="bf-label" id="emp-edit-label"></label>
+          <div id="emp-edit-input-wrap"></div>
+          <div id="emp-edit-alert" role="alert" style="display:none;align-items:flex-start;gap:8px;margin-top:8px;padding:9px 12px;border:1px solid #fecaca;border-radius:6px;background:#fef2f2;color:#b91c1c;font-size:12.5px;line-height:1.45">
+            <i class="fa fa-circle-exclamation" style="margin-top:2px"></i><span id="emp-edit-alert-text"></span>
+          </div>
+        </div>
+        <p id="emp-edit-hint" style="font-size:12px;color:var(--text-muted);margin:8px 0 0;display:none"></p>
+      </div>
+    </div>
+    <div class="bill-modal-footer">
+      <button class="bill-save-btn" id="emp-edit-save"><i class="fa fa-floppy-disk"></i> Save</button>
+      <button class="btn-secondary" id="emp-edit-cancel" style="margin-left:auto">Cancel</button>
     </div>
   </div>
 </div>
