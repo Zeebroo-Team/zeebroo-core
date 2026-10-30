@@ -10,6 +10,9 @@
     $gsName = trim((string) ($gsUser->name ?? '')) ?: __('User');
     $gsInitial = mb_strtoupper(mb_substr($gsName, 0, 1));
     $gsActive = $gsActive ?? 'platforms';
+    $gsBusiness = \Modules\Business\Models\Business::currentForNavbar($gsUser);
+    // Team members don't manage the subscription, so no Billing entry for them.
+    $gsShowBilling = ! $gsBusiness || (int) $gsBusiness->user_id === (int) $gsUser?->id;
     $gsLinks = [
         ['key' => 'platforms', 'label' => 'Platforms', 'icon' => 'fa-layer-group', 'href' => route('business.platform-choice'), 'external' => false],
         ['key' => 'docs', 'label' => 'Docs', 'icon' => 'fa-book-open', 'href' => config('support.docs_url'), 'external' => true],
@@ -181,9 +184,11 @@
                         <div class="gs-menu-email">{{ $gsUser->email }}</div>
                     @endif
                 </div>
-                <a href="{{ route('business.get-started.billing') }}" class="gs-menu-item{{ $gsActive === 'billing' ? ' is-active' : '' }}" role="menuitem">
-                    <i class="fa fa-credit-card" aria-hidden="true"></i> Billing
-                </a>
+                @if($gsShowBilling)
+                    <a href="{{ route('business.get-started.billing') }}" class="gs-menu-item{{ $gsActive === 'billing' ? ' is-active' : '' }}" role="menuitem">
+                        <i class="fa fa-credit-card" aria-hidden="true"></i> Billing
+                    </a>
+                @endif
                 <form method="post" action="{{ route('logout') }}">
                     @csrf
                     <button type="submit" class="gs-menu-item gs-menu-item--danger" role="menuitem">

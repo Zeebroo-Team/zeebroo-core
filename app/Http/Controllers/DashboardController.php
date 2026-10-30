@@ -68,7 +68,10 @@ class DashboardController extends Controller
             return null;
         }
 
-        if ($business->platform_choice_shown_at !== null) {
+        $pending = (int) $business->user_id === (int) $user->id
+            ? $business->platform_choice_shown_at === null
+            : $request->session()->has(Business::PLATFORM_CHOICE_SESSION_KEY);
+        if (!$pending) {
             return null;
         }
 

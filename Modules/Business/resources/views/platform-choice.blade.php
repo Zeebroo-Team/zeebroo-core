@@ -187,7 +187,7 @@
 @endphp
 <div class="plat-shell">
     <div class="plat-card">
-        @if($errors->has('payment') || $pendingPayment)
+        @if($isOwner && ($errors->has('payment') || $pendingPayment))
             <div class="plat-payment-alert" role="alert">
                 <span class="plat-payment-alert-dot" aria-hidden="true"></span>
                 <div class="plat-payment-alert-body">
@@ -217,7 +217,9 @@
         </p>
         <h1 class="plat-title">Welcome to Zeebroo!</h1>
         <p class="plat-sub">Your workspace is ready — pick how you'd like to use Zeebroo. You can always switch later.</p>
-        <div class="plat-plan-pill"><i class="fa fa-crown" aria-hidden="true"></i> You're on the <strong>{{ $platPlanLabel }}</strong></div>
+        @if($isOwner)
+            <div class="plat-plan-pill"><i class="fa fa-crown" aria-hidden="true"></i> You're on the <strong>{{ $platPlanLabel }}</strong></div>
+        @endif
 
         <div class="plat-grid">
             {{-- Desktop app — recommended --}}

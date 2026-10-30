@@ -70,25 +70,32 @@ class BusinessController extends Controller
             return redirect()->route('dashboard');
         }
 
-        if ($business->platform_choice_shown_at === null) {
+        $isOwner = (int) $business->user_id === (int) $request->user()->id;
+
+        $request->session()->forget(Business::PLATFORM_CHOICE_SESSION_KEY);
+        if ($isOwner && $business->platform_choice_shown_at === null) {
             $business->forceFill(['platform_choice_shown_at' => now()])->save();
         }
 
         $latestDesktopRelease = \Modules\AppConnection\Models\AppRelease::latestStable();
         $latestLiteRelease = \Modules\AppConnection\Models\AppRelease::latestStable(\Modules\AppConnection\Models\AppRelease::APP_LITE);
 
-        $pendingPayment = $business->payments()
-            ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
-            ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
-            ->latest()
-            ->first();
+        // Plan and payment details are the owner's business — team members only get the platforms.
+        $pendingPayment = $isOwner
+            ? $business->payments()
+                ->where('payment_type', Payment::TYPE_SUBSCRIPTION)
+                ->whereIn('payment_status', [Payment::STATUS_PENDING, Payment::STATUS_FAILED, Payment::STATUS_CANCELED])
+                ->latest()
+                ->first()
+            : null;
 
         return view('business::platform-choice', [
             'latestDesktopRelease' => $latestDesktopRelease,
             'latestLiteRelease' => $latestLiteRelease,
-            'currentPackage' => $business->package,
+            'currentPackage' => $isOwner ? $business->package : null,
             'detectedOs' => $this->detectOsFromUserAgent($request->userAgent() ?? ''),
             'pendingPayment' => $pendingPayment,
+            'isOwner' => $isOwner,
         ]);
     }
 
