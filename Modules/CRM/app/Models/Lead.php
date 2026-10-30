@@ -28,6 +28,7 @@ class Lead extends Model
         'lost_reason',
         'notes',
         'assigned_to',
+        'created_by',
         'customer_id',
         'converted_at',
     ];
@@ -66,6 +67,11 @@ class Lead extends Model
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'assigned_to');
+    }
+
+    public function createdBy(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'created_by');
     }
 
     public function customer(): BelongsTo

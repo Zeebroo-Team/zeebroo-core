@@ -120,9 +120,9 @@ class PosCrmApiController extends Controller
         $leads = Lead::query()
             ->where('project_id', $project->id)
             ->whereIn('stage_id', $allStages->pluck('id'))
-            ->with('customFieldValues:id,lead_id,custom_field_id,value')
+            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name'])
             ->orderByDesc('id')
-            ->get(['id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'estimated_value', 'expected_close_date', 'notes']);
+            ->get(['id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'estimated_value', 'expected_close_date', 'notes', 'created_by', 'created_at', 'updated_at']);
 
         // Mark leads that already exist as customers (matched by email or phone)
         $emails = $leads->pluck('email')->filter()->unique()->values()->all();
@@ -140,7 +140,9 @@ class PosCrmApiController extends Controller
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
             $lead->is_customer    = $byEmail || $byPhone;
             $lead->custom_fields  = $lead->customFieldValues->pluck('value', 'custom_field_id');
+            $lead->created_by_name = $lead->createdBy?->name;
             unset($lead->customFieldValues);
+            $lead->unsetRelation('createdBy');
             return $lead;
         });
 
@@ -853,7 +855,7 @@ class PosCrmApiController extends Controller
         }
 
         $data = $request->validate($rules);
-        $lead = $this->forms->submit($form, $data, 'pipeline-form');
+        $lead = $this->forms->submit($form, $data, 'pipeline-form', $request->user()?->id);
 
         return response()->json(['data' => $lead->load('stage')], 201);
     }

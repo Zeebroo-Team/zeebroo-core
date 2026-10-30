@@ -56424,6 +56424,7 @@ async function submitDsCreate() {
     if (list)   list.style.display   = 'none';
     if (detail) detail.style.display = 'flex';
     _crmRenderDetailHero();
+    _crmResetPipelineView();
     await loadCrmPipeline(_crmProjectId);
     _crmSwitchDetailTab('dashboard');
   }
@@ -56444,7 +56445,33 @@ async function submitDsCreate() {
     if (metaEl) metaEl.innerHTML = relation.description ? `<span>${escHtml(relation.description)}</span>` : '';
     const count = relation.leads_count || 0;
     const badgesEl = $('#crm-relation-hero-badges');
-    if (badgesEl) badgesEl.innerHTML = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+    const badgeHtml = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+    if (badgesEl) badgesEl.innerHTML = badgeHtml;
+    const headerBadgesEl = $('#crm-relation-header-badges'); if (headerBadgesEl) headerBadgesEl.innerHTML = badgeHtml;
+  }
+
+  // Hide the hero while scrolled and surface its lead count in the header bar instead.
+  // max-height is animated between the measured height and 0, then cleared once
+  // open again so the hero still resizes with its content.
+  let _crmHeroTimer = null;
+  function _crmSetHeroHidden(hidden) {
+    const hero = $('#crm-relation-hero');
+    if (hero && hero.classList.contains('inv-hero--hidden') !== hidden) {
+      clearTimeout(_crmHeroTimer);
+      if (hidden) {
+        hero.dataset.fullHeight = hero.offsetHeight;
+        hero.style.maxHeight = hero.offsetHeight + 'px';
+        void hero.offsetHeight; // commit the start height before transitioning
+        hero.classList.add('inv-hero--hidden');
+        hero.style.maxHeight = '0px';
+      } else {
+        hero.classList.remove('inv-hero--hidden');
+        hero.style.maxHeight = (hero.dataset.fullHeight || hero.scrollHeight) + 'px';
+        _crmHeroTimer = setTimeout(() => { hero.style.maxHeight = ''; }, 320);
+      }
+    }
+    const headerBadgesEl = $('#crm-relation-header-badges');
+    if (headerBadgesEl) headerBadgesEl.style.display = hidden ? '' : 'none';
   }
 
   function _crmRenderDashboardPane() {
@@ -56486,8 +56513,9 @@ async function submitDsCreate() {
     $$('#crm-relation-tabs .inv-tab').forEach(b => b.classList.toggle('active', b.dataset.crmdtab === tab));
     $$('#crm-relation-tab-body .inv-tab-pane').forEach(el => el.classList.remove('active'));
     $(`#crm-relation-pane-${tab}`)?.classList.add('active');
-    const body = $('#crm-relation-tab-body'); if (body) body.scrollTop = 0;
-    $('#crm-relation-hero')?.classList.remove('inv-hero--compact');
+    const body = $('#crm-relation-tab-body');
+    if (body) { body.scrollTop = 0; body.classList.toggle('crm-tab-body--fill', tab === 'pipeline'); }
+    _crmSetHeroHidden(false);
     if (tab === 'forms' && !_crmDetailLoaded.forms) {
       _crmDetailLoaded.forms = true;
       loadCrmForms();
@@ -56508,15 +56536,21 @@ async function submitDsCreate() {
   });
   $('#crm-relation-back-btn')?.addEventListener('click', () => closeRelationDetail());
 
-  // Shrink the hero while the tab body is scrolled; hysteresis avoids flicker
-  // caused by the body growing when the hero collapses.
+  // Hide the hero while the tab body (or, on the pipeline tab, a stage column) is
+  // scrolled; hysteresis avoids flicker caused by the area growing when the hero
+  // disappears. Only hide when there is enough overflow that the scroll position
+  // survives that growth, and only reopen once every scroller is back at the top.
   $('#crm-relation-tab-body')?.addEventListener('scroll', e => {
     const hero = $('#crm-relation-hero');
     const el   = e.target;
-    if (!hero || el.id !== 'crm-relation-tab-body') return;
+    if (!hero || !(el.id === 'crm-relation-tab-body' || el.classList?.contains('crm-col-body') || el.id === 'crm-pipeline-list')) return;
     const top = el.scrollTop;
-    if (top > 40) hero.classList.add('inv-hero--compact');
-    else if (top < 8) hero.classList.remove('inv-hero--compact');
+    const hidden = hero.classList.contains('inv-hero--hidden');
+    if (!hidden && top > 40 && el.scrollHeight - el.clientHeight > hero.offsetHeight + 40) _crmSetHeroHidden(true);
+    else if (hidden && top < 8) {
+      const scrollers = [$('#crm-relation-tab-body'), $('#crm-pipeline-list'), ...$$('#crm-relation-pane-pipeline .crm-col-body')];
+      if (scrollers.every(s => !s || s.scrollTop < 8)) _crmSetHeroHidden(false);
+    }
   }, { passive: true, capture: true });
 
   $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
@@ -56547,7 +56581,7 @@ async function submitDsCreate() {
     }
     _crmPipeline = res.body.data;
     _updateNewLeadBtnState();
-    _renderBoard();
+    _crmRenderPipelineView();
     _crmRenderDashboardPane();
     _crmUpdateCustomDataTabVisibility();
     _crmUpdateContactsTabVisibility();
@@ -56602,23 +56636,225 @@ async function submitDsCreate() {
     }
   }
 
+  // ── Pipeline view state: search/filters, Board/List, compact cards ─────
+  // View + density are per-user preferences; search/filters reset per relation.
+  const CRM_COL_PAGE = 20;
+  const _crmPrefGet = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+  const _crmPrefSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+  let _crmPipeView    = _crmPrefGet('crm.pipeline.view', 'board');
+  let _crmPipeCompact = _crmPrefGet('crm.pipeline.compact', '0') === '1';
+  let _crmPipeFilter  = { q: '', customers: false, hasValue: false };
+  let _crmColLimit    = {};
+  let _crmListSort    = { key: 'created', dir: 'desc' };
+
+  function _crmFilterActive() {
+    return !!(_crmPipeFilter.q || _crmPipeFilter.customers || _crmPipeFilter.hasValue);
+  }
+
+  function _crmLeadMatches(lead) {
+    if (_crmPipeFilter.customers && !lead.is_customer) return false;
+    if (_crmPipeFilter.hasValue && !(Number(lead.estimated_value) > 0)) return false;
+    if (!_crmPipeFilter.q) return true;
+    const hay = [lead.name, lead.company, lead.email, lead.phone].filter(Boolean).join(' ').toLowerCase();
+    return _crmPipeFilter.q.split(/\s+/).every(t => hay.includes(t));
+  }
+
+  function _crmResetPipelineView() {
+    _crmPipeFilter = { q: '', customers: false, hasValue: false };
+    _crmColLimit = {};
+    const input = $('#crm-pipe-search'); if (input) input.value = '';
+    $$('#crm-relation-pane-pipeline [data-crm-filter]').forEach(b => b.classList.remove('active'));
+  }
+
+  // Renders whichever view is active and syncs the toolbar controls with state.
+  function _crmRenderPipelineView() {
+    const board = $('#crm-pipeline-board');
+    const list  = $('#crm-pipeline-list');
+    if (board) board.style.display = _crmPipeView === 'board' ? '' : 'none';
+    if (list)  list.style.display  = _crmPipeView === 'list'  ? '' : 'none';
+    $$('#crm-relation-pane-pipeline [data-crm-view]').forEach(b => b.classList.toggle('active', b.dataset.crmView === _crmPipeView));
+    const density = $('#crm-pipe-density');
+    if (density) {
+      density.classList.toggle('active', _crmPipeCompact);
+      density.style.display = _crmPipeView === 'board' ? '' : 'none';
+      density.title = _crmPipeCompact ? 'Detailed cards' : 'Compact cards';
+    }
+    if (_crmPipeView === 'list') _renderLeadList(); else _renderBoard();
+
+    const resultEl = $('#crm-pipe-result');
+    if (resultEl && _crmPipeline) {
+      const all = _crmPipeline.columns.flatMap(c => c.leads);
+      resultEl.textContent = _crmFilterActive() ? `${all.filter(_crmLeadMatches).length} of ${all.length} leads` : '';
+    }
+  }
+
+  function _crmCardActionsHtml(leadId) {
+    return `<div class="crm-card-actions">
+      <button class="crm-card-btn crm-card-edit" data-lead-id="${leadId}" title="Edit"><i class="fa fa-pen"></i></button>
+      <button class="crm-card-btn crm-card-del" data-lead-id="${leadId}" title="Delete"><i class="fa fa-trash"></i></button>
+    </div>`;
+  }
+
+  async function _crmDeleteLead(leadId) {
+    if (!confirm('Delete this lead?')) return;
+    const res = await API.crmDeleteLead(leadId);
+    if (res.status === 200) {
+      toast('Lead deleted.', 'success');
+      loadCrmPipeline();
+      if (_crmDetailLoaded.customData) loadCrmCustomData();
+      if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
+    } else toast(res.body?.message || 'Failed to delete.', 'error');
+  }
+
+  function _renderLeadList() {
+    const list = $('#crm-pipeline-list');
+    if (!list || !_crmPipeline) return;
+    const cols = _crmPipeline.columns;
+    const stageOrder = new Map(cols.map((c, i) => [c.id, i]));
+    const canMove = _crmCan('leads_move');
+    const rows = cols.flatMap(c => c.leads.filter(_crmLeadMatches).map(l => ({ ...l, stage_id: c.id })));
+
+    const { key, dir } = _crmListSort;
+    const val = r => key === 'name'    ? (r.name || '').toLowerCase()
+                   : key === 'company' ? (r.company || '').toLowerCase()
+                   : key === 'stage'   ? stageOrder.get(r.stage_id)
+                   : key === 'value'   ? Number(r.estimated_value) || 0
+                   : r.id; // created: ids are sequential, and always present
+    rows.sort((a, b) => {
+      const va = val(a), vb = val(b);
+      return (va < vb ? -1 : va > vb ? 1 : 0) * (dir === 'asc' ? 1 : -1);
+    });
+
+    const th = (k, label) => {
+      const icon = _crmListSort.key === k ? `<i class="fa fa-arrow-${_crmListSort.dir === 'asc' ? 'up' : 'down'}"></i>` : '';
+      return `<th data-sort="${k}">${label}${icon}</th>`;
+    };
+    const stageCell = r => {
+      const col = cols[stageOrder.get(r.stage_id)];
+      const dot = `<span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>`;
+      if (!canMove) return `<span class="crm-list-stage">${dot}${escHtml(col.name)}</span>`;
+      return `<span class="crm-list-stage">${dot}<select data-move-lead="${r.id}" data-from-stage="${r.stage_id}">
+        ${cols.map(c => `<option value="${c.id}"${c.id === r.stage_id ? ' selected' : ''}>${escHtml(c.name)}</option>`).join('')}
+      </select></span>`;
+    };
+
+    list.innerHTML = rows.length ? `
+      <table class="crm-table">
+        <thead><tr>
+          ${th('name', 'Lead')}${th('company', 'Company')}<th>Contact</th>${th('stage', 'Stage')}${th('value', 'Value')}${th('created', 'Created')}<th></th>
+        </tr></thead>
+        <tbody>${rows.map(r => `
+          <tr data-lead-id="${r.id}">
+            <td><div class="crm-list-name">${escHtml(r.name)}</div>${r.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}</td>
+            <td>${r.company ? escHtml(r.company) : '<span class="crm-list-sub">—</span>'}</td>
+            <td>${r.email ? `<div>${escHtml(r.email)}</div>` : ''}${r.phone ? `<div class="crm-list-sub">${escHtml(r.phone)}</div>` : ''}${!r.email && !r.phone ? '<span class="crm-list-sub">—</span>' : ''}</td>
+            <td>${stageCell(r)}</td>
+            <td>${r.estimated_value ? formatMoney(r.estimated_value) : '<span class="crm-list-sub">—</span>'}</td>
+            <td class="crm-list-sub">${r.created_at ? escHtml(new Date(r.created_at).toLocaleDateString()) : '—'}</td>
+            <td>${_crmCardActionsHtml(r.id)}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`
+      : `<div class="crm-list-empty">${_crmFilterActive() ? 'No leads match your search or filters.' : 'No leads yet.'}</div>`;
+  }
+
+  $('#crm-pipeline-list')?.addEventListener('click', e => {
+    const sortTh = e.target.closest('th[data-sort]');
+    if (sortTh) {
+      const k = sortTh.dataset.sort;
+      _crmListSort = _crmListSort.key === k
+        ? { key: k, dir: _crmListSort.dir === 'asc' ? 'desc' : 'asc' }
+        : { key: k, dir: k === 'value' || k === 'created' ? 'desc' : 'asc' };
+      _renderLeadList();
+      return;
+    }
+    if (e.target.closest('select')) return;
+    const editBtn = e.target.closest('.crm-card-edit');
+    const delBtn  = e.target.closest('.crm-card-del');
+    if (delBtn) { _crmDeleteLead(parseInt(delBtn.dataset.leadId)); return; }
+    const row = e.target.closest('tr[data-lead-id]');
+    const id  = parseInt((editBtn || row)?.dataset.leadId);
+    const lead = id ? _findLead(id) : null;
+    if (!lead) return;
+    if (editBtn) _openEditLeadModal(lead);
+    else _openViewLeadModal(lead);
+  });
+
+  $('#crm-pipeline-list')?.addEventListener('change', async e => {
+    const sel = e.target.closest('select[data-move-lead]');
+    if (!sel) return;
+    sel.disabled = true;
+    const res = await API.crmMoveLead(parseInt(sel.dataset.moveLead), parseInt(sel.value));
+    if (res.status === 200) {
+      loadCrmPipeline(_crmProjectId, { silent: true });
+    } else {
+      sel.value = sel.dataset.fromStage;
+      sel.disabled = false;
+      toast(res.body?.message || 'Failed to move lead.', 'error');
+    }
+  });
+
+  let _crmSearchTimer = null;
+  $('#crm-pipe-search')?.addEventListener('input', e => {
+    clearTimeout(_crmSearchTimer);
+    _crmSearchTimer = setTimeout(() => {
+      _crmPipeFilter.q = e.target.value.trim().toLowerCase();
+      _crmColLimit = {};
+      _crmRenderPipelineView();
+    }, 150);
+  });
+  $$('#crm-relation-pane-pipeline [data-crm-filter]').forEach(btn => btn.addEventListener('click', () => {
+    const k = btn.dataset.crmFilter;
+    _crmPipeFilter[k] = !_crmPipeFilter[k];
+    btn.classList.toggle('active', _crmPipeFilter[k]);
+    _crmColLimit = {};
+    _crmRenderPipelineView();
+  }));
+  $$('#crm-relation-pane-pipeline [data-crm-view]').forEach(btn => btn.addEventListener('click', () => {
+    if (_crmPipeView === btn.dataset.crmView) return;
+    _crmPipeView = btn.dataset.crmView;
+    _crmPrefSet('crm.pipeline.view', _crmPipeView);
+    _crmSetHeroHidden(false);
+    _crmRenderPipelineView();
+  }));
+  $('#crm-pipe-density')?.addEventListener('click', () => {
+    _crmPipeCompact = !_crmPipeCompact;
+    _crmPrefSet('crm.pipeline.compact', _crmPipeCompact ? '1' : '0');
+    _crmRenderPipelineView();
+  });
+
   function _renderBoard() {
     const board = $('#crm-pipeline-board');
     if (!board || !_crmPipeline) return;
+    board.classList.toggle('crm-board--compact', _crmPipeCompact);
+
+    // Keep scroll positions across re-renders (silent resyncs, "Show more").
+    const scrollLeft = board.scrollLeft;
+    const colScroll = {};
+    board.querySelectorAll('.crm-col-body').forEach(b => { colScroll[b.dataset.dropStage] = b.scrollTop; });
+
+    const filtering = _crmFilterActive();
     board.innerHTML = _crmPipeline.columns.map(col => {
-      const cards = col.leads.map(lead => `
-        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmCan('leads_move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}">
+      const matched = filtering ? col.leads.filter(_crmLeadMatches) : col.leads;
+      const shown   = matched.slice(0, _crmColLimit[col.id] || CRM_COL_PAGE);
+      const remaining = matched.length - shown.length;
+      const cards = shown.map(lead => `
+        <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmCan('leads_move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}"${lead.company ? ` title="${escHtml(lead.name)} · ${escHtml(lead.company)}"` : ''}>
+          ${lead.is_customer ? '<i class="fa fa-circle-check crm-card-cust-ico" title="Already a Customer"></i>' : ''}
           <div class="crm-card-name">${escHtml(lead.name)}</div>
           ${lead.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}
           ${lead.company ? `<div class="crm-card-company"><i class="fa fa-building" style="margin-right:3px;opacity:.6"></i>${escHtml(lead.company)}</div>` : ''}
           <div class="crm-card-footer">
             <span class="crm-card-value">${lead.estimated_value ? formatMoney(lead.estimated_value) : ''}</span>
-            <div class="crm-card-actions">
-              <button class="crm-card-btn crm-card-edit" data-lead-id="${lead.id}" title="Edit"><i class="fa fa-pen"></i></button>
-              <button class="crm-card-btn crm-card-del" data-lead-id="${lead.id}" title="Delete"><i class="fa fa-trash"></i></button>
-            </div>
+            ${_crmCardActionsHtml(lead.id)}
           </div>
         </div>`).join('');
+      const moreBtn = remaining > 0
+        ? `<button class="crm-col-more" data-more-stage="${col.id}">Show ${Math.min(CRM_COL_PAGE, remaining)} more <span>· ${remaining} left</span></button>`
+        : '';
+      const countHtml = filtering
+        ? `<span class="crm-col-count crm-col-count--filtered" title="${matched.length} of ${col.leads_count} match">${matched.length}</span>`
+        : `<span class="crm-col-count">${col.leads_count}</span>`;
 
       const valueLine = col.value_total > 0
         ? `<span style="font-size:10px;color:var(--text-muted);padding:2px 12px 6px;display:block">${formatMoney(col.value_total)}</span>`
@@ -56628,17 +56864,30 @@ async function submitDsCreate() {
         <div class="crm-col-head">
           <span class="crm-col-swatch" style="background:${escHtml(col.color)}"></span>
           <span class="crm-col-name">${escHtml(col.name)}</span>
-          <span class="crm-col-count">${col.leads_count}</span>
+          ${countHtml}
           ${!col.is_won && !col.is_lost
             ? `<button class="crm-card-btn" data-add-stage="${col.id}" title="${_crmPipeline.default_form ? 'Add lead (via default form)' : 'Set a default form in the Forms tab before adding leads'}" style="opacity:1;margin-left:2px"${_crmPipeline.default_form ? '' : ' disabled'}><i class="fa fa-plus"></i></button>`
             : ''}
         </div>
         ${valueLine}
         <div class="crm-col-body" data-drop-stage="${col.id}">
-          ${cards || `<p class="crm-col-empty">No leads</p>`}
+          ${cards || `<p class="crm-col-empty">${filtering ? 'No matches' : 'No leads'}</p>`}
+          ${moreBtn}
         </div>
       </div>`;
     }).join('');
+
+    board.scrollLeft = scrollLeft;
+    board.querySelectorAll('.crm-col-body').forEach(b => { b.scrollTop = colScroll[b.dataset.dropStage] || 0; });
+
+    board.querySelectorAll('[data-more-stage]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.dataset.moreStage;
+        _crmColLimit[id] = (_crmColLimit[id] || CRM_COL_PAGE) + CRM_COL_PAGE;
+        _renderBoard();
+      });
+    });
 
     // ── Drag-and-drop ────────────────────────────────────────────────────
     board.querySelectorAll('.crm-card').forEach(card => {
@@ -56685,7 +56934,7 @@ async function submitDsCreate() {
         // if the server rejects the move.
         const fromBody = board.querySelector(`.crm-col-body[data-drop-stage="${fromStage}"]`);
         col.querySelector('.crm-col-empty')?.remove();
-        col.appendChild(cardEl);
+        col.insertBefore(cardEl, col.querySelector('.crm-col-more'));
         cardEl.dataset.stageId = toStage;
         _crmAdjustColCount(fromStage, -1, fromBody);
         _crmAdjustColCount(toStage, 1, col);
@@ -56698,7 +56947,7 @@ async function submitDsCreate() {
         } else {
           // Revert: move the card back to its original column.
           fromBody?.querySelector('.crm-col-empty')?.remove();
-          fromBody?.appendChild(cardEl);
+          fromBody?.insertBefore(cardEl, fromBody.querySelector('.crm-col-more'));
           cardEl.dataset.stageId = fromStage;
           _crmAdjustColCount(toStage, -1, col);
           _crmAdjustColCount(fromStage, 1, fromBody);
@@ -56726,24 +56975,17 @@ async function submitDsCreate() {
 
     // ── Delete card ───────────────────────────────────────────────────────
     board.querySelectorAll('.crm-card-del').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
+      btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (!confirm('Delete this lead?')) return;
-        const res = await API.crmDeleteLead(parseInt(btn.dataset.leadId));
-        if (res.status === 200) {
-          toast('Lead deleted.', 'success');
-          loadCrmPipeline();
-          if (_crmDetailLoaded.customData) loadCrmCustomData();
-          if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
-        } else toast(res.body?.message || 'Failed to delete.', 'error');
+        _crmDeleteLead(parseInt(btn.dataset.leadId));
       });
     });
 
-    // ── Click card (edit) ─────────────────────────────────────────────────
+    // ── Click card (view details) ─────────────────────────────────────────
     board.querySelectorAll('.crm-card').forEach(card => {
       card.addEventListener('click', () => {
         const lead = _findLead(parseInt(card.dataset.leadId));
-        if (lead) _openEditLeadModal(lead);
+        if (lead) _openViewLeadModal(lead);
       });
     });
   }
@@ -56940,45 +57182,153 @@ async function submitDsCreate() {
     }
   });
 
-  // ── Edit Lead Modal ───────────────────────────────────────────────────────
-  // Shows the fields of whichever form the lead was actually created from (falling back to
-  // the project's current default form, then to core fields, if the lead has none recorded
-  // — e.g. it predates this tracking, or that form was since deleted). This is deliberate:
+  // ── Lead Details Modal (view + inline edit) ───────────────────────────────
+  // Opened by clicking a lead card / list row (view mode) or by any Edit action (edit mode).
+  // Fields come from whichever form the lead was actually created from (falling back to the
+  // project's current default form, then to core fields, if the lead has none recorded —
+  // e.g. it predates this tracking, or that form was since deleted). This is deliberate:
   // if the default form is later swapped for a different one, older leads must keep showing
-  // (and stay editable on) the fields their data was actually captured with, not whatever
-  // form happens to be default today.
-  async function _openEditLeadModal(lead) {
-    _populateStageSelect('#crm-lead-edit-stage', lead.stage_id);
-    $('#crm-lead-edit-id').value      = lead.id;
-    $('#crm-lead-edit-notes').value   = lead.notes || '';
-    $('#crm-lead-edit-alert').style.display = 'none';
-    $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Loading…</span>';
-    $('#crm-lead-edit-save').disabled = true;
-    $('#crm-lead-edit-modal').style.display = 'flex';
+  // (and stay editable on) the fields their data was actually captured with.
+  // Edit swaps the body to inputs in place and Save drops back to view mode with the
+  // updated lead, so the user never has to close the modal and find the lead again.
+  let _crmViewLead        = null;
+  let _crmViewEditing     = false;
+  let _crmViewBlocksReady = false;
+
+  const _crmFmtDateTime = d => d ? new Date(d).toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+
+  function _crmLeadViewItem(label, value) {
+    const empty = value == null || String(value).trim() === '';
+    return `<div class="crm-lead-view-item"><div class="crm-lead-view-label">${escHtml(label)}</div>`
+      + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}</div></div>`;
+  }
+
+  function _crmRenderLeadModal(editing) {
+    const lead = _crmViewLead;
+    if (!lead) return;
+    _crmViewEditing = editing;
+    const item  = _crmLeadViewItem;
+    const stage = _crmPipeline?.columns.find(c => c.id === lead.stage_id);
+    const loading = '<span style="color:var(--text-muted);font-size:12px">Loading…</span>';
+
+    const head = `
+      <div class="crm-lead-view-head">
+        <div class="crm-lead-view-avatar">${escHtml((lead.name || '?').trim().charAt(0).toUpperCase())}</div>
+        <div style="min-width:0">
+          <div class="crm-lead-view-name">${escHtml(lead.name || '')}</div>
+          <div class="crm-lead-view-sub">
+            ${stage ? `<span class="crm-lead-view-stage"><span class="crm-col-swatch" style="background:${escHtml(stage.color)}"></span>${escHtml(stage.name)}</span>` : ''}
+            ${lead.is_customer ? `<span class="crm-card-customer-badge" style="margin-top:0"><i class="fa fa-circle-check"></i> Already a Customer</span>` : ''}
+            <span><i class="fa fa-user-pen" style="margin-right:4px"></i>Entered by <strong>${escHtml(lead.created_by_name || 'Web form / unknown')}</strong></span>
+            ${lead.created_at ? `<span><i class="fa fa-clock" style="margin-right:4px"></i>${escHtml(_crmFmtDateTime(lead.created_at))}</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div id="crm-lead-view-alert" class="svc-form-alert" style="display:none"></div>`;
+
+    let fields;
+    if (!_crmViewBlocksReady) {
+      fields = loading;
+    } else if (editing) {
+      // Field blocks only — the form's headings/description text are decoration for the
+      // public form and just add noise here. Stage + Notes share the same grid.
+      const inputs = _crmLeadFormBlocks
+        .map((b, i) => b.type === 'field' ? _crmLeadFormBlockHtml(b, i, _crmLeadFieldValue(b, lead)) : '')
+        .join('');
+      fields = `<div class="crm-lead-view-grid crm-lead-view-grid--edit">
+        ${inputs}
+        <div class="po-field">
+          <label class="po-field-label">Stage</label>
+          <select id="crm-lead-view-stage" class="po-field-input" style="appearance:auto"></select>
+        </div>
+        <div class="po-field" style="grid-column:1/-1">
+          <label class="po-field-label">Notes</label>
+          <textarea id="crm-lead-view-notes" class="po-field-input" rows="2" style="resize:vertical">${escHtml(lead.notes || '')}</textarea>
+        </div>
+      </div>`;
+    } else {
+      const items = _crmLeadFormBlocks.filter(b => b.type === 'field')
+        .map(b => item(b.label || b.field || 'Field', _crmLeadFieldValue(b, lead))).join('');
+      fields = `<div class="crm-lead-view-grid">${items || item('Name', lead.name)}</div>`;
+    }
+
+    const rest = editing ? '' : `
+      <div>
+        <div class="crm-lead-view-section">Record</div>
+        <div class="crm-lead-view-grid">
+          ${item('Stage', stage?.name)}
+          ${item('Entered By', lead.created_by_name)}
+          ${item('Created', _crmFmtDateTime(lead.created_at))}
+          ${item('Last Updated', _crmFmtDateTime(lead.updated_at))}
+          ${item('Source', lead.source)}
+          ${lead.estimated_value ? item('Estimated Value', formatMoney(lead.estimated_value)) : ''}
+          ${lead.expected_close_date ? item('Expected Close', new Date(lead.expected_close_date).toLocaleDateString()) : ''}
+          ${item('Notes', lead.notes).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide')}
+        </div>
+      </div>`;
+
+    $('#crm-lead-view-body').innerHTML = head
+      + `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
+      + rest;
+
+    $('#crm-lead-view-title').textContent = editing ? 'Edit Lead' : 'Lead Details';
+    $('#crm-lead-view-cancel').innerHTML  = editing ? '<i class="fa fa-arrow-left"></i> Back to Details' : '<i class="fa fa-xmark"></i> Close';
+    $('#crm-lead-view-edit').style.display = !editing && _crmCan('leads_edit') ? '' : 'none';
+    $('#crm-lead-view-save').style.display = editing ? '' : 'none';
+    $('#crm-lead-view-save').disabled      = !_crmViewBlocksReady;
+
+    if (editing) {
+      _populateStageSelect('#crm-lead-view-stage', lead.stage_id);
+      if (_crmViewBlocksReady) $('#crm-lead-view-body .crm-lead-field-input')?.focus();
+    }
+  }
+
+  async function _openViewLeadModal(lead, { edit = false } = {}) {
+    _crmViewLead        = lead;
+    _crmViewBlocksReady = false;
+    $('#crm-lead-view-modal').style.display = 'flex';
+    _crmRenderLeadModal(edit);
 
     const formId = lead.form_id || _crmPipeline?.default_form?.id || null;
     const blocks = await _crmLoadLeadFormBlocks(formId);
+    if (_crmViewLead !== lead) return; // another lead was opened (or the modal closed) meanwhile
     if (blocks === null) {
-      $('#crm-lead-edit-form-fields').innerHTML = '<span style="color:var(--text-muted);font-size:12px">Failed to load form.</span>';
+      $('#crm-lead-view-body').querySelector('.crm-lead-view-section + span').textContent = 'Failed to load form fields.';
       return;
     }
-    $('#crm-lead-edit-form-fields').innerHTML = blocks.length
-      ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i, _crmLeadFieldValue(b, lead))).join('')
-      : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>';
-    $('#crm-lead-edit-save').disabled = false;
-    $('#crm-lead-edit-form-fields').querySelector('.crm-lead-field-input')?.focus();
+    _crmViewBlocksReady = true;
+    _crmRenderLeadModal(_crmViewEditing);
   }
 
-  $('#crm-lead-edit-close')?.addEventListener('click',  () => { $('#crm-lead-edit-modal').style.display = 'none'; });
-  $('#crm-lead-edit-cancel')?.addEventListener('click', () => { $('#crm-lead-edit-modal').style.display = 'none'; });
-  $('#crm-lead-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-lead-edit-modal')) $('#crm-lead-edit-modal').style.display = 'none'; });
+  function _openEditLeadModal(lead) {
+    return _openViewLeadModal(lead, { edit: true });
+  }
 
-  $('#crm-lead-edit-save')?.addEventListener('click', async () => {
-    const id = parseInt($('#crm-lead-edit-id').value);
+  function _closeViewLeadModal() {
+    $('#crm-lead-view-modal').style.display = 'none';
+    _crmViewLead = null;
+  }
+
+  $('#crm-lead-view-close')?.addEventListener('click', _closeViewLeadModal);
+  $('#crm-lead-view-cancel')?.addEventListener('click', () => {
+    if (_crmViewEditing) _crmRenderLeadModal(false);
+    else _closeViewLeadModal();
+  });
+  // Ignore backdrop clicks while editing so a stray click can't throw away unsaved changes.
+  $('#crm-lead-view-modal')?.addEventListener('click', e => {
+    if (e.target === $('#crm-lead-view-modal') && !_crmViewEditing) _closeViewLeadModal();
+  });
+  $('#crm-lead-view-edit')?.addEventListener('click', () => _crmRenderLeadModal(true));
+
+  $('#crm-lead-view-save')?.addEventListener('click', async () => {
+    const lead = _crmViewLead;
+    if (!lead || !_crmViewBlocksReady) return;
+    const alertEl = $('#crm-lead-view-alert');
+    alertEl.style.display = 'none';
 
     const core = { name: '', company: '', email: '', phone: '' };
     const customFields = {};
-    const values = _crmCollectLeadFieldValues($('#crm-lead-edit-form-fields'));
+    const values = _crmCollectLeadFieldValues($('#crm-lead-view-body'));
     _crmLeadFormBlocks.forEach((block, idx) => {
       if (block.type !== 'field') return;
       const field = String(block.field || '');
@@ -56986,30 +57336,50 @@ async function submitDsCreate() {
       if (field in core) core[field] = value;
       else if (field.startsWith('custom:')) customFields[field.slice(7)] = value;
     });
+    // Forms without a name field keep the lead's existing name.
+    const hasNameField = _crmLeadFormBlocks.some(b => b.type === 'field' && b.field === 'name');
+    if (!hasNameField) core.name = lead.name || '';
 
-    if (!core.name) { $('#crm-lead-edit-alert').textContent = 'Name is required.'; $('#crm-lead-edit-alert').style.display = ''; return; }
+    if (!core.name) { alertEl.textContent = 'Name is required.'; alertEl.style.display = ''; return; }
 
-    const btn = $('#crm-lead-edit-save');
+    const payload = {
+      name:          core.name,
+      company:       core.company || null,
+      email:         core.email || null,
+      phone:         core.phone || null,
+      stage_id:      $('#crm-lead-view-stage').value || null,
+      notes:         $('#crm-lead-view-notes').value.trim() || null,
+      custom_fields: customFields,
+    };
+
+    const btn = $('#crm-lead-view-save');
     btn.disabled = true;
-    const res = await API.crmUpdateLead(id, {
-      name:            core.name,
-      company:         core.company || null,
-      email:           core.email || null,
-      phone:           core.phone || null,
-      stage_id:        $('#crm-lead-edit-stage').value || null,
-      notes:           $('#crm-lead-edit-notes').value.trim() || null,
-      custom_fields:   customFields,
-    });
+    const res = await API.crmUpdateLead(lead.id, payload);
     btn.disabled = false;
+    if (_crmViewLead !== lead) return;
+
     if (res.status === 200) {
-      $('#crm-lead-edit-modal').style.display = 'none';
+      const saved = res.body?.data || {};
+      _crmViewLead = {
+        ...lead,
+        name:          payload.name,
+        company:       payload.company,
+        email:         payload.email,
+        phone:         payload.phone,
+        notes:         payload.notes,
+        stage_id:      parseInt(saved.stage_id ?? payload.stage_id ?? lead.stage_id),
+        updated_at:    saved.updated_at || lead.updated_at,
+        custom_fields: { ...(lead.custom_fields || {}), ...customFields },
+      };
+      _crmRenderLeadModal(false);
       toast('Lead updated.', 'success');
-      loadCrmPipeline();
+      loadCrmPipeline(_crmProjectId, { silent: true });
       if (_crmDetailLoaded.customData) loadCrmCustomData();
       if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
     } else {
-      $('#crm-lead-edit-alert').textContent = res.body?.message || 'Failed to update lead.';
-      $('#crm-lead-edit-alert').style.display = '';
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      alertEl.textContent = firstError || res.body?.message || 'Failed to update lead.';
+      alertEl.style.display = '';
     }
   });
 

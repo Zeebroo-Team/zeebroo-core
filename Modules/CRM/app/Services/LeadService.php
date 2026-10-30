@@ -264,6 +264,7 @@ class LeadService
             'expected_close_date' => filled($data['expected_close_date'] ?? '') ? $data['expected_close_date'] : null,
             'notes'               => filled($data['notes'] ?? '') ? $data['notes'] : null,
             'assigned_to'         => $this->nullableInt($data['assigned_to'] ?? null),
+            'created_by'          => $userId,
         ]);
 
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
