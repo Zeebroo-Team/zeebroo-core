@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Modules\Business\Models\Business;
+use Modules\CRM\Models\Concerns\Auditable;
 use Modules\HRManagement\Models\Department;
 use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
@@ -20,6 +21,8 @@ use Modules\Product\Models\Product;
 
 class Lead extends Model
 {
+    use Auditable;
+
     protected $table = 'crm_leads';
 
     /** Where a lead came from: key => [label, Font Awesome icon classes, colour]. */
@@ -198,9 +201,26 @@ class Lead extends Model
         return $this->hasMany(LeadCustomFieldValue::class);
     }
 
+    /** The primary assignee — kept in sync with crm_lead_assignees by LeadAssignmentService. */
     public function assignedTo(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'assigned_to');
+    }
+
+    /** Everyone working the lead, primary first. */
+    public function assignees(): HasMany
+    {
+        return $this->hasMany(LeadAssignee::class)->orderByDesc('is_primary')->orderBy('assigned_at')->orderBy('id');
+    }
+
+    public function messages(): HasMany
+    {
+        return $this->hasMany(LeadMessage::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(LeadAttachment::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
     public function createdBy(): BelongsTo

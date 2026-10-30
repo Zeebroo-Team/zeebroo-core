@@ -7,6 +7,7 @@ use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Gate;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Policies\LeadPolicy;
+use Modules\CRM\Services\Timeline;
 
 class CRMServiceProvider extends ModuleServiceProvider
 {
@@ -46,6 +47,16 @@ class CRMServiceProvider extends ModuleServiceProvider
 
         // Caches each business's settings for the request / queued job
         $this->app->scoped(\Modules\CRM\Services\CrmSettingsService::class);
+
+        // A lead's unified timeline; other modules add sources with extend() (see TimelineSource)
+        $this->app->singleton(Timeline\TimelineService::class, fn ($app) => new Timeline\TimelineService([
+            new Timeline\ActivityTimelineSource(),
+            new Timeline\StageTimelineSource(),
+            new Timeline\AssignmentTimelineSource($app->make(\Modules\CRM\Services\LeadAssignmentService::class)),
+            new Timeline\MessageTimelineSource(),
+            new Timeline\AttachmentTimelineSource(),
+            new Timeline\TaskTimelineSource(),
+        ]));
     }
 
     public function boot(): void

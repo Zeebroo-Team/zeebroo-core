@@ -164,6 +164,9 @@ beforeEach(function () {
         ['id' => 5, 'business_id' => 7, 'project_id' => 4, 'stage_id' => 4, 'name' => 'No department',  'assigned_to' => null],
         ['id' => 6, 'business_id' => 8, 'project_id' => 5, 'stage_id' => 5, 'name' => 'Other business', 'assigned_to' => null],
     ]);
+    // Run after the leads exist: it copies assigned_to into crm_lead_assignees as the primary assignee
+    (require $dir . '2026_11_04_100000_create_crm_lead_assignees_table.php')->up();
+    (require $dir . '2026_11_04_110200_create_crm_audit_logs_table.php')->up();
 
     $this->business = Business::find(7);
     $this->policy   = app(LeadPolicy::class);

@@ -11,7 +11,9 @@ use Modules\CRM\Models\Activity;
 use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAssignmentLog;
+use Modules\CRM\Models\LeadAttachment;
 use Modules\CRM\Models\LeadAuditLog;
+use Modules\CRM\Models\LeadMessage;
 use Modules\CRM\Models\LeadCustomFieldValue;
 use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\Project;
@@ -42,6 +44,7 @@ class MarketingInboxService
         private readonly CrmOrgService $org,
         private readonly LeadAuditService $audit,
         private readonly LeadPolicy $policy,
+        private readonly LeadAssignmentService $assignments,
     ) {}
 
     // ── Reading ──────────────────────────────────────────────────────────
@@ -310,9 +313,11 @@ class MarketingInboxService
                 'note'               => $note,
             ]);
 
+            // The receiving department's head picks who works it
+            $this->assignments->clear($lead);
+
             $lead = $this->leads->moveToProject($lead, $project, $userId, [
                 'division_id'          => $division?->id,
-                'assigned_to'          => null,
                 'needs_review'         => false,
                 'review_reason'        => null,
                 'duplicate_of_lead_id' => null,
@@ -362,6 +367,8 @@ class MarketingInboxService
             Activity::query()->where('subject_type', $morph)->where('subject_id', $source->id)->update(['subject_id' => $target->id]);
             Task::query()->where('subject_type', $morph)->where('subject_id', $source->id)->update(['subject_id' => $target->id]);
             LeadAssignmentLog::query()->where('lead_id', $source->id)->update(['lead_id' => $target->id]);
+            LeadMessage::query()->where('lead_id', $source->id)->update(['lead_id' => $target->id]);
+            LeadAttachment::query()->where('lead_id', $source->id)->update(['lead_id' => $target->id]);
 
             $existingFields = LeadCustomFieldValue::query()->where('lead_id', $target->id)->pluck('custom_field_id');
             LeadCustomFieldValue::query()

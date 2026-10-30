@@ -37,7 +37,7 @@ class LeadService
     ): Collection {
         $query = Lead::query()
             ->where('project_id', $project->id)
-            ->with(['assignedTo', 'customer', 'stage']);
+            ->with(['assignedTo', 'assignees.user:id,name', 'customer', 'stage']);
 
         if (filled($search)) {
             $query->where(function ($q) use ($search) {
@@ -229,7 +229,7 @@ class LeadService
     {
         return Lead::query()
             ->where('project_id', $project->id)
-            ->with(['assignedTo'])
+            ->with(['assignedTo', 'assignees.user:id,name'])
             ->orderByDesc('id')
             ->get()
             ->groupBy('stage_id');
@@ -266,6 +266,12 @@ class LeadService
         [$stageAttributes, $reason] = $stage ? $this->stageEntry(null, $project->business_id, null, $stage, $data) : [[], null];
         $source = $this->sources->resolve($project->business_id, $data['source'] ?? null, $data['source_id'] ?? null);
 
+        // The assignee is set through LeadAssignmentService once the lead exists — check it first
+        $assignee = $this->nullableInt($data['assigned_to'] ?? null);
+        if ($assignee !== null) {
+            $this->assignments()->assertAssignableIn($project, [$assignee]);
+        }
+
         $lead = DB::transaction(function () use ($project, $data, $userId, $stageId, $stageAttributes, $source) {
             $lead = Lead::create([
                 'business_id'           => $project->business_id,
@@ -293,7 +299,6 @@ class LeadService
                 'expected_close_date'   => filled($data['expected_close_date'] ?? '') ? $data['expected_close_date'] : null,
                 'notes'                 => filled($data['notes'] ?? '') ? $data['notes'] : null,
                 'product_interest_note' => filled($data['product_interest_note'] ?? '') ? $data['product_interest_note'] : null,
-                'assigned_to'           => $this->nullableInt($data['assigned_to'] ?? null),
                 'created_by'            => $userId,
             ] + $stageAttributes);
 
@@ -319,7 +324,17 @@ class LeadService
             }
         }
 
+        if ($assignee !== null) {
+            $lead = $this->assignments()->sync($lead, [$assignee], $assignee, $userId);
+        }
+
         return $lead;
+    }
+
+    /** Resolved lazily — LeadAssignmentService itself depends on this service. */
+    private function assignments(): LeadAssignmentService
+    {
+        return app(LeadAssignmentService::class);
     }
 
     /**
@@ -405,9 +420,7 @@ class LeadService
                 'product_interest_note' => array_key_exists('product_interest_note', $data)
                     ? (filled($data['product_interest_note']) ? $data['product_interest_note'] : null)
                     : $lead->product_interest_note,
-                'assigned_to'           => array_key_exists('assigned_to', $data)
-                    ? $this->nullableInt($data['assigned_to'])
-                    : $lead->assigned_to,
+                // assigned_to is not edited here: it follows the primary assignee (LeadAssignmentService)
             ] + $stageAttributes);
 
             if (array_key_exists('products', $data)) {
@@ -806,6 +819,8 @@ class LeadService
     public function delete(Lead $lead, ?int $userId = null, array $auditMeta = []): void
     {
         $this->audit->recordDeleted($lead, $userId, $auditMeta);
+        // The attachment rows go with the lead; their stored files would be left behind
+        app(LeadAttachmentService::class)->deleteAllFor($lead);
         $lead->delete();
     }
 

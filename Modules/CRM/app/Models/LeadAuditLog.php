@@ -26,6 +26,7 @@ class LeadAuditLog extends Model
     const EVENT_REVIEWED      = 'reviewed';
     const EVENT_FORWARDED     = 'forwarded';
     const EVENT_MERGED        = 'merged';
+    const EVENT_ASSIGNED      = 'assigned';
 
     /** Events that move a lead into, between or out of stages — the History flow view's edges. */
     const STAGE_EVENTS = [
@@ -78,6 +79,7 @@ class LeadAuditLog extends Model
             self::EVENT_REVIEWED      => 'Review cleared',
             self::EVENT_FORWARDED     => 'Forwarded',
             self::EVENT_MERGED        => 'Merged',
+            self::EVENT_ASSIGNED      => 'Assignees changed',
         ];
     }
 

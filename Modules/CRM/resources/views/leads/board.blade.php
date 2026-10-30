@@ -129,7 +129,7 @@
                                     @endif
                                     {{ $lead->estimated_value !== null ? number_format((float) $lead->estimated_value, 2) : '' }}
                                 </span>
-                                <span>{{ $lead->assignedTo?->name }}</span>
+                                @include('crm::partials.assignee-chips', ['assignees' => $lead->assignees, 'compact' => true, 'emptyText' => ''])
                             </div>
                         </div>
                     @empty

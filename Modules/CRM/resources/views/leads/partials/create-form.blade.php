@@ -118,9 +118,13 @@
         </div>
 
         <div class="pcat-field">
-            <label for="ld-assignee">Assigned to</label>
+            <label for="ld-assignee">{{ $lead->exists ? 'Primary assignee' : 'Assigned to' }}</label>
             <select id="ld-assignee" name="assigned_to" @disabled(! ($canAssign ?? true)) @if(! ($canAssign ?? true)) title="Only the department head can assign this lead." @endif>
                 <option value="">— Unassigned —</option>
+                {{-- Keep a current assignee who has left the department, rather than unassigning them on save --}}
+                @if($lead->assigned_to && ! $assignableUsers->contains('id', $lead->assigned_to))
+                    <option value="{{ $lead->assigned_to }}" @selected(old('assigned_to', $lead->assigned_to) == $lead->assigned_to)>{{ $lead->assignedTo?->name ?? 'Current assignee' }} (not in the department)</option>
+                @endif
                 @foreach($assignableUsers as $u)
                     <option value="{{ $u->id }}" @selected(old('assigned_to', $lead->assigned_to) == $u->id)>{{ $u->name }}</option>
                 @endforeach

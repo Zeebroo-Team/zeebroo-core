@@ -622,6 +622,36 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('crm/inbox/leads/{lead}/forward',    [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'forward'])->whereNumber('lead')->name('crm.inbox.forward');
     Route::post  ('crm/inbox/leads/{lead}/merge',      [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'merge'])  ->whereNumber('lead')->name('crm.inbox.merge');
 
+    // CRM lead bulk upload (CSV / XLSX: our template, Google Forms or Facebook Lead Ads exports)
+    Route::get   ('crm/lead-imports',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'index'])   ->name('crm.lead-imports.index');
+    Route::get   ('crm/lead-imports/template',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'template'])->name('crm.lead-imports.template');
+    Route::post  ('crm/lead-imports',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'store'])   ->name('crm.lead-imports.store');
+    Route::get   ('crm/lead-imports/{import}',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'show'])    ->whereNumber('import')->name('crm.lead-imports.show');
+    Route::post  ('crm/lead-imports/{import}/preview', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'preview']) ->whereNumber('import')->name('crm.lead-imports.preview');
+    Route::post  ('crm/lead-imports/{import}/run',     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'run'])     ->whereNumber('import')->name('crm.lead-imports.run');
+    Route::get   ('crm/lead-imports/{import}/errors',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'errors'])  ->whereNumber('import')->name('crm.lead-imports.errors');
+    Route::delete('crm/lead-imports/{import}',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'destroy']) ->whereNumber('import')->name('crm.lead-imports.destroy');
+
+    // CRM lead workspace (assignees + history, unified timeline, internal messages, files, tasks) and the admin audit log
+    Route::get   ('crm/leads/{lead}/workspace',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'show'])              ->whereNumber('lead')->name('crm.leads.workspace');
+    Route::get   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'assignees'])         ->whereNumber('lead')->name('crm.leads.assignees.index');
+    Route::put   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'syncAssignees'])     ->whereNumber('lead')->name('crm.leads.assignees.sync');
+    Route::post  ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'addAssignees'])      ->whereNumber('lead')->name('crm.leads.assignees.store');
+    Route::delete('crm/leads/{lead}/assignees/{user}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'removeAssignee'])    ->whereNumber(['lead', 'user'])->name('crm.leads.assignees.destroy');
+    Route::post  ('crm/leads/{lead}/assignees/{user}/primary',          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'primaryAssignee'])   ->whereNumber(['lead', 'user'])->name('crm.leads.assignees.primary');
+    Route::get   ('crm/leads/{lead}/timeline',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'timeline'])          ->whereNumber('lead')->name('crm.leads.timeline');
+    Route::get   ('crm/leads/{lead}/messages',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'messages'])          ->whereNumber('lead')->name('crm.leads.messages.index');
+    Route::post  ('crm/leads/{lead}/messages',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeMessage'])      ->whereNumber('lead')->name('crm.leads.messages.store');
+    Route::put   ('crm/leads/{lead}/messages/{message}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'updateMessage'])     ->whereNumber(['lead', 'message'])->name('crm.leads.messages.update');
+    Route::delete('crm/leads/{lead}/messages/{message}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'destroyMessage'])    ->whereNumber(['lead', 'message'])->name('crm.leads.messages.destroy');
+    Route::get   ('crm/leads/{lead}/attachments',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'attachments'])       ->whereNumber('lead')->name('crm.leads.attachments.index');
+    Route::post  ('crm/leads/{lead}/attachments',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeAttachments'])  ->whereNumber('lead')->name('crm.leads.attachments.store');
+    Route::get   ('crm/leads/{lead}/attachments/{attachment}/download', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'downloadAttachment'])->whereNumber(['lead', 'attachment'])->name('crm.leads.attachments.download');
+    Route::delete('crm/leads/{lead}/attachments/{attachment}',          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'destroyAttachment']) ->whereNumber(['lead', 'attachment'])->name('crm.leads.attachments.destroy');
+    Route::get   ('crm/leads/{lead}/tasks',                             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'tasks'])             ->whereNumber('lead')->name('crm.leads.tasks.index');
+    Route::post  ('crm/leads/{lead}/tasks',                             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeTask'])         ->whereNumber('lead')->name('crm.leads.tasks.store');
+    Route::get   ('crm/audit-logs',                                     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'auditLogs'])         ->name('crm.audit-logs.index');
+
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');

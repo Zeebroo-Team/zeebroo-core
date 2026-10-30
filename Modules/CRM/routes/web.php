@@ -3,12 +3,15 @@
 use Illuminate\Support\Facades\Route;
 use Modules\CRM\Http\Controllers\ActivityController;
 use Modules\CRM\Http\Controllers\ContactController;
+use Modules\CRM\Http\Controllers\CrmAuditLogController;
 use Modules\CRM\Http\Controllers\CrmImageController;
 use Modules\CRM\Http\Controllers\CrmOrgController;
 use Modules\CRM\Http\Controllers\LeadController;
 use Modules\CRM\Http\Controllers\LeadCustomFieldController;
 use Modules\CRM\Http\Controllers\LeadFormController;
+use Modules\CRM\Http\Controllers\LeadImportController;
 use Modules\CRM\Http\Controllers\LeadStageController;
+use Modules\CRM\Http\Controllers\LeadWorkspaceController;
 use Modules\CRM\Http\Controllers\MarketingInboxController;
 use Modules\CRM\Http\Controllers\OverviewController;
 use Modules\CRM\Http\Controllers\ProjectController;
@@ -69,6 +72,19 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/leads/{lead}/resume',     [LeadController::class, 'resume'])      ->name('crm.leads.resume');
     Route::delete('/crm/leads/{lead}',          [LeadController::class, 'destroy'])     ->name('crm.leads.destroy');
 
+    // Lead workspace: assignees, internal messages, files
+    Route::post('/crm/leads/{lead}/assignees',                  [LeadWorkspaceController::class, 'syncAssignees'])     ->name('crm.leads.assignees.sync');
+    Route::delete('/crm/leads/{lead}/assignees/{user}',         [LeadWorkspaceController::class, 'removeAssignee'])    ->whereNumber('user')->name('crm.leads.assignees.destroy');
+    Route::post('/crm/leads/{lead}/assignees/{user}/primary',   [LeadWorkspaceController::class, 'primaryAssignee'])   ->whereNumber('user')->name('crm.leads.assignees.primary');
+    Route::post('/crm/leads/{lead}/messages',                   [LeadWorkspaceController::class, 'storeMessage'])      ->name('crm.leads.messages.store');
+    Route::put('/crm/leads/{lead}/messages/{message}',          [LeadWorkspaceController::class, 'updateMessage'])     ->whereNumber('message')->name('crm.leads.messages.update');
+    Route::delete('/crm/leads/{lead}/messages/{message}',       [LeadWorkspaceController::class, 'destroyMessage'])    ->whereNumber('message')->name('crm.leads.messages.destroy');
+    Route::post('/crm/leads/{lead}/attachments',                [LeadWorkspaceController::class, 'storeAttachments'])  ->name('crm.leads.attachments.store');
+    Route::get('/crm/leads/{lead}/attachments/{attachment}',    [LeadWorkspaceController::class, 'downloadAttachment'])->whereNumber('attachment')->name('crm.leads.attachments.download');
+    Route::delete('/crm/leads/{lead}/attachments/{attachment}', [LeadWorkspaceController::class, 'destroyAttachment']) ->whereNumber('attachment')->name('crm.leads.attachments.destroy');
+
+    Route::get('/crm/audit',                    [CrmAuditLogController::class, 'index']) ->name('crm.audit.index');
+
     Route::get('/crm/contacts',                 [ContactController::class, 'index'])    ->name('crm.contacts.index');
     Route::get('/crm/contacts/{customer}',      [ContactController::class, 'show'])     ->name('crm.contacts.show');
 
@@ -89,7 +105,16 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/inbox/{lead}/forward',     [MarketingInboxController::class, 'forward'])->name('crm.inbox.forward');
     Route::post('/crm/inbox/{lead}/merge',       [MarketingInboxController::class, 'merge'])  ->name('crm.inbox.merge');
 
-    Route::put('/crm/settings/intake',                                   [CrmOrgController::class, 'updateCrmSettings'])->name('crm.settings.update');
+    Route::get('/crm/imports',                      [LeadImportController::class, 'index'])   ->name('crm.imports.index');
+    Route::get('/crm/imports/template',             [LeadImportController::class, 'template'])->name('crm.imports.template');
+    Route::post('/crm/imports',                     [LeadImportController::class, 'store'])   ->name('crm.imports.store');
+    Route::get('/crm/imports/{import}',             [LeadImportController::class, 'show'])    ->whereNumber('import')->name('crm.imports.show');
+    Route::post('/crm/imports/{import}/preview',    [LeadImportController::class, 'preview']) ->whereNumber('import')->name('crm.imports.preview');
+    Route::post('/crm/imports/{import}/run',        [LeadImportController::class, 'run'])     ->whereNumber('import')->name('crm.imports.run');
+    Route::get('/crm/imports/{import}/errors',      [LeadImportController::class, 'errors'])  ->whereNumber('import')->name('crm.imports.errors');
+    Route::delete('/crm/imports/{import}',          [LeadImportController::class, 'destroy']) ->whereNumber('import')->name('crm.imports.destroy');
+
+    Route::put('/crm/settings/intake',                                  [CrmOrgController::class, 'updateCrmSettings'])->name('crm.settings.update');
     Route::get('/crm/settings/org',                                      [CrmOrgController::class, 'index'])          ->name('crm.org.index');
     Route::post('/crm/settings/org/departments/{department}/divisions',  [CrmOrgController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
     Route::put('/crm/settings/org/divisions/{division}',                 [CrmOrgController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');

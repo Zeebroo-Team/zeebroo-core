@@ -56686,6 +56686,7 @@ async function submitDsCreate() {
     const perms = _crmAccess?.permissions || {};
     Object.keys(perms).forEach(k => document.body.classList.toggle(`crm-deny-${k}`, perms[k] === false));
     document.body.classList.toggle('crm-is-admin', !!_crmAccess?.is_admin);
+    document.body.classList.toggle('crm-unrestricted', !!_crmAccess?.unrestricted); // the CRM audit log
     document.body.classList.toggle('crm-uses-inbox', !!_crmAccess?.uses_inbox);
     // A ribbon group whose buttons are all hidden would otherwise show as an empty box
     $$('.ribbon-page[data-page="crm"] .ribbon-group').forEach(grp => {
@@ -58170,7 +58171,7 @@ async function submitDsCreate() {
           + (lead.needs_review ? `<span class="crm-inbox-flag" title="Flagged for Marketing to review"><i class="fa fa-flag"></i> Review</span>` : '')
           + _crmScoreBadge(lead.score)
           + _crmSourceBadge(lead.source)
-          + (lead.assigned_to_name ? `<span class="crm-card-assignee" title="Assigned to ${escHtml(lead.assigned_to_name)}"><i class="fa fa-user"></i> ${escHtml(lead.assigned_to_name)}</span>` : '');
+          + _crmAssigneeChipsHtml(lead.assignee_list, { compact: true });
         return `
         <div class="crm-card${lead.is_customer ? ' crm-card--is-customer' : ''}" draggable="${_crmLeadCan(lead, 'move')}" data-lead-id="${lead.id}" data-stage-id="${col.id}"${lead.company ? ` title="${escHtml(lead.name)} · ${escHtml(lead.company)}"` : ''}>
           <div class="crm-card-top">
@@ -58678,7 +58679,7 @@ async function submitDsCreate() {
   function _crmRenderLeadHistory() {
     const box = $('#crm-lead-view-timeline');
     if (!box) return;
-    box.style.display = _crmViewEditing ? 'none' : '';
+    box.style.display = _crmViewEditing || _crmLeadTab !== 'overview' ? 'none' : '';
     const msg = text => { box.innerHTML = `<div class="crm-tl-msg">${text}</div>`; };
     if (_crmViewHistory === null)  return msg('<i class="fa fa-spinner fa-spin"></i> Loading timeline…');
     if (_crmViewHistory === false) return msg('Failed to load timeline.');
@@ -58851,7 +58852,6 @@ async function submitDsCreate() {
           ${lead.closed_at ? item('Closed', _crmFmtDateTime(lead.closed_at)) : ''}
           ${item('Products of Interest', (lead.product_items || []).map(p => p.name + (p.quantity != null ? ` × ${p.quantity}` : '')).join(', ')).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide')}
           ${lead.product_interest_note ? item('Product Notes', lead.product_interest_note).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide') : ''}
-          ${item('Assigned To', lead.assigned_to_name || 'Unassigned')}
           ${item('Entered By', lead.created_by_name)}
           ${item('Created', _crmFmtDateTime(lead.created_at))}
           ${item('Last Updated', _crmFmtDateTime(lead.updated_at))}
@@ -58862,13 +58862,20 @@ async function submitDsCreate() {
         </div>
       </div>`;
 
+    // Editing always shows the record; viewing shows the tab bar and the chosen tab
+    const overview = editing || _crmLeadTab === 'overview';
     $('#crm-lead-view-body').innerHTML = head
-      + `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
-      + rest;
+      + (editing ? '' : _crmLeadTabsHtml())
+      + (overview
+        ? (editing ? '' : _crmAssigneesSectionHtml(lead))
+          + `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
+          + rest
+        : '<div id="crm-ws-panel" class="crm-ws-panel"></div>');
     // Only show/hide the timeline here — rebuilding it on every body render (e.g. when the
     // form fields finish loading) re-laid it out and re-scrolled it for nothing.
     const tl = $('#crm-lead-view-timeline');
-    if (tl) tl.style.display = editing ? 'none' : '';
+    if (tl) tl.style.display = overview && !editing ? '' : 'none';
+    if (!overview) _crmRenderWsTab();
 
     $('#crm-lead-view-title').textContent = editing ? 'Edit Lead' : 'Lead Details';
     $('#crm-lead-view-cancel').innerHTML  = editing ? '<i class="fa fa-arrow-left"></i> Back to Details' : '<i class="fa fa-xmark"></i> Close';
@@ -59004,10 +59011,13 @@ async function submitDsCreate() {
   async function _openViewLeadModal(lead, { edit = false } = {}) {
     _crmViewLead        = lead;
     _crmViewBlocksReady = false;
+    _crmLeadTab         = 'overview';
+    _crmWs              = { leadId: lead.id };
     $('#crm-lead-view-modal').style.display = 'flex';
     _crmAnimateLeadModal(true);
     _crmRenderLeadModal(edit);
     _crmLoadLeadHistory(lead);
+    _crmLoadWorkspace(lead);
 
     const defaultFormId = _crmPipeline?.default_form?.id || null;
     const formId = lead.form_id || defaultFormId;
@@ -59018,11 +59028,13 @@ async function submitDsCreate() {
     if (blocks === null) blocks = await _crmLoadLeadFormBlocks(null);
     if (_crmViewLead !== lead) return; // another lead was opened (or the modal closed) meanwhile
     if (blocks === null) {
-      $('#crm-lead-view-body').querySelector('.crm-lead-view-section + span').textContent = 'Failed to load form fields.';
+      const slot = $('#crm-lead-view-body').querySelector('.crm-lead-view-section + span');
+      if (slot) slot.textContent = 'Failed to load form fields.';
       return;
     }
     _crmViewBlocksReady = true;
-    _crmRenderLeadModal(_crmViewEditing);
+    // Another tab may be open by now (with a half-written message) — only the record needs redrawing
+    if (_crmViewEditing || _crmLeadTab === 'overview') _crmRenderLeadModal(_crmViewEditing);
   }
 
   function _openEditLeadModal(lead) {
@@ -59046,6 +59058,506 @@ async function submitDsCreate() {
       </select>
     </div>`;
   }
+
+  // ── Lead workspace: assignees, timeline, messages, files, tasks ──────────
+  // The lead window's tabs. Overview is the record itself; the other tabs load on first open
+  // from /crm/leads/{id}/… and stay cached in _crmWs while the same lead is open. Who may
+  // post, upload or assign comes from the workspace's "can" flags (LeadPolicy on the server).
+  const _CRM_LEAD_TABS = [
+    ['overview', 'fa-circle-info',       'Overview'],
+    ['timeline', 'fa-clock-rotate-left', 'Timeline'],
+    ['messages', 'fa-comments',          'Messages'],
+    ['files',    'fa-paperclip',         'Files'],
+    ['tasks',    'fa-list-check',        'Tasks'],
+  ];
+  let _crmLeadTab = 'overview';
+  // { leadId, info (workspace), timeline / messages / files / tasks ({ data, meta } | false), timelineType, replyTo }
+  let _crmWs = { leadId: null };
+  const _crmWsPreviews = {}; // "leadId:attachmentId" → data URL
+
+  function _crmAssigneeChipsHtml(list, { compact = false, empty = '' } = {}) {
+    list = list || [];
+    if (!list.length) return empty;
+    const shown = compact ? list.slice(0, 2) : list;
+    const title = 'Working on it: ' + list.map(a => a.name + (a.is_primary && list.length > 1 ? ' (primary)' : '')).join(', ');
+    return `<span class="crm-assignees" title="${escHtml(title)}">${shown.map(a =>
+      `<span class="crm-assignee${a.is_primary && list.length > 1 ? ' crm-assignee--primary' : ''}"><span class="crm-assignee-av" style="--av:${_crmAvatarColor(a.name)}">${escHtml(_crmInitials(a.name))}</span><span class="crm-assignee-name">${escHtml(compact ? a.name.split(' ')[0] : a.name)}</span></span>`
+    ).join('')}${list.length > shown.length ? `<span class="crm-assignee crm-assignee--more">+${list.length - shown.length}</span>` : ''}</span>`;
+  }
+
+  function _crmWsError(res, fallback) {
+    return (res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null) || res.body?.message || fallback;
+  }
+
+  function _crmLeadTabsHtml() {
+    const counts = _crmWs.info?.counts || {};
+    return `<div class="crm-ws-tabs">${_CRM_LEAD_TABS.map(([key, icon, label]) => {
+      const n = counts[key];
+      return `<button type="button" class="crm-ws-tab${_crmLeadTab === key ? ' active' : ''}" data-ws-tab="${key}"><i class="fa ${icon}"></i>${label}${n ? `<span class="crm-ws-tab-count">${n}</span>` : ''}</button>`;
+    }).join('')}</div>`;
+  }
+
+  function _crmRefreshWsTabs() {
+    const el = $('#crm-lead-view-body .crm-ws-tabs');
+    if (el) el.outerHTML = _crmLeadTabsHtml();
+  }
+
+  // "Working on it" on the Overview tab — everyone who sees the lead sees who works it.
+  function _crmAssigneesSectionHtml(lead) {
+    const list = _crmWs.info?.assignees ?? lead.assignee_list ?? [];
+    const canAssign = _crmWs.info ? _crmWs.info.can?.can_assign : _crmLeadCan(lead, 'assign');
+    return `<div class="crm-ws-assignees">
+      <div class="crm-lead-view-section" style="margin:0">Working on it</div>
+      ${_crmAssigneeChipsHtml(list, { empty: '<span class="crm-ws-muted">Nobody is assigned yet.</span>' })}
+      ${canAssign ? '<button type="button" class="po-btn-ghost crm-ws-assign-btn" data-ws-assign><i class="fa fa-user-pen"></i> Assign…</button>' : ''}
+    </div>`;
+  }
+
+  async function _crmLoadWorkspace(lead) {
+    if (_crmWs.leadId !== lead.id) _crmWs = { leadId: lead.id };
+    const res = await API.crmLeadWorkspace(lead.id).catch(() => ({ status: 0 }));
+    if (_crmViewLead?.id !== lead.id) return;
+    _crmWs.info = res.status === 200 ? res.body.data : null;
+    if (_crmLeadTab === 'overview' && !_crmViewEditing) _crmRenderLeadModal(false);
+    else _crmRefreshWsTabs();
+  }
+
+  /** Drop cached tabs (re-loaded when shown) and refresh the counts. */
+  async function _crmWsRefresh(lead, keys) {
+    keys.forEach(k => { delete _crmWs[k]; });
+    if (keys.includes(_crmLeadTab)) _crmRenderWsTab();
+    await _crmLoadWorkspace(lead);
+  }
+
+  function _crmWsPanelHtml(text) {
+    return `<div class="crm-ws-empty">${text}</div>`;
+  }
+
+  function _crmRenderWsTab() {
+    const panel = $('#crm-ws-panel');
+    const lead  = _crmViewLead;
+    const tab   = _crmLeadTab;
+    if (!panel || !lead) return;
+    if (_crmWs[tab] === undefined) {
+      panel.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+      _crmLoadWsTab(lead, tab);
+      return;
+    }
+    if (_crmWs[tab] === false) { panel.innerHTML = _crmWsPanelHtml('Failed to load.'); return; }
+    panel.innerHTML = { timeline: _crmWsTimelineHtml, messages: _crmWsMessagesHtml, files: _crmWsFilesHtml, tasks: _crmWsTasksHtml }[tab]();
+    if (tab === 'files' || tab === 'messages') _crmWsLoadPreviews(lead);
+  }
+
+  async function _crmLoadWsTab(lead, tab) {
+    const call = {
+      timeline: () => API.crmLeadTimeline(lead.id),
+      messages: () => API.crmLeadMessages(lead.id),
+      files:    () => API.crmLeadAttachments(lead.id),
+      tasks:    () => API.crmLeadTasks(lead.id),
+    }[tab];
+    const res = await call().catch(() => ({ status: 0 }));
+    if (_crmViewLead?.id !== lead.id) return;
+    _crmWs[tab] = res.status === 200 ? res.body : false;
+    if (_crmLeadTab === tab) _crmRenderWsTab();
+  }
+
+  function _crmWsTimelineHtml() {
+    const { data = [], meta = {} } = _crmWs.timeline;
+    const type = _crmWs.timelineType || '';
+    const rows = type ? data.filter(e => e.type === type) : data;
+    const filters = [['', 'All'], ...(meta.types || []).map(t => [t.key, t.label])]
+      .map(([k, l]) => `<button type="button" class="crm-ws-filter${k === type ? ' active' : ''}" data-ws-tl-type="${k}">${escHtml(l)}</button>`).join('');
+    const list = rows.map(e => `
+      <div class="crm-ws-tl-item">
+        <span class="crm-ws-tl-icon" style="--ic:${escHtml(e.color)}"><i class="fa ${escHtml(e.icon)}"></i></span>
+        <div class="crm-ws-tl-content">
+          <div><strong>${escHtml(e.user?.name || 'System')}</strong> · ${escHtml(e.title)}</div>
+          ${e.body ? `<div class="crm-ws-tl-body">${escHtml(e.body)}</div>` : ''}
+          ${e.at ? `<div class="crm-ws-muted">${escHtml(_crmFmtDateTime(e.at))} · ${escHtml(_crmFmtAgo(e.at))}</div>` : ''}
+        </div>
+      </div>`).join('');
+    return `<div class="crm-ws-filters">${filters}</div><div class="crm-ws-tl">${list || _crmWsPanelHtml('Nothing here yet.')}</div>`;
+  }
+
+  function _crmWsMessagesHtml() {
+    const { data = [], meta = {} } = _crmWs.messages;
+    const users = _crmWs.info?.mentionable_users || [];
+    const names = Object.fromEntries(users.map(u => [u.id, u.name]));
+    const replyTo = _crmWs.replyTo ? data.find(m => m.id === _crmWs.replyTo) : null;
+    const composer = meta.can_post ? `
+      <div class="crm-ws-composer">
+        ${replyTo ? `<div class="crm-ws-muted"><i class="fa fa-reply"></i> Replying to <strong>${escHtml(replyTo.user?.name || 'a message')}</strong> <button type="button" class="crm-ws-link" data-ws-reply-cancel>Cancel</button></div>` : ''}
+        <textarea id="crm-ws-msg-body" class="po-field-input" rows="3" maxlength="5000" style="resize:vertical" placeholder="Write an internal note for the team — the customer never sees these…">${escHtml(_crmWs.draft || '')}</textarea>
+        ${(_crmWs.pending || []).length ? `<div class="crm-ws-pending">${_crmWs.pending.map(f =>
+          `<span class="crm-ws-pending-chip"><i class="fa ${f.is_image ? 'fa-image' : 'fa-paperclip'}"></i>${escHtml(f.name)}<button type="button" class="crm-ws-link crm-ws-link--danger" data-ws-pending-remove="${f.id}" title="Remove"><i class="fa fa-xmark"></i></button></span>`).join('')}</div>` : ''}
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+          <span style="display:flex;gap:14px;align-items:flex-start">
+            <button type="button" class="crm-ws-link" data-ws-msg-attach style="font-size:12px"><i class="fa fa-paperclip"></i> Attach files / images</button>
+            ${users.length ? `<details class="crm-ws-mentions"><summary><i class="fa fa-at"></i> Mention people</summary><div>${users.map(u => `<label><input type="checkbox" value="${u.id}" data-ws-mention${(_crmWs.draftMentions || []).includes(u.id) ? ' checked' : ''}> ${escHtml(u.name)}</label>`).join('')}</div></details>` : ''}
+          </span>
+          <button type="button" class="po-btn-primary" data-ws-msg-post><i class="fa fa-paper-plane"></i> Post</button>
+        </div>
+      </div>`
+      : '<div class="crm-ws-muted"><i class="fa fa-lock"></i> You can read these messages but not post — that needs edit rights on the lead or membership of its department.</div>';
+
+    const item = m => `
+      <div class="crm-ws-msg${m.parent_id ? ' crm-ws-msg--reply' : ''}" data-ws-msg="${m.id}">
+        <div class="crm-ws-msg-head">
+          <span class="crm-ws-msg-who">${_crmAvatarHtml(m.user, 20)}<strong>${escHtml(m.user?.name || 'Deleted user')}</strong><span class="crm-ws-muted">${escHtml(_crmFmtAgo(m.created_at))}${m.edited_at ? ' · edited' : ''}</span></span>
+          <span class="crm-ws-msg-actions">
+            ${meta.can_post && !m.parent_id ? `<button type="button" class="crm-ws-link" data-ws-msg-reply="${m.id}"><i class="fa fa-reply"></i> Reply</button>` : ''}
+            ${m.can_edit ? `<button type="button" class="crm-ws-link" data-ws-msg-edit="${m.id}"><i class="fa fa-pen"></i> Edit</button>` : ''}
+            ${m.can_delete ? `<button type="button" class="crm-ws-link crm-ws-link--danger" data-ws-msg-delete="${m.id}" title="Delete"><i class="fa fa-trash"></i></button>` : ''}
+          </span>
+        </div>
+        ${m.body ? `<div class="crm-ws-msg-body">${escHtml(m.body)}</div>` : ''}
+        ${(m.attachments || []).length ? `<div class="crm-ws-msg-files">${m.attachments.map(f => f.is_image
+          ? `<button type="button" class="crm-ws-msg-img" data-ws-preview="${f.id}" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Download ${escHtml(f.name)}"><i class="fa fa-image"></i></button>`
+          : `<button type="button" class="crm-ws-msg-file" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}"><i class="fa ${/pdf/.test(f.mime_type || '') ? 'fa-file-pdf' : 'fa-file'}"></i>${escHtml(f.name)}<span class="crm-ws-muted">${escHtml(f.size || '')}</span></button>`
+        ).join('')}</div>` : ''}
+        ${(m.mentions || []).length ? `<div class="crm-ws-msg-mentions">${m.mentions.map(id => `<span>@${escHtml(names[id] || 'user #' + id)}</span>`).join(' ')}</div>` : ''}
+      </div>`;
+    const threads = data.filter(m => !m.parent_id)
+      .map(root => item(root) + data.filter(m => m.parent_id === root.id).map(item).join('')).join('');
+    return composer + `<div class="crm-ws-msgs">${threads || _crmWsPanelHtml('No messages yet.')}</div>`;
+  }
+
+  function _crmWsFilesHtml() {
+    const { data = [], meta = {} } = _crmWs.files;
+    const rules = meta.rules || {};
+    const upload = meta.can_upload
+      ? `<div class="crm-ws-upload"><button type="button" class="po-btn-primary" data-ws-upload><i class="fa fa-upload"></i> Upload files…</button><span class="crm-ws-muted">Up to ${Math.round((rules.max_kb || 0) / 1024)} MB each · ${escHtml((rules.mimes || []).join(', '))}</span></div>`
+      : '';
+    const icon = f => f.is_image ? 'fa-image' : /pdf/.test(f.mime_type || '') ? 'fa-file-pdf' : /sheet|excel|csv/.test(f.mime_type || '') ? 'fa-file-excel' : /word/.test(f.mime_type || '') ? 'fa-file-word' : 'fa-file';
+    const grid = data.map(f => `
+      <div class="crm-ws-file">
+        <div class="crm-ws-file-thumb"${f.is_image ? ` data-ws-preview="${f.id}"` : ''}><i class="fa ${icon(f)}"></i></div>
+        <div class="crm-ws-file-info">
+          <div class="crm-ws-file-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
+          <div class="crm-ws-muted">${escHtml(f.size || '')} · ${escHtml(f.uploaded_by?.name || 'Unknown')} · ${escHtml(_crmFmtDateTime(f.created_at))}</div>
+          <div class="crm-ws-file-actions">
+            <button type="button" class="crm-ws-link" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}"><i class="fa fa-download"></i> Download</button>
+            ${f.can_delete ? `<button type="button" class="crm-ws-link crm-ws-link--danger" data-ws-file-delete="${f.id}"><i class="fa fa-trash"></i> Delete</button>` : ''}
+          </div>
+        </div>
+      </div>`).join('');
+    return upload + (grid ? `<div class="crm-ws-files">${grid}</div>` : _crmWsPanelHtml('No files on this lead yet.'));
+  }
+
+  // Image thumbnails come through the authorised download route (?inline=1), never a public URL.
+  async function _crmWsLoadPreviews(lead) {
+    for (const el of $$('#crm-ws-panel [data-ws-preview]')) {
+      const key = `${lead.id}:${el.dataset.wsPreview}`;
+      if (!_crmWsPreviews[key]) {
+        const res = await window.electronAPI.fetchDataUrl(API.crmLeadAttachmentDownloadPath(lead.id, el.dataset.wsPreview, true)).catch(() => null);
+        if (res?.status !== 200) continue;
+        _crmWsPreviews[key] = res.dataUrl;
+      }
+      if (_crmViewLead?.id !== lead.id || !el.isConnected) return;
+      el.innerHTML = `<img src="${_crmWsPreviews[key]}" alt="">`;
+    }
+  }
+
+  function _crmWsTasksHtml() {
+    const { data = [] } = _crmWs.tasks;
+    const info = _crmWs.info || {};
+    const form = info.can_add_tasks ? `
+      <div class="crm-ws-task-form">
+        <input id="crm-ws-task-title" class="po-field-input" maxlength="255" placeholder="New task, e.g. Call back about the quote">
+        <input id="crm-ws-task-due" class="po-field-input" type="datetime-local">
+        <select id="crm-ws-task-assignee" class="po-field-input" style="appearance:auto">
+          <option value="">— Unassigned —</option>${(info.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('')}
+        </select>
+        <button type="button" class="po-btn-primary" data-ws-task-add><i class="fa fa-plus"></i> Add</button>
+      </div>` : '';
+    const rows = data.map(t => `
+      <label class="crm-ws-task${t.status === 'completed' ? ' crm-ws-task--done' : ''}">
+        <input type="checkbox" data-ws-task-toggle="${t.id}"${t.status === 'completed' ? ' checked' : ''}${info.can_add_tasks ? '' : ' disabled'}>
+        <span class="crm-ws-task-title">${escHtml(t.title)}</span>
+        <span class="crm-ws-muted">${t.due_at ? `<span class="${t.is_overdue ? 'crm-ws-overdue' : ''}"><i class="fa fa-calendar"></i> ${escHtml(_crmFmtDateTime(t.due_at))}</span>` : ''}${t.assigned_to_name ? ` · <i class="fa fa-user"></i> ${escHtml(t.assigned_to_name)}` : ''}</span>
+      </label>`).join('');
+    return form + `<div class="crm-ws-tasks">${rows || _crmWsPanelHtml('No tasks on this lead.')}</div>`;
+  }
+
+  async function _crmWsUpload(lead) {
+    const rules = _crmWs.files?.meta?.rules || {};
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Add files to the lead',
+      filters: [{ name: 'Allowed files', extensions: rules.mimes?.length ? rules.mimes : ['*'] }, { name: 'All Files', extensions: ['*'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) return;
+    let ok = 0;
+    for (const filePath of result.filePaths) {
+      const res = await window.electronAPI.apiUpload(API.crmLeadAttachmentUploadPath(lead.id), filePath);
+      if (res.status === 201) ok++;
+      else toast(`${filePath.split(/[\\/]/).pop()}: ${_crmWsError(res, 'upload failed')}`, 'error');
+    }
+    if (ok) toast(ok === 1 ? 'File uploaded.' : `${ok} files uploaded.`, 'success');
+    _crmWsRefresh(lead, ['files', 'timeline']);
+  }
+
+  /** Keep what is typed in the composer across a re-render of the Messages tab. */
+  function _crmWsKeepDraft() {
+    const box = $('#crm-ws-msg-body');
+    if (!box) return;
+    _crmWs.draft = box.value;
+    _crmWs.draftMentions = [...$$('#crm-ws-panel [data-ws-mention]:checked')].map(c => +c.value);
+  }
+
+  // Files for a message go up straight away (as lead files) and are shared when it is posted.
+  async function _crmWsAttachToMessage(lead, btn) {
+    const rules = _crmWs.info?.attachment_rules || {};
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Attach files or images to the message',
+      filters: [{ name: 'Allowed files', extensions: rules.mimes?.length ? rules.mimes : ['*'] }, { name: 'All Files', extensions: ['*'] }],
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) return;
+    _crmWsKeepDraft();
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Uploading…';
+    for (const filePath of result.filePaths) {
+      const res = await window.electronAPI.apiUpload(API.crmLeadAttachmentUploadPath(lead.id), filePath);
+      if (res.status === 201) (_crmWs.pending ||= []).push(...(res.body.data || []));
+      else toast(`${filePath.split(/[\\/]/).pop()}: ${_crmWsError(res, 'upload failed')}`, 'error');
+    }
+    if (_crmViewLead?.id !== lead.id) return;
+    delete _crmWs.files; // they are lead files too
+    if (_crmLeadTab === 'messages') _crmRenderWsTab();
+  }
+
+  // Tab bar, timeline filters, messages, files and tasks — one delegated handler for the window body.
+  $('#crm-lead-view-body')?.addEventListener('click', async e => {
+    const lead = _crmViewLead;
+    const t = e.target.closest('button, input[data-ws-task-toggle]');
+    if (!lead || !t) return;
+
+    if (t.dataset.wsTab) {
+      _crmLeadTab = t.dataset.wsTab;
+      _crmRenderLeadModal(false);
+    } else if (t.matches('[data-ws-assign]')) {
+      _crmOpenAssignModal(lead);
+    } else if (t.dataset.wsTlType !== undefined) {
+      _crmWs.timelineType = t.dataset.wsTlType;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-ws-msg-reply]')) {
+      _crmWsKeepDraft();
+      _crmWs.replyTo = +t.dataset.wsMsgReply;
+      _crmRenderWsTab();
+      $('#crm-ws-msg-body')?.focus();
+    } else if (t.matches('[data-ws-reply-cancel]')) {
+      _crmWsKeepDraft();
+      _crmWs.replyTo = null;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-ws-msg-attach]')) {
+      _crmWsAttachToMessage(lead, t);
+    } else if (t.matches('[data-ws-pending-remove]')) {
+      // Not shared yet — take it off the lead again
+      const id = +t.dataset.wsPendingRemove;
+      _crmWsKeepDraft();
+      _crmWs.pending = (_crmWs.pending || []).filter(f => f.id !== id);
+      _crmRenderWsTab();
+      API.crmDeleteLeadAttachment(lead.id, id);
+    } else if (t.matches('[data-ws-msg-post]')) {
+      const body = $('#crm-ws-msg-body').value.trim();
+      const attachmentIds = (_crmWs.pending || []).map(f => f.id);
+      if (!body && !attachmentIds.length) { toast('Write a message or attach a file first.', 'error'); return; }
+      const mentions = [...$$('#crm-ws-panel [data-ws-mention]:checked')].map(c => +c.value);
+      t.disabled = true;
+      const res = await API.crmPostLeadMessage(lead.id, { body: body || null, mentions, parent_id: _crmWs.replyTo || null, attachment_ids: attachmentIds });
+      t.disabled = false;
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not post the message.'), 'error'); return; }
+      Object.assign(_crmWs, { replyTo: null, pending: [], draft: '', draftMentions: [] });
+      _crmWsRefresh(lead, ['messages', 'timeline', 'files']);
+    } else if (t.matches('[data-ws-msg-edit]')) {
+      const msg = _crmWs.messages?.data?.find(m => m.id === +t.dataset.wsMsgEdit);
+      const box = t.closest('[data-ws-msg]')?.querySelector('.crm-ws-msg-body');
+      if (!msg || !box) return;
+      box.innerHTML = `<textarea class="po-field-input" rows="3" maxlength="5000" style="resize:vertical">${escHtml(msg.body)}</textarea>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:6px"><button type="button" class="po-btn-ghost" data-ws-msg-edit-cancel>Cancel</button><button type="button" class="po-btn-primary" data-ws-msg-save="${msg.id}">Save</button></div>`;
+    } else if (t.matches('[data-ws-msg-edit-cancel]')) {
+      _crmRenderWsTab();
+    } else if (t.matches('[data-ws-msg-save]')) {
+      const id   = +t.dataset.wsMsgSave;
+      const msg  = _crmWs.messages?.data?.find(m => m.id === id);
+      const body = t.closest('.crm-ws-msg-body').querySelector('textarea').value.trim();
+      if (!body) return;
+      const res = await API.crmUpdateLeadMessage(lead.id, id, { body, mentions: msg?.mentions || [] });
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the message.'), 'error'); return; }
+      _crmWsRefresh(lead, ['messages', 'timeline']);
+    } else if (t.matches('[data-ws-msg-delete]')) {
+      if (!confirm('Delete this message? Replies to it go too.')) return;
+      const res = await API.crmDeleteLeadMessage(lead.id, +t.dataset.wsMsgDelete);
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the message.'), 'error'); return; }
+      _crmWsRefresh(lead, ['messages', 'timeline']);
+    } else if (t.matches('[data-ws-upload]')) {
+      _crmWsUpload(lead);
+    } else if (t.matches('[data-ws-file-download]')) {
+      // From the Files tab or from inside a message
+      const id = +t.dataset.wsFileDownload, name = t.dataset.wsFileName || `file-${id}`;
+      const res = await window.electronAPI.downloadFile(API.crmLeadAttachmentDownloadPath(lead.id, id), name);
+      if (res?.canceled) return;
+      if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+      toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+    } else if (t.matches('[data-ws-file-delete]')) {
+      if (!confirm('Delete this file from the lead?')) return;
+      const res = await API.crmDeleteLeadAttachment(lead.id, +t.dataset.wsFileDelete);
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the file.'), 'error'); return; }
+      toast('File deleted.', 'success');
+      _crmWsRefresh(lead, ['files', 'timeline']);
+    } else if (t.matches('[data-ws-task-add]')) {
+      const title = $('#crm-ws-task-title').value.trim();
+      if (!title) { toast('Give the task a title.', 'error'); return; }
+      const res = await API.crmCreateLeadTask(lead.id, {
+        title,
+        due_at:      $('#crm-ws-task-due').value || null,
+        assigned_to: $('#crm-ws-task-assignee').value ? +$('#crm-ws-task-assignee').value : null,
+      });
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not add the task.'), 'error'); return; }
+      toast('Task added.', 'success');
+      _crmWsRefresh(lead, ['tasks', 'timeline']);
+    } else if (t.matches('[data-ws-task-toggle]')) {
+      const res = t.checked ? await API.crmCompleteTask(+t.dataset.wsTaskToggle) : await API.crmReopenTask(+t.dataset.wsTaskToggle);
+      if (res.status !== 200) { t.checked = !t.checked; toast(_crmWsError(res, 'Could not update the task.'), 'error'); return; }
+      _crmWsRefresh(lead, ['tasks', 'timeline']);
+    }
+  });
+
+  // ── Assign modal: department members as checkboxes, a star for the primary, and the history ──
+  let _crmAssign = null; // { lead, data }
+
+  async function _crmOpenAssignModal(lead) {
+    $('#crm-assign-modal').style.display = 'flex';
+    $('#crm-assign-note').value = '';
+    $('#crm-assign-body').innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmLeadAssignees(lead.id).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { $('#crm-assign-body').innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    _crmAssign = { lead, data: res.body.data };
+    _crmRenderAssignModal();
+  }
+
+  function _crmRenderAssignModal() {
+    const { data } = _crmAssign;
+    const current = data.assignees.map(a => a.id);
+    const primary = data.assignees.find(a => a.is_primary)?.id;
+    // Someone already on the lead who has since left the department stays listed (untick to remove)
+    const pickable = [
+      ...data.assignees.filter(a => !data.assignable_users.some(u => u.id === a.id)).map(a => ({ id: a.id, name: `${a.name} (not in the department)` })),
+      ...data.assignable_users,
+    ];
+    const rows = pickable.map(u => `
+      <div class="crm-assign-row">
+        <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}> ${escHtml(u.name)}</label>
+        <label class="crm-assign-primary" title="Primary assignee"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
+      </div>`).join('');
+    const history = data.history.map(h => `
+      <div class="crm-ws-tl-item">
+        <span class="crm-ws-tl-icon" style="--ic:${h.action === 'forwarded' ? '#6366f1' : '#0ea5e9'}"><i class="fa ${h.action === 'forwarded' ? 'fa-share' : 'fa-user-tag'}"></i></span>
+        <div class="crm-ws-tl-content">
+          <div>${escHtml(h.title)}</div>
+          ${h.note ? `<div class="crm-ws-tl-body">${escHtml(h.note)}</div>` : ''}
+          <div class="crm-ws-muted">${escHtml(h.by?.name || 'System')} · ${escHtml(_crmFmtDateTime(h.created_at))}</div>
+        </div>
+      </div>`).join('');
+    $('#crm-assign-body').innerHTML = `
+      <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.</div>
+      <div class="crm-assign-list">${rows || _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet — link the staff to users in HR.')}</div>
+      ${history ? `<details class="crm-assign-history"><summary>Assignment history (${data.history.length})</summary><div class="crm-ws-tl">${history}</div></details>` : ''}`;
+    $('#crm-assign-save').disabled = !data.can_assign;
+  }
+
+  function _crmCloseAssignModal() {
+    $('#crm-assign-modal').style.display = 'none';
+    _crmAssign = null;
+  }
+
+  // Starring someone ticks them; unticking clears their star
+  $('#crm-assign-body')?.addEventListener('change', e => {
+    const row = e.target.closest('.crm-assign-row');
+    if (!row) return;
+    if (e.target.type === 'radio') row.querySelector('[data-assign-user]').checked = true;
+    if (e.target.matches('[data-assign-user]') && !e.target.checked) row.querySelector('input[type=radio]').checked = false;
+  });
+  $('#crm-assign-close')?.addEventListener('click', _crmCloseAssignModal);
+  $('#crm-assign-cancel')?.addEventListener('click', _crmCloseAssignModal);
+  $('#crm-assign-save')?.addEventListener('click', async () => {
+    if (!_crmAssign) return;
+    const { lead } = _crmAssign;
+    const userIds = [...$$('#crm-assign-body [data-assign-user]:checked')].map(c => +c.value);
+    const star    = $('#crm-assign-body input[name="crm-assign-primary"]:checked');
+    const btn     = $('#crm-assign-save');
+    btn.disabled = true;
+    const res = await API.crmSyncLeadAssignees(lead.id, {
+      user_ids:        userIds,
+      primary_user_id: star && userIds.includes(+star.value) ? +star.value : null,
+      note:            $('#crm-assign-note').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the assignees.'), 'error'); return; }
+    toast('Assignees saved.', 'success');
+    _crmCloseAssignModal();
+    if (_crmViewLead?.id === lead.id) {
+      _crmViewLead.assignee_list = res.body.data.assignees;
+      _crmViewLead.assigned_to   = res.body.data.assigned_to;
+      _crmViewLead.assigned_to_name = res.body.data.assignees.find(a => a.is_primary)?.name || null;
+      if (res.body.data.stage_id) _crmViewLead.stage_id = res.body.data.stage_id;
+      _crmWsRefresh(_crmViewLead, ['timeline']);
+      _crmLoadLeadHistory(_crmViewLead);
+    }
+    loadCrmPipeline(_crmProjectId, { silent: true });
+  });
+
+  // ── CRM audit log (admins): every change to leads and assignees, column by column ──
+  let _crmAuditPage = 1;
+  let _crmAuditFiltersReady = false;
+
+  async function openCrmAuditModal() {
+    $('#crm-audit-modal').style.display = 'flex';
+    _crmAuditPage = 1;
+    await _crmLoadAudit();
+  }
+
+  async function _crmLoadAudit() {
+    const val = id => $(id)?.value || '';
+    const params = {
+      subject: val('#crm-audit-subject'), subject_id: val('#crm-audit-subject-id'), event: val('#crm-audit-event'),
+      user_id: val('#crm-audit-user'), from: val('#crm-audit-from'), to: val('#crm-audit-to'), page: _crmAuditPage,
+    };
+    $('#crm-audit-rows').innerHTML = `<tr><td colspan="6">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
+    const res = await API.crmAuditLogs(params).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      $('#crm-audit-rows').innerHTML = `<tr><td colspan="6">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the audit log.')))}</td></tr>`;
+      return;
+    }
+    const { data, meta } = res.body;
+    if (!_crmAuditFiltersReady) {
+      const opts = (list, all) => `<option value="">${all}</option>` + list.map(o => `<option value="${o.key ?? o.id}">${escHtml(o.label ?? o.name)}</option>`).join('');
+      $('#crm-audit-subject').innerHTML = opts(meta.subjects, 'All records');
+      $('#crm-audit-event').innerHTML   = opts(meta.events, 'All events');
+      $('#crm-audit-user').innerHTML    = opts(meta.actors, 'Anyone');
+      _crmAuditFiltersReady = true;
+    }
+    const color = { created: '#16a34a', updated: '#0ea5e9', deleted: '#ef4444' };
+    const val2 = v => v == null || v === '' ? '<span class="crm-audit-empty">empty</span>' : escHtml(typeof v === 'object' ? JSON.stringify(v) : String(v));
+    $('#crm-audit-rows').innerHTML = data.length ? data.map(r => `
+      <tr>
+        <td style="white-space:nowrap">${escHtml(_crmFmtDateTime(r.created_at))}</td>
+        <td>${escHtml(r.user?.name || 'System')}</td>
+        <td style="white-space:nowrap">${escHtml(r.subject_label)} #${r.subject_id}</td>
+        <td><span class="crm-audit-ev" style="color:${color[r.event] || '#64748b'}">${escHtml(r.event_label)}</span></td>
+        <td>${r.changes.map(c => `<div><strong>${escHtml(c.field)}</strong>: ${r.event === 'updated' ? `${val2(c.old)} → ` : ''}${val2(r.event === 'deleted' ? c.old : c.new)}</div>`).join('')}</td>
+        <td>${escHtml(r.ip || '—')}</td>
+      </tr>`).join('') : `<tr><td colspan="6">${_crmWsPanelHtml('No audit entries match.')}</td></tr>`;
+    $('#crm-audit-page').textContent = `Page ${meta.current_page} of ${meta.last_page} · ${meta.total} entries`;
+    $('#crm-audit-prev').disabled = meta.current_page <= 1;
+    $('#crm-audit-next').disabled = meta.current_page >= meta.last_page;
+  }
+
+  $('#crm-audit-filter')?.addEventListener('click', () => { _crmAuditPage = 1; _crmLoadAudit(); });
+  $('#crm-audit-prev')?.addEventListener('click', () => { _crmAuditPage--; _crmLoadAudit(); });
+  $('#crm-audit-next')?.addEventListener('click', () => { _crmAuditPage++; _crmLoadAudit(); });
+  $('#crm-audit-close')?.addEventListener('click', () => { $('#crm-audit-modal').style.display = 'none'; });
 
   // macOS-style open/close: the window zooms out of the point that opened it (the clicked
   // lead card) with a soft spring, and shrinks back into it on close.
@@ -59177,11 +59689,13 @@ async function submitDsCreate() {
         assigned_to:   saved.assigned_to ?? null,
         assigned_to_name: (_crmPipeline?.assignable_users || []).find(u => u.id === saved.assigned_to)?.name
           || (saved.assigned_to === lead.assigned_to ? lead.assigned_to_name : null),
+        assignee_list: saved.assignee_list ?? lead.assignee_list,
         updated_at:    saved.updated_at || lead.updated_at,
         custom_fields: { ...(lead.custom_fields || {}), ...customFields },
       };
       _crmRenderLeadModal(false);
       _crmLoadLeadHistory(_crmViewLead);
+      _crmWsRefresh(_crmViewLead, ['timeline']);
       toast('Lead updated.', 'success');
       loadCrmPipeline(_crmProjectId, { silent: true });
       if (_crmDetailLoaded.customData) loadCrmCustomData();
@@ -59379,7 +59893,9 @@ async function submitDsCreate() {
   });
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
   $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
+  $('#rb-crm-audit')?.addEventListener('click',       () => openCrmAuditModal());
   $('#rb-crm-inbox')?.addEventListener('click',       () => { activateTab('crm'); openCrmInboxModal(); });
+  $('#rb-crm-import-leads')?.addEventListener('click', () => { activateTab('crm'); openCrmImportModal(); });
 
   // ── Permissions modal ─────────────────────────────────────────────────────
   // Owner/admins pick a user, then toggle CRM functions and choose which stages
@@ -60091,6 +60607,331 @@ async function submitDsCreate() {
   $('#crm-inbox-refresh-btn')?.addEventListener('click', () => _crmLoadInbox());
   $('#crm-inbox-modal-close')?.addEventListener('click', _crmCloseInbox);
   $('#crm-inbox-close-btn')?.addEventListener('click',   _crmCloseInbox);
+
+  // ── Import leads modal ────────────────────────────────────────────────────
+  // Upload a CSV / XLSX (our template, a Google Forms responses export or a Facebook
+  // Lead Ads export) → the server detects the format and suggests a field per column →
+  // the user adjusts the mapping → preview (ok / duplicate / error / skipped per row,
+  // nothing saved) → run. Big files run on the server queue; step 4 polls until done.
+  let _crmImpOptions = null;   // { imports, pipelines, intake_project, fields, sources, duplicate_modes, … } from /crm/lead-imports
+  let _crmImp        = null;   // the current import (with headers + sample while not run)
+  let _crmImpPreview = null;   // { totals, rows } from /preview
+  let _crmImpFilter  = 'all';
+  let _crmImpPoll    = null;
+  let _crmImpChanged = false;  // leads were added — refresh the board on close
+
+  const _CRM_IMP_STATUS = { ok: 'OK', duplicate: 'Duplicate', error: 'Error', skipped: 'Skipped', failed: 'Failed',
+                            queued: 'Queued', processing: 'Importing', completed: 'Completed' };
+
+  async function openCrmImportModal() {
+    _crmImp = null; _crmImpPreview = null; _crmImpFilter = 'all'; _crmImpChanged = false;
+    $('#crm-import-modal').style.display = 'flex';
+    await _crmImpLoadStart();
+  }
+
+  async function _crmImpClose() {
+    clearInterval(_crmImpPoll); _crmImpPoll = null;
+    // A file that was uploaded but never imported is thrown away
+    if (_crmImp && ['uploaded', 'previewed'].includes(_crmImp.status)) API.crmLeadImportDiscard(_crmImp.id);
+    _crmImp = null;
+    $('#crm-import-modal').style.display = 'none';
+    if (_crmImpChanged && _crmView === 'relation' && $('#crm-relation-detail')?.style.display === 'flex') loadCrmPipeline();
+  }
+
+  function _crmImpAlert(msg) {
+    const el = $('#crm-import-alert');
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
+  }
+
+  function _crmImpError(res, fallback) {
+    _crmImpAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || fallback));
+  }
+
+  function _crmImpStep(n) {
+    $$('#crm-import-steps [data-imp-step]').forEach(s => {
+      const i = Number(s.dataset.impStep);
+      s.classList.toggle('active', i === n);
+      s.classList.toggle('done', i < n);
+    });
+    $('#crm-import-file').textContent = _crmImp ? `${_crmImp.file_name} · ${_crmImp.format_label}` : '';
+  }
+
+  function _crmImpStatus(status) {
+    return `<span class="crm-imp-st ${status}">${escHtml(_CRM_IMP_STATUS[status] || status)}</span>`;
+  }
+
+  // Step 1 — upload, with help for each kind of file and the import history
+  async function _crmImpLoadStart() {
+    _crmImpAlert('');
+    _crmImpStep(1);
+    $('#crm-import-body').innerHTML = '<span class="crm-perms-muted">Loading…</span>';
+    $('#crm-import-footer').innerHTML = '<button class="po-btn-ghost" data-imp-close><i class="fa fa-xmark"></i> Close</button>';
+    const res = await API.crmLeadImports();
+    if (res.status !== 200) {
+      $('#crm-import-body').innerHTML = `<span class="crm-perms-muted">${escHtml(res.body?.message || 'Failed to load.')}</span>`;
+      return;
+    }
+    _crmImpOptions = res.body.data;
+    _crmImpRenderStart();
+  }
+
+  function _crmImpRenderStart() {
+    const o = _crmImpOptions;
+    const history = o.imports.length ? `<table class="crm-imp-table">
+        <thead><tr><th>When</th><th>File</th><th>Source</th><th>Pipeline</th><th>Status</th><th>New</th><th>Existing</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
+        <tbody>${o.imports.map(i => `<tr>
+          <td>${_crmAgo(i.created_at)}${i.user_name ? `<br><span class="crm-perms-muted">${escHtml(i.user_name)}</span>` : ''}</td>
+          <td>${escHtml(i.file_name)}<br><span class="crm-perms-muted">${escHtml(i.format_label)} · ${i.total_rows} rows</span></td>
+          <td>${escHtml(i.source_label || i.source)}</td>
+          <td>${escHtml(i.project?.name || '—')}</td>
+          <td>${_crmImpStatus(i.status)}${i.error ? `<br><span class="crm-imp-warn">${escHtml(i.error)}</span>` : ''}</td>
+          <td>${i.created_count}</td><td>${i.duplicate_count}</td><td>${i.skipped_count}</td><td>${i.failed_count}</td>
+          <td>${i.has_error_rows ? `<button type="button" class="po-btn-ghost" data-imp-errors="${i.id}"><i class="fa fa-download"></i> Errors</button>` : ''}</td>
+        </tr>`).join('')}</tbody></table>`
+      : '<span class="crm-perms-muted">No imports yet.</span>';
+
+    $('#crm-import-body').innerHTML = `
+      <div class="crm-imp-drop">
+        <i class="fa fa-file-csv"></i>
+        <div><strong>Upload a CSV or Excel file of leads</strong><br>
+          <span class="crm-perms-muted">Up to ${Number(o.max_rows).toLocaleString()} rows. Nothing is saved until you check the preview and confirm.</span></div>
+        <div class="crm-org-row">
+          <button type="button" class="po-btn-primary" data-imp-pick><i class="fa fa-folder-open"></i> Choose file…</button>
+          <button type="button" class="po-btn-ghost" data-imp-template><i class="fa fa-download"></i> Download template</button>
+        </div>
+      </div>
+      <div class="crm-imp-help">
+        <div><strong><i class="fa fa-file-csv" style="color:#16a34a"></i> CSV template</strong>
+          Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.</div>
+        <div><strong><i class="fa-brands fa-google" style="color:#ea4335"></i> Google Forms</strong>
+          Open the form's responses sheet → File → Download → CSV, and upload it as it is. Each question becomes a field or a line in the notes.</div>
+        <div><strong><i class="fa-brands fa-facebook" style="color:#1877f2"></i> Facebook / Instagram Lead Ads</strong>
+          Meta Business Suite → Leads Center (or the page's Lead Ads forms) → Download CSV. Instagram leads are recognised from the platform column.</div>
+      </div>
+      <div class="crm-perms-muted"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Recent imports</div>
+        ${history}
+      </div>`;
+  }
+
+  async function _crmImpPick(btn) {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Choose a lead file',
+      filters: [{ name: 'CSV / Excel', extensions: ['csv', 'txt', 'tsv', 'xlsx', 'xls'] }, { name: 'All Files', extensions: ['*'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths?.length) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Reading file…';
+    _crmImpAlert('');
+    const res = await window.electronAPI.apiUpload(API.crmLeadImportUploadPath, result.filePaths[0]);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-folder-open"></i> Choose file…';
+    if (res.status !== 201) { _crmImpError(res, 'The file could not be read.'); return; }
+    _crmImp = res.body.data;
+    _crmImpRenderMapping();
+  }
+
+  // Step 2 — what each column is, the source, the pipeline and the duplicate rule
+  function _crmImpRenderMapping() {
+    _crmImpStep(2);
+    const o = _crmImpOptions, imp = _crmImp;
+    const targets = [...o.fields.map(f => [f.key, f.label]), ['note', 'Add to notes'], ['', "Don't import"]];
+    const sampleOf = i => imp.sample.map(r => r[i]).filter(v => v).slice(0, 3).join(' · ');
+    const pipelines = o.intake_project
+      ? [['', `Marketing inbox (${o.intake_project.name})`], ...o.pipelines.filter(p => p.id !== o.intake_project.id).map(p => [p.id, p.name])]
+      : o.pipelines.map(p => [p.id, p.name]);
+    const curPipeline = imp.project && imp.project.id !== o.intake_project?.id ? imp.project.id : (o.intake_project ? '' : pipelines[0]?.[0]);
+
+    $('#crm-import-body').innerHTML = `
+      <div class="crm-perms-muted">
+        <strong>${imp.total_rows.toLocaleString()}</strong> rows found. Detected as <strong>${escHtml(imp.format_label)}</strong> —
+        check what each column holds. Columns set to <em>Add to notes</em> are kept on the lead as “Column: answer”.
+      </div>
+      <div class="crm-inbox-grid">
+        <label>Lead source<select class="po-field-input" id="crm-imp-source">
+          ${o.sources.map(s => `<option value="${s.key}"${s.key === imp.source ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
+        </select></label>
+        <label>Import into<select class="po-field-input" id="crm-imp-project">
+          ${pipelines.length ? pipelines.map(([id, name]) => `<option value="${id}"${String(id) === String(curPipeline) ? ' selected' : ''}>${escHtml(name)}</option>`).join('')
+                             : '<option value="">No pipeline you can add leads to</option>'}
+        </select></label>
+        <label>Contact already has an open lead<select class="po-field-input" id="crm-imp-dups">
+          ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === imp.duplicates ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
+        </select></label>
+      </div>
+      <table class="crm-imp-table">
+        <thead><tr><th style="width:28%">Column in file</th><th>Sample values</th><th style="width:26%">Import as</th></tr></thead>
+        <tbody>${imp.headers.map((h, i) => `<tr>
+          <td><strong>${escHtml(h)}</strong></td>
+          <td><div class="crm-imp-sample" title="${escHtml(sampleOf(i))}">${escHtml(sampleOf(i)) || '<em>empty</em>'}</div></td>
+          <td><select class="po-field-input" data-imp-col="${i}">
+            ${targets.map(([k, label]) => `<option value="${k}"${k === (imp.mapping[i] ?? '') ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
+          </select></td>
+        </tr>`).join('')}</tbody>
+      </table>`;
+
+    $('#crm-import-footer').innerHTML = `
+      <button class="po-btn-ghost" data-imp-discard><i class="fa fa-arrow-left"></i> Choose another file</button>
+      <button class="po-btn-primary" data-imp-preview><i class="fa fa-eye"></i> Preview</button>`;
+  }
+
+  async function _crmImpRunPreview(btn) {
+    const mapping = Array.from($$('#crm-import-body [data-imp-col]'), s => s.value);
+    if (!mapping.some(v => v === 'phone' || v === 'email')) { _crmImpAlert('Choose the column that holds the phone number or the email.'); return; }
+    const project = $('#crm-imp-project').value;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking rows…';
+    _crmImpAlert('');
+    const res = await API.crmLeadImportPreview(_crmImp.id, {
+      mapping,
+      source: $('#crm-imp-source').value,
+      project_id: project ? Number(project) : null,
+      duplicates: $('#crm-imp-dups').value,
+    });
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-eye"></i> Preview';
+    if (res.status !== 200) { _crmImpError(res, 'The preview failed.'); return; }
+    // Keep the columns for "Back"; the rest of the import comes back fresh
+    _crmImp = { ...res.body.data.import, headers: _crmImp.headers, sample: _crmImp.sample };
+    _crmImpPreview = res.body.data;
+    _crmImpFilter = 'all';
+    _crmImpRenderPreview();
+  }
+
+  // Step 3 — what will happen to each row
+  function _crmImpRenderPreview() {
+    _crmImpStep(3);
+    const t = _crmImpPreview.totals;
+    const importable = t.ok + t.duplicate;
+    const tabs = [['all', 'All', t.total], ['ok', 'OK', t.ok], ['duplicate', 'Duplicate', t.duplicate], ['error', 'Error', t.error], ['skipped', 'Skipped', t.skipped]];
+    const rows = _crmImpPreview.rows.filter(r => _crmImpFilter === 'all' || r.status === _crmImpFilter);
+    const shown = rows.slice(0, 500);
+
+    $('#crm-import-body').innerHTML = `
+      <div class="crm-perms-muted">
+        Into <strong>${escHtml(_crmImp.project?.name || '')}</strong> as <strong>${escHtml(_crmImp.source_label || '')}</strong>.
+        <em>Duplicate</em> rows are imported following the duplicate rules (repeat enquiry on the open lead, or a new lead flagged for review);
+        <em>Error</em> and <em>Skipped</em> rows are left out.
+      </div>
+      <div class="crm-inbox-tabs">${tabs.map(([k, label, n]) =>
+        `<button type="button" class="crm-inbox-tab${k === _crmImpFilter ? ' active' : ''}" data-imp-filter="${k}">${label} (${n})</button>`).join('')}</div>
+      <table class="crm-imp-table">
+        <thead><tr><th>Row</th><th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Details</th></tr></thead>
+        <tbody>${shown.map(r => `<tr>
+          <td class="crm-perms-muted">${r.row}</td>
+          <td>${escHtml(r.name || '—')}</td>
+          <td>${escHtml(r.phone || '')}</td>
+          <td>${escHtml(r.email || '')}</td>
+          <td>${_crmImpStatus(r.status)}</td>
+          <td>${escHtml(r.reason || '')}${r.warnings.map(w => `<div class="crm-imp-warn"><i class="fa fa-triangle-exclamation"></i> ${escHtml(w)}</div>`).join('')}</td>
+        </tr>`).join('') || '<tr><td colspan="6" class="crm-perms-muted">No rows.</td></tr>'}</tbody>
+      </table>
+      ${rows.length > shown.length ? `<span class="crm-perms-muted">Showing the first ${shown.length} of ${rows.length} rows.</span>` : ''}`;
+
+    $('#crm-import-footer').innerHTML = `
+      <button class="po-btn-ghost" data-imp-back><i class="fa fa-arrow-left"></i> Back to columns</button>
+      <button class="po-btn-primary" data-imp-run${importable ? '' : ' disabled'}><i class="fa fa-file-import"></i> Import ${importable.toLocaleString()} row${importable === 1 ? '' : 's'}</button>`;
+  }
+
+  async function _crmImpRun(btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Importing…';
+    _crmImpAlert('');
+    const res = await API.crmLeadImportRun(_crmImp.id);
+    if (res.status !== 200 && res.status !== 202) {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa fa-file-import"></i> Import';
+      _crmImpError(res, 'The import failed.');
+      return;
+    }
+    _crmImp = res.body.data;
+    _crmImpChanged = true;
+    toast(res.body.message || 'Import started.', 'info');
+    _crmImpRenderResult();
+  }
+
+  // Step 4 — progress (queued imports) and the outcome
+  function _crmImpRenderResult() {
+    _crmImpStep(4);
+    const i = _crmImp;
+    const running = i.status === 'queued' || i.status === 'processing';
+    const pct = i.total_rows ? Math.round((i.processed_rows / i.total_rows) * 100) : 0;
+    const total = (n, label) => `<div class="crm-imp-total"><b>${Number(n).toLocaleString()}</b><span>${label}</span></div>`;
+
+    $('#crm-import-body').innerHTML = `
+      <div style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600">${_crmImpStatus(i.status)} ${escHtml(i.file_name)}</div>
+      ${running ? `<div class="crm-imp-progress"><div style="width:${pct}%"></div></div>
+        <span class="crm-perms-muted">${i.processed_rows.toLocaleString()} of ${i.total_rows.toLocaleString()} rows — running in the background. You can close this window; the result appears under Recent imports.</span>` : ''}
+      ${i.status === 'failed' ? `<div class="svc-form-alert">${escHtml(i.error || 'The import failed.')}</div>` : ''}
+      <div class="crm-imp-totals">
+        ${total(i.created_count, 'new leads')}
+        ${total(i.duplicate_count, 'added to existing leads')}
+        ${total(i.skipped_count, 'skipped')}
+        ${total(i.failed_count, 'failed')}
+      </div>
+      ${!running && i.has_error_rows ? `<div class="crm-org-row"><button type="button" class="po-btn-ghost" data-imp-errors="${i.id}"><i class="fa fa-download"></i> Download failed rows (CSV)</button>
+        <span class="crm-perms-muted">Fix them in the file and upload it again.</span></div>` : ''}`;
+
+    $('#crm-import-footer').innerHTML = `
+      <button class="po-btn-ghost" data-imp-again><i class="fa fa-file-csv"></i> Import another file</button>
+      ${document.body.classList.contains('crm-uses-inbox') ? '<button class="po-btn-ghost" data-imp-inbox><i class="fa fa-inbox"></i> Open Marketing Inbox</button>' : ''}
+      <button class="po-btn-primary" data-imp-close><i class="fa fa-check"></i> Done</button>`;
+
+    clearInterval(_crmImpPoll); _crmImpPoll = null;
+    if (running) {
+      const id = i.id;
+      _crmImpPoll = setInterval(async () => {
+        const r = await API.crmLeadImport(id);
+        if (_crmImp?.id !== id) { clearInterval(_crmImpPoll); return; }
+        if (r.status === 200) { _crmImp = r.body.data; _crmImpRenderResult(); }
+      }, 2000);
+    }
+  }
+
+  async function _crmImpDownload(path, name) {
+    const res = await window.electronAPI.downloadFile(path, name);
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+    toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  $('#crm-import-modal')?.addEventListener('click', async e => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.matches('[data-imp-close]') || t.id === 'crm-import-modal-close') {
+      _crmImpClose();
+    } else if (t.matches('[data-imp-pick]')) {
+      _crmImpPick(t);
+    } else if (t.matches('[data-imp-template]')) {
+      _crmImpDownload(API.crmLeadImportTemplatePath, 'lead-import-template.csv');
+    } else if (t.matches('[data-imp-errors]')) {
+      _crmImpDownload(API.crmLeadImportErrorsPath(t.dataset.impErrors), `lead-import-${t.dataset.impErrors}-errors.csv`);
+    } else if (t.matches('[data-imp-discard]')) {
+      if (_crmImp) API.crmLeadImportDiscard(_crmImp.id);
+      _crmImp = null;
+      _crmImpLoadStart();
+    } else if (t.matches('[data-imp-preview]')) {
+      _crmImpRunPreview(t);
+    } else if (t.matches('[data-imp-filter]')) {
+      _crmImpFilter = t.dataset.impFilter;
+      _crmImpRenderPreview();
+    } else if (t.matches('[data-imp-back]')) {
+      _crmImpAlert('');
+      _crmImpRenderMapping();
+    } else if (t.matches('[data-imp-run]')) {
+      _crmImpRun(t);
+    } else if (t.matches('[data-imp-again]')) {
+      clearInterval(_crmImpPoll); _crmImpPoll = null;
+      _crmImp = null;
+      _crmImpLoadStart();
+    } else if (t.matches('[data-imp-inbox]')) {
+      await _crmImpClose();
+      openCrmInboxModal();
+    }
+  });
 
   // ── Subnav ────────────────────────────────────────────────────────────────
   $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));

@@ -184,7 +184,7 @@
                                 </td>
                                 <td><span class="ld-stage" style="border-color:{{ $l->stageColor() }};color:{{ $l->stageColor() }};">{{ $l->stageLabel() }}</span></td>
                                 <td style="text-align:right;font-weight:700;">{{ $l->estimated_value !== null ? number_format((float) $l->estimated_value, 2) : '—' }}</td>
-                                <td>{{ $l->assignedTo?->name ?? '—' }}</td>
+                                <td>@include('crm::partials.assignee-chips', ['assignees' => $l->assignees, 'compact' => true, 'emptyText' => '—'])</td>
                                 <td style="text-align:right;">
                                     <a href="{{ route('crm.leads.show', $l) }}" class="pcat-link">
                                         <i class="fa fa-eye"></i> View

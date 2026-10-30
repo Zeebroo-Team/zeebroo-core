@@ -27,12 +27,15 @@ class LeadAssignmentLog extends Model
         'from_division_id',
         'to_division_id',
         'user_ids',
+        'from_user_ids',
         'by_user_id',
         'note',
     ];
 
+    /** user_ids / from_user_ids: the assignees after / before, primary first. */
     protected $casts = [
-        'user_ids'   => 'array',
+        'user_ids'      => 'array',
+        'from_user_ids' => 'array',
         'created_at' => 'datetime',
     ];
 

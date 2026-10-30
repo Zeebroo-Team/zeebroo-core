@@ -16,12 +16,19 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\Project;
+use Modules\CRM\Models\LeadAttachment;
+use Modules\CRM\Models\LeadMessage;
+use Modules\CRM\Services\CrmOrgService;
+use Modules\CRM\Services\LeadAssignmentService;
+use Modules\CRM\Services\LeadAttachmentService;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
 use Modules\CRM\Services\LeadIntakeService;
+use Modules\CRM\Services\LeadMessageService;
 use Modules\CRM\Services\LeadService;
 use Modules\CRM\Services\LeadStageService;
 use Modules\CRM\Services\LostReasonService;
+use Modules\CRM\Services\Timeline\TimelineService;
 
 class LeadController extends Controller
 {
@@ -34,6 +41,11 @@ class LeadController extends Controller
         private readonly LeadFormService $formService,
         private readonly LostReasonService $lostReasons,
         private readonly LeadIntakeService $intake,
+        private readonly CrmOrgService $org,
+        private readonly LeadAssignmentService $assignments,
+        private readonly LeadMessageService $messages,
+        private readonly LeadAttachmentService $attachments,
+        private readonly TimelineService $timeline,
     ) {}
 
     public function index(Request $request, Project $project): View|RedirectResponse
@@ -66,7 +78,7 @@ class LeadController extends Controller
             'customFields'    => $this->customFieldService->listKeyedById($project),
             'lostReasons'     => $this->lostReasons->listForBusiness($business),
             'statusTabs'      => ['open' => 'Open', 'won' => 'Won', 'lost' => 'Lost', 'all' => 'All'],
-            'assignableUsers' => $this->assignableUsers($business),
+            'assignableUsers' => $this->org->assignableUsers($business, $project->department_id),
             'canCreateLead'   => $this->leadPolicy()->canCreateLeadIn($this->crmAccess($request, $business), $project),
             'canAssign'       => $this->leadPolicy()->canAssignIn($this->crmAccess($request, $business), $project),
         ]);
@@ -144,14 +156,32 @@ class LeadController extends Controller
             'products:id,name,sku', 'lostReason', 'division', 'department', 'leadSource', 'onHoldFromStage',
             'verifiedBy:id,name', 'forwardedBy:id,name', 'requestedDepartment:id,name']);
 
+        $access = $this->crmAccess($request, $business);
+        $policy = $this->leadPolicy();
+        $can    = $policy->abilities($access, $lead);
+
         return view('crm::leads.show', [
-            'business'        => $business,
-            'lead'            => $lead,
-            'assignableUsers' => $this->assignableUsers($business),
-            'stageLogs'       => $this->leadService->stageLogsForLead($lead),
-            'can'             => $this->leadPolicy()->abilities($this->crmAccess($request, $business), $lead),
-            'lostReasons'     => $this->lostReasons->listForBusiness($business),
-            'hasOnHoldStage'  => $this->stageService->stageForStatus($lead->project, LeadStage::STATUS_ON_HOLD) !== null,
+            'business'          => $business,
+            'lead'              => $lead,
+            'stageLogs'         => $this->leadService->stageLogsForLead($lead),
+            'can'               => $can,
+            'lostReasons'       => $this->lostReasons->listForBusiness($business),
+            'hasOnHoldStage'    => $this->stageService->stageForStatus($lead->project, LeadStage::STATUS_ON_HOLD) !== null,
+            // Everyone who sees the lead sees who works it; only those who may assign get the list to pick from
+            'assignees'         => $this->assignments->present($this->assignments->assignees($lead)),
+            'assignableUsers'   => $can['can_assign'] ? $this->assignments->assignableUsers($lead) : collect(),
+            'assignmentHistory' => $this->assignments->presentHistory($this->assignments->history($lead)),
+            'timeline'          => $this->timeline->forLead($lead),
+            'timelineTypes'     => $this->timeline->types(),
+            'messages'          => $this->messages->forLead($lead)->map(fn (LeadMessage $m) => $this->messages->present(
+                $m, $policy->canEditMessage($access, $lead, $m), $policy->canDeleteContribution($access, $lead, $m->user_id ? (int) $m->user_id : null),
+            )),
+            'mentionableUsers'  => $this->messages->mentionableUsers($lead),
+            'attachments'       => $this->attachments->forLead($lead)->map(fn (LeadAttachment $a) => $this->attachments->present(
+                $a, $policy->canDeleteContribution($access, $lead, $a->uploaded_by ? (int) $a->uploaded_by : null),
+            )),
+            'attachmentRules'   => ['mimes' => LeadAttachmentService::ALLOWED_MIMES, 'max_kb' => LeadAttachmentService::maxKb()],
+            'taskAssignees'     => $this->assignableUsers($business),
         ]);
     }
 
@@ -172,7 +202,7 @@ class LeadController extends Controller
             'leadForm'        => $lead->form ?? $this->formService->defaultOrFirstForProject($project),
             'stageOptions'    => $this->stageService->listForProject($project),
             'customFields'    => $this->customFieldService->listKeyedById($project),
-            'assignableUsers' => $this->assignableUsers($business),
+            'assignableUsers' => $this->assignments->assignableUsers($lead),
             'canAssign'       => $this->leadPolicy()->canAssign($this->crmAccess($request, $business), $lead),
             'lostReasons'     => $this->lostReasons->listForBusiness($business),
             'divisions'       => $lead->department_id
@@ -193,8 +223,15 @@ class LeadController extends Controller
         $leadForm = $lead->form ?? $this->formService->defaultOrFirstForProject($project);
         $data     = $this->validated($request, $project, $leadForm, $lead);
 
-        if ((int) ($data['assigned_to'] ?? 0) !== (int) $lead->assigned_to && ! $this->leadPolicy()->canAssign($access, $lead)) {
-            $data['assigned_to'] = $lead->assigned_to;
+        // The "Assigned to" field sets the primary assignee — department head / admin only,
+        // and only to someone of the lead's department
+        $assignee       = isset($data['assigned_to']) ? (int) $data['assigned_to'] : null;
+        $changeAssignee = array_key_exists('assigned_to', $data)
+            && $assignee !== ($lead->assigned_to === null ? null : (int) $lead->assigned_to)
+            && $this->leadPolicy()->canAssign($access, $lead);
+        unset($data['assigned_to']);
+        if ($changeAssignee && $assignee !== null) {
+            $this->assignments->assertAssignable($lead, [$assignee]);
         }
         // Like the assignee, only those who may assign place the lead in a division
         if (! $this->leadPolicy()->canAssign($access, $lead)) {
@@ -204,7 +241,10 @@ class LeadController extends Controller
             abort_unless($this->leadPolicy()->canMove($access, $lead), 403);
         }
 
-        $this->leadService->update($lead, $data, $request->user()?->id);
+        $lead = $this->leadService->update($lead, $data, $request->user()?->id);
+        if ($changeAssignee) {
+            $this->assignments->setPrimaryAssignee($lead, $assignee, $request->user()?->id);
+        }
 
         return redirect()->route('crm.leads.show', $lead)->with('status', 'Lead updated.');
     }

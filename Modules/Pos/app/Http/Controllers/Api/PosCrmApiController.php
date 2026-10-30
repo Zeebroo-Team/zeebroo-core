@@ -24,6 +24,7 @@ use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\IntakeResult;
+use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadAuditService;
 use Modules\CRM\Services\LeadIntakeService;
 use Modules\CRM\Services\LeadCustomFieldService;
@@ -57,6 +58,7 @@ class PosCrmApiController extends Controller
         private readonly LostReasonService           $lostReasons,
         private readonly LeadSourceService           $leadSources,
         private readonly LeadIntakeService           $intake,
+        private readonly LeadAssignmentService       $assignments,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -139,7 +141,7 @@ class PosCrmApiController extends Controller
             ->where('project_id', $project->id)
             ->whereIn('stage_id', $allStages->pluck('id'))
             ->visibleWith($access)
-            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name', 'assignedTo:id,name', 'products:id,name'])
+            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name', 'assignedTo:id,name', 'products:id,name', 'assignees.user:id,name'])
             ->orderByDesc('id')
             ->get(['id', 'project_id', 'department_id', 'division_id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'source_id',
                 'estimated_value', 'score', 'expected_close_date', 'notes', 'product_interest_note', 'lost_reason_id', 'lost_reason',
@@ -166,19 +168,23 @@ class PosCrmApiController extends Controller
             $lead->custom_fields  = $lead->customFieldValues->pluck('value', 'custom_field_id');
             $lead->created_by_name = $lead->createdBy?->name;
             $lead->assigned_to_name = $lead->assignedTo?->name;
+            // Everyone who sees the lead sees who is working it (primary first)
+            $lead->assignee_list  = $this->assignments->present($lead->assignees);
             $lead->product_items  = $this->presentLeadProducts($lead);
             $lead->can = [
-                'edit'    => isset($editable[$lead->id]),
-                'move'    => isset($editable[$lead->id]) && $access->can('leads_move'),
-                'delete'  => $this->policy->canDelete($access, $lead),
-                'assign'  => $this->policy->canAssign($access, $lead),
-                'approve' => $this->policy->canApprove($access, $lead),
-                'forward' => $this->policy->canForward($access, $lead),
+                'edit'       => isset($editable[$lead->id]),
+                'move'       => isset($editable[$lead->id]) && $access->can('leads_move'),
+                'delete'     => $this->policy->canDelete($access, $lead),
+                'assign'     => $this->policy->canAssign($access, $lead),
+                'approve'    => $this->policy->canApprove($access, $lead),
+                'forward'    => $this->policy->canForward($access, $lead),
+                'contribute' => $this->policy->canContribute($access, $lead),
             ];
             unset($lead->customFieldValues);
             $lead->unsetRelation('createdBy');
             $lead->unsetRelation('assignedTo');
             $lead->unsetRelation('products');
+            $lead->unsetRelation('assignees');
             return $lead;
         });
 
@@ -437,18 +443,29 @@ class PosCrmApiController extends Controller
             $this->abortUnlessStageVisible($request, $business, $lead->project_id, (int) $validated['stage_id']);
         }
 
-        // Re-assigning: department head / admin only, and only to someone who works that pipeline
-        if (array_key_exists('assigned_to', $validated) && (int) $validated['assigned_to'] !== (int) $lead->assigned_to) {
+        // The single "Assigned to" field sets the primary assignee (the others stay on the lead):
+        // department head / admin only, and only someone of the lead's department
+        $assignee       = isset($validated['assigned_to']) ? (int) $validated['assigned_to'] : null;
+        $changeAssignee = array_key_exists('assigned_to', $validated)
+            && $assignee !== ($lead->assigned_to === null ? null : (int) $lead->assigned_to);
+        unset($validated['assigned_to']);
+        if ($changeAssignee) {
             $this->abortUnlessAllowed($this->policy->canAssign($access, $lead));
-            $assignee = $validated['assigned_to'];
-            if ($assignee !== null && ! $this->org->assignableUsers($business, $access->departmentOfProject($lead->project_id))->contains('id', (int) $assignee)) {
-                throw ValidationException::withMessages(['assigned_to' => 'This person is not a member of the lead\'s department.']);
+            if ($assignee !== null) {
+                try {
+                    $this->assignments->assertAssignable($lead, [$assignee]);
+                } catch (ValidationException) {
+                    throw ValidationException::withMessages(['assigned_to' => 'This person is not a member of the lead\'s department.']);
+                }
             }
         }
 
         $lead = $this->leads->update($lead, $validated, $request->user()?->id);
+        if ($changeAssignee) {
+            $lead = $this->assignments->setPrimaryAssignee($lead, $assignee, $request->user()?->id);
+        }
 
-        return response()->json(['data' => $lead->load('stage')]);
+        return response()->json(['data' => $lead->load('stage')->toArray() + ['assignee_list' => $this->assignments->present($this->assignments->assignees($lead))]]);
     }
 
     public function moveLead(Request $request, int $leadId): JsonResponse

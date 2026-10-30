@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAssignmentLog;
+use Modules\CRM\Models\LeadMessage;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
@@ -20,8 +21,9 @@ use Modules\CRM\Services\CrmPermissionService;
  *   they forwarded; forwards intake leads, clears review flags and merges duplicates.
  * - Department head (HR head, or a division head for that division): views, edits, assigns
  *   and approves everything in their department, and runs its pipeline.
- * - Staff (and any other member): views their department's leads, edits the ones assigned
- *   to them.
+ * - Staff (and any other member): views their department's leads, edits the ones they are
+ *   one of the assignees of (crm_lead_assignees), and posts messages / files on any lead of
+ *   their department (see canContribute).
  * - A role with the "All Departments" permission works every pipeline.
  *
  * A pipeline no department owns is visible only to those who see everything. The per-user
@@ -185,17 +187,58 @@ class LeadPolicy
             && ($access->worksAllLeads() || $access->isMarketing());
     }
 
+    // ── Lead workspace: messages and files ───────────────────────────────
+
+    /**
+     * Posting internal messages and uploading files. DECISION: edit rights on the lead OR
+     * membership of its department — so department staff can discuss and add files to a
+     * colleague's lead they only view. View-only roles (CEO) never post. Everyone who can view
+     * the lead reads the messages and downloads the files.
+     */
+    public function canContribute(CrmAccess $access, Lead $lead): bool
+    {
+        return $this->mayAct($access, $lead)
+            && ($this->canEdit($access, $lead) || $access->inDepartment($access->departmentOfProject($lead->project_id)));
+    }
+
+    /** Editing a message: its author, while they may still post on the lead. */
+    public function canEditMessage(CrmAccess $access, Lead $lead, LeadMessage $message): bool
+    {
+        return $access->userId !== null
+            && (int) $message->user_id === $access->userId
+            && $this->canContribute($access, $lead);
+    }
+
+    /** Deleting a message or a file: its author / uploader, the lead's head, or an admin. */
+    public function canDeleteContribution(CrmAccess $access, Lead $lead, ?int $authorId): bool
+    {
+        if (! $this->mayAct($access, $lead)) {
+            return false;
+        }
+
+        return ($access->userId !== null && $authorId === $access->userId)
+            || $access->worksAllLeads()
+            || $this->headsLead($access, $lead);
+    }
+
+    /** The row-level CRM audit log (crm_audit_logs): admins and the owner only. */
+    public function canViewAuditLog(CrmAccess $access): bool
+    {
+        return $access->unrestricted;
+    }
+
     /** The per-lead flags the desktop board uses to show or hide actions. */
     public function abilities(CrmAccess $access, Lead $lead): array
     {
         return [
-            'can_edit'    => $this->canEdit($access, $lead),
-            'can_move'    => $this->canMove($access, $lead),
-            'can_delete'  => $this->canDelete($access, $lead),
-            'can_assign'  => $this->canAssign($access, $lead),
-            'can_approve' => $this->canApprove($access, $lead),
-            'can_forward' => $this->canForward($access, $lead),
-            'can_review'  => $this->canReview($access, $lead),
+            'can_edit'       => $this->canEdit($access, $lead),
+            'can_move'       => $this->canMove($access, $lead),
+            'can_delete'     => $this->canDelete($access, $lead),
+            'can_assign'     => $this->canAssign($access, $lead),
+            'can_approve'    => $this->canApprove($access, $lead),
+            'can_forward'    => $this->canForward($access, $lead),
+            'can_review'     => $this->canReview($access, $lead),
+            'can_contribute' => $this->canContribute($access, $lead),
         ];
     }
 
@@ -248,13 +291,13 @@ class LeadPolicy
 
     // ── Assignment & org hooks ───────────────────────────────────────────
 
-    /**
-     * Who a lead is assigned to. This and isAssigned are the only places that know it is the
-     * single crm_leads.assigned_to column; switching to several assignees changes this method.
-     */
+    /** Leads the user is one of the assignees of (crm_lead_assignees, primary or not). */
     public function whereAssigned(Builder $query, int $userId): Builder
     {
-        return $query->where('crm_leads.assigned_to', $userId);
+        return $query->whereExists(fn ($q) => $q->selectRaw('1')
+            ->from('crm_lead_assignees')
+            ->whereColumn('crm_lead_assignees.lead_id', 'crm_leads.id')
+            ->where('crm_lead_assignees.user_id', $userId));
     }
 
     public function isAssigned(Lead $lead, ?int $userId): bool
