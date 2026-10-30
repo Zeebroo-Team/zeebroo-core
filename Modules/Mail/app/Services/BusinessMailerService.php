@@ -23,9 +23,10 @@ class BusinessMailerService
      * as a friendly, actionable message — never thrown — so a failed
      * automation/notification email never breaks the surrounding request.
      *
+     * @param  string[]  $cc
      * @return array{success: bool, error: ?string}
      */
-    public function send(?Business $business, Mailable $mailable, string $to): array
+    public function send(?Business $business, Mailable $mailable, string $to, array $cc = []): array
     {
         $settings = $business ? $this->config->get($business) : null;
 
@@ -40,7 +41,11 @@ class BusinessMailerService
                 $mailable->with('letterheadHtml', $this->letterhead->render($business));
             }
 
-            Mail::mailer($mailerName)->to($to)->send($mailable);
+            $pending = Mail::mailer($mailerName)->to($to);
+            if ($cc !== []) {
+                $pending->cc($cc);
+            }
+            $pending->send($mailable);
 
             return ['success' => true, 'error' => null];
         } catch (Throwable $e) {

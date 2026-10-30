@@ -654,6 +654,21 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('crm/leads/{lead}/tasks',                             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeTask'])         ->whereNumber('lead')->name('crm.leads.tasks.store');
     Route::get   ('crm/audit-logs',                                     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'auditLogs'])         ->name('crm.audit-logs.index');
 
+    // CRM lead quotations (built from inventory, stock-checked) and their approval → PDF → send to the customer
+    Route::get   ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'index'])           ->whereNumber('lead')->name('crm.leads.quotations.index');
+    Route::post  ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'store'])           ->whereNumber('lead')->name('crm.leads.quotations.store');
+    Route::post  ('crm/leads/{lead}/quotations/stock-check',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'stockCheck'])      ->whereNumber('lead')->name('crm.leads.quotations.stock-check');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'show'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.show');
+    Route::put   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'update'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.update');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/revise',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'revise'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.revise');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/submit',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'submit'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.submit');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/approve',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'approve'])         ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.approve');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/return',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'returnForChanges'])->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.return');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/reject',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'reject'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.reject');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}/pdf',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'pdf'])             ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.pdf');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/send',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'send'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.send');
+    Route::get   ('crm/quotation-approvals',                                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'inbox'])           ->name('crm.quotation-approvals.index');
+
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');

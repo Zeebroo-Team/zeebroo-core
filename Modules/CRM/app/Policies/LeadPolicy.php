@@ -163,7 +163,16 @@ class LeadPolicy
             && ($access->worksAllLeads() || $this->headsLead($access, $lead));
     }
 
-    /** Approving the lead's quotations (discounts over the department limit). */
+    /**
+     * Building, editing, submitting and sending the lead's quotations: whoever may edit the lead
+     * — its assignees, the department head, "All Departments" and admins.
+     */
+    public function canQuote(CrmAccess $access, Lead $lead): bool
+    {
+        return $this->canEdit($access, $lead);
+    }
+
+    /** Approving, returning or rejecting the lead's quotations: the lead's department / division head or an admin. */
     public function canApprove(CrmAccess $access, Lead $lead): bool
     {
         return $this->mayAct($access, $lead)
@@ -236,6 +245,7 @@ class LeadPolicy
             'can_delete'     => $this->canDelete($access, $lead),
             'can_assign'     => $this->canAssign($access, $lead),
             'can_approve'    => $this->canApprove($access, $lead),
+            'can_quote'      => $this->canQuote($access, $lead),
             'can_forward'    => $this->canForward($access, $lead),
             'can_review'     => $this->canReview($access, $lead),
             'can_contribute' => $this->canContribute($access, $lead),

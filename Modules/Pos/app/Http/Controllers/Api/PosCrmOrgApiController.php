@@ -53,13 +53,19 @@ class PosCrmOrgApiController extends Controller
         return response()->json(['data' => $this->settings->present($business)]);
     }
 
-    /** PUT /api/v1/pos/crm/settings — phone_country_code (digits, e.g. "94"; empty = the default). */
+    /**
+     * PUT /api/v1/pos/crm/settings — phone_country_code (digits, e.g. "94"; empty = the default),
+     * quotation_stock_check (warn | block | off). A setting left out keeps its value.
+     */
     public function saveCrmSettings(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessCrmAdmin($request, $business);
 
-        $validated = $request->validate(['phone_country_code' => ['nullable', 'string', 'max:6', 'regex:/^\+?\d{0,4}$/']]);
+        $validated = $request->validate([
+            'phone_country_code'    => ['sometimes', 'nullable', 'string', 'max:6', 'regex:/^\+?\d{0,4}$/'],
+            'quotation_stock_check' => ['sometimes', 'required', 'in:' . implode(',', \Modules\CRM\Models\CrmSetting::STOCK_CHECKS)],
+        ]);
         $this->settings->save($business, $validated);
 
         return response()->json(['message' => 'CRM settings saved.', 'data' => $this->settings->present($business)]);

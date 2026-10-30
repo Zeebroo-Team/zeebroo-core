@@ -77,6 +77,11 @@ class PosQuotationApiController extends Controller
         abort_unless((int) $quotation->business_id === (int) $business->id, 404);
         $this->abortUnlessPerm($request, $business, 'pos_quotations');
 
+        // A lead quotation is edited from its lead (stock check, approval rules): crm/leads/{lead}/quotations/{id}
+        if ($quotation->isLeadQuotation()) {
+            return response()->json(['message' => 'This quotation belongs to a CRM lead — edit it from the lead.'], 422);
+        }
+
         $validated = $this->validateHeader($request, $business);
 
         try {
@@ -98,7 +103,11 @@ class PosQuotationApiController extends Controller
         $business = $this->businessOrAbort($request);
         abort_unless((int) $quotation->business_id === (int) $business->id, 404);
 
-        $this->quotations->markSent($quotation);
+        try {
+            $this->quotations->markSent($quotation);
+        } catch (ValidationException $e) {
+            return response()->json(['message' => $e->getMessage(), 'errors' => $e->errors()], 422);
+        }
 
         return response()->json(['message' => 'Marked as sent.', 'status' => $quotation->fresh()->status]);
     }
@@ -154,6 +163,8 @@ class PosQuotationApiController extends Controller
             'expiry_date'    => $q->expiry_date?->toDateString(),
             'total'          => round((float) $q->total, 2),
             'proposal_count' => (int) ($q->proposal_count ?? 0),
+            'version'        => (int) ($q->version ?? 1),
+            'lead_id'        => $q->lead_id,
         ];
     }
 
@@ -166,15 +177,24 @@ class PosQuotationApiController extends Controller
             'tax_amount'      => round((float) $q->tax_amount, 2),
             'notes'           => $q->notes,
             'customer_id'     => $q->customer_id,
-            'is_editable'     => $q->isEditable(),
+            'is_editable'     => $q->isEditable() && ! $q->isLeadQuotation(),
+            // The lead it was built from — the Sales panel links back to it
+            'lead'            => $q->lead ? [
+                'id'         => (int) $q->lead->id,
+                'name'       => $q->lead->name,
+                'project_id' => (int) $q->lead->project_id,
+            ] : null,
             'items'           => $q->items->map(fn ($i) => [
-                'id'          => (int) $i->id,
-                'product_id'  => $i->product_id,
-                'item_type'   => $i->product_id ? 'product' : ($i->service_item_id ? 'service' : 'custom'),
-                'description' => $i->description,
-                'quantity'    => round((float) $i->quantity, 3),
-                'unit_price'  => round((float) $i->unit_price, 2),
-                'line_total'  => round((float) $i->line_total, 2),
+                'id'              => (int) $i->id,
+                'product_id'      => $i->product_id,
+                'item_type'       => $i->product_id ? 'product' : ($i->service_item_id ? 'service' : 'custom'),
+                'description'     => $i->description,
+                'quantity'        => round((float) $i->quantity, 3),
+                'unit_price'      => round((float) $i->unit_price, 2),
+                'discount_amount' => round((float) $i->discount_amount, 2),
+                'tax_rate'        => round((float) $i->tax_rate, 3),
+                'tax_amount'      => round((float) $i->tax_amount, 2),
+                'line_total'      => round((float) $i->line_total, 2),
             ])->values()->all(),
         ];
     }
@@ -197,6 +217,8 @@ class PosQuotationApiController extends Controller
             'items.*.description'     => ['nullable', 'string', 'max:255'],
             'items.*.quantity'        => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_rate'        => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
     }
 }

@@ -55,10 +55,29 @@ tbody td.right{text-align:right;}
 .print-btn--primary{background:{{ $accentColor }};border-color:{{ $accentColor }};color:#fff;}
 .print-btn--back{background:transparent;border-color:#e2e8f0;color:#64748b;}
 </style>
+@if(!empty($pdf))
+{{-- dompdf (QuotationPrintService::generatePdf) has no flex / grid / color-mix: lay the same blocks out with tables and floats --}}
+<style>
+body{font-family:'DejaVu Sans',Arial,sans-serif;font-size:11.5px;padding:0;}
+.print-page{max-width:none;}
+.qt-header{display:table;width:100%;}
+.qt-header > div{display:table-cell;vertical-align:top;}
+.qt-doc-title{background:#fff;}
+.qt-parties{display:table;width:100%;}
+.qt-party{display:table-cell;width:50%;vertical-align:top;}
+.qt-totals{display:block;overflow:hidden;}
+.qt-totals-inner{float:right;}
+.qt-totals-inner .row{display:block;overflow:hidden;}
+.qt-totals-inner .row span:first-child{float:left;}
+.qt-totals-inner .row span:last-child{float:right;}
+.qt-logo{max-height:56px;max-width:180px;margin-bottom:6px;}
+</style>
+@endif
 </head>
 <body>
 <div class="print-page">
 
+    @if(empty($pdf))
     {{-- Letterhead header (print only) --}}
     <div id="lhHeaderZone" class="lh-print-zone">
         <img id="lhHeaderImg" src="" alt="" style="width:100%;display:block;" onerror="this.style.display='none'">
@@ -71,10 +90,12 @@ tbody td.right{text-align:right;}
             <i class="fa fa-print"></i> Print / Save PDF
         </button>
     </div>
+    @endif
 
     {{-- Document header --}}
     <div class="qt-header">
         <div>
+            @if(!empty($logoSrc))<img src="{{ $logoSrc }}" alt="" class="qt-logo"><br>@endif
             <div class="qt-header__business">{{ $business->name }}</div>
             @if($mainBranch)
                 <div style="font-size:12px;color:#64748b;margin-top:4px;">
@@ -85,7 +106,7 @@ tbody td.right{text-align:right;}
         </div>
         <div class="qt-header__meta" style="text-align:right;">
             <span class="qt-doc-title">Quotation</span>
-            <p><strong>{{ $quotation->quote_number }}</strong></p>
+            <p><strong>{{ $quotation->quote_number }}</strong>@if(($quotation->version ?? 1) > 1) <span style="color:#64748b;">(version {{ $quotation->version }})</span>@endif</p>
             <p>Date: <strong>{{ $quotation->quote_date->format('M j, Y') }}</strong></p>
             @if($quotation->expiry_date)
                 <p>Expires: <strong>{{ $quotation->expiry_date->format('M j, Y') }}</strong></p>
@@ -113,6 +134,12 @@ tbody td.right{text-align:right;}
                 @if($quotation->customer->email)<p class="muted">{{ $quotation->customer->email }}</p>@endif
                 @if($quotation->customer->phone)<p class="muted">{{ $quotation->customer->phone }}</p>@endif
                 @if($quotation->customer->address)<p class="muted" style="white-space:pre-line;">{{ $quotation->customer->address }}</p>@endif
+            @elseif($quotation->lead_id && $quotation->lead)
+                {{-- A lead not converted to a customer yet --}}
+                <p style="font-weight:700;">{{ $quotation->lead->company ?: $quotation->lead->name }}</p>
+                @if($quotation->lead->company)<p class="muted">{{ $quotation->lead->name }}</p>@endif
+                @if($quotation->lead->email)<p class="muted">{{ $quotation->lead->email }}</p>@endif
+                @if($quotation->lead->phone)<p class="muted">{{ $quotation->lead->phone }}</p>@endif
             @else
                 <p class="muted">—</p>
             @endif
@@ -124,7 +151,11 @@ tbody td.right{text-align:right;}
         </div>
     </div>
 
-    {{-- Items table --}}
+    {{-- Items table — discount / tax columns only when a line has one (lead quotations) --}}
+    @php
+        $lineDiscounts = $quotation->items->contains(fn ($i) => (float) $i->discount_amount > 0);
+        $lineTaxes     = $quotation->items->contains(fn ($i) => (float) $i->tax_amount > 0);
+    @endphp
     <table>
         <thead>
             <tr>
@@ -132,6 +163,8 @@ tbody td.right{text-align:right;}
                 <th>Item / Description</th>
                 <th class="right" style="width:10%;">Qty</th>
                 <th class="right" style="width:16%;">Unit price</th>
+                @if($lineDiscounts)<th class="right" style="width:12%;">Discount</th>@endif
+                @if($lineTaxes)<th class="right" style="width:12%;">Tax</th>@endif
                 <th class="right" style="width:16%;">Total</th>
             </tr>
         </thead>
@@ -157,6 +190,8 @@ tbody td.right{text-align:right;}
                     </td>
                     <td class="right">{{ rtrim(rtrim(number_format($item->quantity, 3), '0'), '.') }}</td>
                     <td class="right">{{ $currency }} {{ number_format($item->unit_price, 2) }}</td>
+                    @if($lineDiscounts)<td class="right">{{ (float) $item->discount_amount > 0 ? '− ' . number_format($item->discount_amount, 2) : '—' }}</td>@endif
+                    @if($lineTaxes)<td class="right">{{ (float) $item->tax_amount > 0 ? number_format($item->tax_amount, 2) . ' (' . rtrim(rtrim(number_format($item->tax_rate, 3), '0'), '.') . '%)' : '—' }}</td>@endif
                     <td class="right">{{ $currency }} {{ number_format($item->line_total, 2) }}</td>
                 </tr>
                 @foreach($boundProducts as $bp)
@@ -169,6 +204,8 @@ tbody td.right{text-align:right;}
                             {{ rtrim(rtrim(number_format((float)$bp->pivot->qty, 3), '0'), '.') }}
                         </td>
                         <td></td>
+                        @if($lineDiscounts)<td></td>@endif
+                        @if($lineTaxes)<td></td>@endif
                         <td></td>
                     </tr>
                 @endforeach
@@ -207,13 +244,16 @@ tbody td.right{text-align:right;}
         {{ $quotation->expiry_date ? $quotation->expiry_date->format('M j, Y') : 'further notice' }}.
     </div>
 
+    @if(empty($pdf))
     {{-- Letterhead footer (print only) --}}
     <div id="lhFooterZone" class="lh-print-zone">
         <img id="lhFooterImg" src="" alt="" style="width:100%;display:block;position:fixed;bottom:0;left:0;" onerror="this.style.display='none'">
     </div>
+    @endif
 </div>
 
-@if($letterheadCanvasJson)
+@if(!empty($pdf))
+@elseif($letterheadCanvasJson)
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js" crossorigin="anonymous"></script>
 <script>
 (function () {

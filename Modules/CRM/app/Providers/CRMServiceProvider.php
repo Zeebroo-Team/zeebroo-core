@@ -59,7 +59,15 @@ class CRMServiceProvider extends ModuleServiceProvider
             new Timeline\MessageTimelineSource(),
             new Timeline\AttachmentTimelineSource(),
             new Timeline\TaskTimelineSource(),
+            new Timeline\QuotationTimelineSource(),
         ]));
+
+        // Sending approved lead quotations; more channels (WhatsApp, …) are added with extend()
+        $this->app->singleton(\Modules\CRM\Services\QuotationDispatch\QuotationDispatcher::class, fn ($app) => new \Modules\CRM\Services\QuotationDispatch\QuotationDispatcher(
+            $app->make(\Modules\Sales\Services\QuotationPrintService::class),
+            $app->make(\Modules\CRM\Services\LeadQuotationService::class),
+            [$app->make(\Modules\CRM\Services\QuotationDispatch\EmailQuotationChannel::class)],
+        ));
     }
 
     public function boot(): void
