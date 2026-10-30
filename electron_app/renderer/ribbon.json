@@ -493,7 +493,8 @@
         {
           "label": "Access",
           "items": [
-            { "type": "lg", "id": "rb-crm-permissions",   "icon": "fa-user-shield",        "label": "Permissions" }
+            { "type": "lg", "id": "rb-crm-permissions",   "icon": "fa-user-shield",        "label": "Permissions" },
+            { "type": "lg", "id": "rb-crm-org",           "icon": "fa-sitemap",            "label": "Org Structure" }
           ]
         },
         {

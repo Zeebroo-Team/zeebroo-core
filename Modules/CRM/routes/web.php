@@ -4,6 +4,7 @@ use Illuminate\Support\Facades\Route;
 use Modules\CRM\Http\Controllers\ActivityController;
 use Modules\CRM\Http\Controllers\ContactController;
 use Modules\CRM\Http\Controllers\CrmImageController;
+use Modules\CRM\Http\Controllers\CrmOrgController;
 use Modules\CRM\Http\Controllers\LeadController;
 use Modules\CRM\Http\Controllers\LeadCustomFieldController;
 use Modules\CRM\Http\Controllers\LeadFormController;
@@ -77,6 +78,14 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::post('/crm/tasks/{task}/complete',   [TaskController::class, 'complete'])    ->name('crm.tasks.complete');
     Route::post('/crm/tasks/{task}/reopen',     [TaskController::class, 'reopen'])      ->name('crm.tasks.reopen');
     Route::delete('/crm/tasks/{task}',          [TaskController::class, 'destroy'])     ->name('crm.tasks.destroy');
+
+    Route::get('/crm/settings/org',                                      [CrmOrgController::class, 'index'])          ->name('crm.org.index');
+    Route::post('/crm/settings/org/departments/{department}/divisions',  [CrmOrgController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
+    Route::put('/crm/settings/org/divisions/{division}',                 [CrmOrgController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');
+    Route::delete('/crm/settings/org/divisions/{division}',              [CrmOrgController::class, 'destroyDivision'])->whereNumber('division')->name('crm.org.divisions.destroy');
+    Route::put('/crm/settings/org/departments/{department}/settings',    [CrmOrgController::class, 'updateSettings']) ->whereNumber('department')->name('crm.org.settings.update');
+    Route::post('/crm/settings/org/departments/{department}/pipeline',   [CrmOrgController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
+    Route::delete('/crm/settings/org/departments/{department}/pipeline', [CrmOrgController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
 });
 
 // Public lead-capture form pages — no auth, reachable by anyone with the link.

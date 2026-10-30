@@ -54779,7 +54779,9 @@ async function submitDsCreate() {
   /** "Employee #EMP-1002" tag for users that are linked to an HR employee profile. */
   function _employeeTagHtml(emp) {
     if (!emp) return '';
-    return `<span class="um-role-badge" style="background:#0ea5e91a;color:#0284c7" title="HR employee: ${_esc(emp.name)}"><i class="fa fa-id-badge"></i> Employee${emp.employee_id ? ' #' + _esc(emp.employee_id) : ''}</span>`;
+    return `<span class="um-role-badge" style="background:#0ea5e91a;color:#0284c7" title="HR employee: ${_esc(emp.name)}"><i class="fa fa-id-badge"></i> Employee${emp.employee_id ? ' #' + _esc(emp.employee_id) : ''}</span>`
+      + (emp.department ? `<span class="um-role-badge" style="background:#8b5cf61a;color:#7c3aed" title="Department"><i class="fa fa-sitemap"></i> ${_esc(emp.department)}</span>` : '')
+      + (emp.job_title ? `<span class="um-role-badge" style="background:#f59e0b1a;color:#b45309" title="Position"><i class="fa fa-briefcase"></i> ${_esc(emp.job_title)}</span>` : '');
   }
 
   function selectInvite(inv, cardEl, detailId) {
@@ -59061,6 +59063,7 @@ async function submitDsCreate() {
     else if (_crmView === 'tasks')    loadCrmTasks();
   });
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
+  $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
 
   // ── Permissions modal ─────────────────────────────────────────────────────
   // Owner/admins pick a user, then toggle CRM functions and choose which stages
@@ -59318,6 +59321,201 @@ async function submitDsCreate() {
 
   $('#crm-perms-modal-close')?.addEventListener('click', _crmClosePermsModal);
   $('#crm-perms-cancel-btn')?.addEventListener('click',  _crmClosePermsModal);
+
+  // ── Org structure modal ───────────────────────────────────────────────────
+  // Owner/admins pick an HR department, then link its pipeline, set its CRM
+  // settings and manage its divisions. Every action saves straight away.
+  let _crmOrg       = null;   // { departments, pipelines, users, marketing_intake_department_id } from /crm/org
+  let _crmOrgDeptId = null;
+
+  async function openCrmOrgModal() {
+    $('#crm-org-modal').style.display = 'flex';
+    await _crmLoadOrg();
+  }
+
+  async function _crmLoadOrg() {
+    _crmOrgAlert('');
+    const res = await API.crmOrg();
+    if (res.status !== 200) {
+      $('#crm-org-dept-list').innerHTML = `<span class="crm-perms-muted">${escHtml(res.body?.message || 'Failed to load the org structure.')}</span>`;
+      $('#crm-org-editor-body').innerHTML = '';
+      return;
+    }
+    _crmOrg = res.body.data;
+    if (!_crmOrg.departments.some(d => d.id === _crmOrgDeptId)) _crmOrgDeptId = _crmOrg.departments[0]?.id ?? null;
+    _crmRenderOrgDepts();
+    _crmRenderOrgEditor();
+  }
+
+  function _crmOrgAlert(msg) {
+    const el = $('#crm-org-alert');
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
+  }
+
+  function _crmOrgError(res, fallback) {
+    _crmOrgAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || fallback));
+  }
+
+  function _crmRenderOrgDepts() {
+    const list = $('#crm-org-dept-list');
+    if (!_crmOrg.departments.length) {
+      list.innerHTML = '<span class="crm-perms-muted">No departments yet. Create them in HR Management first.</span>';
+      return;
+    }
+    list.innerHTML = _crmOrg.departments.map(d => {
+      const tag = d.settings.is_marketing_intake ? '<span class="crm-perms-tag crm-perms-tag--admin">Intake</span>'
+                : d.warnings.length ? `<span class="crm-perms-tag crm-perms-tag--custom" title="${escHtml(d.warnings.join('\n'))}"><i class="fa fa-triangle-exclamation"></i></span>`
+                : '';
+      return `<button type="button" class="crm-perms-user${d.id === _crmOrgDeptId ? ' active' : ''}" data-org-dept="${d.id}">
+        <span class="crm-perms-avatar"><i class="fa fa-building"></i></span>
+        <span class="crm-perms-user-info">
+          <span class="crm-perms-user-name" style="display:block">${escHtml(d.name)}</span>
+          <span class="crm-perms-user-sub" style="display:block">${d.pipeline ? escHtml(d.pipeline.name) : 'No pipeline'} · ${d.divisions.length} division${d.divisions.length !== 1 ? 's' : ''}</span>
+        </span>
+        ${tag}
+      </button>`;
+    }).join('');
+  }
+
+  function _crmOrgUserOptions(selectedId) {
+    return `<option value="">Head: department head</option>` + _crmOrg.users.map(u =>
+      `<option value="${u.id}"${u.id === selectedId ? ' selected' : ''}>Head: ${escHtml(u.name)}</option>`).join('');
+  }
+
+  function _crmRenderOrgEditor() {
+    const body = $('#crm-org-editor-body');
+    const d = _crmOrg?.departments.find(x => x.id === _crmOrgDeptId);
+    if (!d) { body.innerHTML = '<span class="crm-perms-muted">Select a department.</span>'; return; }
+
+    const person = p => p ? `${escHtml(p.name)}${p.user_name ? '' : ' <span class="crm-perms-muted">(no user)</span>'}` : '—';
+    const linkable = _crmOrg.pipelines.filter(p => p.department_id === null || p.department_id === d.id);
+    const s = d.settings;
+
+    body.innerHTML = `
+      <div>
+        <div style="font-size:15px;font-weight:700">${escHtml(d.name)}</div>
+        <div class="crm-perms-muted">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''} · ${d.staff_count} staff</div>
+      </div>
+      ${d.warnings.map(w => `<div class="crm-org-warn"><i class="fa fa-triangle-exclamation"></i>${escHtml(w)}</div>`).join('')}
+
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Pipeline</div>
+        <div class="crm-org-row">
+          ${d.pipeline ? `<i class="fa fa-handshake" style="color:#7c3aed"></i><strong>${escHtml(d.pipeline.name)}</strong>
+            <button type="button" class="po-btn-ghost" data-org-unlink><i class="fa fa-link-slash"></i> Unlink</button>`
+            : '<span class="crm-perms-muted">No pipeline linked.</span>'}
+        </div>
+        <div class="crm-org-row">
+          <select class="po-field-input" id="crm-org-pipeline-select">
+            <option value="">+ Create a new pipeline</option>
+            ${linkable.map(p => `<option value="${p.id}"${d.pipeline?.id === p.id ? ' selected' : ''}>${escHtml(p.name)}</option>`).join('')}
+          </select>
+          <button type="button" class="po-btn-primary" data-org-link>${d.pipeline ? 'Change' : 'Link'}</button>
+        </div>
+      </div>
+
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Settings</div>
+        <div class="crm-org-row"><label><input type="checkbox" id="crm-org-intake"${s.is_marketing_intake ? ' checked' : ''}> Marketing intake — every new lead lands here first (only one department)</label></div>
+        <div class="crm-org-row"><span style="min-width:180px">Discount approval limit (%)</span>
+          <input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:100px" placeholder="No limit" value="${s.discount_approval_limit_percent ?? ''}"></div>
+        <div class="crm-org-row"><span style="min-width:180px">Follow-up days</span>
+          <input type="text" class="po-field-input" id="crm-org-followups" style="width:100px" placeholder="2, 5" value="${escHtml(s.followup_days.join(', '))}"></div>
+        <div class="crm-org-row"><button type="button" class="po-btn-primary" data-org-save-settings><i class="fa fa-check"></i> Save settings</button></div>
+      </div>
+
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Divisions</div>
+        ${d.divisions.map(v => `<div class="crm-org-row" data-org-div="${v.id}">
+          <input type="text" class="po-field-input" data-f="name" value="${escHtml(v.name)}" maxlength="150" style="flex:1;min-width:150px">
+          <select class="po-field-input" data-f="head_user_id">${_crmOrgUserOptions(v.head_user_id)}</select>
+          <label><input type="checkbox" data-f="is_active"${v.is_active ? ' checked' : ''}> Active</label>
+          <button type="button" class="po-btn-ghost" data-org-div-save><i class="fa fa-check"></i> Save</button>
+          <button type="button" class="po-btn-ghost" data-org-div-delete title="Delete division"><i class="fa fa-trash" style="color:#ef4444"></i></button>
+        </div>`).join('') || '<span class="crm-perms-muted">No divisions yet.</span>'}
+        <div class="crm-org-row" data-org-div-new>
+          <input type="text" class="po-field-input" data-f="name" placeholder="New division name" maxlength="150" style="flex:1;min-width:150px">
+          <select class="po-field-input" data-f="head_user_id">${_crmOrgUserOptions(null)}</select>
+          <button type="button" class="po-btn-primary" data-org-div-add><i class="fa fa-plus"></i> Add division</button>
+        </div>
+      </div>`;
+  }
+
+  function _crmOrgDivisionBody(row) {
+    const head = row.querySelector('[data-f="head_user_id"]').value;
+    const active = row.querySelector('[data-f="is_active"]');
+    return {
+      name: row.querySelector('[data-f="name"]').value.trim(),
+      head_user_id: head ? Number(head) : null,
+      is_active: active ? active.checked : true,
+    };
+  }
+
+  $('#crm-org-dept-list')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-org-dept]');
+    if (!btn) return;
+    _crmOrgDeptId = Number(btn.dataset.orgDept);
+    _crmOrgAlert('');
+    _crmRenderOrgDepts();
+    _crmRenderOrgEditor();
+  });
+
+  $('#crm-org-editor-body')?.addEventListener('click', async e => {
+    const deptId = _crmOrgDeptId;
+    const t = e.target.closest('button');
+    if (!t || !deptId) return;
+    let call = null, msg = '';
+
+    if (t.matches('[data-org-link]')) {
+      const pid = $('#crm-org-pipeline-select').value;
+      call = () => API.crmLinkDepartmentPipeline(deptId, pid ? Number(pid) : null);
+      msg = 'Pipeline linked.';
+    } else if (t.matches('[data-org-unlink]')) {
+      if (!confirm('Unlink this pipeline? Its leads stay where they are.')) return;
+      call = () => API.crmUnlinkDepartmentPipeline(deptId);
+      msg = 'Pipeline unlinked.';
+    } else if (t.matches('[data-org-save-settings]')) {
+      const discount = $('#crm-org-discount').value;
+      const body = {
+        is_marketing_intake: $('#crm-org-intake').checked,
+        discount_approval_limit_percent: discount === '' ? null : Number(discount),
+        followup_days: $('#crm-org-followups').value.split(/[\s,]+/).filter(Boolean).map(Number),
+      };
+      call = () => API.crmSaveDepartmentSettings(deptId, body);
+      msg = 'Department settings saved.';
+    } else if (t.matches('[data-org-div-add]')) {
+      const body = _crmOrgDivisionBody(t.closest('[data-org-div-new]'));
+      if (!body.name) { _crmOrgAlert('Enter a division name.'); return; }
+      call = () => API.crmCreateDivision(deptId, body);
+      msg = 'Division added.';
+    } else if (t.matches('[data-org-div-save]')) {
+      const row = t.closest('[data-org-div]');
+      const body = _crmOrgDivisionBody(row);
+      call = () => API.crmUpdateDivision(Number(row.dataset.orgDiv), body);
+      msg = 'Division updated.';
+    } else if (t.matches('[data-org-div-delete]')) {
+      if (!confirm('Delete this division?')) return;
+      const divId = Number(t.closest('[data-org-div]').dataset.orgDiv);
+      call = () => API.crmDeleteDivision(divId);
+      msg = 'Division deleted.';
+    } else {
+      return;
+    }
+
+    t.disabled = true;
+    const res = await call();
+    if (res.status === 200 || res.status === 201) {
+      toast(msg, 'success');
+      await _crmLoadOrg();
+    } else {
+      t.disabled = false;
+      _crmOrgError(res, 'Failed to save.');
+    }
+  });
+
+  $('#crm-org-modal-close')?.addEventListener('click', () => { $('#crm-org-modal').style.display = 'none'; });
+  $('#crm-org-close-btn')?.addEventListener('click',   () => { $('#crm-org-modal').style.display = 'none'; });
 
   // ── Subnav ────────────────────────────────────────────────────────────────
   $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));

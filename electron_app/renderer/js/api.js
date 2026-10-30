@@ -626,6 +626,14 @@ const API = (() => {
     crmMyPermissions:        ()                => request('GET',    '/crm/permissions/me'),
     crmSaveUserPermissions:  (userId, body)    => request('PUT',    `/crm/permissions/users/${userId}`, body),
     crmResetUserPermissions: (userId)          => request('DELETE', `/crm/permissions/users/${userId}`),
+    // CRM org structure (admin only)
+    crmOrg:                      ()                    => request('GET',    '/crm/org'),
+    crmCreateDivision:           (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/divisions`, body),
+    crmUpdateDivision:           (divisionId, body)    => request('PUT',    `/crm/org/divisions/${divisionId}`, body),
+    crmDeleteDivision:           (divisionId)          => request('DELETE', `/crm/org/divisions/${divisionId}`),
+    crmSaveDepartmentSettings:   (departmentId, body)  => request('PUT',    `/crm/org/departments/${departmentId}/settings`, body),
+    crmLinkDepartmentPipeline:   (departmentId, projectId) => request('POST', `/crm/org/departments/${departmentId}/pipeline`, { project_id: projectId || null }),
+    crmUnlinkDepartmentPipeline: (departmentId)        => request('DELETE', `/crm/org/departments/${departmentId}/pipeline`),
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
     crmCreateProject:(body)               => request('POST',   '/crm/projects', body),

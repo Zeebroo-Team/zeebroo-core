@@ -11,4 +11,12 @@
     <a href="{{ route('crm.tasks.index') }}" @class(['is-active' => request()->routeIs('crm.tasks.*')])>
         <i class="fa fa-list-check"></i> Tasks
     </a>
+    @php
+        $crmNavBusiness = $business ?? null;
+    @endphp
+    @if($crmNavBusiness && app(\Modules\CRM\Services\CrmPermissionService::class)->isAdmin($crmNavBusiness, (int) auth()->id()))
+        <a href="{{ route('crm.org.index') }}" @class(['is-active' => request()->routeIs('crm.org.*')])>
+            <i class="fa fa-sitemap"></i> Org Structure
+        </a>
+    @endif
 </nav>

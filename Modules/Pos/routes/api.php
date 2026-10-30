@@ -601,6 +601,15 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::put   ('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'update'])->whereNumber('user')->name('crm.permissions.update');
     Route::delete('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'reset']) ->whereNumber('user')->name('crm.permissions.reset');
 
+    // CRM org structure (departments → divisions, department pipeline, department settings)
+    Route::get   ('crm/org',                                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'index'])          ->name('crm.org.index');
+    Route::post  ('crm/org/departments/{department}/divisions', [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
+    Route::put   ('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');
+    Route::delete('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'destroyDivision'])->whereNumber('division')->name('crm.org.divisions.destroy');
+    Route::put   ('crm/org/departments/{department}/settings',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateSettings']) ->whereNumber('department')->name('crm.org.settings.update');
+    Route::post  ('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
+    Route::delete('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
+
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');

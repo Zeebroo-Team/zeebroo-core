@@ -61,7 +61,7 @@ class PosCrmApiController extends Controller
             ->where('status', Project::STATUS_ACTIVE)
             ->withCount('leads')
             ->orderBy('name')
-            ->get(['id', 'name', 'description', 'status'])
+            ->get(['id', 'name', 'description', 'status', 'department_id'])
             ->filter(fn (Project $p) => $access->canSeeRelation($p->id))
             ->values();
 
