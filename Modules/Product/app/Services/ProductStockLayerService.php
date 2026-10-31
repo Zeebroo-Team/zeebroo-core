@@ -289,6 +289,65 @@ class ProductStockLayerService
         return $layer->refresh();
     }
 
+    /**
+     * Batches copy the product's selling price when received, and the POS sells at the
+     * batch's price. So a new product price has to reach the in-stock batches still on
+     * the old one, or the POS never sees it. Batches on any other price keep it.
+     */
+    public function moveBatchesToProductPrice(Product $product, float $oldPrice): void
+    {
+        $price = (float) $product->unit_price;
+        if ($this->samePrice($price, $oldPrice)) {
+            return;
+        }
+
+        foreach ($this->batchesFollowingProductPrice($product) as $layer) {
+            if ($this->samePrice((float) $layer->selling_unit_price, $oldPrice)) {
+                $this->updateSellingPrice($layer, $price);
+            }
+        }
+    }
+
+    /**
+     * In-stock batches the POS will sell at something other than the product's price.
+     *
+     * @return EloquentCollection<int, ProductStockLayer>
+     */
+    public function batchesOnOtherPrice(Product $product): EloquentCollection
+    {
+        return $this->batchesFollowingProductPrice($product)
+            ->reject(fn (ProductStockLayer $layer) => $this->samePrice((float) $layer->selling_unit_price, (float) $product->unit_price))
+            ->values();
+    }
+
+    /**
+     * None when the product has no price (0 counts as unset, see defaultSellingUnitPrice())
+     * or uses linked dynamic pricing, whose batches always sell at 1.00. A batch with no
+     * price of its own already sells at the product's.
+     *
+     * @return EloquentCollection<int, ProductStockLayer>
+     */
+    private function batchesFollowingProductPrice(Product $product): EloquentCollection
+    {
+        if ((float) $product->unit_price <= 0 || ($product->is_dynamic_pricing && $product->dynamic_price_qty_linked)) {
+            return new EloquentCollection;
+        }
+
+        return ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $product->business_id)
+            ->where('quantity_remaining', '>', 0)
+            ->whereNotNull('selling_unit_price')
+            ->orderBy('received_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function samePrice(float $a, float $b): bool
+    {
+        return abs($a - $b) < 0.005;
+    }
+
     public function updateCostPrice(ProductStockLayer $layer, float $unitCost): ProductStockLayer
     {
         $layer->unit_cost = round(max(0, $unitCost), 2);

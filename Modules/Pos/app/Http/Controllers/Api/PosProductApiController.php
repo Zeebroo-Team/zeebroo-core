@@ -273,11 +273,25 @@ class PosProductApiController extends Controller
         if ($request->has('dynamic_price_qty_linked')) $data['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
         if ($request->has('is_changeable_price'))    $data['is_changeable_price']  = $request->boolean('is_changeable_price');
 
+        $oldPrice = (float) $product->unit_price;
+
         $this->productService->update($product, $data);
+
+        // Only after a price change: products priced per batch on purpose shouldn't prompt on every save.
+        $otherPriced = (float) $product->unit_price !== $oldPrice ? $this->stockLayers->batchesOnOtherPrice($product) : collect();
 
         return response()->json([
             'message' => 'Product updated.',
-            'data'    => ['id' => $product->id, 'name' => $product->fresh()->name],
+            'data'    => [
+                'id'   => $product->id,
+                'name' => $product->fresh()->name,
+                'batches_on_other_price' => $otherPriced->map(fn ($layer) => [
+                    'id'                 => (int) $layer->id,
+                    'batch_sku'          => $layer->batch_sku,
+                    'selling_unit_price' => (float) $layer->selling_unit_price,
+                    'quantity_remaining' => (float) $layer->quantity_remaining,
+                ])->values(),
+            ],
         ]);
     }
 

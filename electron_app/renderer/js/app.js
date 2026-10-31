@@ -23641,6 +23641,9 @@ async function _prodSave(andNew = false) {
     } else {
       $('#product-modal').style.display = 'none';
       if (_prod.editingId) {
+        await _prodOfferBatchPriceUpdate(_prod.editingId, res.body?.data?.batches_on_other_price, price);
+        // Price or details may have changed — refresh the POS grid
+        loadProducts(state.searchQuery, state.activeCategory);
         openProductDetail(_prod.editingId, body.name);
       } else {
         invState.loaded = false;
@@ -23653,6 +23656,25 @@ async function _prodSave(andNew = false) {
     const first  = errors ? Object.values(errors)[0]?.[0] : null;
     toast(first || res.body?.message || 'Failed to save', 'error');
   }
+}
+
+// The POS sells each batch at its own price. Batches on the old product price
+// move with it on the server; these are on some other price, which may be on
+// purpose, so the user decides.
+async function _prodOfferBatchPriceUpdate(productId, batches, price) {
+  if (!batches?.length) return;
+  const prices = [...new Set(batches.map(b => formatMoney(b.selling_unit_price)))].join(', ');
+  const ok = await appConfirm({
+    title: 'Update batch prices too?',
+    message: `${batches.length === 1 ? '1 batch' : `${batches.length} batches`} in stock will keep selling at ${prices}, because the POS uses each batch's own price. Change to ${formatMoney(price)}?`,
+    confirmText: '<i class="fa fa-check"></i> Update batches',
+    cancelText: 'Keep batch prices',
+  });
+  if (!ok) return;
+
+  const results = await Promise.all(batches.map(b => API.updateLayerSellingPrice(productId, b.id, price)));
+  const failed = results.filter(r => r.status !== 200).length;
+  toast(failed ? `Could not update ${failed} of ${batches.length} batches` : 'Batch prices updated', failed ? 'error' : 'success');
 }
 
 async function _prodDelete() {
