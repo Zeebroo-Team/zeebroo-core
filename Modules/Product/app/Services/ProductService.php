@@ -12,6 +12,7 @@ class ProductService
     public function __construct(
         private readonly ProductImageService $productImageService,
         private readonly ProductBundleService $productBundleService,
+        private readonly ProductStockLayerService $productStockLayerService,
     ) {
     }
 
@@ -119,6 +120,8 @@ class ProductService
 
         $product->fill($data);
         $product->save();
+
+        $this->productStockLayerService->moveBatchesToProductPrice($product, $oldPrice);
 
         if (is_array($categoryIds)) {
             $product->categories()->sync($categoryIds);
