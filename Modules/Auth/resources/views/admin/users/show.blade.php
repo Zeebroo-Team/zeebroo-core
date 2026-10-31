@@ -238,6 +238,7 @@
                             <button type="button" class="ads-biz-tab" data-tab="crm"><i class="fa fa-bullseye"></i> CRM</button>
                             <button type="button" class="ads-biz-tab" data-tab="docs"><i class="fa fa-file-invoice-dollar"></i> Quotes &amp; Invoices</button>
                             <button type="button" class="ads-biz-tab" data-tab="payments"><i class="fa fa-credit-card"></i> Payment</button>
+                            <button type="button" class="ads-biz-tab" data-tab="pos-settings"><i class="fa fa-sliders"></i> POS Settings</button>
                         </div>
 
                         <div class="ads-biz-panel" data-panel="overview">
@@ -460,6 +461,8 @@
                                 </div>
                             @endif
                         </div>
+
+                        <div class="ads-biz-panel" data-panel="pos-settings" data-url="{{ route('admin.businesses.pos-settings.index', $business) }}" hidden></div>
                     </div>
                 @endforeach
             </div>
@@ -687,6 +690,8 @@
         </div>
     @endif
 </div>
+
+@include('pos::admin.settings.assets')
 
 <div class="ads-modal-overlay" id="ads-payment-modal">
     <div class="ads-modal" role="dialog" aria-modal="true" aria-labelledby="ads-payment-modal-title">

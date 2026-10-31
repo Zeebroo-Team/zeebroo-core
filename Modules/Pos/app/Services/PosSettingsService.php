@@ -353,7 +353,7 @@ class PosSettingsService
 
         if (array_key_exists('display_theme', $data)) {
             $theme = strtolower(trim((string) ($data['display_theme'] ?? 'light')));
-            if (! in_array($theme, ['light', 'dark'], true)) {
+            if (! in_array($theme, ['inherit', 'light', 'dark'], true)) {
                 $theme = 'light';
             }
             $business->setSetting(self::KEY_DISPLAY_THEME, $theme);

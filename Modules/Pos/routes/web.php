@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Pos\Http\Controllers\Admin\PosSettingsAdminController;
 use Modules\Pos\Http\Controllers\BrandMgmtAgencyController;
 use Modules\Pos\Http\Controllers\BrandMgmtBrandController;
 use Modules\Pos\Http\Controllers\BrandMgmtCoordinatorController;
@@ -165,3 +166,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('/pos/brand-mgmt/salary-sheets/{salarySheet}/status', [BrandMgmtSalarySheetController::class, 'transitionStatus'])->name('pos.brand-mgmt.salary-sheets.transition');
     Route::delete('/pos/brand-mgmt/salary-sheets/{salarySheet}', [BrandMgmtSalarySheetController::class, 'destroy'])->name('pos.brand-mgmt.salary-sheets.destroy');
 });
+
+// Admin → User → POS Settings tab. Setting names can be raw keys such as tax.rate.
+Route::middleware(['auth', 'role:admin'])
+    ->prefix('admin/businesses/{business}/pos-settings')
+    ->name('admin.businesses.pos-settings.')
+    ->group(function (): void {
+        Route::get('/', [PosSettingsAdminController::class, 'index'])->name('index');
+        Route::put('/{setting}', [PosSettingsAdminController::class, 'update'])->where('setting', '[A-Za-z0-9_.]+')->name('update');
+        Route::delete('/{setting}', [PosSettingsAdminController::class, 'destroy'])->where('setting', '[A-Za-z0-9_.]+')->name('destroy');
+    });

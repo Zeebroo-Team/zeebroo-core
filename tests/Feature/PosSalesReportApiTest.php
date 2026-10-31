@@ -132,6 +132,7 @@ test('product-wise report pulls a range older than 30 days into the window', fun
 });
 
 test('product-wise report treats "all" sources as no source filter', function () {
+    Carbon::setTestNow('2026-10-13 15:00:00');
     [$controller, $service] = salesReportFixture();
     $service->shouldReceive('products')->once()
         ->withArgs(fn ($business, $f) => $f['source'] === null && $f['from']->diffInDays($f['to']) === 6.0)
@@ -140,6 +141,7 @@ test('product-wise report treats "all" sources as no source filter', function ()
     $controller->products(Request::create('/reports/sales/products', 'GET', [
         'date_from' => '2026-10-01', 'date_to' => '2026-10-07', 'source' => 'all',
     ]));
+    Carbon::setTestNow();
 });
 
 test('product-wise report rejects quotation sources', function () {
