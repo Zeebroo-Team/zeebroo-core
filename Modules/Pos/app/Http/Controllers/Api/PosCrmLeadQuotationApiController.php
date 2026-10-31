@@ -13,6 +13,7 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadQuotationService;
 use Modules\CRM\Services\QuotationApprovalService;
 use Modules\CRM\Services\QuotationDispatch\QuotationDispatcher;
@@ -50,6 +51,7 @@ class PosCrmLeadQuotationApiController extends Controller
         private readonly QuotationPrintService $print,
         private readonly QuotationNegotiationService $negotiation,
         private readonly QuotationVersionService $versions,
+        private readonly LeadAssignmentService $assignments,
     ) {}
 
     /** GET crm/leads/{lead}/quotations — the lead's quotations, newest first. */
@@ -453,8 +455,31 @@ class PosCrmLeadQuotationApiController extends Controller
                 'respond' => $canQuote && $q->status === Quotation::STATUS_SENT,
             ],
             'channels'      => $canSend ? $this->dispatcher->channels() : [],
-            'send_defaults' => $canSend ? $this->dispatcher->defaults($lead, $q) : null,
+            'send_defaults' => $canSend ? $this->dispatcher->defaults($lead, $q) + ['cc_options' => $this->ccOptions($lead, $q)] : null,
         ];
+    }
+
+    /**
+     * Addresses the send form offers for CC: the customer's / lead's email and the lead's
+     * department members. Anything else can still be typed in.
+     *
+     * @return list<array{email: string, name: string, kind: string}>
+     */
+    private function ccOptions(Lead $lead, Quotation $q): array
+    {
+        $options = [];
+        foreach ([$q->customer?->email, $lead->email] as $email) {
+            if ($email) {
+                $options[] = ['email' => $email, 'name' => $q->customer?->name ?: $lead->name, 'kind' => 'customer'];
+            }
+        }
+        foreach ($this->assignments->assignableUsers($lead) as $user) {
+            if ($user->email) {
+                $options[] = ['email' => $user->email, 'name' => $user->name, 'kind' => 'member'];
+            }
+        }
+
+        return array_values(collect($options)->unique(fn ($o) => mb_strtolower($o['email']))->all());
     }
 
     private function presentResponse(QuotationCustomerResponse $r): array

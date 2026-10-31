@@ -60309,7 +60309,10 @@ async function submitDsCreate() {
         <div class="crm-lead-view-section" style="margin:0 0 6px">Send by email</div>
         <div class="crm-qt-grid">
           <label style="grid-column:span 2">To<input class="po-field-input" type="email" id="crm-qt-send-to" value="${escHtml(s.send.to || '')}" placeholder="customer@example.com"></label>
-          <label style="grid-column:span 2">CC <span class="crm-ws-muted">(comma separated)</span><input class="po-field-input" id="crm-qt-send-cc" value="${escHtml(s.send.cc || '')}"></label>
+          <div class="crm-qt-field" style="grid-column:span 2"><span>CC <span class="crm-ws-muted">(pick a team member or the customer, or type any email)</span></span>
+            <div class="po-field-input crm-qt-cc" onclick="if(event.target===this)this.querySelector('input').focus()"><span id="crm-qt-cc-chips">${_crmQtCcChipsHtml(s.send.cc)}</span><input id="crm-qt-send-cc" list="crm-qt-cc-list" autocomplete="off" placeholder="Add email…"></div>
+            <datalist id="crm-qt-cc-list">${(q.send_defaults?.cc_options || []).map(o =>
+              `<option value="${escHtml(o.email)}">${escHtml(o.name)} · ${o.kind === 'customer' ? 'Customer' : 'Department'}</option>`).join('')}</datalist></div>
           <label style="grid-column:1/-1">Subject<input class="po-field-input" id="crm-qt-send-subject" maxlength="255" value="${escHtml(s.send.subject || '')}"></label>
           <label style="grid-column:1/-1">Message<textarea class="po-field-input" id="crm-qt-send-message" rows="6" style="resize:vertical">${escHtml(s.send.message || '')}</textarea></label>
         </div>
@@ -60603,22 +60606,28 @@ async function submitDsCreate() {
       toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
     } else if (t.matches('[data-qt-send-open]') && s.detail) {
       const d = s.detail.send_defaults || {};
-      s.send = { to: d.to || '', cc: '', subject: d.subject || '', message: d.message || '' };
+      s.send = { to: d.to || '', cc: [], subject: d.subject || '', message: d.message || '' };
       s.respond = null;
       _crmRenderWsTab();
       $('#crm-qt-send-to')?.focus();
+      $('[data-qt-send]')?.scrollIntoView({ block: 'nearest' });
+    } else if (t.dataset.qtCcRemove !== undefined && s.send) {
+      s.send.cc = s.send.cc.filter(x => x !== t.dataset.qtCcRemove);
+      $('#crm-qt-cc-chips').innerHTML = _crmQtCcChipsHtml(s.send.cc);
+      $('#crm-qt-send-cc')?.focus();
     } else if (t.matches('[data-qt-send-cancel]')) {
       s.send = null;
       _crmRenderWsTab();
     } else if (t.matches('[data-qt-send]') && s.detail) {
+      if (!_crmQtCcCommit()) return;
       const body = {
         channel: 'email',
         to:      $('#crm-qt-send-to').value.trim(),
-        cc:      $('#crm-qt-send-cc').value.split(',').map(x => x.trim()).filter(Boolean),
+        cc:      [...s.send.cc],
         subject: $('#crm-qt-send-subject').value.trim(),
         message: $('#crm-qt-send-message').value,
       };
-      s.send = { ...body, cc: body.cc.join(', ') };
+      s.send = { ...body };
       if (!body.to) { toast('Enter the customer\'s email address.', 'error'); return; }
       t.disabled = true;
       t.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
@@ -60632,6 +60641,47 @@ async function submitDsCreate() {
       }
       _crmQtAfterChange(lead, res);
     }
+  });
+
+  // Send form CC: one chip per address, shown by the name of the team member / customer it belongs to
+  function _crmQtCcChipsHtml(cc) {
+    const named = Object.fromEntries((_crmWs.qt?.detail?.send_defaults?.cc_options || []).map(o => [o.email.toLowerCase(), o.name]));
+    return (cc || []).map(email => `<span class="crm-qt-chip" title="${escHtml(email)}">${escHtml(named[email.toLowerCase()] || email)}<button type="button" data-qt-cc-remove="${escHtml(email)}" title="Remove"><i class="fa fa-xmark"></i></button></span>`).join('');
+  }
+
+  // Moves what's typed in the CC box into chips; false (with a toast unless quiet) when an address is invalid
+  function _crmQtCcCommit(quiet = false) {
+    const s = _crmWs.qt, inp = $('#crm-qt-send-cc');
+    if (!s?.send || !inp) return true;
+    const typed = inp.value.split(/[,;\s]+/).map(x => x.trim()).filter(Boolean);
+    const bad = typed.find(x => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x));
+    if (bad) {
+      if (!quiet) { toast(`"${bad}" is not a valid email address.`, 'error'); inp.focus(); }
+      return false;
+    }
+    typed.forEach(x => { if (!s.send.cc.some(c => c.toLowerCase() === x.toLowerCase())) s.send.cc.push(x); });
+    if (s.send.cc.length > 10) { s.send.cc = s.send.cc.slice(0, 10); toast('CC is limited to 10 addresses.', 'error'); }
+    inp.value = '';
+    $('#crm-qt-cc-chips').innerHTML = _crmQtCcChipsHtml(s.send.cc);
+    return true;
+  }
+
+  $('#crm-lead-view-body')?.addEventListener('keydown', e => {
+    if (e.target.id !== 'crm-qt-send-cc') return;
+    if (['Enter', ',', ';'].includes(e.key)) {
+      e.preventDefault();
+      _crmQtCcCommit();
+    } else if (e.key === 'Backspace' && !e.target.value && _crmWs.qt?.send?.cc.length) {
+      _crmWs.qt.send.cc.pop();
+      $('#crm-qt-cc-chips').innerHTML = _crmQtCcChipsHtml(_crmWs.qt.send.cc);
+    }
+  });
+  // Picking a suggestion from the list adds it straight away
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id === 'crm-qt-send-cc' && (e.inputType === 'insertReplacementText' || !e.inputType)) _crmQtCcCommit();
+  });
+  $('#crm-lead-view-body')?.addEventListener('focusout', e => {
+    if (e.target.id === 'crm-qt-send-cc' && e.target.value.trim()) _crmQtCcCommit(true);
   });
 
   // Customer response form: show the field the picked response needs

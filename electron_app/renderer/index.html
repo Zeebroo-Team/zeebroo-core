@@ -378,7 +378,15 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-qt-row-meta{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-qt-amt{font-weight:700;white-space:nowrap}
 .crm-qt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.crm-qt-grid label,.crm-qt-notes{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted)}
+.crm-qt-grid label,.crm-qt-grid .crm-qt-field,.crm-qt-notes{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted)}
+.crm-qt-grid .po-field-input{padding-left:10px}
+.crm-qt-cc{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 8px!important;cursor:text}
+.crm-qt-cc:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
+.crm-qt-cc>span{display:contents}
+.crm-qt-cc input{flex:1;min-width:140px;border:0;outline:0;background:transparent;color:var(--text);font-size:13px;padding:3px 2px}
+.crm-qt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--accent-light);color:var(--text);font-size:12px;max-width:100%}
+.crm-qt-chip button{border:0;background:transparent;color:var(--text-muted);cursor:pointer;padding:0 4px;font-size:11px;line-height:1}
+.crm-qt-chip button:hover{color:#ef4444}
 .crm-qt-table-wrap{flex:none;overflow-x:auto;border:1px solid var(--border,#e5e7eb);border-radius:8px}
 .crm-ws-panel>.crm-qt-versions,.crm-ws-panel>.crm-qt-foot,.crm-ws-panel>.crm-qt-send{flex:none}
 .crm-qt-table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -792,8 +800,9 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
 .crm-fu-due--overdue{color:#dc2626}
 .crm-fu-status{font-size:11px;color:var(--text-muted,#64748b)}
 .crm-fu-status--done{color:#059669}
-.crm-fu-log{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:8px;border-top:1px dashed var(--border,#e5e7eb)}
-.crm-fu-log textarea{grid-column:1/-1}
+.crm-fu-log{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;padding-top:8px;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-fu-log textarea{grid-column:1/-1;resize:vertical;min-height:52px}
+.crm-fu-form .po-field-input,.crm-fu-log .po-field-input{padding:6px 9px;font-size:12.5px;border-width:1px;border-radius:6px;min-height:32px}
 .crm-fu-lead-line{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
 .crm-fu-lead{border:0;background:none;padding:0;font-weight:600;color:var(--accent,#4f46e5);cursor:pointer;font-size:13px}
 .crm-fu-count{display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:rgba(100,116,139,.18);font-size:10.5px}

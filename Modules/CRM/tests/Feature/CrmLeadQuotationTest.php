@@ -549,7 +549,9 @@ test('sending queues the email with the PDF attached; on success the quotation a
     $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
     expect($detail['can']['send'])->toBeTrue()
         ->and($detail['send_defaults']['to'])->toBe('kasun@example.com')
-        ->and($detail['send_defaults']['subject'])->toBe('Quotation QT-0001 from ABC Solar');
+        ->and($detail['send_defaults']['subject'])->toBe('Quotation QT-0001 from ABC Solar')
+        ->and(collect($detail['send_defaults']['cc_options'])->firstWhere('kind', 'customer')['email'])->toBe('kasun@example.com')
+        ->and(collect($detail['send_defaults']['cc_options'])->where('kind', 'member'))->not->toBeEmpty();
 
     $res = crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', [
         'to' => 'kasun@example.com', 'cc' => ['nimal@example.com'], 'subject' => 'Your quotation', 'message' => "Dear Kasun,\nAttached.",
