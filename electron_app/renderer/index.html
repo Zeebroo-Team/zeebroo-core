@@ -140,7 +140,7 @@
 .crm-imp-progress{height:8px;border-radius:999px;background:var(--border,#e5e7eb);overflow:hidden}
 .crm-imp-progress div{height:100%;background:#7c3aed;transition:width .3s}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
-body:not(.crm-uses-inbox) #rb-crm-inbox,
+body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
 body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
@@ -367,6 +367,47 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-ws-tab.active{color:#7c3aed;border-bottom-color:#7c3aed}
 .crm-ws-tab-count{font-size:10px;font-weight:700;padding:0 6px;border-radius:999px;background:color-mix(in srgb,#7c3aed 14%,transparent);color:#7c3aed}
 .crm-ws-panel{display:flex;flex-direction:column;gap:12px;min-height:0}
+/* Lead window → Quotations tab */
+.crm-qt-bar,.crm-qt-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crm-qt-head strong{font-size:14px}
+.crm-qt-list{display:flex;flex-direction:column;gap:6px}
+.crm-qt-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:12.5px}
+.crm-qt-row:hover{border-color:#7c3aed;background:color-mix(in srgb,#7c3aed 5%,transparent)}
+.crm-qt-num{font-weight:700;white-space:nowrap}
+.crm-qt-row-meta{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-qt-amt{font-weight:700;white-space:nowrap}
+.crm-qt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.crm-qt-grid label,.crm-qt-notes{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted)}
+.crm-qt-table-wrap{overflow-x:auto;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-qt-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.crm-qt-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:7px 8px;border-bottom:1px solid var(--border,#e5e7eb);white-space:nowrap}
+.crm-qt-table td{padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:middle}
+.crm-qt-table tr:last-child td{border-bottom:0}
+.crm-qt-table .po-field-input{width:100%;padding:4px 6px;font-size:12.5px}
+.crm-qt-table--view td{padding:7px 8px}
+.crm-qt-right{text-align:right!important;white-space:nowrap}
+.crm-qt-numin{text-align:right}
+.crm-qt-sub{margin-top:2px}
+.crm-qt-del{padding:3px 7px!important}
+.crm-qt-line--error td{background:color-mix(in srgb,#ef4444 9%,transparent)}
+.crm-qt-stock{font-size:11px;font-weight:600;color:#15803d;white-space:nowrap}
+.crm-qt-stock--short{color:#b91c1c}
+.crm-qt-add{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.crm-qt-results{position:absolute;left:0;right:0;top:100%;z-index:6;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-height:240px;overflow-y:auto;font-size:12.5px}
+.crm-qt-foot{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.crm-qt-notes{flex:1;min-width:220px}
+.crm-qt-totals{width:280px;max-width:100%;display:flex;flex-direction:column;gap:4px;font-size:12.5px;margin-left:auto}
+.crm-qt-totals>div{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.crm-qt-totals .po-field-input{width:110px;padding:3px 6px;font-size:12.5px}
+.crm-qt-grand{border-top:1px solid var(--border,#e5e7eb);padding-top:6px;font-size:14px;font-weight:800}
+.crm-qt-actions{display:flex;gap:8px;justify-content:flex-end}
+.crm-qt-banner{padding:7px 10px;border-radius:8px;font-size:12px;border:1px solid}
+.crm-qt-banner--amber{background:color-mix(in srgb,#f59e0b 10%,transparent);border-color:color-mix(in srgb,#f59e0b 35%,transparent);color:#92400e}
+.crm-qt-banner--red{background:color-mix(in srgb,#ef4444 9%,transparent);border-color:color-mix(in srgb,#ef4444 35%,transparent);color:#991b1b}
+.crm-qt-banner--purple{background:color-mix(in srgb,#a855f7 9%,transparent);border-color:color-mix(in srgb,#a855f7 35%,transparent);color:#7e22ce}
+.crm-qt-banner--teal{background:color-mix(in srgb,#0d9488 9%,transparent);border-color:color-mix(in srgb,#0d9488 35%,transparent);color:#115e59}
+.crm-qt-send{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-banner--purple,body.dark .crm-qt-banner--teal{color:var(--text)}
 .crm-ws-assignees{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px}
 .crm-ws-assign-btn{margin-left:auto;padding:4px 10px!important;font-size:12px!important}
 .crm-ws-muted{font-size:11px;color:var(--text-muted)}
@@ -2041,6 +2082,9 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-inbox">
               <i class="fa fa-inbox"></i>Marketing<br>Inbox
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-approvals">
+              <i class="fa fa-file-signature"></i>Quotation<br>Approvals
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-import-leads">
               <i class="fa fa-file-csv"></i>Import<br>Leads
@@ -12407,6 +12451,28 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-assign-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="crm-assign-save"><i class="fa fa-check"></i> Save Assignees</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: quotation approvals — lead quotations waiting for the department head / admin ── -->
+  <div class="modal-overlay" id="crm-approvals-modal" style="display:none">
+    <div class="po-aim-shell" style="width:980px;max-width:96vw;max-height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-signature" style="color:#a855f7"></i>
+        <span>Quotation Approvals</span>
+        <span class="crm-ws-muted" id="crm-approvals-count" style="margin-left:8px;font-size:12px"></span>
+        <button class="psm-close" id="crm-approvals-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 18px">
+        <table class="crm-audit-table">
+          <thead><tr><th>Quotation</th><th>Lead</th><th>Submitted by</th><th style="text-align:right">Discount</th><th style="text-align:right">Total</th><th></th></tr></thead>
+          <tbody id="crm-approvals-rows"></tbody>
+        </table>
+      </div>
+      <div class="po-aim-footer" style="justify-content:space-between">
+        <span class="crm-ws-muted">Review opens the lead's quotation to approve, return with comments or reject.</span>
+        <button class="po-btn-ghost" id="crm-approvals-refresh"><i class="fa fa-rotate"></i> Refresh</button>
       </div>
     </div>
   </div>

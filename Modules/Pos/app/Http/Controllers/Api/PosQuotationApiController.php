@@ -138,6 +138,11 @@ class PosQuotationApiController extends Controller
         abort_unless((int) $quotation->business_id === (int) $business->id, 404);
         $this->abortUnlessPerm($request, $business, 'pos_quotations');
 
+        // A lead quotation keeps its approval history once it left draft
+        if ($quotation->isLeadQuotation() && $quotation->status !== Quotation::STATUS_DRAFT) {
+            return response()->json(['message' => 'This lead quotation has been through approval and cannot be deleted.'], 422);
+        }
+
         try {
             $this->quotations->delete($quotation);
         } catch (ValidationException $e) {

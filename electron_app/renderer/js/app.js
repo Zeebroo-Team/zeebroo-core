@@ -3536,8 +3536,16 @@ async function _qtOpenDetail(id) {
     if (q.status === 'sent')  acts += `<button class="qt-act-btn accent" id="qd-accept"><i class="fa fa-circle-check"></i> Accept</button>`;
     if (q.status !== 'rejected') acts += `<button class="qt-act-btn" id="qd-reject"><i class="fa fa-circle-xmark"></i> Reject</button>`;
   }
+  // Built from a CRM lead: edited, approved and sent from the lead window; once sent the customer's answer is recorded here
+  if (q.lead) {
+    acts += `<button class="qt-act-btn" id="qd-lead" title="Open the lead's quotation"><i class="fa fa-user-tie"></i> Lead: ${escHtml(q.lead.name)}</button>`;
+    if (q.status === 'sent') {
+      acts += `<button class="qt-act-btn accent" id="qd-accept"><i class="fa fa-circle-check"></i> Accept</button>`;
+      acts += `<button class="qt-act-btn" id="qd-reject"><i class="fa fa-circle-xmark"></i> Reject</button>`;
+    }
+  }
   acts += `<button class="qt-act-btn" id="qd-print"><i class="fa fa-print"></i> Print</button>`;
-  acts += `<button class="qt-act-btn danger" id="qd-delete"><i class="fa fa-trash"></i> Delete</button>`;
+  if (!q.lead) acts += `<button class="qt-act-btn danger" id="qd-delete"><i class="fa fa-trash"></i> Delete</button>`;
   $('#qt-detail-actions').innerHTML = acts;
 
   // Document body
@@ -3606,6 +3614,7 @@ async function _qtOpenDetail(id) {
   // Wire action buttons
   $('#qd-print')?.addEventListener('click', () => _qtPrint(q));
   $('#qd-edit')?.addEventListener('click', () => _qtOpenForm(q));
+  $('#qd-lead')?.addEventListener('click', () => window.crmOpenLead?.(q.lead.project_id, q.lead.id, { quotationId: q.id }));
   $('#qd-sent')?.addEventListener('click', async () => {
     const r = await API.quotationSent(q.id);
     if (r.status === 200) { toast(`Marked as sent`, 'success'); _qtOpenDetail(q.id); } else toast(r.body?.message || 'Error', 'error');
@@ -56767,6 +56776,7 @@ async function submitDsCreate() {
     document.body.classList.toggle('crm-is-admin', !!_crmAccess?.is_admin);
     document.body.classList.toggle('crm-unrestricted', !!_crmAccess?.unrestricted); // the CRM audit log
     document.body.classList.toggle('crm-uses-inbox', !!_crmAccess?.uses_inbox);
+    document.body.classList.toggle('crm-can-approve', !!_crmAccess?.can_approve); // quotation approvals inbox
     // A ribbon group whose buttons are all hidden would otherwise show as an empty box
     $$('.ribbon-page[data-page="crm"] .ribbon-group').forEach(grp => {
       grp.classList.remove('crm-perm-hidden');
@@ -59159,6 +59169,7 @@ async function submitDsCreate() {
     ['messages', 'fa-comments',          'Messages'],
     ['files',    'fa-paperclip',         'Files'],
     ['tasks',    'fa-list-check',        'Tasks'],
+    ['quotations', 'fa-file-invoice-dollar', 'Quotations'],
   ];
   let _crmLeadTab = 'overview';
   // { leadId, info (workspace), timeline / messages / files / tasks ({ data, meta } | false), timelineType, replyTo }
@@ -59234,7 +59245,7 @@ async function submitDsCreate() {
       return;
     }
     if (_crmWs[tab] === false) { panel.innerHTML = _crmWsPanelHtml('Failed to load.'); return; }
-    panel.innerHTML = { timeline: _crmWsTimelineHtml, messages: _crmWsMessagesHtml, files: _crmWsFilesHtml, tasks: _crmWsTasksHtml }[tab]();
+    panel.innerHTML = { timeline: _crmWsTimelineHtml, messages: _crmWsMessagesHtml, files: _crmWsFilesHtml, tasks: _crmWsTasksHtml, quotations: _crmQtHtml }[tab]();
     if (tab === 'files' || tab === 'messages') _crmWsLoadPreviews(lead);
   }
 
@@ -59244,6 +59255,7 @@ async function submitDsCreate() {
       messages: () => API.crmLeadMessages(lead.id),
       files:    () => API.crmLeadAttachments(lead.id),
       tasks:    () => API.crmLeadTasks(lead.id),
+      quotations: () => API.crmLeadQuotations(lead.id),
     }[tab];
     const res = await call().catch(() => ({ status: 0 }));
     if (_crmViewLead?.id !== lead.id) return;
@@ -59513,6 +59525,575 @@ async function submitDsCreate() {
       _crmWsRefresh(lead, ['tasks', 'timeline']);
     }
   });
+
+  // ── Lead quotations: build from inventory, approval, PDF and sending ─────
+  // The Quotations tab. _crmWs.quotations is the list ({ data, meta } from /crm/leads/{id}/quotations);
+  // _crmWs.qt holds what the tab shows: view 'list' | 'edit' | 'detail', the open quotation (detail),
+  // the editor's form, its stock check and the send form. Who may do what comes from the server's
+  // "can" flags (LeadPolicy canQuote / canApprove); stock is warned about or blocked per the CRM setting.
+  const _crmQtMoney = v => formatMoney(parseFloat(v || 0), { currency: state.currency || '' });
+  const _crmQtNum   = v => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+  const _crmQtQty   = v => { const n = _crmQtNum(v); return n % 1 === 0 ? String(n) : String(+n.toFixed(3)); };
+  const _crmQtR2    = v => Math.round((v + Number.EPSILON) * 100) / 100;
+  let _crmQtStockTimer = null;
+  let _crmQtSearchTimer = null;
+
+  function _crmQtState() { return (_crmWs.qt ||= { view: 'list' }); }
+
+  function _crmQtHtml() {
+    const s = _crmQtState();
+    if (s.view === 'edit' && s.form) return _crmQtFormHtml(s);
+    if (s.view === 'detail' && s.detail) return _crmQtDetailHtml(s);
+    return _crmQtListHtml();
+  }
+
+  function _crmQtDate(d) {
+    return d ? new Date(d.length === 10 ? d + 'T00:00:00' : d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+  }
+
+  function _crmQtListHtml() {
+    const { data = [], meta = {} } = _crmWs.quotations;
+    const bar = meta.can_create ? `<div class="crm-qt-bar">
+        <button type="button" class="po-btn-primary" data-qt-new><i class="fa fa-plus"></i> Create quotation</button>
+        <span class="crm-ws-muted">${meta.stock_mode === 'block' ? 'Lines over the stock in hand are refused.' : meta.stock_mode === 'warn' ? 'Lines over the stock in hand are flagged.' : ''}</span>
+      </div>` : '';
+    const rows = data.map(q => `
+      <button type="button" class="crm-qt-row" data-qt-open="${q.id}">
+        <span class="crm-qt-num">${escHtml(q.quote_number)}${q.version > 1 ? ` <span class="crm-ws-muted">v${q.version}</span>` : ''}</span>
+        <span class="qt-badge qt-badge-${escHtml(q.status)}">${escHtml(q.status_label)}</span>
+        <span class="crm-ws-muted crm-qt-row-meta">${_crmQtDate(q.quote_date)}${q.submitted_by ? ` · submitted by ${escHtml(q.submitted_by.name)}` : ''}${q.approved_by ? ` · approved by ${escHtml(q.approved_by.name)}` : ''}${q.sent_at ? ` · sent ${escHtml(_crmFmtDateTime(q.sent_at))}` : ''}</span>
+        <span class="crm-qt-amt">${_crmQtMoney(q.total)}</span>
+      </button>`).join('');
+    return bar + (rows ? `<div class="crm-qt-list">${rows}</div>` : _crmWsPanelHtml('No quotations on this lead yet.'));
+  }
+
+  // ── Editor ──
+  function _crmQtNewForm() {
+    const lead = _crmViewLead;
+    const fromInterest = (lead?.product_items || []).map(p => ({
+      item_type: 'product', product_id: p.id, description: p.name, sku: p.sku || '', quantity: p.quantity || 1, unit_price: p.unit_price ?? 0, discount_amount: 0, tax_rate: 0,
+    }));
+    return {
+      id: null, number: null,
+      quote_date: new Date().toISOString().slice(0, 10), expiry_date: '', reference: '', notes: '',
+      discount_amount: 0, tax_amount: 0,
+      lines: fromInterest,
+    };
+  }
+
+  function _crmQtFormFromDetail(q) {
+    return {
+      id: q.id, number: q.quote_number,
+      quote_date: q.quote_date || new Date().toISOString().slice(0, 10), expiry_date: q.expiry_date || '', reference: q.reference || '', notes: q.notes || '',
+      discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
+      lines: (q.items || []).map(i => ({
+        item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
+        sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
+      })),
+    };
+  }
+
+  /** The server's formula (QuotationService): line net = qty × price − discount; tax on the net; header discount / tax on top. */
+  function _crmQtTotals(form) {
+    let subtotal = 0, discount = 0, tax = 0;
+    const lines = form.lines.map(l => {
+      const gross = _crmQtR2(Math.max(0, _crmQtNum(l.quantity)) * Math.max(0, _crmQtNum(l.unit_price)));
+      const disc  = Math.min(gross, _crmQtR2(Math.max(0, _crmQtNum(l.discount_amount))));
+      const net   = _crmQtR2(gross - disc);
+      const t     = _crmQtR2(net * Math.min(100, Math.max(0, _crmQtNum(l.tax_rate))) / 100);
+      subtotal += gross; discount += disc; tax += t;
+      return { net, tax: t };
+    });
+    discount += Math.max(0, _crmQtNum(form.discount_amount));
+    tax      += Math.max(0, _crmQtNum(form.tax_amount));
+    return { lines, subtotal, discount, tax, total: Math.max(0, subtotal - discount + tax) };
+  }
+
+  function _crmQtStockCellHtml(s, index) {
+    const line = s.form?.lines[index];
+    if (!line || line.item_type !== 'product' || !line.product_id) return '<span class="crm-ws-muted">—</span>';
+    const st = (s.stock?.lines || []).find(x => x.index === index);
+    if (!st) return s.stock?.mode === 'off' ? '<span class="crm-ws-muted">—</span>' : '<i class="fa fa-spinner fa-spin crm-ws-muted"></i>';
+    return `<span class="crm-qt-stock${st.short ? ' crm-qt-stock--short' : ''}" title="${st.short ? `${_crmQtQty(st.requested)} quoted, ${_crmQtQty(st.available)} in stock` : 'In stock'}">
+      ${st.short ? '<i class="fa fa-triangle-exclamation"></i> ' : ''}${_crmQtQty(st.available)} in stock</span>`;
+  }
+
+  function _crmQtStockWarnHtml(stock) {
+    if (!stock?.has_shortage) return '';
+    return stock.mode === 'block'
+      ? '<div class="crm-qt-banner crm-qt-banner--red"><i class="fa fa-ban"></i> Some lines ask for more than is in stock — this quotation cannot be saved until they fit.</div>'
+      : '<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> Some lines ask for more than is in stock.</div>';
+  }
+
+  function _crmQtFormHtml(s) {
+    const f = s.form;
+    const t = _crmQtTotals(f);
+    const returned = s.detail && s.detail.id === f.id && s.detail.status === 'returned' && s.detail.approval_comment
+      ? `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-rotate-left"></i> Returned: ${escHtml(s.detail.approval_comment)}</div>` : '';
+    const rows = f.lines.map((l, i) => `
+      <tr data-qt-line="${i}">
+        <td>
+          <input class="po-field-input" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="Description">
+          ${l.item_type === 'product' && l.product_id ? `<div class="crm-ws-muted crm-qt-sub"><i class="fa fa-box"></i> ${escHtml(l.sku || 'Product')}</div>` : ''}
+        </td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" onwheel="this.blur()"></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" onwheel="this.blur()"></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="discount_amount" data-qt-i="${i}" value="${l.discount_amount ? escHtml(String(l.discount_amount)) : ''}" placeholder="0" onwheel="this.blur()"></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" onwheel="this.blur()"></td>
+        <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
+        <td data-qt-stock="${i}">${_crmQtStockCellHtml(s, i)}</td>
+        <td><button type="button" class="po-btn-ghost crm-qt-del" data-qt-line-del="${i}" title="Remove"><i class="fa fa-xmark"></i></button></td>
+      </tr>`).join('');
+
+    return `<div class="crm-qt-head">
+        <button type="button" class="po-btn-ghost" data-qt-back><i class="fa fa-arrow-left"></i> Back</button>
+        <strong>${f.id ? `Edit ${escHtml(f.number)}` : 'New quotation'}</strong>
+      </div>
+      ${returned}
+      <div id="crm-qt-alert" class="svc-form-alert" style="display:none"></div>
+      <div class="crm-qt-grid">
+        <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
+        <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
+        <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
+      </div>
+      <div class="crm-qt-table-wrap"><table class="crm-qt-table">
+        <thead><tr><th>Item</th><th style="width:78px">Qty</th><th style="width:100px">Unit price</th><th style="width:90px">Discount</th><th style="width:70px">Tax %</th><th style="width:100px" class="crm-qt-right">Total</th><th style="width:110px">Stock</th><th style="width:34px"></th></tr></thead>
+        <tbody>${rows || `<tr><td colspan="8">${_crmWsPanelHtml('Add products from inventory below.')}</td></tr>`}</tbody>
+      </table></div>
+      <div id="crm-qt-stock-warn">${_crmQtStockWarnHtml(s.stock)}</div>
+      <div class="crm-qt-add">
+        <div style="position:relative;flex:1;min-width:220px">
+          <input id="crm-qt-product-search" class="po-field-input" type="search" autocomplete="off" placeholder="Add a product from inventory — search by name or SKU…">
+          <div id="crm-qt-product-results" class="crm-lead-product-results crm-qt-results" style="display:none"></div>
+        </div>
+        <button type="button" class="po-btn-ghost" data-qt-add-custom><i class="fa fa-pen"></i> Custom line</button>
+      </div>
+      <div class="crm-qt-foot">
+        <label class="crm-qt-notes">Notes &amp; terms<textarea class="po-field-input" rows="3" maxlength="5000" data-qt-h="notes" style="resize:vertical">${escHtml(f.notes)}</textarea></label>
+        <div class="crm-qt-totals">
+          <div><span>Subtotal</span><span id="crm-qt-t-sub">${_crmQtMoney(t.subtotal)}</span></div>
+          <div><span>Extra discount</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="discount_amount" value="${f.discount_amount ? escHtml(String(f.discount_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
+          <div><span>Extra tax</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="tax_amount" value="${f.tax_amount ? escHtml(String(f.tax_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
+          <div><span>Discount (all)</span><span id="crm-qt-t-disc">−${_crmQtMoney(t.discount)}</span></div>
+          <div><span>Tax (all)</span><span id="crm-qt-t-tax">+${_crmQtMoney(t.tax)}</span></div>
+          <div class="crm-qt-grand"><span>Total</span><span id="crm-qt-t-total">${_crmQtMoney(t.total)}</span></div>
+        </div>
+      </div>
+      <div class="crm-qt-actions">
+        <button type="button" class="po-btn-ghost" data-qt-back>Cancel</button>
+        <button type="button" class="po-btn-primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
+      </div>`;
+  }
+
+  /** Re-draw totals and line totals only — keeps focus in the field being typed in. */
+  function _crmQtRefreshTotals() {
+    const s = _crmQtState();
+    if (!s.form) return;
+    const t = _crmQtTotals(s.form);
+    t.lines.forEach((l, i) => { const el = $(`#crm-ws-panel [data-qt-lt="${i}"]`); if (el) el.textContent = _crmQtMoney(l.net); });
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+    set('#crm-qt-t-sub', _crmQtMoney(t.subtotal));
+    set('#crm-qt-t-disc', '−' + _crmQtMoney(t.discount));
+    set('#crm-qt-t-tax', '+' + _crmQtMoney(t.tax));
+    set('#crm-qt-t-total', _crmQtMoney(t.total));
+  }
+
+  function _crmQtScheduleStock(lead) {
+    clearTimeout(_crmQtStockTimer);
+    _crmQtStockTimer = setTimeout(async () => {
+      const s = _crmQtState();
+      if (!s.form || s.view !== 'edit') return;
+      const items = s.form.lines.map(l => ({ item_type: l.item_type, product_id: l.product_id || null, quantity: _crmQtNum(l.quantity) }));
+      const res = await API.crmLeadQuotationStock(lead.id, { items }).catch(() => ({ status: 0 }));
+      if (_crmViewLead?.id !== lead.id || s.view !== 'edit' || res.status !== 200) return;
+      s.stock = res.body.data;
+      s.form.lines.forEach((_, i) => { const el = $(`#crm-ws-panel [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
+      const warn = $('#crm-qt-stock-warn');
+      if (warn) warn.innerHTML = _crmQtStockWarnHtml(s.stock);
+    }, 350);
+  }
+
+  function _crmQtEdit(lead, form) {
+    const s = _crmQtState();
+    Object.assign(s, { view: 'edit', form, stock: null });
+    _crmRenderWsTab();
+    _crmQtScheduleStock(lead);
+  }
+
+  async function _crmQtSave(lead, btn) {
+    const s = _crmQtState();
+    const f = s.form;
+    const alertEl = $('#crm-qt-alert');
+    const fail = msg => { alertEl.textContent = msg; alertEl.className = 'alert alert-danger'; alertEl.style.display = ''; alertEl.scrollIntoView({ block: 'nearest' }); };
+    const items = f.lines
+      .filter(l => (l.description || '').trim() || l.product_id)
+      .map(l => ({
+        item_type: l.item_type || 'custom', product_id: l.product_id || null, service_item_id: l.service_item_id || null,
+        description: (l.description || '').trim(), quantity: _crmQtNum(l.quantity), unit_price: _crmQtNum(l.unit_price),
+        discount_amount: _crmQtNum(l.discount_amount), tax_rate: _crmQtNum(l.tax_rate),
+      }));
+    if (!items.length) return fail('Add at least one line.');
+    if (items.some(i => i.quantity <= 0)) return fail('Every line needs a quantity.');
+
+    const body = {
+      quote_date: f.quote_date, expiry_date: f.expiry_date || null, reference: f.reference.trim() || null, notes: f.notes.trim() || null,
+      discount_amount: _crmQtNum(f.discount_amount), tax_amount: _crmQtNum(f.tax_amount), items,
+    };
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+    const res = f.id ? await API.crmUpdateLeadQuotation(lead.id, f.id, body) : await API.crmCreateLeadQuotation(lead.id, body);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save draft';
+    if (res.status !== 200 && res.status !== 201) {
+      // Mark the lines the server refused (e.g. over the stock in hand under the "block" setting)
+      Object.keys(res.body?.errors || {}).forEach(k => {
+        const m = k.match(/^items\.(\d+)\./);
+        if (m) $(`#crm-ws-panel [data-qt-line="${m[1]}"]`)?.classList.add('crm-qt-line--error');
+      });
+      return fail(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Could not save the quotation.'));
+    }
+    _crmQtAfterChange(lead, res);
+  }
+
+  async function _crmQtOpen(lead, id) {
+    const s = _crmQtState();
+    Object.assign(s, { view: 'detail', detail: null, send: null });
+    const panel = $('#crm-ws-panel');
+    if (panel) panel.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmLeadQuotation(lead.id, id).catch(() => ({ status: 0 }));
+    if (_crmViewLead?.id !== lead.id) return;
+    if (res.status !== 200) { s.view = 'list'; toast(_crmWsError(res, 'Could not open the quotation.'), 'error'); }
+    else s.detail = res.body.data;
+    if (_crmLeadTab === 'quotations') _crmRenderWsTab();
+  }
+
+  /** After a save / approval step / send: show the quotation, reload the list and timeline, and the board (the lead's status moved). */
+  async function _crmQtAfterChange(lead, res) {
+    const s = _crmQtState();
+    Object.assign(s, { view: 'detail', detail: res.body.data, form: null, send: null });
+    if (res.body?.message) toast(res.body.message, 'success');
+    delete _crmWs.timeline;
+    _crmWsRefresh(lead, ['quotations']);
+    if (_crmProjectId === lead.project_id) {
+      await loadCrmPipeline(_crmProjectId, { silent: true });
+      const fresh = _findLead(lead.id);
+      if (fresh && _crmViewLead?.id === lead.id && !_crmViewEditing) {
+        _crmViewLead = fresh;
+        _crmRenderLeadModal(false);
+      }
+    }
+  }
+
+  // ── Detail ──
+  function _crmQtDetailHtml(s) {
+    const q = s.detail;
+    const can = q.can || {};
+    const lineDisc = (q.items || []).some(i => i.discount_amount > 0);
+    const lineTax  = (q.items || []).some(i => i.tax_amount > 0);
+    const stock = q.stock || {};
+    const stockOf = idx => {
+      const st = (stock.lines || []).find(x => x.index === idx);
+      return st ? `<span class="crm-qt-stock${st.short ? ' crm-qt-stock--short' : ''}">${st.short ? '<i class="fa fa-triangle-exclamation"></i> ' : ''}${_crmQtQty(st.available)}</span>` : '<span class="crm-ws-muted">—</span>';
+    };
+    const rows = (q.items || []).map((i, idx) => `<tr>
+        <td>${idx + 1}</td>
+        <td>${escHtml(i.description || i.product_name || '—')}${i.sku ? `<div class="crm-ws-muted crm-qt-sub">${escHtml(i.sku)}</div>` : ''}</td>
+        <td class="crm-qt-right">${_crmQtQty(i.quantity)}</td>
+        <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}</td>
+        ${lineDisc ? `<td class="crm-qt-right">${i.discount_amount > 0 ? '−' + _crmQtMoney(i.discount_amount) : '—'}</td>` : ''}
+        ${lineTax ? `<td class="crm-qt-right">${i.tax_amount > 0 ? `${_crmQtMoney(i.tax_amount)} <span class="crm-ws-muted">(${_crmQtQty(i.tax_rate)}%)</span>` : '—'}</td>` : ''}
+        <td class="crm-qt-right"><strong>${_crmQtMoney(i.line_total)}</strong></td>
+        ${stock.mode !== 'off' ? `<td>${stockOf(idx)}</td>` : ''}
+      </tr>`).join('');
+
+    const banners = [];
+    if (q.status === 'returned' && q.approval_comment) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-rotate-left"></i> Returned for changes: ${escHtml(q.approval_comment)}</div>`);
+    if (q.status === 'rejected' && q.approval_comment) banners.push(`<div class="crm-qt-banner crm-qt-banner--red"><i class="fa fa-circle-xmark"></i> Rejected: ${escHtml(q.approval_comment)}</div>`);
+    if (q.status === 'pending_approval') banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-hourglass-half"></i> Waiting for the department head's approval${q.submitted_by ? ` — submitted by ${escHtml(q.submitted_by.name)}` : ''}.</div>`);
+    if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
+    if (q.discount?.over_limit) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%.</div>`);
+    if (stock.has_shortage) banners.push(_crmQtStockWarnHtml(stock));
+
+    const btn = (cond, attr, icon, label, cls = 'po-btn-ghost', style = '') => cond ? `<button type="button" class="${cls}" ${attr}${style ? ` style="${style}"` : ''}><i class="fa ${icon}"></i> ${label}</button>` : '';
+    const actions = [
+      btn(can.edit, 'data-qt-edit', 'fa-pen', 'Edit'),
+      btn(can.submit, 'data-qt-act="submit"', 'fa-paper-plane', 'Submit for approval', 'po-btn-primary'),
+      btn(can.approve, 'data-qt-act="approve"', 'fa-circle-check', 'Approve', 'po-btn-primary'),
+      btn(can.return, 'data-qt-act="return"', 'fa-rotate-left', 'Return with comments', 'po-btn-ghost', 'color:#f97316'),
+      btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'po-btn-ghost', 'color:#ef4444'),
+      btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : 'Send to customer', 'po-btn-primary'),
+      btn(can.revise, 'data-qt-revise', 'fa-code-branch', 'New version'),
+      btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
+    ].join('');
+
+    const sendForm = s.send ? `<div class="crm-qt-send">
+        <div class="crm-lead-view-section" style="margin:0 0 6px">Send by email</div>
+        <div class="crm-qt-grid">
+          <label style="grid-column:span 2">To<input class="po-field-input" type="email" id="crm-qt-send-to" value="${escHtml(s.send.to || '')}" placeholder="customer@example.com"></label>
+          <label style="grid-column:span 2">CC <span class="crm-ws-muted">(comma separated)</span><input class="po-field-input" id="crm-qt-send-cc" value="${escHtml(s.send.cc || '')}"></label>
+          <label style="grid-column:1/-1">Subject<input class="po-field-input" id="crm-qt-send-subject" maxlength="255" value="${escHtml(s.send.subject || '')}"></label>
+          <label style="grid-column:1/-1">Message<textarea class="po-field-input" id="crm-qt-send-message" rows="6" style="resize:vertical">${escHtml(s.send.message || '')}</textarea></label>
+        </div>
+        <div class="crm-ws-muted"><i class="fa fa-paperclip"></i> ${escHtml(q.quote_number)}.pdf is attached.</div>
+        <div class="crm-qt-actions">
+          <button type="button" class="po-btn-ghost" data-qt-send-cancel>Cancel</button>
+          <button type="button" class="po-btn-primary" data-qt-send><i class="fa fa-paper-plane"></i> Send</button>
+        </div>
+      </div>` : '';
+
+    const history = [
+      ...(q.approvals || []).map(a => ({ at: a.at, icon: { submitted: 'fa-paper-plane', approved: 'fa-circle-check', returned: 'fa-rotate-left', rejected: 'fa-circle-xmark' }[a.action] || 'fa-circle',
+        color: { submitted: '#a855f7', approved: '#0d9488', returned: '#f97316', rejected: '#ef4444' }[a.action] || '#64748b',
+        title: `${a.label}${a.version > 1 ? ` (v${a.version})` : ''}`, by: a.by?.name, body: a.comment })),
+      ...(q.dispatches || []).map(d => ({ at: d.sent_at || d.at, icon: d.status === 'failed' ? 'fa-triangle-exclamation' : 'fa-envelope-circle-check', color: d.status === 'failed' ? '#ef4444' : '#f59e0b',
+        title: `${d.status === 'sent' ? 'Sent' : d.status === 'failed' ? 'Could not send' : 'Queued'} by ${d.channel} to ${d.to}${d.cc?.length ? ` (cc ${d.cc.join(', ')})` : ''}`, by: d.by?.name, body: d.status === 'failed' ? d.error : d.subject })),
+    ].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
+    const historyHtml = history.length ? `<div class="crm-lead-view-section">Approval &amp; sending</div>` + history.map(h => `
+      <div class="crm-ws-tl-item">
+        <span class="crm-ws-tl-icon" style="--ic:${h.color}"><i class="fa ${h.icon}"></i></span>
+        <div class="crm-ws-tl-content">
+          <div>${escHtml(h.title)}</div>
+          ${h.body ? `<div class="crm-ws-tl-body">${escHtml(h.body)}</div>` : ''}
+          <div class="crm-ws-muted">${h.by ? escHtml(h.by) + ' · ' : ''}${h.at ? escHtml(_crmFmtDateTime(h.at)) : ''}</div>
+        </div>
+      </div>`).join('') : '';
+
+    return `<div class="crm-qt-head">
+        <button type="button" class="po-btn-ghost" data-qt-back><i class="fa fa-arrow-left"></i> All quotations</button>
+        <strong>${escHtml(q.quote_number)}</strong>${q.version > 1 ? `<span class="crm-ws-muted">version ${q.version}</span>` : ''}
+        <span class="qt-badge qt-badge-${escHtml(q.status)}">${escHtml(q.status_label)}</span>
+        <span class="crm-qt-amt" style="margin-left:auto">${_crmQtMoney(q.total)}</span>
+      </div>
+      ${banners.join('')}
+      <div class="crm-qt-actions" style="justify-content:flex-start;flex-wrap:wrap">${actions}</div>
+      ${sendForm}
+      <div class="crm-ws-muted" style="margin:6px 0">${_crmQtDate(q.quote_date)}${q.expiry_date ? ` · valid until ${_crmQtDate(q.expiry_date)}` : ''}${q.reference ? ` · ${escHtml(q.reference)}` : ''}${q.customer_name ? ` · ${escHtml(q.customer_name)}` : ''}</div>
+      <div class="crm-qt-table-wrap"><table class="crm-qt-table crm-qt-table--view">
+        <thead><tr><th style="width:28px">#</th><th>Item</th><th class="crm-qt-right">Qty</th><th class="crm-qt-right">Unit price</th>${lineDisc ? '<th class="crm-qt-right">Discount</th>' : ''}${lineTax ? '<th class="crm-qt-right">Tax</th>' : ''}<th class="crm-qt-right">Total</th>${stock.mode !== 'off' ? '<th>In stock</th>' : ''}</tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div class="crm-qt-foot">
+        <div class="crm-qt-notes">${q.notes ? `<div class="crm-lead-view-section" style="margin:0 0 4px">Notes &amp; terms</div><div style="white-space:pre-line">${escHtml(q.notes)}</div>` : ''}</div>
+        <div class="crm-qt-totals">
+          <div><span>Subtotal</span><span>${_crmQtMoney(q.subtotal)}</span></div>
+          ${q.discount_amount > 0 ? `<div><span>Discount${q.discount?.percent ? ` (${_crmQtQty(q.discount.percent)}%)` : ''}</span><span>−${_crmQtMoney(q.discount_amount)}</span></div>` : ''}
+          ${q.tax_amount > 0 ? `<div><span>Tax</span><span>+${_crmQtMoney(q.tax_amount)}</span></div>` : ''}
+          <div class="crm-qt-grand"><span>Total</span><span>${_crmQtMoney(q.total)}</span></div>
+        </div>
+      </div>
+      ${historyHtml}`;
+  }
+
+  // Typing in the editor: keep the form state, re-draw the totals, re-check the stock
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    const lead = _crmViewLead;
+    const s = _crmWs.qt;
+    if (!lead || !s?.form || s.view !== 'edit') return;
+    const el = e.target;
+    if (el.dataset.qtF !== undefined) {
+      const line = s.form.lines[+el.dataset.qtI];
+      if (!line) return;
+      line[el.dataset.qtF] = el.value;
+      el.closest('tr')?.classList.remove('crm-qt-line--error');
+      _crmQtRefreshTotals();
+      if (el.dataset.qtF === 'quantity') _crmQtScheduleStock(lead);
+    } else if (el.dataset.qtH !== undefined) {
+      s.form[el.dataset.qtH] = el.value;
+      _crmQtRefreshTotals();
+    } else if (el.id === 'crm-qt-product-search') {
+      clearTimeout(_crmQtSearchTimer);
+      const q = el.value.trim();
+      const results = $('#crm-qt-product-results');
+      if (q.length < 2) { results.style.display = 'none'; return; }
+      _crmQtSearchTimer = setTimeout(async () => {
+        const res = await API.productSearch(q, 10).catch(() => ({ body: {} }));
+        const rows = res.body?.data || [];
+        results.innerHTML = rows.length ? rows.map(p => {
+          const stock = parseFloat(p.available_stock ?? p.stock_quantity ?? p.total_stock ?? p.quantity_on_hand ?? 0);
+          return `<div class="qt-suggest-item" data-qt-pick="${p.id}" data-name="${escHtml(p.name)}" data-sku="${escHtml(p.sku || '')}" data-price="${parseFloat(p.unit_sell_price ?? 0)}" style="padding:6px 10px;cursor:pointer;display:flex;gap:8px;align-items:center">
+              <i class="fa fa-box" style="opacity:.45;font-size:11px"></i><span style="flex:1">${escHtml(p.name)}<span class="qt-suggest-sku">${p.sku ? escHtml(p.sku) : ''}</span></span>
+              <span class="crm-qt-stock${stock > 0 ? '' : ' crm-qt-stock--short'}">${stock > 0 ? _crmQtQty(stock) + ' in stock' : 'Out of stock'}</span>
+              <span>${_crmQtMoney(p.unit_sell_price)}</span></div>`;
+        }).join('') : '<div style="padding:8px 10px;font-size:12px;color:var(--text-muted)">No products found.</div>';
+        results.style.display = '';
+      }, 220);
+    }
+  });
+
+  $('#crm-lead-view-body')?.addEventListener('click', async e => {
+    const lead = _crmViewLead;
+    if (!lead || _crmLeadTab !== 'quotations') return;
+    const s = _crmQtState();
+    const pick = e.target.closest('[data-qt-pick]');
+    if (pick && s.form) {
+      s.form.lines.push({ item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
+        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0 });
+      _crmRenderWsTab();
+      _crmQtScheduleStock(lead);
+      $('#crm-qt-product-search')?.focus();
+      return;
+    }
+    const t = e.target.closest('button');
+    if (!t) return;
+
+    if (t.matches('[data-qt-new]')) {
+      _crmQtEdit(lead, _crmQtNewForm());
+    } else if (t.dataset.qtOpen) {
+      _crmQtOpen(lead, +t.dataset.qtOpen);
+    } else if (t.matches('[data-qt-back]')) {
+      // From the editor of a saved quotation back to it; otherwise to the list
+      s.view = s.view === 'edit' && s.form?.id && s.detail?.id === s.form.id ? 'detail' : 'list';
+      s.form = null;
+      s.send = null;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-qt-edit]') && s.detail) {
+      _crmQtEdit(lead, _crmQtFormFromDetail(s.detail));
+    } else if (t.matches('[data-qt-add-custom]') && s.form) {
+      s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
+      _crmRenderWsTab();
+      $$('#crm-ws-panel [data-qt-f="description"]').pop()?.focus();
+    } else if (t.dataset.qtLineDel !== undefined && s.form) {
+      s.form.lines.splice(+t.dataset.qtLineDel, 1);
+      s.stock = null;
+      _crmRenderWsTab();
+      _crmQtScheduleStock(lead);
+    } else if (t.matches('[data-qt-save]')) {
+      _crmQtSave(lead, t);
+    } else if (t.dataset.qtAct && s.detail) {
+      const action = t.dataset.qtAct;
+      const labels = {
+        submit:  ['Submit for approval', 'Submit', 'Comment for the approver (optional)'],
+        approve: ['Approve quotation', 'Approve', 'Comment (optional)'],
+        return:  ['Return for changes', 'Return', 'What needs to change? *'],
+        reject:  ['Reject quotation', 'Reject', 'Why is it rejected? *'],
+      }[action];
+      const asked = _crmAskReason({ title: `${labels[0]} — ${s.detail.quote_number}`, reasonRequired: action === 'return' || action === 'reject', submitLabel: labels[1] });
+      $('#crm-move-reason-text-label').textContent = labels[2];
+      const extra = await asked;
+      if (extra === null) return;
+      t.disabled = true;
+      const res = await API.crmLeadQuotationAction(lead.id, s.detail.id, action, { comment: extra.reason });
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not update the quotation.'), 'error'); return; }
+      _crmQtAfterChange(lead, res);
+    } else if (t.matches('[data-qt-revise]') && s.detail) {
+      if (!confirm(`Make a new version of ${s.detail.quote_number}? It starts as a draft with the same lines and needs approval again.`)) return;
+      const res = await API.crmReviseLeadQuotation(lead.id, s.detail.id);
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not make a new version.'), 'error'); return; }
+      _crmQtAfterChange(lead, res);
+    } else if (t.matches('[data-qt-pdf]') && s.detail) {
+      const name = `${s.detail.quote_number}.pdf`;
+      t.disabled = true;
+      const res = await window.electronAPI.downloadFile(API.crmLeadQuotationPdfPath(lead.id, s.detail.id), name);
+      t.disabled = false;
+      if (res?.canceled) return;
+      if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+      toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+    } else if (t.matches('[data-qt-send-open]') && s.detail) {
+      const d = s.detail.send_defaults || {};
+      s.send = { to: d.to || '', cc: '', subject: d.subject || '', message: d.message || '' };
+      _crmRenderWsTab();
+      $('#crm-qt-send-to')?.focus();
+    } else if (t.matches('[data-qt-send-cancel]')) {
+      s.send = null;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-qt-send]') && s.detail) {
+      const body = {
+        channel: 'email',
+        to:      $('#crm-qt-send-to').value.trim(),
+        cc:      $('#crm-qt-send-cc').value.split(',').map(x => x.trim()).filter(Boolean),
+        subject: $('#crm-qt-send-subject').value.trim(),
+        message: $('#crm-qt-send-message').value,
+      };
+      s.send = { ...body, cc: body.cc.join(', ') };
+      if (!body.to) { toast('Enter the customer\'s email address.', 'error'); return; }
+      t.disabled = true;
+      t.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
+      const res = await API.crmSendLeadQuotation(lead.id, s.detail.id, body);
+      t.disabled = false;
+      t.innerHTML = '<i class="fa fa-paper-plane"></i> Send';
+      if (res.status !== 200) {
+        toast(_crmWsError(res, 'Could not send the quotation.'), 'error');
+        if (res.body?.data) { s.detail = res.body.data; _crmRenderWsTab(); } // a failed attempt shows in the history
+        return;
+      }
+      _crmQtAfterChange(lead, res);
+    }
+  });
+
+  // Close the product results when clicking elsewhere in the editor
+  $('#crm-lead-view-body')?.addEventListener('focusout', e => {
+    if (e.target.id === 'crm-qt-product-search') setTimeout(() => { const r = $('#crm-qt-product-results'); if (r) r.style.display = 'none'; }, 200);
+  });
+
+  /**
+   * Open a lead's window from outside its pipeline (approvals inbox, Sales quotation) —
+   * on its Quotations tab with one quotation open when quotationId is given.
+   */
+  async function crmOpenLead(projectId, leadId, { quotationId = null } = {}) {
+    if (typeof activateTab === 'function') activateTab('crm');
+    if (_crmProjectId !== projectId || !_findLead(leadId)) await openRelationDetail(projectId);
+    const lead = _findLead(leadId);
+    if (!lead) { toast('That lead is not on its pipeline board (you may not have access to it).', 'error'); return; }
+    _openViewLeadModal(lead);
+    if (quotationId) {
+      _crmLeadTab = 'quotations';
+      _crmRenderLeadModal(false);
+      _crmQtOpen(lead, quotationId);
+    }
+  }
+  window.crmOpenLead = crmOpenLead;
+
+  // ── Approvals inbox: quotations waiting for this head's (or admin's) decision ──
+  async function openCrmApprovalsModal() {
+    $('#crm-approvals-modal').style.display = 'flex';
+    await _crmLoadApprovals();
+  }
+
+  async function _crmLoadApprovals() {
+    const body = $('#crm-approvals-rows');
+    body.innerHTML = `<tr><td colspan="7">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
+    const res = await API.crmQuotationApprovals().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = `<tr><td colspan="7">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.')))}</td></tr>`; return; }
+    const rows = res.body.data || [];
+    $('#crm-approvals-count').textContent = rows.length ? `${rows.length} waiting` : '';
+    body.innerHTML = rows.length ? rows.map(q => `
+      <tr>
+        <td><strong>${escHtml(q.quote_number)}</strong>${q.version > 1 ? ` <span class="crm-ws-muted">v${q.version}</span>` : ''}</td>
+        <td>${escHtml(q.lead?.company || q.lead?.name || '—')}<div class="crm-ws-muted">${escHtml(q.lead?.project_name || '')}</div></td>
+        <td>${escHtml(q.submitted_by?.name || '—')}<div class="crm-ws-muted">${q.updated_at ? escHtml(_crmFmtDateTime(q.updated_at)) : ''}</div></td>
+        <td class="crm-qt-right">${q.discount?.percent ? `<span class="${q.discount.over_limit ? 'crm-qt-stock crm-qt-stock--short' : ''}">${_crmQtQty(q.discount.percent)}%</span>${q.discount.limit !== null ? `<div class="crm-ws-muted">limit ${_crmQtQty(q.discount.limit)}%</div>` : ''}` : '—'}</td>
+        <td class="crm-qt-right"><strong>${_crmQtMoney(q.total)}</strong></td>
+        <td style="white-space:nowrap;text-align:right">
+          <button type="button" class="po-btn-ghost" data-appr-open="${q.id}" data-lead="${q.lead?.id}" data-project="${q.lead?.project_id}"><i class="fa fa-up-right-from-square"></i> Review</button>
+          <button type="button" class="po-btn-primary" data-appr-approve="${q.id}" data-lead="${q.lead?.id}"><i class="fa fa-circle-check"></i> Approve</button>
+        </td>
+      </tr>`).join('') : `<tr><td colspan="7">${_crmWsPanelHtml('<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing is waiting for your approval.')}</td></tr>`;
+  }
+
+  $('#crm-approvals-rows')?.addEventListener('click', async e => {
+    const open = e.target.closest('[data-appr-open]');
+    if (open) {
+      $('#crm-approvals-modal').style.display = 'none';
+      crmOpenLead(+open.dataset.project, +open.dataset.lead, { quotationId: +open.dataset.apprOpen });
+      return;
+    }
+    const approve = e.target.closest('[data-appr-approve]');
+    if (approve) {
+      if (!confirm('Approve this quotation? Its PDF is made and staff can then send it to the customer.')) return;
+      approve.disabled = true;
+      const res = await API.crmLeadQuotationAction(+approve.dataset.lead, +approve.dataset.apprApprove, 'approve', {});
+      if (res.status !== 200) { approve.disabled = false; toast(_crmWsError(res, 'Could not approve.'), 'error'); return; }
+      toast(res.body.message || 'Quotation approved.', 'success');
+      _crmLoadApprovals();
+      if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
+    }
+  });
+  const _crmCloseApprovals = () => { $('#crm-approvals-modal').style.display = 'none'; };
+  $('#crm-approvals-close')?.addEventListener('click', _crmCloseApprovals);
+  $('#crm-approvals-refresh')?.addEventListener('click', _crmLoadApprovals);
+  $('#crm-approvals-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseApprovals(); });
+  $('#rb-crm-approvals')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmApprovalsModal(); });
 
   // ── Assign modal: department members as checkboxes, a star for the primary, and the history ──
   let _crmAssign = null; // { lead, data }
@@ -60482,6 +61063,17 @@ async function submitDsCreate() {
             placeholder="${escHtml(_crmOrg.crm_settings?.default_phone_country_code || '')}" value="${escHtml(_crmOrg.crm_settings?.phone_country_code || '')}">
           <button type="button" class="po-btn-primary" data-org-save-cc><i class="fa fa-check"></i> Save</button></div>
         <div class="crm-perms-muted">Local numbers (077…) are matched as +${escHtml(_crmOrg.crm_settings?.effective_phone_country_code || '')} when checking new leads for duplicates.</div>
+      </div>
+
+      <div class="crm-org-box">
+        <div class="crm-perms-section-title" style="margin:0">Lead quotations (whole business)</div>
+        <div class="crm-org-row"><span style="min-width:180px">When a line is over the stock</span>
+          <select class="po-field-input" id="crm-org-stock-check" style="width:auto;appearance:auto">
+            ${[['warn', 'Warn, but allow saving'], ['block', 'Block saving'], ['off', 'Don\'t check stock']].map(([k, l]) =>
+              `<option value="${k}"${(_crmOrg.crm_settings?.quotation_stock_check || 'warn') === k ? ' selected' : ''}>${l}</option>`).join('')}
+          </select>
+          <button type="button" class="po-btn-primary" data-org-save-stock><i class="fa fa-check"></i> Save</button></div>
+        <div class="crm-perms-muted">Stock is the quantity remaining across the product's stock batches — of the quotation's branch when branch mode is on.</div>
       </div>`;
   }
 
@@ -60546,6 +61138,10 @@ async function submitDsCreate() {
       const cc = $('#crm-org-phone-cc').value.trim();
       call = () => API.crmSaveSettings({ phone_country_code: cc || null });
       msg = 'CRM settings saved.';
+    } else if (t.matches('[data-org-save-stock]')) {
+      const mode = $('#crm-org-stock-check').value;
+      call = () => API.crmSaveSettings({ quotation_stock_check: mode });
+      msg = 'Stock check saved.';
     } else {
       return;
     }

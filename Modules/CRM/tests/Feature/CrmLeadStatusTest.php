@@ -487,7 +487,7 @@ test('the pipeline payload carries the statuses, lost reasons and the new lead f
         ->and($data['lost_reasons'])->toHaveCount(count(LostReason::DEFAULTS))
         ->and($card['id'])->toBe($lead->id)
         ->and($card['score'])->toBe('warm')
-        ->and($card['product_items'])->toEqual([['id' => 1, 'name' => 'Solar panel 450W', 'quantity' => 3]]);
+        ->and($card['product_items'])->toEqual([['id' => 1, 'name' => 'Solar panel 450W', 'quantity' => 3, 'sku' => null, 'unit_price' => null]]);
 });
 
 test('the API rejects a lost move without a reason and accepts one with it', function () {

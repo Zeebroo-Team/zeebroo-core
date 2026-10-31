@@ -705,6 +705,18 @@ const API = (() => {
     crmLeadAttachmentDownloadPath: (leadId, attachmentId, inline) => `/crm/leads/${leadId}/attachments/${attachmentId}/download${inline ? '?inline=1' : ''}`,
     crmLeadTasks:             (leadId)                 => request('GET',    `/crm/leads/${leadId}/tasks`),
     crmCreateLeadTask:        (leadId, body)           => request('POST',   `/crm/leads/${leadId}/tasks`, body),
+    // Lead quotations (PosCrmLeadQuotationApiController): build from inventory → submit → head approves → PDF → send
+    crmLeadQuotations:        (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations`),
+    crmLeadQuotation:         (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}`),
+    crmCreateLeadQuotation:   (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations`, body),
+    crmUpdateLeadQuotation:   (leadId, id, body)       => request('PUT',    `/crm/leads/${leadId}/quotations/${id}`, body),
+    crmLeadQuotationStock:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations/stock-check`, body),
+    crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
+    // action: submit | approve | return | reject — body { comment }
+    crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),
+    crmSendLeadQuotation:     (leadId, id, body)       => request('POST',   `/crm/leads/${leadId}/quotations/${id}/send`, body),
+    crmLeadQuotationPdfPath:  (leadId, id)             => `/crm/leads/${leadId}/quotations/${id}/pdf`,
+    crmQuotationApprovals:    ()                       => request('GET',    '/crm/quotation-approvals'),
     // Row-level CRM audit log — admins only
     crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),

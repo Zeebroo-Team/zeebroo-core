@@ -1290,9 +1290,12 @@ class PosCrmApiController extends Controller
     private function presentLeadProducts(Lead $lead): array
     {
         return $lead->products->map(fn ($p) => [
-            'id'       => $p->id,
-            'name'     => $p->name,
-            'quantity' => $p->pivot->quantity !== null ? (float) $p->pivot->quantity : null,
+            'id'         => $p->id,
+            'name'       => $p->name,
+            'quantity'   => $p->pivot->quantity !== null ? (float) $p->pivot->quantity : null,
+            // A quotation started from the lead pre-fills these
+            'sku'        => $p->sku,
+            'unit_price' => $p->unit_price !== null ? round((float) $p->unit_price, 2) : null,
         ])->values()->all();
     }
 

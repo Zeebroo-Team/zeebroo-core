@@ -141,6 +141,13 @@ beforeEach(function () {
         $t->string('proposal_group')->nullable();
         $t->timestamps();
     });
+    // quotation_items.service_item_id points here
+    Schema::create('service_items', function (Blueprint $t) {
+        $t->id();
+        $t->unsignedBigInteger('business_id');
+        $t->string('name');
+        $t->timestamps();
+    });
 
     $modules = dirname(__DIR__, 3);
     foreach ([
@@ -560,10 +567,17 @@ test('sending queues the email with the PDF attached; on success the quotation a
     (new SendQuotationDispatchJob($dispatch->id))->handle(app(QuotationDispatcher::class));
 
     Mail::assertSent(QuotationMail::class, function (QuotationMail $mail) {
+        $attachments = $mail->attachments();
+        $pdf         = $attachments[0] ?? null;
+
         return $mail->hasTo('kasun@example.com')
             && $mail->hasCc('nimal@example.com')
             && $mail->hasSubject('Your quotation')
-            && $mail->hasAttachmentFromStorageDisk('local', 'quotations/7/QT-0001.pdf', 'QT-0001.pdf', ['mime' => 'application/pdf']);
+            && count($attachments) === 1
+            && $pdf->as === 'QT-0001.pdf'
+            && $pdf->mime === 'application/pdf'
+            && $mail->pdfPath === 'quotations/7/QT-0001.pdf'
+            && Storage::disk('local')->exists($mail->pdfPath);
     });
 
     $q = $q->fresh();
@@ -646,4 +660,17 @@ test('the new migrations roll back and run again on SQLite', function () {
     expect(Schema::hasColumns('quotations', ['lead_id', 'version', 'parent_quotation_id', 'submitted_by', 'approved_by', 'approved_at', 'pdf_path', 'sent_at', 'sent_via', 'approval_comment']))->toBeTrue()
         ->and(Schema::hasColumns('quotation_items', ['discount_amount', 'tax_rate', 'tax_amount']))->toBeTrue()
         ->and(Schema::hasTable('quotation_dispatches'))->toBeTrue();
+});
+
+test('the Sales quotation API keeps a lead quotation\'s approval history: no delete once submitted', function () {
+    $q   = crmQuoteCreate();
+    $pos = app(CrmQuotePosTestApi::class);
+    $del = fn () => $pos->destroy(Request::create('/', 'DELETE')->setUserResolver(fn () => User::find(1)), $q->fresh());
+
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    expect($del()->getStatusCode())->toBe(422)
+        ->and(Quotation::find($q->id))->not->toBeNull();
+
+    $draft = crmQuoteCreate();
+    expect($pos->destroy(Request::create('/', 'DELETE')->setUserResolver(fn () => User::find(1)), $draft)->getStatusCode())->toBe(200);
 });
