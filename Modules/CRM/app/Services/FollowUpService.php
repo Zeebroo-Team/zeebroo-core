@@ -22,11 +22,15 @@ use Modules\Sales\Models\Quotation;
  * (default [2, 5]). A newer version being sent replaces the pending ones; winning or losing
  * the lead cancels them (CrmEventSubscriber). Logging a follow-up records the outcome and can
  * plan the next one. crm:process-follow-ups (every 15 minutes) emits FollowUpDue once a
- * follow-up's time comes and FollowUpOverdue once it is still pending the day after.
+ * follow-up's time comes and FollowUpOverdue once it is still pending the day after
+ * (days by the business's own timezone — CrmSettingsService::startOfToday).
  */
 class FollowUpService
 {
-    public function __construct(private readonly LeadAssignmentService $assignments) {}
+    public function __construct(
+        private readonly LeadAssignmentService $assignments,
+        private readonly CrmSettingsService $settings,
+    ) {}
 
     /**
      * Plan the follow-ups for a quotation version that was just sent. A re-send of a version
@@ -210,9 +214,11 @@ class FollowUpService
             $query->where('crm_follow_ups.user_id', $access->userId ?? 0);
         }
 
+        $startOfToday = $this->settings->startOfToday($business);
+
         match ($status) {
-            'overdue' => $query->overdue(),
-            'today'   => $query->pending()->whereBetween('crm_follow_ups.due_at', [now()->startOfDay(), now()->endOfDay()]),
+            'overdue' => $query->overdue($business->id),
+            'today'   => $query->pending()->where('crm_follow_ups.due_at', '>=', $startOfToday)->where('crm_follow_ups.due_at', '<', $startOfToday->copy()->addDay()),
             'done'    => $query->where('crm_follow_ups.status', FollowUp::STATUS_DONE),
             'all'     => null,
             default   => $query->pending(),
@@ -235,13 +241,13 @@ class FollowUpService
      * @param  int[]  $leadIds
      * @return array<int, array{next_due_at: ?string, pending: int, overdue: int}>
      */
-    public function summaryForLeads(array $leadIds): array
+    public function summaryForLeads(Business $business, array $leadIds): array
     {
         if ($leadIds === []) {
             return [];
         }
 
-        $startOfToday = now()->startOfDay();
+        $startOfToday = $this->settings->startOfToday($business);
 
         return FollowUp::query()
             ->whereIn('lead_id', $leadIds)
@@ -268,17 +274,22 @@ class FollowUpService
         $now ??= now();
         $counts = ['due' => 0, 'overdue' => 0];
 
-        FollowUp::query()
-            ->pending()
-            ->whereNull('overdue_at')
-            ->where('due_at', '<', $now->copy()->startOfDay())
-            ->chunkById(200, function (Collection $rows) use ($now, &$counts) {
-                foreach ($rows as $followUp) {
-                    $followUp->update(['overdue_at' => $now, 'due_notified_at' => $followUp->due_notified_at ?? $now]);
-                    FollowUpOverdue::dispatch($followUp);
-                    $counts['overdue']++;
-                }
-            });
+        // Each business's day starts at its own midnight, so overdue is decided per business
+        $businessIds = FollowUp::query()->pending()->whereNull('overdue_at')->where('due_at', '<', $now)->distinct()->pluck('business_id');
+        foreach ($businessIds as $businessId) {
+            FollowUp::query()
+                ->pending()
+                ->where('business_id', $businessId)
+                ->whereNull('overdue_at')
+                ->where('due_at', '<', $this->settings->startOfToday((int) $businessId, $now))
+                ->chunkById(200, function (Collection $rows) use ($now, &$counts) {
+                    foreach ($rows as $followUp) {
+                        $followUp->update(['overdue_at' => $now, 'due_notified_at' => $followUp->due_notified_at ?? $now]);
+                        FollowUpOverdue::dispatch($followUp);
+                        $counts['overdue']++;
+                    }
+                });
+        }
 
         FollowUp::query()
             ->pending()

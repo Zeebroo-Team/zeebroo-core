@@ -124,6 +124,15 @@ beforeEach(function () {
         $t->text('notes')->nullable();
         $t->timestamps();
     });
+    Schema::create('settings', function (Blueprint $t) {
+        $t->id();
+        $t->string('scope_type');
+        $t->unsignedBigInteger('scope_id');
+        $t->string('key');
+        $t->text('value')->nullable();
+        $t->string('value_type')->default('string');
+        $t->timestamps();
+    });
     Schema::create('products', function (Blueprint $t) {
         $t->id();
         $t->unsignedBigInteger('business_id');
@@ -681,12 +690,11 @@ class CrmWorkspaceTestAuditController extends \Modules\CRM\Http\Controllers\CrmA
 
 /**
  * The app theme needs tables this schema does not have — render the CRM pages inside a bare
- * layout. Every view still runs the Settings module's composer, which reads the settings table.
+ * layout. Every view still runs the Settings module's composer, which reads the settings table
+ * (created with the rest of the schema).
  */
 function crmWsBareTheme(): void
 {
-    (require dirname(__DIR__, 3) . '/Settings/database/migrations/2026_04_30_181900_create_settings_table.php')->up();
-
     $dir = sys_get_temp_dir() . '/crm-ws-theme';
     @mkdir($dir . '/layouts', 0777, true);
     file_put_contents($dir . '/layouts/app.blade.php', "@yield('content')");

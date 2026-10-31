@@ -87,7 +87,7 @@ class CrmReportService
                 'avg_close_days'      => $this->averageCloseDays($closed()),
                 ...$this->quotationValues($business, $access, $filters),
                 ...$this->pendingApprovals($business, $access, $filters),
-                'overdue_follow_ups'  => FollowUp::query()->overdue()
+                'overdue_follow_ups'  => FollowUp::query()->overdue($business->id)
                     ->whereIn('lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))->count(),
             ],
             'trend'        => $this->trend($created(), $from, $to),

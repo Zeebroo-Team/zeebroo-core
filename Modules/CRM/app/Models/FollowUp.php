@@ -5,7 +5,9 @@ namespace Modules\CRM\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 use Modules\Business\Models\Business;
+use Modules\CRM\Services\CrmSettingsService;
 use Modules\Sales\Models\Quotation;
 
 /**
@@ -13,7 +15,8 @@ use Modules\Sales\Models\Quotation;
  * (FollowUpService schedules them at the department's followup_days). Logging one marks it
  * done with an outcome and can plan the next.
  *
- * Overdue = still pending after the end of the day it was due. The desktop, the board and
+ * Overdue = still pending after the end of the day it was due, by the business's own
+ * timezone (CrmSettingsService::startOfToday). The desktop, the board and
  * crm:process-follow-ups all use isOverdue() / scopeOverdue() so they agree.
  */
 class FollowUp extends Model
@@ -97,10 +100,10 @@ class FollowUp extends Model
         return $query->where('crm_follow_ups.status', self::STATUS_PENDING);
     }
 
-    /** Pending and due before today. */
-    public function scopeOverdue(Builder $query): Builder
+    /** Pending and due before today — the business's today (its own timezone). */
+    public function scopeOverdue(Builder $query, int $businessId): Builder
     {
-        return $query->pending()->where('crm_follow_ups.due_at', '<', now()->startOfDay());
+        return $query->pending()->where('crm_follow_ups.due_at', '<', app(CrmSettingsService::class)->startOfToday($businessId));
     }
 
     public function isPending(): bool
@@ -110,12 +113,19 @@ class FollowUp extends Model
 
     public function isOverdue(): bool
     {
-        return $this->isPending() && $this->due_at !== null && $this->due_at->lt(now()->startOfDay());
+        return $this->isPending() && $this->due_at !== null && $this->due_at->lt($this->startOfToday());
     }
 
     public function isDueToday(): bool
     {
-        return $this->isPending() && $this->due_at !== null && $this->due_at->isToday();
+        $start = $this->startOfToday();
+
+        return $this->isPending() && $this->due_at !== null && $this->due_at->gte($start) && $this->due_at->lt($start->copy()->addDay());
+    }
+
+    private function startOfToday(): Carbon
+    {
+        return app(CrmSettingsService::class)->startOfToday((int) $this->business_id);
     }
 
     public static function channelLabel(?string $key): ?string

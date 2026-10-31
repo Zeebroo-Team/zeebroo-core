@@ -104,6 +104,15 @@ beforeEach(function () {
         $t->text('notes')->nullable();
         $t->timestamps();
     });
+    Schema::create('settings', function (Blueprint $t) {
+        $t->id();
+        $t->string('scope_type');
+        $t->unsignedBigInteger('scope_id');
+        $t->string('key');
+        $t->text('value')->nullable();
+        $t->string('value_type')->default('string');
+        $t->timestamps();
+    });
     Schema::create('products', function (Blueprint $t) {
         $t->id();
         $t->unsignedBigInteger('business_id');

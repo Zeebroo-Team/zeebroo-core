@@ -723,6 +723,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');
     Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');
     Route::get   ('crm/projects/{project}/history/flow', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistoryFlow'])->name('crm.projects.history.flow');
+    Route::get   ('crm/overview',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'overview'])    ->name('crm.overview');
     Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
     Route::get   ('crm/customers/{customer}',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customer'])    ->whereNumber('customer')->name('crm.customers.show');
     Route::get   ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'tasksList'])   ->name('crm.tasks.index');

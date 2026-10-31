@@ -172,7 +172,7 @@ class PosCrmApiController extends Controller
         $sellPrices = $this->fifoSellPrices($business, $leads->flatMap(fn ($l) => $l->products->pluck('id'))->unique()->values()->all());
 
         // Follow-up badge (next due / overdue in red) and the suggested Hot / Warm / Cold hint
-        $followUps = $this->followUps->summaryForLeads($leads->pluck('id')->map(fn ($id) => (int) $id)->all());
+        $followUps = $this->followUps->summaryForLeads($business, $leads->pluck('id')->map(fn ($id) => (int) $id)->all());
         $suggested = $this->scores->suggestFor($leads);
 
         $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable, $sellPrices, $followUps, $suggested) {
@@ -651,6 +651,21 @@ class PosCrmApiController extends Controller
     }
 
     // ── Contacts ──────────────────────────────────────────────────────────
+
+    /**
+     * GET crm/overview — the counts on the CRM Overview tiles, without loading the lists.
+     * A count the user may not see is null.
+     */
+    public function overview(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->crmAccess($request, $business);
+
+        return response()->json(['data' => [
+            'contacts'   => $access->can('contacts_view') ? Customer::query()->where('business_id', $business->id)->count() : null,
+            'open_tasks' => $access->can('tasks_view') ? $this->tasks->countForBusiness($business, 'open', $access) : null,
+        ]]);
+    }
 
     public function contacts(Request $request): JsonResponse
     {

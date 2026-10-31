@@ -120,10 +120,32 @@ test('overdue means still pending after the day it was due', function () {
     expect($f->fresh()->isOverdue())->toBeFalse()->and($f->fresh()->isDueToday())->toBeTrue();
 
     Carbon::setTestNow('2026-11-12 23:59:00');
-    expect($f->fresh()->isOverdue())->toBeFalse()->and(FollowUp::query()->overdue()->count())->toBe(0);
+    expect($f->fresh()->isOverdue())->toBeFalse()->and(FollowUp::query()->overdue($this->business->id)->count())->toBe(0);
 
     Carbon::setTestNow('2026-11-13 00:01:00');
-    expect($f->fresh()->isOverdue())->toBeTrue()->and(FollowUp::query()->overdue()->count())->toBe(1);
+    expect($f->fresh()->isOverdue())->toBeTrue()->and(FollowUp::query()->overdue($this->business->id)->count())->toBe(1);
+});
+
+test('today and overdue follow the business\'s own timezone, not the server\'s', function () {
+    $this->business->setSetting('business.timezone', 'Asia/Colombo'); // UTC+5:30
+    crmwfSentQuotation();
+    $f = FollowUp::query()->orderBy('due_at')->firstOrFail(); // due 2026-11-12 09:00 UTC = 14:30 in Colombo
+    Event::fake([FollowUpDue::class, FollowUpOverdue::class]);
+    $service = app(FollowUpService::class);
+
+    // 00:30 on the 12th in Colombo, still the 11th in UTC
+    Carbon::setTestNow('2026-11-11 19:00:00');
+    expect($f->fresh()->isDueToday())->toBeTrue();
+
+    // 23:30 on the 12th in Colombo
+    Carbon::setTestNow('2026-11-12 18:00:00');
+    expect($f->fresh()->isOverdue())->toBeFalse()->and($service->process()['overdue'])->toBe(0);
+
+    // 00:30 on the 13th in Colombo, still the 12th in UTC
+    Carbon::setTestNow('2026-11-12 19:00:00');
+    expect($f->fresh()->isOverdue())->toBeTrue()
+        ->and(FollowUp::query()->overdue($this->business->id)->count())->toBe(1)
+        ->and($service->process()['overdue'])->toBe(1);
 });
 
 test('the scheduler fires "due" once when the time comes and "overdue" once the next day', function () {

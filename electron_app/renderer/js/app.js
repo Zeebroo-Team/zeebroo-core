@@ -56854,20 +56854,20 @@ async function submitDsCreate() {
 
   // ── Overview tab ─────────────────────────────────────────────────────────
   async function loadCrmOverview() {
-    await loadCrmProjects();
-    const [contactsRes, tasksRes] = await Promise.all([API.crmContacts(''), API.crmTasks('open')]);
-    const contactsCount  = contactsRes.status === 200 ? (contactsRes.body?.data?.length || 0) : 0;
-    const openTasksCount = tasksRes.status    === 200 ? (tasksRes.body?.data?.length    || 0) : 0;
-    _renderCrmOverview(contactsCount, openTasksCount);
+    // Counts only — the full contact / task lists are not needed for the tiles
+    const [, ovRes] = await Promise.all([loadCrmProjects(), API.crmOverview().catch(() => ({ status: 0 }))]);
+    const counts = ovRes.status === 200 ? (ovRes.body?.data || {}) : {};
+    _renderCrmOverview(counts.contacts ?? null, counts.open_tasks ?? null);
   }
 
+  // A null count is one the user may not see (or that failed to load); its tile is left out
   function _renderCrmOverview(contactsCount, openTasksCount) {
     const statsEl = $('#crm-ov-stats');
     const statTiles = [
       { key: 'total',     icon: 'fa-handshake',    label: 'Relations',  value: _crmProjects.length },
       { key: 'active',    icon: 'fa-address-book', label: 'Contacts',   value: contactsCount },
       { key: 'completed', icon: 'fa-list-check',   label: 'Open Tasks', value: openTasksCount },
-    ];
+    ].filter(s => s.value !== null);
     if (statsEl) statsEl.innerHTML = statTiles.map(s => `
       <div class="pm-stat-tile pm-stat-tile--${s.key}">
         <div class="pm-stat-tile-icon"><i class="fa ${s.icon}"></i></div>
@@ -56939,7 +56939,8 @@ async function submitDsCreate() {
     const res = await API.crmDeleteProject(relation.id);
     if (res.status === 200) {
       toast('Relation deleted.', 'success');
-      if (_crmProjectId === relation.id) closeRelationDetail();
+      // Forget it too, or the ribbon's New Lead / Stages / Forms would reopen the deleted relation
+      if (_crmProjectId === relation.id) { closeRelationDetail(); _crmProjectId = null; }
       if (_crmView === 'relation') loadCrmRelationsView();
       else loadCrmOverview();
     } else {
@@ -60883,6 +60884,7 @@ async function submitDsCreate() {
       const res = await API.crmCancelFollowUp(+t.dataset.fuCancel);
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not cancel it.'), 'error'); return; }
       _crmLoadFollowUps();
+      if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
     }
   });
 

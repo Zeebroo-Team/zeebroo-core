@@ -743,6 +743,7 @@ const API = (() => {
     crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistoryFlow: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history/flow?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmOverview:     ()                 => request('GET',    '/crm/overview'),
     crmContacts:     (q)                => request('GET',    `/crm/contacts?q=${encodeURIComponent(q||'')}`),
     crmCustomer:     (customerId)       => request('GET',    `/crm/customers/${customerId}`),
     crmTasks:        (filter)             => request('GET',    `/crm/tasks?filter=${filter||'open'}`),

@@ -2,6 +2,8 @@
 
 namespace Modules\CRM\Services;
 
+use Carbon\CarbonInterface;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\CRM\Models\CrmSetting;
@@ -12,6 +14,9 @@ class CrmSettingsService
 {
     /** @var array<int, ?CrmSetting> */
     private array $cache = [];
+
+    /** @var array<int, string> */
+    private array $timezones = [];
 
     public function forBusiness(Business|int $business): ?CrmSetting
     {
@@ -43,6 +48,31 @@ class CrmSettingsService
         $mode = $this->forBusiness($business)?->quotation_stock_check;
 
         return in_array($mode, CrmSetting::STOCK_CHECKS, true) ? $mode : CrmSetting::STOCK_CHECK_WARN;
+    }
+
+    /** The business's own timezone (POS setting business.timezone), or the app's when unset / invalid. */
+    public function timezone(Business|int $business): string
+    {
+        $businessId = $business instanceof Business ? $business->id : $business;
+
+        return $this->timezones[$businessId] ??= (function () use ($business, $businessId) {
+            $model = $business instanceof Business ? $business : Business::find($businessId);
+            $tz    = trim((string) ($model?->getSetting('business.timezone', '') ?? ''));
+            try {
+                return $tz !== '' ? (new \DateTimeZone($tz))->getName() : (string) config('app.timezone');
+            } catch (\Throwable) {
+                return (string) config('app.timezone');
+            }
+        })();
+    }
+
+    /**
+     * Midnight that starts the business's current day, in the app's timezone (how dates are
+     * stored) — so "today" / "overdue" follow the business's calendar, not the server's.
+     */
+    public function startOfToday(Business|int $business, ?CarbonInterface $now = null): Carbon
+    {
+        return Carbon::instance($now ?? now())->setTimezone($this->timezone($business))->startOfDay()->setTimezone(config('app.timezone'));
     }
 
     /** @return array{phone_country_code: ?string, effective_phone_country_code: string, default_phone_country_code: string, quotation_stock_check: string} */

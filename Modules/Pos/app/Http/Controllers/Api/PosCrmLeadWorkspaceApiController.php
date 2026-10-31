@@ -80,7 +80,7 @@ class PosCrmLeadWorkspaceApiController extends Controller
                     'tasks'    => $lead->tasks()->where('status', Task::STATUS_PENDING)->count(),
                     'follow_ups' => $lead->followUps()->pending()->count(),
                 ],
-                'follow_ups_overdue' => $lead->followUps()->overdue()->count(),
+                'follow_ups_overdue' => $lead->followUps()->overdue((int) $lead->business_id)->count(),
             ],
         ]);
     }
