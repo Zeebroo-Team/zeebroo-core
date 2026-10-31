@@ -179,6 +179,13 @@ class LeadPolicy
             && ($access->unrestricted || $this->headsLead($access, $lead));
     }
 
+    /** Taking a won / lost lead back into the pipeline: the lead's department / division head or an admin. */
+    public function canReopen(CrmAccess $access, Lead $lead): bool
+    {
+        return $this->mayAct($access, $lead)
+            && ($access->unrestricted || $this->headsLead($access, $lead));
+    }
+
     public function canForward(CrmAccess $access, Lead $lead): bool
     {
         return $this->mayAct($access, $lead)
@@ -245,6 +252,7 @@ class LeadPolicy
             'can_delete'     => $this->canDelete($access, $lead),
             'can_assign'     => $this->canAssign($access, $lead),
             'can_approve'    => $this->canApprove($access, $lead),
+            'can_reopen'     => $this->canReopen($access, $lead),
             'can_quote'      => $this->canQuote($access, $lead),
             'can_forward'    => $this->canForward($access, $lead),
             'can_review'     => $this->canReview($access, $lead),

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Modules\Business\Models\Business;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -24,6 +25,8 @@ use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\CustomerProfileService;
+use Modules\CRM\Services\FollowUpService;
+use Modules\CRM\Services\LeadScoreService;
 use Modules\CRM\Services\IntakeResult;
 use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadAuditService;
@@ -61,6 +64,8 @@ class PosCrmApiController extends Controller
         private readonly LeadIntakeService           $intake,
         private readonly LeadAssignmentService       $assignments,
         private readonly CustomerProfileService      $customerProfiles,
+        private readonly FollowUpService             $followUps,
+        private readonly LeadScoreService            $scores,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -143,7 +148,8 @@ class PosCrmApiController extends Controller
             ->where('project_id', $project->id)
             ->whereIn('stage_id', $allStages->pluck('id'))
             ->visibleWith($access)
-            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name', 'assignedTo:id,name', 'products:id,name', 'assignees.user:id,name'])
+            ->when(array_key_exists((string) $request->query('score'), Lead::SCORES), fn ($q) => $q->where('score', $request->query('score')))
+            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name', 'assignedTo:id,name', 'products:id,name', 'assignees.user:id,name', 'stage'])
             ->orderByDesc('id')
             ->get(['id', 'project_id', 'department_id', 'division_id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'source_id',
                 'estimated_value', 'score', 'expected_close_date', 'notes', 'product_interest_note', 'lost_reason_id', 'lost_reason',
@@ -163,7 +169,13 @@ class PosCrmApiController extends Controller
             ? Customer::where('business_id', $business->id)->whereIn('phone', $phones)->pluck('phone')->flip()
             : collect();
 
-        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable) {
+        $sellPrices = $this->fifoSellPrices($business, $leads->flatMap(fn ($l) => $l->products->pluck('id'))->unique()->values()->all());
+
+        // Follow-up badge (next due / overdue in red) and the suggested Hot / Warm / Cold hint
+        $followUps = $this->followUps->summaryForLeads($leads->pluck('id')->map(fn ($id) => (int) $id)->all());
+        $suggested = $this->scores->suggestFor($leads);
+
+        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable, $sellPrices, $followUps, $suggested) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
             $lead->is_customer    = $lead->customer_id !== null || $byEmail || $byPhone;
@@ -172,7 +184,9 @@ class PosCrmApiController extends Controller
             $lead->assigned_to_name = $lead->assignedTo?->name;
             // Everyone who sees the lead sees who is working it (primary first)
             $lead->assignee_list  = $this->assignments->present($lead->assignees);
-            $lead->product_items  = $this->presentLeadProducts($lead);
+            $lead->product_items  = $this->presentLeadProducts($lead, $sellPrices);
+            $lead->follow_up       = $followUps[$lead->id] ?? null;
+            $lead->suggested_score = $suggested[$lead->id] ?? null;
             $lead->can = [
                 'edit'       => isset($editable[$lead->id]),
                 'move'       => isset($editable[$lead->id]) && $access->can('leads_move'),
@@ -182,8 +196,10 @@ class PosCrmApiController extends Controller
                 'forward'    => $this->policy->canForward($access, $lead),
                 'contribute' => $this->policy->canContribute($access, $lead),
                 'convert'    => isset($editable[$lead->id]) && $access->can('leads_edit'),
+                'reopen'     => $this->policy->canReopen($access, $lead),
             ];
             unset($lead->customFieldValues);
+            $lead->unsetRelation('stage');
             $lead->unsetRelation('createdBy');
             $lead->unsetRelation('assignedTo');
             $lead->unsetRelation('products');
@@ -444,6 +460,10 @@ class PosCrmApiController extends Controller
         if (isset($validated['stage_id']) && (int) $validated['stage_id'] !== (int) $lead->stage_id) {
             $this->abortUnlessAllowed($this->policy->canMove($access, $lead));
             $this->abortUnlessStageVisible($request, $business, $lead->project_id, (int) $validated['stage_id']);
+            $target = LeadStage::where('project_id', $lead->project_id)->find((int) $validated['stage_id']);
+            if ($target !== null) {
+                $this->abortUnlessMayLeaveClosed($access, $lead, $target);
+            }
         }
 
         // The single "Assigned to" field sets the primary assignee (the others stay on the lead):
@@ -490,6 +510,7 @@ class PosCrmApiController extends Controller
         // Ensure stage belongs to the same project
         $stage = LeadStage::where('project_id', $lead->project_id)->findOrFail($validated['stage_id']);
         $this->abortUnlessStageVisible($request, $business, $lead->project_id, $stage->id);
+        $this->abortUnlessMayLeaveClosed($access, $lead, $stage);
 
         $lead = $this->leads->moveStage($lead, $stage->id, $request->user()?->id, $validated);
 
@@ -1286,17 +1307,49 @@ class PosCrmApiController extends Controller
         ], 201);
     }
 
-    /** @return list<array{id:int,name:string,quantity:?float}> */
-    private function presentLeadProducts(Lead $lead): array
+    /**
+     * @param  array<int, float>  $sellPrices  product id => FIFO selling price (fifoSellPrices)
+     * @return list<array{id:int,name:string,quantity:?float}>
+     */
+    private function presentLeadProducts(Lead $lead, array $sellPrices = []): array
     {
         return $lead->products->map(fn ($p) => [
             'id'         => $p->id,
             'name'       => $p->name,
             'quantity'   => $p->pivot->quantity !== null ? (float) $p->pivot->quantity : null,
-            // A quotation started from the lead pre-fills these
+            // A quotation started from the lead pre-fills these — the same price the POS sells at
             'sku'        => $p->sku,
-            'unit_price' => $p->unit_price !== null ? round((float) $p->unit_price, 2) : null,
+            'unit_price' => array_key_exists((int) $p->id, $sellPrices)
+                ? round($sellPrices[(int) $p->id], 2)
+                : ($p->unit_price !== null ? round((float) $p->unit_price, 2) : null),
         ])->values()->all();
+    }
+
+    /**
+     * Selling price of each product's next in-stock FIFO layer (as PosCatalogService prices the
+     * POS); products without such a layer are left out and fall back to their own unit_price.
+     *
+     * @param  list<int>  $productIds
+     * @return array<int, float>
+     */
+    private function fifoSellPrices(Business $business, array $productIds): array
+    {
+        $prices = [];
+        foreach (array_chunk($productIds, 1000) as $chunk) {
+            DB::table('product_stock_layers')
+                ->where('business_id', $business->id)
+                ->whereIn('product_id', $chunk)
+                ->where('quantity_remaining', '>', 0)
+                ->whereNotNull('selling_unit_price')
+                ->orderBy('received_at')
+                ->orderBy('id')
+                ->get(['product_id', 'selling_unit_price'])
+                ->each(function ($row) use (&$prices) {
+                    $prices[(int) $row->product_id] ??= (float) $row->selling_unit_price;
+                });
+        }
+
+        return $prices;
     }
 
     /** Per-user CRM access (function toggles + stage visibility), resolved once per request. */
@@ -1363,6 +1416,17 @@ class PosCrmApiController extends Controller
         if (! $allowed) {
             throw new HttpResponseException(
                 response()->json(['message' => 'You do not have permission to perform this action.'], 403)
+            );
+        }
+    }
+
+    /** A won / lost lead only leaves its stage when its head or an admin reopens it (LeadPolicy::canReopen). */
+    private function abortUnlessMayLeaveClosed(CrmAccess $access, Lead $lead, LeadStage $to): void
+    {
+        $lead->loadMissing('stage');
+        if (! $lead->isOpen() && (int) $to->id !== (int) $lead->stage_id && ! $this->policy->canReopen($access, $lead)) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'This lead is closed. Only the department head or an admin can reopen it.'], 403)
             );
         }
     }

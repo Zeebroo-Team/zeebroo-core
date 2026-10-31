@@ -32,6 +32,7 @@ class CRMServiceProvider extends ModuleServiceProvider
         \Modules\CRM\Console\Commands\MapStageStatusesCommand::class,
         \Modules\CRM\Console\Commands\NormalizeLeadPhonesCommand::class,
         \Modules\CRM\Console\Commands\NormalizeCustomerPhonesCommand::class,
+        \Modules\CRM\Console\Commands\ProcessFollowUpsCommand::class,
     ];
 
     /**
@@ -83,11 +84,12 @@ class CRMServiceProvider extends ModuleServiceProvider
 
     /**
      * Define module schedules.
-     * 
-     * @param $schedule
      */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+    protected function configureSchedules(Schedule $schedule): void
+    {
+        // Follow-up reminders and overdue marking (FollowUpService::process)
+        $schedule->command('crm:process-follow-ups')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping();
+    }
 }

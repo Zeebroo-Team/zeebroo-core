@@ -463,6 +463,8 @@
             { "type": "lg", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",          "label": "New Lead",        "primary": true },
             { "type": "lg", "id": "rb-crm-inbox",         "icon": "fa-inbox",              "label": "Marketing Inbox" },
             { "type": "lg", "id": "rb-crm-approvals",     "icon": "fa-file-signature",     "label": "Quotation Approvals" },
+            { "type": "lg", "id": "rb-crm-followups",     "icon": "fa-phone-volume",       "label": "My Follow-ups" },
+            { "type": "lg", "id": "rb-crm-dashboard",     "icon": "fa-chart-line",         "label": "CRM Dashboard" },
             { "type": "lg", "id": "rb-crm-import-leads",  "icon": "fa-file-csv",           "label": "Import Leads" }
           ]
         },

@@ -29,7 +29,7 @@ class QuotationPrintService
             ->latest('updated_at')
             ->first() : null;
 
-        $accentColor          = '#3B82F6';
+        $accentColor          = '#1d4ed8'; // the desktop print's Classic template colour
         $letterheadCanvasJson = null;
         if ($letterhead) {
             try {

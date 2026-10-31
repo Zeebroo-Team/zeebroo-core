@@ -60,6 +60,9 @@ class Project extends Model
         'assignment_reference',
         'file_manager_file_id',
         'created_by',
+        // Set when started from a won CRM lead (and its accepted quotation)
+        'quotation_id',
+        'lead_id',
     ];
 
     protected $casts = [

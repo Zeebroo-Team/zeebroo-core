@@ -12,13 +12,16 @@ class QuotationApproval extends Model
     const ACTION_APPROVED  = 'approved';
     const ACTION_RETURNED  = 'returned';
     const ACTION_REJECTED  = 'rejected';
+    // Released by the staff without the head: the discount is within the department's limit
+    const ACTION_WITHIN_LIMIT = 'within_limit';
 
     /** action => [label, Font Awesome icon, colour] */
     const ACTIONS = [
-        self::ACTION_SUBMITTED => ['Submitted for approval', 'fa-paper-plane',     '#a855f7'],
-        self::ACTION_APPROVED  => ['Approved',               'fa-circle-check',    '#0d9488'],
-        self::ACTION_RETURNED  => ['Returned for changes',   'fa-rotate-left',     '#f97316'],
-        self::ACTION_REJECTED  => ['Rejected',               'fa-circle-xmark',    '#ef4444'],
+        self::ACTION_SUBMITTED    => ['Submitted for approval',                   'fa-paper-plane',  '#a855f7'],
+        self::ACTION_APPROVED     => ['Approved',                                 'fa-circle-check', '#0d9488'],
+        self::ACTION_RETURNED     => ['Returned for changes',                     'fa-rotate-left',  '#f97316'],
+        self::ACTION_REJECTED     => ['Rejected',                                 'fa-circle-xmark', '#ef4444'],
+        self::ACTION_WITHIN_LIMIT => ['Within the discount limit — no approval needed', 'fa-percent', '#0d9488'],
     ];
 
     protected $fillable = [

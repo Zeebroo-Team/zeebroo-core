@@ -6,6 +6,7 @@ use Illuminate\Support\Facades\Schema;
 use Modules\CRM\Models\Lead;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
+use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
 
 /** The lead's quotations: each one made, every approval step and every send to the customer. */
@@ -25,7 +26,8 @@ final class QuotationTimelineSource implements TimelineSource
         $quotations = Quotation::query()
             ->where('business_id', $lead->business_id)
             ->where('lead_id', $lead->id)
-            ->with(['approvals.byUser:id,name', 'dispatches.sentBy:id,name'])
+            ->with(array_merge(['approvals.byUser:id,name', 'dispatches.sentBy:id,name'],
+                Schema::hasTable('quotation_customer_responses') ? ['customerResponses.recordedBy:id,name'] : []))
             ->get();
 
         foreach ($quotations as $q) {
@@ -54,6 +56,14 @@ final class QuotationTimelineSource implements TimelineSource
                     $failed ? $d->error : $d->subject, $d->sent_by, $d->sentBy?->name,
                     $failed ? 'fa-triangle-exclamation' : 'fa-envelope-circle-check', $failed ? '#ef4444' : '#f59e0b',
                     $meta + ['dispatch_id' => $d->id, 'status' => $d->status]);
+            }
+
+            foreach ($q->relationLoaded('customerResponses') ? $q->customerResponses : [] as $r) {
+                [$label, $icon, $color] = QuotationCustomerResponse::RESPONSES[$r->response] ?? [$r->label(), 'fa-comment', '#64748b'];
+                $title = $q->quote_number . ': ' . strtolower($label)
+                    . ($r->requested_discount !== null ? ' of ' . rtrim(rtrim(number_format((float) $r->requested_discount, 2, '.', ''), '0'), '.') . '%' : '');
+                yield new TimelineEntry('quotation', 'r' . $r->id, $r->created_at, $title,
+                    $r->notes, $r->recorded_by, $r->recordedBy?->name, $icon, $color, $meta + ['response' => $r->response]);
             }
         }
     }

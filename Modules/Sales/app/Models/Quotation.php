@@ -23,6 +23,9 @@ class Quotation extends Model
     const STATUS_RETURNED         = 'returned';
     const STATUS_APPROVED         = 'approved';
 
+    // A lead quotation replaced by a newer version — kept read-only as history
+    const STATUS_SUPERSEDED = 'superseded';
+
     protected $fillable = [
         'business_id',
         'branch_id',
@@ -98,6 +101,12 @@ class Quotation extends Model
         return $this->hasMany(QuotationDispatch::class)->orderByDesc('created_at')->orderByDesc('id');
     }
 
+    /** What the customer said about this version, oldest first. */
+    public function customerResponses(): HasMany
+    {
+        return $this->hasMany(QuotationCustomerResponse::class)->orderBy('created_at')->orderBy('id');
+    }
+
     public function submittedBy(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'submitted_by');
@@ -132,10 +141,21 @@ class Quotation extends Model
         return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_SENT]);
     }
 
+    public function isSuperseded(): bool
+    {
+        return $this->status === self::STATUS_SUPERSEDED;
+    }
+
+    /** The whole discount (lines + header) as a % of the subtotal. */
+    public function discountPercent(): float
+    {
+        return (float) $this->subtotal > 0 ? round((float) $this->discount_amount / (float) $this->subtotal * 100, 2) : 0.0;
+    }
+
     public function isExpired(): bool
     {
         return $this->expiry_date && $this->expiry_date->isPast()
-            && !in_array($this->status, [self::STATUS_ACCEPTED, self::STATUS_REJECTED, self::STATUS_EXPIRED]);
+            && !in_array($this->status, [self::STATUS_ACCEPTED, self::STATUS_REJECTED, self::STATUS_EXPIRED, self::STATUS_SUPERSEDED]);
     }
 
     public function statusLabel(): string
@@ -149,7 +169,8 @@ class Quotation extends Model
             self::STATUS_PENDING_APPROVAL => 'Pending Approval',
             self::STATUS_RETURNED         => 'Returned',
             self::STATUS_APPROVED         => 'Approved',
-            default                       => ucfirst($this->status),
+            self::STATUS_SUPERSEDED       => 'Superseded',
+            default                      => ucfirst($this->status),
         };
     }
 
@@ -164,7 +185,8 @@ class Quotation extends Model
             self::STATUS_PENDING_APPROVAL => '#a855f7',
             self::STATUS_RETURNED         => '#f97316',
             self::STATUS_APPROVED         => '#0d9488',
-            default                       => '#64748b',
+            self::STATUS_SUPERSEDED       => '#94a3b8',
+            default                      => '#64748b',
         };
     }
 }

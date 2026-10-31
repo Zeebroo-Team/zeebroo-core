@@ -156,6 +156,9 @@ class QuotationService
         if ($quotation->status === Quotation::STATUS_ACCEPTED) {
             throw ValidationException::withMessages(['quotation' => 'Accepted quotations cannot be deleted.']);
         }
+        if ($quotation->isSuperseded()) {
+            throw ValidationException::withMessages(['quotation' => 'An earlier version is kept as history and cannot be deleted.']);
+        }
 
         $quotation->delete();
     }
@@ -168,13 +171,32 @@ class QuotationService
     /**
      * A new draft version of a lead quotation that can no longer be edited (approved, sent,
      * rejected …): same header and lines, version + 1, numbered "<first number>-v<version>".
+     * The old version becomes superseded — read-only history.
      */
     public function revise(Quotation $quotation): Quotation
     {
         if ($quotation->isEditable()) {
             throw ValidationException::withMessages(['quotation' => 'This quotation can still be edited — no new version is needed.']);
         }
+        if ($quotation->isSuperseded()) {
+            throw ValidationException::withMessages(['quotation' => 'This version has been replaced — revise the latest version instead.']);
+        }
+        if (in_array($quotation->status, [Quotation::STATUS_PENDING_APPROVAL, Quotation::STATUS_ACCEPTED], true)) {
+            throw ValidationException::withMessages(['quotation' => $quotation->status === Quotation::STATUS_ACCEPTED
+                ? 'The customer accepted this quotation — it cannot be revised.'
+                : 'This quotation is waiting for approval — wait for the decision before revising it.']);
+        }
 
+        return DB::transaction(function () use ($quotation) {
+            $revision = $this->copyAsNextVersion($quotation);
+            $quotation->update(['status' => Quotation::STATUS_SUPERSEDED]);
+
+            return $revision;
+        });
+    }
+
+    private function copyAsNextVersion(Quotation $quotation): Quotation
+    {
         $quotation->loadMissing(['items', 'business']);
         $base    = $this->baseNumber($quotation);
         $latest  = (int) Quotation::query()
@@ -226,7 +248,7 @@ class QuotationService
     }
 
     /** "QT-0007" for QT-0007, QT-0007-v2, QT-0007-v3 … */
-    private function baseNumber(Quotation $quotation): string
+    public function baseNumber(Quotation $quotation): string
     {
         return preg_replace('/-v\d+$/i', '', (string) $quotation->quote_number);
     }

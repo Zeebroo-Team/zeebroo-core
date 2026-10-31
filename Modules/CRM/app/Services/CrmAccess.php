@@ -232,6 +232,9 @@ final class CrmAccess
             'uses_inbox'           => $this->usesInbox(),
             'can_assign'           => $this->worksAllLeads() || $this->isHead(),
             'can_approve'          => $this->unrestricted || $this->isHead(),
+            // The management dashboard (CrmReportService::canView) and the team follow-up list
+            'can_view_reports'     => $this->hasCrm() && ($this->viewsAllLeads() || $this->isHead()),
+            'can_see_team'         => $this->worksAllLeads() || $this->isHead(),
             'permissions'          => $permissions,
             'stage_access'         => $this->unrestricted ? (object) [] : (object) $this->stageAccess,
         ];

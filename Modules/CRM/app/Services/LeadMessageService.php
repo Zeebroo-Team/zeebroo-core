@@ -63,6 +63,7 @@ class LeadMessageService
             ]);
 
             LeadAttachment::query()->whereIn('id', $attachments->pluck('id'))->update(['message_id' => $message->id]);
+            $lead->recordFirstResponse();
 
             return $message->load(['user:id,name', 'attachments.file']);
         });

@@ -20,6 +20,7 @@ use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadAttachmentService;
 use Modules\CRM\Services\LeadMessageService;
+use Modules\CRM\Services\LeadSummaryService;
 use Modules\CRM\Services\TaskService;
 use Modules\CRM\Services\Timeline\TimelineService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
@@ -44,7 +45,16 @@ class PosCrmLeadWorkspaceApiController extends Controller
         private readonly TimelineService $timeline,
         private readonly TaskService $tasks,
         private readonly CrmAuditService $audit,
+        private readonly LeadSummaryService $summaries,
     ) {}
+
+    /** GET crm/leads/{lead}/summary — the lead with its department heads and assignees' HR details. */
+    public function summary(Request $request, int $leadId): JsonResponse
+    {
+        [, , $lead] = $this->context($request, $leadId);
+
+        return response()->json(['data' => $this->summaries->summary($lead)]);
+    }
 
     /** GET crm/leads/{lead}/workspace — what the lead window needs to draw its tabs. */
     public function show(Request $request, int $leadId): JsonResponse
@@ -68,7 +78,9 @@ class PosCrmLeadWorkspaceApiController extends Controller
                     'messages' => $lead->messages()->count(),
                     'files'    => $lead->attachments()->count(),
                     'tasks'    => $lead->tasks()->where('status', Task::STATUS_PENDING)->count(),
+                    'follow_ups' => $lead->followUps()->pending()->count(),
                 ],
+                'follow_ups_overdue' => $lead->followUps()->overdue()->count(),
             ],
         ]);
     }

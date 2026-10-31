@@ -636,7 +636,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
 
     // CRM lead workspace (assignees + history, unified timeline, internal messages, files, tasks) and the admin audit log
     Route::get   ('crm/leads/{lead}/workspace',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'show'])              ->whereNumber('lead')->name('crm.leads.workspace');
-    Route::get   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'assignees'])         ->whereNumber('lead')->name('crm.leads.assignees.index');
+    Route::get   ('crm/leads/{lead}/summary',                           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'summary'])           ->whereNumber('lead')->name('crm.leads.summary');
+    Route::get   ('crm/leads/{lead}/assignees',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'assignees'])         ->whereNumber('lead')->name('crm.leads.assignees.index');
     Route::put   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'syncAssignees'])     ->whereNumber('lead')->name('crm.leads.assignees.sync');
     Route::post  ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'addAssignees'])      ->whereNumber('lead')->name('crm.leads.assignees.store');
     Route::delete('crm/leads/{lead}/assignees/{user}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'removeAssignee'])    ->whereNumber(['lead', 'user'])->name('crm.leads.assignees.destroy');
@@ -661,13 +662,37 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'show'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.show');
     Route::put   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'update'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.update');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/revise',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'revise'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.revise');
-    Route::post  ('crm/leads/{lead}/quotations/{quotation}/submit',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'submit'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.submit');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/responses',      [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'respond'])         ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.responses');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}/versions',       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'versions'])        ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.versions');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}/diff',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'diff'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.diff');
+    Route::get   ('crm/customers/{customer}/quotations/{quotation}/versions', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'customerVersions'])->whereNumber(['customer', 'quotation'])->name('crm.customers.quotations.versions');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/submit',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'submit'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.submit');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/approve',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'approve'])         ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.approve');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/return',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'returnForChanges'])->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.return');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/reject',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'reject'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.reject');
     Route::get   ('crm/leads/{lead}/quotations/{quotation}/pdf',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'pdf'])             ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.pdf');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/send',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'send'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.send');
     Route::get   ('crm/quotation-approvals',                                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'inbox'])           ->name('crm.quotation-approvals.index');
+
+    // CRM closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
+    Route::get   ('crm/leads/{lead}/close-options', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'options'])->whereNumber('lead')->name('crm.leads.close-options');
+    Route::post  ('crm/leads/{lead}/won',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'won'])    ->whereNumber('lead')->name('crm.leads.won');
+    Route::post  ('crm/leads/{lead}/lost',          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'lost'])   ->whereNumber('lead')->name('crm.leads.lost');
+    Route::post  ('crm/leads/{lead}/reopen',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'reopen']) ->whereNumber('lead')->name('crm.leads.reopen');
+
+    // CRM follow-ups: my / team list, the lead's tab, log one; CRM email preference
+    Route::get   ('crm/follow-ups',                    [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'index'])  ->name('crm.follow-ups.index');
+    Route::post  ('crm/follow-ups/{followUp}/log',     [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'log'])    ->whereNumber('followUp')->name('crm.follow-ups.log');
+    Route::post  ('crm/follow-ups/{followUp}/cancel',  [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'cancel']) ->whereNumber('followUp')->name('crm.follow-ups.cancel');
+    Route::get   ('crm/leads/{lead}/follow-ups',       [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'forLead'])->whereNumber('lead')->name('crm.leads.follow-ups.index');
+    Route::post  ('crm/leads/{lead}/follow-ups',       [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'store'])  ->whereNumber('lead')->name('crm.leads.follow-ups.store');
+    Route::get   ('crm/notification-preferences',      [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'preferences'])      ->name('crm.notification-preferences.show');
+    Route::put   ('crm/notification-preferences',      [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'updatePreferences'])->name('crm.notification-preferences.update');
+
+    // CRM management dashboard (view only): admin, CEO, heads (own departments)
+    Route::get   ('crm/reports/dashboard',       [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'dashboard'])->name('crm.reports.dashboard');
+    Route::get   ('crm/reports/dashboard/pdf',   [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'pdf'])      ->name('crm.reports.dashboard.pdf');
+    Route::get   ('crm/reports/dashboard/excel', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'excel'])    ->name('crm.reports.dashboard.excel');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');

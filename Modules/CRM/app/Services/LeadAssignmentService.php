@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\CRM\Events\LeadAssigned;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAssignee;
 use Modules\CRM\Models\LeadAssignmentLog;
@@ -210,6 +211,12 @@ class LeadAssignmentService
             'previous'  => collect($before)->map(fn ($id) => $names->get($id) ?? "User #{$id}")->all(),
             'note'      => $note,
         ], fn ($v) => $v !== null));
+
+        $added = array_values(array_diff($ids, $before));
+        $newPrimary = ($ids[0] ?? null) !== null && ($ids[0] ?? null) !== ($before[0] ?? null) ? $ids[0] : null;
+        if ($added !== [] || $newPrimary !== null) {
+            LeadAssigned::dispatch($lead, $added, $action, $byUserId, $newPrimary);
+        }
 
         // Someone is now working a new lead
         $lead->loadMissing(['stage', 'project']);

@@ -39,6 +39,9 @@ class PosHrEmployeeListApiController extends Controller
     /** @var array{member_user_ids: array<int, true>, invited_emails: array<string, true>}|null */
     private ?array $accessLookup = null;
 
+    /** @var array<int, list<array<string, mixed>>>|null Departments each employee heads / co-heads */
+    private ?array $leadershipLookup = null;
+
     public function index(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -60,6 +63,7 @@ class PosHrEmployeeListApiController extends Controller
 
         $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
         $this->accessLookup = $this->systemAccess->accessLookup($business);
+        $this->leadershipLookup = $this->departmentService->leadershipLookup($business);
 
         return response()->json([
             'data'            => $employees->map(fn (Employee $e) => $this->format($e))->values(),
@@ -80,6 +84,7 @@ class PosHrEmployeeListApiController extends Controller
 
         $employee->load(['department', 'jobTitle', 'bank', 'user']);
         $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+        $this->leadershipLookup = $this->departmentService->leadershipLookup($business);
 
         return response()->json(['data' => $this->format($employee, detailed: true)]);
     }
@@ -262,6 +267,7 @@ class PosHrEmployeeListApiController extends Controller
 
         $employee = $employee->fresh(['department', 'jobTitle', 'bank', 'user']);
         $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+        $this->leadershipLookup = $this->departmentService->leadershipLookup($business);
 
         return response()->json([
             'data'    => $this->format($employee, detailed: true),
@@ -303,6 +309,10 @@ class PosHrEmployeeListApiController extends Controller
 
         if ($this->accessLookup !== null) {
             $base['system_access'] = $this->systemAccess->quickStatus($employee, $this->accessLookup);
+        }
+
+        if ($this->leadershipLookup !== null) {
+            $base['leadership'] = $this->leadershipLookup[(int) $employee->id] ?? [];
         }
 
         if ($this->weeklyTotals !== null) {

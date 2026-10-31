@@ -141,6 +141,7 @@
 .crm-imp-progress div{height:100%;background:#7c3aed;transition:width .3s}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
 body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
+body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"],
 body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
@@ -378,7 +379,8 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-qt-amt{font-weight:700;white-space:nowrap}
 .crm-qt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
 .crm-qt-grid label,.crm-qt-notes{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted)}
-.crm-qt-table-wrap{overflow-x:auto;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-qt-table-wrap{flex:none;overflow-x:auto;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-ws-panel>.crm-qt-versions,.crm-ws-panel>.crm-qt-foot,.crm-ws-panel>.crm-qt-send{flex:none}
 .crm-qt-table{width:100%;border-collapse:collapse;font-size:12.5px}
 .crm-qt-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:7px 8px;border-bottom:1px solid var(--border,#e5e7eb);white-space:nowrap}
 .crm-qt-table td{padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:middle}
@@ -408,6 +410,28 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-qt-banner--teal{background:color-mix(in srgb,#0d9488 9%,transparent);border-color:color-mix(in srgb,#0d9488 35%,transparent);color:#115e59}
 .crm-qt-send{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-banner--purple,body.dark .crm-qt-banner--teal{color:var(--text)}
+/* Negotiation: older versions, customer response form, version history + diff */
+.crm-qt-row--old{margin-left:22px;width:calc(100% - 22px);padding:6px 12px;opacity:.75;border-style:dashed}
+.crm-qt-row--old .crm-qt-num{font-weight:600}
+.crm-qt-respond-opts{display:flex;gap:8px;flex-wrap:wrap}
+.crm-qt-respond-opts label{display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:12.5px;cursor:pointer;color:var(--text)}
+.crm-qt-respond-opts label:has(input:checked){border-color:#7c3aed;background:color-mix(in srgb,#7c3aed 8%,transparent)}
+.crm-qt-versions{display:flex;flex-direction:column;gap:6px}
+.crm-qt-ver{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.crm-qt-ver--current{border-color:#7c3aed}
+.crm-qt-ver-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crm-qt-ver details{margin-top:6px}
+.crm-qt-ver summary{cursor:pointer;font-size:12px;color:var(--text-muted)}
+.crm-qt-diff{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.crm-qt-diff td,.crm-qt-diff th{padding:4px 6px;border-bottom:1px solid var(--border,#e5e7eb);text-align:left}
+.crm-qt-diff th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+.crm-qt-diff-added td:first-child{color:#15803d}
+.crm-qt-diff-removed td{color:#b91c1c;text-decoration:line-through}
+.crm-qt-diff-removed td:first-child{text-decoration:none}
+.crm-qt-diff-changed td:first-child{color:#b45309}
+.crm-qt-diff-old{color:var(--text-muted);text-decoration:line-through;margin-right:4px}
+.crm-qt-delta-up{color:#15803d}
+.crm-qt-delta-down{color:#b91c1c}
 .crm-ws-assignees{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px}
 .crm-ws-assign-btn{margin-left:auto;padding:4px 10px!important;font-size:12px!important}
 .crm-ws-muted{font-size:11px;color:var(--text-muted)}
@@ -466,6 +490,34 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
 .crm-audit-table th,.crm-audit-table td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:top}
 .crm-audit-table th{position:sticky;top:0;background:var(--surface);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
 .crm-audit-table td div{word-break:break-all}
+.crm-appr-list{display:flex;flex-direction:column;gap:12px;padding:16px 18px}
+.crm-appr-card{border:1px solid var(--border,#e5e7eb);border-radius:12px;background:var(--surface);overflow:hidden;transition:box-shadow .15s,border-color .15s}
+.crm-appr-card:hover{border-color:#c4b5fd;box-shadow:0 4px 14px rgba(124,58,237,.08)}
+.crm-appr-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border,#e5e7eb)}
+.crm-appr-num{font-size:14px;font-weight:700;color:var(--text)}
+.crm-appr-ver{font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;background:#ede9fe;color:#6d28d9}
+.crm-appr-status{font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:#fef3c7;color:#b45309;text-transform:uppercase;letter-spacing:.03em}
+.crm-appr-lead{margin-left:auto;text-align:right;font-size:12px;min-width:0}
+.crm-appr-lead strong{display:block;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-appr-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 16px;background:var(--surface2,#f8fafc)}
+.crm-appr-party{display:flex;align-items:center;gap:10px;min-width:0}
+.crm-appr-party--to{flex-direction:row-reverse;text-align:right}
+.crm-appr-avatar{flex:0 0 36px;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;background:#6366f1}
+.crm-appr-party--to .crm-appr-avatar{background:#a855f7}
+.crm-appr-party-body{min-width:0}
+.crm-appr-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+.crm-appr-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-appr-dept{display:inline-flex;align-items:center;gap:5px;margin-top:3px;font-size:11px;padding:2px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border,#e5e7eb);color:var(--text-muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-appr-arrow{display:flex;flex-direction:column;align-items:center;gap:2px;color:#a855f7;font-size:10px;font-weight:600}
+.crm-appr-arrow i{font-size:16px}
+.crm-appr-note{margin:0 16px;padding:8px 12px;border-left:3px solid #c4b5fd;background:var(--surface2,#f8fafc);border-radius:0 6px 6px 0;font-size:12px;color:var(--text);white-space:pre-wrap}
+.crm-appr-foot{display:flex;align-items:center;gap:20px;padding:12px 16px;flex-wrap:wrap}
+.crm-appr-fig{font-size:11px;color:var(--text-muted)}
+.crm-appr-fig b{display:block;font-size:13px;color:var(--text)}
+.crm-appr-fig--total b{font-size:15px;color:#6d28d9}
+.crm-appr-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:nowrap}
+.crm-appr-actions button{width:auto;white-space:nowrap}
+@media (max-width:720px){.crm-appr-route{grid-template-columns:1fr}.crm-appr-arrow{transform:rotate(90deg)}.crm-appr-party--to{flex-direction:row;text-align:left}}
 .crm-lead-view-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
 .crm-lead-view-item{background:var(--surface2,#f8fafc);border-radius:6px;padding:6px 10px;min-width:0}
 .crm-lead-view-item--wide{grid-column:1/-1}
@@ -511,6 +563,30 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
 .crm-hf-stat b{display:block;font-size:15px}
 .crm-hf-stat span{font-size:10.5px;color:var(--text-muted)}
 .crm-hf-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
+.crm-hf-sec{border:1px solid var(--border,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--surface,#fff)}
+.crm-hf-sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+.crm-hf-sec>summary::-webkit-details-marker{display:none}
+.crm-hf-sec>summary::after{content:'\f078';font-family:'Font Awesome 6 Free','FontAwesome';font-weight:900;margin-left:auto;font-size:10px;transition:transform .15s}
+.crm-hf-sec[open]>summary::after{transform:rotate(180deg)}
+.crm-hf-sec>summary .crm-hf-sec-count{background:var(--surface2,#f1f5f9);border-radius:10px;padding:0 7px;font-size:10.5px;text-transform:none;letter-spacing:0}
+.crm-hf-sec-body{padding:0 12px 10px}
+.crm-hf-rows{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12px}
+.crm-hf-rows dt{color:var(--text-muted);white-space:nowrap}
+.crm-hf-rows dd{margin:0;font-weight:600;word-break:break-word}
+.crm-hf-person{display:flex;gap:10px;padding:8px 0;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-hf-person:first-child{border-top:none}
+.crm-hf-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px;color:#7c3aed;background:rgba(124,58,237,.12);object-fit:cover}
+.crm-hf-person-main{min-width:0;flex:1}
+.crm-hf-person-name{font-weight:700;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.crm-hf-person-role{font-size:11.5px;color:var(--text-muted);margin-top:1px}
+.crm-hf-person-meta{font-size:11px;color:var(--text-muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:3px 10px}
+.crm-hf-person-meta i{width:12px;text-align:center}
+.crm-hf-tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:8px;padding:1px 6px;background:rgba(37,99,235,.12);color:#2563eb}
+.crm-hf-tag--primary{background:rgba(22,163,74,.13);color:#16a34a}
+.crm-hf-tag--head{background:rgba(217,119,6,.14);color:#d97706}
+.crm-hf-log{font-size:11.5px;padding:6px 0;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-hf-log:first-child{border-top:none}
+.crm-hf-log small{display:block;color:var(--text-muted);margin-top:2px}
 .crm-hf-panel .crm-audit-list::before{left:13px}
 @media (max-width:900px){.crm-hf-panel.open{width:300px}.crm-hf-panel-inner{width:300px}}
 /* Lead audit trail — Lead Details "Activity History" + relation "History" tab */
@@ -695,6 +771,69 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
 .crm-wiz-step.is-done .crm-wiz-step-num{background:#d1fae5;color:#065f46}
 .crm-wiz-step:not(:last-child)::after{content:'';flex:1;height:1px;background:var(--border,#e5e7eb);margin-left:6px;min-width:14px}
 .crm-wiz-panel{display:flex;flex-direction:column;gap:12px}
+
+/* ── CRM: follow-ups (overdue = red everywhere), suggested score, Won window ── */
+.crm-fu-badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;background:rgba(100,116,139,.12);color:var(--text-muted,#64748b);white-space:nowrap}
+.crm-fu-badge--today{background:rgba(245,158,11,.16);color:#b45309}
+.crm-fu-badge--overdue{background:rgba(239,68,68,.14);color:#dc2626}
+.crm-card--overdue{box-shadow:inset 3px 0 0 #ef4444}
+.crm-score-hint{display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--border,#cbd5e1);border-radius:999px;padding:0 7px;font-size:10.5px;color:var(--text-muted,#64748b);white-space:nowrap;cursor:help}
+.crm-ws-tab-count--overdue{background:#ef4444 !important;color:#fff !important}
+.crm-fu-form{display:grid;grid-template-columns:190px 130px 150px 1fr auto;gap:8px;align-items:center;margin-bottom:10px}
+.crm-fu-list{display:flex;flex-direction:column;gap:6px}
+.crm-fu-row{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:start;padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:12.5px}
+.crm-fu-row--overdue{border-color:rgba(239,68,68,.55);background:rgba(239,68,68,.05)}
+.crm-fu-row--closed{opacity:.72}
+.crm-fu-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.crm-fu-actions{display:flex;gap:6px}
+.crm-fu-notes{color:var(--text-muted,#64748b);white-space:pre-wrap}
+.crm-fu-due{font-weight:600}
+.crm-fu-due--today{color:#b45309}
+.crm-fu-due--overdue{color:#dc2626}
+.crm-fu-status{font-size:11px;color:var(--text-muted,#64748b)}
+.crm-fu-status--done{color:#059669}
+.crm-fu-log{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding-top:8px;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-fu-log textarea{grid-column:1/-1}
+.crm-fu-lead-line{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.crm-fu-lead{border:0;background:none;padding:0;font-weight:600;color:var(--accent,#4f46e5);cursor:pointer;font-size:13px}
+.crm-fu-count{display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:rgba(100,116,139,.18);font-size:10.5px}
+.crm-fu-count--overdue{background:#ef4444;color:#fff}
+.crm-inbox-tab.active .crm-fu-count{background:rgba(255,255,255,.25);color:#fff}
+.crm-won-choices{display:flex;flex-direction:column;gap:6px}
+.crm-won-choice{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:12.5px;cursor:pointer}
+.crm-won-choice.is-disabled{opacity:.55;cursor:not-allowed}
+.crm-won-doc{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0}
+
+/* ── CRM: management dashboard. Series colours validated (dataviz) on both surfaces; Won is also dashed. ── */
+#crm-dashboard-view{--crm-dash-c1:#4f46e5;--crm-dash-c2:#0d9488;--crm-dash-c3:#64748b}
+body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-dash-c3:#94a3b8}
+.crm-dash-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border,#e5e7eb);flex-shrink:0}
+.crm-dash-filters .po-field-input{width:auto;padding:5px 8px;font-size:12.5px}
+.crm-dash-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.crm-dash-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.crm-dash-tile{border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:10px 12px;background:var(--surface,#fff)}
+.crm-dash-tile-label{font-size:11.5px;color:var(--text-muted,#64748b)}
+.crm-dash-tile-value{font-size:22px;font-weight:700;color:var(--text,#111827);margin-top:2px}
+.crm-dash-tile-sub{font-size:11px;color:var(--text-muted,#64748b);margin-top:2px}
+.crm-dash-tile--warn{border-color:rgba(245,158,11,.6)}
+.crm-dash-tile--overdue{border-color:rgba(239,68,68,.6)}
+.crm-dash-tile--overdue .crm-dash-tile-value,.crm-dash-tile--overdue .crm-dash-tile-sub{color:#dc2626}
+.crm-dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.crm-dash-card{border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px 14px;background:var(--surface,#fff);position:relative}
+.crm-dash-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600;font-size:13px;margin-bottom:10px;color:var(--text,#111827)}
+.crm-dash-sub-head{font-size:11.5px;font-weight:600;color:var(--text-muted,#64748b);margin:12px 0 6px}
+.crm-dash-chart{height:220px;position:relative}
+.crm-dash-legend{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:400;color:var(--text-muted,#64748b)}
+.crm-dash-key{display:inline-block;width:16px;height:0;border-top:2px solid var(--crm-dash-c1);margin-left:6px}
+.crm-dash-key--c2{border-top:2px dashed var(--crm-dash-c2)}
+.crm-dash-tip{position:absolute;pointer-events:none;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 8px;font-size:11.5px;color:var(--text,#111827);box-shadow:0 4px 14px rgba(0,0,0,.12);min-width:110px}
+.crm-dash-bars{display:flex;flex-direction:column;gap:6px}
+.crm-dash-bar-row{display:grid;grid-template-columns:130px 1fr auto;gap:8px;align-items:center;font-size:12px}
+.crm-dash-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#111827)}
+.crm-dash-bar-track{height:10px;border-radius:4px;background:rgba(100,116,139,.1);overflow:hidden}
+.crm-dash-bar{display:block;height:100%;border-radius:0 4px 4px 0}
+.crm-dash-bar-value{font-variant-numeric:tabular-nums;color:var(--text,#111827);white-space:nowrap}
+.crm-dash-table td,.crm-dash-table th{font-variant-numeric:tabular-nums}
 </style>
 <script src="js/react.min.js"></script>
 <script src="js/react-dom.min.js"></script>
@@ -2085,6 +2224,12 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-approvals">
               <i class="fa fa-file-signature"></i>Quotation<br>Approvals
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-followups">
+              <i class="fa fa-phone-volume"></i>My<br>Follow-ups
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-dashboard">
+              <i class="fa fa-chart-line"></i>CRM<br>Dashboard
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-import-leads">
               <i class="fa fa-file-csv"></i>Import<br>Leads
@@ -9783,6 +9928,7 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
         <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
         <button class="fin-subnav-btn" style="display:none" data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
         <button class="fin-subnav-btn"         data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
+        <button class="fin-subnav-btn"         data-crmsub="dashboard"><i class="fa fa-chart-line"></i> Dashboard</button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9912,6 +10058,12 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
                 <button class="crm-chip" data-crm-filter="customers" title="Only leads that already exist as customers"><i class="fa fa-circle-check"></i> Customers</button>
                 <button class="crm-chip" data-crm-filter="hasValue" title="Only leads with an estimated value"><i class="fa fa-coins"></i> Has value</button>
                 <select class="crm-chip crm-chip--select" id="crm-pipe-source" title="Filter by lead source"><option value="">All sources</option></select>
+                <select class="crm-chip crm-chip--select" id="crm-pipe-score" title="Filter by score (Hot / Warm / Cold)">
+                  <option value="">All scores</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option><option value="none">Not scored</option>
+                </select>
+                <select class="crm-chip crm-chip--select" id="crm-pipe-sort" title="Order of the cards in each column">
+                  <option value="newest">Newest first</option><option value="score">Hottest first</option><option value="follow_up">Follow-up due first</option><option value="value">Highest value first</option>
+                </select>
                 <span class="crm-pipe-result" id="crm-pipe-result"></span>
                 <div id="crm-pipeline-alert" class="svc-form-alert" style="display:none"></div>
                 <div class="crm-pipe-view">
@@ -10056,6 +10208,28 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
       </div>
 
       <!-- ── Tasks view ── -->
+      <!-- ── Dashboard view (view only: admin, CEO, heads — their departments) ── -->
+      <div id="crm-dashboard-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="crm-dash-filters">
+          <select id="crm-dash-range" class="po-field-input" style="appearance:auto" title="Quick range">
+            <option value="">Quick range…</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option><option value="month">This month</option><option value="quarter">This quarter</option><option value="year">This year</option>
+          </select>
+          <input type="date" id="crm-dash-from" class="po-field-input" title="Leads created from">
+          <span class="crm-ws-muted">→</span>
+          <input type="date" id="crm-dash-to" class="po-field-input" title="Leads created to">
+          <select id="crm-dash-dept" class="po-field-input" style="appearance:auto"></select>
+          <select id="crm-dash-div" class="po-field-input" style="appearance:auto"></select>
+          <select id="crm-dash-user" class="po-field-input" style="appearance:auto"></select>
+          <select id="crm-dash-source" class="po-field-input" style="appearance:auto"></select>
+          <button class="po-btn-primary" id="crm-dash-apply"><i class="fa fa-filter"></i> Apply</button>
+          <span style="flex:1"></span>
+          <button class="po-btn-ghost" id="crm-dash-pdf" title="Export this view to PDF"><i class="fa fa-file-pdf"></i> PDF</button>
+          <button class="po-btn-ghost" id="crm-dash-excel" title="Export this view to Excel"><i class="fa fa-file-excel"></i> Excel</button>
+        </div>
+        <div class="crm-dash-body" id="crm-dash-body"></div>
+      </div>
+
       <div id="crm-tasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
         <div class="finance-toolbar" style="gap:8px">
           <div class="svc-chip-bar" id="crm-task-filter-chips">
@@ -12464,15 +12638,63 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
         <span class="crm-ws-muted" id="crm-approvals-count" style="margin-left:8px;font-size:12px"></span>
         <button class="psm-close" id="crm-approvals-close"><i class="fa fa-xmark"></i></button>
       </div>
-      <div style="flex:1;min-height:0;overflow:auto;padding:0 18px">
-        <table class="crm-audit-table">
-          <thead><tr><th>Quotation</th><th>Lead</th><th>Submitted by</th><th style="text-align:right">Discount</th><th style="text-align:right">Total</th><th></th></tr></thead>
-          <tbody id="crm-approvals-rows"></tbody>
-        </table>
+      <div style="flex:1;min-height:0;overflow:auto">
+        <div class="crm-appr-list" id="crm-approvals-rows"></div>
       </div>
       <div class="po-aim-footer" style="justify-content:space-between">
         <span class="crm-ws-muted">Review opens the lead's quotation to approve, return with comments or reject.</span>
         <button class="po-btn-ghost" id="crm-approvals-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Won — mark won and optionally create an invoice / sales order / project ── -->
+  <div class="modal-overlay" id="crm-won-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:520px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-trophy" style="color:#10b981"></i>
+        <span id="crm-won-title">Mark won</span>
+        <button class="psm-close" id="crm-won-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px;overflow:auto">
+        <div id="crm-won-alert" class="svc-form-alert" style="display:none"></div>
+        <div id="crm-won-body" style="display:flex;flex-direction:column;gap:12px"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-won-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-won-submit"><i class="fa fa-trophy"></i> Mark Won</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: My follow-ups / Team — overdue in red, log from the list ── -->
+  <div class="modal-overlay" id="crm-fu-modal" style="display:none">
+    <div class="po-aim-shell" style="width:860px;max-width:96vw;height:84vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-phone-volume" style="color:#7c3aed"></i>
+        <span>Follow-ups</span>
+        <button class="psm-close" id="crm-fu-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--border)">
+        <div class="crm-inbox-tabs" id="crm-fu-scopes"></div>
+        <div class="crm-inbox-tabs" id="crm-fu-status">
+          <button type="button" class="crm-inbox-tab" data-fu-status="overdue">Overdue</button>
+          <button type="button" class="crm-inbox-tab" data-fu-status="today">Today</button>
+          <button type="button" class="crm-inbox-tab" data-fu-status="pending">All pending</button>
+          <button type="button" class="crm-inbox-tab" data-fu-status="done">Done</button>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:12px 18px">
+        <div class="crm-fu-list" id="crm-fu-rows"></div>
+      </div>
+      <div class="po-aim-footer" style="justify-content:space-between">
+        <label class="crm-ws-muted" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="crm-fu-email"> Also email me CRM notifications
+        </label>
+        <div style="display:flex;gap:8px">
+          <button class="po-btn-ghost" id="crm-fu-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+          <button class="po-btn-ghost" id="crm-fu-close-btn"><i class="fa fa-xmark"></i> Close</button>
+        </div>
       </div>
     </div>
   </div>

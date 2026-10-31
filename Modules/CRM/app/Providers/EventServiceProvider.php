@@ -14,6 +14,15 @@ class EventServiceProvider extends ServiceProvider
     protected $listen = [];
 
     /**
+     * Notifications, follow-up scheduling and automation triggers for the CRM workflow events.
+     *
+     * @var array<int, class-string>
+     */
+    protected $subscribe = [
+        \Modules\CRM\Listeners\CrmEventSubscriber::class,
+    ];
+
+    /**
      * Indicates if events should be discovered.
      *
      * @var bool

@@ -124,6 +124,11 @@ class CustomerProfileService
             ->map(fn (Quotation $q) => [
                 'id'           => $q->id,
                 'number'       => $q->quote_number,
+                // Versions of a lead quotation share the base number (QT-0007, QT-0007-v2 …)
+                'base_number'  => preg_replace('/-v\d+$/i', '', (string) $q->quote_number),
+                'version'      => (int) $q->version,
+                'parent_quotation_id' => $q->parent_quotation_id,
+                'lead_id'      => $q->lead_id,
                 'reference'    => $q->reference,
                 'status'       => $q->status,
                 'status_label' => $q->statusLabel(),

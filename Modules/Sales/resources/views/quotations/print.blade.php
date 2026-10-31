@@ -4,10 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Quotation {{ $quotation->quote_number }}</title>
+{{-- Same "Classic" layout as the desktop invoice/quotation print. Laid out with tables only,
+     so the browser print page and the dompdf PDF (no flex / grid) render the same. --}}
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1e293b;background:#fff;padding:24px 32px;}
-.print-page{max-width:780px;margin:0 auto;}
+{{-- dompdf treats an html / "*" margin as the page margin, which would wipe the @page margins below --}}
+{{ !empty($pdf) ? 'body,div,span,p,b,strong,img,table,tr,th,td' : '*' }}{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:{!! !empty($pdf) ? "'DejaVu Sans'," : '' !!}'Segoe UI',Arial,sans-serif;font-size:11px;color:#0f172a;background:#fff;padding:{{ !empty($pdf) ? '0' : '24px 32px' }};}
+.print-page{max-width:{{ !empty($pdf) ? 'none' : '780px' }};margin:0 auto;}
+table{width:100%;border-collapse:collapse;}
+@if(!empty($pdf))
+/* dompdf: page margins, and only normal / bold weights exist (heavier ones fall back to a serif) */
+@page{margin:16mm 15mm;}
+body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
+@endif
 
 /* Letterhead zones */
 .lh-print-zone{display:none;}
@@ -18,63 +27,66 @@ body{font-family:'Segoe UI',Arial,sans-serif;font-size:13px;color:#1e293b;backgr
     @page{margin:12mm 14mm;}
 }
 
-.qt-header{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;padding:20px 0 16px;border-bottom:2px solid #e2e8f0;margin-bottom:20px;}
-.qt-header__business{font-size:20px;font-weight:800;color:#1e293b;}
-.qt-header__meta p{margin:2px 0;font-size:12px;color:#64748b;}
-.qt-header__meta strong{color:#1e293b;}
+/* Header: document title left, business right, accent rule underneath */
+.qt-top{border-bottom:2.5px solid {{ $accentColor }};margin-bottom:22px;}
+.qt-top td{vertical-align:top;padding-bottom:18px;}
+.qt-title{font-size:30px;font-weight:700;text-transform:uppercase;color:{{ $accentColor }};letter-spacing:.01em;}
+.qt-num{font-size:12px;color:#64748b;margin-top:4px;}
+.qt-biz{font-size:20px;font-weight:700;color:{{ $accentColor }};}
+.qt-addr{font-size:10px;color:#64748b;margin-top:5px;line-height:1.6;white-space:pre-line;}
+.qt-logo{max-height:56px;max-width:180px;margin-bottom:6px;}
 
-.qt-doc-title{display:inline-block;font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
-    padding:5px 16px;border-radius:999px;background:color-mix(in srgb,{{ $accentColor }} 14%,#fff);
-    border:1.5px solid {{ $accentColor }};color:{{ $accentColor }};margin-bottom:12px;}
+/* Billed to + dates */
+.qt-meta{margin-bottom:20px;}
+.qt-meta > tbody > tr > td{vertical-align:top;}
+.qt-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:6px;}
+.qt-bill-name{font-size:14px;font-weight:700;}
+.qt-bill-info{font-size:11px;color:#64748b;margin-top:3px;line-height:1.5;}
+.qt-dates td{font-size:11px;padding:6px 0;border-bottom:1px dashed #e2e8f0;}
+.qt-dates tr:last-child td{border-bottom:none;}
+.qt-dates .k{color:#94a3b8;}
+.qt-dates .v{font-weight:700;text-align:right;}
 
-.qt-parties{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px;}
-.qt-party__title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;margin-bottom:4px;}
-.qt-party p{margin:2px 0;font-size:12.5px;color:#1e293b;}
-.qt-party .muted{color:#64748b;}
+/* Items */
+.qt-items{margin-bottom:20px;}
+.qt-items thead th{background:{{ $accentColor }};color:#fff;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;padding:9px 10px;text-align:left;}
+.qt-items tbody td{font-size:11px;padding:8px 10px;border-bottom:1px solid #e2e8f0;vertical-align:top;}
+.qt-items tbody tr.alt td{background:#f8fafc;}
+.qt-items .n{color:#94a3b8;text-align:center;}
+.qt-items .r{text-align:right;}
+.qt-items .b{font-weight:700;}
+.qt-items .muted{color:#94a3b8;}
+.qt-items .sub td{font-size:10px;color:#64748b;padding-top:4px;padding-bottom:4px;}
 
-table{width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:16px;}
-thead th{background:{{ $accentColor }};color:#fff;font-weight:700;padding:8px 10px;text-align:left;}
-thead th.right{text-align:right;}
-tbody tr:nth-child(even){background:#f8fafc;}
-tbody td{padding:7px 10px;border-bottom:1px solid #e2e8f0;color:#1e293b;}
-tbody td.right{text-align:right;}
+/* Notes + totals */
+.qt-bottom > tbody > tr > td{vertical-align:top;}
+.qt-notes{padding:13px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;}
+.qt-notes-text{font-size:11px;color:#64748b;line-height:1.55;white-space:pre-line;}
+.qt-totals td{font-size:11px;padding:5px 0;border-bottom:1px solid #f1f5f9;color:#64748b;}
+.qt-totals td.v{text-align:right;color:#475569;}
+.qt-totals tr.grand td{font-size:15px;font-weight:700;color:#0f172a;border-top:2.5px solid {{ $accentColor }};border-bottom:none;padding-top:9px;}
+.qt-totals tr.grand td.v{color:{{ $accentColor }};}
 
-.qt-totals{display:flex;justify-content:flex-end;margin-bottom:20px;}
-.qt-totals-inner{width:260px;}
-.qt-totals-inner .row{display:flex;justify-content:space-between;padding:5px 0;font-size:12.5px;border-bottom:1px solid #e2e8f0;}
-.qt-totals-inner .row.total{font-size:15px;font-weight:800;border-bottom:none;padding-top:8px;}
-
-.qt-notes{background:#f8fafc;border-left:3px solid {{ $accentColor }};padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:20px;}
-.qt-notes__title{font-size:10px;font-weight:700;text-transform:uppercase;color:#94a3b8;margin-bottom:4px;}
-.qt-notes p{font-size:12px;color:#475569;white-space:pre-line;}
-
-.qt-footer{border-top:1px solid #e2e8f0;padding-top:10px;font-size:11px;color:#94a3b8;text-align:center;}
+.qt-footer{margin-top:22px;border-top:1px solid #e2e8f0;}
+.qt-footer td{padding-top:12px;font-size:10px;color:#94a3b8;}
 
 .print-btn-bar{display:flex;gap:10px;margin-bottom:20px;}
 .print-btn{padding:8px 18px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid;text-decoration:none;display:inline-flex;align-items:center;gap:6px;}
 .print-btn--primary{background:{{ $accentColor }};border-color:{{ $accentColor }};color:#fff;}
 .print-btn--back{background:transparent;border-color:#e2e8f0;color:#64748b;}
 </style>
-@if(!empty($pdf))
-{{-- dompdf (QuotationPrintService::generatePdf) has no flex / grid / color-mix: lay the same blocks out with tables and floats --}}
-<style>
-body{font-family:'DejaVu Sans',Arial,sans-serif;font-size:11.5px;padding:0;}
-.print-page{max-width:none;}
-.qt-header{display:table;width:100%;}
-.qt-header > div{display:table-cell;vertical-align:top;}
-.qt-doc-title{background:#fff;}
-.qt-parties{display:table;width:100%;}
-.qt-party{display:table-cell;width:50%;vertical-align:top;}
-.qt-totals{display:block;overflow:hidden;}
-.qt-totals-inner{float:right;}
-.qt-totals-inner .row{display:block;overflow:hidden;}
-.qt-totals-inner .row span:first-child{float:left;}
-.qt-totals-inner .row span:last-child{float:right;}
-.qt-logo{max-height:56px;max-width:180px;margin-bottom:6px;}
-</style>
-@endif
 </head>
 <body>
+@php
+    $fmtQty     = fn ($q) => rtrim(rtrim(number_format((float) $q, 3), '0'), '.');
+    $money      = fn ($n) => trim(number_format((float) $n, 2) . ' ' . $currency);
+    $validUntil = $quotation->expiry_date ? $quotation->expiry_date->format('Y-m-d') : '—';
+    $address    = $mainBranch?->address;
+    $phone      = $mainBranch?->phone;
+    // Discount / tax columns only when a line has one (lead quotations)
+    $lineDiscounts = $quotation->items->contains(fn ($i) => (float) $i->discount_amount > 0);
+    $lineTaxes     = $quotation->items->contains(fn ($i) => (float) $i->tax_amount > 0);
+@endphp
 <div class="print-page">
 
     @if(empty($pdf))
@@ -93,79 +105,74 @@ body{font-family:'DejaVu Sans',Arial,sans-serif;font-size:11.5px;padding:0;}
     @endif
 
     {{-- Document header --}}
-    <div class="qt-header">
-        <div>
-            @if(!empty($logoSrc))<img src="{{ $logoSrc }}" alt="" class="qt-logo"><br>@endif
-            <div class="qt-header__business">{{ $business->name }}</div>
-            @if($mainBranch)
-                <div style="font-size:12px;color:#64748b;margin-top:4px;">
-                    @if($mainBranch->address) {{ $mainBranch->address }}<br> @endif
-                    @if($mainBranch->phone) {{ $mainBranch->phone }} @endif
+    <table class="qt-top">
+        <tr>
+            <td>
+                <div class="qt-title">Quotation</div>
+                <div class="qt-num">
+                    {{ $quotation->quote_number }}@if(($quotation->version ?? 1) > 1) (v{{ $quotation->version }})@endif
+                    · {{ $quotation->quote_date->format('Y-m-d') }}
                 </div>
-            @endif
-        </div>
-        <div class="qt-header__meta" style="text-align:right;">
-            <span class="qt-doc-title">Quotation</span>
-            <p><strong>{{ $quotation->quote_number }}</strong>@if(($quotation->version ?? 1) > 1) <span style="color:#64748b;">(version {{ $quotation->version }})</span>@endif</p>
-            <p>Date: <strong>{{ $quotation->quote_date->format('M j, Y') }}</strong></p>
-            @if($quotation->expiry_date)
-                <p>Expires: <strong>{{ $quotation->expiry_date->format('M j, Y') }}</strong></p>
-            @endif
-            @if($quotation->reference)
-                <p>Ref: <strong>{{ $quotation->reference }}</strong></p>
-            @endif
-            <p style="margin-top:6px;">
-                <span style="display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;
-                    background:color-mix(in srgb,{{ $quotation->statusColor() }} 15%,#fff);
-                    border:1px solid {{ $quotation->statusColor() }};color:{{ $quotation->statusColor() }};">
-                    {{ $quotation->statusLabel() }}
-                </span>
-            </p>
-        </div>
-    </div>
+            </td>
+            <td style="text-align:right;">
+                @if(!empty($logoSrc))<img src="{{ $logoSrc }}" alt="" class="qt-logo"><br>@endif
+                <div class="qt-biz">{{ $business->name }}</div>
+                @if($address || $phone)
+                    <div class="qt-addr">{{ $address }}@if($address && $phone) · @endif @if($phone)Tel: {{ $phone }}@endif</div>
+                @endif
+            </td>
+        </tr>
+    </table>
 
-    {{-- Bill To --}}
-    <div class="qt-parties">
-        <div class="qt-party">
-            <div class="qt-party__title">Bill To</div>
-            @if($quotation->customer)
-                <p style="font-weight:700;">{{ $quotation->customer->name }}</p>
-                @if($quotation->customer->contact_name)<p class="muted">{{ $quotation->customer->contact_name }}</p>@endif
-                @if($quotation->customer->email)<p class="muted">{{ $quotation->customer->email }}</p>@endif
-                @if($quotation->customer->phone)<p class="muted">{{ $quotation->customer->phone }}</p>@endif
-                @if($quotation->customer->address)<p class="muted" style="white-space:pre-line;">{{ $quotation->customer->address }}</p>@endif
-            @elseif($quotation->lead_id && $quotation->lead)
-                {{-- A lead not converted to a customer yet --}}
-                <p style="font-weight:700;">{{ $quotation->lead->company ?: $quotation->lead->name }}</p>
-                @if($quotation->lead->company)<p class="muted">{{ $quotation->lead->name }}</p>@endif
-                @if($quotation->lead->email)<p class="muted">{{ $quotation->lead->email }}</p>@endif
-                @if($quotation->lead->phone)<p class="muted">{{ $quotation->lead->phone }}</p>@endif
-            @else
-                <p class="muted">—</p>
-            @endif
-        </div>
-        <div class="qt-party">
-            <div class="qt-party__title">From</div>
-            <p style="font-weight:700;">{{ $business->name }}</p>
-            @if($mainBranch?->address)<p class="muted" style="white-space:pre-line;">{{ $mainBranch->address }}</p>@endif
-        </div>
-    </div>
+    {{-- Billed to + dates --}}
+    <table class="qt-meta">
+        <tr>
+            <td>
+                <div class="qt-label">Billed To</div>
+                @if($quotation->customer)
+                    <div class="qt-bill-name">{{ $quotation->customer->name }}</div>
+                    <div class="qt-bill-info">
+                        @if($quotation->customer->contact_name){{ $quotation->customer->contact_name }}<br>@endif
+                        @if($quotation->customer->email){{ $quotation->customer->email }}<br>@endif
+                        @if($quotation->customer->phone){{ $quotation->customer->phone }}<br>@endif
+                        @if($quotation->customer->address)<span style="white-space:pre-line;">{{ $quotation->customer->address }}</span>@endif
+                    </div>
+                @elseif($quotation->lead_id && $quotation->lead)
+                    {{-- A lead not converted to a customer yet --}}
+                    <div class="qt-bill-name">{{ $quotation->lead->company ?: $quotation->lead->name }}</div>
+                    <div class="qt-bill-info">
+                        @if($quotation->lead->company){{ $quotation->lead->name }}<br>@endif
+                        @if($quotation->lead->email){{ $quotation->lead->email }}<br>@endif
+                        @if($quotation->lead->phone){{ $quotation->lead->phone }}@endif
+                    </div>
+                @else
+                    <div class="qt-bill-name">Walk-in Customer</div>
+                @endif
+            </td>
+            <td style="width:220px;">
+                <table class="qt-dates">
+                    <tr><td class="k">Issue Date</td><td class="v">{{ $quotation->quote_date->format('Y-m-d') }}</td></tr>
+                    <tr><td class="k">Valid Until</td><td class="v">{{ $validUntil }}</td></tr>
+                    @if($quotation->reference)
+                        <tr><td class="k">Reference</td><td class="v">{{ $quotation->reference }}</td></tr>
+                    @endif
+                    <tr><td class="k">Status</td><td class="v" style="color:{{ $quotation->statusColor() }};">{{ $quotation->statusLabel() }}</td></tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 
-    {{-- Items table — discount / tax columns only when a line has one (lead quotations) --}}
-    @php
-        $lineDiscounts = $quotation->items->contains(fn ($i) => (float) $i->discount_amount > 0);
-        $lineTaxes     = $quotation->items->contains(fn ($i) => (float) $i->tax_amount > 0);
-    @endphp
-    <table>
+    {{-- Items --}}
+    <table class="qt-items">
         <thead>
             <tr>
-                <th style="width:4%;">#</th>
-                <th>Item / Description</th>
-                <th class="right" style="width:10%;">Qty</th>
-                <th class="right" style="width:16%;">Unit price</th>
-                @if($lineDiscounts)<th class="right" style="width:12%;">Discount</th>@endif
-                @if($lineTaxes)<th class="right" style="width:12%;">Tax</th>@endif
-                <th class="right" style="width:16%;">Total</th>
+                <th style="width:26px;text-align:center;">#</th>
+                <th>Description</th>
+                <th class="r" style="width:50px;text-align:right;">Qty</th>
+                <th class="r" style="width:100px;text-align:right;">Unit Price</th>
+                @if($lineDiscounts)<th style="width:80px;text-align:right;">Disc</th>@endif
+                @if($lineTaxes)<th style="width:80px;text-align:right;">Tax</th>@endif
+                <th style="width:110px;text-align:right;">Total</th>
             </tr>
         </thead>
         <tbody>
@@ -176,33 +183,42 @@ body{font-family:'DejaVu Sans',Arial,sans-serif;font-size:11.5px;padding:0;}
                     $label         = $item->serviceItem?->name ?? $item->product?->name ?? ($item->description ?: '—');
                     $sublabel      = (!$item->serviceItem && $item->product && $item->description && $item->description !== $item->product->name)
                                    ? $item->description : null;
+                    $rowClass      = $loop->even ? 'alt' : '';
                 @endphp
-                <tr>
-                    <td>{{ $loop->iteration }}</td>
+                <tr class="{{ $rowClass }}">
+                    <td class="n">{{ $loop->iteration }}</td>
                     <td>
-                        <strong>{{ $label }}</strong>
+                        <b>{{ $label }}</b>
                         @if($isService)
-                            <span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:#ede9fe;color:#7c3aed;margin-left:5px;">Service</span>
+                            <span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:#ede9fe;color:#7c3aed;margin-left:4px;">Service</span>
                         @endif
                         @if($sublabel)
-                            <br><span style="color:#64748b;font-size:11px;">{{ $sublabel }}</span>
+                            <br><span style="color:#64748b;font-size:10px;">{{ $sublabel }}</span>
                         @endif
                     </td>
-                    <td class="right">{{ rtrim(rtrim(number_format($item->quantity, 3), '0'), '.') }}</td>
-                    <td class="right">{{ $currency }} {{ number_format($item->unit_price, 2) }}</td>
-                    @if($lineDiscounts)<td class="right">{{ (float) $item->discount_amount > 0 ? '− ' . number_format($item->discount_amount, 2) : '—' }}</td>@endif
-                    @if($lineTaxes)<td class="right">{{ (float) $item->tax_amount > 0 ? number_format($item->tax_amount, 2) . ' (' . rtrim(rtrim(number_format($item->tax_rate, 3), '0'), '.') . '%)' : '—' }}</td>@endif
-                    <td class="right">{{ $currency }} {{ number_format($item->line_total, 2) }}</td>
+                    <td class="r">{{ $fmtQty($item->quantity) }}</td>
+                    <td class="r">{{ $money($item->unit_price) }}</td>
+                    @if($lineDiscounts)
+                        @if((float) $item->discount_amount > 0)
+                            <td class="r" style="color:#ef4444;">−{{ number_format($item->discount_amount, 2) }}</td>
+                        @else
+                            <td class="r muted">—</td>
+                        @endif
+                    @endif
+                    @if($lineTaxes)
+                        @if((float) $item->tax_amount > 0)
+                            <td class="r" style="color:#10b981;">{{ number_format($item->tax_amount, 2) }} ({{ $fmtQty($item->tax_rate) }}%)</td>
+                        @else
+                            <td class="r muted">—</td>
+                        @endif
+                    @endif
+                    <td class="r b">{{ $money($item->line_total) }}</td>
                 </tr>
                 @foreach($boundProducts as $bp)
-                    <tr style="background:#f8fafc;">
+                    <tr class="sub {{ $rowClass }}">
                         <td></td>
-                        <td style="padding-left:24px;color:#64748b;font-size:11px;">
-                            &#8627; {{ $bp->name }}@if($bp->sku) ({{ $bp->sku }})@endif
-                        </td>
-                        <td class="right" style="color:#64748b;font-size:11px;">
-                            {{ rtrim(rtrim(number_format((float)$bp->pivot->qty, 3), '0'), '.') }}
-                        </td>
+                        <td style="padding-left:22px;">&#8627; {{ $bp->name }}@if($bp->sku) ({{ $bp->sku }})@endif</td>
+                        <td class="r">{{ $fmtQty($bp->pivot->qty) }}</td>
                         <td></td>
                         @if($lineDiscounts)<td></td>@endif
                         @if($lineTaxes)<td></td>@endif
@@ -213,36 +229,37 @@ body{font-family:'DejaVu Sans',Arial,sans-serif;font-size:11.5px;padding:0;}
         </tbody>
     </table>
 
-    {{-- Totals --}}
-    <div class="qt-totals">
-        <div class="qt-totals-inner">
-            <div class="row"><span>Subtotal</span><span>{{ $currency }} {{ number_format($quotation->subtotal, 2) }}</span></div>
-            @if($quotation->discount_amount > 0)
-                <div class="row"><span>Discount</span><span style="color:#ef4444;">− {{ $currency }} {{ number_format($quotation->discount_amount, 2) }}</span></div>
-            @endif
-            @if($quotation->tax_amount > 0)
-                <div class="row"><span>Tax</span><span>+ {{ $currency }} {{ number_format($quotation->tax_amount, 2) }}</span></div>
-            @endif
-            <div class="row total">
-                <span>Total</span>
-                <span style="color:{{ $accentColor }};">{{ $currency }} {{ number_format($quotation->total, 2) }}</span>
-            </div>
-        </div>
-    </div>
-
-    {{-- Notes --}}
-    @if($quotation->notes)
-    <div class="qt-notes">
-        <div class="qt-notes__title">Notes &amp; Terms</div>
-        <p>{{ $quotation->notes }}</p>
-    </div>
-    @endif
+    {{-- Notes + totals --}}
+    <table class="qt-bottom">
+        <tr>
+            <td style="padding-right:20px;">
+                <div class="qt-notes">
+                    <div class="qt-label">Notes</div>
+                    <div class="qt-notes-text">{{ $quotation->notes ?: 'Thank you for your business!' }}</div>
+                </div>
+            </td>
+            <td style="width:250px;">
+                <table class="qt-totals">
+                    <tr><td>Subtotal</td><td class="v">{{ $money($quotation->subtotal) }}</td></tr>
+                    @if($quotation->discount_amount > 0)
+                        <tr><td>Discount</td><td class="v" style="color:#ef4444;">−{{ $money($quotation->discount_amount) }}</td></tr>
+                    @endif
+                    @if($quotation->tax_amount > 0)
+                        <tr><td>Tax</td><td class="v" style="color:#10b981;">+{{ $money($quotation->tax_amount) }}</td></tr>
+                    @endif
+                    <tr class="grand"><td>Quote Total</td><td class="v">{{ $money($quotation->total) }}</td></tr>
+                </table>
+            </td>
+        </tr>
+    </table>
 
     {{-- Footer --}}
-    <div class="qt-footer">
-        This quotation was generated by {{ $business->name }}. Valid until
-        {{ $quotation->expiry_date ? $quotation->expiry_date->format('M j, Y') : 'further notice' }}.
-    </div>
+    <table class="qt-footer">
+        <tr>
+            <td>{{ $quotation->quote_number }} · {{ $business->name }}</td>
+            <td style="text-align:right;">Valid until {{ $quotation->expiry_date ? $quotation->expiry_date->format('M j, Y') : 'further notice' }}</td>
+        </tr>
+    </table>
 
     @if(empty($pdf))
     {{-- Letterhead footer (print only) --}}

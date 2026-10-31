@@ -37,6 +37,8 @@ function crmStatusMigrations(): array
         $dir . '2026_11_01_100200_create_crm_lost_reasons_table.php',
         $dir . '2026_11_01_100300_add_status_fields_to_crm_leads_table.php',
         $dir . '2026_11_01_100400_create_crm_lead_products_table.php',
+        // Indexes columns added above — rolled back first, re-added last
+        $dir . '2026_11_07_100200_add_report_indexes_to_crm_leads_table.php',
     ];
 }
 
@@ -108,6 +110,16 @@ beforeEach(function () {
         $t->string('name');
         $t->string('sku')->nullable();
         $t->boolean('is_active')->default(true);
+        $t->timestamps();
+    });
+    Schema::create('product_stock_layers', function (Blueprint $t) {
+        $t->id();
+        $t->unsignedBigInteger('business_id');
+        $t->unsignedBigInteger('branch_id')->nullable();
+        $t->unsignedBigInteger('product_id');
+        $t->decimal('quantity_remaining', 14, 3);
+        $t->decimal('selling_unit_price', 14, 2)->nullable();
+        $t->date('received_at')->nullable();
         $t->timestamps();
     });
 
@@ -488,6 +500,20 @@ test('the pipeline payload carries the statuses, lost reasons and the new lead f
         ->and($card['id'])->toBe($lead->id)
         ->and($card['score'])->toBe('warm')
         ->and($card['product_items'])->toEqual([['id' => 1, 'name' => 'Solar panel 450W', 'quantity' => 3, 'sku' => null, 'unit_price' => null]]);
+});
+
+test('a lead product is priced at its next in-stock FIFO layer, as the POS sells it', function () {
+    ($this->newLead)(['products' => [['product_id' => 1, 'quantity' => 2]]]);
+    DB::table('product_stock_layers')->insert([
+        ['business_id' => 7, 'product_id' => 1, 'quantity_remaining' => 0, 'selling_unit_price' => 9000, 'received_at' => '2026-01-01'], // sold out
+        ['business_id' => 7, 'product_id' => 1, 'quantity_remaining' => 4, 'selling_unit_price' => 11000, 'received_at' => '2026-02-01'],
+        ['business_id' => 7, 'product_id' => 1, 'quantity_remaining' => 9, 'selling_unit_price' => 12500, 'received_at' => '2026-03-01'],
+    ]);
+
+    $data = app(CrmLeadStatusTestApi::class)->pipeline(crmStatusRequest(1), $this->project->id)->getData(true)['data'];
+    $card = collect($data['columns'])->firstWhere('system_key', 'new')['leads'][0];
+
+    expect($card['product_items'][0]['unit_price'])->toEqual(11000);
 });
 
 test('the API rejects a lost move without a reason and accepts one with it', function () {

@@ -7,6 +7,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\CRM\Events\LeadForwarded;
 use Modules\CRM\Models\Activity;
 use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
@@ -342,6 +343,8 @@ class MarketingInboxService
                     'created_by'   => $userId,
                 ]);
             }
+
+            LeadForwarded::dispatch($lead, $userId, $note);
 
             return $lead;
         });

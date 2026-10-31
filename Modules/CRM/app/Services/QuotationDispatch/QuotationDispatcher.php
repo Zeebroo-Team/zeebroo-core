@@ -4,6 +4,7 @@ namespace Modules\CRM\Services\QuotationDispatch;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\CRM\Events\QuotationSent;
 use Modules\CRM\Jobs\SendQuotationDispatchJob;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadStage;
@@ -94,6 +95,7 @@ class QuotationDispatcher
 
         DB::transaction(function () use ($dispatch, $quotation) {
             $dispatch->update(['status' => QuotationDispatch::STATUS_SENT, 'error' => null, 'sent_at' => now()]);
+            $firstSend = $quotation->status === Quotation::STATUS_APPROVED;
 
             $quotation->update([
                 'status'   => $quotation->status === Quotation::STATUS_APPROVED ? Quotation::STATUS_SENT : $quotation->status,
@@ -104,6 +106,10 @@ class QuotationDispatcher
             $lead = Lead::find($quotation->lead_id);
             if ($lead !== null) {
                 $this->leadQuotations->moveLeadTo($lead, LeadStage::STATUS_QUOTATION_SENT, $dispatch->sent_by);
+                // Follow-ups are planned from the first send of each version, not from re-sends
+                if ($firstSend) {
+                    QuotationSent::dispatch($lead, $quotation, $dispatch->sent_by);
+                }
             }
         });
 

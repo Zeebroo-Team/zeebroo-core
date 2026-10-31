@@ -16,13 +16,16 @@ use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\LeadQuotationService;
 use Modules\CRM\Services\QuotationApprovalService;
 use Modules\CRM\Services\QuotationDispatch\QuotationDispatcher;
+use Modules\CRM\Services\QuotationNegotiationService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
+use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
 use Modules\Sales\Models\QuotationItem;
 use Modules\Sales\Services\QuotationPrintService;
 use Modules\Sales\Services\QuotationService;
+use Modules\Sales\Services\QuotationVersionService;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -45,6 +48,8 @@ class PosCrmLeadQuotationApiController extends Controller
         private readonly QuotationApprovalService $approvals,
         private readonly QuotationDispatcher $dispatcher,
         private readonly QuotationPrintService $print,
+        private readonly QuotationNegotiationService $negotiation,
+        private readonly QuotationVersionService $versions,
     ) {}
 
     /** GET crm/leads/{lead}/quotations — the lead's quotations, newest first. */
@@ -116,7 +121,74 @@ class PosCrmLeadQuotationApiController extends Controller
         return response()->json(['message' => 'Quotation saved.', 'data' => $this->presentDetail($business, $access, $lead, $quotation)]);
     }
 
-    /** POST …/{quotation}/revise — a new draft version of an approved, sent or rejected quotation. */
+    /**
+     * POST …/{quotation}/responses — { response: accept|reject|discount_request, requested_discount?,
+     * notes?, lost_reason_id?, lost_reason? }: what the customer said about the sent version.
+     */
+    public function respond(Request $request, int $leadId, int $quotationId): JsonResponse
+    {
+        [$business, $access, $lead] = $this->context($request, $leadId);
+        $this->abortUnlessAllowed($this->policy->canQuote($access, $lead));
+        $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
+
+        $data = $request->validate([
+            'response'           => ['required', 'string', Rule::in(array_keys(QuotationCustomerResponse::RESPONSES))],
+            'requested_discount' => ['nullable', 'numeric', 'gt:0', 'max:100', 'required_if:response,' . QuotationCustomerResponse::RESPONSE_DISCOUNT_REQUEST],
+            'notes'              => ['nullable', 'string', 'max:2000'],
+            'lost_reason_id'     => ['nullable', 'integer'],
+            'lost_reason'        => ['nullable', 'string', 'max:500'],
+        ]);
+
+        $row = $this->negotiation->record($lead, $quotation, $data, (int) $request->user()->id);
+
+        return response()->json([
+            'message' => $row->label() . '.',
+            'data'    => $this->presentDetail($business, $access, $lead->fresh(), $quotation->fresh()),
+        ]);
+    }
+
+    /** GET …/{quotation}/versions — every version of this quotation, oldest first, each with what changed from the one before. */
+    public function versions(Request $request, int $leadId, int $quotationId): JsonResponse
+    {
+        [, , $lead] = $this->context($request, $leadId);
+        $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
+
+        return response()->json(['data' => $this->presentVersions($quotation)]);
+    }
+
+    /** GET crm/customers/{customer}/quotations/{quotation}/versions — the same history, from the customer window. */
+    public function customerVersions(Request $request, int $customerId, int $quotationId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessAllowed($this->access($request, $business)->can('contacts_view'));
+
+        $quotation = Quotation::query()
+            ->where('business_id', $business->id)
+            ->where('customer_id', $customerId)
+            ->findOrFail($quotationId);
+
+        return response()->json(['data' => $this->presentVersions($quotation)]);
+    }
+
+    /** GET …/{quotation}/diff?against={id} — what changed from another version (default: the one it revises) to this one. */
+    public function diff(Request $request, int $leadId, int $quotationId): JsonResponse
+    {
+        [, , $lead] = $this->context($request, $leadId);
+        $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
+
+        $againstId = $request->integer('against') ?: $quotation->parent_quotation_id;
+        if (! $againstId) {
+            return response()->json(['message' => 'This is the first version — there is nothing to compare it with.'], 422);
+        }
+        $against = $this->versions->versions($quotation)->firstWhere('id', $againstId);
+        if ($against === null) {
+            abort(404);
+        }
+
+        return response()->json(['data' => $this->versions->diff($against, $quotation)]);
+    }
+
+    /** POST …/{quotation}/revise — a new draft version of an approved, sent or rejected quotation; the old one is superseded. */
     public function revise(Request $request, int $leadId, int $quotationId): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
@@ -168,12 +240,19 @@ class PosCrmLeadQuotationApiController extends Controller
         [, , $lead] = $this->context($request, $leadId);
         $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
 
-        $path = $this->print->pdfPath($quotation);
+        // A draft is still being edited — rebuild it so the download matches its current lines
+        $path = $quotation->status === Quotation::STATUS_DRAFT
+            ? $this->print->generatePdf($quotation)
+            : $this->print->pdfPath($quotation);
 
         return Storage::disk(QuotationPrintService::disk())->download($path, $quotation->quote_number . '.pdf', ['Content-Type' => 'application/pdf']);
     }
 
-    /** POST …/{quotation}/send — { channel?, to, cc[]?, subject, message }: queue the approved PDF to the customer. */
+    /**
+     * POST …/{quotation}/send — { channel?, to, cc[]?, subject, message }: queue the approved PDF to
+     * the customer. A draft / returned version within the department's discount limit is sent
+     * straight away, without the head's approval.
+     */
     public function send(Request $request, int $leadId, int $quotationId): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
@@ -190,6 +269,9 @@ class PosCrmLeadQuotationApiController extends Controller
             'message' => ['required', 'string', 'max:10000'],
         ]);
 
+        if (in_array($quotation->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true)) {
+            $quotation = $this->approvals->releaseWithinLimit($lead, $quotation, (int) $request->user()->id);
+        }
         $dispatch = $this->dispatcher->queue($quotation, $channel, $data, $request->user()?->id);
 
         return response()->json([
@@ -209,6 +291,9 @@ class PosCrmLeadQuotationApiController extends Controller
         $rows = $this->approvals->inbox($business, $access)->map(fn (Quotation $q) => $this->presentListItem($q) + [
             'lead'     => $this->presentLead($q->lead),
             'discount' => $this->approvals->discountSummary($q->lead, $q),
+            'routing'  => $this->approvals->routing($q),
+            'subtotal' => round((float) $q->subtotal, 2),
+            'items_count' => $q->items()->count(),
         ])->values();
 
         return response()->json(['data' => $rows, 'meta' => ['can_approve' => $access->unrestricted || $access->isHead()]]);
@@ -264,7 +349,10 @@ class PosCrmLeadQuotationApiController extends Controller
             'id'               => (int) $q->id,
             'lead_id'          => $q->lead_id,
             'quote_number'     => $q->quote_number,
+            'base_number'      => $this->quotations->baseNumber($q),
             'version'          => (int) $q->version,
+            'parent_quotation_id' => $q->parent_quotation_id,
+            'is_superseded'    => $q->isSuperseded(),
             'status'           => $q->status,
             'status_label'     => $q->statusLabel(),
             'status_color'     => $q->statusColor(),
@@ -286,7 +374,7 @@ class PosCrmLeadQuotationApiController extends Controller
 
     private function presentDetail(Business $business, CrmAccess $access, Lead $lead, Quotation $q): array
     {
-        $q->load(['customer', 'items.product:id,name,sku', 'approvals.byUser:id,name', 'dispatches.sentBy:id,name', 'submittedBy:id,name', 'approvedBy:id,name']);
+        $q->load(['customer', 'items.product:id,name,sku', 'approvals.byUser:id,name', 'dispatches.sentBy:id,name', 'customerResponses.recordedBy:id,name', 'submittedBy:id,name', 'approvedBy:id,name']);
 
         $items = $q->items->map(fn (QuotationItem $i) => [
             'id'              => (int) $i->id,
@@ -307,7 +395,14 @@ class PosCrmLeadQuotationApiController extends Controller
         $canQuote   = $this->policy->canQuote($access, $lead);
         $canApprove = $this->policy->canApprove($access, $lead);
         $pending    = $q->status === Quotation::STATUS_PENDING_APPROVAL;
-        $canSend    = $canQuote && in_array($q->status, [Quotation::STATUS_APPROVED, Quotation::STATUS_SENT], true);
+        $discount   = $this->approvals->discountSummary($lead, $q);
+        $preparing  = in_array($q->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true);
+        // A draft within the department's discount limit goes out without the head (releaseWithinLimit)
+        $sendDirect = $canQuote && $preparing && ! $discount['requires_approval'] && count($items) > 0;
+        $canSend    = $sendDirect || ($canQuote && in_array($q->status, [Quotation::STATUS_APPROVED, Quotation::STATUS_SENT], true));
+        $newer      = $q->isSuperseded()
+            ? Quotation::query()->where('business_id', $q->business_id)->where('parent_quotation_id', $q->id)->first(['id', 'quote_number', 'version'])
+            : null;
 
         return $this->presentListItem($q) + [
             'reference'     => $q->reference,
@@ -320,7 +415,9 @@ class PosCrmLeadQuotationApiController extends Controller
             'header'        => $this->quotations->headerAdjustments($q),
             'items'         => $items,
             'stock'         => $this->leadQuotations->stockCheck($business, $items, $q->branch_id),
-            'discount'      => $this->approvals->discountSummary($lead, $q),
+            'discount'      => $discount,
+            'superseded_by' => $newer ? ['id' => (int) $newer->id, 'quote_number' => $newer->quote_number, 'version' => (int) $newer->version] : null,
+            'responses'     => $q->customerResponses->map(fn (QuotationCustomerResponse $r) => $this->presentResponse($r))->values(),
             'approvals'     => $q->approvals->map(fn (QuotationApproval $a) => [
                 'id'      => (int) $a->id,
                 'action'  => $a->action,
@@ -349,12 +446,51 @@ class PosCrmLeadQuotationApiController extends Controller
                 'approve' => $canApprove && $pending,
                 'return'  => $canApprove && $pending,
                 'reject'  => $canApprove && $pending,
-                'revise'  => $canQuote && ! $q->isEditable() && $q->status !== Quotation::STATUS_PENDING_APPROVAL,
+                'revise'  => $canQuote && ! $q->isEditable() && ! in_array($q->status, [Quotation::STATUS_PENDING_APPROVAL, Quotation::STATUS_ACCEPTED, Quotation::STATUS_SUPERSEDED], true),
                 'send'    => $canSend,
+                // Sending this draft skips the approval (its discount is within the limit)
+                'send_direct' => $sendDirect,
+                'respond' => $canQuote && $q->status === Quotation::STATUS_SENT,
             ],
             'channels'      => $canSend ? $this->dispatcher->channels() : [],
             'send_defaults' => $canSend ? $this->dispatcher->defaults($lead, $q) : null,
         ];
+    }
+
+    private function presentResponse(QuotationCustomerResponse $r): array
+    {
+        return [
+            'id'                 => (int) $r->id,
+            'response'           => $r->response,
+            'label'              => $r->label(),
+            'version'            => (int) $r->version,
+            'requested_discount' => $r->requested_discount !== null ? (float) $r->requested_discount : null,
+            'notes'              => $r->notes,
+            'by'                 => $r->recordedBy ? ['id' => $r->recordedBy->id, 'name' => $r->recordedBy->name] : null,
+            'at'                 => $r->created_at?->toIso8601String(),
+        ];
+    }
+
+    /** Every version, oldest first, with its discount, the customer's responses and the diff from the version before. */
+    private function presentVersions(Quotation $quotation): array
+    {
+        $versions = $this->versions->versions($quotation);
+        $previous = null;
+        $rows     = [];
+        foreach ($versions as $v) {
+            $rows[] = $this->presentListItem($v) + [
+                'subtotal'         => round((float) $v->subtotal, 2),
+                'discount_amount'  => round((float) $v->discount_amount, 2),
+                'discount_percent' => $v->discountPercent(),
+                'items_count'      => $v->items->count(),
+                'is_current'       => (int) $v->id === (int) $quotation->id,
+                'responses'        => $v->customerResponses->map(fn (QuotationCustomerResponse $r) => $this->presentResponse($r))->values(),
+                'diff'             => $previous ? $this->versions->diff($previous, $v) : null,
+            ];
+            $previous = $v;
+        }
+
+        return $rows;
     }
 
     private function presentLead(?Lead $lead): ?array

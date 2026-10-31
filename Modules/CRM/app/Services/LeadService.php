@@ -6,6 +6,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Models\AutomationFlow;
+use Modules\CRM\Events\LeadClosed;
+use Modules\CRM\Events\LeadEnteredInbox;
 use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAuditLog;
@@ -328,6 +330,11 @@ class LeadService
             $lead = $this->assignments()->sync($lead, [$assignee], $assignee, $userId);
         }
 
+        if ($lead->department_id !== null
+            && (int) $lead->department_id === (int) app(CrmOrgService::class)->marketingIntakeDepartment($project->business)?->id) {
+            LeadEnteredInbox::dispatch($lead, $userId);
+        }
+
         return $lead;
     }
 
@@ -446,14 +453,27 @@ class LeadService
         return $this->moveTo($lead, $lostStage, $userId, ['lost_reason_id' => $lostReasonId, 'lost_reason' => $note], event: LeadAuditLog::EVENT_LOST);
     }
 
-    public function reopen(Lead $lead, ?int $userId = null): Lead
+    /**
+     * Take a won / lost lead back to the pipeline's default open stage. Who may do it is
+     * LeadPolicy::canReopen (the head or an admin), checked by the caller; the reason goes to the
+     * stage log and the "reopened" audit entry. The customer link stays.
+     */
+    public function reopen(Lead $lead, ?int $userId = null, ?string $reason = null): Lead
     {
+        $lead->loadMissing('stage');
+        if ($lead->isOpen()) {
+            throw ValidationException::withMessages(['lead' => 'Only a won or lost lead can be reopened.']);
+        }
+
         $openStage = $this->stages->defaultOpenStage($lead->project);
         if ($openStage === null) {
             throw ValidationException::withMessages(['stage_id' => 'This pipeline has no open stage.']);
         }
 
-        return $this->moveTo($lead, $openStage, $userId, system: true, event: LeadAuditLog::EVENT_REOPENED);
+        $reason = trim((string) $reason);
+        $context = $reason === '' ? [] : ['reopen_reason' => mb_substr($reason, 0, 500)];
+
+        return $this->moveTo($lead, $openStage, $userId, $context, system: true, event: LeadAuditLog::EVENT_REOPENED);
     }
 
     /** Put the lead on hold; resume() later returns it to the stage it was in. */
@@ -600,11 +620,14 @@ class LeadService
         }
 
         [$attributes, $reason] = $this->stageEntry($lead, $lead->business_id, $lead->stage, $to, $context, $system);
+        if (filled($context['reopen_reason'] ?? null)) {
+            $reason = $context['reopen_reason'];
+        }
 
         $lead->update(['stage_id' => $to->id] + $attributes);
         $lead->setRelation('stage', $to);
 
-        $meta = $event === LeadAuditLog::EVENT_LOST ? array_filter(['reason' => $reason]) : [];
+        $meta = in_array($event, [LeadAuditLog::EVENT_LOST, LeadAuditLog::EVENT_REOPENED], true) ? array_filter(['reason' => $reason]) : [];
         $this->logStageChange($lead, $oldStageId, $to->id, $userId, $event, $meta, $reason);
 
         return $lead;
@@ -742,6 +765,11 @@ class LeadService
             $toStage = LeadStage::find($toStageId);
             if ($toStage) {
                 $this->autoSendStageMail($lead, $toStage);
+
+                // Won or lost from an open stage, however it got there
+                if ($toStage->isTerminal() && ! LeadStage::find($fromStageId)?->isTerminal()) {
+                    LeadClosed::dispatch($lead, $toStage->isWonStage() ? LeadClosed::WON : LeadClosed::LOST, $userId);
+                }
             }
         }
     }

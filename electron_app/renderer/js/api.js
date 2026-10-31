@@ -690,6 +690,7 @@ const API = (() => {
     // electronAPI.downloadFile and image previews through electronAPI.fetchDataUrl.
     crmLeadWorkspace:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/workspace`),
     crmLeadAssignees:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/assignees`),
+    crmLeadSummary:           (leadId)                 => request('GET',    `/crm/leads/${leadId}/summary`),
     crmSyncLeadAssignees:     (leadId, body)           => request('PUT',    `/crm/leads/${leadId}/assignees`, body),
     crmAddLeadAssignees:      (leadId, body)           => request('POST',   `/crm/leads/${leadId}/assignees`, body),
     crmRemoveLeadAssignee:    (leadId, userId)         => request('DELETE', `/crm/leads/${leadId}/assignees/${userId}`),
@@ -716,7 +717,28 @@ const API = (() => {
     crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),
     crmSendLeadQuotation:     (leadId, id, body)       => request('POST',   `/crm/leads/${leadId}/quotations/${id}/send`, body),
     crmLeadQuotationPdfPath:  (leadId, id)             => `/crm/leads/${leadId}/quotations/${id}/pdf`,
+    // Negotiation: body { response: accept|reject|discount_request, requested_discount?, notes?, lost_reason_id?, lost_reason? }
+    crmLeadQuotationRespond:  (leadId, id, body)       => request('POST',   `/crm/leads/${leadId}/quotations/${id}/responses`, body),
+    crmLeadQuotationVersions: (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}/versions`),
+    crmLeadQuotationDiff:     (leadId, id, againstId)  => request('GET',    `/crm/leads/${leadId}/quotations/${id}/diff${againstId ? `?against=${againstId}` : ''}`),
+    crmCustomerQuotationVersions: (customerId, id)     => request('GET',    `/crm/customers/${customerId}/quotations/${id}/versions`),
     crmQuotationApprovals:    ()                       => request('GET',    '/crm/quotation-approvals'),
+    // Closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
+    crmLeadCloseOptions:      (leadId)                 => request('GET',    `/crm/leads/${leadId}/close-options`),
+    crmLeadWon:               (leadId, body)           => request('POST',   `/crm/leads/${leadId}/won`, body),
+    crmLeadLost:              (leadId, body)           => request('POST',   `/crm/leads/${leadId}/lost`, body),
+    crmLeadReopen:            (leadId, reason)         => request('POST',   `/crm/leads/${leadId}/reopen`, { reason }),
+    // Follow-ups: my / team list (scope mine|team, status pending|overdue|today|done|all), the lead's tab, log one
+    crmFollowUps:             (scope, status)          => request('GET',    `/crm/follow-ups?scope=${scope || 'mine'}&status=${status || 'pending'}`),
+    crmLeadFollowUps:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/follow-ups`),
+    crmCreateLeadFollowUp:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/follow-ups`, body),
+    crmLogFollowUp:           (id, body)               => request('POST',   `/crm/follow-ups/${id}/log`, body),
+    crmCancelFollowUp:        (id)                     => request('POST',   `/crm/follow-ups/${id}/cancel`),
+    crmNotificationPrefs:     ()                       => request('GET',    '/crm/notification-preferences'),
+    crmSaveNotificationPrefs: (body)                   => request('PUT',    '/crm/notification-preferences', body),
+    // Management dashboard (admin, CEO, heads) — params: from, to, department_id, division_id, user_id, source
+    crmDashboard:             (params = {})            => request('GET',    `/crm/reports/dashboard?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmDashboardExportPath:   (format, params = {})    => `/crm/reports/dashboard/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
     // Row-level CRM audit log — admins only
     crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),

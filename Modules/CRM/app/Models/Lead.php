@@ -268,6 +268,22 @@ class Lead extends Model
         return $this->morphMany(Task::class, 'subject')->orderBy('due_at');
     }
 
+    public function followUps(): HasMany
+    {
+        return $this->hasMany(FollowUp::class)->orderBy('due_at');
+    }
+
+    /**
+     * The first time someone works the lead after it was assigned (a message, a follow-up, a
+     * quotation, an activity) — the dashboard's response time is assignment → this.
+     */
+    public function recordFirstResponse(): void
+    {
+        if ($this->first_response_at === null && $this->assigned_to !== null) {
+            $this->forceFill(['first_response_at' => now()])->saveQuietly();
+        }
+    }
+
     /** Leads of this business the user may see (see LeadPolicy). */
     public function scopeVisibleTo(Builder $query, Authenticatable|PosCashier|null $user, Business $business): Builder
     {

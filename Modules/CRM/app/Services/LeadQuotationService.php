@@ -78,6 +78,7 @@ class LeadQuotationService
         ], $items);
 
         $this->moveLeadTo($lead, LeadStage::STATUS_QUOTATION_PREPARING, $userId);
+        $lead->recordFirstResponse();
 
         return $quotation;
     }
@@ -92,7 +93,10 @@ class LeadQuotationService
         ], $items);
     }
 
-    /** A new draft version of an approved / sent / rejected quotation; the lead goes back to preparing. */
+    /**
+     * A new draft version of an approved / sent / rejected quotation (the old one becomes
+     * superseded); the lead goes back to preparing.
+     */
     public function revise(Lead $lead, Quotation $quotation, ?int $userId = null): Quotation
     {
         $revision = $this->quotations->revise($quotation);
@@ -105,7 +109,7 @@ class LeadQuotationService
      * Move an open lead to the pipeline's stage for a status, as the quotation workflow does.
      * A pipeline without that stage, or a lead already there or closed, is left as it is.
      */
-    public function moveLeadTo(Lead $lead, string $statusKey, ?int $userId = null, ?string $reason = null): Lead
+    public function moveLeadTo(Lead $lead, string $statusKey, ?int $userId = null, ?string $reason = null, array $context = []): Lead
     {
         $lead->loadMissing(['stage', 'project']);
         if (! $lead->isOpen() || $lead->statusKey() === $statusKey || $lead->project === null
@@ -113,7 +117,7 @@ class LeadQuotationService
             return $lead;
         }
 
-        return $this->leads->moveToStatus($lead, $statusKey, $userId, array_filter(['reason' => $reason]), system: true);
+        return $this->leads->moveToStatus($lead, $statusKey, $userId, array_filter(['reason' => $reason]) + $context, system: true);
     }
 
     /** "Kasun Perera (Lead #12)" — the quotation's reference when none is given. */

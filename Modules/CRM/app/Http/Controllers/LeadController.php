@@ -286,7 +286,8 @@ class LeadController extends Controller
 
     public function reopen(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead, 'canMove');
+        // Reopening a won / lost lead is for its head or an admin (LeadPolicy::canReopen)
+        $business = $this->requireLead($request, $lead, 'canReopen');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
