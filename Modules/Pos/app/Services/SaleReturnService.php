@@ -31,6 +31,7 @@ class SaleReturnService
         ?int $creditAccountId,
         ?string $notes,
         ?string $refundReason = null,
+        ?\Carbon\CarbonInterface $returnedAt = null, // when replayed from the desktop's offline queue
     ): SaleReturn {
         if ((int) $sale->business_id !== (int) $business->id) {
             abort(403);
@@ -94,7 +95,7 @@ class SaleReturnService
             ]);
         }
 
-        $saleReturn = DB::transaction(function () use ($sale, $business, $user, $normalised, $refundMethod, $creditAccountId, $notes, $refundReason): SaleReturn {
+        $saleReturn = DB::transaction(function () use ($sale, $business, $user, $normalised, $refundMethod, $creditAccountId, $notes, $refundReason, $returnedAt): SaleReturn {
             $total = 0.0;
             foreach ($normalised as $row) {
                 $total += round((float) $row['sale_item']->unit_sell_price * $row['quantity'], 2);
@@ -111,7 +112,7 @@ class SaleReturnService
                 'refund_reason'     => $refundReason,
                 'total'             => $total,
                 'notes'             => $notes,
-                'returned_at'       => now(),
+                'returned_at'       => $returnedAt ?? now(),
             ]);
 
             foreach ($normalised as $row) {

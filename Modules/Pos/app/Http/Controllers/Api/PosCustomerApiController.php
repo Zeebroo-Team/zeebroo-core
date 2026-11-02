@@ -62,6 +62,33 @@ class PosCustomerApiController extends Controller
         ]);
     }
 
+    /**
+     * GET customers/offline-sync — every customer in large pages, same row
+     * shape as index(), so the desktop app can pick customers while offline.
+     */
+    public function offlineSync(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $perPage = max(1, min(500, (int) $request->query('per_page', 500)));
+
+        $customers = Customer::query()
+            ->where('business_id', $business->id)
+            ->withCount('sales')
+            ->withCreditOutstanding()
+            ->with('category:id,name')
+            ->orderBy('id')
+            ->paginate($perPage);
+
+        return response()->json([
+            'data' => collect($customers->items())->map(fn (Customer $c) => $this->format($c))->values(),
+            'meta' => [
+                'total'        => $customers->total(),
+                'current_page' => $customers->currentPage(),
+                'last_page'    => $customers->lastPage(),
+            ],
+        ]);
+    }
+
     public function show(Request $request, Customer $customer): JsonResponse
     {
         $business = $this->businessOrAbort($request);

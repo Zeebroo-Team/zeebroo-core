@@ -12,6 +12,10 @@ const API = (() => {
     if (res.status === 402 && res.body?.code === 'subscription_ended') {
       window.dispatchEvent(new CustomEvent('api-subscription-ended'));
     }
+    // Offline mode kept a change on this PC (checkout shows its own message)
+    if (res.offline && method !== 'GET' && res.status >= 200 && res.status < 300 && path !== '/online/checkout') {
+      window.dispatchEvent(new CustomEvent('api-saved-offline', { detail: res.body?.message }));
+    }
     return res;
   }
 

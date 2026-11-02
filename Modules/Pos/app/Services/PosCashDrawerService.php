@@ -51,10 +51,12 @@ class PosCashDrawerService
         ];
     }
 
-    public function setOpening(Business $business, float $amount, ?int $userId = null): PosCashOpening
+    // $date: the register day (Y-m-d) — today unless replayed from the desktop's offline queue.
+    public function setOpening(Business $business, float $amount, ?int $userId = null, ?string $date = null): PosCashOpening
     {
+        $date = $date ?: now()->toDateString();
         $existing = PosCashOpening::where('business_id', $business->id)
-            ->whereDate('register_date', now()->toDateString())
+            ->whereDate('register_date', $date)
             ->first();
 
         if ($existing) {
@@ -64,17 +66,17 @@ class PosCashDrawerService
 
         return PosCashOpening::create([
             'business_id'   => $business->id,
-            'register_date' => now()->toDateString(),
+            'register_date' => $date,
             'opening_float' => max(0, $amount),
             'user_id'       => $userId,
         ]);
     }
 
-    public function addWithdrawal(Business $business, float $amount, ?string $note, ?int $userId = null): PosCashWithdrawal
+    public function addWithdrawal(Business $business, float $amount, ?string $note, ?int $userId = null, ?string $date = null): PosCashWithdrawal
     {
         $withdrawal = PosCashWithdrawal::create([
             'business_id'   => $business->id,
-            'register_date' => now()->toDateString(),
+            'register_date' => $date ?: now()->toDateString(),
             'amount'        => max(0, $amount),
             'note'          => $note ? trim(substr($note, 0, 255)) : null,
             'user_id'       => $userId,

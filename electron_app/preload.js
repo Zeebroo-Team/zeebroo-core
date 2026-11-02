@@ -104,6 +104,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   kdsFullscreen:    (flag)   => ipcRenderer.send('kds-fullscreen', flag),
   kdsIsFullScreen:  ()       => ipcRenderer.invoke('kds-is-fullscreen'),
 
+  // Offline mode — local catalog + queued sales (offline.js)
+  offlineStatus:   ()     => ipcRenderer.invoke('offline-status'),
+  offlineOutbox:   ()     => ipcRenderer.invoke('offline-outbox'),
+  offlineSync:     (opts) => ipcRenderer.invoke('offline-sync', opts),
+  offlineRetry:    (uuid) => ipcRenderer.invoke('offline-retry', uuid),
+  offlineDiscard:  (uuid) => ipcRenderer.invoke('offline-discard', uuid),
+  onOfflineStatus: (cb)   => ipcRenderer.on('offline-status', (_e, s) => cb(s)),
+
   // App version (shown in About modal, compared in Check for Updates)
   appVersion: () => ipcRenderer.invoke('app-version'),
 });

@@ -4,9 +4,12 @@ namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Modules\Business\Models\Business;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\PosCashier;
 use Modules\Pos\Models\Sale;
@@ -31,6 +34,17 @@ class PosCheckoutApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'pos_checkout');
 
+        // A rental sold offline may come back after its return date; it only
+        // has to be on/after the day it was sold.
+        $rentalFloor = 'today';
+        if ($request->filled('sold_at')) {
+            try {
+                $rentalFloor = CarbonImmutable::parse((string) $request->input('sold_at'))->setTimezone(config('app.timezone'))->toDateString();
+            } catch (\Throwable) {
+                // sold_at itself fails validation below
+            }
+        }
+
         $validated = $request->validate([
             'items'                          => ['required', 'array', 'min:1'],
             'items.*.item_type'              => ['nullable', 'string', 'in:product,service'],
@@ -41,7 +55,7 @@ class PosCheckoutApiController extends Controller
             'items.*.product_selling_unit_id'=> ['nullable', 'integer', 'min:1'],
             'items.*.warranty_type'          => ['nullable', 'string', 'in:lifetime,date'],
             'items.*.warranty_date'          => ['nullable', 'date_format:Y-m-d'],
-            'items.*.rental_return_date'     => ['nullable', 'date_format:Y-m-d', 'after_or_equal:today'],
+            'items.*.rental_return_date'     => ['nullable', 'date_format:Y-m-d', 'after_or_equal:'.$rentalFloor],
             'items.*.item_discount_percent'  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.custom_unit_price'      => ['nullable', 'numeric', 'min:0.01'],
             'items.*.custom_requirement_values'         => ['nullable', 'array', 'max:20'],
@@ -68,7 +82,44 @@ class PosCheckoutApiController extends Controller
             'gift_card_code'                 => ['nullable', 'string', 'max:40'],
             'gift_card_amount'               => ['nullable', 'required_with:gift_card_code', 'numeric', 'min:0.01'],
             'coupon_code'                    => ['nullable', 'string', 'max:40'],
+            // Desktop offline mode: every checkout carries a client_uuid so a retry
+            // never creates a second sale; sold_at is set only when a sale recorded
+            // offline is replayed later (the price paid is then kept as-is).
+            'client_uuid'                    => ['nullable', 'uuid'],
+            'offline_ref'                    => ['nullable', 'string', 'max:40'],
+            'sold_at'                        => ['nullable', 'date', 'required_with:offline_ref'],
         ]);
+
+        $clientUuid = $validated['client_uuid'] ?? null;
+        if ($clientUuid !== null && ($existing = $this->findByClientUuid($business, $clientUuid))) {
+            return $this->saleResponse($existing, duplicate: true);
+        }
+
+        $soldAt = null;
+        if (! empty($validated['sold_at'])) {
+            if ($clientUuid === null) {
+                return response()->json([
+                    'message' => 'An offline sale must carry a client_uuid.',
+                    'errors'  => ['client_uuid' => ['Required when sold_at is sent.']],
+                ], 422);
+            }
+            // Gift cards and coupons are allowed: SaleService checks them as of
+            // sold_at and still enforces the live balance / remaining uses, so a
+            // card spent elsewhere in the meantime fails here (shown on the desktop).
+            // The desktop sends UTC (…Z); store it in the app's own timezone.
+            $soldAt = CarbonImmutable::parse($validated['sold_at'])->setTimezone(config('app.timezone'));
+            if ($soldAt->lt(now()->subDays(PosOfflineSaleApiController::MAX_AGE_DAYS))) {
+                return response()->json([
+                    'message' => 'This offline sale is older than '.PosOfflineSaleApiController::MAX_AGE_DAYS.' days and can no longer be uploaded.',
+                    'code'    => 'offline_sale_too_old',
+                    'errors'  => ['sold_at' => ['Offline sales must be uploaded within '.PosOfflineSaleApiController::MAX_AGE_DAYS.' days.']],
+                ], 422);
+            }
+            // A PC clock running ahead must not create future-dated sales.
+            if ($soldAt->gt(now())) {
+                $soldAt = CarbonImmutable::now();
+            }
+        }
 
         $branchId = $validated['branch_id']
             ?? $request->query('branch')
@@ -132,6 +183,10 @@ class PosCheckoutApiController extends Controller
                 $validated['gift_card_code'] ?? null,
                 isset($validated['gift_card_amount']) ? (float) $validated['gift_card_amount'] : null,
                 $validated['coupon_code'] ?? null,
+                soldAt: $soldAt,
+                honourClientPrices: $soldAt !== null,
+                clientUuid: $clientUuid,
+                offlineRef: $validated['offline_ref'] ?? null,
                 cheque: $validated['payment_method'] === Sale::PAYMENT_CHEQUE ? [
                     'cheque_number' => $validated['cheque_number'] ?? null,
                     'cheque_date'   => $validated['cheque_date'] ?? null,
@@ -143,11 +198,41 @@ class PosCheckoutApiController extends Controller
                 'message' => $e->getMessage() ?: 'Checkout validation failed.',
                 'errors' => $e->errors(),
             ], 422);
+        } catch (QueryException $e) {
+            // Two uploads of the same sale raced; the unique index stopped the
+            // second one — return the one that won.
+            if ($clientUuid !== null && ($existing = $this->findByClientUuid($business, $clientUuid))) {
+                return $this->saleResponse($existing, duplicate: true);
+            }
+            throw $e;
         }
 
+        // Some MySQL/MariaDB setups define pos_sales.sold_at as
+        // "ON UPDATE CURRENT_TIMESTAMP"; keep the time the sale really happened.
+        if ($soldAt !== null && ! $sale->sold_at->equalTo($soldAt)) {
+            Sale::query()->whereKey($sale->id)->update(['sold_at' => $soldAt]);
+            $sale->refresh();
+        }
+
+        return $this->saleResponse($sale, duplicate: false);
+    }
+
+    protected function findByClientUuid(Business $business, string $clientUuid): ?Sale
+    {
+        return $business->sales()->where('client_uuid', $clientUuid)->first();
+    }
+
+    private function saleResponse(Sale $sale, bool $duplicate): JsonResponse
+    {
         return response()->json([
-            'message' => 'Sale '.$sale->sale_number.' completed.',
-            'data' => $this->api->formatSale($sale),
-        ], 201);
+            'message'   => $duplicate
+                ? 'Sale '.$sale->sale_number.' was already saved.'
+                : 'Sale '.$sale->sale_number.' completed.',
+            'duplicate' => $duplicate,
+            'data'      => array_merge($this->api->formatSale($sale), [
+                'client_uuid' => $sale->client_uuid,
+                'offline_ref' => $sale->offline_ref,
+            ]),
+        ], $duplicate ? 200 : 201);
     }
 }

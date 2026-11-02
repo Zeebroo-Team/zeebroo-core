@@ -4,6 +4,7 @@ const path = require('path');
 const fs   = require('fs');
 const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage } = require('electron');
 const { API_BASE_URL } = require('./config');
+const { createOffline } = require('./offline');
 
 let CONFIG_PATH;
 
@@ -943,14 +944,14 @@ ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
 const https = require('https');
 const http  = require('http');
 
-function apiRequest(method, path_, body, token, businessId, branchId) {
+function apiRequest(method, path_, body, token, businessId, branchId, timeoutMs = 120000, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const base = API_BASE_URL.replace(/\/$/, '');
     const url  = new URL(base + path_);
     const isHttps = url.protocol === 'https:';
     const lib  = isHttps ? https : http;
 
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', ...extraHeaders };
     if (token)      headers['Authorization'] = `Bearer ${token}`;
     if (businessId) headers['X-Business-Id'] = String(businessId);
     if (branchId)   headers['X-Branch-Id']   = String(branchId);
@@ -964,7 +965,7 @@ function apiRequest(method, path_, body, token, businessId, branchId) {
       path: url.pathname + url.search,
       method,
       headers,
-      timeout: 120000,
+      timeout: timeoutMs,
     }, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
@@ -974,20 +975,54 @@ function apiRequest(method, path_, body, token, businessId, branchId) {
       });
     });
 
-    req.on('timeout', () => { req.destroy(new Error('Request timed out after 120s')); });
+    req.on('timeout', () => { req.destroy(new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`)); });
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
   });
 }
 
+// ── Offline mode (see offline.js) ─────────────────────────────────────────
+// Every renderer API call goes through it: pass-through while online, local
+// catalog + queued sales while the internet is down.
+let offline = null;
+function getOffline() {
+  if (!offline) {
+    offline = createOffline({
+      userDataDir: app.getPath('userData'),
+      getConfig:   () => config,
+      request: (method, p, body, opts = {}) => apiRequest(
+        method, p, body, config.token,
+        opts.businessId ?? config.business_id,
+        opts.branchId !== undefined ? opts.branchId : config.branch_id,
+        opts.timeout,
+        // Exactly-once writes for the offline queue (Modules\Pos\Http\Middleware\PosIdempotency)
+        opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {},
+      ),
+      notify: (status) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('offline-status', status);
+      },
+    });
+  }
+  return offline;
+}
+
+app.whenReady().then(() => getOffline().start());
+app.on('before-quit', () => offline?.stop());
+
 ipcMain.handle('api-request', async (_e, { method, path: p, body }) => {
   try {
-    return await apiRequest(method, p, body, config.token, config.business_id, config.branch_id);
+    return await getOffline().handle(method, p, body);
   } catch (err) {
     return { status: 0, body: { message: err.message } };
   }
 });
+
+ipcMain.handle('offline-status',  () => getOffline().status());
+ipcMain.handle('offline-outbox',  () => getOffline().listOutbox());
+ipcMain.handle('offline-sync',    (_e, opts) => getOffline().syncNow(opts || {}));
+ipcMain.handle('offline-retry',   (_e, clientUuid) => getOffline().retryEntry(clientUuid));
+ipcMain.handle('offline-discard', (_e, clientUuid) => getOffline().discardEntry(clientUuid));
 
 // Downloads a binary file (e.g. a PDF receipt) from the API and lets the user
 // save it to disk — apiRequest() always JSON.parses the response, which isn't

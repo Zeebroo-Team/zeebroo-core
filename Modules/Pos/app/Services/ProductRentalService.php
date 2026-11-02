@@ -25,6 +25,7 @@ class ProductRentalService
         float $dailyRate,
         float $quantity,
         string $returnDate,
+        ?string $rentedOn = null, // Y-m-d; the sale day for an offline sale replayed later
     ): ProductRental {
         return ProductRental::query()->create([
             'business_id'          => $business->id,
@@ -35,7 +36,7 @@ class ProductRentalService
             'pos_sale_item_id'     => $saleItemId,
             'daily_rate'           => round($dailyRate, 2),
             'quantity'             => round($quantity, 3),
-            'rented_at'            => now()->toDateString(),
+            'rented_at'            => $rentedOn ?? now()->toDateString(),
             'due_at'               => $returnDate,
             'late_fee_multiplier'  => (float) ($product->rental_late_fee_multiplier ?? 0),
             'status'               => ProductRental::STATUS_ACTIVE,
@@ -70,7 +71,8 @@ class ProductRentalService
             ->paginate($perPage);
     }
 
-    public function markReturned(ProductRental $rental): ProductRental
+    // $returnedOn: when it came back — today unless replayed from the desktop's offline queue.
+    public function markReturned(ProductRental $rental, ?\Carbon\CarbonInterface $returnedOn = null): ProductRental
     {
         abort_unless(
             in_array($rental->status, [ProductRental::STATUS_ACTIVE, ProductRental::STATUS_OVERDUE], true),
@@ -78,10 +80,10 @@ class ProductRentalService
             'This rental has already been closed out.',
         );
 
-        return DB::transaction(function () use ($rental) {
+        return DB::transaction(function () use ($rental, $returnedOn) {
             $rental->load('saleItem.product', 'product');
 
-            $returnedAt = now()->startOfDay();
+            $returnedAt = \Carbon\Carbon::instance($returnedOn ?? now())->startOfDay();
             $lateFee = 0.0;
             if ($rental->due_at !== null && $returnedAt->gt($rental->due_at)) {
                 $daysLate = (int) $rental->due_at->diffInDays($returnedAt);

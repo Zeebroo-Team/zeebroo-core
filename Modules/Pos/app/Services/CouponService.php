@@ -151,7 +151,7 @@ class CouponService
      *
      * @return array{0: Coupon, 1: float} the coupon and the discount given
      */
-    public function redeemForSale(Business $business, string $code, float $amount, Sale $sale, ?User $user): array
+    public function redeemForSale(Business $business, string $code, float $amount, Sale $sale, ?User $user, ?\Carbon\CarbonInterface $on = null): array
     {
         $coupon = Coupon::query()
             ->where('business_id', $business->id)
@@ -163,7 +163,7 @@ class CouponService
             throw ValidationException::withMessages(['coupon_code' => 'Coupon not found.']);
         }
 
-        $this->assertRedeemable($coupon);
+        $this->assertRedeemable($coupon, $on);
 
         $discount = $coupon->discountFor($amount);
 
@@ -199,9 +199,9 @@ class CouponService
         Coupon::query()->whereKey($sale->pos_coupon_id)->where('used_count', '>', 0)->decrement('used_count');
     }
 
-    public function assertRedeemable(Coupon $coupon): void
+    public function assertRedeemable(Coupon $coupon, ?\Carbon\CarbonInterface $on = null): void
     {
-        $message = match ($coupon->status()) {
+        $message = match ($coupon->status($on)) {
             Coupon::STATUS_DISABLED  => 'This coupon is disabled.',
             Coupon::STATUS_EXPIRED   => 'This coupon expired on '.$coupon->expires_at?->toDateString().'.',
             Coupon::STATUS_SCHEDULED => 'This coupon is not valid until '.$coupon->valid_from?->toDateString().'.',
