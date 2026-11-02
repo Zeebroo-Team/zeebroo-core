@@ -35551,7 +35551,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
 // user sync now, retry or discard sales the server rejected.
 let _offline = { online: true, pending: 0, failed: 0 };
 const _offlineKindIcon = {
-  settings: 'fa-gear', customer_create: 'fa-user-plus', customer_update: 'fa-user-pen',
+  settings: 'fa-gear', customer_create: 'fa-user-plus', customer_update: 'fa-user-pen', product_create: 'fa-box-open',
   void: 'fa-ban', return: 'fa-rotate-left', revert: 'fa-rotate-left', eod: 'fa-building-columns',
   cash_open: 'fa-cash-register', cash_withdraw: 'fa-arrow-up-from-bracket',
   rental_return: 'fa-calendar-check', credit_payment: 'fa-hand-holding-dollar',
