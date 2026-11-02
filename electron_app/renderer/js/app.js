@@ -35531,8 +35531,9 @@ $('#checkout-confirm').addEventListener('click', async () => {
   const sale = res.body?.data;
   if (sale) {
     if (_taxSnap.length > 0) sale._taxBreakdown = _taxSnap;
-    // Invoices are created on the server, so an offline sale always prints a bill
-    if (!sale.offline && (state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
+    // Offline, the invoice is saved on this PC and prints with the offline sale's
+    // number; it gets its real invoice number when it uploads (offline.js).
+    if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
       _posCreateInvoiceFromSale(sale, postCustomerId);
     } else {
       showReceiptModal(sale, { afterSale: true });
@@ -35544,16 +35545,60 @@ $('#checkout-confirm').addEventListener('click', async () => {
 });
 
 // ── Offline mode: status pill + sync panel ─────────────────────────────────
-// main.js (offline.js) keeps a local copy of the catalog/customers and queues
-// sales while the internet is down; this shows where things stand and lets the
-// user sync now, retry or discard sales the server rejected.
+// main.js (offline.js) keeps a local copy of every tab's screens, queues sales
+// and changes while the internet is down, and logs what it did. The panel
+// shows where things stand: an overview, the history of everything saved
+// offline (by app tab), the sync activity log, and what works offline.
 let _offline = { online: true, pending: 0, failed: 0 };
+const _osm = { view: 'overview', module: 'all', status: 'all', q: '', eventFilter: 'all', rows: [], events: [], open: new Set() };
+
 const _offlineKindIcon = {
-  settings: 'fa-gear', customer_create: 'fa-user-plus', customer_update: 'fa-user-pen', product_create: 'fa-box-open',
+  sale: 'fa-receipt', settings: 'fa-gear', customer_create: 'fa-user-plus', customer_update: 'fa-user-pen', product_create: 'fa-box-open',
   void: 'fa-ban', return: 'fa-rotate-left', revert: 'fa-rotate-left', eod: 'fa-building-columns',
   cash_open: 'fa-cash-register', cash_withdraw: 'fa-arrow-up-from-bracket',
   rental_return: 'fa-calendar-check', credit_payment: 'fa-hand-holding-dollar',
+  generic: 'fa-pen-to-square',
 };
+const _offlineKindName = {
+  sale: 'POS sale', settings: 'POS / receipt settings', customer_create: 'New customer', customer_update: 'Customer change',
+  product_create: 'New product', void: 'Void sale', return: 'Sale return', revert: 'Revert bill', eod: 'End-of-day settle',
+  cash_open: 'Opening cash', cash_withdraw: 'Cash withdrawal', rental_return: 'Rental returned', credit_payment: 'Credit payment',
+  generic: 'Change',
+};
+
+// App tabs, in ribbon order — the History filter and the overview cards.
+const _osmModules = [
+  { key: 'pos',       name: 'POS',       icon: 'fa-cash-register',     color: '#2563eb' },
+  { key: 'sales',     name: 'Sales',     icon: 'fa-file-invoice',      color: '#7c3aed' },
+  { key: 'customers', name: 'Customers', icon: 'fa-users',             color: '#0891b2' },
+  { key: 'inventory', name: 'Inventory', icon: 'fa-boxes-stacked',     color: '#d97706' },
+  { key: 'finance',   name: 'Finance',   icon: 'fa-sack-dollar',       color: '#16a34a' },
+  { key: 'hr',        name: 'HR',        icon: 'fa-user-tie',          color: '#db2777' },
+  { key: 'services',  name: 'Services',  icon: 'fa-screwdriver-wrench', color: '#0d9488' },
+  { key: 'settings',  name: 'Settings',  icon: 'fa-sliders',           color: '#475569' },
+  { key: 'other',     name: 'Other',     icon: 'fa-shapes',            color: '#64748b' },
+];
+const _osmModuleByKey = Object.fromEntries(_osmModules.map(m => [m.key, m]));
+
+function _osmModuleOf(r) {
+  const byKind = {
+    sale: 'pos', void: 'pos', return: 'pos', revert: 'pos', eod: 'pos', cash_open: 'pos', cash_withdraw: 'pos', rental_return: 'pos',
+    settings: 'settings', customer_create: 'customers', customer_update: 'customers', credit_payment: 'customers', product_create: 'inventory',
+  };
+  if (byKind[r.kind]) return byKind[r.kind];
+  const p = String(r.path || '').split('?')[0];
+  const rules = [
+    ['pos',       /^\/(online\/checkout|service\/pos|gift-cards|coupons|product-rentals|cash-drawer|eod)(\/|$)/],
+    ['settings',  /^\/(online\/settings|online\/features|users|roles|branches|counters|cashiers|mail\/settings|notifications|accounts|banks)(\/|$)/],
+    ['customers', /^\/(customers|customer-categories)(\/|$)/],
+    ['sales',     /^\/(invoices|quotations|sales-orders|subscriptions|sale-cheques|sale-reverts|sales)(\/|$)/],
+    ['inventory', /^\/(online\/products|categories|brands|discounts|sale-campaigns|gift-card-groups|stock-audits|stock-transfers|cheques|grns|grn-permissions|purchase-orders|suppliers|supplier-categories|units)(\/|$)/],
+    ['finance',   /^\/(expenses|loans|rentals|properties|budgets)(\/|$)/],
+    ['hr',        /^\/hr(\/|$)/],
+    ['services',  /^\/service(\/|$)/],
+  ];
+  return (rules.find(([, re]) => re.test(p)) || ['other'])[0];
+}
 
 function _offlineAgo(iso) {
   if (!iso) return 'never';
@@ -35563,19 +35608,27 @@ function _offlineAgo(iso) {
   const hrs = Math.round(mins / 60);
   return hrs < 48 ? `${hrs} h ago` : `${Math.round(hrs / 24)} days ago`;
 }
+const _osmTime = iso => (iso ? new Date(iso).toLocaleString() : '—');
+function _osmDay(iso) {
+  const d = new Date(iso);
+  const today = new Date(); const y = new Date(); y.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return 'Today';
+  if (d.toDateString() === y.toDateString()) return 'Yesterday';
+  return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
 
 function _renderOfflinePill() {
   const s = _offline;
   // Background download progress is shown only inside the sync panel.
   let cls = '', html = '';
-  // Calm on purpose: offline is a normal working mode, not an error. Only
-  // items the server rejected (need a person to look) stand out.
-  if (s.failed) {
-    cls  = 'is-failed';
-    html = `<i class="fa fa-triangle-exclamation"></i> ${s.failed} need${s.failed === 1 ? 's' : ''} attention`;
-  } else if (!s.online) {
+  // Offline is a normal working mode, but must be easy to spot: solid red.
+  // Items the server rejected (need a person to look) stand out too.
+  if (!s.online) {
     cls  = 'is-offline';
-    html = `<i class="fa fa-cloud"></i> Offline${s.pending ? ` · ${s.pending} saved` : ''}`;
+    html = `<span class="op-dot"></span><i class="fa fa-plug-circle-xmark"></i> Offline${s.pending ? ` · ${s.pending} saved` : ''}${s.failed ? ` · ${s.failed} failed` : ''}`;
+  } else if (s.failed) {
+    cls  = 'is-failed';
+    html = `<span class="op-dot"></span><i class="fa fa-triangle-exclamation"></i> ${s.failed} need${s.failed === 1 ? 's' : ''} attention`;
   } else if (s.pending) {
     html = `<i class="fa fa-cloud-arrow-up"></i> Uploading ${s.pending}`;
   } else {
@@ -35584,47 +35637,294 @@ function _renderOfflinePill() {
   $$('[data-offline-pill]').forEach(el => {
     el.className = `offline-pill ${cls}`;
     el.innerHTML = html;
+    el.title = s.online ? 'Offline & Sync' : 'Working offline — click for details';
     el.style.display = '';
   });
 }
 
-async function _renderOfflinePanel() {
-  const s = _offline;
-  const offlineSince = !s.online && s.lastOnlineAt ? ` since ${_offlineAgo(s.lastOnlineAt)}` : '';
-  $('#offline-sync-summary').innerHTML = `
-    <div class="os-tile"><div class="os-label">Connection</div><div class="os-value" style="color:${s.online ? '#16a34a' : '#dc2626'}">${s.online ? 'Online' : 'Offline' + escHtml(offlineSince)}</div></div>
-    <div class="os-tile"><div class="os-label">Waiting to sync</div><div class="os-value">${s.pending || 0}${s.failed ? ` <span style="color:#dc2626">· ${s.failed} failed</span>` : ''}</div></div>
-    <div class="os-tile"><div class="os-label">Offline products</div><div class="os-value">${s.productCount || 0}</div></div>
-    <div class="os-tile"><div class="os-label">Offline customers</div><div class="os-value">${s.customerCount || 0}</div></div>
-    <div class="os-tile" style="grid-column:1/-1"><div class="os-label">Offline data last updated</div><div class="os-value">${escHtml(_offlineAgo(s.catalogSyncedAt))}${s.syncing ? ` <i class="fa fa-spinner fa-spin"></i>${s.catalogProgress?.total ? ` <small>${escHtml(s.catalogProgress.step)} ${s.catalogProgress.done}/${s.catalogProgress.total}</small>` : ''}` : ''}</div></div>
-    <p class="offline-note" style="grid-column:1/-1">Without internet you can keep selling for up to ${s.maxOfflineDays || 7} days, even after restarting the PC — sales, returns, voids, cash drawer, end of day, gift cards, coupons and rentals. Everything uploads automatically, in order, when the connection is back. A gift card or coupon also used on another till meanwhile may be rejected; it then shows here.</p>
-    ${s.lastError ? `<p class="offline-note" style="grid-column:1/-1;color:#dc2626">${escHtml(s.lastError)}</p>` : ''}`;
-
-  const rows = await window.electronAPI.offlineOutbox();
-  const tag  = { pending: 'Waiting', failed: 'Failed', synced: 'Synced' };
-  $('#offline-sync-list').innerHTML = rows.map(r => `
-    <div class="offline-row">
-      <div class="or-main">
-        ${r.kind === 'sale' ? `
-        <div><strong>${escHtml(r.offline_ref)}</strong>${r.sale_number ? ` → ${escHtml(r.sale_number)}` : ''}</div>
-        <div class="or-sub">${escHtml(new Date(r.sold_at).toLocaleString())} · ${r.item_count} item${r.item_count === 1 ? '' : 's'} · ${escHtml(r.payment_method || '')} · ${formatMoney(r.total || 0)}</div>` : `
-        <div><i class="fa ${_offlineKindIcon[r.kind] || 'fa-circle'}"></i> <strong>${escHtml(r.offline_ref)}</strong></div>
-        <div class="or-sub">${escHtml(new Date(r.sold_at).toLocaleString())}</div>`}
-        ${r.error && r.status !== 'synced' ? `<div class="or-err">${escHtml(r.error)}</div>` : ''}
-      </div>
-      <span class="or-tag ${r.status}">${tag[r.status] || r.status}</span>
-      ${r.kind === 'sale' ? `<button class="psm-btn-cancel" data-ofl-receipt="${escHtml(r.client_uuid)}" title="Show receipt"><i class="fa fa-receipt"></i></button>` : ''}
-      ${r.status === 'failed' ? `
-        <button class="psm-btn-cancel" data-ofl-retry="${escHtml(r.client_uuid)}">Retry</button>
-        <button class="psm-btn-cancel" data-ofl-discard="${escHtml(r.client_uuid)}" style="color:#dc2626">Discard</button>` : ''}
-    </div>`).join('');
-  _offlinePanelRows = rows;
+// Sync progress as percentages: the current step's own, and overall across the
+// download steps (products → customers → screens → records, a quarter each).
+const _osmSyncSteps = ['products', 'customers', 'screens', 'records'];
+function _osmSyncProgress(s) {
+  const p = s.catalogProgress;
+  const idx = p ? _osmSyncSteps.indexOf(p.step) : -1;
+  if (!s.syncing || idx < 0) return null;
+  const stepPct = p.total ? Math.min(100, Math.round((p.done / p.total) * 100)) : 0;
+  return {
+    stepNo: idx + 1,
+    steps: _osmSyncSteps.length,
+    stepPct,
+    overall: Math.min(100, Math.round(((idx + stepPct / 100) / _osmSyncSteps.length) * 100)),
+  };
 }
-let _offlinePanelRows = [];
+
+// ── Panel: banner across the top ──
+function _osmRenderHero() {
+  const s = _offline;
+  const synced = _osm.rows.filter(r => r.status === 'synced').length;
+  const state = !s.online ? 'offline' : (s.failed ? 'failed' : 'online');
+  const title = {
+    offline: `Working offline${s.lastOnlineAt ? ` · since ${_offlineAgo(s.lastOnlineAt)}` : ''}`,
+    failed:  `Online · ${s.failed} item${s.failed === 1 ? '' : 's'} need${s.failed === 1 ? 's' : ''} your attention`,
+    online:  s.pending ? `Online · uploading ${s.pending} item${s.pending === 1 ? '' : 's'}` : 'Online · everything is up to date',
+  }[state];
+  const sub = {
+    offline: `Keep working as usual — sales and changes are saved on this PC and upload by themselves when the internet is back (within ${s.maxOfflineDays || 7} days).`,
+    failed:  'The server did not accept some items saved offline. Open History to see why, then retry or discard them.',
+    online:  `Offline data last updated ${_offlineAgo(s.catalogSyncedAt)}. If the internet drops, this PC keeps working.`,
+  }[state];
+  const p = s.catalogProgress;
+  const prog = _osmSyncProgress(s);
+  const pct = prog ? prog.overall : null;
+  const stepName = { products: 'Downloading products', customers: 'Downloading customers', screens: 'Downloading screens', records: 'Downloading records' }[p?.step] || (s.syncing ? 'Uploading saved items' : 'Syncing');
+  $('#offline-sync-hero').className = `osm-hero is-${state}`;
+  $('#offline-sync-hero').innerHTML = `
+    <div class="osm-hero-icon"><i class="fa ${state === 'offline' ? 'fa-plug-circle-xmark' : state === 'failed' ? 'fa-triangle-exclamation' : 'fa-cloud'}"></i></div>
+    <div class="osm-hero-text">
+      <div class="osm-hero-title">${escHtml(title)}</div>
+      <div class="osm-hero-sub">${escHtml(sub)}</div>
+      ${s.syncing ? `
+        <div class="osm-sync-line">
+          <span class="osm-hero-sub"><i class="fa fa-spinner fa-spin"></i> ${prog ? `Step ${prog.stepNo} of ${prog.steps} · ` : ''}${escHtml(stepName)}${p?.total ? ` · ${p.done.toLocaleString()} of ${p.total.toLocaleString()} (${prog.stepPct}%)` : '…'}</span>
+          ${pct !== null ? `<b class="osm-sync-pct">${pct}%</b>` : ''}
+        </div>
+        <div class="osm-progress ${pct === null ? 'indeterminate' : ''}"><div style="width:${pct ?? 0}%"></div></div>` : ''}
+    </div>
+    <div class="osm-hero-stats">
+      <div class="osm-hero-stat"><b style="color:#d97706">${s.pending || 0}</b><span>Waiting</span></div>
+      <div class="osm-hero-stat"><b style="color:#dc2626">${s.failed || 0}</b><span>Failed</span></div>
+      <div class="osm-hero-stat"><b style="color:#16a34a">${synced}</b><span>Uploaded</span></div>
+    </div>`;
+  $('#osm-count-history').textContent = s.failed ? s.failed : '';
+  $('#osm-footer-note').textContent = s.lastError ? s.lastError : `Products, customers and screens refresh every 15 minutes while online.`;
+  $('#osm-footer-note').style.color = s.lastError ? '#dc2626' : '';
+}
+
+// ── Panel: Overview ──
+function _osmTile(icon, color, label, value, sub = '') {
+  return `<div class="osm-tile">
+    <div class="osm-tile-icon" style="background:${color}1f;color:${color}"><i class="fa ${icon}"></i></div>
+    <div><div class="osm-tile-label">${escHtml(label)}</div><div class="osm-tile-value">${value}</div>${sub ? `<div class="osm-tile-sub">${escHtml(sub)}</div>` : ''}</div>
+  </div>`;
+}
+
+function _osmRenderOverview() {
+  const s = _offline;
+  const rows = _osm.rows;
+  const synced = rows.filter(r => r.status === 'synced').length;
+  const counts = {};
+  rows.forEach(r => {
+    const m = _osmModuleOf(r);
+    counts[m] = counts[m] || { pending: 0, failed: 0, synced: 0 };
+    counts[m][r.status] = (counts[m][r.status] || 0) + 1;
+  });
+
+  $('#offline-sync-summary').innerHTML = `
+    ${s.failed ? `<div class="osm-callout warn"><b><i class="fa fa-triangle-exclamation" style="color:#dc2626"></i> ${s.failed} item${s.failed === 1 ? '' : 's'} could not upload.</b> The reason is shown on each one in <a data-osm-goto="history" data-osm-status="failed" style="color:var(--accent);cursor:pointer;font-weight:600">History</a> — fix the cause and press Retry, or Discard it if it should not be kept.</div>` : ''}
+    <div class="osm-section-title">Status</div>
+    <div class="osm-tiles">
+      ${_osmTile(s.online ? 'fa-wifi' : 'fa-plug-circle-xmark', s.online ? '#16a34a' : '#dc2626', 'Connection', s.online ? 'Online' : 'Offline', s.online ? `Checked ${_offlineAgo(s.lastOnlineAt)}` : `Last online ${_offlineAgo(s.lastOnlineAt)}`)}
+      ${_osmTile('fa-hourglass-half', '#d97706', 'Waiting to upload', s.pending || 0, s.pending ? 'Uploads by itself when online' : 'Nothing waiting')}
+      ${_osmTile('fa-triangle-exclamation', '#dc2626', 'Needs attention', s.failed || 0, s.failed ? 'Open History to fix' : 'All good')}
+      ${_osmTile('fa-cloud-arrow-up', '#2563eb', 'Uploaded', synced, 'Last 3 days')}
+    </div>
+    <div class="osm-section-title">Saved on this PC for offline use</div>
+    <div class="osm-tiles">
+      ${_osmTile('fa-box', '#d97706', 'Products', (s.productCount || 0).toLocaleString(), 'Search, barcode, stock')}
+      ${_osmTile('fa-users', '#0891b2', 'Customers', (s.customerCount || 0).toLocaleString(), 'With credit balances')}
+      ${_osmTile('fa-table-columns', '#7c3aed', 'Screens', (s.screenCount || 0).toLocaleString(), 'Lists and records of every tab')}
+      ${_osmTile('fa-clock', '#475569', 'Last updated', escHtml(_offlineAgo(s.catalogSyncedAt)), s.catalogSyncedAt ? _osmTime(s.catalogSyncedAt) : 'Connect once to download')}
+    </div>
+    <div class="osm-section-title">By section <a data-osm-goto="history">View history <i class="fa fa-arrow-right"></i></a></div>
+    <div class="osm-modules">
+      ${_osmModules.filter(m => m.key !== 'other' || counts.other).map(m => {
+        const c = counts[m.key] || {};
+        const any = c.pending || c.failed || c.synced;
+        return `<button class="osm-module" data-osm-goto="history" data-osm-module="${m.key}">
+          <div class="osm-module-head"><i class="fa ${m.icon}" style="background:${m.color}1f;color:${m.color}"></i> ${escHtml(m.name)}</div>
+          <div class="osm-module-counts">
+            ${c.pending ? `<span class="osm-badge pending"><i class="fa fa-hourglass-half"></i> ${c.pending} waiting</span>` : ''}
+            ${c.failed ? `<span class="osm-badge failed"><i class="fa fa-xmark"></i> ${c.failed} failed</span>` : ''}
+            ${c.synced ? `<span class="osm-badge synced"><i class="fa fa-check"></i> ${c.synced} uploaded</span>` : ''}
+            ${any ? '' : '<span class="osm-badge muted"><i class="fa fa-circle-check"></i> Works offline</span>'}
+          </div>
+        </button>`;
+      }).join('')}
+    </div>
+    <div class="osm-section-title">Recent sync activity <a data-osm-goto="activity">View all <i class="fa fa-arrow-right"></i></a></div>
+    ${_osm.events.length ? `<div class="osm-timeline">${_osm.events.slice(0, 6).map(_osmEventHtml).join('')}</div>` : '<div class="osm-empty"><i class="fa fa-wave-square"></i>No sync activity yet.</div>'}`;
+}
+
+// ── Panel: History (everything saved offline, by app tab) ──
+function _osmRowTitle(r) {
+  if (r.kind === 'sale') return `${r.offline_ref}${r.sale_number ? ` → ${r.sale_number}` : ''}`;
+  return r.offline_ref || _offlineKindName[r.kind] || r.kind;
+}
+
+function _osmRowHtml(r) {
+  const m = _osmModuleByKey[_osmModuleOf(r)];
+  const tag = { pending: 'Waiting', failed: 'Failed', synced: 'Uploaded' };
+  const sub = r.kind === 'sale'
+    ? `${new Date(r.sold_at).toLocaleTimeString()} · ${r.item_count} item${r.item_count === 1 ? '' : 's'} · ${escHtml(r.payment_method || '')} · ${formatMoney(r.total || 0)}${r.customer_name ? ` · ${escHtml(r.customer_name)}` : ''}`
+    : `${new Date(r.sold_at).toLocaleTimeString()} · ${escHtml(m.name)} · ${escHtml(_offlineKindName[r.kind] || r.kind)}`;
+  const statusLine = r.status === 'synced' ? `Uploaded ${_osmTime(r.synced_at)}`
+    : r.status === 'failed' ? 'Not accepted by the server' : (r.error ? r.error : 'Waiting for the internet');
+  const open = _osm.open.has(r.client_uuid);
+  return `<div class="osm-row ${open ? 'open' : ''}" data-osm-row="${escHtml(r.client_uuid)}">
+    <div class="osm-row-head">
+      <div class="osm-row-icon" style="background:${m.color}1f;color:${m.color}"><i class="fa ${_offlineKindIcon[r.kind] || 'fa-circle'}"></i></div>
+      <div class="osm-row-main">
+        <div class="osm-row-title">${escHtml(_osmRowTitle(r))}</div>
+        <div class="osm-row-sub">${sub}</div>
+        ${r.error && r.status === 'failed' ? `<div class="osm-row-err"><i class="fa fa-circle-exclamation"></i> ${escHtml(r.error)}</div>` : ''}
+      </div>
+      <div class="osm-row-actions">
+        <span class="osm-badge ${r.status}">${tag[r.status] || escHtml(r.status)}</span>
+        ${r.kind === 'sale' ? `<button class="psm-btn-cancel" data-ofl-receipt="${escHtml(r.client_uuid)}" title="Show receipt"><i class="fa fa-receipt"></i></button>` : ''}
+        ${r.status === 'failed' ? `
+          <button class="psm-btn-cancel" data-ofl-retry="${escHtml(r.client_uuid)}"><i class="fa fa-rotate"></i> Retry</button>
+          <button class="psm-btn-cancel" data-ofl-discard="${escHtml(r.client_uuid)}" style="color:#dc2626"><i class="fa fa-trash"></i> Discard</button>` : ''}
+        <i class="fa fa-chevron-right osm-row-caret"></i>
+      </div>
+    </div>
+    <div class="osm-row-detail">
+      <dl class="osm-kv">
+        <dt>Section</dt><dd>${escHtml(m.name)}</dd>
+        <dt>What</dt><dd>${escHtml(_offlineKindName[r.kind] || r.kind)}</dd>
+        <dt>Status</dt><dd>${escHtml(statusLine)}</dd>
+        <dt>Saved on this PC</dt><dd>${escHtml(_osmTime(r.created_at || r.sold_at))}</dd>
+        ${r.sale_number ? `<dt>Server number</dt><dd>${escHtml(r.sale_number)}</dd>` : ''}
+        ${r.kind === 'sale' ? `<dt>Total</dt><dd>${formatMoney(r.total || 0)} · ${escHtml(r.payment_method || '')}</dd>` : ''}
+        <dt>Upload attempts</dt><dd>${r.attempts || 0}${r.last_attempt_at ? ` · last ${escHtml(_osmTime(r.last_attempt_at))}` : ''}</dd>
+        ${r.path ? `<dt>Request</dt><dd><code>${escHtml(r.method || '')} ${escHtml(r.path)}</code></dd>` : ''}
+        ${r.error ? `<dt>Server message</dt><dd style="color:${r.status === 'failed' ? '#dc2626' : 'inherit'}">${escHtml(r.error)}</dd>` : ''}
+        <dt>Reference</dt><dd><code>${escHtml(r.client_uuid)}</code></dd>
+      </dl>
+    </div>
+  </div>`;
+}
+
+function _osmRenderHistory() {
+  const rows = _osm.rows;
+  const byModule = m => rows.filter(r => m === 'all' || _osmModuleOf(r) === m);
+  $('#osm-module-chips').innerHTML = [{ key: 'all', name: 'All sections', icon: 'fa-layer-group' }, ..._osmModules]
+    .filter(m => m.key === 'all' || m.key !== 'other' || byModule('other').length)
+    .map(m => `<button class="osm-chip ${_osm.module === m.key ? 'active' : ''}" data-osm-module-chip="${m.key}"><i class="fa ${m.icon}"></i> ${escHtml(m.name)} <span class="n">${byModule(m.key).length}</span></button>`).join('');
+  const inModule = byModule(_osm.module);
+  const st = [['all', 'All'], ['pending', 'Waiting'], ['failed', 'Failed'], ['synced', 'Uploaded']];
+  $('#osm-status-chips').innerHTML = st.map(([k, label]) =>
+    `<button class="osm-chip ${_osm.status === k ? 'active' : ''}" data-osm-status-chip="${k}">${label} <span class="n">${k === 'all' ? inModule.length : inModule.filter(r => r.status === k).length}</span></button>`).join('');
+
+  const q = _osm.q.toLowerCase();
+  const list = inModule
+    .filter(r => _osm.status === 'all' || r.status === _osm.status)
+    .filter(r => !q || [r.offline_ref, r.sale_number, r.error, r.path, r.customer_name, r.payment_method].some(v => String(v || '').toLowerCase().includes(q)));
+  if (!list.length) {
+    $('#offline-sync-list').innerHTML = `<div class="osm-empty"><i class="fa fa-inbox"></i>${rows.length ? 'Nothing matches these filters.' : 'Nothing has been saved offline in the last 3 days.'}</div>`;
+    return;
+  }
+  const days = [];
+  list.forEach(r => {
+    const d = _osmDay(r.sold_at);
+    if (!days.length || days[days.length - 1].day !== d) days.push({ day: d, rows: [] });
+    days[days.length - 1].rows.push(r);
+  });
+  $('#offline-sync-list').innerHTML = days.map(g => `
+    <div class="osm-day">${escHtml(g.day)} · ${g.rows.length}</div>
+    <div class="osm-list">${g.rows.map(_osmRowHtml).join('')}</div>`).join('');
+}
+
+// ── Panel: Sync activity ──
+const _osmEventStyle = {
+  online:     ['fa-wifi', '#16a34a', 'connection'],
+  offline:    ['fa-plug-circle-xmark', '#dc2626', 'connection'],
+  uploaded:   ['fa-cloud-arrow-up', '#2563eb', 'uploads'],
+  downloaded: ['fa-download', '#7c3aed', 'downloads'],
+  saved:      ['fa-floppy-disk', '#d97706', 'uploads'],
+  failed:     ['fa-triangle-exclamation', '#dc2626', 'problems'],
+  retry:      ['fa-rotate', '#0891b2', 'uploads'],
+  discarded:  ['fa-trash', '#64748b', 'problems'],
+};
+function _osmEventHtml(e) {
+  const [icon, color] = _osmEventStyle[e.type] || ['fa-circle', '#64748b'];
+  return `<div class="osm-event">
+    <div class="osm-event-dot" style="background:${color}"><i class="fa ${icon}"></i></div>
+    <div class="osm-event-text">${escHtml(e.text)}</div>
+    <div class="osm-event-time">${escHtml(_osmTime(e.at))} · ${escHtml(_offlineAgo(e.at))}</div>
+  </div>`;
+}
+
+function _osmRenderActivity() {
+  const filters = [['all', 'All'], ['connection', 'Connection'], ['uploads', 'Saved & uploaded'], ['downloads', 'Downloads'], ['problems', 'Problems']];
+  const list = _osm.events.filter(e => _osm.eventFilter === 'all' || (_osmEventStyle[e.type] || [])[2] === _osm.eventFilter);
+  const days = [];
+  list.forEach(e => {
+    const d = _osmDay(e.at);
+    if (!days.length || days[days.length - 1].day !== d) days.push({ day: d, items: [] });
+    days[days.length - 1].items.push(e);
+  });
+  $('#osm-activity').innerHTML = `
+    <div class="osm-toolbar"><div class="osm-chips">${filters.map(([k, label]) =>
+      `<button class="osm-chip ${_osm.eventFilter === k ? 'active' : ''}" data-osm-event-chip="${k}">${label}</button>`).join('')}</div></div>
+    ${days.length ? days.map(g => `<div class="osm-day">${escHtml(g.day)}</div><div class="osm-timeline">${g.items.map(_osmEventHtml).join('')}</div>`).join('')
+      : '<div class="osm-empty"><i class="fa fa-wave-square"></i>No activity to show.</div>'}`;
+}
+
+// ── Panel: What works offline ──
+const _osmSupport = [
+  { m: 'pos', yes: ['Sell with cash, card, credit and cheque — receipts print at once', 'Product search, barcode scan, categories, discounts and campaigns', 'Returns, voids and reverting bills', 'Cash drawer: opening cash and withdrawals', 'End-of-day settle', 'Gift cards and coupons (balance checked on this PC)', 'Rentals and rental returns', 'Service POS catalog', 'Today\'s summary including offline sales', 'Printing a sale as an invoice (numbered with the offline sale number until it uploads)'],
+    no: [] },
+  { m: 'sales', yes: ['Transactions, history, pending credits', 'Invoices, quotations and sales orders — create, edit, mark sent / paid, cancel', 'Subscriptions, reverted bills and cheques lists', 'Search and status filters on every list'],
+    no: ['Sharing an invoice link', 'Notifying a subscriber by e-mail'] },
+  { m: 'customers', yes: ['Full customer list and search', 'Add and edit customers, customer categories', 'Import customers from CSV', 'Receive credit payments'], no: [] },
+  { m: 'inventory', yes: ['Products list, add and edit products (sellable at once)', 'Categories, brands, units, discounts, sale campaigns', 'Purchase orders, goods receive, cheques, stock audits and transfers', 'Suppliers and supplier categories', 'Gift card groups and coupons'],
+    no: ['Product / supplier CSV import', 'Generating barcode SKUs', 'AI category suggestions', 'Product export'] },
+  { m: 'finance', yes: ['Overview, financial flow, profit report', 'Bills — create, pay, delete', 'Loans, rentals, properties, modifications, investments', 'Budgets and budget actuals', 'Bank accounts and balances'],
+    no: ['Scanning a bill with AI', 'Sales reports for dates never opened online'] },
+  { m: 'hr', yes: ['Employees — add, edit, view details', 'Departments, positions, allowance types', 'Leave requests and leave rules', 'Payroll rule sets and cycles', 'HR settings'],
+    no: ['Attendance import', 'Leave preview calculation', 'Attendance for dates never opened online'] },
+  { m: 'services', yes: ['Service requests — create, start, complete, cancel', 'Service catalog and categories', 'Search and status filters'], no: [] },
+  { m: 'settings', yes: ['Business, general, receipt, tax and invoice settings', 'Users, roles, branches, counters, cashiers', 'Mail and HR settings', 'Notifications'],
+    no: ['Sending e-mail and testing mail settings', 'Backup & import, billing, developer keys', 'Uploading images and attachments'] },
+];
+
+function _osmRenderSupport() {
+  $('#osm-support').innerHTML = `
+    <div class="osm-callout"><b>How offline works.</b> While online, this PC quietly downloads your products, customers and the screens of every tab, and keeps them fresh. When the internet drops, everything below keeps working from this PC — what you add, edit or delete is shown at once and saved here, even if the PC is restarted. When the internet is back it all uploads by itself, in the order it happened. Up to ${_offline.maxOfflineDays || 7} days offline is supported.</div>
+    <div class="osm-callout"><b>Good to know.</b> Connect once after installing so the data can download. Numbers the server works out (totals, profit, stock on other tills) catch up after the upload. If the server cannot accept something — for example a gift card also used on another till — it shows in History with the reason.</div>
+    <div class="osm-support-grid">${_osmSupport.map(x => {
+      const m = _osmModuleByKey[x.m];
+      return `<div class="osm-support-card">
+        <h4><i class="fa ${m.icon}" style="background:${m.color}1f;color:${m.color}"></i> ${escHtml(m.name)}</h4>
+        <ul>
+          ${x.yes.map(t => `<li class="yes"><i class="fa fa-check"></i><span>${escHtml(t)}</span></li>`).join('')}
+          ${x.no.map(t => `<li class="no"><i class="fa fa-wifi"></i><span>${escHtml(t)} — needs internet</span></li>`).join('')}
+        </ul>
+      </div>`;
+    }).join('')}</div>`;
+}
+
+async function _renderOfflinePanel() {
+  const [rows, events] = await Promise.all([window.electronAPI.offlineOutbox(), window.electronAPI.offlineEvents()]);
+  _osm.rows = rows || [];
+  _osm.events = events || [];
+  _osmRenderHero();
+  if (_osm.view === 'overview') _osmRenderOverview();
+  if (_osm.view === 'history') _osmRenderHistory();
+  if (_osm.view === 'activity') _osmRenderActivity();
+  if (_osm.view === 'support') _osmRenderSupport();
+}
+
+function _osmShow(view) {
+  _osm.view = view;
+  $$('#osm-nav [data-osm-view]').forEach(b => b.classList.toggle('active', b.dataset.osmView === view));
+  $$('#offline-sync-modal [data-osm-panel]').forEach(p => { p.hidden = p.dataset.osmPanel !== view; });
+  _renderOfflinePanel();
+}
 
 function _openOfflinePanel() {
   $('#offline-sync-modal').style.display = 'flex';
-  _renderOfflinePanel();
+  _osmShow(_offline.failed ? 'history' : 'overview');
 }
 
 window.electronAPI.onOfflineStatus(s => {
@@ -35632,6 +35932,7 @@ window.electronAPI.onOfflineStatus(s => {
   _offline = s;
   _renderOfflinePill();
   if ($('#offline-sync-modal').style.display === 'flex') _renderOfflinePanel();
+  $$('#offline-sync-modal [data-busy]').forEach(_osmBusyLabel);
 
   // Going offline / online is silent on purpose — the user just keeps working;
   // the status pill is the only sign. Once uploads finish, quietly refresh the numbers.
@@ -35647,14 +35948,30 @@ $('#offline-sync-close').addEventListener('click', () => { $('#offline-sync-moda
 $('#offline-sync-modal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
 });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && $('#offline-sync-modal').style.display === 'flex') $('#offline-sync-modal').style.display = 'none';
+});
+$('#osm-nav').addEventListener('click', e => {
+  const b = e.target.closest('[data-osm-view]');
+  if (b) _osmShow(b.dataset.osmView);
+});
+$('#osm-search').addEventListener('input', e => { _osm.q = e.target.value.trim(); _osmRenderHistory(); });
+
+// "Syncing… 45%" on the button that started the sync, updated as status arrives.
+function _osmBusyLabel(btn) {
+  const prog = _osmSyncProgress(_offline);
+  btn.innerHTML = `<i class="fa fa-spinner fa-spin"></i> Syncing…${prog ? ` ${prog.overall}%` : ''}`;
+}
 
 async function _offlineSyncNow(full) {
   const btn = full ? $('#offline-sync-full') : $('#offline-sync-now');
   const html = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Syncing…';
+  btn.dataset.busy = '1';
+  _osmBusyLabel(btn);
   const s = await window.electronAPI.offlineSync({ full });
   btn.disabled = false;
+  delete btn.dataset.busy;
   btn.innerHTML = html;
   _offline = s;
   _renderOfflinePill();
@@ -35664,12 +35981,25 @@ async function _offlineSyncNow(full) {
 $('#offline-sync-now').addEventListener('click', () => _offlineSyncNow(false));
 $('#offline-sync-full').addEventListener('click', () => _offlineSyncNow(true));
 
-$('#offline-sync-list').addEventListener('click', async e => {
+$('#offline-sync-modal').addEventListener('click', async e => {
+  const goto    = e.target.closest('[data-osm-goto]');
+  const modChip = e.target.closest('[data-osm-module-chip]');
+  const stChip  = e.target.closest('[data-osm-status-chip]');
+  const evChip  = e.target.closest('[data-osm-event-chip]');
   const receipt = e.target.closest('[data-ofl-receipt]');
   const retry   = e.target.closest('[data-ofl-retry]');
   const discard = e.target.closest('[data-ofl-discard]');
+  const rowHead = e.target.closest('.osm-row-head');
+  if (goto) {
+    if (goto.dataset.osmModule) _osm.module = goto.dataset.osmModule;
+    if (goto.dataset.osmStatus) _osm.status = goto.dataset.osmStatus;
+    return _osmShow(goto.dataset.osmGoto);
+  }
+  if (modChip) { _osm.module = modChip.dataset.osmModuleChip; return _osmRenderHistory(); }
+  if (stChip)  { _osm.status = stChip.dataset.osmStatusChip; return _osmRenderHistory(); }
+  if (evChip)  { _osm.eventFilter = evChip.dataset.osmEventChip; return _osmRenderActivity(); }
   if (receipt) {
-    const row = _offlinePanelRows.find(r => r.client_uuid === receipt.dataset.oflReceipt);
+    const row = _osm.rows.find(r => r.client_uuid === receipt.dataset.oflReceipt);
     if (row?.receipt) {
       $('#offline-sync-modal').style.display = 'none';
       showReceiptModal(row.receipt);
@@ -35678,7 +36008,7 @@ $('#offline-sync-list').addEventListener('click', async e => {
     await window.electronAPI.offlineRetry(retry.dataset.oflRetry);
     _renderOfflinePanel();
   } else if (discard) {
-    const row = _offlinePanelRows.find(r => r.client_uuid === discard.dataset.oflDiscard);
+    const row = _osm.rows.find(r => r.client_uuid === discard.dataset.oflDiscard);
     const ok = await appConfirm(row?.kind === 'sale' ? {
       title: 'Discard this offline sale?',
       message: 'It will never be uploaded and will not appear in your sales or stock. Only do this if the sale did not really happen or you entered it again online.',
@@ -35686,13 +36016,17 @@ $('#offline-sync-list').addEventListener('click', async e => {
       danger: true,
     } : {
       title: 'Discard this offline change?',
-      message: 'It will never be uploaded. Sales that use a discarded new customer will fail to upload.',
+      message: 'It will never be uploaded. Anything else that uses it (for example a sale to a discarded new customer) will fail to upload.',
       confirmText: '<i class="fa fa-trash"></i> Discard',
       danger: true,
     });
     if (!ok) return;
     await window.electronAPI.offlineDiscard(discard.dataset.oflDiscard);
     _renderOfflinePanel();
+  } else if (rowHead) {
+    const id = rowHead.closest('[data-osm-row]').dataset.osmRow;
+    _osm.open.has(id) ? _osm.open.delete(id) : _osm.open.add(id);
+    rowHead.closest('.osm-row').classList.toggle('open');
   }
 });
 

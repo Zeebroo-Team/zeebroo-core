@@ -7,8 +7,10 @@ use Modules\Restaurant\Http\Controllers\Api\MenuCategoryApiController;
 use Modules\Restaurant\Http\Controllers\Api\MenuItemApiController;
 use Modules\Restaurant\Http\Controllers\Api\OrderApiController;
 use Modules\Restaurant\Http\Controllers\Api\TableApiController;
+use Modules\Pos\Http\Middleware\PosIdempotency;
 
-Route::middleware(['api', 'auth:sanctum'])->prefix('restaurant')->group(function (): void {
+// PosIdempotency: writes the desktop app queued offline (Idempotency-Key header) run once.
+Route::middleware(['api', 'auth:sanctum', PosIdempotency::class])->prefix('restaurant')->group(function (): void {
 
     // Orders — literal routes BEFORE wildcard
     Route::get('/orders/bootstrap',                              [OrderApiController::class, 'bootstrap'])      ->name('api.restaurant.orders.bootstrap');

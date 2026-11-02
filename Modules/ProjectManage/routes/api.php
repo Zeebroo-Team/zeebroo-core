@@ -1,10 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Pos\Http\Middleware\PosIdempotency;
 use Modules\ProjectManage\Http\Controllers\Api\ProjectInboxApiController;
 use Modules\ProjectManage\Http\Controllers\Api\ProjectManageApiController;
 
-Route::middleware(['auth:sanctum'])->prefix('v1/pos')->name('pos.')->group(function () {
+// PosIdempotency: writes the desktop app queued offline (Idempotency-Key header) run once.
+Route::middleware(['auth:sanctum', PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function () {
 
     $c = ProjectManageApiController::class;
 

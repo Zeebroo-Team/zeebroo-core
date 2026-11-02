@@ -1023,6 +1023,7 @@ ipcMain.handle('offline-outbox',  () => getOffline().listOutbox());
 ipcMain.handle('offline-sync',    (_e, opts) => getOffline().syncNow(opts || {}));
 ipcMain.handle('offline-retry',   (_e, clientUuid) => getOffline().retryEntry(clientUuid));
 ipcMain.handle('offline-discard', (_e, clientUuid) => getOffline().discardEntry(clientUuid));
+ipcMain.handle('offline-events',  () => getOffline().listEvents());
 
 // Downloads a binary file (e.g. a PDF receipt) from the API and lets the user
 // save it to disk — apiRequest() always JSON.parses the response, which isn't
