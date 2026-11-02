@@ -56,6 +56,27 @@ function checkoutReplayRequest(array $body): Request
 
 const REPLAY_UUID = '7b1d2c3e-4f50-4a61-8b72-9c83d4e5f601';
 
+// The customer's receipt shows the number printed offline; after upload the
+// sale lists it next to its POS number so staff can find it by either.
+test('the sales list shows the receipt number a sale was printed with offline', function () {
+    $api = new PosOnlineApiService(
+        Mockery::mock(\Modules\Pos\Services\PosCatalogService::class),
+        Mockery::mock(PosSettingsService::class),
+        Mockery::mock(SaleService::class),
+        Mockery::mock(\Modules\Product\Services\ProductCatalogOptionsService::class),
+    );
+    $sale = (new Sale)->forceFill([
+        'id' => 8, 'sale_number' => 'POS-0008', 'offline_ref' => 'OFF-0A63-261102-0005',
+        'status' => Sale::STATUS_COMPLETED, 'payment_method' => 'cash', 'total' => 1012.49, 'amount_paid' => 1012.49,
+        'items_count' => 2,
+    ]);
+
+    $row = $api->formatSaleList(collect([$sale]))[0];
+
+    expect($row['sale_number'])->toBe('POS-0008')
+        ->and($row['offline_ref'])->toBe('OFF-0A63-261102-0005');
+});
+
 // Mockery hands withArgs() the arguments by position — name the ones under test.
 function checkoutReplayArgs(array $args): array
 {

@@ -274,6 +274,7 @@ class SaleReturnService
                 $sub->where('return_number', 'like', "%{$q}%")
                     ->orWhereHas('sale', function ($saleQuery) use ($q) {
                         $saleQuery->where('sale_number', 'like', "%{$q}%")
+                            ->orWhere('offline_ref', 'like', "%{$q}%")
                             ->orWhereHas('customer', fn ($c) => $c->where('name', 'like', "%{$q}%"));
                     });
             });

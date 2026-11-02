@@ -893,7 +893,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     const needle = String(params.get('q') || '').toLowerCase().trim();
     const body = JSON.parse(JSON.stringify(hit.body));
     if (!s.cache[p] && Array.isArray(body.data) && needle) {
-      body.data = body.data.filter(r => [r.sale_number, r.customer_name].some(v => String(v || '').toLowerCase().includes(needle)));
+      body.data = body.data.filter(r => [r.sale_number, r.offline_ref, r.customer_name].some(v => String(v || '').toLowerCase().includes(needle)));
     }
     const limit = Number(params.get('limit')) || 0;
     if (limit && Array.isArray(body.data)) body.data = body.data.slice(0, limit);

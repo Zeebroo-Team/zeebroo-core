@@ -188,7 +188,7 @@ class SaleChequeService
             $query->where(function (Builder $b) use ($like) {
                 $b->where('cheque_number', 'like', $like)
                   ->orWhere('bank_name', 'like', $like)
-                  ->orWhereHas('sale', fn ($q) => $q->where('sale_number', 'like', $like))
+                  ->orWhereHas('sale', fn ($q) => $q->where('sale_number', 'like', $like)->orWhere('offline_ref', 'like', $like))
                   ->orWhereHas('customer', fn ($q) => $q->where('name', 'like', $like)->orWhere('phone', 'like', $like));
             });
         }
