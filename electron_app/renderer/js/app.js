@@ -9421,7 +9421,6 @@ async function doCashierLogin() {
   }
 
   const d = res.body?.data;
-  if (res.offline) toast('No internet — signed in offline. Sales will sync when the internet is back.', 'info');
   // Store cashier token + business config
   await window.electronAPI.setConfig({
     token:       d.token,
@@ -9755,7 +9754,6 @@ async function doLogin() {
 
   const token = res.body?.token || res.body?.data?.token || res.body?.access_token;
   console.log('[login] token extracted:', token ? token.slice(0,20)+'…' : 'NONE');
-  if (res.offline) toast('No internet — signed in offline. Sales will sync when the internet is back.', 'info');
   state._userName  = res.body?.user?.name  || null;
   state._userEmail = res.body?.user?.email || email;
   state._userAvatar = res.body?.user?.avatar_url || null;
@@ -25867,7 +25865,8 @@ $('#product-search').addEventListener('input', (e) => {
   _ssRender(q.trim());
   _scheduleScanAdd(q.trim());
   if (q.trim()) {
-    searchTimer = setTimeout(() => loadProducts(state.searchQuery, state.activeCategory), 400);
+    // Answered from this PC's product catalog (offline.js), so a short pause is enough.
+    searchTimer = setTimeout(() => loadProducts(state.searchQuery, state.activeCategory), 180);
   }
 });
 
@@ -35517,7 +35516,6 @@ $('#checkout-confirm').addEventListener('click', async () => {
     showAlert(alertEl, res.body?.message || 'Checkout failed');
     return;
   }
-  if (res.offline) toast(res.body?.message || 'Sale saved offline — it will sync when the internet is back.', 'info');
 
   const postCustomerId = tab?._customer?.id ?? null;
   // Snapshot tax breakdown before clearing the cart (per-item taxes live in cart items)
@@ -35568,20 +35566,18 @@ function _offlineAgo(iso) {
 
 function _renderOfflinePill() {
   const s = _offline;
-  const progress = s.catalogProgress?.total
-    ? ` ${s.catalogProgress.done}/${s.catalogProgress.total}` : '';
+  // Background download progress is shown only inside the sync panel.
   let cls = '', html = '';
-  if (!s.online) {
-    cls  = 'is-offline';
-    html = `<i class="fa fa-wifi"></i> Offline${s.pending ? ` · ${s.pending} to sync` : ''}`;
-  } else if (s.failed) {
+  // Calm on purpose: offline is a normal working mode, not an error. Only
+  // items the server rejected (need a person to look) stand out.
+  if (s.failed) {
     cls  = 'is-failed';
-    html = `<i class="fa fa-triangle-exclamation"></i> ${s.failed} sale${s.failed === 1 ? '' : 's'} need attention`;
+    html = `<i class="fa fa-triangle-exclamation"></i> ${s.failed} need${s.failed === 1 ? 's' : ''} attention`;
+  } else if (!s.online) {
+    cls  = 'is-offline';
+    html = `<i class="fa fa-cloud"></i> Offline${s.pending ? ` · ${s.pending} saved` : ''}`;
   } else if (s.pending) {
-    cls  = 'is-pending';
-    html = `<i class="fa fa-rotate fa-spin"></i> Syncing ${s.pending} sale${s.pending === 1 ? '' : 's'}`;
-  } else if (s.syncing) {
-    html = `<i class="fa fa-rotate fa-spin"></i> Updating offline data${progress}`;
+    html = `<i class="fa fa-cloud-arrow-up"></i> Uploading ${s.pending}`;
   } else {
     html = `<i class="fa fa-cloud"></i> Online`;
   }
@@ -35600,7 +35596,7 @@ async function _renderOfflinePanel() {
     <div class="os-tile"><div class="os-label">Waiting to sync</div><div class="os-value">${s.pending || 0}${s.failed ? ` <span style="color:#dc2626">· ${s.failed} failed</span>` : ''}</div></div>
     <div class="os-tile"><div class="os-label">Offline products</div><div class="os-value">${s.productCount || 0}</div></div>
     <div class="os-tile"><div class="os-label">Offline customers</div><div class="os-value">${s.customerCount || 0}</div></div>
-    <div class="os-tile" style="grid-column:1/-1"><div class="os-label">Offline data last updated</div><div class="os-value">${escHtml(_offlineAgo(s.catalogSyncedAt))}${s.syncing ? ' <i class="fa fa-spinner fa-spin"></i>' : ''}</div></div>
+    <div class="os-tile" style="grid-column:1/-1"><div class="os-label">Offline data last updated</div><div class="os-value">${escHtml(_offlineAgo(s.catalogSyncedAt))}${s.syncing ? ` <i class="fa fa-spinner fa-spin"></i>${s.catalogProgress?.total ? ` <small>${escHtml(s.catalogProgress.step)} ${s.catalogProgress.done}/${s.catalogProgress.total}</small>` : ''}` : ''}</div></div>
     <p class="offline-note" style="grid-column:1/-1">Without internet you can keep selling for up to ${s.maxOfflineDays || 7} days, even after restarting the PC — sales, returns, voids, cash drawer, end of day, gift cards, coupons and rentals. Everything uploads automatically, in order, when the connection is back. A gift card or coupon also used on another till meanwhile may be rejected; it then shows here.</p>
     ${s.lastError ? `<p class="offline-note" style="grid-column:1/-1;color:#dc2626">${escHtml(s.lastError)}</p>` : ''}`;
 
@@ -35637,20 +35633,14 @@ window.electronAPI.onOfflineStatus(s => {
   _renderOfflinePill();
   if ($('#offline-sync-modal').style.display === 'flex') _renderOfflinePanel();
 
-  // Back online / sales uploaded: refresh numbers and the grid from the server
+  // Going offline / online is silent on purpose — the user just keeps working;
+  // the status pill is the only sign. Once uploads finish, quietly refresh the numbers.
   const uploaded = (s.pending || 0) < (prev.pending || 0);
-  if ((s.online && !prev.online) || uploaded) {
-    if (uploaded && !s.pending) toast('Offline sales synced to the server.', 'info');
-    if (typeof _loadPosRibbonStats === 'function') _loadPosRibbonStats();
-  }
-  if (!s.online && prev.online) {
-    toast('Internet connection lost — working offline. Sales will sync automatically.', 'error');
+  if (((s.online && !prev.online) || uploaded) && typeof _loadPosRibbonStats === 'function') {
+    _loadPosRibbonStats();
   }
 });
 window.electronAPI.offlineStatus().then(s => { _offline = s; _renderOfflinePill(); });
-window.addEventListener('api-saved-offline', e => {
-  toast(e.detail || 'No internet — saved on this PC. It will upload when the internet is back.', 'info');
-});
 
 $$('[data-offline-pill]').forEach(el => el.addEventListener('click', _openOfflinePanel));
 $('#offline-sync-close').addEventListener('click', () => { $('#offline-sync-modal').style.display = 'none'; });

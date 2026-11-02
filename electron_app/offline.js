@@ -23,7 +23,8 @@ const crypto = require('crypto');
 
 const MAX_OFFLINE_DAYS   = 7;
 const PROBE_INTERVAL_MS  = 15 * 1000;        // how often to check while offline
-const CATALOG_REFRESH_MS = 10 * 60 * 1000;   // background catalog refresh while online
+const CATALOG_REFRESH_MS = 15 * 60 * 1000;   // background catalog refresh while online
+const PRODUCT_REFRESH_MS = 3 * 60 * 1000;    // changed products only (prices / stock from other tills)
 const OUTBOX_RETRY_MS    = 60 * 1000;        // retry pending sales after a server error
 const CACHE_MAX_ENTRIES  = 400;
 const CACHE_MAX_BYTES    = 2 * 1024 * 1024;  // skip caching single responses bigger than this
@@ -41,6 +42,9 @@ const WARM_PATHS = [
   '/online/sale-campaigns/products', '/service/pos/catalog?q=&category=',
   '/gift-cards?q=&status=', '/coupons?q=&status=',
   '/product-rentals?q=&status=all', '/product-rentals?q=&status=active', '/product-rentals?q=&status=overdue',
+  // Home dashboard
+  '/finance/flow', '/finance/overview', '/business-flow/summary', '/expenses/overview', '/expenses/bills',
+  '/hr/employees', '/hr/departments', '/hr/payroll/cycles', '/crm/projects', '/notifications/settings',
 ];
 // How many of the most recent sales to keep in full (for returns / voids offline).
 const WARM_SALE_DETAILS = 30;
@@ -84,6 +88,20 @@ function writeJsonAtomic(file, data) {
   fs.renameSync(tmp, file);
 }
 
+async function writeJsonAtomicAsync(file, data) {
+  const tmp = `${file}.${process.pid}-${Date.now()}.tmp`;
+  const fh = await fs.promises.open(tmp, 'w');
+  try {
+    await fh.writeFile(JSON.stringify(data));
+    await fh.sync();
+  } finally {
+    await fh.close();
+  }
+  await fs.promises.rename(tmp, file);
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
 function tokenKey(token) {
   return token ? crypto.createHash('sha256').update(String(token)).digest('hex').slice(0, 24) : null;
 }
@@ -106,9 +124,12 @@ function pick(obj, keys) {
   return out;
 }
 
-function createOffline({ userDataDir, getConfig, request, notify }) {
+// backgroundGapMs: pause between background requests, so the server and this
+// PC stay free for the user (tests pass 0).
+function createOffline({ userDataDir, getConfig, request, notify, backgroundGapMs = 250 }) {
   const st = {
     online: true,
+    userInFlight: 0,
     lastOnlineAt: null,
     probeTimer: null,
     catalogTimer: null,
@@ -202,26 +223,44 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
     writeJsonAtomic(authFile(), auth);
   }
 
+  // The product catalog and the screen cache can be many MB: they are written
+  // in the background, a moment after the last change, so the app never
+  // freezes while saving. Everything that must survive a power cut (queued
+  // sales and changes, customers, receipt numbering) is still written at once.
+  const BIG_FILES = ['catalog', 'cache'];
+  const pendingBig = new Map();
+
   function save(name) {
     const s = st.store;
-    if (s) writeJsonAtomic(path.join(s.dir, `${name}.json`), s[name]);
+    if (!s) return;
+    if (BIG_FILES.includes(name)) return saveLater(s, name);
+    writeJsonAtomic(path.join(s.dir, `${name}.json`), s[name]);
   }
 
+  function saveLater(s, name) {
+    const key = `${s.dir}|${name}`;
+    if (pendingBig.has(key)) return;
+    pendingBig.set(key, {
+      s, name,
+      timer: setTimeout(() => {
+        pendingBig.delete(key);
+        writeJsonAtomicAsync(path.join(s.dir, `${name}.json`), s[name])
+          .catch(err => console.error('[offline] write', name, err.message));
+      }, 1500),
+    });
+  }
+
+  // On quit / business switch: write what is still waiting, right now.
   function flushCache() {
-    if (st.cacheWriteTimer) {
-      clearTimeout(st.cacheWriteTimer);
-      st.cacheWriteTimer = null;
-      try { save('cache'); } catch (err) { console.error('[offline] cache write', err.message); }
+    for (const [key, job] of pendingBig) {
+      clearTimeout(job.timer);
+      pendingBig.delete(key);
+      try { writeJsonAtomic(path.join(job.s.dir, `${job.name}.json`), job.s[job.name]); }
+      catch (err) { console.error('[offline] write', job.name, err.message); }
     }
   }
 
-  function saveCacheSoon() {
-    if (st.cacheWriteTimer) return;
-    st.cacheWriteTimer = setTimeout(() => {
-      st.cacheWriteTimer = null;
-      try { save('cache'); } catch (err) { console.error('[offline] cache write', err.message); }
-    }, 2000);
-  }
+  const saveCacheSoon = () => save('cache');
 
   // Outboxes of every business on this PC — a sale queued under business A
   // must still upload after the user switches to business B.
@@ -299,6 +338,15 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
     } catch (err) {
       return { status: 0, body: { message: err.message } };
     }
+  }
+
+  // Background work (catalog download, uploads) always gives way to the
+  // user: it waits while any screen is loading, then goes one request at a time.
+  async function bgNet(method, p, body, opts = {}) {
+    const since = Date.now();
+    while (st.userInFlight > 0 && Date.now() - since < 60000) await sleep(200);
+    if (backgroundGapMs) await sleep(backgroundGapMs);
+    return net(method, p, body, opts);
   }
 
   function startProbe() {
@@ -1526,7 +1574,7 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
 
     // Uploads one queued item. Returns false when syncing must stop for now.
     async function upload(box, entry, method, p, body, idempotencyKey) {
-      const res = await net(method, p, body, { timeout: 60000, businessId: box.businessId, branchId: box.branchId, idempotencyKey });
+      const res = await bgNet(method, p, body, { timeout: 60000, businessId: box.businessId, branchId: box.branchId, idempotencyKey });
       entry.attempts = (entry.attempts || 0) + 1;
       entry.last_attempt_at = new Date().toISOString();
       if (isUnreachable(res.status)) {
@@ -1710,59 +1758,80 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
     return catalogRun;
   }
 
+  // POS settings/categories (one tiny bootstrap page) + only the products
+  // whose fingerprint changed. Returns false when the connection dropped.
+  async function syncProducts(s, full = false) {
+    const boot = await bgNet('GET', '/online/bootstrap?q=&category=&page=1&per_page=1', null, { timeout: 60000 });
+    if (isUnreachable(boot.status)) { setOnline(false); return false; }
+    if (boot.status === 200) remember('/online/bootstrap', boot.body);
+
+    const idx = await bgNet('GET', '/online/products/sync-index', null, { timeout: 120000 });
+    if (isUnreachable(idx.status)) { setOnline(false); return false; }
+    if (idx.status !== 200) throw new Error(idx.body?.message || `sync-index failed (${idx.status})`);
+    const { version, items = [] } = idx.body.data || {};
+    if (full || version !== s.catalog.version) {
+      s.catalog.fp = {};
+      s.catalog.version = version;
+    }
+    const live = new Set(items.map(i => String(i.id)));
+    for (const id of Object.keys(s.catalog.products)) {
+      // Products added offline (negative ids) stay until they upload.
+      if (!live.has(id) && Number(id) > 0) { delete s.catalog.products[id]; delete s.catalog.fp[id]; }
+    }
+    const changed = items.filter(i => s.catalog.fp[i.id] !== i.fp || !s.catalog.products[i.id]);
+    st.catalogProgress = { step: 'products', done: 0, total: changed.length };
+    emit();
+    for (let k = 0; k < changed.length; k += BY_IDS_CHUNK) {
+      const chunk = changed.slice(k, k + BY_IDS_CHUNK);
+      const res = await bgNet('GET', `/online/products/by-ids?ids=${chunk.map(i => i.id).join(',')}`, null, { timeout: 120000 });
+      if (isUnreachable(res.status)) { save('catalog'); setOnline(false); return false; }
+      if (res.status !== 200) throw new Error(res.body?.message || `by-ids failed (${res.status})`);
+      const fps = Object.fromEntries(chunk.map(i => [i.id, i.fp]));
+      for (const card of res.body.data || []) {
+        s.catalog.products[card.id] = card;
+        s.catalog.fp[card.id] = fps[card.id];
+      }
+      st.catalogProgress = { step: 'products', done: Math.min(k + BY_IDS_CHUNK, changed.length), total: changed.length };
+      emit();
+    }
+    s.catalog.synced_at = new Date().toISOString();
+    save('catalog');
+    return true;
+  }
+
+  // Quick product-only refresh (every few minutes, and soon after this PC
+  // changes products or stock) — keeps the instant local search current.
+  let productRun = null;
+  let productSoonTimer = null;
+  function syncProductsQuick() {
+    const s = store();
+    if (catalogRun || productRun || !s || !st.online || !getConfig().token) return catalogRun || productRun || Promise.resolve();
+    productRun = syncProducts(s)
+      .catch(err => console.error('[offline] product refresh', err.message))
+      .finally(() => { productRun = null; st.catalogProgress = null; emit(); });
+    return productRun;
+  }
+  function syncProductsSoon() {
+    clearTimeout(productSoonTimer);
+    productSoonTimer = setTimeout(() => { productSoonTimer = null; syncProductsQuick(); }, 3000);
+  }
+
   async function runCatalogSync({ full = false } = {}) {
     const s = store();
     if (!s || !st.online || !getConfig().token) return;
+    if (productRun) await productRun;
     st.syncingCatalog = true;
     st.catalogProgress = { step: 'products', done: 0, total: 0 };
     emit();
     try {
-      // POS settings, categories, currency, units… (one tiny bootstrap page)
-      const boot = await net('GET', '/online/bootstrap?q=&category=&page=1&per_page=1', null, { timeout: 60000 });
-      if (isUnreachable(boot.status)) { setOnline(false); return; }
-      if (boot.status === 200) remember('/online/bootstrap', boot.body);
-
-      // Products: compare fingerprints, download only new/changed cards.
-      const idx = await net('GET', '/online/products/sync-index', null, { timeout: 120000 });
-      if (isUnreachable(idx.status)) { setOnline(false); return; }
-      if (idx.status !== 200) throw new Error(idx.body?.message || `sync-index failed (${idx.status})`);
-      const { version, items = [] } = idx.body.data || {};
-      if (full || version !== s.catalog.version) {
-        s.catalog.fp = {};
-        s.catalog.version = version;
-      }
-      const live = new Set(items.map(i => String(i.id)));
-      for (const id of Object.keys(s.catalog.products)) {
-        // Products added offline (negative ids) stay until they upload.
-        if (!live.has(id) && Number(id) > 0) { delete s.catalog.products[id]; delete s.catalog.fp[id]; }
-      }
-      const changed = items.filter(i => s.catalog.fp[i.id] !== i.fp || !s.catalog.products[i.id]);
-      st.catalogProgress = { step: 'products', done: 0, total: changed.length };
-      emit();
-      for (let k = 0; k < changed.length; k += BY_IDS_CHUNK) {
-        const chunk = changed.slice(k, k + BY_IDS_CHUNK);
-        const res = await net('GET', `/online/products/by-ids?ids=${chunk.map(i => i.id).join(',')}`, null, { timeout: 120000 });
-        if (isUnreachable(res.status)) { save('catalog'); setOnline(false); return; }
-        if (res.status !== 200) throw new Error(res.body?.message || `by-ids failed (${res.status})`);
-        const fps = Object.fromEntries(chunk.map(i => [i.id, i.fp]));
-        for (const card of res.body.data || []) {
-          s.catalog.products[card.id] = card;
-          s.catalog.fp[card.id] = fps[card.id];
-        }
-        st.catalogProgress = { step: 'products', done: Math.min(k + BY_IDS_CHUNK, changed.length), total: changed.length };
-        emit();
-        // Save as we go — a 5,000 product first download survives an interruption.
-        if ((k / BY_IDS_CHUNK) % 10 === 9) save('catalog');
-      }
-      s.catalog.synced_at = new Date().toISOString();
-      save('catalog');
+      if (!(await syncProducts(s, full))) return;
 
       // Customers (full list — they are small)
       st.catalogProgress = { step: 'customers', done: 0, total: 0 };
       emit();
       const customers = [];
       for (let page = 1, last = 1; page <= last; page += 1) {
-        const res = await net('GET', `/customers/offline-sync?page=${page}&per_page=500`, null, { timeout: 120000 });
+        const res = await bgNet('GET', `/customers/offline-sync?page=${page}&per_page=500`, null, { timeout: 120000 });
         if (isUnreachable(res.status)) { setOnline(false); return; }
         if (res.status !== 200) throw new Error(res.body?.message || `customers failed (${res.status})`);
         customers.push(...(res.body.data || []));
@@ -1790,14 +1859,14 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
       for (const p of WARM_PATHS) {
         if (keepLocal[p]?.()) continue;
         if (p.startsWith('/product-rentals') && waiting(['rental_return'])) continue;
-        const res = await net('GET', p, null, { timeout: 30000 });
+        const res = await bgNet('GET', p, null, { timeout: 30000 });
         if (isUnreachable(res.status)) break;
         if (res.status === 200) remember(p, res.body);
       }
       const recent = Array.isArray(s.cache['/sales?q=']?.body?.data) ? s.cache['/sales?q='].body.data.slice(0, WARM_SALE_DETAILS) : [];
       for (const row of recent) {
         if (!(row.id > 0) || waiting(['void', 'return', 'revert'])) break;
-        const res = await net('GET', `/sales/${row.id}`, null, { timeout: 30000 });
+        const res = await bgNet('GET', `/sales/${row.id}`, null, { timeout: 30000 });
         if (isUnreachable(res.status)) break;
         if (res.status === 200) remember(`/sales/${row.id}`, res.body);
       }
@@ -1813,8 +1882,27 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
     }
   }
 
+  // How long a screen waits before falling back to this PC's copy. A dead or
+  // half-dead connection must never leave a spinner up for minutes.
+  const LONG_GETS = /export|report|backup|download|statement|pdf/i;
+  function getTimeout(pathname) {
+    if (!st.online) return 4000; // already offline: just a quick "is it back?" try
+    if (/^\/(online\/bootstrap|online\/products(\/sku\/.*)?|customers)$/.test(pathname)) return 15000;
+    return LONG_GETS.test(pathname) ? 120000 : 30000;
+  }
+
   // ── Entry point for every renderer API call ────────────────────────────
+  // Counted while in flight so background work waits (bgNet).
   async function handle(method, p, body) {
+    st.userInFlight += 1;
+    try {
+      return await handleRequest(method, p, body);
+    } finally {
+      st.userInFlight -= 1;
+    }
+  }
+
+  async function handleRequest(method, p, body) {
     const m = String(method || 'GET').toUpperCase();
     const [pathname] = splitPath(p);
 
@@ -1837,7 +1925,9 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
       return res;
     }
     if (s && m === 'POST' && pathname === '/online/products') {
-      return (await writeOrQueue(m, p, body, () => queueProductCreate(body || {}, s))).res;
+      const { res, queued } = await writeOrQueue(m, p, body, () => queueProductCreate(body || {}, s));
+      if (!queued && res.status < 300) catalogChanged();
+      return res;
     }
     if (s && m === 'POST' && pathname === '/customers/import/preview') {
       return (await writeOrQueue(m, p, body, () => customerImportResponse(customerImportPlan(s, body?.rows, body?.duplicates || 'skip'), true))).res;
@@ -1874,14 +1964,18 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
         if (!(e?.status === 'synced' && e.server_id && st.online)) return localGet(p);
         p = `/sales/${e.server_id}`;
       }
+      // Product grid / search / barcode: answered from this PC's catalog even
+      // while online — instant, instead of a server round trip per keystroke.
+      if (s && st.online && localFirst(s, pathname, splitPath(p)[1])) {
+        const local = localGet(p);
+        if (local && local.status === 200) return { ...local, offline: false, fromLocalCatalog: true };
+      }
       // Known offline: answer from disk at once instead of waiting on a dead connection.
       if (!st.online) {
         const local = localGet(p);
         if (local) return local;
       }
-      // POS lookups that disk can answer give up sooner on a hung connection.
-      const posLookup = /^\/(online\/bootstrap|online\/products(\/sku\/.*)?|customers)$/.test(pathname);
-      const res = await net(m, p, body, { timeout: !st.online ? 10000 : (posLookup ? 15000 : 120000) });
+      const res = await net(m, p, body, { timeout: getTimeout(pathname) });
       if (isUnreachable(res.status)) {
         setOnline(false);
         return localGet(p) || offlineResponse(res.body);
@@ -1897,20 +1991,44 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
       return offlineResponse(res.body);
     }
     setOnline(true);
+    if (res.status < 300 && CATALOG_WRITES.test(pathname)) catalogChanged();
     return res;
+  }
+
+  // Writes that change product cards (price, stock, categories, discounts…).
+  const CATALOG_WRITES = /^\/(online\/products|online\/barcodes|grns|purchase-orders|stock-transfers|stock-audits|categories|brands|discounts|sale-campaigns|units)(\/|$)/;
+  // Right after this PC changes products, the grid reads from the server for
+  // a moment (so the change shows at once) while the local copy catches up.
+  const SERVER_FIRST_MS = 20000;
+  function catalogChanged() {
+    st.serverFirstUntil = Date.now() + SERVER_FIRST_MS;
+    syncProductsSoon();
+  }
+
+  function localFirst(s, pathname, params) {
+    if (Date.now() < (st.serverFirstUntil || 0)) return false;
+    if (!s.catalog.synced_at || !s.meta.bootstrap || !Object.keys(s.catalog.products).length) return false;
+    if (pathname === '/online/bootstrap') {
+      // "Recent" ordering and brand filters need the server's sales/brand data.
+      return !params.get('brand_id') && params.get('recent_sales') !== '1' && params.get('sort') !== 'recent_sales';
+    }
+    return pathname === '/online/products' || pathname.startsWith('/online/products/sku/');
   }
 
   function start() {
     st.catalogTimer = setInterval(() => {
       if (st.online) { syncOutbox().then(() => syncCatalog()); }
     }, CATALOG_REFRESH_MS);
-    // First refresh shortly after launch, once the renderer has settled.
-    setTimeout(() => { syncOutbox().then(() => syncCatalog()); }, 5000);
+    // Products (price / stock) refresh more often, so the instant local search stays current.
+    st.productTimer = setInterval(() => { if (st.online) syncProductsQuick(); }, PRODUCT_REFRESH_MS);
+    // First refresh once the app has finished opening (it waits for the user anyway).
+    setTimeout(() => { syncOutbox().then(() => syncCatalog()); }, 20000);
   }
 
   function stop() {
     stopProbe();
     if (st.catalogTimer) clearInterval(st.catalogTimer);
+    if (st.productTimer) clearInterval(st.productTimer);
     if (st.outboxTimer) clearTimeout(st.outboxTimer);
     flushCache();
     if (gst.timer) {

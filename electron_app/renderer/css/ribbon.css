@@ -1192,11 +1192,11 @@ body.dark .tpm-item-danger:hover { background: #3b1515; }
   background: rgba(255,255,255,.18); color: #fff;
 }
 .offline-pill i { opacity: 1 !important; }
-.offline-pill.is-offline { background: #dc2626; color: #fff; }
-.offline-pill.is-pending { background: #f59e0b; color: #1f2937; }
+.offline-pill.is-offline { background: rgba(0,0,0,.18); color: #fff; }
 .offline-pill.is-failed  { background: #fff; color: #b91c1c; }
 #cashier-topbar .offline-pill { margin-left: 10px; -webkit-app-region: no-drag; }
-#cashier-topbar .offline-pill:not(.is-offline):not(.is-pending):not(.is-failed) { background: var(--accent); }
+#cashier-topbar .offline-pill:not(.is-offline):not(.is-failed) { background: var(--accent); }
+#cashier-topbar .offline-pill.is-offline { background: #6b7280; }
 .offline-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .offline-summary .os-tile { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
 .offline-summary .os-label { font-size: 11px; color: var(--text-muted); }
