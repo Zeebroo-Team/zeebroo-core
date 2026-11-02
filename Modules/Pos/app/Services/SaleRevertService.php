@@ -39,7 +39,8 @@ class SaleRevertService
     ) {
     }
 
-    public function revert(Sale $sale, Business $business, User $user, string $reason, ?string $notes): SaleRevert
+    // $revertedAt: when replayed from the desktop's offline queue (default now).
+    public function revert(Sale $sale, Business $business, User $user, string $reason, ?string $notes, ?\Carbon\CarbonInterface $revertedAt = null): SaleRevert
     {
         if ((int) $sale->business_id !== (int) $business->id) {
             abort(403);
@@ -53,7 +54,7 @@ class SaleRevertService
             throw ValidationException::withMessages(['notes' => 'Describe why this bill is being reverted.']);
         }
 
-        $revert = DB::transaction(function () use ($sale, $business, $user, $reason, $notes): SaleRevert {
+        $revert = DB::transaction(function () use ($sale, $business, $user, $reason, $notes, $revertedAt): SaleRevert {
             // Lock the sale so two cashiers can't revert the same bill at once
             $sale = Sale::query()->whereKey($sale->id)->lockForUpdate()->firstOrFail();
 
@@ -187,7 +188,7 @@ class SaleRevertService
                 'account_reversed'   => round($accountReversed, 2),
                 'stock_restored_qty' => round($restoredTotal, 3),
                 'items'              => $itemsSnapshot,
-                'reverted_at'        => now(),
+                'reverted_at'        => $revertedAt ?? now(),
             ]);
 
             return $revert;

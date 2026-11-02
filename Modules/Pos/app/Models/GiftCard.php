@@ -69,22 +69,23 @@ class GiftCard extends Model
         return $this->hasMany(GiftCardTransaction::class, 'pos_gift_card_id')->orderByDesc('created_at')->orderByDesc('id');
     }
 
-    public function isExpired(): bool
+    // $on: judge validity on this day (an offline sale replayed later) instead of today.
+    public function isExpired(?\Carbon\CarbonInterface $on = null): bool
     {
-        return (bool) ($this->expires_at && $this->expires_at->lt(now()->startOfDay()));
+        return (bool) ($this->expires_at && $this->expires_at->lt(\Carbon\Carbon::instance($on ?? now())->startOfDay()));
     }
 
-    public function isScheduled(): bool
+    public function isScheduled(?\Carbon\CarbonInterface $on = null): bool
     {
-        return (bool) ($this->valid_from && $this->valid_from->gt(now()->startOfDay()));
+        return (bool) ($this->valid_from && $this->valid_from->gt(\Carbon\Carbon::instance($on ?? now())->startOfDay()));
     }
 
-    public function status(): string
+    public function status(?\Carbon\CarbonInterface $on = null): string
     {
         return match (true) {
             ! $this->is_active                 => self::STATUS_DISABLED,
-            $this->isExpired()                 => self::STATUS_EXPIRED,
-            $this->isScheduled()               => self::STATUS_SCHEDULED,
+            $this->isExpired($on)              => self::STATUS_EXPIRED,
+            $this->isScheduled($on)            => self::STATUS_SCHEDULED,
             (float) $this->balance <= 0.005    => self::STATUS_USED,
             default                            => self::STATUS_ACTIVE,
         };

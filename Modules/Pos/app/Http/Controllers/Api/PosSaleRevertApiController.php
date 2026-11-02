@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesOfflineTime;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Models\SaleRevert;
@@ -14,6 +15,7 @@ use Modules\Pos\Services\SaleRevertService;
 
 class PosSaleRevertApiController extends Controller
 {
+    use ResolvesOfflineTime;
     use ResolvesPosBusinessForApi;
 
     public function __construct(
@@ -73,6 +75,7 @@ class PosSaleRevertApiController extends Controller
         $validated = $request->validate([
             'reason' => 'required|string|max:40',
             'notes'  => 'nullable|string|max:1000',
+            'occurred_at' => 'nullable|date',
         ]);
 
         try {
@@ -82,6 +85,7 @@ class PosSaleRevertApiController extends Controller
                 $request->user() ?? abort(401),
                 $validated['reason'],
                 $validated['notes'] ?? null,
+                $this->offlineOccurredAt($request),
             );
         } catch (ValidationException $e) {
             return response()->json([

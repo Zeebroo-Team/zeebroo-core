@@ -9421,6 +9421,7 @@ async function doCashierLogin() {
   }
 
   const d = res.body?.data;
+  if (res.offline) toast('No internet — signed in offline. Sales will sync when the internet is back.', 'info');
   // Store cashier token + business config
   await window.electronAPI.setConfig({
     token:       d.token,
@@ -9754,6 +9755,7 @@ async function doLogin() {
 
   const token = res.body?.token || res.body?.data?.token || res.body?.access_token;
   console.log('[login] token extracted:', token ? token.slice(0,20)+'…' : 'NONE');
+  if (res.offline) toast('No internet — signed in offline. Sales will sync when the internet is back.', 'info');
   state._userName  = res.body?.user?.name  || null;
   state._userEmail = res.body?.user?.email || email;
   state._userAvatar = res.body?.user?.avatar_url || null;
@@ -35477,6 +35479,10 @@ $('#checkout-confirm').addEventListener('click', async () => {
         item_tax_rule:          i.itemTaxRule ?? undefined,
         rental_return_date:     i._isRental ? i._rentalReturnDate : undefined,
         custom_unit_price:      ((i._isDynamic && !i._dynLinked) || i._changeablePrice) ? i.price : undefined,
+        // Offline mode only (stripped before sending): the price the customer
+        // pays is kept when the sale is uploaded later, and the receipt name.
+        offline_unit_price:     i.price,
+        offline_name:           i.name,
       })),
       ...serviceItems.map(i => ({
         item_type:              'service',
@@ -35487,8 +35493,19 @@ $('#checkout-confirm').addEventListener('click', async () => {
         item_discount_percent:  _itemEffectivePct(i) > 0 ? _itemEffectivePct(i) : undefined,
         item_tax_rule:          i.itemTaxRule ?? undefined,
         custom_requirement_values: (i.customRequirementValues && i.customRequirementValues.length) ? i.customRequirementValues : undefined,
+        offline_unit_price:     i.price,
+        offline_name:           i.name,
       })),
     ],
+    // Offline mode only: totals for the receipt printed before the sale is uploaded
+    offline_summary: {
+      subtotal:         _coComputeSubtotal(),
+      discount_amount:  Math.max(0, Math.round((_coComputeSubtotal() - _coGetAfterDiscount()) * 100) / 100),
+      coupon_discount:  _coCoupon ? _coCouponDiscount(_coGetAfterDiscount()) : 0,
+      gift_card_amount: _coGift && giftAmt > 0 ? giftAmt : 0,
+      total,
+      cashier_name:     state._userName || null,
+    },
   };
 
   const res = await API.checkout(body);
@@ -35500,6 +35517,7 @@ $('#checkout-confirm').addEventListener('click', async () => {
     showAlert(alertEl, res.body?.message || 'Checkout failed');
     return;
   }
+  if (res.offline) toast(res.body?.message || 'Sale saved offline — it will sync when the internet is back.', 'info');
 
   const postCustomerId = tab?._customer?.id ?? null;
   // Snapshot tax breakdown before clearing the cart (per-item taxes live in cart items)
@@ -35515,7 +35533,8 @@ $('#checkout-confirm').addEventListener('click', async () => {
   const sale = res.body?.data;
   if (sale) {
     if (_taxSnap.length > 0) sale._taxBreakdown = _taxSnap;
-    if ((state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
+    // Invoices are created on the server, so an offline sale always prints a bill
+    if (!sale.offline && (state.receiptSettings?.receipt_mode || 'bill') === 'invoice') {
       _posCreateInvoiceFromSale(sale, postCustomerId);
     } else {
       showReceiptModal(sale, { afterSale: true });
@@ -35524,6 +35543,167 @@ $('#checkout-confirm').addEventListener('click', async () => {
 
   // Refresh ribbon stats after each sale
   _loadPosRibbonStats();
+});
+
+// ── Offline mode: status pill + sync panel ─────────────────────────────────
+// main.js (offline.js) keeps a local copy of the catalog/customers and queues
+// sales while the internet is down; this shows where things stand and lets the
+// user sync now, retry or discard sales the server rejected.
+let _offline = { online: true, pending: 0, failed: 0 };
+const _offlineKindIcon = {
+  settings: 'fa-gear', customer_create: 'fa-user-plus', customer_update: 'fa-user-pen',
+  void: 'fa-ban', return: 'fa-rotate-left', revert: 'fa-rotate-left', eod: 'fa-building-columns',
+  cash_open: 'fa-cash-register', cash_withdraw: 'fa-arrow-up-from-bracket',
+  rental_return: 'fa-calendar-check', credit_payment: 'fa-hand-holding-dollar',
+};
+
+function _offlineAgo(iso) {
+  if (!iso) return 'never';
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  return hrs < 48 ? `${hrs} h ago` : `${Math.round(hrs / 24)} days ago`;
+}
+
+function _renderOfflinePill() {
+  const s = _offline;
+  const progress = s.catalogProgress?.total
+    ? ` ${s.catalogProgress.done}/${s.catalogProgress.total}` : '';
+  let cls = '', html = '';
+  if (!s.online) {
+    cls  = 'is-offline';
+    html = `<i class="fa fa-wifi"></i> Offline${s.pending ? ` · ${s.pending} to sync` : ''}`;
+  } else if (s.failed) {
+    cls  = 'is-failed';
+    html = `<i class="fa fa-triangle-exclamation"></i> ${s.failed} sale${s.failed === 1 ? '' : 's'} need attention`;
+  } else if (s.pending) {
+    cls  = 'is-pending';
+    html = `<i class="fa fa-rotate fa-spin"></i> Syncing ${s.pending} sale${s.pending === 1 ? '' : 's'}`;
+  } else if (s.syncing) {
+    html = `<i class="fa fa-rotate fa-spin"></i> Updating offline data${progress}`;
+  } else {
+    html = `<i class="fa fa-cloud"></i> Online`;
+  }
+  $$('[data-offline-pill]').forEach(el => {
+    el.className = `offline-pill ${cls}`;
+    el.innerHTML = html;
+    el.style.display = '';
+  });
+}
+
+async function _renderOfflinePanel() {
+  const s = _offline;
+  const offlineSince = !s.online && s.lastOnlineAt ? ` since ${_offlineAgo(s.lastOnlineAt)}` : '';
+  $('#offline-sync-summary').innerHTML = `
+    <div class="os-tile"><div class="os-label">Connection</div><div class="os-value" style="color:${s.online ? '#16a34a' : '#dc2626'}">${s.online ? 'Online' : 'Offline' + escHtml(offlineSince)}</div></div>
+    <div class="os-tile"><div class="os-label">Waiting to sync</div><div class="os-value">${s.pending || 0}${s.failed ? ` <span style="color:#dc2626">· ${s.failed} failed</span>` : ''}</div></div>
+    <div class="os-tile"><div class="os-label">Offline products</div><div class="os-value">${s.productCount || 0}</div></div>
+    <div class="os-tile"><div class="os-label">Offline customers</div><div class="os-value">${s.customerCount || 0}</div></div>
+    <div class="os-tile" style="grid-column:1/-1"><div class="os-label">Offline data last updated</div><div class="os-value">${escHtml(_offlineAgo(s.catalogSyncedAt))}${s.syncing ? ' <i class="fa fa-spinner fa-spin"></i>' : ''}</div></div>
+    <p class="offline-note" style="grid-column:1/-1">Without internet you can keep selling for up to ${s.maxOfflineDays || 7} days, even after restarting the PC — sales, returns, voids, cash drawer, end of day, gift cards, coupons and rentals. Everything uploads automatically, in order, when the connection is back. A gift card or coupon also used on another till meanwhile may be rejected; it then shows here.</p>
+    ${s.lastError ? `<p class="offline-note" style="grid-column:1/-1;color:#dc2626">${escHtml(s.lastError)}</p>` : ''}`;
+
+  const rows = await window.electronAPI.offlineOutbox();
+  const tag  = { pending: 'Waiting', failed: 'Failed', synced: 'Synced' };
+  $('#offline-sync-list').innerHTML = rows.map(r => `
+    <div class="offline-row">
+      <div class="or-main">
+        ${r.kind === 'sale' ? `
+        <div><strong>${escHtml(r.offline_ref)}</strong>${r.sale_number ? ` → ${escHtml(r.sale_number)}` : ''}</div>
+        <div class="or-sub">${escHtml(new Date(r.sold_at).toLocaleString())} · ${r.item_count} item${r.item_count === 1 ? '' : 's'} · ${escHtml(r.payment_method || '')} · ${formatMoney(r.total || 0)}</div>` : `
+        <div><i class="fa ${_offlineKindIcon[r.kind] || 'fa-circle'}"></i> <strong>${escHtml(r.offline_ref)}</strong></div>
+        <div class="or-sub">${escHtml(new Date(r.sold_at).toLocaleString())}</div>`}
+        ${r.error && r.status !== 'synced' ? `<div class="or-err">${escHtml(r.error)}</div>` : ''}
+      </div>
+      <span class="or-tag ${r.status}">${tag[r.status] || r.status}</span>
+      ${r.kind === 'sale' ? `<button class="psm-btn-cancel" data-ofl-receipt="${escHtml(r.client_uuid)}" title="Show receipt"><i class="fa fa-receipt"></i></button>` : ''}
+      ${r.status === 'failed' ? `
+        <button class="psm-btn-cancel" data-ofl-retry="${escHtml(r.client_uuid)}">Retry</button>
+        <button class="psm-btn-cancel" data-ofl-discard="${escHtml(r.client_uuid)}" style="color:#dc2626">Discard</button>` : ''}
+    </div>`).join('');
+  _offlinePanelRows = rows;
+}
+let _offlinePanelRows = [];
+
+function _openOfflinePanel() {
+  $('#offline-sync-modal').style.display = 'flex';
+  _renderOfflinePanel();
+}
+
+window.electronAPI.onOfflineStatus(s => {
+  const prev = _offline;
+  _offline = s;
+  _renderOfflinePill();
+  if ($('#offline-sync-modal').style.display === 'flex') _renderOfflinePanel();
+
+  // Back online / sales uploaded: refresh numbers and the grid from the server
+  const uploaded = (s.pending || 0) < (prev.pending || 0);
+  if ((s.online && !prev.online) || uploaded) {
+    if (uploaded && !s.pending) toast('Offline sales synced to the server.', 'info');
+    if (typeof _loadPosRibbonStats === 'function') _loadPosRibbonStats();
+  }
+  if (!s.online && prev.online) {
+    toast('Internet connection lost — working offline. Sales will sync automatically.', 'error');
+  }
+});
+window.electronAPI.offlineStatus().then(s => { _offline = s; _renderOfflinePill(); });
+window.addEventListener('api-saved-offline', e => {
+  toast(e.detail || 'No internet — saved on this PC. It will upload when the internet is back.', 'info');
+});
+
+$$('[data-offline-pill]').forEach(el => el.addEventListener('click', _openOfflinePanel));
+$('#offline-sync-close').addEventListener('click', () => { $('#offline-sync-modal').style.display = 'none'; });
+$('#offline-sync-modal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+});
+
+async function _offlineSyncNow(full) {
+  const btn = full ? $('#offline-sync-full') : $('#offline-sync-now');
+  const html = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Syncing…';
+  const s = await window.electronAPI.offlineSync({ full });
+  btn.disabled = false;
+  btn.innerHTML = html;
+  _offline = s;
+  _renderOfflinePill();
+  _renderOfflinePanel();
+  if (!s.online) toast('Still offline — will keep trying automatically.', 'error');
+}
+$('#offline-sync-now').addEventListener('click', () => _offlineSyncNow(false));
+$('#offline-sync-full').addEventListener('click', () => _offlineSyncNow(true));
+
+$('#offline-sync-list').addEventListener('click', async e => {
+  const receipt = e.target.closest('[data-ofl-receipt]');
+  const retry   = e.target.closest('[data-ofl-retry]');
+  const discard = e.target.closest('[data-ofl-discard]');
+  if (receipt) {
+    const row = _offlinePanelRows.find(r => r.client_uuid === receipt.dataset.oflReceipt);
+    if (row?.receipt) {
+      $('#offline-sync-modal').style.display = 'none';
+      showReceiptModal(row.receipt);
+    }
+  } else if (retry) {
+    await window.electronAPI.offlineRetry(retry.dataset.oflRetry);
+    _renderOfflinePanel();
+  } else if (discard) {
+    const row = _offlinePanelRows.find(r => r.client_uuid === discard.dataset.oflDiscard);
+    const ok = await appConfirm(row?.kind === 'sale' ? {
+      title: 'Discard this offline sale?',
+      message: 'It will never be uploaded and will not appear in your sales or stock. Only do this if the sale did not really happen or you entered it again online.',
+      confirmText: '<i class="fa fa-trash"></i> Discard',
+      danger: true,
+    } : {
+      title: 'Discard this offline change?',
+      message: 'It will never be uploaded. Sales that use a discarded new customer will fail to upload.',
+      confirmText: '<i class="fa fa-trash"></i> Discard',
+      danger: true,
+    });
+    if (!ok) return;
+    await window.electronAPI.offlineDiscard(discard.dataset.oflDiscard);
+    _renderOfflinePanel();
+  }
 });
 
 // ── Register Lock ──────────────────────────────────────────────────────────

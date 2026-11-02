@@ -268,7 +268,7 @@ class SaleService
             fn ($i) => ($i['item_type'] ?? '') === 'service' && !empty($i['service_item_id']),
         ));
 
-        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems, $honourClientPrices) : [];
+        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems, $honourClientPrices, $soldAt) : [];
         $serviceLines = $this->normalizeServiceCartItems($business, $rawServiceItems);
 
         if ($productLines === [] && $serviceLines === []) {
@@ -334,12 +334,14 @@ class SaleService
                     : $this->stockConsumption->consumeFifo($product, $line['quantity'], $branchId, $branchStockSeparate);
 
                 $isRentalLine = (bool) $product->is_rental;
+                // An offline sale replayed later rents from the day it was sold.
+                $rentFrom = \Carbon\Carbon::instance($soldAt ?? now())->startOfDay();
                 $rentalReturnDate = $isRentalLine
-                    ? ($line['rental_return_date'] ?? now()->addDays((int) $product->rental_max_days)->toDateString())
+                    ? ($line['rental_return_date'] ?? $rentFrom->copy()->addDays((int) $product->rental_max_days)->toDateString())
                     : null;
                 // Rentals are billed as daily_rate × days, never for less than one day.
                 $rentalDays = $isRentalLine
-                    ? max(1, (int) now()->startOfDay()->diffInDays(\Carbon\Carbon::parse($rentalReturnDate)->startOfDay()))
+                    ? max(1, (int) $rentFrom->diffInDays(\Carbon\Carbon::parse($rentalReturnDate)->startOfDay()))
                     : null;
 
                 // Resolve the applicable discount for this line — when multiple
@@ -454,6 +456,7 @@ class SaleService
                         (float) $product->rental_daily_rate,
                         $rentalQty,
                         $rentalReturnDate,
+                        $rentFrom->toDateString(),
                     );
                 }
             }
@@ -543,6 +546,7 @@ class SaleService
                     max(0, $subtotal - $discountAmount),
                     $sale,
                     $user,
+                    $soldAt,
                 );
             }
 
@@ -557,7 +561,7 @@ class SaleService
             if (filled($giftCardCode) && $giftCardAmount !== null && $giftCardAmount > self::MONEY_TOLERANCE) {
                 $giftApplied = round(min($giftCardAmount, $total), 2);
                 if ($giftApplied > self::MONEY_TOLERANCE) {
-                    $giftCard = $this->giftCards->redeemForSale($business, (string) $giftCardCode, $giftApplied, $sale, $user);
+                    $giftCard = $this->giftCards->redeemForSale($business, (string) $giftCardCode, $giftApplied, $sale, $user, $soldAt);
                 } else {
                     $giftApplied = 0.0;
                 }
@@ -723,7 +727,7 @@ class SaleService
      * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, product_selling_unit_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null, warranty_type?: ?string, warranty_days?: ?int}>  $items
      * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float, warranty_type: ?string, warranty_days: ?int}>
      */
-    private function normalizeCartItems(Business $business, array $items, bool $honourClientPrices = false): array
+    private function normalizeCartItems(Business $business, array $items, bool $honourClientPrices = false, ?\Carbon\CarbonInterface $soldAt = null): array
     {
         if ($items === []) {
             throw ValidationException::withMessages([
@@ -806,7 +810,7 @@ class SaleService
             }
 
             if ($product->is_rental && !empty($row['rental_return_date'])) {
-                $maxDate = now()->addDays((int) $product->rental_max_days)->toDateString();
+                $maxDate = \Carbon\Carbon::instance($soldAt ?? now())->addDays((int) $product->rental_max_days)->toDateString();
                 if ($row['rental_return_date'] > $maxDate) {
                     throw ValidationException::withMessages([
                         'items' => 'Return date for '.$product->name.' exceeds the maximum rental period.',

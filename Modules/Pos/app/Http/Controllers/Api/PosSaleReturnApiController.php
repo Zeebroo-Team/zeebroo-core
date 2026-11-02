@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesOfflineTime;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Models\SaleReturn;
@@ -14,6 +15,7 @@ use Modules\Pos\Services\SaleReturnService;
 
 class PosSaleReturnApiController extends Controller
 {
+    use ResolvesOfflineTime;
     use ResolvesPosBusinessForApi;
 
     public function __construct(
@@ -66,6 +68,7 @@ class PosSaleReturnApiController extends Controller
             'credit_account_id'      => 'nullable|integer|min:1',
             'notes'                  => 'nullable|string|max:1000',
             'refund_reason'          => 'nullable|string|max:500',
+            'occurred_at'            => 'nullable|date',
         ]);
 
         try {
@@ -78,6 +81,7 @@ class PosSaleReturnApiController extends Controller
                 $validated['credit_account_id'] ?? null,
                 $validated['notes'] ?? null,
                 $validated['refund_reason'] ?? null,
+                $this->offlineOccurredAt($request),
             );
         } catch (ValidationException $e) {
             return response()->json([

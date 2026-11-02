@@ -5,12 +5,14 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesOfflineTime;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\ProductRental;
 use Modules\Pos\Services\ProductRentalService;
 
 class PosProductRentalApiController extends Controller
 {
+    use ResolvesOfflineTime;
     use ResolvesPosBusinessForApi;
 
     public function __construct(
@@ -57,8 +59,9 @@ class PosProductRentalApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         abort_unless((int) $productRental->business_id === (int) $business->id, 404);
+        $request->validate(['occurred_at' => ['nullable', 'date']]);
 
-        $productRental = $this->rentals->markReturned($productRental);
+        $productRental = $this->rentals->markReturned($productRental, $this->offlineOccurredAt($request));
 
         return response()->json(['message' => 'Rental marked as returned.', 'data' => $this->format($productRental)]);
     }

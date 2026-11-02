@@ -37,6 +37,7 @@
     "files": [
       "main.js",
       "config.js",
+      "offline.js",
       "preload.js",
       "renderer/**/*",
       "node_modules/**/*",

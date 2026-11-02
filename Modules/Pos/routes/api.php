@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Pos\Http\Middleware\EnsureSubscriptionSettled;
+use Modules\Pos\Http\Middleware\PosIdempotency;
 use Modules\Pos\Http\Controllers\Api\PosAuthApiController;
 use Modules\Pos\Http\Controllers\Api\PosPaymentApiController;
 use Modules\Pos\Http\Controllers\Api\PosBusinessesApiController;
@@ -105,7 +106,8 @@ Route::prefix('v1/pos')->group(function (): void {
         ->name('media.business-file');
 });
 
-Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
+// PosIdempotency only acts on writes sent with an Idempotency-Key header (desktop offline queue).
+Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
     Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post  ('auth/profile/avatar', [PosAuthApiController::class, 'uploadAvatar'])->name('auth.profile.avatar.upload')->withoutMiddleware(EnsureSubscriptionSettled::class);
@@ -348,6 +350,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
     Route::post('customers/import/preview', [PosCustomerApiController::class, 'importPreview'])->name('customers.import.preview');
     Route::get('customers/duplicates', [PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
+    // Desktop offline mode: full customer list download (read-only)
+    Route::get('customers/offline-sync', [PosCustomerApiController::class, 'offlineSync'])->name('customers.offline-sync');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');

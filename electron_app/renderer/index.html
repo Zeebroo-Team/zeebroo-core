@@ -1196,6 +1196,7 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
     </div>
     <div class="ctb-center">
       <span class="ctb-clock" id="ctb-clock"></span>
+      <button class="offline-pill" data-offline-pill style="display:none" title="Offline sync"></button>
     </div>
     <div class="ctb-right">
       <div class="ctb-summary">
@@ -13475,6 +13476,7 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
     <i class="fa fa-circle-info"></i>
     <span id="status-text">Zeebroo POS &nbsp;·&nbsp; v1.0 &nbsp;·&nbsp; Ready</span>
     <div class="status-right">
+      <button class="offline-pill" data-offline-pill style="display:none" title="Offline sync"></button>
       <span id="status-branch"><i class="fa fa-code-branch"></i> —</span>
       <span id="status-time"></span>
     </div>
@@ -13560,6 +13562,24 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
     <div class="eod-modal-footer">
       <button class="psm-btn-cancel" id="reg-lock-pw-cancel">Cancel</button>
       <button class="eod-settle-btn" id="reg-lock-pw-confirm"><i class="fa fa-check"></i> Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Offline sync panel (status bar pill) ─────────────────────────── -->
+<div id="offline-sync-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
+  <div class="eod-modal" style="width:560px;max-width:calc(100vw - 32px)">
+    <div class="eod-modal-header">
+      <span><i class="fa fa-cloud-arrow-up"></i> Offline &amp; Sync</span>
+      <button class="psm-btn-cancel" id="offline-sync-close" style="margin-left:auto"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="eod-modal-body">
+      <div id="offline-sync-summary" class="offline-summary"></div>
+      <div id="offline-sync-list" class="offline-list"></div>
+    </div>
+    <div class="eod-modal-footer">
+      <button class="psm-btn-cancel" id="offline-sync-full" title="Download every product and customer again">Re-download data</button>
+      <button class="eod-settle-btn" id="offline-sync-now"><i class="fa fa-rotate"></i> Sync now</button>
     </div>
   </div>
 </div>
