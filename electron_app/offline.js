@@ -314,13 +314,15 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
     if (st.probeTimer) { clearInterval(st.probeTimer); st.probeTimer = null; }
   }
 
-  function offlineResponse(extra = {}) {
+  // The raw network error (e.g. "getaddrinfo ENOTFOUND …") is kept for logs
+  // only — the user sees a plain message.
+  function offlineResponse(netBody = {}) {
     return {
       status: 0,
       offline: true,
       body: {
-        message: 'No internet connection. This screen needs to be online — POS sales still work offline and will sync automatically.',
-        ...extra,
+        message: 'No internet connection. This needs to be online — POS sales, products and customers still work offline and sync automatically.',
+        network_error: netBody?.message || null,
       },
     };
   }
@@ -909,6 +911,14 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
       if (realId) body.pos_customer_id = realId;
       else return queueSale(body, s);
     }
+    // Same for a product added offline.
+    const productMap = s.meta.product_id_map || {};
+    body.items = (body.items || []).map(i => {
+      if (!(i.product_id < 0) || !productMap[i.product_id]) return i;
+      const { product_stock_layer_id, ...rest } = i;
+      return { ...rest, product_id: productMap[i.product_id] };
+    });
+    if (body.items.some(i => i.product_id < 0)) return queueSale(body, s);
 
     if (st.online) {
       const res = await net('POST', '/online/checkout', stripOfflineKeys(body), { timeout: 30000 });
@@ -988,6 +998,131 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
       addWrite(s, { kind: 'customer_update', method: 'PATCH', path: `/customers/${id}`, body, label: `Customer change: ${row?.name || id}` });
     }
     return { status: 200, offline: true, body: { message: SAVED_OFFLINE_MSG, data: row || { id, ...fields } } };
+  }
+
+  // ── New product offline: sellable right away; uploads before its sales ──
+  function queueProductCreate(body, s) {
+    const name = String(body?.name || '').trim();
+    const price = Number(body?.unit_price);
+    if (!name) return { status: 422, offline: true, body: { message: 'Product name is required.', errors: { name: ['Product name is required.'] } } };
+    if (!(price >= 0) || body.unit_price === null || body.unit_price === '') {
+      return { status: 422, offline: true, body: { message: 'Selling price is required.', errors: { unit_price: ['Selling price is required.'] } } };
+    }
+    if (body.sku && Object.values(s.catalog.products).some(c => String(c.sku || '').toLowerCase() === String(body.sku).toLowerCase())) {
+      return { status: 422, offline: true, body: { message: 'This SKU is already used by another product.', errors: { sku: ['This SKU is already used by another product.'] } } };
+    }
+    const tempId = -Date.now();
+    const layers = (body.opening_batches || []).filter(b => Number(b.quantity) > 0).map((b, i) => ({
+      id: tempId * 100 - i, // negative: replaced by real batches after upload
+      batch_sku: null,
+      label: 'Opening stock',
+      quantity_remaining: Number(b.quantity),
+      unit_cost: Number(b.cost_price ?? body.cost_price ?? 0),
+      unit_sell_price: Number(b.selling_price ?? price),
+      received_at: todayYmd(),
+    }));
+    const stock = layers.reduce((a, l) => a + l.quantity_remaining, 0);
+    const prices = new Set(layers.map(l => l.unit_sell_price.toFixed(2)));
+    const card = {
+      id: tempId, name, sku: body.sku || null, unit: null, image_url: null,
+      unit_sell_price: price, discounted_sell_price: null, discount: null,
+      stock_quantity: stock, available_stock: stock, has_layers: layers.length > 0, layer_count: layers.length,
+      requires_layer_pick: layers.length > 1 && prices.size > 1, has_multiple_prices: prices.size > 1,
+      layers, selling_units: [], batch_skus: [], category_ids: body.product_category_ids || [],
+      wholesale_price: body.wholesale_price ?? null, has_warranty: !!body.has_warranty, warranty_duration: body.warranty_duration ?? null,
+      track_expiry: !!body.track_expiry, courier_delivery: false, loyalty_redeemable: !!body.loyalty_redeemable,
+      is_subscription: !!body.is_subscription, subscription_recurring_period: body.subscription_recurring_period ?? null,
+      subscription_free_trial: !!body.subscription_free_trial,
+      is_rental: !!body.is_rental, rental_daily_rate: body.rental_daily_rate ?? null, rental_max_days: body.rental_max_days ?? null,
+      rental_late_fee_multiplier: body.rental_late_fee_multiplier ?? null, rental_needs_cleaning: !!body.rental_needs_cleaning,
+      is_dynamic_pricing: !!body.is_dynamic_pricing, dynamic_price_qty_linked: !!body.dynamic_price_qty_linked,
+      is_changeable_price: !!body.is_changeable_price, offline: true,
+    };
+    // Bundles never show in the POS grid, so they only wait for the upload.
+    if (!body.is_bundle && body.is_active !== false) {
+      s.catalog.products[tempId] = card;
+      save('catalog');
+    }
+    addWrite(s, { kind: 'product_create', method: 'POST', path: '/online/products', body, temp_id: tempId, label: `New product: ${name}` });
+    return { status: 201, offline: true, body: { message: SAVED_OFFLINE_MSG, data: { ...card, batches_on_other_price: [] } } };
+  }
+
+  // A product created offline got its real id: fix the sales that sold it.
+  function mapProduct(box, tempId, realId) {
+    if (!tempId || !realId) return;
+    const fix = items => (items || []).forEach(i => {
+      if (i.product_id === tempId) {
+        i.product_id = realId;
+        // Its offline "opening stock" batch ids don't exist on the server — sell FIFO.
+        if (i.product_stock_layer_id < 0) delete i.product_stock_layer_id;
+      }
+    });
+    for (const e of box.outbox) { fix(e.body?.items); fix(e.receipt?.items); }
+    if (box.isCurrent) {
+      st.store.meta.product_id_map = { ...(st.store.meta.product_id_map || {}), [tempId]: realId };
+      delete st.store.catalog.products[tempId];
+      save('meta');
+      save('catalog');
+    } else {
+      const metaFile = path.join(box.dir, 'meta.json');
+      const meta = readJson(metaFile, {});
+      meta.product_id_map = { ...(meta.product_id_map || {}), [tempId]: realId };
+      writeJsonAtomic(metaFile, meta);
+    }
+  }
+
+  // ── Customer CSV import offline: each row becomes an offline customer ───
+  // (phone matches are linked to the existing customer on upload, as with
+  // POST customers/offline from the mobile app).
+  function customerImportPlan(s, rows, mode) {
+    const cats = s.cache['/customer-categories']?.body?.data || [];
+    const seen = new Set();
+    return (rows || []).map((r, idx) => {
+      const key = [String(r.phone || '').trim(), String(r.email || '').trim().toLowerCase()];
+      const existing = s.customers.items.find(c =>
+        (key[0] && String(c.phone || '').trim() === key[0]) || (key[1] && String(c.email || '').trim().toLowerCase() === key[1]));
+      const dupInFile = key.some(k => k && seen.has(k));
+      key.forEach(k => { if (k) seen.add(k); });
+      const category = r.category ? cats.find(c => String(c.name).toLowerCase() === String(r.category).toLowerCase()) : null;
+      let status = 'create', reason = null;
+      if (!String(r.name || '').trim()) { status = 'error'; reason = 'Name is required.'; }
+      else if (dupInFile) { status = 'skip'; reason = 'Repeated in this file.'; }
+      else if (existing) { status = mode === 'update' ? 'update' : 'skip'; reason = mode === 'update' ? null : `Already a customer: ${existing.name}`; }
+      return {
+        row: idx + 1, name: r.name || null, phone: r.phone || null, email: r.email || null,
+        status, reason, customer_id: existing?.id ?? null,
+        fields: { ...pick(r, CUSTOMER_FIELDS), customer_category_id: category?.id ?? null },
+      };
+    });
+  }
+
+  function customerImportResponse(plan, preview) {
+    const totals = { create: 0, update: 0, skip: 0, error: 0 };
+    plan.forEach(p => { totals[p.status] += 1; });
+    const notImported = plan.filter(p => p.status === 'skip' || p.status === 'error');
+    return {
+      status: 200,
+      offline: true,
+      body: {
+        message: preview ? 'Checked on this PC (offline).' : SAVED_OFFLINE_MSG,
+        imported: preview ? 0 : totals.create,
+        updated: preview ? 0 : totals.update,
+        skipped: totals.skip + totals.error,
+        errors: notImported.map(p => ({ row: p.row, name: p.name || '', message: p.reason, type: p.status === 'skip' ? 'duplicate' : 'error' })),
+        preview,
+        totals,
+        rows: plan.map(({ fields, ...row }) => row),
+      },
+    };
+  }
+
+  function queueCustomerImport(body, s) {
+    const plan = customerImportPlan(s, body?.rows, body?.duplicates || 'skip');
+    for (const p of plan) {
+      if (p.status === 'create') queueCustomerCreate(p.fields, s);
+      if (p.status === 'update') queueCustomerUpdate(p.customer_id, p.fields, s);
+    }
+    return customerImportResponse(plan, false);
   }
 
   // Try the server first; when it can't be reached, keep the change on this PC.
@@ -1456,6 +1591,17 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
               }
               continue;
             }
+            const newProduct = (item.body?.items || []).find(i => i.product_id < 0);
+            if (newProduct) {
+              const create = box.writes.find(w => w.temp_id === newProduct.product_id && w.kind === 'product_create');
+              if (!create || create.status === 'failed') {
+                item.status = 'failed';
+                item.error = 'A new product on this sale could not upload.';
+              } else {
+                item.error = 'Waiting for its new product to upload first.';
+              }
+              continue;
+            }
             const r = await upload(box, item, 'POST', '/online/checkout', item.body);
             if (r.stop) return;
             if (r.res) {
@@ -1477,6 +1623,7 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
               const r = await upload(box, item, item.method, resolved.path, resolved.body, item.id);
               if (r.stop) return;
               if (r.res && item.kind === 'customer_create') mapCustomer(box, item.temp_id, r.res.body?.data?.id);
+              if (r.res && item.kind === 'product_create') mapProduct(box, item.temp_id, r.res.body?.data?.id);
             }
           }
           saveOutbox(box);
@@ -1586,7 +1733,8 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
       }
       const live = new Set(items.map(i => String(i.id)));
       for (const id of Object.keys(s.catalog.products)) {
-        if (!live.has(id)) { delete s.catalog.products[id]; delete s.catalog.fp[id]; }
+        // Products added offline (negative ids) stay until they upload.
+        if (!live.has(id) && Number(id) > 0) { delete s.catalog.products[id]; delete s.catalog.fp[id]; }
       }
       const changed = items.filter(i => s.catalog.fp[i.id] !== i.fp || !s.catalog.products[i.id]);
       st.catalogProgress = { step: 'products', done: 0, total: changed.length };
@@ -1687,6 +1835,15 @@ function createOffline({ userDataDir, getConfig, request, notify }) {
         save('customers');
       }
       return res;
+    }
+    if (s && m === 'POST' && pathname === '/online/products') {
+      return (await writeOrQueue(m, p, body, () => queueProductCreate(body || {}, s))).res;
+    }
+    if (s && m === 'POST' && pathname === '/customers/import/preview') {
+      return (await writeOrQueue(m, p, body, () => customerImportResponse(customerImportPlan(s, body?.rows, body?.duplicates || 'skip'), true))).res;
+    }
+    if (s && m === 'POST' && pathname === '/customers/import') {
+      return (await writeOrQueue(m, p, body, () => queueCustomerImport(body || {}, s))).res;
     }
     const customerEdit = pathname.match(/^\/customers\/(-?\d+)$/);
     if (s && m === 'PATCH' && customerEdit) {
