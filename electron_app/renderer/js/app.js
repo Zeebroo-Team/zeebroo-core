@@ -893,6 +893,8 @@ async function loadSalesPage() {
 const _sal = {
   all: [], filtered: [],
   channel: '', status: '', search: '',
+  // Tick boxes next to the search: sales made online / printed offline
+  showOnline: true, showOffline: true,
   activeSale: null,
   view: 'transactions',   // 'transactions' | 'history' | 'quotes'
 };
@@ -1745,7 +1747,7 @@ function _pcRender() {
     !q ||
     (g.customer_name || '').toLowerCase().includes(q) ||
     (g.customer_phone || '').toLowerCase().includes(q) ||
-    g.sales.some(s => (s.sale_number || '').toLowerCase().includes(q))
+    g.sales.some(s => [s.sale_number, s.offline_ref].some(v => (v || '').toLowerCase().includes(q)))
   );
 
   // KPI totals
@@ -1856,13 +1858,22 @@ function _pcRender() {
   });
 }
 
+// Printed while the till was offline: uploaded (has its OFF receipt number)
+// or still waiting on this PC (offline.js lists those with offline: true).
+const _salIsOfflineSale = s => !!(s.offline_ref || s.offline);
+
 function _salApplyFilters() {
   const q = _sal.search.toLowerCase();
+  const offlineCount = _sal.all.filter(_salIsOfflineSale).length;
+  $('#sal-count-online').textContent  = _sal.all.length - offlineCount;
+  $('#sal-count-offline').textContent = offlineCount;
   _sal.filtered = _sal.all.filter(s => {
     if (_sal.channel && s.channel !== _sal.channel) return false;
     if (_sal.status  && s.status  !== _sal.status)  return false;
+    if (!(_salIsOfflineSale(s) ? _sal.showOffline : _sal.showOnline)) return false;
     if (q && !(
       (s.sale_number  || '').toLowerCase().includes(q) ||
+      (s.offline_ref  || '').toLowerCase().includes(q) ||
       (s.customer_name|| '').toLowerCase().includes(q) ||
       (s.payment_method||'').toLowerCase().includes(q)
     )) return false;
@@ -2215,6 +2226,9 @@ $('#sal-credits-refresh')?.addEventListener('click', () => {
 });
 
 // ── Transactions filters ──────────────────────────────────────────────────
+[['#sal-show-online', 'showOnline'], ['#sal-show-offline', 'showOffline']].forEach(([sel, key]) => {
+  $(sel).addEventListener('change', e => { _sal[key] = e.target.checked; _salApplyFilters(); });
+});
 $('#sal-search').addEventListener('input', e => {
   clearTimeout(_salSearchTimer);
   _sal.search = e.target.value.trim();
@@ -22608,6 +22622,7 @@ function _rfndRenderList() {
     return `<div class="rfnd-sale-item${active}" data-id="${s.id}">
       <div class="rfnd-si-num">${num} <span class="rfnd-si-total">${formatMoney(total, {currency: cur})}</span></div>
       <div class="rfnd-si-meta">${date} &bull; ${s.customer_name || 'Walk-in'}</div>
+      ${_salOfflineRefHtml(s)}
     </div>`;
   }).join('');
   el.querySelectorAll('.rfnd-sale-item').forEach(row => {

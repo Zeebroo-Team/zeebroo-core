@@ -3404,7 +3404,18 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
         <div class="finance-toolbar">
           <div class="finance-search-wrap">
             <i class="fa fa-magnifying-glass"></i>
-            <input type="text" id="sal-search" placeholder="Search sales, customers…">
+            <input type="text" id="sal-search" placeholder="Search sales, customers, receipt no…">
+          </div>
+          <!-- Sales rung up with internet vs. printed while offline (receipt OFF-…) -->
+          <div class="sal-mode-filter" role="group" aria-label="Show sales made">
+            <label class="sal-mode-opt" title="Sales rung up while the till was online">
+              <input type="checkbox" id="sal-show-online" checked>
+              <i class="fa fa-cloud"></i> Online sales <span class="sal-mode-count" id="sal-count-online"></span>
+            </label>
+            <label class="sal-mode-opt is-offline" title="Sales printed while the till was offline (receipt OFF-…)">
+              <input type="checkbox" id="sal-show-offline" checked>
+              <i class="fa fa-plug-circle-xmark"></i> Offline sales <span class="sal-mode-count" id="sal-count-offline"></span>
+            </label>
           </div>
         </div>
         <div class="sal-content-card">

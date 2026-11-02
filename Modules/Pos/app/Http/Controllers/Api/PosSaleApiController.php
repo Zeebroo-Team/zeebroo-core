@@ -172,6 +172,7 @@ class PosSaleApiController extends Controller
                 return [
                     'id'              => $s->id,
                     'sale_number'     => $s->sale_number,
+                    'offline_ref'     => $s->offline_ref,
                     'total'           => round((float) $s->total, 2),
                     'amount_paid'     => round((float) $s->amount_paid, 2),
                     'due_amount'      => $due,
