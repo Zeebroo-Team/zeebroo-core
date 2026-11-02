@@ -110,6 +110,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   offlineSync:     (opts) => ipcRenderer.invoke('offline-sync', opts),
   offlineRetry:    (uuid) => ipcRenderer.invoke('offline-retry', uuid),
   offlineDiscard:  (uuid) => ipcRenderer.invoke('offline-discard', uuid),
+  offlineEvents:   ()     => ipcRenderer.invoke('offline-events'),
   onOfflineStatus: (cb)   => ipcRenderer.on('offline-status', (_e, s) => cb(s)),
 
   // App version (shown in About modal, compared in Check for Updates)

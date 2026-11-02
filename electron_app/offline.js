@@ -6,10 +6,13 @@
 // also keeps a local copy of what the POS needs. When the internet drops:
 //
 //   - GETs are answered from disk: the full product catalog (searched and
-//     paginated locally), customers, and the last response of every other
-//     screen the user opened (settings, features, accounts, …);
+//     paginated locally), customers, and the screens of every tab (downloaded
+//     in the background, plus every screen the user opened), searched and
+//     filtered locally;
 //   - POST /online/checkout is saved to an outbox on disk and a local receipt
 //     is returned, so the cashier keeps selling;
+//   - any other change (bills, employees, invoices, service requests,
+//     settings, …) is kept on this PC, shown at once, and uploaded in order;
 //   - a background worker uploads the outbox when the server is back. Every
 //     sale carries a client_uuid, so a retry can never create a duplicate.
 //
@@ -26,8 +29,11 @@ const PROBE_INTERVAL_MS  = 15 * 1000;        // how often to check while offline
 const CATALOG_REFRESH_MS = 15 * 60 * 1000;   // background catalog refresh while online
 const PRODUCT_REFRESH_MS = 3 * 60 * 1000;    // changed products only (prices / stock from other tills)
 const OUTBOX_RETRY_MS    = 60 * 1000;        // retry pending sales after a server error
-const CACHE_MAX_ENTRIES  = 400;
-const CACHE_MAX_BYTES    = 2 * 1024 * 1024;  // skip caching single responses bigger than this
+const CACHE_MAX_ENTRIES  = 2500;
+const CACHE_MAX_BYTES    = 6 * 1024 * 1024;  // skip caching single responses bigger than this
+// The screen cache is split over this many files, so saving one screen
+// rewrites a small file instead of every screen at once.
+const CACHE_SHARDS       = 32;
 const SYNCED_KEEP_MS     = 3 * 24 * 3600 * 1000;
 const BY_IDS_CHUNK       = 100;
 // Signing in offline reuses the last online sign-in on this PC, for this long.
@@ -46,6 +52,45 @@ const WARM_PATHS = [
   '/finance/flow', '/finance/overview', '/business-flow/summary', '/expenses/overview', '/expenses/bills',
   '/hr/employees', '/hr/departments', '/hr/payroll/cycles', '/crm/projects', '/notifications/settings',
 ];
+// Every other tab (Home, Sales, Inventory, Finance, HR, Services, Settings):
+// list screens downloaded too, refreshed less often than the POS ones.
+const MODULE_WARM_PATHS = [
+  // Sales
+  '/invoices?q=&status=all', '/quotations?q=&status=all', '/sales-orders?q=&status=all',
+  '/subscriptions?q=&status=all', '/sales/pending-credits', '/sale-reverts?page=1', '/sale-cheques?page=1',
+  // Inventory
+  '/categories?q=&status=&page=1', '/categories/parent-options', '/brands?q=&status=', '/discounts?q=&status=',
+  '/sale-campaigns?q=&status=', '/gift-card-groups?q=&status=', '/stock-audits?page=1', '/stock-transfers?page=1&q=',
+  '/cheques?filter=all', '/grns?q=&payment=all', '/grn-permissions', '/purchase-orders?q=&status=',
+  '/suppliers?q=&page=1', '/supplier-categories', '/units', '/online/barcodes/products',
+  // Finance
+  '/loans', '/rentals', '/properties', '/expenses/rentals', '/expenses/modifications', '/expenses/investments',
+  '/budgets', '/profit-report?period=30', '/payroll-overview', '/expenses/bill-assignment-targets',
+  // HR
+  '/hr/job-titles', '/hr/leave-requests', '/hr/leave-requests?status=pending', '/hr/leave-policies', '/hr/settings',
+  '/hr/allowance-types', '/hr/payroll/rule-sets', '/hr/payroll/templates',
+  // Services
+  '/service/requests?q=&status=', '/service/catalog?q=', '/service/categories',
+  // Settings, notifications, Home CRM card
+  '/users', '/roles', '/branches', '/cashiers', '/mail/settings',
+  '/notifications?limit=5', '/notifications?limit=1', '/notifications?status=all&limit=100', '/crm/overview',
+];
+const MODULE_WARM_MS = 30 * 60 * 1000;
+// Lists whose most recent records are also downloaded in full (GET <list>/<id>),
+// so their detail screens open offline.
+const DETAIL_WARM_LISTS = [
+  '/hr/employees', '/hr/departments', '/hr/payroll/cycles', '/hr/payroll/rule-sets',
+  '/expenses/bills', '/loans', '/rentals', '/expenses/modifications', '/expenses/investments', '/budgets',
+  '/invoices?q=&status=all', '/quotations?q=&status=all', '/sales-orders?q=&status=all',
+  '/purchase-orders?q=&status=', '/grns?q=&payment=all', '/suppliers?q=&page=1',
+  '/stock-audits?page=1', '/stock-transfers?page=1&q=', '/service/catalog?q=',
+];
+const DETAIL_WARM_MAX = 25;
+const DETAIL_WARM_MS  = 6 * 3600 * 1000;
+// Screens the user opened (with their own dates and filters) are refreshed too.
+const LEARNED_WARM_MAX  = 200;
+const LEARNED_WARM_MS   = 60 * 60 * 1000;
+const LEARNED_KEEP_MS   = 14 * 24 * 3600 * 1000;
 // How many of the most recent sales to keep in full (for returns / voids offline).
 const WARM_SALE_DETAILS = 30;
 // Per-user (not per-business) reads — also kept in the signed-in user's own cache,
@@ -124,6 +169,140 @@ function pick(obj, keys) {
   return out;
 }
 
+function shardOf(key) {
+  let h = 0;
+  for (let i = 0; i < key.length; i += 1) h = (h * 31 + key.charCodeAt(i)) | 0;
+  return Math.abs(h) % CACHE_SHARDS;
+}
+
+// The screen cache, oldest first (the order evictions go by). Reads the
+// shard files plus the single cache.json older versions wrote.
+function loadCache(dir) {
+  const entries = Object.entries(readJson(path.join(dir, 'cache.json'), {}));
+  const shardDir = path.join(dir, 'cache');
+  if (fs.existsSync(shardDir)) {
+    for (const f of fs.readdirSync(shardDir)) {
+      if (/^shard-\d+\.json$/.test(f)) entries.push(...Object.entries(readJson(path.join(shardDir, f), {})));
+    }
+  }
+  entries.sort((a, b) => (a[1]?.at || 0) - (b[1]?.at || 0));
+  return Object.fromEntries(entries);
+}
+
+// ── Generic offline changes (every tab other than the POS screens) ──────
+// Ids made on this PC for records added offline: negative and far below any
+// real number a form sends, so they can be found and swapped once uploaded.
+const TEMP_ID_MAX = -1e11;
+const isTempId = v => (typeof v === 'number' && v <= TEMP_ID_MAX) || (typeof v === 'string' && /^-\d{12,}$/.test(v));
+const TEMP_ID_IN_PATH = /\/-\d{12,}(?=\/|$|\?)/;
+
+// Writes that only make sense with the server there (AI, e-mail, sign-in,
+// backups, imports that report per-row results, …): answered "needs internet".
+const ONLINE_ONLY_WRITES = new RegExp([
+  '^/(auth|backup|guide|businesses|developers|crm/lead-imports|online/barcodes)(/|$)',
+  '^/mail/(send|sync|test|verify-credentials)$',
+  '/(generate-ai|ai-chat|ai-content|ai-fill|scan|preview|stock-check|generate-skus|enable-share|notify|import|install)$',
+].join('|'));
+
+// POSTs to a collection that are actions, not "add a record".
+const COLLECTION_ACTIONS = /^(read-all|clear-all|reorder|positions|actions|resolve|sync|send|test)$/;
+
+// Status a record shows right away after an action taken offline.
+const ACTION_STATUS = {
+  'mark-sent': 'sent', 'mark-paid': 'paid', 'mark-overdue': 'overdue', cancel: 'cancelled',
+  accept: 'accepted', reject: 'rejected', confirm: 'confirmed', complete: 'completed', approve: 'approved',
+};
+
+// Which record a write is about: /hr/employees/12/access → collection
+// /hr/employees, id 12, rest ['access'].
+function parseTarget(method, pathname) {
+  const segs = pathname.split('/').filter(Boolean);
+  let idx = -1;
+  for (let i = segs.length - 1; i >= 0; i -= 1) {
+    if (/^-?\d+$/.test(segs[i])) { idx = i; break; }
+  }
+  if (idx < 0) {
+    return { collection: `/${segs.join('/')}`, id: null, rest: [], create: method === 'POST' && !COLLECTION_ACTIONS.test(segs[segs.length - 1] || '') };
+  }
+  return { collection: `/${segs.slice(0, idx).join('/')}`, id: Number(segs[idx]), rest: segs.slice(idx + 1), create: false };
+}
+
+const isRows = a => Array.isArray(a) && (a.length === 0 || (a[0] !== null && typeof a[0] === 'object'));
+
+// Where a list response keeps its rows: { data: [...] }, { data: { data: [...] } },
+// { data: { employees: [...], stats } }, …
+function findRows(body) {
+  if (!body || typeof body !== 'object') return null;
+  const names = ['items', 'rows', 'list', 'records', 'results'];
+  if (isRows(body.data)) return { holder: body, key: 'data' };
+  const d = body.data && typeof body.data === 'object' && !Array.isArray(body.data) ? body.data : null;
+  if (d) {
+    if (isRows(d.data)) return { holder: d, key: 'data' };
+    for (const k of names) if (isRows(d[k])) return { holder: d, key: k };
+    const withIds = Object.keys(d).filter(k => isRows(d[k]) && d[k].length && d[k][0].id !== undefined);
+    if (withIds.length === 1) return { holder: d, key: withIds[0] };
+  }
+  for (const k of names) if (isRows(body[k])) return { holder: body, key: k };
+  return null;
+}
+
+// Empty values shaped like an existing row, so a screen drawing a record
+// added offline finds every field it expects.
+function blankLike(sample, depth = 0) {
+  const out = {};
+  if (!sample || typeof sample !== 'object' || Array.isArray(sample)) return out;
+  for (const [k, v] of Object.entries(sample)) {
+    if (typeof v === 'number') out[k] = 0;
+    else if (typeof v === 'string') out[k] = '';
+    else if (typeof v === 'boolean') out[k] = false;
+    else if (Array.isArray(v)) out[k] = [];
+    else if (v && typeof v === 'object') out[k] = depth < 2 ? blankLike(v, depth + 1) : null;
+    else out[k] = null;
+  }
+  return out;
+}
+
+function primitiveFields(body) {
+  const out = {};
+  for (const [k, v] of Object.entries(body || {})) {
+    if (v === null || ['string', 'number', 'boolean'].includes(typeof v)) out[k] = v;
+  }
+  return out;
+}
+
+function deepMap(value, fn) {
+  if (Array.isArray(value)) return value.map(v => deepMap(v, fn));
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, deepMap(v, fn)]));
+  return fn(value);
+}
+
+// Text a row can be searched by: its own values and those one level down.
+function rowText(row, depth = 0) {
+  if (row === null || row === undefined) return '';
+  if (typeof row !== 'object') return String(row);
+  if (depth > 1) return '';
+  return Object.values(row).map(v => rowText(v, depth + 1)).join(' ');
+}
+
+function genericLabel(method, t, body) {
+  const noun = (t.collection.split('/').filter(Boolean).pop() || 'record')
+    .replace(/-/g, ' ').replace(/ies$/, 'y').replace(/(ss)es$/, '$1').replace(/([^s])s$/, '$1');
+  let verb;
+  if (t.create) verb = `New ${noun}`;
+  else if (!t.rest.length) verb = method === 'DELETE' ? `Delete ${noun}` : `Edit ${noun}`;
+  else verb = `${t.rest.join(' ').replace(/-/g, ' ').replace(/^./, c => c.toUpperCase())} (${noun})`;
+  const name = body?.name || body?.title || body?.full_name || body?.bill_name || body?.subject || '';
+  if (name) return `${verb}: ${name}`;
+  return t.id > 0 ? `${verb} #${t.id}` : verb;
+}
+
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function randomCode(len) {
+  let out = '';
+  for (let i = 0; i < len; i += 1) out += CODE_ALPHABET[crypto.randomInt(CODE_ALPHABET.length)];
+  return out;
+}
+
 // backgroundGapMs: pause between background requests, so the server and this
 // PC stay free for the user (tests pass 0).
 function createOffline({ userDataDir, getConfig, request, notify, backgroundGapMs = 250 }) {
@@ -141,6 +320,8 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     dirKey: null,
     store: null,
     cacheWriteTimer: null,
+    // Collections changed by uploaded offline writes: refreshed on the next download.
+    refreshCollections: new Set(),
   };
 
   // ── Storage (one folder per business + branch) ─────────────────────────
@@ -170,7 +351,11 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       catalog:   readJson(path.join(dir, 'catalog.json'),   { version: null, synced_at: null, products: {}, fp: {} }),
       meta:      readJson(path.join(dir, 'meta.json'),      { bootstrap: null, synced_at: null }),
       customers: readJson(path.join(dir, 'customers.json'), { synced_at: null, items: [], id_map: {} }),
-      cache:     readJson(path.join(dir, 'cache.json'),     {}),
+      cache:     loadCache(dir),
+      // Cache shard files changed since the last save; an old single
+      // cache.json is rewritten as shards on the first save.
+      cacheDirty: new Set(),
+      legacyCache: fs.existsSync(path.join(dir, 'cache.json')),
       outbox:    readJson(path.join(dir, 'outbox.json'),    []),
       // Settings / customer changes made offline, uploaded before the sales.
       writes:    readJson(path.join(dir, 'writes.json'),    []),
@@ -216,6 +401,25 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
   // successful online sign-in, plus that sign-in's response (the token).
   // Signing out only forgets the token in config.json; it is not revoked on
   // the server, so the remembered one still works once the internet is back.
+  // ── Sync activity log (shown in the sync panel): connection changes,
+  // uploads, downloads and failures, newest last, kept across restarts.
+  const EVENTS_KEEP = 300;
+  const eventsFile = () => path.join(userDataDir, 'offline', '_events.json');
+  let events = null;
+  function logEvent(type, text, extra = {}) {
+    if (!events) events = readJson(eventsFile(), []);
+    events.push({ at: new Date().toISOString(), type, text, business_id: getConfig().business_id || null, ...extra });
+    if (events.length > EVENTS_KEEP) events = events.slice(-EVENTS_KEEP);
+    try {
+      fs.mkdirSync(path.dirname(eventsFile()), { recursive: true });
+      writeJsonAtomic(eventsFile(), events);
+    } catch (err) { console.error('[offline] events write', err.message); }
+  }
+  function listEvents() {
+    if (!events) events = readJson(eventsFile(), []);
+    return [...events].reverse();
+  }
+
   const authFile = () => path.join(userDataDir, 'offline', '_auth.json');
   const loadAuth = () => readJson(authFile(), { entries: {} });
   function saveAuth(auth) {
@@ -230,11 +434,65 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
   const BIG_FILES = ['catalog', 'cache'];
   const pendingBig = new Map();
 
+  // save('cache') rewrites every shard; saveCacheKeys() only the ones holding those screens.
   function save(name) {
     const s = st.store;
     if (!s) return;
+    if (name === 'cache') {
+      for (let i = 0; i < CACHE_SHARDS; i += 1) s.cacheDirty.add(i);
+      return saveLater(s, name);
+    }
     if (BIG_FILES.includes(name)) return saveLater(s, name);
     writeJsonAtomic(path.join(s.dir, `${name}.json`), s[name]);
+  }
+
+  function saveCacheKeys(keys) {
+    const s = st.store;
+    if (!s) return;
+    keys.forEach(k => s.cacheDirty.add(shardOf(k)));
+    if (s.legacyCache) for (let i = 0; i < CACHE_SHARDS; i += 1) s.cacheDirty.add(i);
+    saveLater(s, 'cache');
+  }
+
+  // The dirty shards' contents, taken now (later changes mark them dirty again).
+  function takeCacheShards(s) {
+    const shards = new Map([...s.cacheDirty].map(i => [i, {}]));
+    s.cacheDirty.clear();
+    for (const [k, v] of Object.entries(s.cache)) {
+      const shard = shards.get(shardOf(k));
+      if (shard) shard[k] = v;
+    }
+    return shards;
+  }
+
+  function dropLegacyCache(s) {
+    if (!s.legacyCache) return;
+    s.legacyCache = false;
+    try { fs.unlinkSync(path.join(s.dir, 'cache.json')); } catch (_) {}
+  }
+
+  function writeCacheNow(s) {
+    const dir = path.join(s.dir, 'cache');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const [i, data] of takeCacheShards(s)) writeJsonAtomic(path.join(dir, `shard-${i}.json`), data);
+    dropLegacyCache(s);
+  }
+
+  // One cache write at a time, so an older copy can never land after a newer one.
+  function writeCacheLater(s) {
+    s.cacheWriting = (s.cacheWriting || Promise.resolve()).then(async () => {
+      const shards = takeCacheShards(s);
+      if (!shards.size) return;
+      const dir = path.join(s.dir, 'cache');
+      await fs.promises.mkdir(dir, { recursive: true });
+      try {
+        for (const [i, data] of shards) await writeJsonAtomicAsync(path.join(dir, `shard-${i}.json`), data);
+        dropLegacyCache(s);
+      } catch (err) {
+        shards.forEach((_, i) => s.cacheDirty.add(i));
+        throw err;
+      }
+    }).catch(err => console.error('[offline] write cache', err.message));
   }
 
   function saveLater(s, name) {
@@ -244,6 +502,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       s, name,
       timer: setTimeout(() => {
         pendingBig.delete(key);
+        if (name === 'cache') return writeCacheLater(s);
         writeJsonAtomicAsync(path.join(s.dir, `${name}.json`), s[name])
           .catch(err => console.error('[offline] write', name, err.message));
       }, 1500),
@@ -255,12 +514,12 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     for (const [key, job] of pendingBig) {
       clearTimeout(job.timer);
       pendingBig.delete(key);
-      try { writeJsonAtomic(path.join(job.s.dir, `${job.name}.json`), job.s[job.name]); }
-      catch (err) { console.error('[offline] write', job.name, err.message); }
+      try {
+        if (job.name === 'cache') writeCacheNow(job.s);
+        else writeJsonAtomic(path.join(job.s.dir, `${job.name}.json`), job.s[job.name]);
+      } catch (err) { console.error('[offline] write', job.name, err.message); }
     }
   }
-
-  const saveCacheSoon = () => save('cache');
 
   // Outboxes of every business on this PC — a sale queued under business A
   // must still upload after the user switches to business B.
@@ -308,6 +567,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       catalogProgress: st.catalogProgress,
       productCount:    s ? Object.keys(s.catalog.products).length : 0,
       customerCount:   s ? s.customers.items.length : 0,
+      screenCount:     s ? Object.keys(s.cache).length : 0,
       catalogSyncedAt: s ? s.catalog.synced_at : null,
       lastError:       st.lastError,
       maxOfflineDays:  MAX_OFFLINE_DAYS,
@@ -322,6 +582,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     if (flag) st.lastOnlineAt = new Date().toISOString();
     if (st.online === flag) return;
     st.online = flag;
+    logEvent(flag ? 'online' : 'offline', flag ? 'Internet is back' : 'Internet connection lost — working offline');
     emit();
     if (flag) {
       stopProbe();
@@ -369,14 +630,16 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       status: 0,
       offline: true,
       body: {
-        message: 'No internet connection. This needs to be online — POS sales, products and customers still work offline and sync automatically.',
+        message: 'No internet connection. This one needs to be online — everything else keeps working offline and syncs automatically.',
         network_error: netBody?.message || null,
       },
     };
   }
 
   // ── Remembering responses while online ─────────────────────────────────
-  function remember(p, body) {
+  // byUser: opened on a screen (not a background refresh) — such screens are
+  // kept fresh in the background too (warmLearned).
+  function remember(p, body, byUser = false) {
     if (body == null) return;
     if (USER_PATHS.includes(p) || !scope()) rememberGlobal(p, body);
     const s = store();
@@ -409,13 +672,15 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     let json;
     try { json = JSON.stringify(body); } catch (_) { return; }
     if (json.length > CACHE_MAX_BYTES) return;
+    const used = byUser ? Date.now() : s.cache[p]?.used;
     delete s.cache[p];
-    s.cache[p] = { at: Date.now(), body };
+    s.cache[p] = used ? { at: Date.now(), used, body } : { at: Date.now(), body };
+    const touched = [p];
     const keys = Object.keys(s.cache);
     if (keys.length > CACHE_MAX_ENTRIES) {
-      keys.slice(0, keys.length - CACHE_MAX_ENTRIES).forEach(k => delete s.cache[k]);
+      keys.slice(0, keys.length - CACHE_MAX_ENTRIES).forEach(k => { delete s.cache[k]; touched.push(k); });
     }
-    saveCacheSoon();
+    saveCacheKeys(touched);
   }
 
   // ── Answering GETs from disk ───────────────────────────────────────────
@@ -645,10 +910,75 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     return { status: 200, offline: true, cachedAt: hit.at, body: { data } };
   }
 
+  // ── Any list screen, searched / filtered offline ───────────────────────
+  // A list opened with a search or filter this PC never downloaded is answered
+  // from a downloaded copy of the same list: rows matching the search words,
+  // and rows whose field of the same name equals each filter (status=paid, …).
+  // Dates, periods and grouping change what the server adds up, so those must
+  // match a downloaded copy exactly; later pages are never made up.
+  const EXACT_PARAMS = /^(date_from|date_to|from|to|period|month|year|start|end|start_date|end_date|group_by|branch_id|counter_id|box|scope|type|export)$/;
+  const PAGING_PARAMS = ['page', 'per_page', 'limit'];
+  const isWildcard = v => v === '' || v === 'all';
+
+  function localListFallback(s, pathname, params) {
+    if (Number(params.get('page') || 1) > 1) return null;
+    let best = null;
+    for (const [key, hit] of Object.entries(s.cache)) {
+      const [kPath, kParams] = splitPath(key);
+      if (kPath !== pathname || !findRows(hit.body)) continue;
+      if (Number(kParams.get('page') || 1) !== 1) continue;
+      let ok = true, score = 0;
+      // Every filter the downloaded copy has, the request has too…
+      for (const [k, v] of kParams) {
+        if (PAGING_PARAMS.includes(k) || isWildcard(v)) continue;
+        if (params.get(k) !== v) { ok = false; break; }
+        score += 1;
+      }
+      // …and the same dates / grouping.
+      for (const [k, v] of params) {
+        if (ok && EXACT_PARAMS.test(k) && !isWildcard(v) && kParams.get(k) !== v) ok = false;
+      }
+      if (ok && (!best || score > best.score || (score === best.score && hit.at > best.hit.at))) best = { hit, score, kParams };
+    }
+    if (!best) return null;
+
+    const body = JSON.parse(JSON.stringify(best.hit.body));
+    const { holder, key } = findRows(body);
+    const before = holder[key].length;
+    const words = String(params.get('q') || params.get('search') || '').toLowerCase().split(/\s+/).filter(Boolean);
+    let rows = holder[key];
+    if (words.length && !best.kParams.get('q')) {
+      rows = rows.filter(r => { const hay = rowText(r).toLowerCase(); return words.every(w => hay.includes(w)); });
+    }
+    for (const [k, v] of params) {
+      if (k === 'q' || k === 'search' || PAGING_PARAMS.includes(k) || EXACT_PARAMS.test(k) || isWildcard(v)) continue;
+      if (best.kParams.get(k) === v || !rows.some(r => r && r[k] !== undefined)) continue;
+      rows = rows.filter(r => String(r?.[k]) === v);
+    }
+    holder[key] = rows;
+    const meta = body.meta || (holder !== body ? holder.meta : null);
+    if (meta && rows.length !== before) Object.assign(meta, { total: rows.length, current_page: 1, last_page: 1 });
+    return { status: 200, offline: true, cachedAt: best.hit.at, body };
+  }
+
+  // Gift card / coupon "Generate" offline: same format as the server, not
+  // already in the downloaded list (the server re-checks on upload).
+  function localCode(s, pathname) {
+    const isGift = pathname.startsWith('/gift-cards');
+    const taken = new Set((s.cache[isGift ? GIFT_LIST : COUPON_LIST]?.body?.data || []).map(x => normCode(x.code)));
+    let code;
+    do {
+      code = isGift ? `GC-${randomCode(4)}-${randomCode(4)}-${randomCode(4)}` : `CP-${randomCode(6)}`;
+    } while (taken.has(code));
+    return { status: 200, offline: true, body: { data: { code } } };
+  }
+
   function localGet(p) {
     const s = store();
     if (!s) return globalGet(p);
     const [pathname, params] = splitPath(p);
+
+    if (pathname === '/gift-cards/generate-code' || pathname === '/coupons/generate-code') return localCode(s, pathname);
 
     const offlineSale = pathname.match(/^\/sales\/(-\d+)$/);
     if (offlineSale) {
@@ -703,7 +1033,8 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
 
     const hit = s.cache[p];
     if (hit) return { status: 200, offline: true, cachedAt: hit.at, body: hit.body };
-    return USER_PATHS.includes(p) ? globalGet(p) : null;
+    if (USER_PATHS.includes(p)) return globalGet(p);
+    return localListFallback(s, pathname, params);
   }
 
   // ── Checkout (online, or queued) ───────────────────────────────────────
@@ -926,6 +1257,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
 
     s.outbox.push(entry);
     save('outbox');
+    logEvent('saved', `Sale saved on this PC: ${entry.offline_ref} · ${Number(entry.receipt.total || 0).toFixed(2)}`, { ref: entry.client_uuid });
     consumeLocalStock(s, body);
     // Spend the gift card / coupon on this PC's copy too, so it can't be
     // used past its balance while still offline.
@@ -995,6 +1327,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       ...write,
     });
     save('writes');
+    logEvent('saved', `Saved on this PC: ${write.label || write.kind}`, { ref: s.writes[s.writes.length - 1].id });
     emit();
   }
 
@@ -1559,6 +1892,237 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     return applyLocalEffect(action, body, s);
   }
 
+  // ── Every other change (bills, employees, invoices, service requests, …) ─
+  // Tried online first; without internet it is kept on this PC, shown at once
+  // in the downloaded lists, and uploaded in order with an Idempotency-Key.
+  // A record added offline gets a temporary id; later changes that use it
+  // (in the URL or the form) wait for it and then use its real id.
+  function boxMeta(box) {
+    return box.isCurrent ? st.store.meta : readJson(path.join(box.dir, 'meta.json'), {});
+  }
+
+  // Temporary id → server id, for everything this PC added offline.
+  function tempIdMap(outbox, customerMap, meta) {
+    const map = { ...(customerMap || {}), ...(meta?.product_id_map || {}), ...(meta?.generic_id_map || {}) };
+    for (const e of outbox) if (e.server_id) map[e.local_id] = e.server_id;
+    return map;
+  }
+
+  // { path, body } with real ids, or { waitFor } / { error } like resolveRefs.
+  function resolveGeneric(p, body, map, outbox, writes) {
+    let missing = null;
+    const swap = v => {
+      if (!isTempId(v)) return v;
+      const real = map[String(Number(v))];
+      if (real != null) return typeof v === 'string' ? String(real) : real;
+      if (missing === null) missing = Number(v);
+      return v;
+    };
+    const [pathname, query] = [splitPath(p)[0], p.includes('?') ? p.slice(p.indexOf('?')) : ''];
+    const realPath = pathname.split('/').map(seg => (isTempId(seg) ? String(swap(seg)) : seg)).join('/') + query;
+    const realBody = deepMap(body, swap);
+    if (missing === null) return { path: realPath, body: realBody };
+    const create = writes.find(w => w.temp_id === missing) || outbox.find(e => e.local_id === missing);
+    if (!create) return { error: 'It uses a record added offline that was then discarded.' };
+    if (create.status === 'failed') return { error: 'It uses a record added offline that could not upload.' };
+    return { waitFor: create.id || create.client_uuid };
+  }
+
+  // Cached lists of a collection (any search / filter / page of it).
+  function eachCachedList(s, collection, fn) {
+    const keys = [];
+    for (const [key, hit] of Object.entries(s.cache)) {
+      if (splitPath(key)[0] !== collection) continue;
+      const found = findRows(hit.body);
+      if (found && fn(found.holder[found.key], found) !== false) keys.push(key);
+    }
+    return keys;
+  }
+
+  function cachedDetailSample(s, collection) {
+    const re = new RegExp(`^${collection.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/\\d+$`);
+    const key = Object.keys(s.cache).find(k => re.test(k));
+    const data = key ? s.cache[key].body?.data : null;
+    return data && typeof data === 'object' && !Array.isArray(data) ? data : null;
+  }
+
+  function applyGenericEffect(m, t, body, s, tempId) {
+    const ok = (data, status = 200) => ({ status, offline: true, body: { message: SAVED_OFFLINE_MSG, data } });
+    const fields = primitiveFields(body);
+    const now = new Date().toISOString();
+    let touched = [];
+    let row = null;
+
+    if (tempId != null) {
+      // New record: on top of every downloaded list of its collection.
+      const extras = offlineRecordExtras(t.collection, body, s);
+      touched = eachCachedList(s, t.collection, rows => {
+        const r = { ...blankLike(rows[0]), ...fields, ...extras.row, id: tempId, offline: true };
+        if ('created_at' in r) r.created_at = now;
+        rows.unshift(r);
+        row = row || r;
+      });
+      row = row || { ...fields, ...extras.row, id: tempId, offline: true, created_at: now };
+      const detailKey = `${t.collection}/${tempId}`;
+      const detail = { ...blankLike(cachedDetailSample(s, t.collection)), ...row, ...extras.detail };
+      s.cache[detailKey] = { at: Date.now(), body: { data: detail } };
+      saveCacheKeys([...touched, detailKey]);
+      return ok(JSON.parse(JSON.stringify(detail)), 201);
+    }
+
+    if (t.id === null) {
+      // A single settings-like record (PUT /hr/settings, PATCH /mail/settings, …).
+      const hit = s.cache[t.collection];
+      if ((m === 'PUT' || m === 'PATCH') && hit?.body?.data && typeof hit.body.data === 'object' && !Array.isArray(hit.body.data)) {
+        Object.assign(hit.body.data, fields);
+        saveCacheKeys([t.collection]);
+        return ok(hit.body.data);
+      }
+      return ok(null);
+    }
+
+    const detailKey = `${t.collection}/${t.id}`;
+    const detail = s.cache[detailKey]?.body?.data;
+    const status = t.rest[0] === 'status' && typeof body?.status === 'string' ? body.status
+      : (m === 'POST' && t.rest.length === 1 ? ACTION_STATUS[t.rest[0]] : null);
+    const change = r => {
+      if (!t.rest.length) Object.assign(r, fields);
+      else if (status) {
+        r.status = status;
+        if ('status_label' in r) r.status_label = status.charAt(0).toUpperCase() + status.slice(1);
+      }
+    };
+    if (!t.rest.length && m === 'DELETE') {
+      touched = eachCachedList(s, t.collection, (rows, found) => {
+        const left = rows.filter(r => String(r.id) !== String(t.id));
+        if (left.length === rows.length) return false;
+        found.holder[found.key] = left;
+      });
+      if (s.cache[detailKey]) { delete s.cache[detailKey]; touched.push(detailKey); }
+    } else if (!t.rest.length || status) {
+      touched = eachCachedList(s, t.collection, rows => {
+        const r = rows.find(x => String(x.id) === String(t.id));
+        if (!r) return false;
+        change(r);
+        row = row || r;
+      });
+      if (detail && typeof detail === 'object') { change(detail); touched.push(detailKey); }
+    }
+
+    // Customers are listed from their own full copy, not the screen cache.
+    if (t.collection === '/customers' && !t.rest.length && m === 'DELETE') {
+      s.customers.items = s.customers.items.filter(c => String(c.id) !== String(t.id));
+      save('customers');
+    }
+    // A product edited or deleted in Inventory: the POS grid follows at once.
+    if (t.collection === '/online/products' && !t.rest.length && s.catalog.products[t.id]) {
+      const card = s.catalog.products[t.id];
+      if (m === 'DELETE' || body?.is_active === false) delete s.catalog.products[t.id];
+      else {
+        if (body?.name) card.name = body.name;
+        if (body?.sku !== undefined) card.sku = body.sku;
+        if (body?.unit_price != null && body.unit_price !== '') card.unit_sell_price = Number(body.unit_price);
+      }
+      save('catalog');
+    }
+    if (touched.length) saveCacheKeys(touched);
+    return ok(row || (detail && typeof detail === 'object' ? detail : { id: t.id, ...fields }));
+  }
+
+  // Records added offline that a screen shows in full straight away — an
+  // invoice printed after an offline sale: the fields the server works out
+  // (ModulesSalesServicesInvoiceService::recalculateTotals). Its number is
+  // the offline sale's until the server gives it a real one on upload.
+  function offlineRecordExtras(collection, body, s) {
+    if (collection !== '/invoices') return { row: {}, detail: {} };
+    const r2 = v => Math.round(v * 100) / 100;
+    const items = (body.items || []).map((i, idx) => {
+      const quantity = Number(i.quantity) || 0;
+      const unitPrice = Number(i.unit_price) || 0;
+      return {
+        id: -(idx + 1), product_id: i.product_id ?? null, item_type: i.item_type || 'custom', is_subscription: false,
+        description: i.description || '', quantity, unit_price: unitPrice,
+        discount_type: 'pct', discount_value: 0, tax_pct: 0, tax_type: 'pct', line_total: r2(quantity * unitPrice),
+      };
+    });
+    const subtotal = r2(items.reduce((a, i) => a + i.line_total, 0));
+    const discount = Number(body.discount_amount) || 0;
+    const tax = Number(body.tax_amount) || 0;
+    const customer = body.customer_id != null ? s.customers.items.find(c => String(c.id) === String(body.customer_id)) : null;
+    return {
+      row: {
+        invoice_number: body.reference || 'Waiting to upload', status: 'draft', status_label: 'Draft',
+        customer_name: customer?.name ?? null, reference: body.reference ?? null, issue_date: body.issue_date ?? null,
+        due_date: body.due_date ?? null, is_overdue: false, total: r2(Math.max(0, subtotal - discount + tax)),
+      },
+      detail: {
+        subtotal, discount_amount: r2(discount), tax_amount: r2(tax), notes: body.notes ?? null,
+        customer_id: body.customer_id ?? null, is_editable: false, share_token: null, share_url: null, items,
+      },
+    };
+  }
+
+  function queueGeneric(m, p, body, s, key) {
+    const t = parseTarget(m, splitPath(p)[0]);
+    const tempId = t.create ? newTempId() : null;
+    addWrite(s, {
+      id: key, kind: 'generic', method: m, path: p, body,
+      temp_id: tempId, collection: t.collection, label: genericLabel(m, t, body),
+    });
+    return applyGenericEffect(m, t, body, s, tempId);
+  }
+
+  let lastTempId = 0;
+  function newTempId() {
+    let id = -Date.now();
+    if (id >= lastTempId) id = lastTempId - 1;
+    lastTempId = id;
+    return id;
+  }
+
+  async function genericWrite(m, p, body, s) {
+    const key = crypto.randomUUID();
+    const r = resolveGeneric(p, body, tempIdMap(s.outbox, s.customers.id_map, s.meta), s.outbox, s.writes);
+    if (r.error) return { status: 422, offline: true, body: { message: r.error } };
+    if (!r.waitFor && st.online) {
+      // Same key as a later upload: if this times out after the server saved
+      // it, the upload gets that answer back instead of saving it twice.
+      const res = await net(m, r.path, r.body, { timeout: 30000, idempotencyKey: key });
+      if (!isUnreachable(res.status)) {
+        setOnline(true);
+        if (res.status < 300 && CATALOG_WRITES.test(splitPath(p)[0])) catalogChanged();
+        return res;
+      }
+      setOnline(false);
+    }
+    return queueGeneric(m, p, body, s, key);
+  }
+
+  // A record added offline got its real id.
+  function mapGeneric(box, item, realId) {
+    if (!item.temp_id || realId == null) return;
+    const meta = boxMeta(box);
+    meta.generic_id_map = { ...(meta.generic_id_map || {}), [item.temp_id]: realId };
+    if (!box.isCurrent) { writeJsonAtomic(path.join(box.dir, 'meta.json'), meta); return; }
+    save('meta');
+    const s = st.store;
+    const touched = eachCachedList(s, item.collection, rows => {
+      const r = rows.find(x => x.id === item.temp_id);
+      if (!r) return false;
+      r.id = realId;
+      delete r.offline;
+    });
+    const oldKey = `${item.collection}/${item.temp_id}`;
+    if (s.cache[oldKey]) {
+      const hit = s.cache[oldKey];
+      delete s.cache[oldKey];
+      if (hit.body?.data) { hit.body.data.id = realId; delete hit.body.data.offline; }
+      s.cache[`${item.collection}/${realId}`] = hit;
+      touched.push(oldKey, `${item.collection}/${realId}`);
+    }
+    saveCacheKeys(touched);
+  }
+
   // ── Outbox upload ──────────────────────────────────────────────────────
   let outboxRun = null;
   function syncOutbox() {
@@ -1571,6 +2135,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     st.syncingOutbox = true;
     emit();
     let uploaded = 0;
+    const failedEvent = entry => logEvent('failed', `Not accepted: ${entry.label || entry.offline_ref} — ${entry.error}`, { ref: entry.client_uuid || entry.id });
 
     // Uploads one queued item. Returns false when syncing must stop for now.
     async function upload(box, entry, method, p, body, idempotencyKey) {
@@ -1590,6 +2155,13 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         uploaded += 1;
         return { res };
       }
+      // An offline change this user may not make: only that change fails.
+      if (res.status === 403 && entry.kind === 'generic') {
+        entry.status = 'failed';
+        entry.error = res.body?.message || 'You do not have permission for this.';
+        failedEvent(entry);
+        return {};
+      }
       if (res.status === 401 || res.status === 402 || res.status === 403) {
         // Signed out / subscription / permission — nothing to retry until the user acts.
         entry.error = res.body?.message || `Server refused the upload (${res.status}).`;
@@ -1600,6 +2172,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       if (res.status === 422 || res.status === 404) {
         entry.status = 'failed';
         entry.error = res.body?.message || 'The server rejected this.';
+        failedEvent(entry);
         return {};
       }
       entry.error = res.body?.message || `Server error (${res.status}). Will retry.`;
@@ -1660,10 +2233,13 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
               item.server_items = (data.items || []).map(i => ({ id: i.id, product_id: i.product_id, layer: i.product_stock_layer_id, quantity: i.quantity }));
             }
           } else {
-            const resolved = resolveRefs(box.outbox, boxIdMap(box), box.writes, item.kind, item.path, item.body);
+            const resolved = item.kind === 'generic'
+              ? resolveGeneric(item.path, item.body, tempIdMap(box.outbox, boxIdMap(box), boxMeta(box)), box.outbox, box.writes)
+              : resolveRefs(box.outbox, boxIdMap(box), box.writes, item.kind, item.path, item.body);
             if (resolved.error) {
               item.status = 'failed';
               item.error = resolved.error;
+              failedEvent(item);
             } else if (resolved.waitFor) {
               item.error = 'Waiting for its sale or customer to upload first.';
               continue;
@@ -1672,6 +2248,11 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
               if (r.stop) return;
               if (r.res && item.kind === 'customer_create') mapCustomer(box, item.temp_id, r.res.body?.data?.id);
               if (r.res && item.kind === 'product_create') mapProduct(box, item.temp_id, r.res.body?.data?.id);
+              if (r.res && item.kind === 'generic') {
+                mapGeneric(box, item, r.res.body?.data?.id ?? r.res.body?.id ?? null);
+                // Its screens come back from the server on the next refresh.
+                if (box.isCurrent) st.refreshCollections.add(item.collection);
+              }
             }
           }
           saveOutbox(box);
@@ -1681,6 +2262,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       st.lastError = null;
     } finally {
       st.syncingOutbox = false;
+      if (uploaded > 0) logEvent('uploaded', `Uploaded ${uploaded} item${uploaded === 1 ? '' : 's'} saved offline`, { count: uploaded });
       emit();
     }
     if (uploaded > 0) syncCatalog();
@@ -1708,6 +2290,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     hit.entry.status = 'pending';
     hit.entry.error = null;
     saveOutbox(hit.box);
+    logEvent('retry', `Retrying: ${hit.entry.label || hit.entry.offline_ref}`, { ref: id });
     emit();
     syncOutbox();
     return true;
@@ -1718,6 +2301,9 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     if (!hit || hit.entry.status === 'synced') return false;
     hit.box[hit.list] = hit.box[hit.list].filter(e => (hit.list === 'outbox' ? e.client_uuid : e.id) !== id);
     saveOutbox(hit.box);
+    // Its screens still show the change made on this PC: take the server's again.
+    if (hit.entry.kind === 'generic' && hit.box.isCurrent) st.refreshCollections.add(hit.entry.collection);
+    logEvent('discarded', `Discarded: ${hit.entry.label || hit.entry.offline_ref}`);
     emit();
     return true;
   }
@@ -1732,6 +2318,11 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       error: w.error,
       attempts: w.attempts,
       business_id: box.businessId,
+      method: w.method || null,
+      path: w.path || null,
+      created_at: w.created_at,
+      last_attempt_at: w.last_attempt_at || null,
+      synced_at: w.synced_at || null,
     })));
     return [...changes, ...allOutboxes().flatMap(box => box.outbox.map(e => ({
       kind: 'sale',
@@ -1747,6 +2338,12 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       item_count: (e.body?.items || []).length,
       business_id: e.business_id,
       receipt: e.receipt,
+      method: 'POST',
+      path: '/online/checkout',
+      customer_name: e.receipt?.customer_name || null,
+      created_at: e.created_at,
+      last_attempt_at: e.last_attempt_at || null,
+      synced_at: e.synced_at || null,
     })))].sort((a, b) => String(b.sold_at).localeCompare(String(a.sold_at)));
   }
 
@@ -1779,6 +2376,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       if (!live.has(id) && Number(id) > 0) { delete s.catalog.products[id]; delete s.catalog.fp[id]; }
     }
     const changed = items.filter(i => s.catalog.fp[i.id] !== i.fp || !s.catalog.products[i.id]);
+    st.productChanges = changed.length;
     st.catalogProgress = { step: 'products', done: 0, total: changed.length };
     emit();
     for (let k = 0; k < changed.length; k += BY_IDS_CHUNK) {
@@ -1856,24 +2454,67 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         '/gift-cards?q=&status=':  () => salesWaiting(e => e.body?.gift_card_code),
         '/coupons?q=&status=':     () => salesWaiting(e => e.body?.coupon_code),
       };
+      // …nor the screens of a collection with offline changes waiting.
+      const pendingCollections = s.writes.filter(w => w.kind === 'generic' && w.status !== 'synced').map(w => w.collection);
+      const under = (p, cols) => { const pn = splitPath(p)[0]; return cols.some(c => pn === c || pn.startsWith(`${c}/`)); };
+      const refreshed = [...st.refreshCollections];
+      // Fetches one screen; false once the connection is gone.
+      let reachable = true;
+      const fetchScreen = async (p, maxAgeMs = 0) => {
+        if (!reachable || under(p, pendingCollections)) return reachable;
+        const hit = s.cache[p];
+        if (!full && maxAgeMs && hit && Date.now() - hit.at < maxAgeMs && !under(p, refreshed)) return true;
+        const res = await bgNet('GET', p, null, { timeout: 30000 });
+        if (isUnreachable(res.status)) { reachable = false; return false; }
+        if (res.status === 200) remember(p, res.body);
+        return true;
+      };
+
       for (const p of WARM_PATHS) {
         if (keepLocal[p]?.()) continue;
         if (p.startsWith('/product-rentals') && waiting(['rental_return'])) continue;
-        const res = await bgNet('GET', p, null, { timeout: 30000 });
-        if (isUnreachable(res.status)) break;
-        if (res.status === 200) remember(p, res.body);
+        if (!(await fetchScreen(p))) break;
       }
       const recent = Array.isArray(s.cache['/sales?q=']?.body?.data) ? s.cache['/sales?q='].body.data.slice(0, WARM_SALE_DETAILS) : [];
       for (const row of recent) {
         if (!(row.id > 0) || waiting(['void', 'return', 'revert'])) break;
-        const res = await bgNet('GET', `/sales/${row.id}`, null, { timeout: 30000 });
-        if (isUnreachable(res.status)) break;
-        if (res.status === 200) remember(`/sales/${row.id}`, res.body);
+        if (!(await fetchScreen(`/sales/${row.id}`))) break;
       }
+
+      // Every other tab: its lists, the screens this PC opened, recent records in full.
+      const warmed = new Set([...WARM_PATHS, ...MODULE_WARM_PATHS]);
+      const learned = Object.entries(s.cache)
+        .filter(([k, v]) => v.used && Date.now() - v.used < LEARNED_KEEP_MS && !warmed.has(k) && learnable(k))
+        .sort((a, b) => b[1].used - a[1].used)
+        .slice(0, LEARNED_WARM_MAX)
+        .map(([k]) => k);
+      const runSteps = async (step, paths, maxAgeMs) => {
+        st.catalogProgress = { step, done: 0, total: paths.length };
+        emit();
+        for (let i = 0; i < paths.length && reachable; i += 1) {
+          await fetchScreen(paths[i], maxAgeMs);
+          if (i % 10 === 9) { st.catalogProgress = { step, done: i + 1, total: paths.length }; emit(); }
+        }
+      };
+      await runSteps('screens', MODULE_WARM_PATHS, MODULE_WARM_MS);
+      await runSteps('screens', learned, LEARNED_WARM_MS);
+      // Records in full, now that their lists are in.
+      const details = [];
+      for (const list of DETAIL_WARM_LISTS) {
+        const found = findRows(s.cache[list]?.body);
+        const base = splitPath(list)[0];
+        (found ? found.holder[found.key] : [])
+          .filter(r => Number(r?.id) > 0).slice(0, DETAIL_WARM_MAX)
+          .forEach(r => details.push(`${base}/${r.id}`));
+      }
+      await runSteps('records', details, DETAIL_WARM_MS);
+      if (reachable) refreshed.forEach(c => st.refreshCollections.delete(c));
       flushCache();
+      logEvent('downloaded', `Offline data refreshed — ${st.productChanges || 0} product${st.productChanges === 1 ? '' : 's'} updated, ${customers.length} customers, ${Object.keys(s.cache).length} screens`, { complete: reachable });
       st.lastError = null;
     } catch (err) {
       st.lastError = `Offline data refresh failed: ${err.message}`;
+      logEvent('failed', st.lastError);
       console.error('[offline]', st.lastError);
     } finally {
       st.syncingCatalog = false;
@@ -1885,6 +2526,18 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
   // How long a screen waits before falling back to this PC's copy. A dead or
   // half-dead connection must never leave a spinner up for minutes.
   const LONG_GETS = /export|report|backup|download|statement|pdf/i;
+
+  // Screens worth refreshing in the background once the user has opened them:
+  // not files, not one-off codes, not ids made on this PC, and not the
+  // product grid / customer list (those come from the full local copies).
+  function learnable(p) {
+    const pathname = splitPath(p)[0];
+    if (/export|backup|download|pdf|generate-code|next-ref/i.test(pathname) || /\/-\d+(\/|$)/.test(pathname)) return false;
+    if (/^\/(online\/bootstrap|online\/products|customers)$/.test(pathname) || pathname.startsWith('/online/products/sku/')) return false;
+    // POS screens changed by offline sales / returns are refreshed by their own rules above.
+    if (/^\/(sales\/\d+|product-rentals|gift-cards|coupons|cash-drawer|eod)(\/|$)/.test(pathname)) return false;
+    return !USER_PATHS.includes(p);
+  }
   function getTimeout(pathname) {
     if (!st.online) return 4000; // already offline: just a quick "is it back?" try
     if (/^\/(online\/bootstrap|online\/products(\/sku\/.*)?|customers)$/.test(pathname)) return 15000;
@@ -1964,6 +2617,15 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         if (!(e?.status === 'synced' && e.server_id && st.online)) return localGet(p);
         p = `/sales/${e.server_id}`;
       }
+      // Any other record added offline: this PC's copy until it uploads, then its real id.
+      if (s && TEMP_ID_IN_PATH.test(p)) {
+        const map = tempIdMap(s.outbox, s.customers.id_map, s.meta);
+        const real = p.replace(new RegExp(TEMP_ID_IN_PATH.source, 'g'), seg => (map[seg.slice(1)] != null ? `/${map[seg.slice(1)]}` : seg));
+        if (!st.online || TEMP_ID_IN_PATH.test(real)) {
+          return localGet(p) || { status: 404, offline: true, body: { message: 'This was added offline and has not uploaded yet.' } };
+        }
+        p = real;
+      }
       // Product grid / search / barcode: answered from this PC's catalog even
       // while online — instant, instead of a server round trip per keystroke.
       if (s && st.online && localFirst(s, pathname, splitPath(p)[1])) {
@@ -1981,9 +2643,11 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         return localGet(p) || offlineResponse(res.body);
       }
       setOnline(true);
-      if (res.status === 200) remember(p, res.body);
+      if (res.status === 200 && !/generate-code$/.test(pathname)) remember(p, res.body, true);
       return s && res.status === 200 ? withOfflineSales(s, p, res) : res;
     }
+
+    if (s && !ONLINE_ONLY_WRITES.test(pathname)) return genericWrite(m, p, body || {}, s);
 
     const res = await net(m, p, body);
     if (isUnreachable(res.status)) {
@@ -2047,6 +2711,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     stop,
     status,
     listOutbox,
+    listEvents,
     retryEntry,
     discardEntry,
     syncNow: async ({ full = false } = {}) => {
@@ -2055,6 +2720,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         const res = await net('GET', '/auth/me', null, { timeout: 8000 });
         if (isUnreachable(res.status)) return status();
         st.online = true;
+        logEvent('online', 'Internet is back');
         stopProbe();
       }
       await syncOutbox();

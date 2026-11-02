@@ -3,6 +3,7 @@
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesOfflineTime;
 use Modules\Pos\Http\Middleware\PosIdempotency;
@@ -84,6 +85,21 @@ test('a key reused for a different request is refused', function () {
     $other = $middleware->handle(idempotentRequest('k-4', 'api/v1/pos/eod/settle'), fn () => response()->json(['ok' => true]));
 
     expect($other->getStatusCode())->toBe(422);
+});
+
+// The desktop app queues writes from every tab offline (electron_app/offline.js
+// genericWrite), so every signed-in desktop write route must be exactly-once.
+test('every signed-in desktop write route runs exactly once per Idempotency-Key', function () {
+    $missing = collect(Route::getRoutes()->getRoutes())
+        ->filter(fn ($route) => str_starts_with($route->uri(), 'api/v1/pos/')
+            && in_array('auth:sanctum', $route->gatherMiddleware(), true)
+            && array_diff($route->methods(), ['GET', 'HEAD']) !== [])
+        ->reject(fn ($route) => in_array(PosIdempotency::class, $route->gatherMiddleware(), true))
+        ->map(fn ($route) => implode('|', $route->methods()).' '.$route->uri())
+        ->values()
+        ->all();
+
+    expect($missing)->toBe([]);
 });
 
 // ── occurred_at: when an offline action really happened ────────────────────

@@ -13567,18 +13567,39 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
 </div>
 
 <!-- ── Offline sync panel (status bar pill) ─────────────────────────── -->
-<div id="offline-sync-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true">
-  <div class="eod-modal" style="width:560px;max-width:calc(100vw - 32px)">
-    <div class="eod-modal-header">
-      <span><i class="fa fa-cloud-arrow-up"></i> Offline &amp; Sync</span>
-      <button class="psm-btn-cancel" id="offline-sync-close" style="margin-left:auto"><i class="fa fa-xmark"></i></button>
+<div id="offline-sync-modal" class="bwz-overlay" style="display:none" role="dialog" aria-modal="true" aria-labelledby="osm-title">
+  <div class="osm">
+    <div class="osm-header">
+      <div class="osm-title" id="osm-title"><i class="fa fa-cloud-arrow-up"></i> Offline &amp; Sync</div>
+      <button class="osm-close" id="offline-sync-close" title="Close"><i class="fa fa-xmark"></i></button>
     </div>
-    <div class="eod-modal-body">
-      <div id="offline-sync-summary" class="offline-summary"></div>
-      <div id="offline-sync-list" class="offline-list"></div>
+    <div id="offline-sync-hero" class="osm-hero"></div>
+    <div class="osm-main">
+      <nav class="osm-nav" id="osm-nav">
+        <button class="osm-nav-btn active" data-osm-view="overview"><i class="fa fa-gauge-high"></i> Overview</button>
+        <button class="osm-nav-btn" data-osm-view="history"><i class="fa fa-clock-rotate-left"></i> History <span class="osm-nav-count" id="osm-count-history"></span></button>
+        <button class="osm-nav-btn" data-osm-view="activity"><i class="fa fa-wave-square"></i> Sync activity</button>
+        <button class="osm-nav-btn" data-osm-view="support"><i class="fa fa-circle-check"></i> Works offline</button>
+      </nav>
+      <div class="osm-body">
+        <section class="osm-view" data-osm-panel="overview"><div id="offline-sync-summary"></div></section>
+        <section class="osm-view" data-osm-panel="history" hidden>
+          <div class="osm-toolbar">
+            <div class="osm-chips" id="osm-module-chips"></div>
+            <div class="osm-toolbar-row">
+              <div class="osm-chips" id="osm-status-chips"></div>
+              <label class="osm-search"><i class="fa fa-magnifying-glass"></i><input id="osm-search" type="search" placeholder="Search history…"></label>
+            </div>
+          </div>
+          <div id="offline-sync-list" class="osm-history"></div>
+        </section>
+        <section class="osm-view" data-osm-panel="activity" hidden><div id="osm-activity"></div></section>
+        <section class="osm-view" data-osm-panel="support" hidden><div id="osm-support"></div></section>
+      </div>
     </div>
-    <div class="eod-modal-footer">
-      <button class="psm-btn-cancel" id="offline-sync-full" title="Download every product and customer again">Re-download data</button>
+    <div class="osm-footer">
+      <span class="osm-footer-note" id="osm-footer-note"></span>
+      <button class="psm-btn-cancel" id="offline-sync-full" title="Download every product, customer and screen again"><i class="fa fa-download"></i> Re-download data</button>
       <button class="eod-settle-btn" id="offline-sync-now"><i class="fa fa-rotate"></i> Sync now</button>
     </div>
   </div>
