@@ -516,6 +516,8 @@ function _escposBuffer(receipt, paperWidth, margins = {}, logo = null) {
 
   // Metadata
   rowLR('Receipt No.:', String(receipt.saleNumber || ''));
+  // Printed while offline: the number on the customer's first receipt
+  if (receipt.offlineRef) rowLR('Offline No.:', String(receipt.offlineRef));
   rowLR('Date:',        String(receipt.date        || ''));
   if (receipt.customer) rowLR('Customer:', String(receipt.customer));
   if (receipt.cashier)  rowLR('Cashier:',  String(receipt.cashier));

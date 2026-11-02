@@ -65,6 +65,7 @@ class SaleService
             $like = '%'.addcslashes($term, '%_\\').'%';
             $query->where(function ($builder) use ($like) {
                 $builder->where('sale_number', 'like', $like)
+                    ->orWhere('offline_ref', 'like', $like)
                     ->orWhere('notes', 'like', $like);
             });
         }
@@ -172,6 +173,7 @@ class SaleService
             $like = '%'.addcslashes($term, '%_\\').'%';
             $query->where(function ($b) use ($like) {
                 $b->where('sale_number', 'like', $like)
+                  ->orWhere('offline_ref', 'like', $like)
                   ->orWhere('notes', 'like', $like)
                   ->orWhereHas('customer', fn ($q) => $q->where('name', 'like', $like));
             });

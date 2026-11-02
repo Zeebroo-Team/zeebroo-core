@@ -1933,7 +1933,7 @@ function _salRenderList() {
       const ch  = s.channel === 'online' ? 'online' : '';
       const chLbl = s.channel === 'online' ? 'Online' : 'POS';
       return `<tr data-sal-id="${s.id}"${s.is_overdue ? ' class="sal-row-overdue" title="Credit payment overdue"' : ''}>
-        <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}</td>
+        <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}${_salOfflineRefHtml(s)}</td>
         <td class="td-muted">${dt}</td>
         <td class="td-muted">${escHtml(s.customer_name || '—')}</td>
         <td><span class="sal-channel-chip ${ch}">${chLbl}</span></td>
@@ -1950,6 +1950,18 @@ function _salRenderList() {
     row.addEventListener('click', () => _salSelectSale(Number(row.dataset.salId)));
   });
   _salWirePayButtons($('#sal-table-wrap'), list, () => loadSalesList());
+}
+
+// A sale made while the till was offline: the customer's receipt shows the
+// number printed then (OFF-…), the server gave it the next POS number on
+// upload. Both find the sale in search, Return / Refund and reprints.
+function _salOfflineRef(s) {
+  return s?.offline_ref && s.offline_ref !== s.sale_number ? s.offline_ref : null;
+}
+function _salOfflineRefHtml(s) {
+  const ref = _salOfflineRef(s);
+  return ref ? `<div class="sal-offline-ref" title="Receipt printed while offline. The customer's receipt shows this number.">
+    <i class="fa fa-plug-circle-xmark"></i> Receipt ${escHtml(ref)}</div>` : '';
 }
 
 // A cheque sale earns nothing until the cheque is claimed (pending or bounced)
@@ -1988,7 +2000,7 @@ async function _salSelectSale(id) {
   const cur     = state.currency || '';
   const isVoided = _isVoidSale(sale);
 
-  $('#sal-detail-title').textContent = `Sale #${num}`;
+  $('#sal-detail-title').textContent = `Sale #${num}${_salOfflineRef(sale) ? ` · receipt ${_salOfflineRef(sale)}` : ''}`;
   $('#sal-void-btn').style.display   = isVoided ? 'none' : '';
   $('#sal-return-btn').style.display = isVoided ? 'none' : '';
   const hasCreqDetails = (sale.items || []).some(i => (i.custom_requirement_values || []).length);
@@ -2100,6 +2112,10 @@ async function _salSelectSale(id) {
         <span class="sal-detail-meta-label">Sale #</span>
         <span class="sal-detail-meta-val">${escHtml(num)}</span>
       </div>
+      ${_salOfflineRef(sale) ? `<div class="sal-detail-meta-item" title="Receipt printed while offline. The customer's receipt shows this number; it was given ${escHtml(num)} when it uploaded.">
+        <span class="sal-detail-meta-label">Printed offline as</span>
+        <span class="sal-detail-meta-val"><span class="sal-offline-chip"><i class="fa fa-plug-circle-xmark"></i> ${escHtml(_salOfflineRef(sale))}</span></span>
+      </div>` : ''}
       <div class="sal-detail-meta-item">
         <span class="sal-detail-meta-label">Date</span>
         <span class="sal-detail-meta-val">${dateStr}</span>
@@ -2913,7 +2929,7 @@ function _salHistRenderTable(data) {
       const cls = _isVoidSale(s) ? 'voided' : 'completed';
       const ch  = s.channel === 'online' ? 'online' : '';
       return `<tr data-sal-id="${s.id}"${s.is_overdue ? ' class="sal-row-overdue" title="Credit payment overdue"' : ''}>
-        <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}</td>
+        <td class="td-ref"><i class="fa fa-receipt" style="margin-right:6px;opacity:.55"></i>${escHtml(s.sale_number || String(s.id))}${_salOfflineRefHtml(s)}</td>
         <td class="td-muted">${dt}</td>
         <td class="td-muted">${escHtml(s.customer_name || '—')}</td>
         <td><span class="sal-channel-chip ${ch}">${s.channel === 'online' ? 'Online' : 'POS'}</span></td>
@@ -32542,6 +32558,7 @@ function buildReceiptHTML(sale, overrides = {}) {
     ${headerText ? `<div class="rcpt-biz-sub">${escHtml(headerText)}</div>` : ''}
     <hr class="rcpt-divider">
     <div class="rcpt-meta"><span>${lbl.receiptNo}</span><span>${escHtml(sale.sale_number || '')}</span></div>
+    ${_salOfflineRef(sale) ? `<div class="rcpt-meta"><span>Offline receipt #</span><span>${escHtml(_salOfflineRef(sale))}</span></div>` : ''}
     <div class="rcpt-meta"><span>${lbl.date}</span><span>${dateStr}</span></div>
     ${customerName ? `<div class="rcpt-meta"><span>${lbl.customer}</span><span>${escHtml(customerName)}</span></div>` : ''}
     ${showCashier && sale.cashier?.name ? `<div class="rcpt-meta"><span>${lbl.cashier}</span><span>${escHtml(sale.cashier.name)}</span></div>` : ''}
@@ -32733,6 +32750,7 @@ function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
     currency:      state.currency || '',
     currencyPosition: currencyPosition(),
     saleNumber:    sale?.sale_number || '',
+    offlineRef:    _salOfflineRef(sale) || '',
     date:          sale?.sold_at
       ? new Date(sale.sold_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
       : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),

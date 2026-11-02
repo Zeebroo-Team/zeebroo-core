@@ -200,6 +200,8 @@ class PosOnlineApiService
         return [
             'id' => (int) $sale->id,
             'sale_number' => $sale->sale_number,
+            // Receipt number printed while the till was offline (e.g. OFF-0A63-261102-0005), if any
+            'offline_ref' => $sale->offline_ref,
             'status' => $sale->status,
             'payment_method' => $sale->payment_method,
             'payment_method_label' => $sale->paymentMethodLabel(),
@@ -297,6 +299,8 @@ class PosOnlineApiService
         return $sales->map(fn (Sale $sale) => [
             'id' => (int) $sale->id,
             'sale_number' => $sale->sale_number,
+            // Receipt number printed while the till was offline (e.g. OFF-0A63-261102-0005), if any
+            'offline_ref' => $sale->offline_ref,
             'status' => $sale->status,
             'payment_method' => $sale->payment_method,
             'channel' => $sale->channel,
