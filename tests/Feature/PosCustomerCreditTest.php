@@ -3,6 +3,8 @@
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\CRM\Services\CustomerImportService;
+use Modules\CRM\Services\CustomerService;
 use Modules\Pos\Http\Controllers\Api\PosCustomerApiController;
 use Modules\Pos\Models\Customer;
 use Modules\Pos\Services\CustomerCreditService;
@@ -20,7 +22,8 @@ function creditService(): CustomerCreditService
 
 function creditController(CustomerCreditService $credit): PosCustomerApiController
 {
-    return new class($credit) extends PosCustomerApiController {
+    // The import and CRM customer services aren't used by the credit endpoints.
+    return new class($credit, Mockery::mock(CustomerImportService::class), Mockery::mock(CustomerService::class)) extends PosCustomerApiController {
         protected function businessOrAbort(Request $request): Business
         {
             return (new Business)->forceFill(['id' => 12, 'user_id' => 1]);
