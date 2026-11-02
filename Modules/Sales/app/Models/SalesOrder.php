@@ -31,6 +31,9 @@ class SalesOrder extends Model
         'discount_amount',
         'tax_amount',
         'total',
+        // Set when made from a won CRM lead's accepted quotation
+        'quotation_id',
+        'lead_id',
     ];
 
     protected $casts = [

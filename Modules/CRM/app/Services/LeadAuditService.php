@@ -19,16 +19,19 @@ class LeadAuditService
 {
     /** Core lead columns tracked field-by-field on edit, with their display labels. */
     private const TRACKED_FIELDS = [
-        'name'                => 'Name',
-        'company'             => 'Company',
-        'email'               => 'Email',
-        'phone'               => 'Phone',
-        'source'              => 'Source',
-        'estimated_value'     => 'Estimated Value',
-        'expected_close_date' => 'Expected Close',
-        'notes'               => 'Notes',
-        'assigned_to'         => 'Assigned To',
-        'lost_reason'         => 'Lost Reason',
+        'name'                  => 'Name',
+        'company'               => 'Company',
+        'email'                 => 'Email',
+        'phone'                 => 'Phone',
+        'source'                => 'Source',
+        'estimated_value'       => 'Estimated Value',
+        'expected_close_date'   => 'Expected Close',
+        'notes'                 => 'Notes',
+        'assigned_to'           => 'Assigned To',
+        'lost_reason'           => 'Lost Reason',
+        'score'                 => 'Score',
+        'division_id'           => 'Division',
+        'product_interest_note' => 'Product Interest',
     ];
 
     /**
@@ -104,7 +107,7 @@ class LeadAuditService
         ]);
     }
 
-    public function recordDeleted(Lead $lead, ?int $userId): void
+    public function recordDeleted(Lead $lead, ?int $userId, array $meta = []): void
     {
         $lead->loadMissing('stage');
 
@@ -116,8 +119,27 @@ class LeadAuditService
                 'phone'           => $lead->phone,
                 'company'         => $lead->company,
                 'estimated_value' => $this->normalise($lead->estimated_value),
-            ]),
+            ]) + $meta,
         ]);
+    }
+
+    /**
+     * The lead entered its (new) pipeline from another one. Logged against the new pipeline as an
+     * arrival — no from-stage, since that stage belongs to the pipeline it left (named in meta).
+     */
+    public function recordForwarded(Lead $lead, LeadStage $to, ?int $userId, array $meta = []): void
+    {
+        $this->write($lead, LeadAuditLog::EVENT_FORWARDED, $userId, [
+            'to_stage_id'   => $to->id,
+            'to_stage_name' => $to->name,
+            'meta'          => $meta ?: null,
+        ]);
+    }
+
+    /** An event with no stage move or field diff (verified, repeat enquiry, merged, …). */
+    public function recordEvent(Lead $lead, string $event, ?int $userId, array $meta = []): void
+    {
+        $this->write($lead, $event, $userId, ['meta' => $meta ?: null]);
     }
 
     // ── Reading ──────────────────────────────────────────────────────────
@@ -386,6 +408,13 @@ class LeadAuditService
             } elseif ($key === 'source') {
                 $old = Lead::sourceLabel($old);
                 $new = Lead::sourceLabel($new);
+            } elseif ($key === 'score') {
+                $old = Lead::scoreLabel($old);
+                $new = Lead::scoreLabel($new);
+            } elseif ($key === 'division_id') {
+                $names = \Modules\CRM\Models\Division::whereIn('id', array_filter([$old, $new]))->pluck('name', 'id');
+                $old   = $old !== null ? ($names->get((int) $old) ?? "Division #{$old}") : null;
+                $new   = $new !== null ? ($names->get((int) $new) ?? "Division #{$new}") : null;
             }
 
             $label = str_starts_with($key, 'custom:')

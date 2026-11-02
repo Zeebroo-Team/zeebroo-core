@@ -32,6 +32,9 @@
                             created in <strong>{{ $log->toStage?->name ?? '—' }}</strong>
                         @endif
                     </div>
+                    @if($log->reason)
+                        <div class="pj-timeline__meta" style="color:var(--text);"><i class="fa fa-quote-left"></i> {{ $log->reason }}</div>
+                    @endif
                     <div class="pj-timeline__meta">
                         {{ $log->created_at->diffForHumans() }} · {{ $log->changedBy?->name ?? 'System' }}
                     </div>

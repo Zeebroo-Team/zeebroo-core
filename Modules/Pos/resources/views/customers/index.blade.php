@@ -46,6 +46,10 @@
 .cust-btn-ghost:hover{border-color:var(--text);color:var(--text);}
 .cust-btn-primary{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;font-size:13px;font-weight:700;border-radius:9px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--text);cursor:pointer;transition:all .15s;}
 .cust-btn-primary:hover{background:color-mix(in srgb,var(--primary) 24%,transparent);}
+.cust-dup{display:flex;gap:8px;padding:9px 12px;border-radius:9px;font-size:12.5px;line-height:1.4;border:1px solid color-mix(in srgb,#f59e0b 45%,var(--border));background:color-mix(in srgb,#f59e0b 10%,transparent);color:var(--text);}
+.cust-dup[hidden]{display:none;}
+.cust-dup i{color:#f59e0b;margin-top:2px;}
+.cust-dup a{color:var(--primary);font-weight:700;margin-right:10px;}
 </style>
 
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
@@ -63,9 +67,16 @@
                 <a href="{{ route('pos.customers.index') }}" class="linkbtn" style="padding:8px 12px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">Clear</a>
             @endif
         </form>
-        <button type="button" class="linkbtn" id="cust-add-btn" style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
-            <i class="fa fa-plus"></i> Add customer
-        </button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            @if(Route::has('crm.contacts.import.index'))
+                <a href="{{ route('crm.contacts.import.index') }}" class="linkbtn" style="padding:8px 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;">
+                    <i class="fa fa-file-import"></i> Import
+                </a>
+            @endif
+            <button type="button" class="linkbtn" id="cust-add-btn" style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-plus"></i> Add customer
+            </button>
+        </div>
     </div>
 
     <div class="cust-table-wrap">
@@ -166,6 +177,10 @@
                     <label for="cust-notes">Notes</label>
                     <textarea name="notes" id="cust-notes" rows="2" maxlength="2000" placeholder="Optional notes…" style="resize:vertical;font-family:inherit;"></textarea>
                 </div>
+                <div id="cust-dup-warning" class="cust-dup" hidden>
+                    <i class="fa fa-triangle-exclamation"></i>
+                    <div><span id="cust-dup-text"></span><div id="cust-dup-links" style="margin-top:4px;"></div></div>
+                </div>
             </div>
             <div class="cust-modal__foot">
                 <button type="button" class="cust-btn-ghost" id="cust-modal-cancel">Cancel</button>
@@ -185,6 +200,76 @@
     var methodEl   = document.getElementById('cust-form-method');
     var baseAction = @json(route('pos.customers.store'));
     var updateBase = @json(url('/pos/customers'));
+    var dupUrl     = @json(route('pos.customers.duplicates'));
+    var contactUrl = @json(Route::has('crm.contacts.show') ? url('/crm/contacts') : null);
+    var dupBox     = document.getElementById('cust-dup-warning');
+    var saveBtn    = form.querySelector('button[type="submit"]');
+    var saveLabel  = saveBtn.innerHTML;
+    var editingId  = null;
+    var dupFound   = false;
+    var dupAcked   = false;
+    var dupSeq     = 0;
+
+    // Warn (not block) when the phone or email already belongs to a customer: the first
+    // save click shows the warning, the second one saves anyway.
+    function resetDuplicates() {
+        dupFound = dupAcked = false;
+        dupBox.hidden = true;
+        saveBtn.innerHTML = saveLabel;
+    }
+
+    function checkDuplicates() {
+        var phone = document.getElementById('cust-phone').value.trim();
+        var email = document.getElementById('cust-email').value.trim();
+        var seq   = ++dupSeq;
+        if (!phone && !email) { resetDuplicates(); return Promise.resolve(); }
+
+        var params = new URLSearchParams({ phone: phone, email: email });
+        if (editingId) params.set('ignore_id', editingId);
+
+        return fetch(dupUrl + '?' + params.toString(), { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : { data: [] }; })
+            .then(function (res) {
+                if (seq !== dupSeq) return;
+                var list = res.data || [];
+                dupFound = list.length > 0;
+                dupAcked = false;
+                saveBtn.innerHTML = saveLabel;
+                dupBox.hidden = !dupFound;
+                if (!dupFound) return;
+                document.getElementById('cust-dup-text').textContent = res.message;
+                var links = document.getElementById('cust-dup-links');
+                links.innerHTML = '';
+                if (contactUrl) list.forEach(function (d) {
+                    var a = document.createElement('a');
+                    a.href = contactUrl + '/' + d.id;
+                    a.target = '_blank';
+                    a.textContent = 'Open ' + d.name;
+                    links.appendChild(a);
+                });
+            })
+            .catch(function () {});
+    }
+
+    ['cust-phone', 'cust-email'].forEach(function (id) {
+        document.getElementById(id).addEventListener('change', checkDuplicates);
+    });
+
+    function contactKey() {
+        return document.getElementById('cust-phone').value.trim() + '|' + document.getElementById('cust-email').value.trim();
+    }
+
+    form.addEventListener('submit', function (e) {
+        if (dupAcked) return;
+        e.preventDefault();
+        var key = contactKey();
+        checkDuplicates().then(function () {
+            if (key !== contactKey()) return;
+            if (!dupFound) { form.submit(); return; }
+            dupAcked = true;
+            saveBtn.innerHTML = '<i class="fa fa-floppy-disk"></i> Save anyway';
+        });
+    });
 
     function setOpen(open) {
         modal.classList.toggle('is-open', open);
@@ -198,6 +283,8 @@
         form.action = baseAction;
         methodEl.value = 'POST';
         titleEl.textContent = 'Add customer';
+        editingId = null;
+        resetDuplicates();
     }
 
     document.getElementById('cust-add-btn').addEventListener('click', function () {
@@ -222,6 +309,8 @@
             document.getElementById('cust-email').value   = btn.dataset.email   || '';
             document.getElementById('cust-address').value = btn.dataset.address || '';
             document.getElementById('cust-notes').value   = btn.dataset.notes   || '';
+            editingId = id;
+            resetDuplicates();
             setOpen(true);
         });
     });

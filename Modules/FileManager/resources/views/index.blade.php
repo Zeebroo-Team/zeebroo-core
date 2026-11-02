@@ -86,7 +86,7 @@
             <div class="fm-grid">
                 @foreach($files as $fileRow)
                     <article class="fm-card">
-                        @if($fileRow->isImage())
+                        @if($fileRow->isImage() && ! $fileRow->isManaged())
                             <img src="{{ $fileRow->publicUrl() }}" alt="" class="fm-card__thumb" loading="lazy">
                         @else
                             <i class="fa fa-file-lines fm-card__icon" aria-hidden="true"></i>
@@ -97,12 +97,17 @@
                             <span class="fm-card__meta" style="margin-top:-4px;">{{ \Illuminate\Support\Str::limit($fileRow->notes, 60) }}</span>
                         @endif
                         <div class="fm-card__actions">
-                            <a class="fm-link" href="{{ route('filemanager.files.download', $fileRow) }}"><i class="fa fa-download"></i> Download</a>
-                            <form method="post" action="{{ route('filemanager.files.destroy', $fileRow) }}" style="margin:0;display:inline;" onsubmit="return confirm('Delete this file?');">
-                                @csrf
-                                @method('DELETE')
-                                <button type="submit" class="fm-btn-del"><i class="fa fa-trash-can"></i></button>
-                            </form>
+                            @if($fileRow->isManaged())
+                                {{-- Served only by its own module, after that module's access checks --}}
+                                <span class="fm-card__meta"><i class="fa fa-lock"></i> Managed by {{ strtoupper($fileRow->managed_by) }}</span>
+                            @else
+                                <a class="fm-link" href="{{ route('filemanager.files.download', $fileRow) }}"><i class="fa fa-download"></i> Download</a>
+                                <form method="post" action="{{ route('filemanager.files.destroy', $fileRow) }}" style="margin:0;display:inline;" onsubmit="return confirm('Delete this file?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="fm-btn-del"><i class="fa fa-trash-can"></i></button>
+                                </form>
+                            @endif
                         </div>
                     </article>
                 @endforeach

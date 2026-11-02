@@ -63,6 +63,7 @@ class PosNotification extends Model
         'reference_type',
         'reference_id',
         'payload',
+        'action_url',
         'read_at',
         'dismissed_at',
     ];

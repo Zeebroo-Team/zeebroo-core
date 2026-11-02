@@ -72,6 +72,44 @@ class BusinessRole extends Model
                 'is_system'   => true,
                 'sort_order'  => 3,
             ],
+            // CRM roles. Which leads they reach is decided by the CRM LeadPolicy from these
+            // slugs and the HR org structure; the keys below only open the CRM screens.
+            [
+                'slug'        => 'crm_ceo',
+                'name'        => 'CRM CEO',
+                'color'       => '#7c3aed',
+                'description' => 'Views every lead, quotation and CRM dashboard. Cannot change anything.',
+                'permissions' => ['home_tab_crm', 'crm_pipeline', 'crm_contacts', 'crm_tasks', 'crm_forms'],
+                'is_system'   => true,
+                'sort_order'  => 10,
+            ],
+            [
+                'slug'        => 'crm_marketing',
+                'name'        => 'CRM Marketing',
+                'color'       => '#db2777',
+                'description' => 'Works the marketing intake pipeline and forwards leads to departments.',
+                'permissions' => ['home_tab_crm', 'crm_pipeline', 'crm_contacts', 'crm_tasks', 'crm_forms'],
+                'is_system'   => true,
+                'sort_order'  => 11,
+            ],
+            [
+                'slug'        => 'crm_department_head',
+                'name'        => 'CRM Department Head',
+                'color'       => '#ea580c',
+                'description' => 'Runs their department pipeline: edits, assigns and approves. Head rights come from HR.',
+                'permissions' => ['home_tab_crm', 'crm_pipeline', 'crm_contacts', 'crm_tasks', 'crm_forms'],
+                'is_system'   => true,
+                'sort_order'  => 12,
+            ],
+            [
+                'slug'        => 'crm_staff',
+                'name'        => 'CRM Staff',
+                'color'       => '#16a34a',
+                'description' => 'Sees their department leads and works the leads assigned to them.',
+                'permissions' => ['home_tab_crm', 'crm_pipeline', 'crm_contacts', 'crm_tasks'],
+                'is_system'   => true,
+                'sort_order'  => 13,
+            ],
         ];
 
         foreach ($defaults as $data) {

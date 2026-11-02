@@ -857,6 +857,7 @@ class PosNotificationService
             'reference_type' => $n->reference_type,
             'reference_id' => $n->reference_id,
             'payload' => $n->payload ?? [],
+            'action_url' => $n->action_url,
             'read' => $n->isRead(),
             'created_at' => $n->created_at?->toDateTimeString(),
         ];

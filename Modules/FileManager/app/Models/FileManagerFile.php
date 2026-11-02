@@ -16,6 +16,8 @@ class FileManagerFile extends Model
         'uploaded_by_user_id',
         'original_filename',
         'stored_path',
+        'disk',
+        'managed_by',
         'mime_type',
         'size_bytes',
         'notes',
@@ -48,9 +50,24 @@ class FileManagerFile extends Model
         return str_starts_with((string) $this->mime_type, 'image/');
     }
 
+    /** The storage disk the file lives on (older rows have none: the public disk). */
+    public function diskName(): string
+    {
+        return $this->disk ?: 'public';
+    }
+
+    /** Owned by another module (e.g. CRM lead files), which serves and deletes it itself. */
+    public function isManaged(): bool
+    {
+        return filled($this->managed_by);
+    }
+
     public function publicUrl(): string
     {
-        return Storage::disk('public')->url($this->stored_path);
+        // Files off the public disk have no public URL — go through the authorised download
+        return $this->diskName() === 'public'
+            ? Storage::disk('public')->url($this->stored_path)
+            : route('filemanager.files.download', $this);
     }
 
     public function humanSize(): string

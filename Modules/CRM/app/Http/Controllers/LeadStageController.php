@@ -63,7 +63,7 @@ class LeadStageController extends Controller
      */
     public function createAutomation(Request $request, Project $project): RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -130,7 +130,7 @@ class LeadStageController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -172,7 +172,7 @@ class LeadStageController extends Controller
 
     public function reorder(Request $request, Project $project): JsonResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             abort(403);
         }
@@ -185,7 +185,7 @@ class LeadStageController extends Controller
 
     private function requireStage(Request $request, Project $project, LeadStage $stage): Business|RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'stages_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -204,9 +204,9 @@ class LeadStageController extends Controller
                     ->where(fn ($q) => $q->where('project_id', $project->id))
                     ->ignore($stage?->id),
             ],
-            'color'   => ['nullable', 'string', 'max:20'],
-            'is_won'  => ['nullable', 'boolean'],
-            'is_lost' => ['nullable', 'boolean'],
-        ]);
+            'color'           => ['nullable', 'string', 'max:20'],
+            'system_key'      => ['required', Rule::in(array_keys(LeadStage::STATUSES))],
+            'requires_reason' => ['nullable', 'boolean'],
+        ]) + ['requires_reason' => false];
     }
 }

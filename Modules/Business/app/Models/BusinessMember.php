@@ -362,6 +362,7 @@ class BusinessMember extends Model
                     ['key' => 'crm_contacts', 'label' => 'Contacts',           'desc' => 'View and manage CRM contact records'],
                     ['key' => 'crm_tasks',    'label' => 'Tasks',              'desc' => 'Create and manage CRM tasks and follow-ups'],
                     ['key' => 'crm_forms',    'label' => 'Lead Capture Forms', 'desc' => 'Design and manage web forms for capturing leads from your website'],
+                    ['key' => 'crm_all_leads', 'label' => 'All Departments',   'desc' => 'Work every pipeline and lead, not only those of your own department'],
                 ],
             ],
             [

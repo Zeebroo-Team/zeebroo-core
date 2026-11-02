@@ -528,6 +528,7 @@ const TRIGGER_GROUPS = {
   'Customers / CRM': {
     'customer.created':'Customer Created','crm.lead.created':'Lead Created (in Relation)',
     'crm.lead.stage_changed':'Lead Stage Changed (in Relation)',
+    'crm.quotation.sent':'Lead Quotation Sent','crm.followup.overdue':'Lead Follow-up Overdue',
   },
   'Cash & End of Day': {
     'eod.withdraw':'Cash Withdrawal','eod.settled':'End-of-Day Settled to Bank',
@@ -774,6 +775,45 @@ const TRIGGER_SAMPLES = {
       from_stage: { id: 7, name: 'New' },
       to_stage: { id: 8, name: 'Contacted' },
       relation: { id: 3, name: 'Relation_001' },
+    },
+  },
+  'crm.quotation.sent': {
+    desc: 'Fires when a lead quotation version first reaches the customer (re-sending the same version does not fire it again). Follow-ups are scheduled at the same moment.',
+    vars: [
+      { key: 'lead.id',                type: 'number', desc: 'Lead ID' },
+      { key: 'lead.name',              type: 'string', desc: 'Lead name' },
+      { key: 'lead.email',             type: 'string', desc: 'Email address' },
+      { key: 'lead.phone',             type: 'string', desc: 'Phone number' },
+      { key: 'lead.project_id',        type: 'number', desc: 'Pipeline (Relation) ID' },
+      { key: 'lead.assigned_to',       type: 'number', desc: 'Primary assignee user ID' },
+      { key: 'quotation.id',           type: 'number', desc: 'Quotation ID' },
+      { key: 'quotation.quote_number', type: 'string', desc: 'Quotation number' },
+      { key: 'quotation.version',      type: 'number', desc: 'Version number' },
+      { key: 'quotation.total',        type: 'number', desc: 'Quotation total' },
+      { key: 'quotation.sent_via',     type: 'string', desc: 'Channel it was sent on (email, …)' },
+    ],
+    sample: {
+      event: 'crm.quotation.sent',
+      lead: { id: 41, name: 'Nimal Perera', email: 'nimal@example.com', phone: '+94711234567', project_id: 3, stage_id: 9, assigned_to: 5 },
+      quotation: { id: 120, quote_number: 'QT-0120', version: 2, total: 245000.00, sent_via: 'email' },
+    },
+  },
+  'crm.followup.overdue': {
+    desc: 'Fires once when a lead follow-up is still not logged after the day it was due (checked every 15 minutes).',
+    vars: [
+      { key: 'lead.id',                type: 'number', desc: 'Lead ID' },
+      { key: 'lead.name',              type: 'string', desc: 'Lead name' },
+      { key: 'lead.phone',             type: 'string', desc: 'Phone number' },
+      { key: 'lead.project_id',        type: 'number', desc: 'Pipeline (Relation) ID' },
+      { key: 'follow_up.id',           type: 'number', desc: 'Follow-up ID' },
+      { key: 'follow_up.due_at',       type: 'string', desc: 'When it was due (ISO 8601)' },
+      { key: 'follow_up.user_id',      type: 'number', desc: 'Assignee user ID' },
+      { key: 'follow_up.quotation_id', type: 'number', desc: 'Quotation it follows up on' },
+    ],
+    sample: {
+      event: 'crm.followup.overdue',
+      lead: { id: 41, name: 'Nimal Perera', email: 'nimal@example.com', phone: '+94711234567', project_id: 3, stage_id: 9, assigned_to: 5 },
+      follow_up: { id: 7, due_at: '2026-01-17T10:00:00+05:30', user_id: 5, quotation_id: 120 },
     },
   },
   'order.created': {

@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Modules\Business\Models\Business;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Modules\CRM\Models\Activity;
+use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAuditLog;
 use Modules\CRM\Models\LeadCustomField;
@@ -18,14 +20,24 @@ use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\LeadStageMailTemplate;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
+use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
+use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\CustomerProfileService;
+use Modules\CRM\Services\FollowUpService;
+use Modules\CRM\Services\LeadScoreService;
+use Modules\CRM\Services\IntakeResult;
+use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadAuditService;
+use Modules\CRM\Services\LeadIntakeService;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
 use Modules\CRM\Services\LeadService;
+use Modules\CRM\Services\LeadSourceService;
 use Modules\CRM\Services\LeadStageMailTemplateService;
 use Modules\CRM\Services\LeadStageService;
+use Modules\CRM\Services\LostReasonService;
 use Modules\CRM\Services\ProjectService;
 use Modules\CRM\Services\TaskService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
@@ -45,6 +57,15 @@ class PosCrmApiController extends Controller
         private readonly LeadStageMailTemplateService $stageMailTemplates,
         private readonly CrmPermissionService        $crmPermissions,
         private readonly LeadAuditService            $audit,
+        private readonly LeadPolicy                  $policy,
+        private readonly CrmOrgService               $org,
+        private readonly LostReasonService           $lostReasons,
+        private readonly LeadSourceService           $leadSources,
+        private readonly LeadIntakeService           $intake,
+        private readonly LeadAssignmentService       $assignments,
+        private readonly CustomerProfileService      $customerProfiles,
+        private readonly FollowUpService             $followUps,
+        private readonly LeadScoreService            $scores,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -56,21 +77,24 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $access   = $this->abortUnlessCrm($request, $business, 'relations_view');
 
-        $rows = Project::query()
+        $rows = $this->policy->visibleProjects($access, Project::query()
             ->where('business_id', $business->id)
             ->where('status', Project::STATUS_ACTIVE)
             ->withCount('leads')
             ->orderBy('name')
-            ->get(['id', 'name', 'description', 'status'])
-            ->filter(fn (Project $p) => $access->canSeeRelation($p->id))
-            ->values();
+            ->get(['id', 'name', 'description', 'status', 'department_id']));
 
-        // Restricted users only count the leads in stages they can see
         foreach ($rows as $project) {
+            // Restricted users only count the leads in stages they can see
             $stageIds = $access->visibleStageIds($project->id);
             if ($stageIds !== null) {
                 $project->leads_count = Lead::where('project_id', $project->id)->whereIn('stage_id', $stageIds)->count();
             }
+            $project->can = [
+                'manage'       => $this->policy->canManageProject($access, $project),
+                'create_leads' => $this->policy->canCreateLeadIn($access, $project),
+                'work_all'     => $this->policy->worksWholeProject($access, $project),
+            ];
         }
 
         return response()->json(['data' => $rows]);
@@ -123,9 +147,16 @@ class PosCrmApiController extends Controller
         $leads = Lead::query()
             ->where('project_id', $project->id)
             ->whereIn('stage_id', $allStages->pluck('id'))
-            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name'])
+            ->visibleWith($access)
+            ->when(array_key_exists((string) $request->query('score'), Lead::SCORES), fn ($q) => $q->where('score', $request->query('score')))
+            ->with(['customFieldValues:id,lead_id,custom_field_id,value', 'createdBy:id,name', 'assignedTo:id,name', 'products:id,name', 'assignees.user:id,name', 'stage'])
             ->orderByDesc('id')
-            ->get(['id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'estimated_value', 'expected_close_date', 'notes', 'created_by', 'created_at', 'updated_at']);
+            ->get(['id', 'project_id', 'department_id', 'division_id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'source_id',
+                'estimated_value', 'score', 'expected_close_date', 'notes', 'product_interest_note', 'lost_reason_id', 'lost_reason',
+                'on_hold_from_stage_id', 'closed_at', 'assigned_to', 'created_by', 'created_at', 'updated_at',
+                'needs_review', 'review_reason', 'verified_at', 'forwarded_at', 'customer_id', 'converted_at']);
+
+        $editable = $this->policy->editableLeadIds($access, $leads);
 
         // Mark leads that already exist as customers (matched by email or phone)
         $emails = $leads->pluck('email')->filter()->unique()->values()->all();
@@ -138,14 +169,41 @@ class PosCrmApiController extends Controller
             ? Customer::where('business_id', $business->id)->whereIn('phone', $phones)->pluck('phone')->flip()
             : collect();
 
-        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones) {
+        $sellPrices = $this->fifoSellPrices($business, $leads->flatMap(fn ($l) => $l->products->pluck('id'))->unique()->values()->all());
+
+        // Follow-up badge (next due / overdue in red) and the suggested Hot / Warm / Cold hint
+        $followUps = $this->followUps->summaryForLeads($business, $leads->pluck('id')->map(fn ($id) => (int) $id)->all());
+        $suggested = $this->scores->suggestFor($leads);
+
+        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable, $sellPrices, $followUps, $suggested) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
-            $lead->is_customer    = $byEmail || $byPhone;
+            $lead->is_customer    = $lead->customer_id !== null || $byEmail || $byPhone;
             $lead->custom_fields  = $lead->customFieldValues->pluck('value', 'custom_field_id');
             $lead->created_by_name = $lead->createdBy?->name;
+            $lead->assigned_to_name = $lead->assignedTo?->name;
+            // Everyone who sees the lead sees who is working it (primary first)
+            $lead->assignee_list  = $this->assignments->present($lead->assignees);
+            $lead->product_items  = $this->presentLeadProducts($lead, $sellPrices);
+            $lead->follow_up       = $followUps[$lead->id] ?? null;
+            $lead->suggested_score = $suggested[$lead->id] ?? null;
+            $lead->can = [
+                'edit'       => isset($editable[$lead->id]),
+                'move'       => isset($editable[$lead->id]) && $access->can('leads_move'),
+                'delete'     => $this->policy->canDelete($access, $lead),
+                'assign'     => $this->policy->canAssign($access, $lead),
+                'approve'    => $this->policy->canApprove($access, $lead),
+                'forward'    => $this->policy->canForward($access, $lead),
+                'contribute' => $this->policy->canContribute($access, $lead),
+                'convert'    => isset($editable[$lead->id]) && $access->can('leads_edit'),
+                'reopen'     => $this->policy->canReopen($access, $lead),
+            ];
             unset($lead->customFieldValues);
+            $lead->unsetRelation('stage');
             $lead->unsetRelation('createdBy');
+            $lead->unsetRelation('assignedTo');
+            $lead->unsetRelation('products');
+            $lead->unsetRelation('assignees');
             return $lead;
         });
 
@@ -153,12 +211,7 @@ class PosCrmApiController extends Controller
 
         $columns = $allStages->map(function (LeadStage $stage) use ($groupedLeads) {
             $stageLeads = $groupedLeads->get($stage->id, collect());
-            return [
-                'id'           => $stage->id,
-                'name'         => $stage->name,
-                'color'        => $stage->color,
-                'is_won'       => $stage->is_won,
-                'is_lost'      => $stage->is_lost,
+            return $this->presentStage($stage) + [
                 'leads_count'  => $stageLeads->count(),
                 'value_total'  => (float) $stageLeads->sum('estimated_value'),
                 'leads'        => $stageLeads->values(),
@@ -167,18 +220,62 @@ class PosCrmApiController extends Controller
 
         return response()->json([
             'data' => [
-                'project'            => ['id' => $project->id, 'name' => $project->name],
+                'project'            => ['id' => $project->id, 'name' => $project->name, 'department_id' => $project->department_id],
+                'can'                => [
+                    'manage'       => $this->policy->canManageProject($access, $project),
+                    'create_leads' => $this->policy->canCreateLeadIn($access, $project),
+                    'work_all'     => $this->policy->worksWholeProject($access, $project),
+                ],
                 'columns'            => $columns,
-                'stages'             => $allStages->map(fn ($s) => ['id' => $s->id, 'name' => $s->name, 'color' => $s->color]),
+                'stages'             => $allStages->map(fn ($s) => $this->presentStage($s))->values(),
                 'default_form'       => $defaultForm ? [
                     'id'               => $defaultForm->id,
                     'name'             => $defaultForm->name,
                     'default_stage_id' => $defaultForm->default_stage_id,
                 ] : null,
+                // Only those who may assign get the list of people to assign to
+                'assignable_users'   => $this->policy->canAssignIn($access, $project)
+                    ? $this->org->assignableUsers($business, $project->department_id)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values()
+                    : [],
                 'custom_data_count'  => $access->can('custom_data_view') ? $this->leads->customDataLeadCount($project) : 0,
                 'sources'            => Lead::sourceOptions(),
+                'statuses'           => LeadStage::statusOptions(),
+                'scores'             => collect(Lead::SCORES)->map(fn ($s, $key) => ['key' => $key, 'label' => $s[0], 'color' => $s[1]])->values(),
+                'lost_reasons'       => $this->lostReasons->present($this->lostReasons->listForBusiness($business)),
+                // Divisions of the pipeline's department, for those who place leads in one
+                'divisions'          => $project->department_id && $this->policy->canAssignIn($access, $project)
+                    ? Division::query()->where('business_id', $business->id)->where('department_id', $project->department_id)
+                        ->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name'])
+                    : [],
             ],
         ]);
+    }
+
+    /** The standard statuses (stages carry one of these keys). */
+    public function statuses(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        return response()->json(['data' => LeadStage::statusOptions()]);
+    }
+
+    /** Active reasons a lead can be lost for — picked when moving a lead to a lost stage. */
+    public function lostReasons(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        return response()->json(['data' => $this->lostReasons->present($this->lostReasons->listForBusiness($business))]);
+    }
+
+    /** The business's lead sources (manual, web form, CSV, Google Form, Facebook, WhatsApp, …). */
+    public function leadSources(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        return response()->json(['data' => $this->leadSources->present($this->leadSources->listForBusiness($business))]);
     }
 
     /**
@@ -194,7 +291,7 @@ class PosCrmApiController extends Controller
         $project  = $this->visibleProject($request, $business, $projectId);
 
         $groups = $this->leads->customDataLeadsForProject($project)
-            ->filter(fn (Lead $lead) => $access->canSeeStage($project->id, $lead->stage_id))
+            ->filter(fn (Lead $lead) => $this->policy->canView($access, $lead))
             ->groupBy('form_id')
             ->map(function ($leadsForForm) {
                 $form = $leadsForForm->first()->form;
@@ -246,6 +343,7 @@ class PosCrmApiController extends Controller
 
         $leads = Lead::query()
             ->where('project_id', $project->id)
+            ->visibleWith($access)
             ->when($visibleStageIds !== null, fn ($q) => $q->whereIn('stage_id', $visibleStageIds))
             ->when(filled($search), fn ($q) => $q->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
@@ -305,6 +403,7 @@ class PosCrmApiController extends Controller
         $this->abortUnlessCrm($request, $business, 'leads_create');
 
         $project = $this->visibleProject($request, $business, $projectId);
+        $this->abortUnlessAllowed($this->policy->canCreateLeadIn($this->crmAccess($request, $business), $project));
 
         $validated = $request->validate([
             'name'                => ['required', 'string', 'max:255'],
@@ -316,24 +415,28 @@ class PosCrmApiController extends Controller
             'estimated_value'     => ['nullable', 'numeric', 'min:0'],
             'expected_close_date' => ['nullable', 'date'],
             'notes'               => ['nullable', 'string', 'max:2000'],
-        ]);
+        ] + $this->leadStatusFieldRules());
         $validated['source'] = ($validated['source'] ?? null) ?: Lead::SOURCE_MANUAL;
+        // Only those who may assign place the lead in a division
+        if (! $this->policy->canAssignIn($this->crmAccess($request, $business), $project)) {
+            unset($validated['division_id']);
+        }
 
         $this->abortUnlessStageVisible($request, $business, $project->id, $validated['stage_id'] ?? null);
 
-        $lead = $this->leads->create($project, $validated, $request->user()?->id);
+        $result = $this->intake->capture($validated, $validated['source'], $project, $request->user()?->id);
 
-        return response()->json(['data' => $lead->load('stage')], 201);
+        return $this->intakeResponse($request, $business, $result);
     }
 
     public function updateLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $this->abortUnlessCrm($request, $business, 'leads_edit');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_edit');
 
-        $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
-        $this->abortUnlessStageVisible($request, $business, $lead->project_id, $lead->stage_id);
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canEdit($access, $lead));
 
         $validated = $request->validate([
             'name'                => ['required', 'string', 'max:255'],
@@ -347,48 +450,140 @@ class PosCrmApiController extends Controller
             'notes'               => ['nullable', 'string', 'max:2000'],
             'custom_fields'       => ['nullable', 'array'],
             'custom_fields.*'     => ['nullable', 'string', 'max:2000'],
-        ]);
+            'assigned_to'         => ['sometimes', 'nullable', 'integer'],
+        ] + $this->leadStatusFieldRules());
+
+        if (array_key_exists('division_id', $validated) && (int) $validated['division_id'] !== (int) $lead->division_id) {
+            $this->abortUnlessAllowed($this->policy->canAssign($access, $lead));
+        }
 
         if (isset($validated['stage_id']) && (int) $validated['stage_id'] !== (int) $lead->stage_id) {
-            $this->abortUnlessCrm($request, $business, 'leads_move');
+            $this->abortUnlessAllowed($this->policy->canMove($access, $lead));
             $this->abortUnlessStageVisible($request, $business, $lead->project_id, (int) $validated['stage_id']);
+            $target = LeadStage::where('project_id', $lead->project_id)->find((int) $validated['stage_id']);
+            if ($target !== null) {
+                $this->abortUnlessMayLeaveClosed($access, $lead, $target);
+            }
+        }
+
+        // The single "Assigned to" field sets the primary assignee (the others stay on the lead):
+        // department head / admin only, and only someone of the lead's department
+        $assignee       = isset($validated['assigned_to']) ? (int) $validated['assigned_to'] : null;
+        $changeAssignee = array_key_exists('assigned_to', $validated)
+            && $assignee !== ($lead->assigned_to === null ? null : (int) $lead->assigned_to);
+        unset($validated['assigned_to']);
+        if ($changeAssignee) {
+            $this->abortUnlessAllowed($this->policy->canAssign($access, $lead));
+            if ($assignee !== null) {
+                try {
+                    $this->assignments->assertAssignable($lead, [$assignee]);
+                } catch (ValidationException) {
+                    throw ValidationException::withMessages(['assigned_to' => 'This person is not a member of the lead\'s department.']);
+                }
+            }
         }
 
         $lead = $this->leads->update($lead, $validated, $request->user()?->id);
+        if ($changeAssignee) {
+            $lead = $this->assignments->setPrimaryAssignee($lead, $assignee, $request->user()?->id);
+        }
 
-        return response()->json(['data' => $lead->load('stage')]);
+        return response()->json(['data' => $lead->load('stage')->toArray() + ['assignee_list' => $this->assignments->present($this->assignments->assignees($lead))]]);
     }
 
     public function moveLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $this->abortUnlessCrm($request, $business, 'leads_move');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_move');
 
-        $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canMove($access, $lead));
 
         $validated = $request->validate([
-            'stage_id' => ['required', 'integer', 'exists:crm_lead_stages,id'],
+            'stage_id'       => ['required', 'integer', 'exists:crm_lead_stages,id'],
+            'lost_reason_id' => ['nullable', 'integer'],
+            'lost_reason'    => ['nullable', 'string', 'max:255'],
+            'reason'         => ['nullable', 'string', 'max:500'],
         ]);
 
         // Ensure stage belongs to the same project
         $stage = LeadStage::where('project_id', $lead->project_id)->findOrFail($validated['stage_id']);
-        $this->abortUnlessStageVisible($request, $business, $lead->project_id, $lead->stage_id);
         $this->abortUnlessStageVisible($request, $business, $lead->project_id, $stage->id);
+        $this->abortUnlessMayLeaveClosed($access, $lead, $stage);
 
-        $lead = $this->leads->moveStage($lead, $stage->id, $request->user()?->id);
+        $lead = $this->leads->moveStage($lead, $stage->id, $request->user()?->id, $validated);
 
         return response()->json(['data' => $lead->load('stage')]);
+    }
+
+    /** Put the lead in the pipeline's "On Hold" stage, remembering where it was. */
+    public function holdLead(Request $request, int $leadId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_move');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canMove($access, $lead));
+
+        $validated = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);
+        $lead = $this->leads->putOnHold($lead, $validated['reason'] ?? null, $request->user()?->id);
+
+        return response()->json(['data' => $lead->load('stage')]);
+    }
+
+    /** Return an on-hold lead to the stage it was in before it was put on hold. */
+    public function resumeLead(Request $request, int $leadId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_move');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canMove($access, $lead));
+
+        $lead = $this->leads->resume($lead, $request->user()?->id);
+
+        return response()->json(['data' => $lead->load('stage')]);
+    }
+
+    /**
+     * Convert an open lead: it is marked won and linked to its customer — the one it is already
+     * linked to, else one with the same phone / email, else a new one (same as the web action).
+     */
+    public function convertLead(Request $request, int $leadId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_edit');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canEdit($access, $lead));
+
+        $lead     = $this->leads->convertToCustomer($lead, $request->user()?->id);
+        $customer = $lead->customer;
+
+        return response()->json([
+            'message' => $customer->wasRecentlyCreated
+                ? 'Lead converted to a new customer.'
+                : "Lead converted and linked to the existing customer \"{$customer->name}\".",
+            'data'    => [
+                'lead'     => $lead->load('stage'),
+                'customer' => ['id' => $customer->id, 'name' => $customer->name, 'phone' => $customer->phone, 'email' => $customer->email],
+                'created'  => $customer->wasRecentlyCreated,
+            ],
+        ]);
     }
 
     public function deleteLead(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $this->abortUnlessCrm($request, $business, 'leads_delete');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_delete');
 
-        $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
-        $this->abortUnlessStageVisible($request, $business, $lead->project_id, $lead->stage_id);
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canDelete($access, $lead));
 
         $this->leads->delete($lead, $request->user()?->id);
 
@@ -401,9 +596,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessCrm($request, $business, 'leads_view');
 
-        $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
-        $this->visibleProject($request, $business, $lead->project_id);
-        $this->abortUnlessStageVisible($request, $business, $lead->project_id, $lead->stage_id);
+        $lead = $this->visibleLead($request, $business, $leadId);
 
         return response()->json(['data' => $this->audit->present($this->audit->forLead($lead))]);
     }
@@ -459,6 +652,21 @@ class PosCrmApiController extends Controller
 
     // ── Contacts ──────────────────────────────────────────────────────────
 
+    /**
+     * GET crm/overview — the counts on the CRM Overview tiles, without loading the lists.
+     * A count the user may not see is null.
+     */
+    public function overview(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->crmAccess($request, $business);
+
+        return response()->json(['data' => [
+            'contacts'   => $access->can('contacts_view') ? Customer::query()->where('business_id', $business->id)->count() : null,
+            'open_tasks' => $access->can('tasks_view') ? $this->tasks->countForBusiness($business, 'open', $access) : null,
+        ]]);
+    }
+
     public function contacts(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -507,18 +715,29 @@ class PosCrmApiController extends Controller
         return response()->json(['data' => $data]);
     }
 
+    /** The 360° customer page: leads, quotations, files, follow-ups, invoices / orders and the timeline. */
+    public function customer(Request $request, int $customerId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->abortUnlessCrm($request, $business, 'contacts_view');
+
+        $customer = Customer::where('business_id', $business->id)->findOrFail($customerId);
+
+        return response()->json(['data' => $this->customerProfiles->build($customer, $access)]);
+    }
+
     // ── Tasks ─────────────────────────────────────────────────────────────
 
     public function tasksList(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $this->abortUnlessCrm($request, $business, 'tasks_view');
+        $access = $this->abortUnlessCrm($request, $business, 'tasks_view');
 
         $filter = in_array($request->query('filter'), ['open', 'overdue', 'completed'], true)
             ? $request->query('filter')
             : 'open';
 
-        $taskRows = $this->tasks->listForBusiness($business, $filter);
+        $taskRows = $this->tasks->listForBusiness($business, $filter, $access);
 
         $data = $taskRows->map(fn (Task $t) => [
             'id'          => $t->id,
@@ -559,6 +778,7 @@ class PosCrmApiController extends Controller
         $this->abortUnlessCrm($request, $business, 'tasks_complete');
 
         $task = Task::where('business_id', $business->id)->findOrFail($taskId);
+        $this->abortUnlessTaskWorkable($request, $business, $task);
 
         $this->tasks->complete($task);
 
@@ -572,6 +792,7 @@ class PosCrmApiController extends Controller
         $this->abortUnlessCrm($request, $business, 'tasks_complete');
 
         $task = Task::where('business_id', $business->id)->findOrFail($taskId);
+        $this->abortUnlessTaskWorkable($request, $business, $task);
 
         $this->tasks->reopen($task);
 
@@ -585,6 +806,7 @@ class PosCrmApiController extends Controller
         $this->abortUnlessCrm($request, $business, 'tasks_delete');
 
         $task = Task::where('business_id', $business->id)->findOrFail($taskId);
+        $this->abortUnlessTaskWorkable($request, $business, $task);
 
         $this->tasks->delete($task);
 
@@ -605,16 +827,11 @@ class PosCrmApiController extends Controller
             ->pluck('stage_id')
             ->all();
 
-        return response()->json(['data' => $stages->map(fn ($s) => [
-            'id'                 => $s->id,
-            'name'               => $s->name,
-            'color'              => $s->color,
-            'is_won'             => (bool) $s->is_won,
-            'is_lost'            => (bool) $s->is_lost,
+        return response()->json(['data' => $stages->map(fn ($s) => $this->presentStage($s) + [
             'sort_order'         => $s->sort_order,
             'leads_count'        => (int) $s->leads_count,
             'has_mail_template'  => in_array($s->id, $stageIdsWithTemplate, true),
-        ])]);
+        ])->values()]);
     }
 
     public function createStage(Request $request, int $projectId): JsonResponse
@@ -622,14 +839,9 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $this->abortUnlessCrm($request, $business, 'stages_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
 
-        $validated = $request->validate([
-            'name'    => ['required', 'string', 'max:60'],
-            'color'   => ['nullable', 'string', 'max:20'],
-            'is_won'  => ['nullable', 'boolean'],
-            'is_lost' => ['nullable', 'boolean'],
-        ]);
+        $validated = $request->validate($this->stageRules());
 
         $stage = $this->stages->create($project, $validated);
 
@@ -641,16 +853,11 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $this->abortUnlessCrm($request, $business, 'stages_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $this->abortUnlessStageVisible($request, $business, $project->id, $stage->id);
 
-        $validated = $request->validate([
-            'name'    => ['required', 'string', 'max:60'],
-            'color'   => ['nullable', 'string', 'max:20'],
-            'is_won'  => ['nullable', 'boolean'],
-            'is_lost' => ['nullable', 'boolean'],
-        ]);
+        $validated = $request->validate($this->stageRules());
 
         $stage = $this->stages->update($stage, $validated);
 
@@ -662,7 +869,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $this->abortUnlessCrm($request, $business, 'stages_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $this->abortUnlessStageVisible($request, $business, $project->id, $stage->id);
 
@@ -680,7 +887,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $access   = $this->abortUnlessCrm($request, $business, 'stages_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
 
         // Reordering a partial list would collide with the sort order of the hidden stages
         if ($access->visibleStageIds($project->id) !== null) {
@@ -717,7 +924,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $this->abortUnlessCrm($request, $business, 'stage_mail');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $this->abortUnlessStageVisible($request, $business, $project->id, $stage->id);
 
@@ -743,7 +950,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $this->abortUnlessCrm($request, $business, 'stage_mail');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $this->abortUnlessStageVisible($request, $business, $project->id, $stage->id);
 
@@ -760,7 +967,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $this->abortUnlessCrm($request, $business, 'stage_mail');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
         $this->abortUnlessStageVisible($request, $business, $project->id, $stage->id);
 
@@ -804,7 +1011,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'forms_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
 
         $validated = $request->validate([
             'name'              => ['required', 'string', 'max:255'],
@@ -876,7 +1083,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'forms_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $validated = $request->validate([
@@ -913,8 +1120,9 @@ class PosCrmApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
-        $this->abortUnlessCrm($request, $business, 'leads_create');
+        $access   = $this->abortUnlessCrm($request, $business, 'leads_create');
         $project  = $this->visibleProject($request, $business, $projectId);
+        $this->abortUnlessAllowed($this->policy->canCreateLeadIn($access, $project));
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $rules = [];
@@ -934,9 +1142,9 @@ class PosCrmApiController extends Controller
         $source = ($data['source'] ?? null) ?: Lead::SOURCE_MANUAL;
         unset($data['source']);
 
-        $lead = $this->forms->submit($form, $data, $source, $request->user()?->id);
+        $result = $this->forms->submit($form, $data, $source, $request->user()?->id);
 
-        return response()->json(['data' => $lead->load('stage')], 201);
+        return $this->intakeResponse($request, $business, $result);
     }
 
     public function setDefaultForm(Request $request, int $projectId, int $formId): JsonResponse
@@ -944,7 +1152,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'forms_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $form = $this->forms->toggleDefault($form);
@@ -957,7 +1165,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'forms_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $this->forms->publish($form);
@@ -970,7 +1178,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'forms_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $this->forms->unpublish($form);
@@ -983,7 +1191,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'forms_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
         $form     = LeadForm::where('project_id', $project->id)->findOrFail($formId);
 
         $this->forms->delete($form);
@@ -1019,7 +1227,7 @@ class PosCrmApiController extends Controller
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'crm_forms');
         $this->abortUnlessCrm($request, $business, 'custom_fields_manage');
-        $project  = $this->visibleProject($request, $business, $projectId);
+        $project  = $this->manageableProject($request, $business, $projectId);
 
         $validated = $request->validate([
             'name'    => ['required', 'string', 'max:80'],
@@ -1047,6 +1255,118 @@ class PosCrmApiController extends Controller
 
     // ── Helpers ───────────────────────────────────────────────────────────
 
+    /**
+     * A stage with its standard status. Older desktop builds only send is_won / is_lost, so
+     * system_key stays optional here and the service derives it from those flags.
+     */
+    private function stageRules(): array
+    {
+        return [
+            'name'            => ['required', 'string', 'max:60'],
+            'color'           => ['nullable', 'string', 'max:20'],
+            'is_won'          => ['nullable', 'boolean'],
+            'is_lost'         => ['nullable', 'boolean'],
+            'system_key'      => ['sometimes', 'nullable', Rule::in(array_keys(LeadStage::STATUSES))],
+            'requires_reason' => ['sometimes', 'nullable', 'boolean'],
+        ];
+    }
+
+    private function presentStage(LeadStage $stage): array
+    {
+        return [
+            'id'              => $stage->id,
+            'name'            => $stage->name,
+            'color'           => $stage->color,
+            'is_won'          => (bool) $stage->is_won,
+            'is_lost'         => (bool) $stage->is_lost,
+            'system_key'      => $stage->system_key,
+            'status_label'    => LeadStage::statusLabel($stage->system_key),
+            'requires_reason' => (bool) $stage->requires_reason,
+            'is_reserved'     => $stage->isReserved(),
+            'is_on_hold'      => $stage->isOnHold(),
+        ];
+    }
+
+    /** Lead fields added with the standard statuses; every key is optional for older desktop builds. */
+    private function leadStatusFieldRules(): array
+    {
+        return [
+            'source_id'             => ['sometimes', 'nullable', 'integer'],
+            'score'                 => ['sometimes', 'nullable', Rule::in(array_keys(Lead::SCORES))],
+            'division_id'           => ['sometimes', 'nullable', 'integer'],
+            'product_interest_note' => ['sometimes', 'nullable', 'string', 'max:2000'],
+            'products'              => ['sometimes', 'array', 'max:50'],
+            'products.*.product_id' => ['required', 'integer'],
+            'products.*.quantity'   => ['nullable', 'numeric', 'min:0', 'max:9999999'],
+            'lost_reason_id'        => ['sometimes', 'nullable', 'integer'],
+            'lost_reason'           => ['sometimes', 'nullable', 'string', 'max:255'],
+            'reason'                => ['sometimes', 'nullable', 'string', 'max:500'],
+        ];
+    }
+
+    /**
+     * 201 for every accepted lead, so older desktop builds keep showing success. `data` is the
+     * lead when the user may still see it — it may have gone to the marketing inbox, or be
+     * another department's existing lead the enquiry was added to — and null otherwise;
+     * `intake` says what happened.
+     */
+    private function intakeResponse(Request $request, Business $business, IntakeResult $result): JsonResponse
+    {
+        $lead    = $result->lead->fresh(['stage']);
+        $visible = $this->policy->canView($this->crmAccess($request, $business), $lead);
+
+        return response()->json([
+            'data'    => $visible ? $lead : null,
+            'intake'  => $result->toArray(),
+            'message' => $result->message(),
+        ], 201);
+    }
+
+    /**
+     * @param  array<int, float>  $sellPrices  product id => FIFO selling price (fifoSellPrices)
+     * @return list<array{id:int,name:string,quantity:?float}>
+     */
+    private function presentLeadProducts(Lead $lead, array $sellPrices = []): array
+    {
+        return $lead->products->map(fn ($p) => [
+            'id'         => $p->id,
+            'name'       => $p->name,
+            'quantity'   => $p->pivot->quantity !== null ? (float) $p->pivot->quantity : null,
+            // A quotation started from the lead pre-fills these — the same price the POS sells at
+            'sku'        => $p->sku,
+            'unit_price' => array_key_exists((int) $p->id, $sellPrices)
+                ? round($sellPrices[(int) $p->id], 2)
+                : ($p->unit_price !== null ? round((float) $p->unit_price, 2) : null),
+        ])->values()->all();
+    }
+
+    /**
+     * Selling price of each product's next in-stock FIFO layer (as PosCatalogService prices the
+     * POS); products without such a layer are left out and fall back to their own unit_price.
+     *
+     * @param  list<int>  $productIds
+     * @return array<int, float>
+     */
+    private function fifoSellPrices(Business $business, array $productIds): array
+    {
+        $prices = [];
+        foreach (array_chunk($productIds, 1000) as $chunk) {
+            DB::table('product_stock_layers')
+                ->where('business_id', $business->id)
+                ->whereIn('product_id', $chunk)
+                ->where('quantity_remaining', '>', 0)
+                ->whereNotNull('selling_unit_price')
+                ->orderBy('received_at')
+                ->orderBy('id')
+                ->get(['product_id', 'selling_unit_price'])
+                ->each(function ($row) use (&$prices) {
+                    $prices[(int) $row->product_id] ??= (float) $row->selling_unit_price;
+                });
+        }
+
+        return $prices;
+    }
+
     /** Per-user CRM access (function toggles + stage visibility), resolved once per request. */
     protected function crmAccess(Request $request, Business $business): CrmAccess
     {
@@ -1070,11 +1390,60 @@ class PosCrmApiController extends Controller
     private function visibleProject(Request $request, Business $business, int $projectId): Project
     {
         $project = Project::where('business_id', $business->id)->findOrFail($projectId);
-        if (! $this->crmAccess($request, $business)->canSeeRelation($project->id)) {
+        if (! $this->policy->canViewProject($this->crmAccess($request, $business), $project)) {
             abort(404);
         }
 
         return $project;
+    }
+
+    /** Load a relation whose stages, forms and fields the user may change (its department head, …). */
+    private function manageableProject(Request $request, Business $business, int $projectId): Project
+    {
+        $project = $this->visibleProject($request, $business, $projectId);
+        $this->abortUnlessAllowed($this->policy->canManageProject($this->crmAccess($request, $business), $project));
+
+        return $project;
+    }
+
+    /** Load a lead the user may see, 404-ing on leads hidden from them. */
+    private function visibleLead(Request $request, Business $business, int $leadId): Lead
+    {
+        $lead = Lead::where('business_id', $business->id)->findOrFail($leadId);
+        if (! $this->policy->canView($this->crmAccess($request, $business), $lead)) {
+            abort(404);
+        }
+
+        return $lead;
+    }
+
+    /** A task on a lead is worked by whoever may edit that lead; other tasks by any CRM user who can change things. */
+    private function abortUnlessTaskWorkable(Request $request, Business $business, Task $task): void
+    {
+        $access = $this->crmAccess($request, $business);
+        $lead   = $task->subject_type === (new Lead)->getMorphClass() ? $task->subject : null;
+
+        $this->abortUnlessAllowed($lead instanceof Lead ? $this->policy->canEdit($access, $lead) : ! $access->isReadOnly());
+    }
+
+    private function abortUnlessAllowed(bool $allowed): void
+    {
+        if (! $allowed) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'You do not have permission to perform this action.'], 403)
+            );
+        }
+    }
+
+    /** A won / lost lead only leaves its stage when its head or an admin reopens it (LeadPolicy::canReopen). */
+    private function abortUnlessMayLeaveClosed(CrmAccess $access, Lead $lead, LeadStage $to): void
+    {
+        $lead->loadMissing('stage');
+        if (! $lead->isOpen() && (int) $to->id !== (int) $lead->stage_id && ! $this->policy->canReopen($access, $lead)) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'This lead is closed. Only the department head or an admin can reopen it.'], 403)
+            );
+        }
     }
 
     /** 403 unless the stage is visible to the user. Null stage ids pass (service picks the default). */

@@ -12,9 +12,11 @@ use Modules\CRM\Models\Project;
 use Modules\Pos\Models\PosCashier;
 
 /**
- * Per-user CRM permissions: which CRM functions a business member may use and which
- * pipeline stages they see in each relation. The owner and admin-role members always
- * have full access and are the only ones who may change these settings.
+ * Resolves a user's CRM access: their CRM role (business_members.role), their place in the
+ * HR org structure, and the per-user CRM permissions — which CRM functions a member may use
+ * and which pipeline stages they see in each relation. Those per-user settings only narrow
+ * what the role allows (see LeadPolicy). The owner and admin-role members always have full
+ * access and are the only ones who may change these settings.
  */
 class CrmPermissionService
 {
@@ -98,25 +100,64 @@ class CrmPermissionService
         return $keys;
     }
 
+    public function __construct(private readonly CrmOrgService $org) {}
+
     /** Resolve what the authenticated user may do in this business's CRM. */
-    public function accessFor(Business $business, ?Authenticatable $user): CrmAccess
+    public function accessFor(Business $business, Authenticatable|PosCashier|null $user): CrmAccess
     {
-        // Cashier tokens carry no user id of their own; CRM gating for them stays with the
-        // existing role-level checks.
+        // Cashier tokens have no business role, so nothing grants them the CRM.
         if ($user === null || $user instanceof PosCashier) {
-            return CrmAccess::full();
+            return CrmAccess::none();
         }
 
-        if ($this->isAdmin($business, (int) $user->getAuthIdentifier())) {
-            return CrmAccess::full(isAdmin: true);
+        $userId = (int) $user->getAuthIdentifier();
+        if ($this->isAdmin($business, $userId)) {
+            return CrmAccess::full(isAdmin: true, userId: $userId);
         }
+
+        $member = BusinessMember::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->first();
+
+        $departmentIds = $this->org->departmentIdsForUser($business, $userId);
+
+        // Someone with neither a membership nor an HR record in this business has no CRM.
+        if ($member === null && $departmentIds === []) {
+            return CrmAccess::none();
+        }
+
+        $role = match ($member?->role) {
+            CrmAccess::ROLE_CEO, CrmAccess::ROLE_MARKETING, CrmAccess::ROLE_HEAD, CrmAccess::ROLE_STAFF => $member->role,
+            default => CrmAccess::ROLE_MEMBER,
+        };
+
+        $headDepartmentIds = $this->org->headedDepartmentIds($business, $userId);
+        $headDivisions     = $this->org->headedDivisions($business, $userId);
 
         $row = CrmUserPermission::query()
             ->where('business_id', $business->id)
-            ->where('user_id', $user->getAuthIdentifier())
+            ->where('user_id', $userId)
             ->first();
 
-        return new CrmAccess(false, $row?->permissions ?? [], $row?->stage_access ?? []);
+        return new CrmAccess(
+            false,
+            $row?->permissions ?? [],
+            $row?->stage_access ?? [],
+            userId: $userId,
+            role: $role,
+            departmentIds: array_values(array_unique(array_merge($departmentIds, $headDepartmentIds, array_values($headDivisions)))),
+            headDepartmentIds: $headDepartmentIds,
+            headDivisions: $headDivisions,
+            intakeDepartmentId: $role === CrmAccess::ROLE_MARKETING ? $this->org->marketingIntakeDepartment($business)?->id : null,
+            projectDepartments: Project::query()
+                ->where('business_id', $business->id)
+                ->whereNotNull('department_id')
+                ->pluck('department_id', 'id')
+                ->map(fn ($id) => (int) $id)
+                ->all(),
+            allDepartments: $member !== null && $this->memberHasPermission($business, $member, 'crm_all_leads'),
+        );
     }
 
     /** Owner, an "admin" member, or a member whose role grants full access. */
@@ -244,7 +285,7 @@ class CrmPermissionService
         );
     }
 
-    /** Drop a member's CRM settings so they fall back to full access. */
+    /** Drop a member's CRM settings so only their role limits them. */
     public function resetForUser(Business $business, int $userId): void
     {
         CrmUserPermission::query()
@@ -266,5 +307,20 @@ class CrmPermissionService
             ->first();
 
         return $role !== null && $role->permissions === null;
+    }
+
+    /** Same rule as /pos/me: the member's own permission list, else their role's. */
+    private function memberHasPermission(Business $business, BusinessMember $member, string $key): bool
+    {
+        if ($member->permissions !== null) {
+            return in_array($key, $member->permissions, true);
+        }
+
+        $role = BusinessRole::query()
+            ->where('business_id', $business->id)
+            ->where('slug', $member->role)
+            ->first();
+
+        return $role !== null && $role->hasPermission($key);
     }
 }

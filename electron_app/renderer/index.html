@@ -92,8 +92,57 @@
 .crm-perms-stage input{accent-color:#7c3aed;margin:0}
 .crm-perms-stage-dot{width:8px;height:8px;border-radius:50%}
 .crm-perms-admin-note{border:1px dashed var(--border,#e5e7eb);border-radius:9px;padding:16px;font-size:13px;color:var(--text-muted,#6b7280);display:flex;gap:10px;align-items:center}
+/* CRM org structure modal — reuses the permissions modal's two-pane layout */
+.crm-org-warn{background:rgba(245,158,11,.14);color:#b45309;border-radius:7px;padding:6px 10px;font-size:12px;display:flex;gap:7px;align-items:center}
+.crm-org-box{border:1px solid var(--border,#e5e7eb);border-radius:9px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.crm-org-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px}
+.crm-org-row .po-field-input{width:auto;padding:5px 8px;font-size:12.5px}
+.crm-org-row label{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
+.crm-org-row input[type=checkbox]{accent-color:#7c3aed}
+/* CRM marketing inbox modal — same two-pane layout */
+.crm-inbox-tabs{display:flex;flex-wrap:wrap;gap:4px}
+.crm-inbox-tab{border:1px solid var(--border,#e5e7eb);background:transparent;border-radius:999px;padding:3px 9px;font-size:11.5px;cursor:pointer;color:var(--text-muted,#6b7280)}
+.crm-inbox-tab.active{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.crm-inbox-flag{background:rgba(245,158,11,.16);color:#b45309;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-inbox-ok{background:rgba(22,163,74,.14);color:#15803d;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-inbox-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:8px}
+.crm-inbox-grid label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted,#6b7280)}
+.crm-inbox-grid .po-field-input{width:100%;padding:5px 8px;font-size:12.5px}
+.crm-inbox-match{display:flex;align-items:center;gap:8px;justify-content:space-between;font-size:12px;padding:6px 0;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-inbox-match:first-child{border-top:0}
+/* CRM lead import modal — upload → map columns → preview → result */
+.crm-imp-steps{display:flex;gap:6px;font-size:11.5px;color:var(--text-muted,#6b7280);margin-left:auto;margin-right:12px}
+.crm-imp-steps span{padding:2px 9px;border-radius:999px;border:1px solid var(--border,#e5e7eb)}
+.crm-imp-steps span.active{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.crm-imp-steps span.done{color:#15803d;border-color:rgba(22,163,74,.4)}
+.crm-imp-body{flex:1;overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+.crm-imp-drop{border:2px dashed var(--border,#d1d5db);border-radius:10px;padding:26px;text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}
+.crm-imp-drop i.fa-file-csv{font-size:34px;color:#16a34a}
+.crm-imp-help{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px}
+.crm-imp-help div{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.5}
+.crm-imp-help strong{display:block;margin-bottom:3px}
+.crm-imp-table{width:100%;border-collapse:collapse;font-size:12px}
+.crm-imp-table th,.crm-imp-table td{border-bottom:1px solid var(--border,#e5e7eb);padding:6px 8px;text-align:left;vertical-align:top}
+.crm-imp-table th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text-muted,#6b7280);position:sticky;top:0;background:var(--surface,#fff)}
+.crm-imp-table .po-field-input{width:100%;padding:4px 6px;font-size:12px}
+.crm-imp-sample{color:var(--text-muted,#6b7280);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-imp-st{border-radius:999px;padding:1px 8px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-imp-st.ok{background:rgba(22,163,74,.14);color:#15803d}
+.crm-imp-st.duplicate{background:rgba(245,158,11,.16);color:#b45309}
+.crm-imp-st.error,.crm-imp-st.failed{background:rgba(239,68,68,.14);color:#b91c1c}
+.crm-imp-st.skipped,.crm-imp-st.queued,.crm-imp-st.processing{background:rgba(100,116,139,.16);color:#475569}
+.crm-imp-st.completed{background:rgba(22,163,74,.14);color:#15803d}
+.crm-imp-warn{color:#b45309;font-size:11px}
+.crm-imp-totals{display:flex;flex-wrap:wrap;gap:8px}
+.crm-imp-total{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:8px 12px;min-width:110px}
+.crm-imp-total b{display:block;font-size:18px}
+.crm-imp-total span{font-size:11px;color:var(--text-muted,#6b7280)}
+.crm-imp-progress{height:8px;border-radius:999px;background:var(--border,#e5e7eb);overflow:hidden}
+.crm-imp-progress div{height:100%;background:#7c3aed;transition:width .3s}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
-body:not(.crm-is-admin) #rb-crm-permissions,
+body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
+body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"],
+body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
 body.crm-deny-relations_create #rb-crm-projects, body.crm-deny-relations_create #crm-ov-new-relation-btn,
@@ -101,6 +150,7 @@ body.crm-deny-relations_create #crm-relation-new-btn, body.crm-deny-relations_cr
 body.crm-deny-relations_delete #crm-relation-delete-btn, body.crm-deny-relations_delete .crm-relation-card-delete,
 body.crm-deny-leads_view [data-crmdtab="pipeline"],
 body.crm-deny-leads_create #rb-crm-new-lead, body.crm-deny-leads_create #crm-relation-new-lead-btn, body.crm-deny-leads_create [data-add-stage],
+body.crm-deny-leads_create #rb-crm-import-leads,
 body.crm-deny-leads_edit .crm-card-edit, body.crm-deny-leads_edit #crm-ctx-edit,
 body.crm-deny-leads_delete .crm-card-del,
 body.crm-deny-stages_manage #rb-crm-stages, body.crm-deny-stages_manage #crm-relation-stages-btn,
@@ -112,7 +162,12 @@ body.crm-deny-tasks_create #rb-crm-new-task, body.crm-deny-tasks_create #crm-tas
 body.crm-deny-tasks_delete .crm-task-del-btn,
 body.crm-deny-forms_view #rb-crm-forms, body.crm-deny-forms_view [data-crmdtab="forms"],
 body.crm-deny-forms_manage #rb-crm-new-form, body.crm-deny-forms_manage #crm-forms-new-btn,
-body.crm-deny-custom_data_view #crm-tab-customdata{display:none !important}
+body.crm-deny-custom_data_view #crm-tab-customdata,
+/* Per-pipeline rules from the open pipeline's `can` (department head / marketing / admin) */
+body.crm-proj-deny-create #rb-crm-new-lead, body.crm-proj-deny-create #crm-relation-new-lead-btn,
+body.crm-proj-deny-manage #rb-crm-stages, body.crm-proj-deny-manage #crm-relation-stages-btn, body.crm-proj-deny-manage [data-add-stage],
+body.crm-proj-deny-manage #crm-stage-add-open-btn, body.crm-proj-deny-manage [data-edit-stage], body.crm-proj-deny-manage [data-del-stage],
+body.crm-proj-deny-manage [data-mail-stage], body.crm-proj-deny-manage #rb-crm-new-form, body.crm-proj-deny-manage #crm-forms-new-btn{display:none !important}
 body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 /* ── CRM Kanban ── */
 .crm-board{display:flex;gap:12px;padding:10px;overflow-x:auto;flex:1;align-items:flex-start;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--text-muted,#6b7280) 35%,transparent) transparent}
@@ -200,6 +255,16 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-src{display:inline-flex;align-items:center;gap:4px;max-width:100%;font-size:10px;font-weight:600;color:var(--src,#64748b);background:color-mix(in srgb,var(--src,#64748b) 11%,transparent);border-radius:4px;padding:1px 6px;white-space:nowrap}
 .crm-src i{font-size:10px}
 .crm-src-label{overflow:hidden;text-overflow:ellipsis}
+#crm-lead-view-products:empty{display:none!important}
+#crm-lead-view-products .crm-lead-product-chip{display:inline-flex;align-items:stretch;height:28px;max-width:100%;overflow:hidden;font-size:12px;line-height:1;color:var(--text);background:color-mix(in srgb,var(--accent,#4e8ef7) 7%,var(--surface,#fff));border:1px solid color-mix(in srgb,var(--accent,#4e8ef7) 28%,transparent);border-radius:999px}
+#crm-lead-view-products .crm-lead-product-name{display:flex;align-items:center;padding:0 10px 0 12px;font-weight:500;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#crm-lead-view-products .crm-lead-product-qty{display:flex;align-items:center;gap:2px;margin:0;padding:0 2px 0 8px;font-size:11px;font-weight:600;color:var(--text-muted);border-left:1px solid color-mix(in srgb,var(--accent,#4e8ef7) 22%,transparent);cursor:text}
+#crm-lead-view-products .crm-lead-product-qty input[type=number]{width:38px;height:100%;min-height:0;margin:0;padding:0 2px;font-size:12px;font-weight:600;line-height:1;text-align:left;color:var(--text);background:transparent;border:none;border-radius:0;box-shadow:none;outline:none;-moz-appearance:textfield;appearance:textfield}
+#crm-lead-view-products .crm-lead-product-qty input::placeholder{color:var(--text-muted);font-weight:400}
+#crm-lead-view-products .crm-lead-product-qty input::-webkit-outer-spin-button,#crm-lead-view-products .crm-lead-product-qty input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+#crm-lead-view-products .crm-lead-product-qty:focus-within{background:var(--surface,#fff)}
+#crm-lead-view-products .crm-lead-product-chip button{display:flex;align-items:center;justify-content:center;width:28px;padding:0;font-size:11px;color:var(--text-muted);background:none;border:none;border-left:1px solid color-mix(in srgb,var(--accent,#4e8ef7) 22%,transparent);cursor:pointer}
+#crm-lead-view-products .crm-lead-product-chip button:hover{background:color-mix(in srgb,#ef4444 12%,transparent);color:#ef4444}
 .crm-dash-src-row{cursor:pointer}
 .crm-dash-src-row:hover td{background:color-mix(in srgb,var(--accent,#4e8ef7) 5%,transparent)}
 .crm-dash-src-bar{height:5px;border-radius:3px;background:var(--surface2,#f1f5f9);margin:2px 0 4px;max-width:260px;overflow:hidden}
@@ -263,6 +328,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-card-value{flex-shrink:0;font-size:11.5px;font-weight:700;color:var(--text,#111827);font-variant-numeric:tabular-nums;padding-top:1px}
 .crm-card-tags{display:flex;flex-wrap:wrap;gap:4px;margin:8px 0 0 39px}
 .crm-card-tags .crm-card-customer-badge{margin-top:0}
+.crm-card-assignee{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;color:var(--text-muted);border:1px solid var(--border);border-radius:4px;padding:1px 6px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-card-footer{display:flex;justify-content:space-between;align-items:center;gap:4px;margin-top:8px;padding-top:7px;min-height:22px;border-top:1px solid color-mix(in srgb,var(--border,#e5e7eb) 70%,transparent)}
 .crm-card-meta{display:inline-flex;align-items:center;gap:9px;min-width:0;font-size:10.5px;color:var(--text-muted,#6b7280)}
 .crm-card-date{display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
@@ -289,6 +355,177 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-lead-view-sub i{font-size:10px}
 .crm-lead-view-stage{display:inline-flex;align-items:center;gap:5px;font-weight:600;color:var(--text)}
 .crm-lead-view-section{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-muted);margin-bottom:6px}
+/* Lead workspace: assignee chips, tabs, timeline, messages, files, tasks */
+.crm-assignees{display:inline-flex;flex-wrap:wrap;align-items:center;gap:4px;max-width:100%}
+.crm-assignee{display:inline-flex;align-items:center;gap:4px;max-width:150px;font-size:10.5px;font-weight:600;line-height:1;padding:2px 7px 2px 2px;border-radius:999px;border:1px solid var(--border);color:var(--text)}
+.crm-assignee--primary{border-color:color-mix(in srgb,#f59e0b 60%,transparent)}
+.crm-assignee--more{padding:2px 6px;color:var(--text-muted)}
+.crm-assignee-av{width:16px;height:16px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;background:var(--av,#7c3aed)}
+.crm-assignee-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-ws-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border,#e5e7eb);margin-top:-4px}
+.crm-ws-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text-muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.crm-ws-tab:hover{color:var(--text)}
+.crm-ws-tab.active{color:#7c3aed;border-bottom-color:#7c3aed}
+.crm-ws-tab-count{font-size:10px;font-weight:700;padding:0 6px;border-radius:999px;background:color-mix(in srgb,#7c3aed 14%,transparent);color:#7c3aed}
+.crm-ws-panel{display:flex;flex-direction:column;gap:12px;min-height:0}
+/* Lead window → Quotations tab */
+.crm-qt-bar,.crm-qt-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crm-qt-head strong{font-size:14px}
+.crm-qt-list{display:flex;flex-direction:column;gap:6px}
+.crm-qt-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 12px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:transparent;color:var(--text);cursor:pointer;font-size:12.5px}
+.crm-qt-row:hover{border-color:#7c3aed;background:color-mix(in srgb,#7c3aed 5%,transparent)}
+.crm-qt-num{font-weight:700;white-space:nowrap}
+.crm-qt-row-meta{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-qt-amt{font-weight:700;white-space:nowrap}
+.crm-qt-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.crm-qt-grid label,.crm-qt-grid .crm-qt-field,.crm-qt-notes{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted)}
+.crm-qt-grid .po-field-input{padding-left:10px}
+.crm-qt-cc{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding:5px 8px!important;cursor:text}
+.crm-qt-cc:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
+.crm-qt-cc>span{display:contents}
+.crm-qt-cc input{flex:1;min-width:140px;border:0;outline:0;background:transparent;color:var(--text);font-size:13px;padding:3px 2px}
+.crm-qt-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--accent-light);color:var(--text);font-size:12px;max-width:100%}
+.crm-qt-chip button{border:0;background:transparent;color:var(--text-muted);cursor:pointer;padding:0 4px;font-size:11px;line-height:1}
+.crm-qt-chip button:hover{color:#ef4444}
+.crm-qt-table-wrap{flex:none;overflow-x:auto;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-ws-panel>.crm-qt-versions,.crm-ws-panel>.crm-qt-foot,.crm-ws-panel>.crm-qt-send{flex:none}
+.crm-qt-table{width:100%;border-collapse:collapse;font-size:12.5px}
+.crm-qt-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);padding:7px 8px;border-bottom:1px solid var(--border,#e5e7eb);white-space:nowrap}
+.crm-qt-table td{padding:5px 8px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:middle}
+.crm-qt-table tr:last-child td{border-bottom:0}
+.crm-qt-table .po-field-input{width:100%;padding:4px 6px;font-size:12.5px}
+.crm-qt-table--view td{padding:7px 8px}
+.crm-qt-right{text-align:right!important;white-space:nowrap}
+.crm-qt-numin{text-align:right}
+.crm-qt-sub{margin-top:2px}
+.crm-qt-del{padding:3px 7px!important}
+.crm-qt-line--error td{background:color-mix(in srgb,#ef4444 9%,transparent)}
+.crm-qt-stock{font-size:11px;font-weight:600;color:#15803d;white-space:nowrap}
+.crm-qt-stock--short{color:#b91c1c}
+.crm-qt-add{display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap}
+.crm-qt-results{position:absolute;left:0;right:0;top:100%;z-index:6;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,.18);max-height:240px;overflow-y:auto;font-size:12.5px}
+.crm-qt-foot{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.crm-qt-notes{flex:1;min-width:220px}
+.crm-qt-totals{width:280px;max-width:100%;display:flex;flex-direction:column;gap:4px;font-size:12.5px;margin-left:auto}
+.crm-qt-totals>div{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.crm-qt-totals .po-field-input{width:110px;padding:3px 6px;font-size:12.5px}
+.crm-qt-grand{border-top:1px solid var(--border,#e5e7eb);padding-top:6px;font-size:14px;font-weight:800}
+.crm-qt-actions{display:flex;gap:8px;justify-content:flex-end}
+.crm-qt-banner{padding:7px 10px;border-radius:8px;font-size:12px;border:1px solid}
+.crm-qt-banner--amber{background:color-mix(in srgb,#f59e0b 10%,transparent);border-color:color-mix(in srgb,#f59e0b 35%,transparent);color:#92400e}
+.crm-qt-banner--red{background:color-mix(in srgb,#ef4444 9%,transparent);border-color:color-mix(in srgb,#ef4444 35%,transparent);color:#991b1b}
+.crm-qt-banner--purple{background:color-mix(in srgb,#a855f7 9%,transparent);border-color:color-mix(in srgb,#a855f7 35%,transparent);color:#7e22ce}
+.crm-qt-banner--teal{background:color-mix(in srgb,#0d9488 9%,transparent);border-color:color-mix(in srgb,#0d9488 35%,transparent);color:#115e59}
+.crm-qt-send{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-banner--purple,body.dark .crm-qt-banner--teal{color:var(--text)}
+/* Negotiation: older versions, customer response form, version history + diff */
+.crm-qt-row--old{margin-left:22px;width:calc(100% - 22px);padding:6px 12px;opacity:.75;border-style:dashed}
+.crm-qt-row--old .crm-qt-num{font-weight:600}
+.crm-qt-respond-opts{display:flex;gap:8px;flex-wrap:wrap}
+.crm-qt-respond-opts label{display:flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:12.5px;cursor:pointer;color:var(--text)}
+.crm-qt-respond-opts label:has(input:checked){border-color:#7c3aed;background:color-mix(in srgb,#7c3aed 8%,transparent)}
+.crm-qt-versions{display:flex;flex-direction:column;gap:6px}
+.crm-qt-ver{border:1px solid var(--border,#e5e7eb);border-radius:8px;padding:8px 10px;font-size:12.5px}
+.crm-qt-ver--current{border-color:#7c3aed}
+.crm-qt-ver-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.crm-qt-ver details{margin-top:6px}
+.crm-qt-ver summary{cursor:pointer;font-size:12px;color:var(--text-muted)}
+.crm-qt-diff{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+.crm-qt-diff td,.crm-qt-diff th{padding:4px 6px;border-bottom:1px solid var(--border,#e5e7eb);text-align:left}
+.crm-qt-diff th{font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+.crm-qt-diff-added td:first-child{color:#15803d}
+.crm-qt-diff-removed td{color:#b91c1c;text-decoration:line-through}
+.crm-qt-diff-removed td:first-child{text-decoration:none}
+.crm-qt-diff-changed td:first-child{color:#b45309}
+.crm-qt-diff-old{color:var(--text-muted);text-decoration:line-through;margin-right:4px}
+.crm-qt-delta-up{color:#15803d}
+.crm-qt-delta-down{color:#b91c1c}
+.crm-ws-assignees{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-ws-assign-btn{margin-left:auto;padding:4px 10px!important;font-size:12px!important}
+.crm-ws-muted{font-size:11px;color:var(--text-muted)}
+.crm-ws-empty{padding:18px;text-align:center;font-size:12px;color:var(--text-muted)}
+.crm-ws-link{background:none;border:none;padding:0;font-size:11px;color:var(--text-muted);cursor:pointer}
+.crm-ws-link:hover{color:var(--text)}
+.crm-ws-link--danger:hover{color:#ef4444}
+.crm-ws-filters{display:flex;flex-wrap:wrap;gap:6px}
+.crm-ws-filter{font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);background:none;color:var(--text-muted);cursor:pointer}
+.crm-ws-filter.active{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.crm-ws-tl{display:flex;flex-direction:column;gap:10px}
+.crm-ws-tl-item{display:flex;gap:10px;align-items:flex-start;font-size:12px}
+.crm-ws-tl-icon{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--ic);background:color-mix(in srgb,var(--ic) 14%,transparent)}
+.crm-ws-tl-content{min-width:0;display:flex;flex-direction:column;gap:2px}
+.crm-ws-tl-body{white-space:pre-line;color:var(--text);overflow-wrap:anywhere}
+.crm-ws-composer{display:flex;flex-direction:column;gap:8px;padding:10px;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-ws-mentions summary{font-size:11px;color:var(--text-muted);cursor:pointer}
+.crm-ws-mentions > div{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:6px;font-size:12px;max-width:560px}
+.crm-ws-msgs{display:flex;flex-direction:column;gap:8px}
+.crm-ws-msg{padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px}
+.crm-ws-msg--reply{margin-left:30px}
+.crm-ws-msg-head{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.crm-ws-msg-who{display:inline-flex;align-items:center;gap:6px}
+.crm-ws-msg-actions{display:inline-flex;gap:10px}
+.crm-ws-msg-body{margin-top:4px;font-size:12.5px;white-space:pre-line;overflow-wrap:anywhere}
+.crm-ws-msg-mentions{margin-top:4px;font-size:11px;font-weight:600;color:#7c3aed}
+.crm-ws-pending{display:flex;flex-wrap:wrap;gap:6px}
+.crm-ws-pending-chip{display:inline-flex;align-items:center;gap:6px;max-width:260px;font-size:11.5px;padding:3px 6px 3px 9px;border:1px solid var(--border,#e5e7eb);border-radius:999px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-ws-msg-files{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.crm-ws-msg-img{width:170px;height:120px;padding:0;border:1px solid var(--border,#e5e7eb);border-radius:8px;overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--text-muted);background:color-mix(in srgb,#7c3aed 6%,transparent)}
+.crm-ws-msg-img img{width:100%;height:100%;object-fit:cover}
+.crm-ws-msg-file{display:inline-flex;align-items:center;gap:6px;max-width:300px;font-size:12px;padding:6px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;background:none;color:var(--text);cursor:pointer}
+.crm-ws-upload{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crm-ws-files{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.crm-ws-file{border:1px solid var(--border,#e5e7eb);border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
+.crm-ws-file-thumb{height:110px;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--text-muted);background:color-mix(in srgb,#7c3aed 6%,transparent)}
+.crm-ws-file-thumb img{width:100%;height:100%;object-fit:cover}
+.crm-ws-file-info{padding:8px 10px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.crm-ws-file-name{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-ws-file-actions{display:flex;gap:12px;margin-top:2px}
+.crm-ws-task-form{display:grid;grid-template-columns:1fr 190px 170px auto;gap:8px;align-items:center}
+.crm-ws-tasks{display:flex;flex-direction:column;gap:4px}
+.crm-ws-task{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:12.5px;cursor:pointer}
+.crm-ws-task-title{flex:1;min-width:0}
+.crm-ws-task--done .crm-ws-task-title{text-decoration:line-through;color:var(--text-muted)}
+.crm-ws-overdue{color:#ef4444}
+.crm-assign-list{display:flex;flex-direction:column;border:1px solid var(--border,#e5e7eb);border-radius:8px;max-height:300px;overflow-y:auto}
+.crm-assign-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid var(--border,#e5e7eb);font-size:13px}
+.crm-assign-row:last-child{border-bottom:none}
+.crm-assign-row label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
+.crm-assign-primary{color:var(--text-muted)}
+.crm-assign-primary input:checked + i{color:#f59e0b}
+.crm-assign-history summary{font-size:12px;color:var(--text-muted);cursor:pointer;margin-bottom:8px}
+.crm-audit-ev{font-size:10px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid currentColor}
+.crm-audit-table{width:100%;border-collapse:collapse;font-size:12px}
+.crm-audit-table th,.crm-audit-table td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:top}
+.crm-audit-table th{position:sticky;top:0;background:var(--surface);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+.crm-audit-table td div{word-break:break-all}
+.crm-appr-list{display:flex;flex-direction:column;gap:12px;padding:16px 18px}
+.crm-appr-card{border:1px solid var(--border,#e5e7eb);border-radius:12px;background:var(--surface);overflow:hidden;transition:box-shadow .15s,border-color .15s}
+.crm-appr-card:hover{border-color:#c4b5fd;box-shadow:0 4px 14px rgba(124,58,237,.08)}
+.crm-appr-head{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border,#e5e7eb)}
+.crm-appr-num{font-size:14px;font-weight:700;color:var(--text)}
+.crm-appr-ver{font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;background:#ede9fe;color:#6d28d9}
+.crm-appr-status{font-size:10px;font-weight:700;padding:2px 9px;border-radius:999px;background:#fef3c7;color:#b45309;text-transform:uppercase;letter-spacing:.03em}
+.crm-appr-lead{margin-left:auto;text-align:right;font-size:12px;min-width:0}
+.crm-appr-lead strong{display:block;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-appr-route{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;padding:14px 16px;background:var(--surface2,#f8fafc)}
+.crm-appr-party{display:flex;align-items:center;gap:10px;min-width:0}
+.crm-appr-party--to{flex-direction:row-reverse;text-align:right}
+.crm-appr-avatar{flex:0 0 36px;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;background:#6366f1}
+.crm-appr-party--to .crm-appr-avatar{background:#a855f7}
+.crm-appr-party-body{min-width:0}
+.crm-appr-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)}
+.crm-appr-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-appr-dept{display:inline-flex;align-items:center;gap:5px;margin-top:3px;font-size:11px;padding:2px 8px;border-radius:6px;background:var(--surface);border:1px solid var(--border,#e5e7eb);color:var(--text-muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-appr-arrow{display:flex;flex-direction:column;align-items:center;gap:2px;color:#a855f7;font-size:10px;font-weight:600}
+.crm-appr-arrow i{font-size:16px}
+.crm-appr-note{margin:0 16px;padding:8px 12px;border-left:3px solid #c4b5fd;background:var(--surface2,#f8fafc);border-radius:0 6px 6px 0;font-size:12px;color:var(--text);white-space:pre-wrap}
+.crm-appr-foot{display:flex;align-items:center;gap:20px;padding:12px 16px;flex-wrap:wrap}
+.crm-appr-fig{font-size:11px;color:var(--text-muted)}
+.crm-appr-fig b{display:block;font-size:13px;color:var(--text)}
+.crm-appr-fig--total b{font-size:15px;color:#6d28d9}
+.crm-appr-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:nowrap}
+.crm-appr-actions button{width:auto;white-space:nowrap}
+@media (max-width:720px){.crm-appr-route{grid-template-columns:1fr}.crm-appr-arrow{transform:rotate(90deg)}.crm-appr-party--to{flex-direction:row;text-align:left}}
 .crm-lead-view-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px}
 .crm-lead-view-item{background:var(--surface2,#f8fafc);border-radius:6px;padding:6px 10px;min-width:0}
 .crm-lead-view-item--wide{grid-column:1/-1}
@@ -334,6 +571,30 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-hf-stat b{display:block;font-size:15px}
 .crm-hf-stat span{font-size:10.5px;color:var(--text-muted)}
 .crm-hf-hint{font-size:12px;color:var(--text-muted);line-height:1.5}
+.crm-hf-sec{border:1px solid var(--border,#e5e7eb);border-radius:10px;margin-bottom:10px;background:var(--surface,#fff)}
+.crm-hf-sec>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
+.crm-hf-sec>summary::-webkit-details-marker{display:none}
+.crm-hf-sec>summary::after{content:'\f078';font-family:'Font Awesome 6 Free','FontAwesome';font-weight:900;margin-left:auto;font-size:10px;transition:transform .15s}
+.crm-hf-sec[open]>summary::after{transform:rotate(180deg)}
+.crm-hf-sec>summary .crm-hf-sec-count{background:var(--surface2,#f1f5f9);border-radius:10px;padding:0 7px;font-size:10.5px;text-transform:none;letter-spacing:0}
+.crm-hf-sec-body{padding:0 12px 10px}
+.crm-hf-rows{display:grid;grid-template-columns:auto 1fr;gap:5px 12px;font-size:12px}
+.crm-hf-rows dt{color:var(--text-muted);white-space:nowrap}
+.crm-hf-rows dd{margin:0;font-weight:600;word-break:break-word}
+.crm-hf-person{display:flex;gap:10px;padding:8px 0;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-hf-person:first-child{border-top:none}
+.crm-hf-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px;color:#7c3aed;background:rgba(124,58,237,.12);object-fit:cover}
+.crm-hf-person-main{min-width:0;flex:1}
+.crm-hf-person-name{font-weight:700;font-size:13px;display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.crm-hf-person-role{font-size:11.5px;color:var(--text-muted);margin-top:1px}
+.crm-hf-person-meta{font-size:11px;color:var(--text-muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:3px 10px}
+.crm-hf-person-meta i{width:12px;text-align:center}
+.crm-hf-tag{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;border-radius:8px;padding:1px 6px;background:rgba(37,99,235,.12);color:#2563eb}
+.crm-hf-tag--primary{background:rgba(22,163,74,.13);color:#16a34a}
+.crm-hf-tag--head{background:rgba(217,119,6,.14);color:#d97706}
+.crm-hf-log{font-size:11.5px;padding:6px 0;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-hf-log:first-child{border-top:none}
+.crm-hf-log small{display:block;color:var(--text-muted);margin-top:2px}
 .crm-hf-panel .crm-audit-list::before{left:13px}
 @media (max-width:900px){.crm-hf-panel.open{width:300px}.crm-hf-panel-inner{width:300px}}
 /* Lead audit trail — Lead Details "Activity History" + relation "History" tab */
@@ -518,6 +779,70 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-wiz-step.is-done .crm-wiz-step-num{background:#d1fae5;color:#065f46}
 .crm-wiz-step:not(:last-child)::after{content:'';flex:1;height:1px;background:var(--border,#e5e7eb);margin-left:6px;min-width:14px}
 .crm-wiz-panel{display:flex;flex-direction:column;gap:12px}
+
+/* ── CRM: follow-ups (overdue = red everywhere), suggested score, Won window ── */
+.crm-fu-badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;background:rgba(100,116,139,.12);color:var(--text-muted,#64748b);white-space:nowrap}
+.crm-fu-badge--today{background:rgba(245,158,11,.16);color:#b45309}
+.crm-fu-badge--overdue{background:rgba(239,68,68,.14);color:#dc2626}
+.crm-card--overdue{box-shadow:inset 3px 0 0 #ef4444}
+.crm-score-hint{display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--border,#cbd5e1);border-radius:999px;padding:0 7px;font-size:10.5px;color:var(--text-muted,#64748b);white-space:nowrap;cursor:help}
+.crm-ws-tab-count--overdue{background:#ef4444 !important;color:#fff !important}
+.crm-fu-form{display:grid;grid-template-columns:190px 130px 150px 1fr auto;gap:8px;align-items:center;margin-bottom:10px}
+.crm-fu-list{display:flex;flex-direction:column;gap:6px}
+.crm-fu-row{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:start;padding:8px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:12.5px}
+.crm-fu-row--overdue{border-color:rgba(239,68,68,.55);background:rgba(239,68,68,.05)}
+.crm-fu-row--closed{opacity:.72}
+.crm-fu-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.crm-fu-actions{display:flex;gap:6px}
+.crm-fu-notes{color:var(--text-muted,#64748b);white-space:pre-wrap}
+.crm-fu-due{font-weight:600}
+.crm-fu-due--today{color:#b45309}
+.crm-fu-due--overdue{color:#dc2626}
+.crm-fu-status{font-size:11px;color:var(--text-muted,#64748b)}
+.crm-fu-status--done{color:#059669}
+.crm-fu-log{grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;padding-top:8px;border-top:1px dashed var(--border,#e5e7eb)}
+.crm-fu-log textarea{grid-column:1/-1;resize:vertical;min-height:52px}
+.crm-fu-form .po-field-input,.crm-fu-log .po-field-input{padding:6px 9px;font-size:12.5px;border-width:1px;border-radius:6px;min-height:32px}
+.crm-fu-lead-line{display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.crm-fu-lead{border:0;background:none;padding:0;font-weight:600;color:var(--accent,#4f46e5);cursor:pointer;font-size:13px}
+.crm-fu-count{display:inline-block;min-width:16px;padding:0 5px;border-radius:999px;background:rgba(100,116,139,.18);font-size:10.5px}
+.crm-fu-count--overdue{background:#ef4444;color:#fff}
+.crm-inbox-tab.active .crm-fu-count{background:rgba(255,255,255,.25);color:#fff}
+.crm-won-choices{display:flex;flex-direction:column;gap:6px}
+.crm-won-choice{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;font-size:12.5px;cursor:pointer}
+.crm-won-choice.is-disabled{opacity:.55;cursor:not-allowed}
+.crm-won-doc{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:4px 0}
+
+/* ── CRM: management dashboard. Series colours validated (dataviz) on both surfaces; Won is also dashed. ── */
+#crm-dashboard-view{--crm-dash-c1:#4f46e5;--crm-dash-c2:#0d9488;--crm-dash-c3:#64748b}
+body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-dash-c3:#94a3b8}
+.crm-dash-filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--border,#e5e7eb);flex-shrink:0}
+.crm-dash-filters .po-field-input{width:auto;padding:5px 8px;font-size:12.5px}
+.crm-dash-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.crm-dash-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.crm-dash-tile{border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:10px 12px;background:var(--surface,#fff)}
+.crm-dash-tile-label{font-size:11.5px;color:var(--text-muted,#64748b)}
+.crm-dash-tile-value{font-size:22px;font-weight:700;color:var(--text,#111827);margin-top:2px}
+.crm-dash-tile-sub{font-size:11px;color:var(--text-muted,#64748b);margin-top:2px}
+.crm-dash-tile--warn{border-color:rgba(245,158,11,.6)}
+.crm-dash-tile--overdue{border-color:rgba(239,68,68,.6)}
+.crm-dash-tile--overdue .crm-dash-tile-value,.crm-dash-tile--overdue .crm-dash-tile-sub{color:#dc2626}
+.crm-dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.crm-dash-card{border:1px solid var(--border,#e5e7eb);border-radius:10px;padding:12px 14px;background:var(--surface,#fff);position:relative}
+.crm-dash-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:600;font-size:13px;margin-bottom:10px;color:var(--text,#111827)}
+.crm-dash-sub-head{font-size:11.5px;font-weight:600;color:var(--text-muted,#64748b);margin:12px 0 6px}
+.crm-dash-chart{height:220px;position:relative}
+.crm-dash-legend{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:400;color:var(--text-muted,#64748b)}
+.crm-dash-key{display:inline-block;width:16px;height:0;border-top:2px solid var(--crm-dash-c1);margin-left:6px}
+.crm-dash-key--c2{border-top:2px dashed var(--crm-dash-c2)}
+.crm-dash-tip{position:absolute;pointer-events:none;background:var(--surface,#fff);border:1px solid var(--border,#e5e7eb);border-radius:6px;padding:6px 8px;font-size:11.5px;color:var(--text,#111827);box-shadow:0 4px 14px rgba(0,0,0,.12);min-width:110px}
+.crm-dash-bars{display:flex;flex-direction:column;gap:6px}
+.crm-dash-bar-row{display:grid;grid-template-columns:130px 1fr auto;gap:8px;align-items:center;font-size:12px}
+.crm-dash-bar-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text,#111827)}
+.crm-dash-bar-track{height:10px;border-radius:4px;background:rgba(100,116,139,.1);overflow:hidden}
+.crm-dash-bar{display:block;height:100%;border-radius:0 4px 4px 0}
+.crm-dash-bar-value{font-variant-numeric:tabular-nums;color:var(--text,#111827);white-space:nowrap}
+.crm-dash-table td,.crm-dash-table th{font-variant-numeric:tabular-nums}
 </style>
 <script src="js/react.min.js"></script>
 <script src="js/react-dom.min.js"></script>
@@ -1903,6 +2228,21 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <button class="ribbon-btn-lg primary" id="rb-crm-new-lead">
               <i class="fa fa-plus"></i>New Lead
             </button>
+            <button class="ribbon-btn-lg" id="rb-crm-inbox">
+              <i class="fa fa-inbox"></i>Marketing<br>Inbox
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-approvals">
+              <i class="fa fa-file-signature"></i>Quotation<br>Approvals
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-followups">
+              <i class="fa fa-phone-volume"></i>My<br>Follow-ups
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-dashboard">
+              <i class="fa fa-chart-line"></i>CRM<br>Dashboard
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-import-leads">
+              <i class="fa fa-file-csv"></i>Import<br>Leads
+            </button>
           </div>
           <div class="ribbon-group-label">Pipeline</div>
         </div>
@@ -1956,6 +2296,9 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-crm-permissions">
               <i class="fa fa-user-shield"></i>Permissions
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-org">
+              <i class="fa fa-sitemap"></i>Org<br>Structure
             </button>
           </div>
           <div class="ribbon-group-label">Access</div>
@@ -9594,6 +9937,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
         <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
         <button class="fin-subnav-btn" style="display:none" data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
         <button class="fin-subnav-btn"         data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
+        <button class="fin-subnav-btn"         data-crmsub="dashboard"><i class="fa fa-chart-line"></i> Dashboard</button>
       </div>
 
       <!-- ── Overview view ── -->
@@ -9723,6 +10067,12 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
                 <button class="crm-chip" data-crm-filter="customers" title="Only leads that already exist as customers"><i class="fa fa-circle-check"></i> Customers</button>
                 <button class="crm-chip" data-crm-filter="hasValue" title="Only leads with an estimated value"><i class="fa fa-coins"></i> Has value</button>
                 <select class="crm-chip crm-chip--select" id="crm-pipe-source" title="Filter by lead source"><option value="">All sources</option></select>
+                <select class="crm-chip crm-chip--select" id="crm-pipe-score" title="Filter by score (Hot / Warm / Cold)">
+                  <option value="">All scores</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option><option value="none">Not scored</option>
+                </select>
+                <select class="crm-chip crm-chip--select" id="crm-pipe-sort" title="Order of the cards in each column">
+                  <option value="newest">Newest first</option><option value="score">Hottest first</option><option value="follow_up">Follow-up due first</option><option value="value">Highest value first</option>
+                </select>
                 <span class="crm-pipe-result" id="crm-pipe-result"></span>
                 <div id="crm-pipeline-alert" class="svc-form-alert" style="display:none"></div>
                 <div class="crm-pipe-view">
@@ -9867,6 +10217,28 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
       </div>
 
       <!-- ── Tasks view ── -->
+      <!-- ── Dashboard view (view only: admin, CEO, heads — their departments) ── -->
+      <div id="crm-dashboard-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+        <div class="crm-dash-filters">
+          <select id="crm-dash-range" class="po-field-input" style="appearance:auto" title="Quick range">
+            <option value="">Quick range…</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option><option value="month">This month</option><option value="quarter">This quarter</option><option value="year">This year</option>
+          </select>
+          <input type="date" id="crm-dash-from" class="po-field-input" title="Leads created from">
+          <span class="crm-ws-muted">→</span>
+          <input type="date" id="crm-dash-to" class="po-field-input" title="Leads created to">
+          <select id="crm-dash-dept" class="po-field-input" style="appearance:auto"></select>
+          <select id="crm-dash-div" class="po-field-input" style="appearance:auto"></select>
+          <select id="crm-dash-user" class="po-field-input" style="appearance:auto"></select>
+          <select id="crm-dash-source" class="po-field-input" style="appearance:auto"></select>
+          <button class="po-btn-primary" id="crm-dash-apply"><i class="fa fa-filter"></i> Apply</button>
+          <span style="flex:1"></span>
+          <button class="po-btn-ghost" id="crm-dash-pdf" title="Export this view to PDF"><i class="fa fa-file-pdf"></i> PDF</button>
+          <button class="po-btn-ghost" id="crm-dash-excel" title="Export this view to Excel"><i class="fa fa-file-excel"></i> Excel</button>
+        </div>
+        <div class="crm-dash-body" id="crm-dash-body"></div>
+      </div>
+
       <div id="crm-tasks-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
         <div class="finance-toolbar" style="gap:8px">
           <div class="svc-chip-bar" id="crm-task-filter-chips">
@@ -12235,6 +12607,166 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     </div>
   </div>
 
+  <!-- ── CRM: 360° customer — leads, quotations, files, follow-ups, invoices / orders, timeline ── -->
+  <div class="modal-overlay" id="crm-customer-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:860px;max-width:96vw;max-height:90vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-address-card" style="color:#4e8ef7"></i>
+        <span id="crm-customer-title">Customer</span>
+        <button class="psm-close" id="crm-customer-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" id="crm-customer-body" style="flex:1;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- ── CRM: assign a lead to department staff (one primary) + assignment history ── -->
+  <div class="modal-overlay" id="crm-assign-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:480px;max-width:94vw;max-height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-user-pen" style="color:#0ea5e9"></i>
+        <span>Assign Lead</span>
+        <button class="psm-close" id="crm-assign-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:10px">
+        <div id="crm-assign-body" style="display:flex;flex-direction:column;gap:10px"></div>
+        <textarea id="crm-assign-note" class="po-field-input" rows="2" maxlength="2000" style="resize:vertical" placeholder="Note for the team (optional)"></textarea>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-assign-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-assign-save"><i class="fa fa-check"></i> Save Assignees</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: quotation approvals — lead quotations waiting for the department head / admin ── -->
+  <div class="modal-overlay" id="crm-approvals-modal" style="display:none">
+    <div class="po-aim-shell" style="width:980px;max-width:96vw;max-height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-signature" style="color:#a855f7"></i>
+        <span>Quotation Approvals</span>
+        <span class="crm-ws-muted" id="crm-approvals-count" style="margin-left:8px;font-size:12px"></span>
+        <button class="psm-close" id="crm-approvals-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto">
+        <div class="crm-appr-list" id="crm-approvals-rows"></div>
+      </div>
+      <div class="po-aim-footer" style="justify-content:space-between">
+        <span class="crm-ws-muted">Review opens the lead's quotation to approve, return with comments or reject.</span>
+        <button class="po-btn-ghost" id="crm-approvals-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Won — mark won and optionally create an invoice / sales order / project ── -->
+  <div class="modal-overlay" id="crm-won-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:520px;max-width:96vw;max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-trophy" style="color:#10b981"></i>
+        <span id="crm-won-title">Mark won</span>
+        <button class="psm-close" id="crm-won-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px;overflow:auto">
+        <div id="crm-won-alert" class="svc-form-alert" style="display:none"></div>
+        <div id="crm-won-body" style="display:flex;flex-direction:column;gap:12px"></div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-won-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-won-submit"><i class="fa fa-trophy"></i> Mark Won</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: My follow-ups / Team — overdue in red, log from the list ── -->
+  <div class="modal-overlay" id="crm-fu-modal" style="display:none">
+    <div class="po-aim-shell" style="width:860px;max-width:96vw;height:84vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-phone-volume" style="color:#7c3aed"></i>
+        <span>Follow-ups</span>
+        <button class="psm-close" id="crm-fu-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid var(--border)">
+        <div class="crm-inbox-tabs" id="crm-fu-scopes"></div>
+        <div class="crm-inbox-tabs" id="crm-fu-status">
+          <button type="button" class="crm-inbox-tab" data-fu-status="overdue">Overdue</button>
+          <button type="button" class="crm-inbox-tab" data-fu-status="today">Today</button>
+          <button type="button" class="crm-inbox-tab" data-fu-status="pending">All pending</button>
+          <button type="button" class="crm-inbox-tab" data-fu-status="done">Done</button>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:12px 18px">
+        <div class="crm-fu-list" id="crm-fu-rows"></div>
+      </div>
+      <div class="po-aim-footer" style="justify-content:space-between">
+        <label class="crm-ws-muted" style="display:flex;align-items:center;gap:6px;cursor:pointer">
+          <input type="checkbox" id="crm-fu-email"> Also email me CRM notifications
+        </label>
+        <div style="display:flex;gap:8px">
+          <button class="po-btn-ghost" id="crm-fu-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+          <button class="po-btn-ghost" id="crm-fu-close-btn"><i class="fa fa-xmark"></i> Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: audit log (admins) — every change to leads and assignees ── -->
+  <div class="modal-overlay" id="crm-audit-modal" style="display:none">
+    <div class="po-aim-shell" style="width:1100px;max-width:96vw;height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-shield-halved" style="color:#7c3aed"></i>
+        <span>CRM Audit Log</span>
+        <button class="psm-close" id="crm-audit-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;padding:10px 18px;border-bottom:1px solid var(--border)">
+        <select id="crm-audit-subject" class="po-field-input" style="width:auto;appearance:auto"><option value="">All records</option></select>
+        <input id="crm-audit-subject-id" class="po-field-input" type="number" min="1" placeholder="Record #" style="width:100px">
+        <select id="crm-audit-event" class="po-field-input" style="width:auto;appearance:auto"><option value="">All events</option></select>
+        <select id="crm-audit-user" class="po-field-input" style="width:auto;appearance:auto"><option value="">Anyone</option></select>
+        <input id="crm-audit-from" class="po-field-input" type="date" style="width:auto" title="From">
+        <input id="crm-audit-to" class="po-field-input" type="date" style="width:auto" title="To">
+        <button class="po-btn-primary" id="crm-audit-filter"><i class="fa fa-filter"></i> Filter</button>
+      </div>
+      <div style="flex:1;min-height:0;overflow:auto;padding:0 18px">
+        <table class="crm-audit-table">
+          <thead><tr><th>When</th><th>Who</th><th>Record</th><th>Event</th><th>Changes</th><th>IP</th></tr></thead>
+          <tbody id="crm-audit-rows"></tbody>
+        </table>
+      </div>
+      <div class="po-aim-footer" style="justify-content:space-between">
+        <span class="crm-ws-muted" id="crm-audit-page"></span>
+        <span style="display:flex;gap:8px">
+          <button class="po-btn-ghost" id="crm-audit-prev"><i class="fa fa-chevron-left"></i> Newer</button>
+          <button class="po-btn-ghost" id="crm-audit-next">Older <i class="fa fa-chevron-right"></i></button>
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: reason asked when a lead moves to a lost stage / a stage that needs a reason / on hold ── -->
+  <div class="modal-overlay" id="crm-move-reason-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:420px;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-comment-dots" style="color:#7c3aed"></i>
+        <span id="crm-move-reason-title">Move lead</span>
+        <button class="psm-close" id="crm-move-reason-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:10px">
+        <div id="crm-move-reason-alert" class="svc-form-alert" style="display:none"></div>
+        <div class="po-field" id="crm-move-reason-lost-wrap">
+          <label class="po-field-label" for="crm-move-reason-lost">Lost reason *</label>
+          <select id="crm-move-reason-lost" class="po-field-input" style="appearance:auto"></select>
+        </div>
+        <div class="po-field">
+          <label class="po-field-label" for="crm-move-reason-text" id="crm-move-reason-text-label">Reason</label>
+          <textarea id="crm-move-reason-text" class="po-field-input" rows="3" maxlength="500" style="resize:vertical"></textarea>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-move-reason-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-move-reason-submit"><i class="fa fa-check"></i> Move</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── CRM: Relation History Flow (History tab → View more) ── -->
   <div class="modal-overlay" id="crm-history-flow-modal" style="display:none">
     <div class="po-aim-shell crm-hf-shell">
@@ -12389,6 +12921,87 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     </div>
   </div>
 
+  <!-- ── CRM: Org Structure Modal ── -->
+  <div class="modal-overlay" id="crm-org-modal" style="display:none">
+    <div class="po-aim-shell" style="width:1100px;max-width:96vw;height:82vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-sitemap" style="color:#7c3aed"></i>
+        <span>CRM Org Structure</span>
+        <button class="psm-close" id="crm-org-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="po-aim-body crm-perms-body">
+        <aside class="crm-perms-users">
+          <div class="crm-perms-muted">Departments come from HR Management.</div>
+          <div id="crm-org-dept-list" class="crm-perms-user-list">
+            <span class="crm-perms-muted">Loading…</span>
+          </div>
+        </aside>
+
+        <section class="crm-perms-editor">
+          <div id="crm-org-alert" class="svc-form-alert" style="display:none"></div>
+          <div id="crm-org-editor-body" style="display:flex;flex-direction:column;gap:14px"><span class="crm-perms-muted">Select a department.</span></div>
+        </section>
+      </div>
+
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-org-close-btn"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Marketing Inbox Modal ── -->
+  <div class="modal-overlay" id="crm-inbox-modal" style="display:none">
+    <div class="po-aim-shell" style="width:1150px;max-width:96vw;height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-inbox" style="color:#7c3aed"></i>
+        <span>Marketing Inbox</span>
+        <span class="crm-perms-muted" id="crm-inbox-pipeline" style="margin-left:8px;font-size:12px"></span>
+        <button class="psm-close" id="crm-inbox-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div class="po-aim-body crm-perms-body">
+        <aside class="crm-perms-users">
+          <div class="crm-inbox-tabs" id="crm-inbox-tabs"></div>
+          <input type="search" class="po-field-input" id="crm-inbox-search" placeholder="Search name, phone, email…">
+          <div id="crm-inbox-list" class="crm-perms-user-list">
+            <span class="crm-perms-muted">Loading…</span>
+          </div>
+        </aside>
+
+        <section class="crm-perms-editor">
+          <div id="crm-inbox-alert" class="svc-form-alert" style="display:none"></div>
+          <div id="crm-inbox-editor-body" style="display:flex;flex-direction:column;gap:14px"><span class="crm-perms-muted">Select a lead.</span></div>
+        </section>
+      </div>
+
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-inbox-refresh-btn"><i class="fa fa-rotate"></i> Refresh</button>
+        <button class="po-btn-ghost" id="crm-inbox-close-btn"><i class="fa fa-xmark"></i> Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Import Leads Modal ── -->
+  <div class="modal-overlay" id="crm-import-modal" style="display:none">
+    <div class="po-aim-shell" style="width:1100px;max-width:96vw;height:86vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-file-csv" style="color:#16a34a"></i>
+        <span>Import Leads</span>
+        <span class="crm-perms-muted" id="crm-import-file" style="margin-left:8px;font-size:12px"></span>
+        <div class="crm-imp-steps" id="crm-import-steps">
+          <span data-imp-step="1">1 · Upload</span><span data-imp-step="2">2 · Columns</span><span data-imp-step="3">3 · Preview</span><span data-imp-step="4">4 · Done</span>
+        </div>
+        <button class="psm-close" id="crm-import-modal-close"><i class="fa fa-xmark"></i></button>
+      </div>
+
+      <div id="crm-import-alert" class="svc-form-alert" style="display:none;margin:10px 18px 0"></div>
+      <div class="crm-imp-body" id="crm-import-body"><span class="crm-perms-muted">Loading…</span></div>
+
+      <div class="po-aim-footer" id="crm-import-footer"></div>
+    </div>
+  </div>
+
   <!-- ── CRM: Add Stage Modal ── -->
   <div class="modal-overlay" id="crm-stage-add-modal" style="display:none">
     <div class="po-aim-shell" style="width:400px">
@@ -12409,14 +13022,13 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
           </div>
         </div>
-        <div style="display:flex;gap:16px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-new-won"> Mark as Won stage
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-new-lost"> Mark as Lost stage
-          </label>
+        <div class="po-field">
+          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
+          <select id="crm-stage-new-status" class="po-field-input" style="appearance:auto"></select>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" id="crm-stage-new-reason"> Ask for a reason when a lead moves here
+        </label>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-stage-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -12446,14 +13058,13 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
             <input type="color" id="crm-stage-edit-color" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
           </div>
         </div>
-        <div style="display:flex;gap:16px">
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-edit-won"> Mark as Won stage
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-            <input type="checkbox" id="crm-stage-edit-lost"> Mark as Lost stage
-          </label>
+        <div class="po-field">
+          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
+          <select id="crm-stage-edit-status" class="po-field-input" style="appearance:auto"></select>
         </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
+          <input type="checkbox" id="crm-stage-edit-reason"> Ask for a reason when a lead moves here
+        </label>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-stage-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -16186,6 +16797,13 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <!-- Step 2: Preview -->
     <div class="csv-import-body" id="cust-csv-step-2" style="display:none">
       <div class="csv-preview-summary" id="cust-csv-preview-summary"></div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted);margin:0 0 8px">
+        When the phone or email is already a customer:
+        <select id="cust-csv-dup-mode" class="po-field-input" style="appearance:auto;width:auto;padding:4px 8px;font-size:12px">
+          <option value="skip">Skip the row</option>
+          <option value="update">Update the existing customer</option>
+        </select>
+      </label>
       <div class="csv-preview-wrap">
         <table class="csv-preview-tbl" id="cust-csv-preview-tbl">
           <thead id="cust-csv-preview-thead"></thead>
@@ -16202,10 +16820,11 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
     <div class="csv-import-body" id="cust-csv-step-3" style="display:none">
       <div class="csv-result-summary" id="cust-csv-result-summary"></div>
       <div class="csv-result-errors" id="cust-csv-result-errors" style="display:none">
-        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows with errors</div>
+        <div class="csv-result-errors-title"><i class="fa fa-triangle-exclamation"></i> Rows not imported</div>
         <div class="csv-result-errors-list" id="cust-csv-result-errors-list"></div>
       </div>
       <div class="csv-import-footer">
+        <button class="csv-sample-btn" id="cust-csv-download-errors" style="display:none;margin-right:auto"><i class="fa fa-download"></i> Download rows not imported</button>
         <button class="psm-btn-cancel" id="cust-csv-done-btn">Done</button>
         <button class="eod-settle-btn" id="cust-csv-import-more-btn"><i class="fa fa-plus"></i> Import More</button>
       </div>

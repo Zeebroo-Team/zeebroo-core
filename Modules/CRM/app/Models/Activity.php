@@ -15,6 +15,8 @@ class Activity extends Model
     const TYPE_CALL    = 'call';
     const TYPE_EMAIL   = 'email';
     const TYPE_MEETING = 'meeting';
+    /** Written by lead intake when a known contact enquires again; not offered in the activity form. */
+    const TYPE_ENQUIRY = 'enquiry';
 
     protected $fillable = [
         'business_id',
@@ -66,6 +68,7 @@ class Activity extends Model
             self::TYPE_CALL    => 'fa-phone',
             self::TYPE_EMAIL   => 'fa-envelope',
             self::TYPE_MEETING => 'fa-people-arrows',
+            self::TYPE_ENQUIRY => 'fa-inbox',
             default            => 'fa-note-sticky',
         };
     }

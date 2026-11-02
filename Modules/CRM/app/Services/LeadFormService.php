@@ -4,7 +4,6 @@ namespace Modules\CRM\Services;
 
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadCustomField;
 use Modules\CRM\Models\LeadForm;
 use Modules\CRM\Models\Project;
@@ -12,7 +11,7 @@ use Modules\CRM\Models\Project;
 class LeadFormService
 {
     public function __construct(
-        private readonly LeadService $leadService,
+        private readonly LeadIntakeService $intake,
         private readonly LeadCustomFieldService $customFields,
     ) {}
 
@@ -254,29 +253,29 @@ class LeadFormService
     }
 
     /**
-     * Create a Lead from a form submission — either the public web form or the desktop
-     * "New Lead" flow, which reuses the same field-block mapping. The lead always lands on
-     * the form's own default stage, keeping both entry points consistent. Tagging the lead
-     * with form_id lets Edit Lead keep showing *this* form's fields later, even if a
+     * Turn a form submission into a lead — either the public web form or the desktop
+     * "New Lead" flow, which reuses the same field-block mapping. It goes through lead intake
+     * (duplicate check, marketing inbox); when the lead stays in the form's own pipeline it
+     * lands on the form's default stage, keeping both entry points consistent. Tagging the
+     * lead with form_id lets Edit Lead keep showing *this* form's fields later, even if a
      * different form is made the project's default afterwards.
      *
      * @param  array<string, string>  $input  keyed by block path (see LeadForm::fieldBlocksWithPaths())
      */
-    public function submit(LeadForm $form, array $input, string $source = 'public-form', ?int $userId = null): Lead
+    public function submit(LeadForm $form, array $input, string $source = 'web_form', ?int $userId = null): IntakeResult
     {
         $mapped = $form->mapPathedInputsToLeadData($input);
         $name   = $mapped['core']['name'] ?: ($mapped['first_text'] ?: 'Website inquiry');
 
-        return $this->leadService->create($form->project, [
+        return $this->intake->capture([
             'form_id'       => $form->id,
             'name'          => $name,
             'company'       => $mapped['core']['company'],
             'email'         => $mapped['core']['email'],
             'phone'         => $mapped['core']['phone'],
-            'source'        => $source,
             'custom_fields' => $mapped['custom_fields'],
             'stage_id'      => $form->default_stage_id,
-        ], $userId);
+        ], $source, $form->project, $userId);
     }
 
     /**

@@ -108,10 +108,12 @@
                    style="padding:8px 16px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                     <i class="fa fa-table-columns"></i> Board view
                 </a>
+                @if($canCreateLead)
                 <button type="button" id="ld-modal-open" class="linkbtn"
                         style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
                     <i class="fa fa-plus"></i> New lead
                 </button>
+                @endif
             @endif
         </div>
     </div>
@@ -129,7 +131,7 @@
                     <i class="fa fa-plus"></i> Create a lead form
                 </a>
             </section>
-        @else
+        @elseif($canCreateLead)
             <section class="pcat-inline">
                 <h2>New lead</h2>
                 <p class="pcat-muted">Capture a prospect, then move it through the pipeline as you follow up.</p>
@@ -164,6 +166,9 @@
                             <tr>
                                 <td>
                                     <strong style="color:var(--text);">{{ $l->name }}</strong>
+                                    @if($l->score)
+                                        <span class="ld-stage" style="border-color:{{ \Modules\CRM\Models\Lead::SCORES[$l->score][1] }};color:{{ \Modules\CRM\Models\Lead::SCORES[$l->score][1] }};margin-left:4px;">{{ \Modules\CRM\Models\Lead::scoreLabel($l->score) }}</span>
+                                    @endif
                                     @if($l->email)<div class="muted" style="font-size:11px;">{{ $l->email }}</div>@endif
                                 </td>
                                 <td>{{ $l->company ?? '—' }}</td>
@@ -179,7 +184,7 @@
                                 </td>
                                 <td><span class="ld-stage" style="border-color:{{ $l->stageColor() }};color:{{ $l->stageColor() }};">{{ $l->stageLabel() }}</span></td>
                                 <td style="text-align:right;font-weight:700;">{{ $l->estimated_value !== null ? number_format((float) $l->estimated_value, 2) : '—' }}</td>
-                                <td>{{ $l->assignedTo?->name ?? '—' }}</td>
+                                <td>@include('crm::partials.assignee-chips', ['assignees' => $l->assignees, 'compact' => true, 'emptyText' => '—'])</td>
                                 <td style="text-align:right;">
                                     <a href="{{ route('crm.leads.show', $l) }}" class="pcat-link">
                                         <i class="fa fa-eye"></i> View

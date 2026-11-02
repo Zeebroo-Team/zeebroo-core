@@ -9,6 +9,8 @@ use Modules\CRM\Models\Project;
 
 class ProjectService
 {
+    public function __construct(private readonly LeadStageService $stages) {}
+
     public function listForBusiness(Business $business): Collection
     {
         return Project::query()
@@ -25,12 +27,16 @@ class ProjectService
 
     public function create(Business $business, array $data): Project
     {
-        return Project::create([
+        $project = Project::create([
             'business_id' => $business->id,
             'name'        => $data['name'],
             'description' => filled($data['description'] ?? '') ? $data['description'] : null,
             'status'      => Project::STATUS_ACTIVE,
         ]);
+
+        $this->stages->seedStandard($project);
+
+        return $project;
     }
 
     public function update(Project $project, array $data): Project

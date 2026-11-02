@@ -26,6 +26,8 @@ class CrmImageController extends Controller
             return response()->json(['error' => 'No business selected.'], 422);
         }
 
+        abort_unless($this->crmAccess($request, $business)->can('forms_manage'), 403);
+
         $images = $this->fileManagerService->listImagesForBusiness($business, 80);
 
         return response()->json([
@@ -44,6 +46,8 @@ class CrmImageController extends Controller
         if ($business instanceof RedirectResponse) {
             return response()->json(['error' => 'No business selected.'], 422);
         }
+
+        abort_unless($this->crmAccess($request, $business)->can('forms_manage'), 403);
 
         $validated = $request->validate([
             'image' => ['required', 'file', 'max:5120', 'mimes:jpg,jpeg,png,gif,webp'],
@@ -66,6 +70,8 @@ class CrmImageController extends Controller
         if ($business instanceof RedirectResponse) {
             return response()->json(['error' => 'No business selected.'], 422);
         }
+
+        abort_unless($this->crmAccess($request, $business)->can('forms_manage'), 403);
 
         $validated = $request->validate([
             'subject' => ['nullable', 'string', 'max:255'],
