@@ -61553,6 +61553,14 @@ async function submitDsCreate() {
       : '<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> Some lines ask for more than is in stock.</div>';
   }
 
+  /** Live version of the detail view's discount banner: the overall discount % against the department's limit (QuotationApprovalService::discountSummary). */
+  function _crmQtDiscountWarnHtml(t) {
+    const limit = _crmWs.quotations?.meta?.discount_limit;
+    const percent = t.subtotal > 0 ? _crmQtR2(t.discount / t.subtotal * 100) : 0;
+    if (limit == null || percent <= limit) return '';
+    return `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+  }
+
   function _crmQtFormHtml(s) {
     const f = s.form;
     const t = _crmQtTotals(f);
@@ -61609,6 +61617,8 @@ async function submitDsCreate() {
         </div>
       </section>
 
+      <div id="crm-qt-disc-warn">${_crmQtDiscountWarnHtml(t)}</div>
+
       <div class="crm-qtx-foot">
         <section class="crm-qtx-card crm-qtx-notes">
           <div class="crm-qtx-card-h"><i class="fa fa-note-sticky"></i> Notes &amp; terms</div>
@@ -61648,6 +61658,8 @@ async function submitDsCreate() {
     set('#crm-qt-t-tax', '+' + _crmQtMoney(t.tax));
     set('#crm-qt-t-total', _crmQtMoney(t.total));
     set('#crm-qt-t-total-dock', _crmQtMoney(t.total));
+    const warn = $('#crm-qt-disc-warn');
+    if (warn) warn.innerHTML = _crmQtDiscountWarnHtml(t);
   }
 
   function _crmQtScheduleStock(lead) {
@@ -61713,7 +61725,7 @@ async function submitDsCreate() {
 
   async function _crmQtOpen(lead, id) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'detail', detail: null, send: null, respond: null, versions: null });
+    Object.assign(s, { view: 'detail', detail: null, submit: null, send: null, respond: null, versions: null });
     const panel = $('#crm-ws-panel');
     if (panel) panel.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmLeadQuotation(lead.id, id).catch(() => ({ status: 0 }));
@@ -61727,7 +61739,7 @@ async function submitDsCreate() {
   /** After a save / approval step / send: show the quotation, reload the list and timeline, and the board (the lead's status moved). */
   async function _crmQtAfterChange(lead, res) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'detail', detail: res.body.data, form: null, send: null, respond: null, versions: null });
+    Object.assign(s, { view: 'detail', detail: res.body.data, form: null, submit: null, send: null, respond: null, versions: null });
     if (res.body?.message) toast(res.body.message, 'success');
     _crmQtLoadVersions(lead, s.detail);
     delete _crmWs.timeline;
@@ -61771,7 +61783,6 @@ async function submitDsCreate() {
     if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
     if (q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-lock"></i> This version was replaced${q.superseded_by ? ` by <button type="button" class="crm-ws-link" data-qt-open="${q.superseded_by.id}">${escHtml(q.superseded_by.quote_number)}</button>` : ''} — it is kept read-only as history.</div>`);
     if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
-    if (can.send_direct) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is within the department's limit of ${_crmQtQty(q.discount.limit)}% — you can send it to the customer without approval.</div>`);
     const lastAsk = [...(q.responses || [])].reverse().find(r => r.response === 'discount_request');
     if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Make a new version with the revised price.</div>`);
     if (stock.has_shortage) banners.push(_crmQtStockWarnHtml(stock));
@@ -61779,11 +61790,11 @@ async function submitDsCreate() {
     const btn = (cond, attr, icon, label, kind = '') => cond ? `<button type="button" class="crm-qtx-btn${kind ? ` crm-qtx-btn--${kind}` : ''}" ${attr}><i class="fa ${icon}"></i> ${label}</button>` : '';
     // Workflow steps on the left, document actions on the right (a macOS window toolbar)
     const steps = [
-      btn(can.submit, 'data-qt-act="submit"', 'fa-paper-plane', 'Submit for approval', 'primary'),
+      btn(can.submit && !s.submit, 'data-qt-submit-open', 'fa-paper-plane', 'Submit for approval', 'primary'),
       btn(can.approve, 'data-qt-act="approve"', 'fa-circle-check', 'Approve', 'primary'),
       btn(can.return, 'data-qt-act="return"', 'fa-rotate-left', 'Return with comments', 'warn'),
       btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'danger'),
-      btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : can.send_direct ? 'Send to customer (no approval needed)' : 'Send to customer', 'primary'),
+      btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : 'Send to customer', 'primary'),
       btn(can.respond && !s.respond, 'data-qt-respond-open', 'fa-comments', 'Record customer response', 'primary'),
     ].join('');
     const tools = [
@@ -61792,6 +61803,24 @@ async function submitDsCreate() {
       btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
     ].join('');
     const actions = steps || tools ? `<div class="crm-qtx-actions">${steps}<span class="crm-fm-spacer"></span>${tools}</div>` : '';
+
+    // Submit for approval: tick the heads to email — any one of them approving is enough
+    const approvers = q.approvers || [];
+    const submitForm = s.submit ? `<div class="crm-qt-send" id="crm-qt-submit">
+        <div class="crm-qtx-card-h"><i class="fa fa-paper-plane"></i> Submit ${escHtml(q.quote_number)} for approval</div>
+        ${approvers.length ? `<div class="crm-ws-muted">Email these heads a link to approve or reject it — they don't need to sign in. The first one to decide settles it.</div>
+        <div class="crm-qt-approvers">${approvers.map(a => `
+          <label class="crm-qt-approver"><input type="checkbox" data-qt-approver="${a.id}"${s.submit.ids.includes(a.id) ? ' checked' : ''}>
+            <span class="crm-qt-approver-main"><b>${escHtml(a.name)}</b><small>${escHtml(a.email)}</small></span>
+            <span class="crm-qt-approver-role">${escHtml(a.role)}</span></label>`).join('')}</div>`
+        : `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> No division or department head with an email is set for this lead — an admin will have to approve it in the CRM.</div>`}
+        <label class="crm-qt-field"><span>Note for the approver <span class="crm-ws-muted">(optional)</span></span>
+          <textarea class="po-field-input" id="crm-qt-submit-comment" rows="3" maxlength="2000" style="resize:vertical" placeholder="Why this price, anything to check…">${escHtml(s.submit.comment || '')}</textarea></label>
+        <div class="crm-qt-actions">
+          <button type="button" class="crm-qtx-btn" data-qt-submit-cancel>Cancel</button>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-submit><i class="fa fa-paper-plane"></i> ${approvers.length ? 'Submit & email' : 'Submit'}</button>
+        </div>
+      </div>` : '';
 
     const sendForm = s.send ? `<div class="crm-qt-send">
         <div class="crm-qtx-card-h"><i class="fa fa-envelope"></i> Send by email</div>
@@ -61825,7 +61854,7 @@ async function submitDsCreate() {
           <label style="grid-column:1/-1">Notes<textarea class="po-field-input" id="crm-qt-resp-notes" rows="3" maxlength="2000" style="resize:vertical" placeholder="What exactly did they say?">${escHtml(r.notes || '')}</textarea></label>
         </div>
         <div class="crm-ws-muted" id="crm-qt-resp-hint">${{
-          discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount' + (q.discount?.limit != null ? ` — up to ${_crmQtQty(q.discount.limit)}% it can be sent without approval.` : '.'),
+          discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount and submit it for approval.',
           accept: 'The quotation is marked accepted and the lead is won.',
           reject: 'The quotation is marked rejected and the lead is lost.',
         }[r.response]}</div>
@@ -61876,6 +61905,7 @@ async function submitDsCreate() {
       </section>
       ${banners.join('')}
       ${actions}
+      ${submitForm}
       ${sendForm}
       ${respondForm}
       <section class="crm-qtx-card crm-qtx-card--flush">
@@ -62057,6 +62087,28 @@ async function submitDsCreate() {
       _crmQtScheduleStock(lead);
     } else if (t.matches('[data-qt-save]')) {
       _crmQtSave(lead, t);
+    } else if (t.matches('[data-qt-submit-open]') && s.detail) {
+      // Every head is ticked to start with
+      s.submit = { ids: (s.detail.approvers || []).map(a => a.id), comment: '' };
+      s.send = s.respond = null;
+      _crmRenderWsTab();
+      $('#crm-qt-submit')?.scrollIntoView({ block: 'nearest' });
+    } else if (t.matches('[data-qt-submit-cancel]')) {
+      s.submit = null;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-qt-submit]') && s.detail && s.submit) {
+      const approvers = s.detail.approvers || [];
+      s.submit.ids = [...$$('#crm-ws-panel [data-qt-approver]')].filter(c => c.checked).map(c => +c.dataset.qtApprover);
+      s.submit.comment = $('#crm-qt-submit-comment')?.value || '';
+      if (approvers.length && !s.submit.ids.length) { toast('Tick at least one head to send the approval request to.', 'error'); return; }
+      t.disabled = true;
+      t.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Submitting…';
+      const res = await API.crmLeadQuotationAction(lead.id, s.detail.id, 'submit', { comment: s.submit.comment.trim() || null, approver_ids: s.submit.ids });
+      t.disabled = false;
+      t.innerHTML = '<i class="fa fa-paper-plane"></i> Submit';
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not submit the quotation.'), 'error'); return; }
+      if (res.body?.emailed?.failed?.length) toast(`Could not email ${res.body.emailed.failed.join(', ')} — they can still approve in the CRM.`, 'warning');
+      _crmQtAfterChange(lead, res);
     } else if (t.dataset.qtAct && s.detail) {
       const action = t.dataset.qtAct;
       const labels = {

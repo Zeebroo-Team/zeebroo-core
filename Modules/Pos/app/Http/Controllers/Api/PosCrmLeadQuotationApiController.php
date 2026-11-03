@@ -15,6 +15,7 @@ use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadQuotationService;
+use Modules\CRM\Services\QuotationApprovalMailer;
 use Modules\CRM\Services\QuotationApprovalService;
 use Modules\CRM\Services\QuotationDispatch\QuotationDispatcher;
 use Modules\CRM\Services\QuotationNegotiationService;
@@ -47,6 +48,7 @@ class PosCrmLeadQuotationApiController extends Controller
         private readonly LeadQuotationService $leadQuotations,
         private readonly QuotationService $quotations,
         private readonly QuotationApprovalService $approvals,
+        private readonly QuotationApprovalMailer $approvalMail,
         private readonly QuotationDispatcher $dispatcher,
         private readonly QuotationPrintService $print,
         private readonly QuotationNegotiationService $negotiation,
@@ -65,6 +67,8 @@ class PosCrmLeadQuotationApiController extends Controller
                 'can_create'  => $this->policy->canQuote($access, $lead),
                 'can_approve' => $this->policy->canApprove($access, $lead),
                 'stock_mode'  => $this->leadQuotations->stockCheck($business, [])['mode'],
+                // So the editor can warn live when the discount goes over it (null = no limit set)
+                'discount_limit' => $this->approvals->discountLimit($lead),
                 'lead'        => $this->presentLead($lead),
             ],
         ]);
@@ -205,17 +209,31 @@ class PosCrmLeadQuotationApiController extends Controller
         ], 201);
     }
 
-    /** POST …/{quotation}/submit — { comment? }: staff on the lead send it for approval. */
+    /**
+     * POST …/{quotation}/submit — { comment?, approver_ids[]? }: staff on the lead send it for
+     * approval, emailing the ticked heads (all of them when approver_ids is left out) a link to
+     * approve or reject it.
+     */
     public function submit(Request $request, int $leadId, int $quotationId): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
         $this->abortUnlessAllowed($this->policy->canQuote($access, $lead));
         $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
 
-        $data      = $request->validate(['comment' => ['nullable', 'string', 'max:2000']]);
+        $data = $request->validate([
+            'comment'        => ['nullable', 'string', 'max:2000'],
+            'approver_ids'   => ['nullable', 'array', 'max:10'],
+            'approver_ids.*' => ['integer'],
+        ]);
+        $approvers = $this->approvals->pickApprovers($lead, $request->has('approver_ids') ? ($data['approver_ids'] ?? []) : null);
         $quotation = $this->approvals->submit($lead, $quotation, (int) $request->user()->id, $data['comment'] ?? null);
+        $mail      = $this->approvalMail->send($lead, $quotation, $approvers);
 
-        return response()->json(['message' => 'Submitted for approval.', 'data' => $this->presentDetail($business, $access, $lead->fresh(), $quotation)]);
+        $message = 'Submitted for approval.'
+            . ($mail['sent'] ? ' Emailed ' . implode(', ', $mail['sent']) . '.' : '')
+            . ($mail['failed'] ? ' Could not email ' . implode(', ', $mail['failed']) . ' — they can still approve in the CRM.' : '');
+
+        return response()->json(['message' => $message, 'emailed' => $mail, 'data' => $this->presentDetail($business, $access, $lead->fresh(), $quotation)]);
     }
 
     /** POST …/{quotation}/approve — { comment? }: the department head or an admin. */
@@ -250,11 +268,7 @@ class PosCrmLeadQuotationApiController extends Controller
         return Storage::disk(QuotationPrintService::disk())->download($path, $quotation->quote_number . '.pdf', ['Content-Type' => 'application/pdf']);
     }
 
-    /**
-     * POST …/{quotation}/send — { channel?, to, cc[]?, subject, message }: queue the approved PDF to
-     * the customer. A draft / returned version within the department's discount limit is sent
-     * straight away, without the head's approval.
-     */
+    /** POST …/{quotation}/send — { channel?, to, cc[]?, subject, message }: queue the approved PDF to the customer. */
     public function send(Request $request, int $leadId, int $quotationId): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
@@ -271,9 +285,6 @@ class PosCrmLeadQuotationApiController extends Controller
             'message' => ['required', 'string', 'max:10000'],
         ]);
 
-        if (in_array($quotation->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true)) {
-            $quotation = $this->approvals->releaseWithinLimit($lead, $quotation, (int) $request->user()->id);
-        }
         $dispatch = $this->dispatcher->queue($quotation, $channel, $data, $request->user()?->id);
 
         return response()->json([
@@ -397,11 +408,8 @@ class PosCrmLeadQuotationApiController extends Controller
         $canQuote   = $this->policy->canQuote($access, $lead);
         $canApprove = $this->policy->canApprove($access, $lead);
         $pending    = $q->status === Quotation::STATUS_PENDING_APPROVAL;
-        $discount   = $this->approvals->discountSummary($lead, $q);
-        $preparing  = in_array($q->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true);
-        // A draft within the department's discount limit goes out without the head (releaseWithinLimit)
-        $sendDirect = $canQuote && $preparing && ! $discount['requires_approval'] && count($items) > 0;
-        $canSend    = $sendDirect || ($canQuote && in_array($q->status, [Quotation::STATUS_APPROVED, Quotation::STATUS_SENT], true));
+        $canSubmit  = $canQuote && in_array($q->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true);
+        $canSend    = $canQuote && in_array($q->status, [Quotation::STATUS_APPROVED, Quotation::STATUS_SENT], true);
         $newer      = $q->isSuperseded()
             ? Quotation::query()->where('business_id', $q->business_id)->where('parent_quotation_id', $q->id)->first(['id', 'quote_number', 'version'])
             : null;
@@ -417,7 +425,9 @@ class PosCrmLeadQuotationApiController extends Controller
             'header'        => $this->quotations->headerAdjustments($q),
             'items'         => $items,
             'stock'         => $this->leadQuotations->stockCheck($business, $items, $q->branch_id),
-            'discount'      => $discount,
+            'discount'      => $this->approvals->discountSummary($lead, $q),
+            // The heads the submit form offers to email for approval
+            'approvers'     => $canSubmit ? $this->approvals->approvers($lead) : [],
             'superseded_by' => $newer ? ['id' => (int) $newer->id, 'quote_number' => $newer->quote_number, 'version' => (int) $newer->version] : null,
             'responses'     => $q->customerResponses->map(fn (QuotationCustomerResponse $r) => $this->presentResponse($r))->values(),
             'approvals'     => $q->approvals->map(fn (QuotationApproval $a) => [
@@ -444,14 +454,12 @@ class PosCrmLeadQuotationApiController extends Controller
             'lead'          => $this->presentLead($lead),
             'can'           => [
                 'edit'    => $canQuote && $q->isEditable(),
-                'submit'  => $canQuote && in_array($q->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true),
+                'submit'  => $canSubmit,
                 'approve' => $canApprove && $pending,
                 'return'  => $canApprove && $pending,
                 'reject'  => $canApprove && $pending,
                 'revise'  => $canQuote && ! $q->isEditable() && ! in_array($q->status, [Quotation::STATUS_PENDING_APPROVAL, Quotation::STATUS_ACCEPTED, Quotation::STATUS_SUPERSEDED], true),
                 'send'    => $canSend,
-                // Sending this draft skips the approval (its discount is within the limit)
-                'send_direct' => $sendDirect,
                 'respond' => $canQuote && $q->status === Quotation::STATUS_SENT,
             ],
             'channels'      => $canSend ? $this->dispatcher->channels() : [],

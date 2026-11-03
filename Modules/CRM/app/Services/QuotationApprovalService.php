@@ -27,8 +27,10 @@ use Modules\Sales\Services\QuotationPrintService;
  *   pending_approval ──approve─▶ approved (+ PDF)       lead stays Pending Approval until sent
  *   pending_approval ──return──▶ returned               lead → Quotation Preparing
  *   pending_approval ──reject──▶ rejected               lead → Quotation Preparing
- *   draft / returned ──release─▶ approved (+ PDF)       discount within the department limit:
- *                                                        no head needed (releaseWithinLimit)
+ *
+ * Every quotation needs a head's approval. On submit the staff tick which heads to email
+ * (approvers()); each gets signed approve / reject links (QuotationApprovalMailer), so they can
+ * decide without signing in — the first decision wins.
  *
  * Who may do which step is LeadPolicy::canQuote / canApprove, checked by the caller.
  */
@@ -168,60 +170,138 @@ class QuotationApprovalService
 
     /**
      * The overall discount as a % of the subtotal, against the department's approval limit
-     * (crm_department_settings.discount_approval_limit_percent). Over the limit — or with no
-     * limit set for the department — the version must be approved by the head; within it the
-     * staff on the lead may send it straight away (releaseWithinLimit).
+     * (crm_department_settings.discount_approval_limit_percent) — shown to the head so a large
+     * discount stands out. Every version is approved by the head either way.
      *
-     * @return array{percent: float, limit: ?float, over_limit: bool, requires_approval: bool}
+     * @return array{percent: float, limit: ?float, over_limit: bool}
      */
     public function discountSummary(Lead $lead, Quotation $quotation): array
     {
         $percent = $quotation->discountPercent();
-        $limit   = $lead->department_id === null ? null : DepartmentSetting::query()
+        $limit   = $this->discountLimit($lead);
+
+        return ['percent' => $percent, 'limit' => $limit, 'over_limit' => $limit !== null && $percent > $limit];
+    }
+
+    /** The lead's department discount approval limit (%), or null when none is set. */
+    public function discountLimit(Lead $lead): ?float
+    {
+        $limit = $lead->department_id === null ? null : DepartmentSetting::query()
             ->where('business_id', $lead->business_id)
             ->where('department_id', $lead->department_id)
             ->value('discount_approval_limit_percent');
-        $limit = $limit !== null ? (float) $limit : null;
-        $over  = $limit !== null && $percent > $limit;
 
-        return ['percent' => $percent, 'limit' => $limit, 'over_limit' => $over, 'requires_approval' => $limit === null || $over];
+        return $limit !== null ? (float) $limit : null;
     }
 
     /**
-     * A draft / returned version whose discount is within the department's limit, made ready
-     * to send without the head: approved (no approver), recorded as "within_limit", PDF made.
-     * Over the limit (or with no limit set) it has to be submitted instead.
+     * Who a submitted quotation can be emailed to for approval: the lead's division head (when
+     * the lead sits in a division) and the department head / co-head — each a Zeebroo user with
+     * an email, once. Any one of them approving is enough.
+     *
+     * @return list<array{id: int, name: string, email: string, role: string}>
      */
-    public function releaseWithinLimit(Lead $lead, Quotation $quotation, int $userId): Quotation
+    public function approvers(Lead $lead): array
     {
-        $this->requireStatus($quotation, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], 'Only a draft or returned quotation can be sent without approval.');
-        if ($quotation->items()->count() === 0) {
-            throw ValidationException::withMessages(['quotation' => 'Add at least one line before sending.']);
+        $lead->loadMissing(['division.headUser', 'department.headEmployee.user', 'department.coHeadEmployee.user']);
+        $division = $lead->division !== null && (int) $lead->division->department_id === (int) $lead->department_id ? $lead->division : null;
+
+        $list = [];
+        foreach ([
+            [$division?->headUser, 'Division head'],
+            [$lead->department?->headEmployee?->user, 'Department head'],
+            [$lead->department?->coHeadEmployee?->user, 'Department co-head'],
+        ] as [$user, $role]) {
+            if ($user !== null && $user->email && ! isset($list[$user->id])) {
+                $list[$user->id] = ['id' => (int) $user->id, 'name' => $user->name, 'email' => $user->email, 'role' => $role];
+            }
         }
 
-        $discount = $this->discountSummary($lead, $quotation);
-        if ($discount['requires_approval']) {
-            throw ValidationException::withMessages(['quotation' => $discount['limit'] === null
-                ? 'No discount limit is set for this department — submit the quotation for approval.'
-                : 'The discount of ' . $this->percent($discount['percent']) . '% is over the department\'s limit of ' . $this->percent($discount['limit']) . '% — submit it for approval.']);
+        return array_values($list);
+    }
+
+    /**
+     * The approvers ticked when submitting (null = all of them). With heads on file at least
+     * one must be picked; with none the quotation still goes to an admin in the app.
+     *
+     * @param  int[]|null  $ids
+     * @return list<array{id: int, name: string, email: string, role: string}>
+     */
+    public function pickApprovers(Lead $lead, ?array $ids): array
+    {
+        $all = $this->approvers($lead);
+        if ($ids === null) {
+            return $all;
         }
 
-        DB::transaction(function () use ($quotation, $userId, $discount) {
-            $quotation->update([
-                'status'           => Quotation::STATUS_APPROVED,
-                'submitted_by'     => $userId,
-                'approved_by'      => null,
-                'approved_at'      => now(),
-                'approval_comment' => null,
-            ]);
-            $this->record($quotation, QuotationApproval::ACTION_WITHIN_LIMIT, $userId,
-                'Discount ' . $this->percent($discount['percent']) . '% (limit ' . $this->percent($discount['limit']) . '%)');
+        $ids    = array_map('intval', $ids);
+        $picked = array_values(array_filter($all, fn (array $a) => in_array($a['id'], $ids, true)));
+        if ($all !== [] && $picked === []) {
+            throw ValidationException::withMessages(['approver_ids' => 'Pick at least one head to send the approval request to.']);
+        }
+
+        return $picked;
+    }
+
+    /**
+     * Whether an emailed approval link (QuotationApprovalMailer) can still be used: null when the
+     * head may decide now, otherwise what happened instead — the first decision wins, and a
+     * quotation submitted again needs the newest email's link.
+     */
+    public function linkBlocker(Quotation $quotation, int $approverId, int $submissionId): ?string
+    {
+        $lead = $quotation->lead;
+        if ($lead === null || ! $quotation->isLeadQuotation()) {
+            return 'This quotation is no longer available.';
+        }
+
+        $latest = QuotationApproval::query()
+            ->where('quotation_id', $quotation->id)
+            ->where('action', QuotationApproval::ACTION_SUBMITTED)
+            ->max('id');
+        if ((int) $latest !== $submissionId) {
+            return 'This quotation was changed and submitted again — use the link in the newest approval email.';
+        }
+
+        if ($quotation->status !== Quotation::STATUS_PENDING_APPROVAL) {
+            $decision = QuotationApproval::query()
+                ->where('quotation_id', $quotation->id)
+                ->where('id', '>', $submissionId)
+                ->whereIn('action', [QuotationApproval::ACTION_APPROVED, QuotationApproval::ACTION_RETURNED, QuotationApproval::ACTION_REJECTED])
+                ->with('byUser:id,name')
+                ->oldest('id')
+                ->first();
+
+            return $decision === null
+                ? 'This quotation is no longer waiting for approval.'
+                : 'Already ' . match ($decision->action) {
+                    QuotationApproval::ACTION_APPROVED => 'approved',
+                    QuotationApproval::ACTION_RETURNED => 'returned for changes',
+                    default                            => 'rejected',
+                } . ($decision->byUser ? ' by ' . $decision->byUser->name : '') . ' on ' . $decision->created_at?->format('M j, Y g:i A') . '.';
+        }
+
+        if (! in_array($approverId, array_column($this->approvers($lead), 'id'), true)) {
+            return 'You are no longer an approver for this quotation.';
+        }
+
+        return null;
+    }
+
+    /** A decision made from the emailed link, as that head: approve, or reject with a reason. */
+    public function decideByLink(Quotation $quotation, int $approverId, int $submissionId, string $decision, ?string $comment): Quotation
+    {
+        return DB::transaction(function () use ($quotation, $approverId, $submissionId, $decision, $comment) {
+            // One decision only: a second head clicking at the same moment sees the first one's
+            $quotation = Quotation::query()->lockForUpdate()->findOrFail($quotation->id);
+            if (($blocker = $this->linkBlocker($quotation, $approverId, $submissionId)) !== null) {
+                throw ValidationException::withMessages(['decision' => $blocker]);
+            }
+
+            return $decision === 'approve'
+                ? $this->approve($quotation->lead, $quotation, $approverId, $comment)
+                : $this->reject($quotation->lead, $quotation, $approverId, (string) $comment);
         });
-
-        // Always a fresh PDF: the draft may have been printed before its last edit
-        $this->print->generatePdf($quotation);
-
-        return $quotation->fresh();
     }
 
     private function decline(Lead $lead, Quotation $quotation, int $userId, string $comment, string $status, string $action): Quotation
@@ -262,11 +342,6 @@ class QuotationApprovalService
         if (! $quotation->isLeadQuotation() || ! in_array($quotation->status, $statuses, true)) {
             throw ValidationException::withMessages(['quotation' => $message]);
         }
-    }
-
-    private function percent(float $value): string
-    {
-        return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
     }
 
     private function clean(?string $comment): ?string

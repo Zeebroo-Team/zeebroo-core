@@ -14,6 +14,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessRole;
 use Modules\CRM\Jobs\SendQuotationDispatchJob;
+use Modules\CRM\Mail\QuotationApprovalRequestMail;
 use Modules\CRM\Mail\QuotationMail;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadStage;
@@ -39,8 +40,8 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 /*
  * Business 7 "ABC Solar" (owner user 1):
- *   Sales (10)   head Nimal (2), staff Sunil (3) — assigned to the lead — and Priya (6)
- *   Marketing (11) Kamala (4) — the marketing intake
+ *   Sales (10)   head Nimal (2), staff Sunil (3) â€” assigned to the lead â€” and Priya (6)
+ *   Marketing (11) Kamala (4) â€” the marketing intake
  *   Support (12) head Dinesh (8)
  *   Chen (5) is the CEO.
  * Products 1 "Solar panel" (stock 3 + 2 = 5) and 2 "Inverter" (no stock).
@@ -210,7 +211,7 @@ beforeEach(function () {
     Storage::fake('public');
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class CrmQuoteTestApi extends PosCrmLeadQuotationApiController
 {
@@ -228,7 +229,7 @@ class CrmQuotePosTestApi extends PosQuotationApiController
     }
 }
 
-/** Calls the lead quotation API as a user — a fresh controller each time, as each request gets. */
+/** Calls the lead quotation API as a user â€” a fresh controller each time, as each request gets. */
 function crmQuote(string $method, int $userId, array $args = [], string $http = 'GET', array $body = [])
 {
     $request = Request::create('/api/v1/pos/crm', $http, $body);
@@ -275,7 +276,7 @@ function crmQuoteLeadStatus(): ?string
     return Lead::with('stage')->find(test()->lead->id)->statusKey();
 }
 
-// ── Totals ───────────────────────────────────────────────────────────────
+// â”€â”€ Totals â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('regression: a quotation without line discount / tax totals exactly as before', function () {
     $service = app(QuotationService::class);
@@ -286,7 +287,7 @@ test('regression: a quotation without line discount / tax totals exactly as befo
 
     $q = $service->create($this->business, ['quote_date' => '2026-11-05', 'discount_amount' => 20, 'tax_amount' => 15], $items);
 
-    // The original formula: subtotal = Σ round(qty × price, 2); total = subtotal − discount + tax
+    // The original formula: subtotal = Î£ round(qty Ã— price, 2); total = subtotal âˆ’ discount + tax
     expect((float) $q->subtotal)->toBe(250.0)
         ->and((float) $q->discount_amount)->toBe(20.0)
         ->and((float) $q->tax_amount)->toBe(15.0)
@@ -314,18 +315,18 @@ test('line discount and tax, plus a header discount, recalculate every total', f
     ]);
 
     $lines = $q->items;
-    expect((float) $lines[0]->line_total)->toBe(180.0)     // 200 − 20
+    expect((float) $lines[0]->line_total)->toBe(180.0)     // 200 âˆ’ 20
         ->and((float) $lines[0]->tax_amount)->toBe(18.0)   // 10% of 180
         ->and((float) $lines[2]->discount_amount)->toBe(30.0) // capped at the line's gross
         ->and((float) $lines[2]->line_total)->toBe(0.0)
         ->and((float) $q->subtotal)->toBe(280.0)           // 200 + 50 + 30
         ->and((float) $q->discount_amount)->toBe(60.0)     // 20 + 30 + header 10
         ->and((float) $q->tax_amount)->toBe(18.0)
-        ->and((float) $q->total)->toBe(238.0)              // 280 − 60 + 18
+        ->and((float) $q->total)->toBe(238.0)              // 280 âˆ’ 60 + 18
         ->and(app(QuotationService::class)->headerAdjustments($q))->toBe(['discount_amount' => 10.0, 'tax_amount' => 0.0]);
 });
 
-// ── Stock ────────────────────────────────────────────────────────────────
+// â”€â”€ Stock â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('each product line shows the stock in hand and warns when the quantity is more', function () {
     $q = crmQuoteCreate([
@@ -383,7 +384,7 @@ test('in branch mode the stock is that of the quotation\'s branch', function () 
         ->and($check(null))->toEqual(5);
 });
 
-// ── Creating from the lead ───────────────────────────────────────────────
+// â”€â”€ Creating from the lead â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('creating a quotation from the lead links it and moves the lead to Quotation Preparing', function () {
     $res = crmQuote('store', 3, [$this->lead->id], 'POST', crmQuoteBody());
@@ -422,7 +423,7 @@ test('who may create a quotation on the lead', function (int $userId, int $statu
     'another department'    => [8, 404],
 ]);
 
-// ── Approval ─────────────────────────────────────────────────────────────
+// â”€â”€ Approval â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('who may submit and who may approve', function () {
     $q = crmQuoteCreate();
@@ -450,6 +451,110 @@ test('who may submit and who may approve', function () {
         ->and(substr(Storage::disk('local')->get($q->pdf_path), 0, 4))->toBe('%PDF');
 });
 
+test('submitting offers the division and department heads and emails the ticked ones', function () {
+    Mail::fake();
+    // Lead in the "Rooftop" division of Sales, headed by Priya (6); Nimal (2) heads Sales
+    DB::table('crm_divisions')->insert(['id' => 40, 'business_id' => 7, 'department_id' => 10, 'name' => 'Rooftop', 'head_user_id' => 6]);
+    $this->lead->update(['division_id' => 40]);
+    $q = crmQuoteCreate();
+
+    $approvers = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['approvers'];
+    expect($approvers)->toBe([
+        ['id' => 6, 'name' => 'Priya', 'email' => 'priya@example.com', 'role' => 'Division head'],
+        ['id' => 2, 'name' => 'Nimal', 'email' => 'nimal@example.com', 'role' => 'Department head'],
+    ]);
+
+    // None ticked, or only someone who is not a head: refused
+    expect(crmQuoteStatus(fn () => crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST', ['approver_ids' => [5]])))->toBe(422)
+        ->and($q->fresh()->status)->toBe('draft');
+
+    $res = crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST', ['approver_ids' => [2], 'comment' => 'Best price']);
+    expect($res->getData(true)['emailed'])->toBe(['sent' => ['nimal@example.com'], 'failed' => []])
+        ->and($res->getData(true)['data']['approvers'])->toBe([]);   // nothing to pick once submitted
+
+    Mail::assertSent(QuotationApprovalRequestMail::class, 1);
+    Mail::assertSent(QuotationApprovalRequestMail::class, fn ($m) => $m->hasTo('nimal@example.com')
+        && $m->submission->comment === 'Best price'
+        && str_contains($m->reviewUrl, '/crm/quotation-approval/' . $q->id . '/2/'));
+
+    // The email carries the details to decide from the inbox
+    Mail::assertSent(QuotationApprovalRequestMail::class, function ($m) use ($q) {
+        $html = $m->render();
+        expect($html)->toContain('Dear Nimal')
+            ->toContain('As <strong>Department head</strong>')
+            ->toContain('Prepared by')
+            ->toContain('Department &amp; approvers')
+            ->toContain('Rooftop')            // the division
+            ->toContain('Priya')              // its head, listed though not emailed
+            ->toContain('NOT SENT')
+            ->toContain('Lead details')
+            ->toContain('Lead ID')
+            ->toContain('Best price')
+            ->toContain($q->quote_number)
+            ->toContain($this->lead->name)
+            ->toContain('Items')
+            ->toContain('Review &amp; approve or reject')
+            ->not->toContain('Also sent to');
+
+        return true;
+    });
+});
+
+test('a head approves from the email link without signing in; the first decision wins', function () {
+    Mail::fake();
+    DB::table('crm_divisions')->insert(['id' => 40, 'business_id' => 7, 'department_id' => 10, 'name' => 'Rooftop', 'head_user_id' => 6]);
+    $this->lead->update(['division_id' => 40]);
+    $q = crmQuoteCreate();
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');   // both heads emailed
+
+    $urls = [];
+    Mail::assertSent(QuotationApprovalRequestMail::class, function ($m) use (&$urls) {
+        $urls[$m->to[0]['address']] = $m->reviewUrl;
+
+        return true;
+    });
+    expect(array_keys($urls))->toEqualCanonicalizing(['priya@example.com', 'nimal@example.com']);
+
+    // The page opens from the link; a tampered link does not
+    $this->get($urls['priya@example.com'])->assertOk()->assertSee('QT-0001')->assertSee('Approve quotation')
+        ->assertSee('Prepared by')->assertSee('Rooftop')->assertSee('Lead details')->assertSee('Deciding as');
+    $this->get(str_replace('/6/', '/2/', $urls['priya@example.com']))->assertForbidden();
+
+    // Rejecting needs a reason
+    $this->post($urls['priya@example.com'], ['decision' => 'reject'])->assertSessionHasErrors('comment');
+
+    $this->post($urls['priya@example.com'], ['decision' => 'approve', 'comment' => 'Fine'])->assertRedirect();
+    $q = $q->fresh();
+    expect($q->status)->toBe('approved')
+        ->and($q->approved_by)->toBe(6)
+        ->and($q->approval_comment)->toBe('Fine');
+
+    // Nimal's link now only says what happened
+    $this->get($urls['nimal@example.com'])->assertOk()->assertSee('Already approved by Priya');
+    $this->post($urls['nimal@example.com'], ['decision' => 'reject', 'comment' => 'No'])->assertSessionHasErrors('decision');
+    expect($q->fresh()->status)->toBe('approved');
+});
+
+test('an old approval link stops working once the quotation is submitted again', function () {
+    Mail::fake();
+    $q = crmQuoteCreate();
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    $first = null;
+    Mail::assertSent(QuotationApprovalRequestMail::class, function ($m) use (&$first) { $first = $m->reviewUrl; return true; });
+
+    crmQuote('returnForChanges', 2, [$this->lead->id, $q->id], 'POST', ['comment' => 'Fix the price']);
+    Mail::fake();
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+
+    // The new email shows why it came back
+    Mail::assertSent(QuotationApprovalRequestMail::class, fn ($m) => str_contains($m->render(), 'Approval history')
+        && str_contains($m->render(), 'Fix the price'));
+
+    $this->get($first)->assertOk()->assertSee('submitted again');
+    $this->post($first, ['decision' => 'approve'])->assertSessionHasErrors('decision');
+    expect($q->fresh()->status)->toBe('pending_approval');
+});
+
 test('an admin may approve too', function () {
     $q = crmQuoteCreate();
     crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
@@ -457,7 +562,7 @@ test('an admin may approve too', function () {
     expect(crmQuoteStatus(fn () => crmQuote('approve', 1, [$this->lead->id, $q->id], 'POST')))->toBe(200);
 });
 
-test('returned with comments → the staff edit and resubmit', function () {
+test('returned with comments â†’ the staff edit and resubmit', function () {
     $q = crmQuoteCreate();
     crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
 
@@ -478,7 +583,7 @@ test('returned with comments → the staff edit and resubmit', function () {
     expect(crmQuoteStatus(fn () => crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', $edited)))->toBe(422);
 });
 
-test('rejected → locked; a new version carries the lines over', function () {
+test('rejected â†’ locked; a new version carries the lines over', function () {
     $q = crmQuoteCreate();
     crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
     crmQuote('reject', 2, [$this->lead->id, $q->id], 'POST', ['comment' => 'Wrong product']);
@@ -509,7 +614,7 @@ test('only quotations waiting for approval can be decided', function () {
 
 test('the approvals inbox lists what each head has to decide', function () {
     $q = crmQuoteCreate();
-    crmQuoteCreate();                                   // a draft — not in the inbox
+    crmQuoteCreate();                                   // a draft â€” not in the inbox
     crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
 
     $inbox = function (int $userId) {
@@ -525,7 +630,7 @@ test('the approvals inbox lists what each head has to decide', function () {
         ->and($inbox(8))->toBe([]);
 });
 
-// ── Sending ──────────────────────────────────────────────────────────────
+// â”€â”€ Sending â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 test('an unapproved lead quotation cannot be sent', function () {
     $q = crmQuoteCreate();
@@ -679,7 +784,7 @@ test('the Sales quotation API keeps a lead quotation\'s approval history: no del
     expect($pos->destroy(Request::create('/', 'DELETE')->setUserResolver(fn () => User::find(1)), $draft)->getStatusCode())->toBe(200);
 });
 
-// ── Negotiation: customer responses, versions, discount limit ───────────
+// â”€â”€ Negotiation: customer responses, versions, discount limit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** Set the Sales department's discount approval limit (null = none set). */
 function crmQuoteSetLimit(?float $percent): void
@@ -766,7 +871,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
         ->and($q->fresh()->status)->toBe('superseded')
         ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_QUOTATION_PREPARING);
 
-    // v2 → v3 carries on the numbering from the first version
+    // v2 â†’ v3 carries on the numbering from the first version
     crmQuote('submit', 3, [$this->lead->id, $v2->id], 'POST');
     crmQuote('approve', 2, [$this->lead->id, $v2->id], 'POST');
     $v3 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $v2->id], 'POST')->getData(true)['data']['id']);
@@ -838,53 +943,39 @@ test('the diff between versions lists added, removed and changed lines and the t
         ->and(crmQuoteStatus(fn () => crmQuote('diff', 3, [$this->lead->id, $q->id])))->toBe(422);
 });
 
-test('within the department discount limit the staff send directly; over it, approval is required', function () {
+test('every quotation needs the head\'s approval, whatever the discount', function () {
     Queue::fake();
     crmQuoteSetLimit(10);
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
 
-    // 5% off — within the 10% limit: sent without the head
+    // The list hands the limit to the editor for its live warning
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['discount_limit'])->toEqual(10.0);
+
+    // 5% off â€” within the 10% limit, still not sendable before approval
     $within = crmQuoteCreate(null, ['discount_amount' => 10]);
     $detail = crmQuote('show', 3, [$this->lead->id, $within->id])->getData(true)['data'];
-    expect($detail['discount'])->toEqual(['percent' => 5.0, 'limit' => 10.0, 'over_limit' => false, 'requires_approval' => false])
-        ->and($detail['can']['send'])->toBeTrue()
-        ->and($detail['can']['send_direct'])->toBeTrue();
-
-    expect(crmQuote('send', 3, [$this->lead->id, $within->id], 'POST', $send)->getStatusCode())->toBe(200);
-    $within = $within->fresh();
-    expect($within->status)->toBe('approved')
-        ->and($within->approved_by)->toBeNull()
-        ->and($within->pdf_path)->not->toBeNull()
-        ->and($within->approvals->pluck('action')->all())->toBe([QuotationApproval::ACTION_WITHIN_LIMIT])
-        ->and(QuotationDispatch::where('quotation_id', $within->id)->count())->toBe(1);
-
-    // 15% off — over the limit: refused until the head approves
-    $over   = crmQuoteCreate(null, ['discount_amount' => 30]);
-    $detail = crmQuote('show', 3, [$this->lead->id, $over->id])->getData(true)['data'];
-    expect($detail['discount']['over_limit'])->toBeTrue()
+    expect($detail['discount'])->toEqual(['percent' => 5.0, 'limit' => 10.0, 'over_limit' => false])
         ->and($detail['can']['send'])->toBeFalse()
         ->and($detail['can']['submit'])->toBeTrue()
-        ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $over->id], 'POST', $send)))->toBe(422)
-        ->and($over->fresh()->status)->toBe('draft')
-        ->and(QuotationDispatch::where('quotation_id', $over->id)->count())->toBe(0);
+        ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $within->id], 'POST', $send)))->toBe(422)
+        ->and($within->fresh()->status)->toBe('draft')
+        ->and(QuotationDispatch::where('quotation_id', $within->id)->count())->toBe(0);
 
-    crmQuote('submit', 3, [$this->lead->id, $over->id], 'POST');
-    crmQuote('approve', 2, [$this->lead->id, $over->id], 'POST');
-    expect(crmQuote('send', 3, [$this->lead->id, $over->id], 'POST', $send)->getStatusCode())->toBe(200);
+    // 15% off â€” flagged as over the limit for the head
+    $over = crmQuoteCreate(null, ['discount_amount' => 30]);
+    expect(crmQuote('show', 3, [$this->lead->id, $over->id])->getData(true)['data']['discount']['over_limit'])->toBeTrue();
 
-    // Exactly at the limit counts as within it
-    $at = crmQuoteCreate(null, ['discount_amount' => 20]);
-    expect(crmQuote('show', 3, [$this->lead->id, $at->id])->getData(true)['data']['discount']['requires_approval'])->toBeFalse();
+    crmQuote('submit', 3, [$this->lead->id, $within->id], 'POST');
+    crmQuote('approve', 2, [$this->lead->id, $within->id], 'POST');
+    expect(crmQuote('send', 3, [$this->lead->id, $within->id], 'POST', $send)->getStatusCode())->toBe(200);
 });
 
-test('a revised version is checked against the limit again; with no limit set every version needs approval', function () {
+test('a revised version needs approval again', function () {
     Queue::fake();
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
 
-    // No limit for the department: even no discount needs the head (as before)
     $q = crmQuoteCreate();
-    expect(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['discount']['requires_approval'])->toBeTrue()
-        ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', $send)))->toBe(422);
+    expect(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', $send)))->toBe(422);
 
     crmQuoteSetLimit(10);
     crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
@@ -894,7 +985,7 @@ test('a revised version is checked against the limit again; with no limit set ev
     (new SendQuotationDispatchJob(QuotationDispatch::sole()->id))->handle(app(QuotationDispatcher::class));
     crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'discount_request', 'requested_discount' => 20]);
 
-    // The customer wants 20%; the staff give 20% in v2 → over the 10% limit
+    // The customer wants 20%; the staff give 20% in v2 â†’ over the 10% limit
     $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody(null, ['discount_amount' => 40]));
 
