@@ -57443,6 +57443,7 @@ async function submitDsCreate() {
     const dash = $('#crm-dashboard-view');
     if (dash) dash.style.display = view === 'dashboard' ? 'flex' : 'none';
     $$('[data-crmsub]').forEach(b => b.classList.toggle('active', b.dataset.crmsub === view));
+    if (view === 'overview') _crmGuideSyncLinks();
     // skipLoad: caller is about to open a specific relation's detail pane itself —
     // running loadCrmRelationsView() here would race with it and call closeRelationDetail()
     // after the detail pane is shown, bouncing the user back to the relations list.
@@ -57503,6 +57504,37 @@ async function submitDsCreate() {
   $('#crm-ov-new-relation-btn')?.addEventListener('click', () => _openProjectModal());
   $('#crm-ov-viewall-btn')?.addEventListener('click', () => switchCrmView('relation'));
   $('#crm-ov-viewall-relations-btn')?.addEventListener('click', () => switchCrmView('relation'));
+
+  // ── Overview: "How CRM Works" guide ──────────────────────────────────────
+  // Collapsed state is a per-user convenience, so localStorage is fine here
+  function _crmGuideSetOpen(open) {
+    $('#crm-ov-guide-body').style.display = open ? '' : 'none';
+    const t = $('#crm-ov-guide-toggle');
+    t.querySelector('span').textContent = open ? 'Hide guide' : 'Show guide';
+    t.querySelector('i').className = `fa fa-chevron-${open ? 'up' : 'down'}`;
+    try { localStorage.setItem('crm_ov_guide_hidden', open ? '0' : '1'); } catch {}
+  }
+  try { if (localStorage.getItem('crm_ov_guide_hidden') === '1') _crmGuideSetOpen(false); } catch {}
+  $('#crm-ov-guide-toggle')?.addEventListener('click', () =>
+    _crmGuideSetOpen($('#crm-ov-guide-body').style.display === 'none'));
+
+  // Guide links reuse the ribbon buttons, so they follow the same permission gating
+  function _crmGuideRibbonBtn(id) {
+    const rb = document.getElementById(id);
+    if (!rb || rb.style.display === 'none' || rb.closest('.ribbon-group')?.style.display === 'none') return null;
+    return rb;
+  }
+  function _crmGuideSyncLinks() {
+    $$('[data-crm-guide-rb]').forEach(b => {
+      const ok = !!_crmGuideRibbonBtn(b.dataset.crmGuideRb);
+      b.disabled = !ok;
+      b.title = ok ? '' : "You don't have access to this";
+    });
+  }
+  $('#crm-ov-guide')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-crm-guide-rb]');
+    if (b) _crmGuideRibbonBtn(b.dataset.crmGuideRb)?.click();
+  });
 
   // ── Relation tab (list) ──────────────────────────────────────────────────
   async function loadCrmRelationsView() {
