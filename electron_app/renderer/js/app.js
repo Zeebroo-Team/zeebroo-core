@@ -35712,7 +35712,7 @@ function _osmRenderHero() {
   const stepName = { products: 'Downloading products', customers: 'Downloading customers', screens: 'Downloading screens', records: 'Downloading records' }[p?.step] || (s.syncing ? 'Uploading saved items' : 'Syncing');
   $('#offline-sync-hero').className = `osm-hero is-${state}`;
   $('#offline-sync-hero').innerHTML = `
-    <div class="osm-hero-icon"><i class="fa ${state === 'offline' ? 'fa-plug-circle-xmark' : state === 'failed' ? 'fa-triangle-exclamation' : 'fa-cloud'}"></i></div>
+    <div class="osm-hero-dot"></div>
     <div class="osm-hero-text">
       <div class="osm-hero-title">${escHtml(title)}</div>
       <div class="osm-hero-sub">${escHtml(sub)}</div>
@@ -35724,19 +35724,26 @@ function _osmRenderHero() {
         <div class="osm-progress ${pct === null ? 'indeterminate' : ''}"><div style="width:${pct ?? 0}%"></div></div>` : ''}
     </div>
     <div class="osm-hero-stats">
-      <div class="osm-hero-stat"><b style="color:#d97706">${s.pending || 0}</b><span>Waiting</span></div>
-      <div class="osm-hero-stat"><b style="color:#dc2626">${s.failed || 0}</b><span>Failed</span></div>
-      <div class="osm-hero-stat"><b style="color:#16a34a">${synced}</b><span>Uploaded</span></div>
+      <div class="osm-hero-stat"><b class="${s.pending ? 'is-warn' : ''}">${s.pending || 0}</b><span>Waiting</span></div>
+      <div class="osm-hero-stat"><b class="${s.failed ? 'is-bad' : ''}">${s.failed || 0}</b><span>Failed</span></div>
+      <div class="osm-hero-stat"><b>${synced}</b><span>Uploaded</span></div>
     </div>`;
+  const head = s.syncing ? ['is-busy', 'fa-rotate fa-spin', pct !== null ? `Syncing · ${pct}%` : 'Syncing…']
+    : s.pending && s.online ? ['is-busy', 'fa-cloud-arrow-up', `Uploading ${s.pending}…`]
+    : { offline: ['is-offline', 'fa-plug-circle-xmark', 'Offline'],
+        failed:  ['is-failed', 'fa-circle-exclamation', `${s.failed} need${s.failed === 1 ? 's' : ''} attention`],
+        online:  ['', 'fa-circle-check', `Synced ${_offlineAgo(s.catalogSyncedAt)}`] }[state];
+  $('#osm-head-status').className = `osm-head-status ${head[0]}`;
+  $('#osm-head-status').innerHTML = `<i class="fa ${head[1]}"></i> ${escHtml(head[2])}`;
   $('#osm-count-history').textContent = s.failed ? s.failed : '';
   $('#osm-footer-note').textContent = s.lastError ? s.lastError : `Products, customers and screens refresh every 15 minutes while online.`;
   $('#osm-footer-note').style.color = s.lastError ? '#dc2626' : '';
 }
 
 // ── Panel: Overview ──
-function _osmTile(icon, color, label, value, sub = '') {
+function _osmTile(icon, label, value, sub = '') {
   return `<div class="osm-tile">
-    <div class="osm-tile-icon" style="background:${color}1f;color:${color}"><i class="fa ${icon}"></i></div>
+    <div class="osm-tile-icon"><i class="fa ${icon}"></i></div>
     <div><div class="osm-tile-label">${escHtml(label)}</div><div class="osm-tile-value">${value}</div>${sub ? `<div class="osm-tile-sub">${escHtml(sub)}</div>` : ''}</div>
   </div>`;
 }
@@ -35753,20 +35760,20 @@ function _osmRenderOverview() {
   });
 
   $('#offline-sync-summary').innerHTML = `
-    ${s.failed ? `<div class="osm-callout warn"><b><i class="fa fa-triangle-exclamation" style="color:#dc2626"></i> ${s.failed} item${s.failed === 1 ? '' : 's'} could not upload.</b> The reason is shown on each one in <a data-osm-goto="history" data-osm-status="failed" style="color:var(--accent);cursor:pointer;font-weight:600">History</a> — fix the cause and press Retry, or Discard it if it should not be kept.</div>` : ''}
+    ${s.failed ? `<div class="osm-callout warn"><b><i class="fa fa-triangle-exclamation" style="color:#ff3b30"></i> ${s.failed} item${s.failed === 1 ? '' : 's'} could not upload.</b> The reason is shown on each one in <a data-osm-goto="history" data-osm-status="failed" style="color:var(--accent);cursor:pointer;font-weight:600">History</a> — fix the cause and press Retry, or Discard it if it should not be kept.</div>` : ''}
     <div class="osm-section-title">Status</div>
     <div class="osm-tiles">
-      ${_osmTile(s.online ? 'fa-wifi' : 'fa-plug-circle-xmark', s.online ? '#16a34a' : '#dc2626', 'Connection', s.online ? 'Online' : 'Offline', s.online ? `Checked ${_offlineAgo(s.lastOnlineAt)}` : `Last online ${_offlineAgo(s.lastOnlineAt)}`)}
-      ${_osmTile('fa-hourglass-half', '#d97706', 'Waiting to upload', s.pending || 0, s.pending ? 'Uploads by itself when online' : 'Nothing waiting')}
-      ${_osmTile('fa-triangle-exclamation', '#dc2626', 'Needs attention', s.failed || 0, s.failed ? 'Open History to fix' : 'All good')}
-      ${_osmTile('fa-cloud-arrow-up', '#2563eb', 'Uploaded', synced, 'Last 3 days')}
+      ${_osmTile(s.online ? 'fa-wifi' : 'fa-plug-circle-xmark', 'Connection', s.online ? 'Online' : 'Offline', s.online ? `Checked ${_offlineAgo(s.lastOnlineAt)}` : `Last online ${_offlineAgo(s.lastOnlineAt)}`)}
+      ${_osmTile('fa-hourglass-half', 'Waiting to upload', s.pending || 0, s.pending ? 'Uploads by itself when online' : 'Nothing waiting')}
+      ${_osmTile('fa-triangle-exclamation', 'Needs attention', s.failed || 0, s.failed ? 'Open History to fix' : 'All good')}
+      ${_osmTile('fa-cloud-arrow-up', 'Uploaded', synced, 'Last 3 days')}
     </div>
     <div class="osm-section-title">Saved on this PC for offline use</div>
     <div class="osm-tiles">
-      ${_osmTile('fa-box', '#d97706', 'Products', (s.productCount || 0).toLocaleString(), 'Search, barcode, stock')}
-      ${_osmTile('fa-users', '#0891b2', 'Customers', (s.customerCount || 0).toLocaleString(), 'With credit balances')}
-      ${_osmTile('fa-table-columns', '#7c3aed', 'Screens', (s.screenCount || 0).toLocaleString(), 'Lists and records of every tab')}
-      ${_osmTile('fa-clock', '#475569', 'Last updated', escHtml(_offlineAgo(s.catalogSyncedAt)), s.catalogSyncedAt ? _osmTime(s.catalogSyncedAt) : 'Connect once to download')}
+      ${_osmTile('fa-box', 'Products', (s.productCount || 0).toLocaleString(), 'Search, barcode, stock')}
+      ${_osmTile('fa-users', 'Customers', (s.customerCount || 0).toLocaleString(), 'With credit balances')}
+      ${_osmTile('fa-table-columns', 'Screens', (s.screenCount || 0).toLocaleString(), 'Lists and records of every tab')}
+      ${_osmTile('fa-clock', 'Last updated',escHtml(_offlineAgo(s.catalogSyncedAt)), s.catalogSyncedAt ? _osmTime(s.catalogSyncedAt) : 'Connect once to download')}
     </div>
     <div class="osm-section-title">By section <a data-osm-goto="history">View history <i class="fa fa-arrow-right"></i></a></div>
     <div class="osm-modules">
@@ -35774,7 +35781,7 @@ function _osmRenderOverview() {
         const c = counts[m.key] || {};
         const any = c.pending || c.failed || c.synced;
         return `<button class="osm-module" data-osm-goto="history" data-osm-module="${m.key}">
-          <div class="osm-module-head"><i class="fa ${m.icon}" style="background:${m.color}1f;color:${m.color}"></i> ${escHtml(m.name)}</div>
+          <div class="osm-module-head"><i class="fa ${m.icon}"></i> ${escHtml(m.name)}</div>
           <div class="osm-module-counts">
             ${c.pending ? `<span class="osm-badge pending"><i class="fa fa-hourglass-half"></i> ${c.pending} waiting</span>` : ''}
             ${c.failed ? `<span class="osm-badge failed"><i class="fa fa-xmark"></i> ${c.failed} failed</span>` : ''}
@@ -35805,7 +35812,7 @@ function _osmRowHtml(r) {
   const open = _osm.open.has(r.client_uuid);
   return `<div class="osm-row ${open ? 'open' : ''}" data-osm-row="${escHtml(r.client_uuid)}">
     <div class="osm-row-head">
-      <div class="osm-row-icon" style="background:${m.color}1f;color:${m.color}"><i class="fa ${_offlineKindIcon[r.kind] || 'fa-circle'}"></i></div>
+      <div class="osm-row-icon"><i class="fa ${_offlineKindIcon[r.kind] || 'fa-circle'}"></i></div>
       <div class="osm-row-main">
         <div class="osm-row-title">${escHtml(_osmRowTitle(r))}</div>
         <div class="osm-row-sub">${sub}</div>
@@ -35928,7 +35935,7 @@ function _osmRenderSupport() {
     <div class="osm-support-grid">${_osmSupport.map(x => {
       const m = _osmModuleByKey[x.m];
       return `<div class="osm-support-card">
-        <h4><i class="fa ${m.icon}" style="background:${m.color}1f;color:${m.color}"></i> ${escHtml(m.name)}</h4>
+        <h4><i class="fa ${m.icon}"></i> ${escHtml(m.name)}</h4>
         <ul>
           ${x.yes.map(t => `<li class="yes"><i class="fa fa-check"></i><span>${escHtml(t)}</span></li>`).join('')}
           ${x.no.map(t => `<li class="no"><i class="fa fa-wifi"></i><span>${escHtml(t)} — needs internet</span></li>`).join('')}
@@ -35952,12 +35959,55 @@ function _osmShow(view) {
   _osm.view = view;
   $$('#osm-nav [data-osm-view]').forEach(b => b.classList.toggle('active', b.dataset.osmView === view));
   $$('#offline-sync-modal [data-osm-panel]').forEach(p => { p.hidden = p.dataset.osmPanel !== view; });
-  _renderOfflinePanel();
+  return _renderOfflinePanel();
 }
 
-function _openOfflinePanel() {
-  $('#offline-sync-modal').style.display = 'flex';
-  _osmShow(_offline.failed ? 'history' : 'overview');
+// macOS-style zoom: the window grows out of the pill that opened it and shrinks back into it.
+// Only transform/opacity animate, so it runs on the GPU without repainting the panel each frame.
+let _osmOrigin = null;
+function _osmZoom(open) {
+  const modal = $('#offline-sync-modal');
+  const win = modal.querySelector('.osm');
+  modal.getAnimations().concat(win.getAnimations()).forEach(a => a.cancel());
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return Promise.resolve();
+
+  const w = win.getBoundingClientRect();
+  const o = _osmOrigin?.isConnected && _osmOrigin.offsetParent ? _osmOrigin.getBoundingClientRect() : null;
+  const from = o
+    ? `translate3d(${o.left + o.width / 2 - (w.left + w.width / 2)}px, ${o.top + o.height / 2 - (w.top + w.height / 2)}px, 0) scale(${Math.min(Math.max(o.width / w.width, 0.06), 0.3)})`
+    : 'translate3d(0, 16px, 0) scale(.94)';
+  const shut = { transform: from, opacity: 0 };
+  const full = { transform: 'translate3d(0, 0, 0) scale(1)', opacity: 1 };
+  const frames = open ? [shut, { opacity: 1, offset: 0.25 }, full] : [full, { opacity: 1, offset: 0.75 }, shut];
+  const timing = open
+    ? { duration: 380, easing: 'cubic-bezier(.16, 1, .3, 1)' }
+    : { duration: 260, easing: 'cubic-bezier(.55, 0, .8, .35)', fill: 'forwards' };
+  win.classList.add('is-animating');
+  modal.animate(open ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0 }],
+    { duration: timing.duration, easing: 'ease-out', fill: timing.fill || 'none' });
+  return win.animate(frames, timing).finished.catch(() => {}).then(() => win.classList.remove('is-animating'));
+}
+
+async function _openOfflinePanel(e) {
+  if (e?.currentTarget) _osmOrigin = e.currentTarget;
+  const modal = $('#offline-sync-modal');
+  // Fill the panel first, so no data lands (and re-lays out) mid-animation.
+  if (modal.style.display !== 'flex') await _osmShow(_offline.failed ? 'history' : 'overview').catch(() => {});
+  delete modal.dataset.closing;
+  modal.style.display = 'flex';
+  _osmZoom(true);
+}
+
+function _closeOfflinePanel() {
+  const modal = $('#offline-sync-modal');
+  if (modal.style.display !== 'flex' || modal.dataset.closing) return;
+  modal.dataset.closing = '1';
+  _osmZoom(false).then(() => {
+    if (!modal.dataset.closing) return; // reopened mid-animation
+    delete modal.dataset.closing;
+    modal.style.display = 'none';
+    modal.getAnimations().concat(modal.querySelector('.osm').getAnimations()).forEach(a => a.cancel());
+  });
 }
 
 window.electronAPI.onOfflineStatus(s => {
@@ -35977,12 +36027,12 @@ window.electronAPI.onOfflineStatus(s => {
 window.electronAPI.offlineStatus().then(s => { _offline = s; _renderOfflinePill(); });
 
 $$('[data-offline-pill]').forEach(el => el.addEventListener('click', _openOfflinePanel));
-$('#offline-sync-close').addEventListener('click', () => { $('#offline-sync-modal').style.display = 'none'; });
+$('#offline-sync-close').addEventListener('click', _closeOfflinePanel);
 $('#offline-sync-modal').addEventListener('click', e => {
-  if (e.target === e.currentTarget) e.currentTarget.style.display = 'none';
+  if (e.target === e.currentTarget) _closeOfflinePanel();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $('#offline-sync-modal').style.display === 'flex') $('#offline-sync-modal').style.display = 'none';
+  if (e.key === 'Escape' && $('#offline-sync-modal').style.display === 'flex') _closeOfflinePanel();
 });
 $('#osm-nav').addEventListener('click', e => {
   const b = e.target.closest('[data-osm-view]');
