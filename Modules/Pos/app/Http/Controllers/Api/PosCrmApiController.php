@@ -1147,6 +1147,28 @@ class PosCrmApiController extends Controller
         return $this->intakeResponse($request, $business, $result);
     }
 
+    /**
+     * The form behind manual "New Lead" entry — creating an internal "Manual entry" form when
+     * the pipeline has none yet. Open to anyone who may add leads, not just form managers, so
+     * a salesperson taking a phone call is never blocked on form setup.
+     */
+    public function manualEntryForm(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access   = $this->abortUnlessCrm($request, $business, 'leads_create');
+        $project  = $this->visibleProject($request, $business, $projectId);
+        $this->abortUnlessAllowed($this->policy->canCreateLeadIn($access, $project));
+
+        $form = $this->forms->ensureManualEntryForm($project);
+
+        return response()->json(['data' => [
+            'id'               => $form->id,
+            'name'             => $form->name,
+            'default_stage_id' => $form->default_stage_id,
+        ]]);
+    }
+
     public function setDefaultForm(Request $request, int $projectId, int $formId): JsonResponse
     {
         $business = $this->businessOrAbort($request);

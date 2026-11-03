@@ -17,6 +17,7 @@ use Modules\CRM\Http\Controllers\MarketingInboxController;
 use Modules\CRM\Http\Controllers\OverviewController;
 use Modules\CRM\Http\Controllers\ProjectController;
 use Modules\CRM\Http\Controllers\PublicLeadFormController;
+use Modules\CRM\Http\Controllers\QuotationApprovalLinkController;
 use Modules\CRM\Http\Controllers\TaskController;
 
 Route::middleware(['web', 'auth', 'verified'])->group(function () {
@@ -133,11 +134,19 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::delete('/crm/settings/org/divisions/{division}',              [CrmOrgController::class, 'destroyDivision'])->whereNumber('division')->name('crm.org.divisions.destroy');
     Route::put('/crm/settings/org/departments/{department}/settings',    [CrmOrgController::class, 'updateSettings']) ->whereNumber('department')->name('crm.org.settings.update');
     Route::post('/crm/settings/org/departments/{department}/pipeline',   [CrmOrgController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
-    Route::delete('/crm/settings/org/departments/{department}/pipeline', [CrmOrgController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
+    Route::delete('/crm/settings/org/departments/{department}/pipelines/{project}', [CrmOrgController::class, 'unlinkPipeline'])->whereNumber(['department', 'project'])->name('crm.org.pipeline.unlink');
 });
 
 // Public lead-capture form pages — no auth, reachable by anyone with the link.
 Route::middleware(['web'])->group(function () {
     Route::get('/f/{token}',  [PublicLeadFormController::class, 'show'])  ->name('crm.public-forms.show');
     Route::post('/f/{token}', [PublicLeadFormController::class, 'submit'])->name('crm.public-forms.submit');
+});
+
+// Approve / reject a quotation from the head's approval email — signed per head, no sign-in.
+Route::middleware(['web', 'signed', 'throttle:30,1'])->group(function () {
+    Route::get('/crm/quotation-approval/{quotation}/{approver}/{submission}',  [QuotationApprovalLinkController::class, 'show'])
+        ->whereNumber(['quotation', 'approver', 'submission'])->name('crm.quotation-approval.show');
+    Route::post('/crm/quotation-approval/{quotation}/{approver}/{submission}', [QuotationApprovalLinkController::class, 'decide'])
+        ->whereNumber(['quotation', 'approver', 'submission'])->name('crm.quotation-approval.decide');
 });

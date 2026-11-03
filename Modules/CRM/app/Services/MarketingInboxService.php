@@ -17,7 +17,6 @@ use Modules\CRM\Models\LeadAuditLog;
 use Modules\CRM\Models\LeadMessage;
 use Modules\CRM\Models\LeadCustomFieldValue;
 use Modules\CRM\Models\LeadStage;
-use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
 use Modules\CRM\Policies\LeadPolicy;
 use Modules\HRManagement\Models\Department;
@@ -107,8 +106,9 @@ class MarketingInboxService
 
     /**
      * Departments a lead can be forwarded to: those with a pipeline, except the intake one.
+     * `pipeline` is the main one; `pipelines` lists every linked one, main first.
      *
-     * @return list<array{id:int,name:string,pipeline:array{id:int,name:string},divisions:list<array{id:int,name:string}>}>
+     * @return list<array{id:int,name:string,pipeline:array{id:int,name:string},pipelines:list<array{id:int,name:string}>,divisions:list<array{id:int,name:string}>}>
      */
     public function forwardTargets(Business $business): array
     {
@@ -118,6 +118,7 @@ class MarketingInboxService
                 'id'        => $d['id'],
                 'name'      => $d['name'],
                 'pipeline'  => ['id' => $d['pipeline']['id'], 'name' => $d['pipeline']['name']],
+                'pipelines' => collect($d['pipelines'])->map(fn (array $p) => ['id' => $p['id'], 'name' => $p['name']])->all(),
                 'divisions' => collect($d['divisions'])->where('is_active', true)
                     ->map(fn (array $v) => ['id' => $v['id'], 'name' => $v['name']])->values()->all(),
             ])
@@ -260,11 +261,11 @@ class MarketingInboxService
     }
 
     /**
-     * Send the lead to a department's pipeline (stage "new"), optionally into one of its
-     * divisions. Forwarding also verifies the lead and clears its review flag; the history
-     * goes to crm_lead_assignment_logs.
+     * Send the lead to one of a department's pipelines (its main one unless another is
+     * picked) at stage "new", optionally into one of its divisions. Forwarding also verifies
+     * the lead and clears its review flag; the history goes to crm_lead_assignment_logs.
      */
-    public function forward(Lead $lead, int $departmentId, ?int $divisionId, ?string $note, ?int $userId): Lead
+    public function forward(Lead $lead, int $departmentId, ?int $divisionId, ?string $note, ?int $userId, ?int $projectId = null): Lead
     {
         $lead->loadMissing(['stage', 'project']);
         if (! $lead->isOpen()) {
@@ -276,12 +277,11 @@ class MarketingInboxService
             throw ValidationException::withMessages(['department_id' => 'Pick a department of this business.']);
         }
 
-        $project = Project::query()
-            ->where('business_id', $lead->business_id)
-            ->where('department_id', $department->id)
-            ->first();
+        $project = $this->org->departmentPipeline($lead->business, $department, $projectId);
         if ($project === null) {
-            throw ValidationException::withMessages(['department_id' => $department->name . ' has no pipeline yet. Link one under CRM → Org Structure.']);
+            throw ValidationException::withMessages($projectId === null
+                ? ['department_id' => $department->name . ' has no pipeline yet. Link one under CRM → Org Structure.']
+                : ['project_id' => 'Pick a pipeline of ' . $department->name . '.']);
         }
         if ((int) $project->id === (int) $lead->project_id) {
             throw ValidationException::withMessages(['department_id' => 'The lead is already in the ' . $department->name . ' pipeline.']);

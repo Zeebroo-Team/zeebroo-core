@@ -133,7 +133,7 @@ class PosCrmOrgApiController extends Controller
         ]);
     }
 
-    /** POST /api/v1/pos/crm/org/departments/{department}/pipeline — link one, or create one when project_id is empty. */
+    /** POST /api/v1/pos/crm/org/departments/{department}/pipeline — add one, or create one when project_id is empty. */
     public function linkPipeline(Request $request, int $departmentId): JsonResponse
     {
         $business   = $this->businessOrAbort($request);
@@ -147,14 +147,17 @@ class PosCrmOrgApiController extends Controller
         return response()->json(['message' => 'Pipeline linked.', 'data' => $project]);
     }
 
-    /** DELETE /api/v1/pos/crm/org/departments/{department}/pipeline */
-    public function unlinkPipeline(Request $request, int $departmentId): JsonResponse
+    /**
+     * DELETE /api/v1/pos/crm/org/departments/{department}/pipelines/{project} — unlink that one;
+     * DELETE /api/v1/pos/crm/org/departments/{department}/pipeline — unlink them all.
+     */
+    public function unlinkPipeline(Request $request, int $departmentId, ?int $projectId = null): JsonResponse
     {
         $business   = $this->businessOrAbort($request);
         $this->abortUnlessCrmAdmin($request, $business);
         $department = $this->org->departmentForBusiness($business, $departmentId);
 
-        $this->org->unlinkPipeline($business, $department);
+        $this->org->unlinkPipeline($business, $department, $projectId);
 
         return response()->json(['message' => 'Pipeline unlinked.']);
     }

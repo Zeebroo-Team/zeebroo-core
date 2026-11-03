@@ -12,7 +12,7 @@ class QuotationSubmitted implements ShouldDispatchAfterCommit
 {
     use Dispatchable;
 
-    /** @param array{percent: float, limit: ?float, over_limit: bool, requires_approval: bool} $discount */
+    /** @param array{percent: float, limit: ?float, over_limit: bool} $discount */
     public function __construct(
         public readonly Lead $lead,
         public readonly Quotation $quotation,

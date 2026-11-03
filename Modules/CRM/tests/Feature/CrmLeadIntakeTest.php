@@ -441,6 +441,37 @@ test('the desktop form flow returns the intake result', function () {
         ->and(Lead::where('name', 'Desk')->value('source'))->toBe('phone');
 });
 
+test('a pipeline with no form gets one internal manual-entry form for desktop new leads', function () {
+    $first  = app(CrmLeadIntakeTestApi::class)->manualEntryForm(crmIntakeRequest(1, 'POST'), $this->sales->id);
+    $second = app(CrmLeadIntakeTestApi::class)->manualEntryForm(crmIntakeRequest(1, 'POST'), $this->sales->id);
+    $form   = LeadForm::find($first->getData(true)['data']['id']);
+
+    expect($first->getStatusCode())->toBe(200)
+        ->and($second->getData(true)['data']['id'])->toBe($form->id)
+        ->and(LeadForm::where('project_id', $this->sales->id)->count())->toBe(1)
+        ->and($form->name)->toBe('Manual entry')
+        ->and($form->is_default)->toBeTrue()
+        // Staff-only: never a public web form
+        ->and($form->is_published)->toBeFalse();
+
+    $paths = collect($form->fieldBlocksWithPaths())->mapWithKeys(fn ($b, $path) => [$b['field'] => $path]);
+    $res   = app(CrmLeadIntakeTestApi::class)->submitFormLead(crmIntakeRequest(1, 'POST', [
+        $paths['name'] => 'Caller', $paths['phone'] => '0775550000', 'source' => 'phone',
+    ]), $this->sales->id, $form->id);
+
+    expect($res->getStatusCode())->toBe(201)
+        ->and(Lead::where('name', 'Caller')->value('source'))->toBe('phone');
+});
+
+test('the manual-entry endpoint reuses an existing form instead of adding one', function () {
+    $contact = app(LeadFormService::class)->create($this->sales, ['name' => 'Contact', 'template' => 'contact']);
+
+    $res = app(CrmLeadIntakeTestApi::class)->manualEntryForm(crmIntakeRequest(1, 'POST'), $this->sales->id);
+
+    expect($res->getData(true)['data']['id'])->toBe($contact->id)
+        ->and(LeadForm::where('project_id', $this->sales->id)->count())->toBe(1);
+});
+
 // ── Forwarding ───────────────────────────────────────────────────────────
 
 test('only marketing and admins may forward an intake lead', function (int $userId, bool $allowed) {
@@ -484,6 +515,25 @@ test('forwarding moves the lead to the department pipeline and records the histo
         ->and($log->note)->toBe('Wants a 5kW system')
         ->and(LeadAuditLog::where('lead_id', $lead->id)->where('event', LeadAuditLog::EVENT_FORWARDED)->value('project_id'))->toBe($this->sales->id)
         ->and(\Modules\CRM\Models\LeadStageLog::where('lead_id', $lead->id)->latest('id')->value('project_id'))->toBe($this->sales->id);
+});
+
+test('a department with several pipelines takes forwarded leads in its main one unless another is picked', function () {
+    $second = app(CrmOrgService::class)->linkPipeline($this->business, Department::find(10), null);
+
+    $main   = ($this->capture)(['phone' => '0771111111'])->lead;
+    $picked = ($this->capture)(['phone' => '0772222222'])->lead;
+    $this->inbox->forward($main, 10, null, null, 4);
+    $this->inbox->forward($picked, 10, null, null, 4, $second->id);
+
+    expect($main->fresh()->project_id)->toBe($this->sales->id)
+        ->and($picked->fresh()->project_id)->toBe($second->id)
+        ->and($picked->fresh()->department_id)->toBe(10)
+        ->and($picked->fresh(['stage'])->stage->project_id)->toBe($second->id)
+        ->and(fn () => $this->inbox->forward(($this->capture)(['phone' => '0773333333'])->lead, 10, null, null, 4, $this->marketing->id))
+        ->toThrow(ValidationException::class);
+
+    $target = collect($this->inbox->forwardTargets($this->business))->firstWhere('id', 10);
+    expect(collect($target['pipelines'])->pluck('id')->all())->toBe([$this->sales->id, $second->id]);
 });
 
 test('after forwarding, marketing still sees the lead but no longer works it, and Sales does', function () {

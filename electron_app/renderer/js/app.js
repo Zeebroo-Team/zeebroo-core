@@ -154,7 +154,8 @@ $('#app-confirm-cancel-btn')?.addEventListener('click', () => _appConfirmClose(f
 $('#app-confirm-submit-btn')?.addEventListener('click', () => _appConfirmClose(true));
 $('#app-confirm-modal')?.addEventListener('click', e => { if (e.target.id === 'app-confirm-modal') _appConfirmClose(false); });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && $('#app-confirm-modal')?.style.display === 'flex') _appConfirmClose(false);
+  // preventDefault stops the window behind (mac-overlay Esc handler) from also closing
+  if (e.key === 'Escape' && $('#app-confirm-modal')?.style.display === 'flex') { e.preventDefault(); _appConfirmClose(false); }
 });
 
 function setStatus(msg) { $('#status-text').textContent = msg; }
@@ -57442,6 +57443,7 @@ async function submitDsCreate() {
     const dash = $('#crm-dashboard-view');
     if (dash) dash.style.display = view === 'dashboard' ? 'flex' : 'none';
     $$('[data-crmsub]').forEach(b => b.classList.toggle('active', b.dataset.crmsub === view));
+    if (view === 'overview') _crmGuideSyncLinks();
     // skipLoad: caller is about to open a specific relation's detail pane itself —
     // running loadCrmRelationsView() here would race with it and call closeRelationDetail()
     // after the detail pane is shown, bouncing the user back to the relations list.
@@ -57502,6 +57504,37 @@ async function submitDsCreate() {
   $('#crm-ov-new-relation-btn')?.addEventListener('click', () => _openProjectModal());
   $('#crm-ov-viewall-btn')?.addEventListener('click', () => switchCrmView('relation'));
   $('#crm-ov-viewall-relations-btn')?.addEventListener('click', () => switchCrmView('relation'));
+
+  // ── Overview: "How CRM Works" guide ──────────────────────────────────────
+  // Collapsed state is a per-user convenience, so localStorage is fine here
+  function _crmGuideSetOpen(open) {
+    $('#crm-ov-guide-body').style.display = open ? '' : 'none';
+    const t = $('#crm-ov-guide-toggle');
+    t.querySelector('span').textContent = open ? 'Hide guide' : 'Show guide';
+    t.querySelector('i').className = `fa fa-chevron-${open ? 'up' : 'down'}`;
+    try { localStorage.setItem('crm_ov_guide_hidden', open ? '0' : '1'); } catch {}
+  }
+  try { if (localStorage.getItem('crm_ov_guide_hidden') === '1') _crmGuideSetOpen(false); } catch {}
+  $('#crm-ov-guide-toggle')?.addEventListener('click', () =>
+    _crmGuideSetOpen($('#crm-ov-guide-body').style.display === 'none'));
+
+  // Guide links reuse the ribbon buttons, so they follow the same permission gating
+  function _crmGuideRibbonBtn(id) {
+    const rb = document.getElementById(id);
+    if (!rb || rb.style.display === 'none' || rb.closest('.ribbon-group')?.style.display === 'none') return null;
+    return rb;
+  }
+  function _crmGuideSyncLinks() {
+    $$('[data-crm-guide-rb]').forEach(b => {
+      const ok = !!_crmGuideRibbonBtn(b.dataset.crmGuideRb);
+      b.disabled = !ok;
+      b.title = ok ? '' : "You don't have access to this";
+    });
+  }
+  $('#crm-ov-guide')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-crm-guide-rb]');
+    if (b) _crmGuideRibbonBtn(b.dataset.crmGuideRb)?.click();
+  });
 
   // ── Relation tab (list) ──────────────────────────────────────────────────
   async function loadCrmRelationsView() {
@@ -57675,44 +57708,67 @@ async function submitDsCreate() {
       if (c.is_won) r.won++;
     }));
     const srcRows = Object.entries(bySrc).sort((a, b) => b[1].count - a[1].count);
-    const srcMax  = srcRows[0]?.[1].count || 1;
+    const open    = Math.max(0, totalLeads - won - lost);
+    const closed  = won + lost;
+    const pct     = (n, of) => of ? Math.round(n / of * 100) : 0;
+    const plural  = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`;
+    const bar     = (share, color) => `<div class="crm-rd-bar"><span style="width:${share ? Math.max(2, share) : 0}%;background:${color}"></span></div>`;
+
     const srcHtml = srcRows.map(([key, r]) => {
       const s = _crmSource(key);
-      const meta = [`${r.count} lead${r.count !== 1 ? 's' : ''}`, r.value ? formatMoney(r.value) : '', r.won ? `${r.won} won (${Math.round(r.won / r.count * 100)}%)` : '']
-        .filter(Boolean).join(' · ');
-      return `<tr${key ? ` class="crm-dash-src-row" data-dash-source="${escHtml(key)}" title="Show ${escHtml(s.label)} leads in the pipeline"` : ''}>
-        <td class="inv-dt-label">${key ? _crmSourceBadge(key) : '<span class="inv-detail-none">No source</span>'}</td>
-        <td class="inv-dt-val"><div class="crm-dash-src-bar"><span style="width:${Math.max(4, Math.round(r.count / srcMax * 100))}%;background:${escHtml(s?.color || '#94a3b8')}"></span></div>${meta}</td>
-      </tr>`;
+      return `<div class="crm-rd-tr crm-rd-tr--src${key ? ' crm-dash-src-row' : ''}"${key ? ` data-dash-source="${escHtml(key)}" title="Show ${escHtml(s.label)} leads in the pipeline"` : ''}>
+        <div class="crm-rd-name">${key ? _crmSourceBadge(key) : '<span class="crm-rd-muted">No source</span>'}</div>
+        ${bar(pct(r.count, totalLeads), escHtml(s?.color || '#94a3b8'))}
+        <div class="crm-rd-num">${r.count}</div>
+        <div class="crm-rd-num${r.won ? '' : ' crm-rd-muted'}">${r.won ? `${r.won} <small>(${pct(r.won, r.count)}%)</small>` : '—'}</div>
+        <div class="crm-rd-num crm-rd-muted">${pct(r.count, totalLeads)}%</div>
+        <i class="fa fa-chevron-right crm-rd-chev"${key ? '' : ' style="visibility:hidden"'}></i>
+      </div>`;
     }).join('');
 
+    const stageHtml = cols.map(c => {
+      const color = c.is_won ? '#30a46c' : c.is_lost ? '#e5484d' : '#3b82f6';
+      const tag   = c.is_won ? '<span class="crm-rd-tag crm-rd-tag--won">Won</span>' : c.is_lost ? '<span class="crm-rd-tag crm-rd-tag--lost">Lost</span>' : '';
+      return `<div class="crm-rd-tr crm-rd-tr--stage">
+        <div class="crm-rd-name"><span class="crm-rd-dot" style="background:${color}"></span><span class="crm-rd-ellipsis">${escHtml(c.name)}</span>${tag}</div>
+        ${bar(pct(c.leads_count, totalLeads), color)}
+        <div class="crm-rd-num${c.leads_count ? '' : ' crm-rd-muted'}">${c.leads_count}</div>
+        <div class="crm-rd-num${c.value_total ? '' : ' crm-rd-muted'}">${c.value_total ? formatMoney(c.value_total) : '—'}</div>
+        <div class="crm-rd-num crm-rd-muted">${pct(c.leads_count, totalLeads)}%</div>
+      </div>`;
+    }).join('');
+
+    const kpi = (icon, tone, label, value, sub) => `
+      <div class="crm-rd-kpi">
+        <div class="crm-rd-kpi-head"><span>${label}</span><i class="fa ${icon} crm-rd-kpi-icon crm-rd-kpi-icon--${tone}"></i></div>
+        <div class="crm-rd-kpi-value">${value}</div>
+        <div class="crm-rd-kpi-sub">${sub}</div>
+      </div>`;
+
     pane.innerHTML = `
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-chart-simple"></i> Pipeline Overview</div>
-        <div class="inv-detail-grid">
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Total Leads</div><div class="inv-detail-cell-value">${totalLeads}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Total Value</div><div class="inv-detail-cell-value">${formatMoney(totalValue)}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Won</div><div class="inv-detail-cell-value">${won}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Lost</div><div class="inv-detail-cell-value">${lost}</div></div>
+      <div class="crm-rd">
+        <div class="crm-rd-kpis">
+          ${kpi('fa-users', 'blue', 'Total leads', totalLeads, `${plural(open, 'open lead')}`)}
+          ${kpi('fa-coins', 'amber', 'Pipeline value', formatMoney(totalValue), totalLeads ? `Avg ${formatMoney(totalValue / totalLeads)} per lead` : 'No leads yet')}
+          ${kpi('fa-trophy', 'green', 'Won', won, closed ? `<b class="crm-rd-up">${pct(won, closed)}%</b> win rate` : 'No closed leads yet')}
+          ${kpi('fa-circle-xmark', 'red', 'Lost', lost, closed ? `<b class="crm-rd-down">${pct(lost, closed)}%</b> of closed leads` : 'No closed leads yet')}
         </div>
-      </div>
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-table-columns"></i> Stages</div>
-        <table class="inv-detail-table">
-          ${cols.length ? cols.map(c => `<tr><td class="inv-dt-label">${escHtml(c.name)}</td><td class="inv-dt-val">${c.leads_count} lead${c.leads_count !== 1 ? 's' : ''}${c.value_total ? ' · ' + formatMoney(c.value_total) : ''}</td></tr>`).join('') : '<tr><td class="inv-dt-val" colspan="2"><span class="inv-detail-none">No stages yet</span></td></tr>'}
-        </table>
-      </div>
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-bullhorn"></i> Lead Sources</div>
-        <table class="inv-detail-table">
-          ${srcHtml || '<tr><td class="inv-dt-val" colspan="2"><span class="inv-detail-none">No leads yet</span></td></tr>'}
-        </table>
-      </div>
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
-        <table class="inv-detail-table">
-          <tr><td class="inv-dt-label">Description</td><td class="inv-dt-val">${relation.description ? escHtml(relation.description) : '<span class="inv-detail-none">No description</span>'}</td></tr>
-        </table>
+        <div class="crm-rd-cols">
+          <section class="crm-rd-card">
+            <header class="crm-rd-card-head"><div><h4>Stages</h4><p>Where the ${plural(totalLeads, 'lead')} sit right now</p></div></header>
+            <div class="crm-rd-tr crm-rd-tr--stage crm-rd-th"><div>Stage</div><div>Share</div><div class="crm-rd-num">Leads</div><div class="crm-rd-num">Value</div><div class="crm-rd-num">%</div></div>
+            ${stageHtml || '<div class="crm-rd-empty">No stages yet</div>'}
+          </section>
+          <section class="crm-rd-card">
+            <header class="crm-rd-card-head"><div><h4>Lead sources</h4><p>Click a source to open its leads in the pipeline</p></div></header>
+            <div class="crm-rd-tr crm-rd-tr--src crm-rd-th"><div>Source</div><div>Share</div><div class="crm-rd-num">Leads</div><div class="crm-rd-num">Won</div><div class="crm-rd-num">%</div><span></span></div>
+            ${srcHtml || '<div class="crm-rd-empty">No leads yet</div>'}
+          </section>
+        </div>
+        <section class="crm-rd-card">
+          <header class="crm-rd-card-head"><div><h4>Details</h4></div></header>
+          <div class="crm-rd-desc">${relation.description ? escHtml(relation.description) : '<span class="crm-rd-muted">No description</span>'}</div>
+        </section>
       </div>
     `;
   }
@@ -57975,17 +58031,19 @@ async function submitDsCreate() {
   function _crmHfFlowApp(RF) {
     const { Controls, MiniMap, Background, useNodesState, useEdgesState } = RF;
     const isDark = document.body.classList.contains('dark');
-    return ({ nodes: initNodes, edges: initEdges, nodeTypes, edgeTypes, edgeTip, onNodeClick, onEdgeClick }) => {
+    // fitNodes: the nodes the window opens on, so it starts readable instead of zoomed out to the
+    // whole graph; the controls' fit button still fits everything. scrollPans: wheel scrolls (ctrl+wheel zooms).
+    return ({ nodes: initNodes, edges: initEdges, nodeTypes, edgeTypes, edgeTip, onNodeClick, onEdgeClick, fitNodes, scrollPans }) => {
       const [nodes, , onNodesChange] = useNodesState(initNodes);
       const [edges, , onEdgesChange] = useEdgesState(initEdges);
       const types = React.useMemo(() => nodeTypes, []);
       const eTypes = React.useMemo(() => edgeTypes || {}, []);
       return React.createElement(RF.ReactFlow, {
         nodes, edges, onNodesChange, onEdgesChange, nodeTypes: types, edgeTypes: eTypes,
-        fitView: true, fitViewOptions: { padding: 0.15, maxZoom: 1.1 },
+        fitView: true, fitViewOptions: { padding: 0.12, maxZoom: 1.1, ...(fitNodes?.length ? { nodes: fitNodes.map(id => ({ id })) } : {}) },
         minZoom: 0.1, maxZoom: 2.5,
         nodesDraggable: true, nodesConnectable: false, elementsSelectable: true,
-        zoomOnScroll: true, panOnDrag: true,
+        zoomOnScroll: !scrollPans, panOnScroll: !!scrollPans, panOnDrag: true,
         onlyRenderVisibleElements: initNodes.length > 120,
         proOptions: { hideAttribution: true },
         onNodeClick, onEdgeClick: (ev, edge) => { _crmHfTip(null); onEdgeClick(ev, edge); },
@@ -57993,15 +58051,16 @@ async function submitDsCreate() {
         onEdgeMouseMove:  ev => _crmHfTipMove(ev),
         onEdgeMouseLeave: () => _crmHfTip(null),
         onMoveStart:      () => _crmHfTip(null),
-        style: { background: isDark ? '#1a1b2e' : '#ffffff', width: '100%', height: '100%' },
+        style: { background: isDark ? '#1c1c1e' : '#f5f5f7', width: '100%', height: '100%' },
       },
-        Background && React.createElement(Background, { gap: 22, size: 1, color: isDark ? '#2a2c44' : '#e5e7eb' }),
+        Background && React.createElement(Background, { variant: RF.BackgroundVariant?.Dots, gap: 20, size: 1.2, color: isDark ? '#3a3a3e' : '#d1d1d6' }),
         MiniMap && React.createElement(MiniMap, {
-          pannable: true, zoomable: true,
+          pannable: true, zoomable: true, nodeBorderRadius: 4,
           nodeColor: n => n.data?.color || '#94a3b8',
-          style: { background: isDark ? '#111827' : '#f8fafc', width: 170, height: 110 },
+          maskColor: isDark ? 'rgba(0,0,0,.45)' : 'rgba(245,245,247,.65)',
+          style: { background: isDark ? '#2b2b30' : '#ffffff', width: 170, height: 110 },
         }),
-        React.createElement(Controls, { showInteractive: false })
+        React.createElement(Controls, { showInteractive: false, fitViewOptions: { padding: 0.12, maxZoom: 1.1 } })
       );
     };
   }
@@ -58010,11 +58069,12 @@ async function submitDsCreate() {
     const isDark = document.body.classList.contains('dark');
     return {
       isDark,
-      card:  isDark ? '#0f172a' : '#ffffff',
-      text:  isDark ? '#e5e7eb' : '#111827',
-      muted: isDark ? '#9ca3af' : '#6b7280',
-      soft:  isDark ? '#1e293b' : '#f1f5f9',
-      font:  "'Segoe UI',sans-serif",
+      card:  isDark ? '#2c2c2e' : '#ffffff',
+      text:  isDark ? '#f5f5f7' : '#1d1d1f',
+      muted: isDark ? '#98989d' : '#6e6e73',
+      soft:  isDark ? 'rgba(118,118,128,.22)' : 'rgba(118,118,128,.1)',
+      line:  isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)',
+      font:  '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif',
     };
   }
 
@@ -58093,22 +58153,24 @@ async function submitDsCreate() {
 
     const StageNode = ({ data }) => {
       const s = data.stage, c = s.color;
-      const stat = (label, value) => h('div', { style: { background: T.soft, borderRadius: 6, padding: '3px 6px', textAlign: 'center' } },
-        h('div', { style: { fontWeight: 800, fontSize: 13, color: T.text } }, value),
-        h('div', { style: { fontSize: 9, color: T.muted, textTransform: 'uppercase', letterSpacing: '.04em' } }, label));
+      const stat = (label, value) => h('div', { style: { background: T.soft, borderRadius: 7, padding: '4px 6px', textAlign: 'center' } },
+        h('div', { style: { fontWeight: 600, fontSize: 14, color: T.text, fontVariantNumeric: 'tabular-nums' } }, value),
+        h('div', { style: { fontSize: 10, color: T.muted } }, label));
       return h('div', { style: {
-        width: 200, background: T.card, border: `1.5px solid ${c}`, borderLeft: `6px solid ${c}`, borderRadius: 11,
-        padding: '9px 11px', fontFamily: T.font, boxShadow: `0 6px 18px ${c}33`, cursor: 'pointer', opacity: s.deleted ? 0.75 : 1,
+        width: 200, background: T.card, borderRadius: 12, padding: '10px 12px', fontFamily: T.font, cursor: 'pointer', opacity: s.deleted ? 0.75 : 1,
+        boxShadow: `0 0 0 1px ${c}59, 0 1px 2px rgba(0,0,0,.06), 0 6px 18px ${c}26`,
       }},
         _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
         _crmHfHandle(RF, 'source', 'Bottom', 'src-b'), _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
         _crmHfHandle(RF, 'source', 'Top', 'src-t'), _crmHfHandle(RF, 'target', 'Top', 'tgt-t'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 12.5, color: T.text } },
-          h('i', { className: `fa ${s.is_won ? 'fa-trophy' : s.is_lost ? 'fa-circle-xmark' : s.deleted ? 'fa-ghost' : 'fa-layer-group'}`, style: { color: c, fontSize: 11 } }),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, color: T.text } },
+          h('span', { style: { width: 22, height: 22, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: c, boxShadow: '0 1px 2px rgba(0,0,0,.18)' } },
+            h('i', { className: `fa ${s.is_won ? 'fa-trophy' : s.is_lost ? 'fa-circle-xmark' : s.deleted ? 'fa-ghost' : 'fa-layer-group'}`, style: { color: '#fff', fontSize: 10.5 } })),
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name)),
-        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 7 } },
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5, marginTop: 9 } },
           stat('Now', s.leads_count), stat('In', data.entered), stat('Out', data.left)),
-        h('div', { style: { marginTop: 6, fontSize: 10, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
+        h('div', { style: { marginTop: 7, fontSize: 10.5, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
           h('i', { className: 'fa fa-hourglass-half' }),
           data.avgStay != null ? `Avg stay ${_crmFmtDuration(data.avgStay)}` : 'No exits yet')
       );
@@ -58116,8 +58178,9 @@ async function submitDsCreate() {
 
     const TerminalNode = ({ data }) => h('div', { style: {
       background: data.color, color: '#fff', borderRadius: 24, padding: '0 18px', height: 46,
-      display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 12.5, fontFamily: T.font,
-      boxShadow: `0 6px 16px ${data.color}66`, cursor: 'pointer', whiteSpace: 'nowrap',
+      display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, fontFamily: T.font,
+      backgroundImage: 'linear-gradient(rgba(255,255,255,.18),rgba(255,255,255,0))',
+      boxShadow: `0 0 0 .5px rgba(0,0,0,.12), 0 6px 16px ${data.color}55`, cursor: 'pointer', whiteSpace: 'nowrap',
     }},
       _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
       _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
@@ -58133,6 +58196,8 @@ async function submitDsCreate() {
       }});
     });
     if (deleted) nodes.push({ id: 'end', type: 'hfTerminal', position: pos.end, data: { label: 'Deleted', icon: 'fa-trash', color: '#b91c1c', count: deleted } });
+    // Open on the stages that fit the canvas at ~75% zoom; a long pipeline pans right from there.
+    const fitSpan = ($('#crm-hf-canvas')?.clientWidth || 1200) / 0.75 - 200;
 
     const maxCount = Math.max(1, ...transitions.map(t => t.count));
     const stageById = new Map(stages.map(s => [s.id, s]));
@@ -58204,6 +58269,7 @@ async function submitDsCreate() {
 
     return {
       nodes, edges, edgeTip,
+      fitNodes: nodes.filter(n => n.position.x <= fitSpan).map(n => n.id),
       edgeTypes: { hfArc: ArcEdge },
       nodeTypes: { hfStage: StageNode, hfTerminal: TerminalNode },
       onNodeClick: (_e, n) => {
@@ -58231,15 +58297,15 @@ async function submitDsCreate() {
       const cur = stageById.get(j.current_stage_id);
       const src = _crmSource(j.lead.source);
       return h('div', { style: {
-        width: 210, background: T.card, border: `1.5px solid ${data.color}`, borderRadius: 12, padding: '8px 11px',
-        fontFamily: T.font, boxShadow: `0 4px 14px ${data.color}33`, cursor: 'pointer',
+        width: 210, background: T.card, borderRadius: 12, padding: '9px 12px', fontFamily: T.font, cursor: 'pointer',
+        boxShadow: `0 0 0 1px ${data.color}59, 0 1px 2px rgba(0,0,0,.06), 0 4px 14px ${data.color}22`,
       }},
         _crmHfHandle(RF, 'source', 'Right', 'src-r'),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h('div', { style: { width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, fontSize: 12, color: '#7c3aed', background: 'rgba(124,58,237,.12)' } }, (j.lead.name || '?').trim().charAt(0).toUpperCase()),
+          h('div', { style: { width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 600, fontSize: 12.5, color: '#fff', background: 'linear-gradient(#c084fc,#7c3aed)', boxShadow: '0 1px 2px rgba(0,0,0,.18)' } }, (j.lead.name || '?').trim().charAt(0).toUpperCase()),
           h('div', { style: { minWidth: 0 } },
-            h('div', { style: { fontWeight: 700, fontSize: 12.5, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, j.lead.name || `Lead #${j.lead.id}`),
+            h('div', { style: { fontWeight: 600, fontSize: 13, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, j.lead.name || `Lead #${j.lead.id}`),
             h('div', { style: { fontSize: 10, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
               src ? h('i', { className: src.icon, title: `Source: ${src.label}`, style: { color: src.color } }) : null,
               `${j.steps.length} move${j.steps.length === 1 ? '' : 's'}${src ? ' · ' + src.label : ''}`))),
@@ -58256,15 +58322,16 @@ async function submitDsCreate() {
       const stage = e.to_stage || e.from_stage;
       const d = new Date(e.created_at);
       return h('div', { style: {
-        width: 180, background: T.card, border: `1.5px solid ${data.color}`, borderRadius: 10, padding: '7px 10px',
-        fontFamily: T.font, cursor: 'pointer',
-        boxShadow: data.current ? `0 0 0 3px ${data.color}44, 0 4px 12px ${data.color}44` : '0 2px 8px rgba(0,0,0,.08)',
+        width: 180, background: T.card, borderRadius: 10, padding: '8px 10px', fontFamily: T.font, cursor: 'pointer',
+        boxShadow: data.current
+          ? `0 0 0 1.5px ${data.color}, 0 0 0 4.5px ${data.color}29, 0 4px 12px rgba(0,0,0,.08)`
+          : `0 0 0 .5px ${T.line}, 0 1px 3px rgba(0,0,0,.08)`,
       }},
         _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: ev, textTransform: 'uppercase', letterSpacing: '.04em' } },
-          h('i', { className: `fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}` }), e.event_label,
-          data.current && h('span', { style: { marginLeft: 'auto', color: data.color } }, 'Current')),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontWeight: 700, fontSize: 12, color: T.text } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: ev } },
+          h('i', { className: `fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}`, style: { fontSize: 9.5 } }), e.event_label,
+          data.current && h('span', { style: { marginLeft: 'auto', padding: '0 6px', borderRadius: 999, fontSize: 9.5, color: '#fff', background: data.color } }, 'Current')),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontWeight: 600, fontSize: 12.5, color: T.text } },
           h('span', { style: { width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: stage?.color || '#94a3b8' } }),
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: e.to_stage ? 'none' : 'line-through' } }, stage?.name || 'No stage')),
         h('div', { style: { marginTop: 4, fontSize: 9.5, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
@@ -58307,8 +58374,11 @@ async function submitDsCreate() {
       y += Math.max(1, Math.ceil(j.steps.length / perLine)) * LINE + LEAD_GAP;
     });
 
+    // Open on the first leads at a readable zoom (the layout already fits the width); scroll down for the rest.
+    const fitHeight = ($('#crm-hf-canvas')?.clientHeight || 700) / 0.85 - LINE;
     return {
-      nodes, edges,
+      nodes, edges, scrollPans: true,
+      fitNodes: nodes.filter(n => n.position.y <= fitHeight).map(n => n.id),
       nodeTypes: { hfLead: LeadNode, hfStep: StepNode },
       onNodeClick: (_e, n) => n.type === 'hfLead' ? _crmHfPanelLead(n.data.journey) : _crmHfPanelStep(n.data.entry, n.data.journey),
       onEdgeClick: () => {},
@@ -58634,13 +58704,11 @@ async function submitDsCreate() {
     }
   }
 
-  // Pipeline leads are always created from the project's default form, so both the ribbon
-  // "New Lead" button and the per-column "+" buttons stay disabled until one is set.
+  // A pipeline with no form yet still takes leads: the first "New Lead" creates its internal
+  // "Manual entry" form (see _openNewLeadModal), so the button only waits for the pipeline.
   function _updateNewLeadBtnState() {
-    const hasDefault = !!(_crmPipeline && _crmPipeline.default_form);
-    const title = hasDefault ? '' : 'Set a default form in the Forms tab before adding leads';
     const btn = $('#crm-relation-new-lead-btn');
-    if (btn) { btn.disabled = !hasDefault; btn.title = title; }
+    if (btn) { btn.disabled = !_crmPipeline; btn.title = ''; }
   }
 
   let _dragLeadId    = null;
@@ -58911,7 +58979,7 @@ async function submitDsCreate() {
   }
 
   async function _crmDeleteLead(leadId) {
-    if (!confirm('Delete this lead?')) return;
+    if (!await appConfirm({ title: 'Delete lead?', message: 'This lead and its history will be removed.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
     const res = await API.crmDeleteLead(leadId);
     if (res.status === 200) {
       toast('Lead deleted.', 'success');
@@ -59133,7 +59201,7 @@ async function submitDsCreate() {
             ${stateIcon}
             ${countHtml}
             ${!closed
-              ? `<button class="crm-card-btn crm-col-add" data-add-stage="${col.id}" title="${_crmPipeline.default_form ? 'Add lead (via default form)' : 'Set a default form in the Forms tab before adding leads'}"${_crmPipeline.default_form ? '' : ' disabled'}><i class="fa fa-plus"></i></button>`
+              ? `<button class="crm-card-btn crm-col-add" data-add-stage="${col.id}" title="Add lead"><i class="fa fa-plus"></i></button>`
               : ''}
           </div>
           <div class="crm-col-total${col.value_total > 0 ? '' : ' crm-col-total--empty'}">${formatMoney(col.value_total || 0, { decimals: 0 })}</div>
@@ -59275,13 +59343,19 @@ async function submitDsCreate() {
   // ── New Lead Modal ───────────────────────────────────────────────────────
   // Leads are always created through the project's default form (Forms tab), so every
   // "New Lead" entry point ends up here, and the lead lands on that form's default stage.
+  // A pipeline without one (e.g. its leads so far came from a CSV import) gets an internal
+  // "Manual entry" form from the server on first use, so a phone-call lead is never blocked.
   async function _openNewLeadModal() {
     if (!_crmPipeline) return;
-    const defaultForm = _crmPipeline.default_form;
-    if (!defaultForm) {
-      toast('Set a default form in the Forms tab before adding leads.', 'error');
-      return;
+    if (!_crmPipeline.default_form) {
+      const res = await API.crmManualEntryForm(_crmProjectId);
+      if (res.status !== 200) {
+        toast(res.body?.message || 'Could not prepare the lead form.', 'error');
+        return;
+      }
+      _crmPipeline.default_form = res.body.data;
     }
+    const defaultForm = _crmPipeline.default_form;
 
     _crmLeadFormId = defaultForm.id;
     $('#crm-lead-modal-title').textContent = defaultForm.name;
@@ -59684,6 +59758,8 @@ async function submitDsCreate() {
     if (_crmViewLead?.id !== lead.id) return;
     _crmViewHistory = res.status === 200 ? (res.body?.data || []) : false;
     _crmRenderLeadHistory();
+    // Overview's "In this stage for" comes from the history
+    if (_crmLeadTab === 'overview' && !_crmViewEditing) _crmRenderLeadModal(false);
   }
 
   function _crmLeadViewItem(label, value) {
@@ -59764,28 +59840,53 @@ async function submitDsCreate() {
       fields = `<div class="crm-lead-view-grid">${items || item('Name', lead.name)}</div>`;
     }
 
-    const rest = editing ? '' : `
-      <div>
-        <div class="crm-lead-view-section">Record</div>
-        <div class="crm-lead-view-grid">
-          ${item('Stage', stage?.name)}
-          ${item('Status', stage?.status_label)}
-          ${item('Score', (_crmPipeline?.scores || []).find(s => s.key === lead.score)?.label)}
-          ${lead.division_id ? item('Division', (_crmPipeline?.divisions || []).find(d => d.id === lead.division_id)?.name) : ''}
-          ${(stage?.is_lost || stage?.system_key === 'lost') ? item('Lost Reason', [(_crmPipeline?.lost_reasons || []).find(r => r.id === lead.lost_reason_id)?.label, lead.lost_reason].filter(Boolean).join(' — ')) : ''}
-          ${stage?.is_on_hold && lead.on_hold_from_stage_id ? item('On Hold From', (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id)?.name) : ''}
-          ${lead.closed_at ? item('Closed', _crmFmtDateTime(lead.closed_at)) : ''}
-          ${item('Products of Interest', (lead.product_items || []).map(p => p.name + (p.quantity != null ? ` × ${p.quantity}` : '')).join(', ')).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide')}
-          ${lead.product_interest_note ? item('Product Notes', lead.product_interest_note).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide') : ''}
-          ${item('Entered By', lead.created_by_name)}
-          ${item('Created', _crmFmtDateTime(lead.created_at))}
-          ${item('Last Updated', _crmFmtDateTime(lead.updated_at))}
-          ${item('Source', _crmSource(lead.source)?.label)}
-          ${lead.estimated_value ? item('Estimated Value', formatMoney(lead.estimated_value)) : ''}
-          ${lead.expected_close_date ? item('Expected Close', new Date(lead.expected_close_date).toLocaleDateString()) : ''}
-          ${item('Notes', lead.notes).replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide')}
-        </div>
-      </div>`;
+    const wide = html => html.replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide');
+    const section = (title, body) => `<div><div class="crm-lead-view-section">${title}</div><div class="crm-lead-view-grid">${body}</div></div>`;
+    // Time in the current stage — from the audit trail (re-rendered once it has loaded)
+    const stageSince = Array.isArray(_crmViewHistory)
+      ? _crmViewHistory.find(e => e.to_stage?.id === lead.stage_id && ['created', 'stage_changed', 'reopened', 'converted', 'lost'].includes(e.event))?.created_at
+      : null;
+    const ago = iso => iso ? _crmFmtDuration(Math.max(60, (Date.now() - new Date(iso).getTime()) / 1000)) : null;
+
+    const pipeline = editing ? '' : section('Pipeline', `
+      ${item('Stage', stage?.name)}
+      ${item('Status', stage?.status_label)}
+      ${stageSince ? item('In this stage for', ago(stageSince)) : ''}
+      ${item('Score', (_crmPipeline?.scores || []).find(s => s.key === lead.score)?.label)}
+      ${item('Division', (_crmPipeline?.divisions || []).find(d => d.id === lead.division_id)?.name)}
+      ${item('Source', _crmSource(lead.source)?.label)}
+      ${(stage?.is_lost || stage?.system_key === 'lost') ? item('Lost Reason', [(_crmPipeline?.lost_reasons || []).find(r => r.id === lead.lost_reason_id)?.label, lead.lost_reason].filter(Boolean).join(' — ')) : ''}
+      ${stage?.is_on_hold && lead.on_hold_from_stage_id ? item('On Hold From', (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id)?.name) : ''}
+      ${item('Estimated Value', lead.estimated_value ? formatMoney(lead.estimated_value) : null)}
+      ${item('Expected Close', lead.expected_close_date ? new Date(lead.expected_close_date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : null)}`);
+
+    // Workspace counts — each row opens its tab
+    const counts  = _crmWs.info?.counts;
+    const overdue = _crmWs.info?.follow_ups_overdue || 0;
+    const wsRow = (tab, icon, color, label, n, note = '') => `
+      <button type="button" class="crm-lead-view-item crm-lv-link" data-ws-tab="${tab}">
+        <span class="crm-lead-view-label"><span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${color}"><i class="fa ${icon}"></i></span>${label}</span>
+        <span class="crm-lead-view-value${n ? '' : ' crm-lead-view-value--empty'}">${note}${n ?? '—'}<i class="fa fa-chevron-right crm-lv-chev"></i></span>
+      </button>`;
+
+    const rest = editing ? '' : `<div class="crm-lv-stack">
+      ${section('Products &amp; Notes', `
+        ${wide(item('Products of Interest', (lead.product_items || []).map(p => p.name + (p.quantity != null ? ` × ${p.quantity}` : '')).join(', ')))}
+        ${lead.product_interest_note ? wide(item('Product Notes', lead.product_interest_note)) : ''}
+        ${wide(item('Notes', lead.notes))}`)}
+      ${section('Workspace', `
+        ${wsRow('messages',  'fa-comments',    '#0a84ff', 'Messages',           counts?.messages)}
+        ${wsRow('files',     'fa-paperclip',   '#34c759', 'Files',              counts?.files)}
+        ${wsRow('tasks',     'fa-list-check',  '#ff9f0a', 'Open tasks',         counts?.tasks)}
+        ${wsRow('followups', 'fa-phone-volume', '#af52de', 'Pending follow-ups', counts?.follow_ups,
+          overdue ? `<span class="crm-lv-badge">${overdue} overdue</span>` : '')}`)}
+      ${section('Dates', `
+        ${item('Entered By', lead.created_by_name)}
+        ${item('Created', _crmFmtDateTime(lead.created_at))}
+        ${item('Last Updated', lead.updated_at ? `${_crmFmtDateTime(lead.updated_at)} · ${_crmFmtAgo(lead.updated_at)}` : null)}
+        ${lead.closed_at ? item('Closed', _crmFmtDateTime(lead.closed_at)) : ''}
+        ${item('Lead age', ago(lead.created_at))}`)}
+    </div>`;
 
     // Editing always shows the record; viewing shows the tab bar and the chosen tab
     const overview = editing || _crmLeadTab === 'overview';
@@ -59793,8 +59894,9 @@ async function submitDsCreate() {
       + (editing ? '' : _crmLeadTabsHtml())
       + (overview
         ? (editing ? '' : _crmAssigneesSectionHtml(lead))
-          + `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
-          + rest
+          + (editing
+            ? `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
+            : `<div class="crm-lv-cols"><div class="crm-lv-stack"><div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>${pipeline}</div>${rest}</div>`)
         : '<div id="crm-ws-panel" class="crm-ws-panel"></div>');
     // Only show/hide the timeline here — rebuilding it on every body render (e.g. when the
     // form fields finish loading) re-laid it out and re-scrolled it for nothing.
@@ -60144,6 +60246,39 @@ async function submitDsCreate() {
     }).join('')}</div>`;
   }
 
+  // Tab switch: the white highlight glides from the old tab to the new one, and the content
+  // below slides in from the side the user moved towards.
+  function _crmAnimateTabSwitch(fromRect, dir) {
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const bar = $('#crm-lead-view-body .crm-ws-tabs');
+    const to  = bar?.querySelector('.crm-ws-tab.active');
+    if (!bar || !to?.animate) return;
+
+    if (fromRect) {
+      const pill = document.createElement('span');
+      pill.className = 'crm-ws-tab-pill';
+      Object.assign(pill.style, { left: `${to.offsetLeft}px`, top: `${to.offsetTop}px`, width: `${to.offsetWidth}px`, height: `${to.offsetHeight}px` });
+      bar.prepend(pill);
+      to.classList.add('crm-ws-tab--arriving');
+      const sx = fromRect.width / to.offsetWidth;
+      pill.animate([
+        { transform: `translate(${fromRect.left - to.offsetLeft}px, ${fromRect.top - to.offsetTop}px) scaleX(${sx})` },
+        { transform: 'none' },
+      ], { duration: 320, easing: 'cubic-bezier(.3, .9, .3, 1.05)' }).onfinish = () => {
+        to.classList.remove('crm-ws-tab--arriving');
+        pill.remove();
+      };
+    }
+
+    let next = bar.nextElementSibling;
+    for (let i = 0; next; next = next.nextElementSibling, i++) {
+      next.animate([
+        { opacity: 0, transform: `translateX(${dir * 18}px)` },
+        { opacity: 1, transform: 'none' },
+      ], { duration: 280, delay: Math.min(i, 3) * 30, easing: 'cubic-bezier(.2, .8, .3, 1)', fill: 'backwards' });
+    }
+  }
+
   function _crmRefreshWsTabs() {
     const el = $('#crm-lead-view-body .crm-ws-tabs');
     if (el) el.outerHTML = _crmLeadTabsHtml();
@@ -60192,6 +60327,12 @@ async function submitDsCreate() {
     }
     if (_crmWs[tab] === false) { panel.innerHTML = _crmWsPanelHtml('Failed to load.'); return; }
     panel.innerHTML = { timeline: _crmWsTimelineHtml, messages: _crmWsMessagesHtml, files: _crmWsFilesHtml, tasks: _crmWsTasksHtml, quotations: _crmQtHtml, followups: _crmWsFollowUpsHtml }[tab]();
+    if (tab === 'messages') {
+      // Newest message in view, like a chat (the conversation scrolls on its own, the tabs stay put)
+      _crmChatAutosize();
+      const feed = $('#crm-ws-panel .crm-chat-feed');
+      if (feed) feed.scrollTop = feed.scrollHeight;
+    }
     if (tab === 'files' || tab === 'messages') _crmWsLoadPreviews(lead);
   }
 
@@ -60216,81 +60357,386 @@ async function submitDsCreate() {
     const rows = type ? data.filter(e => e.type === type) : data;
     const filters = [['', 'All'], ...(meta.types || []).map(t => [t.key, t.label])]
       .map(([k, l]) => `<button type="button" class="crm-ws-filter${k === type ? ' active' : ''}" data-ws-tl-type="${k}">${escHtml(l)}</button>`).join('');
-    const list = rows.map(e => `
-      <div class="crm-ws-tl-item">
-        <span class="crm-ws-tl-icon" style="--ic:${escHtml(e.color)}"><i class="fa ${escHtml(e.icon)}"></i></span>
-        <div class="crm-ws-tl-content">
-          <div><strong>${escHtml(e.user?.name || 'System')}</strong> · ${escHtml(e.title)}</div>
-          ${e.body ? `<div class="crm-ws-tl-body">${escHtml(e.body)}</div>` : ''}
-          ${e.at ? `<div class="crm-ws-muted">${escHtml(_crmFmtDateTime(e.at))} · ${escHtml(_crmFmtAgo(e.at))}</div>` : ''}
-        </div>
+    // Grouped by day (Today / Yesterday / date), one rounded panel per day
+    let list = '', lastDay = null;
+    rows.forEach(e => {
+      const day = e.at ? _osmDay(e.at) : '';
+      if (day !== lastDay) {
+        if (lastDay !== null) list += '</div>';
+        list += `${day ? `<div class="crm-tlf-day">${escHtml(day)}</div>` : ''}<div class="crm-tlf-group">`;
+        lastDay = day;
+      }
+      list += `
+        <div class="crm-tlf-row">
+          <span class="crm-tlf-icon" style="--ic:${escHtml(e.color)}"><i class="fa ${escHtml(e.icon)}"></i></span>
+          <div class="crm-tlf-main">
+            <div class="crm-tlf-title"><strong>${escHtml(e.user?.name || 'System')}</strong> ${escHtml(e.title)}</div>
+            ${e.body ? `<div class="crm-tlf-body">${escHtml(e.body)}</div>` : ''}
+          </div>
+          ${e.at ? `<div class="crm-tlf-time" title="${escHtml(_crmFmtDateTime(e.at))}">${escHtml(new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}<small>${escHtml(_crmFmtAgo(e.at))}</small></div>` : ''}
+        </div>`;
+    });
+    if (lastDay !== null) list += '</div>';
+    return `<div class="crm-ws-filters">${filters}</div>
+      <div class="crm-tlf-layout"><div class="crm-tlf">${list || _crmWsPanelHtml('Nothing here yet.')}</div>${_crmWsTimelineSideHtml(data, meta, type)}</div>`;
+  }
+
+  // Inspector beside the timeline: totals, events by type (click to filter), people, first / latest activity.
+  // Always counts the whole timeline, not just the current filter.
+  function _crmWsTimelineSideHtml(data, meta, type) {
+    if (!data.length) return '';
+    const byType = {}, people = {};
+    data.forEach(e => {
+      (byType[e.type] ||= { n: 0, color: e.color, icon: e.icon }).n++;
+      const who = e.user?.name || 'System';
+      people[who] = (people[who] || 0) + 1;
+    });
+    const times = data.map(e => e.at).filter(Boolean).sort();
+    const days  = new Set(times.map(t => new Date(t).toDateString())).size;
+    const label = k => (meta.types || []).find(t => t.key === k)?.label || k;
+    const max   = Math.max(...Object.values(byType).map(t => t.n));
+    const initials = n => n.trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+
+    const types = Object.entries(byType).sort((a, b) => b[1].n - a[1].n).map(([k, t]) => `
+      <button type="button" class="crm-tlf-side-row crm-tlf-type${k === type ? ' active' : ''}" data-ws-tl-type="${k === type ? '' : escHtml(k)}" title="${k === type ? 'Show all' : `Show only ${escHtml(label(k))}`}">
+        <span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${escHtml(t.color)}"><i class="fa ${escHtml(t.icon)}"></i></span>
+        <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(label(k))}</span><span class="crm-tlf-bar"><span style="width:${Math.round(t.n / max * 100)}%;background:${escHtml(t.color)}"></span></span></span>
+        <span class="crm-tlf-side-n">${t.n}</span>
+      </button>`).join('');
+    const who = Object.entries(people).sort((a, b) => b[1] - a[1]).map(([name, n]) => `
+      <div class="crm-tlf-side-row">
+        <span class="crm-assign-av${name === 'System' ? ' crm-tlf-av--sys' : ''}">${name === 'System' ? '<i class="fa fa-gear"></i>' : escHtml(initials(name))}</span>
+        <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(name)}</span></span>
+        <span class="crm-tlf-side-n">${n}</span>
       </div>`).join('');
-    return `<div class="crm-ws-filters">${filters}</div><div class="crm-ws-tl">${list || _crmWsPanelHtml('Nothing here yet.')}</div>`;
+    const first = times[0], last = times[times.length - 1];
+
+    return `<aside class="crm-tlf-side">
+      <div class="crm-tlf-card crm-tlf-stats">
+        <div><b>${data.length}</b><span>Events</span></div>
+        <div><b>${Object.keys(people).length}</b><span>${Object.keys(people).length === 1 ? 'Person' : 'People'}</span></div>
+        <div><b>${days}</b><span>Active ${days === 1 ? 'day' : 'days'}</span></div>
+      </div>
+      <div class="crm-tlf-side-title">By type</div>
+      <div class="crm-tlf-card">${types}</div>
+      <div class="crm-tlf-side-title">People</div>
+      <div class="crm-tlf-card">${who}</div>
+      ${first ? `<div class="crm-tlf-side-title">Activity</div>
+      <div class="crm-tlf-card">
+        <div class="crm-tlf-side-row"><span class="crm-tlf-side-main crm-tlf-side-key">Latest</span><span class="crm-tlf-side-val">${escHtml(_crmFmtAgo(last))}</span></div>
+        <div class="crm-tlf-side-row"><span class="crm-tlf-side-main crm-tlf-side-key">First</span><span class="crm-tlf-side-val" title="${escHtml(_crmFmtDateTime(first))}">${escHtml(new Date(first).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }))}</span></div>
+        <div class="crm-tlf-side-row"><span class="crm-tlf-side-main crm-tlf-side-key">Active for</span><span class="crm-tlf-side-val">${escHtml(_crmFmtDuration(Math.max(60, (Date.now() - new Date(first).getTime()) / 1000)))}</span></div>
+      </div>` : ''}
+    </aside>`;
   }
 
   function _crmWsMessagesHtml() {
     const { data = [], meta = {} } = _crmWs.messages;
     const users = _crmWs.info?.mentionable_users || [];
     const names = Object.fromEntries(users.map(u => [u.id, u.name]));
-    const replyTo = _crmWs.replyTo ? data.find(m => m.id === _crmWs.replyTo) : null;
-    const composer = meta.can_post ? `
-      <div class="crm-ws-composer">
-        ${replyTo ? `<div class="crm-ws-muted"><i class="fa fa-reply"></i> Replying to <strong>${escHtml(replyTo.user?.name || 'a message')}</strong> <button type="button" class="crm-ws-link" data-ws-reply-cancel>Cancel</button></div>` : ''}
-        <textarea id="crm-ws-msg-body" class="po-field-input" rows="3" maxlength="5000" style="resize:vertical" placeholder="Write an internal note for the team — the customer never sees these…">${escHtml(_crmWs.draft || '')}</textarea>
-        ${(_crmWs.pending || []).length ? `<div class="crm-ws-pending">${_crmWs.pending.map(f =>
-          `<span class="crm-ws-pending-chip"><i class="fa ${f.is_image ? 'fa-image' : 'fa-paperclip'}"></i>${escHtml(f.name)}<button type="button" class="crm-ws-link crm-ws-link--danger" data-ws-pending-remove="${f.id}" title="Remove"><i class="fa fa-xmark"></i></button></span>`).join('')}</div>` : ''}
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
-          <span style="display:flex;gap:14px;align-items:flex-start">
-            <button type="button" class="crm-ws-link" data-ws-msg-attach style="font-size:12px"><i class="fa fa-paperclip"></i> Attach files / images</button>
-            ${users.length ? `<details class="crm-ws-mentions"><summary><i class="fa fa-at"></i> Mention people</summary><div>${users.map(u => `<label><input type="checkbox" value="${u.id}" data-ws-mention${(_crmWs.draftMentions || []).includes(u.id) ? ' checked' : ''}> ${escHtml(u.name)}</label>`).join('')}</div></details>` : ''}
-          </span>
-          <button type="button" class="po-btn-primary" data-ws-msg-post><i class="fa fa-paper-plane"></i> Post</button>
-        </div>
-      </div>`
-      : '<div class="crm-ws-muted"><i class="fa fa-lock"></i> You can read these messages but not post — that needs edit rights on the lead or membership of its department.</div>';
+    const byId = Object.fromEntries(data.map(m => [m.id, m]));
+    const replyTo = _crmWs.replyTo ? byId[_crmWs.replyTo] : null;
+    const initials = n => (n || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase();
+    const excerpt = (s, n = 80) => s ? (s.length > n ? s.slice(0, n) + '…' : s) : 'Attachment';
+    const chosen = _crmWs.draftMentions || [];
 
-    const item = m => `
-      <div class="crm-ws-msg${m.parent_id ? ' crm-ws-msg--reply' : ''}" data-ws-msg="${m.id}">
-        <div class="crm-ws-msg-head">
-          <span class="crm-ws-msg-who">${_crmAvatarHtml(m.user, 20)}<strong>${escHtml(m.user?.name || 'Deleted user')}</strong><span class="crm-ws-muted">${escHtml(_crmFmtAgo(m.created_at))}${m.edited_at ? ' · edited' : ''}</span></span>
-          <span class="crm-ws-msg-actions">
-            ${meta.can_post && !m.parent_id ? `<button type="button" class="crm-ws-link" data-ws-msg-reply="${m.id}"><i class="fa fa-reply"></i> Reply</button>` : ''}
-            ${m.can_edit ? `<button type="button" class="crm-ws-link" data-ws-msg-edit="${m.id}"><i class="fa fa-pen"></i> Edit</button>` : ''}
-            ${m.can_delete ? `<button type="button" class="crm-ws-link crm-ws-link--danger" data-ws-msg-delete="${m.id}" title="Delete"><i class="fa fa-trash"></i></button>` : ''}
-          </span>
+    // Composer docked under the conversation (Messages style): attach, @, growing field, round send
+    const composer = meta.can_post ? `
+      <div class="crm-chat-dock">
+        <div class="crm-chat-compose">
+          ${replyTo ? `<div class="crm-chat-replying">
+            <span class="crm-chat-replying-ic"><i class="fa fa-reply"></i></span>
+            <span class="crm-chat-replying-txt">Replying to <strong>${escHtml(replyTo.user?.name || 'a message')}</strong><em>${escHtml(excerpt(replyTo.body))}</em></span>
+            <button type="button" class="crm-msg-x" data-ws-reply-cancel title="Cancel reply"><i class="fa fa-xmark"></i></button>
+          </div>` : ''}
+          ${(_crmWs.pending || []).length ? `<div class="crm-msg-pending">${_crmWs.pending.map(f =>
+            `<span class="crm-msg-pending-chip"><i class="fa ${f.is_image ? 'fa-image' : 'fa-paperclip'}"></i><span>${escHtml(f.name)}</span><button type="button" class="crm-msg-x" data-ws-pending-remove="${f.id}" title="Remove"><i class="fa fa-xmark"></i></button></span>`).join('')}</div>` : ''}
+          <div class="crm-chat-tokens" id="crm-chat-tokens">${_crmChatTokensHtml(users, chosen)}</div>
+          <div class="crm-chat-bar">
+            <button type="button" class="crm-chat-icon" data-ws-msg-attach title="Attach files or images"><i class="fa fa-paperclip"></i></button>
+            ${users.length ? `<details class="crm-msg-mention">
+              <summary class="crm-chat-icon" title="Mention people (or type @)"><i class="fa fa-at"></i></summary>
+              <div class="crm-msg-menu">
+                <div class="crm-msg-menu-title">Notify people</div>
+                ${users.map(u => `<label class="crm-msg-menu-row" data-name="${escHtml((u.name || '').toLowerCase())}"><input type="checkbox" value="${u.id}" data-ws-mention${chosen.includes(u.id) ? ' checked' : ''}><span class="crm-msg-check"><i class="fa fa-check"></i></span><span class="crm-assign-av">${escHtml(initials(u.name))}</span><span>${escHtml(u.name)}</span></label>`).join('')}
+                <div class="crm-msg-menu-none">No one matches</div>
+              </div>
+            </details>` : ''}
+            <textarea id="crm-ws-msg-body" class="crm-chat-input" rows="1" maxlength="5000" placeholder="${replyTo ? `Reply to ${escHtml(replyTo.user?.name || 'message')}…` : 'Message the team…'}">${escHtml(_crmWs.draft || '')}</textarea>
+            <button type="button" class="crm-chat-send" data-ws-msg-post title="Send (Enter)"><i class="fa fa-arrow-up"></i></button>
+          </div>
         </div>
-        ${m.body ? `<div class="crm-ws-msg-body">${escHtml(m.body)}</div>` : ''}
-        ${(m.attachments || []).length ? `<div class="crm-ws-msg-files">${m.attachments.map(f => f.is_image
-          ? `<button type="button" class="crm-ws-msg-img" data-ws-preview="${f.id}" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Download ${escHtml(f.name)}"><i class="fa fa-image"></i></button>`
-          : `<button type="button" class="crm-ws-msg-file" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}"><i class="fa ${/pdf/.test(f.mime_type || '') ? 'fa-file-pdf' : 'fa-file'}"></i>${escHtml(f.name)}<span class="crm-ws-muted">${escHtml(f.size || '')}</span></button>`
-        ).join('')}</div>` : ''}
-        ${(m.mentions || []).length ? `<div class="crm-ws-msg-mentions">${m.mentions.map(id => `<span>@${escHtml(names[id] || 'user #' + id)}</span>`).join(' ')}</div>` : ''}
+        <div class="crm-chat-foot"><span><i class="fa fa-lock"></i> Internal — customers never see these</span><span><kbd>Enter</kbd> to send, <kbd>Shift</kbd>+<kbd>Enter</kbd> for a new line, <kbd>@</kbd> to mention</span></div>
+      </div>`
+      : '<div class="crm-chat-dock"><div class="crm-msg-banner"><i class="fa fa-lock"></i> You can read these messages but not post — that needs edit rights on the lead or membership of its department.</div></div>';
+
+    const fileIcon = f => /pdf/.test(f.mime_type || '') ? ['fa-file-pdf', '#ff3b30'] : /sheet|excel|csv/.test(f.mime_type || '') ? ['fa-file-excel', '#34c759']
+      : /word/.test(f.mime_type || '') ? ['fa-file-word', '#0a84ff'] : /zip|rar|7z/.test(f.mime_type || '') ? ['fa-file-zipper', '#ff9f0a'] : ['fa-file-lines', '#8e8e93'];
+    const files = m => (m.attachments || []).length ? `<div class="crm-chat-files">${m.attachments.map(f => {
+      if (f.is_image) return `<button type="button" class="crm-msg-img" data-ws-preview="${f.id}" data-ws-quicklook="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Preview ${escHtml(f.name)}"><i class="fa fa-image"></i></button>`;
+      const [ic, color] = fileIcon(f);
+      return `<button type="button" class="crm-msg-file" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Download ${escHtml(f.name)}">
+        <span class="crm-msg-file-ic" style="--ic:${color}"><i class="fa ${ic}"></i></span>
+        <span class="crm-msg-file-info"><span class="crm-msg-file-name">${escHtml(f.name)}</span><span class="crm-msg-file-size">${escHtml(f.size || '')} · Click to download</span></span>
+        <i class="fa fa-arrow-down crm-msg-file-dl"></i>
+      </button>`;
+    }).join('')}</div>` : '';
+
+    // Flat conversation, oldest first; a reply quotes the message it answers.
+    // Back-to-back messages from one person (same day, < 5 min apart) share one avatar and name.
+    let list = '', lastDay = null, prev = null;
+    [...data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).forEach(m => {
+      const day = m.created_at ? _osmDay(m.created_at) : '';
+      if (day !== lastDay) { list += day ? `<div class="crm-chat-day"><span>${escHtml(day)}</span></div>` : ''; lastDay = day; prev = null; }
+      const mine = meta.me != null && m.user?.id === meta.me;
+      const parent = m.parent_id ? byId[m.parent_id] : null;
+      const cont = prev && !parent && prev.user?.id === m.user?.id && new Date(m.created_at) - new Date(prev.created_at) < 5 * 60000;
+      prev = m;
+      const time = new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      list += `
+        <div class="crm-chat-row${mine ? ' crm-chat-row--mine' : ''}${cont ? ' crm-chat-row--cont' : ''}" data-ws-msg="${m.id}">
+          ${mine ? '' : cont ? '<span class="crm-chat-gap"></span>' : _crmAvatarHtml(m.user, 30)}
+          <div class="crm-chat-col">
+            ${!mine && !cont ? `<div class="crm-chat-name">${escHtml(m.user?.name || 'Deleted user')}</div>` : ''}
+            ${parent ? `<button type="button" class="crm-chat-quote" data-ws-jump="${parent.id}" title="Show the original message"><i class="fa fa-reply"></i><span><b>${escHtml(parent.user?.id === meta.me ? 'You' : parent.user?.name || 'Deleted user')}</b> ${escHtml(excerpt(parent.body, 60))}</span></button>` : ''}
+            ${m.body ? `<div class="crm-chat-bubble"><div class="crm-ws-msg-body">${escHtml(m.body)}</div></div>` : ''}
+            ${files(m)}
+            ${(m.mentions || []).length ? `<div class="crm-chat-mentions">${m.mentions.map(id => `<span class="crm-msg-token${id === meta.me ? ' crm-msg-token--me' : ''}">@${escHtml(id === meta.me ? 'You' : names[id] || 'user #' + id)}</span>`).join('')}</div>` : ''}
+            <div class="crm-chat-meta">
+              <span title="${escHtml(_crmFmtDateTime(m.created_at))}">${escHtml(time)}${m.edited_at ? ' · Edited' : ''}</span>
+              ${meta.can_post ? `<button type="button" class="crm-chat-act" data-ws-msg-reply="${m.parent_id || m.id}"><i class="fa fa-reply"></i> Reply</button>` : ''}
+              ${m.can_edit && m.body ? `<button type="button" class="crm-chat-act" data-ws-msg-edit="${m.id}"><i class="fa fa-pen"></i> Edit</button>` : ''}
+              ${m.can_delete ? `<button type="button" class="crm-chat-act crm-chat-act--danger" data-ws-msg-delete="${m.id}"><i class="fa fa-trash"></i> Delete</button>` : ''}
+            </div>
+          </div>
+        </div>`;
+    });
+    const empty = `<div class="crm-msg-empty"><span><i class="fa fa-comments"></i></span><strong>No messages yet</strong><small>Start the conversation — notes here are shared with everyone working on this lead.</small></div>`;
+    return `<div class="crm-chat"><div class="crm-chat-feed">${list || empty}</div>${composer}</div>`;
+  }
+
+  /** The people ticked in the @ menu, shown as removable tokens above the message field. */
+  function _crmChatTokensHtml(users, ids) {
+    const picked = users.filter(u => ids.includes(u.id));
+    return picked.length ? `<span class="crm-chat-tokens-label">Notify</span>${picked.map(u =>
+      `<span class="crm-msg-token">@${escHtml(u.name)}<button type="button" class="crm-chat-token-x" data-ws-mention-remove="${u.id}" title="Don't notify ${escHtml(u.name)}"><i class="fa fa-xmark"></i></button></span>`).join('')}` : '';
+  }
+
+  function _crmChatRefreshTokens() {
+    const box = $('#crm-chat-tokens');
+    if (!box) return;
+    const ids = [...$$('#crm-ws-panel [data-ws-mention]:checked')].map(c => +c.value);
+    box.innerHTML = _crmChatTokensHtml(_crmWs.info?.mentionable_users || [], ids);
+  }
+
+  /** Grow the message field with its text, up to a few lines. */
+  function _crmChatAutosize() {
+    const box = $('#crm-ws-msg-body');
+    if (!box) return;
+    box.style.height = 'auto';
+    box.style.height = Math.min(box.scrollHeight, 180) + 'px';
+  }
+
+  // "@name" being typed just before the caret, or null
+  function _crmChatAtQuery(box) {
+    const m = box.value.slice(0, box.selectionStart).match(/(?:^|\s)@([^\s@]*)$/);
+    return m ? m[1] : null;
+  }
+
+  /** Show only the @ menu rows matching what is typed after "@". */
+  function _crmChatFilterMenu(q) {
+    const menu = $('#crm-ws-panel details.crm-msg-mention');
+    if (!menu) return;
+    let shown = 0;
+    menu.querySelectorAll('.crm-msg-menu-row').forEach(r => {
+      const hit = !q || r.dataset.name.includes(q.toLowerCase());
+      r.hidden = !hit;
+      r.classList.toggle('crm-msg-menu-row--first', hit && !shown++);
+    });
+    menu.classList.toggle('crm-msg-mention--none', !shown);
+  }
+
+  async function _crmWsDownload(lead, id, name) {
+    const res = await window.electronAPI.downloadFile(API.crmLeadAttachmentDownloadPath(lead.id, id), name);
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
+    toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  /** Quick Look-style preview of an image in a message, with Download. */
+  async function _crmWsQuickLook(lead, id, name) {
+    const key = `${lead.id}:${id}`;
+    const ov = document.createElement('div');
+    ov.className = 'crm-ql';
+    ov.innerHTML = `<div class="crm-ql-win">
+      <div class="crm-ql-bar"><button type="button" class="crm-ql-btn" data-ql-close title="Close (Esc)"><i class="fa fa-xmark"></i></button><span class="crm-ql-name">${escHtml(name)}</span>
+        <button type="button" class="crm-ql-btn crm-ql-btn--text" data-ql-download><i class="fa fa-arrow-down"></i> Download</button></div>
+      <div class="crm-ql-stage">${_crmWsPreviews[key] ? `<img src="${_crmWsPreviews[key]}" alt="">` : '<i class="fa fa-spinner fa-spin"></i>'}</div>
+    </div>`;
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey, true); };
+    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); close(); } };
+    document.addEventListener('keydown', onKey, true);
+    ov.addEventListener('click', e => {
+      if (e.target === ov || e.target.closest('[data-ql-close]')) close();
+      else if (e.target.closest('[data-ql-download]')) _crmWsDownload(lead, id, name);
+    });
+    document.body.appendChild(ov);
+    if (!_crmWsPreviews[key]) {
+      const res = await window.electronAPI.fetchDataUrl(API.crmLeadAttachmentDownloadPath(lead.id, id, true)).catch(() => null);
+      if (res?.status === 200) _crmWsPreviews[key] = res.dataUrl;
+      const stage = ov.querySelector('.crm-ql-stage');
+      if (stage) stage.innerHTML = _crmWsPreviews[key] ? `<img src="${_crmWsPreviews[key]}" alt="">` : 'Could not load the preview.';
+    }
+  }
+
+  // ── Files tab: a Finder window — kind filter, search, sort, icon / list view, drop files to upload ──
+  let _crmFmView = (() => { try { return localStorage.getItem('crm.files.view') === 'list' ? 'list' : 'grid'; } catch { return 'grid'; } })();
+
+  const _CRM_FM_KINDS = { image: 'Images', pdf: 'PDFs', doc: 'Documents', sheet: 'Spreadsheets', archive: 'Archives', other: 'Other' };
+  const _CRM_FM_SORTS = [['date', 'Date Added'], ['name', 'Name'], ['size', 'Size'], ['kind', 'Kind'], ['by', 'Added By']];
+
+  /** Finder-style kind of a lead file: filter group, "Kind" label, extension badge and its tint. */
+  function _crmFmKind(f) {
+    const ext  = (/\.([a-z0-9]{1,5})$/i.exec(f.name || '')?.[1] || '').toUpperCase();
+    const mime = f.mime_type || '';
+    const is   = list => list.includes(ext);
+    if (f.is_image) return { group: 'image', label: `${ext || 'Image'} image`, ext: ext || 'IMG', color: '#af52de' };
+    if (/pdf/.test(mime) || ext === 'PDF') return { group: 'pdf', label: 'PDF document', ext: 'PDF', color: '#ff3b30' };
+    if (/sheet|excel|csv/.test(mime) || is(['XLS', 'XLSX', 'CSV'])) return { group: 'sheet', label: ext === 'CSV' ? 'CSV text' : 'Spreadsheet', ext, color: '#34c759' };
+    if (/presentation|powerpoint/.test(mime) || is(['PPT', 'PPTX'])) return { group: 'doc', label: 'Presentation', ext, color: '#ff9f0a' };
+    if (/word/.test(mime) || is(['DOC', 'DOCX'])) return { group: 'doc', label: 'Word document', ext, color: '#0a84ff' };
+    if (/^text\//.test(mime) || ext === 'TXT') return { group: 'doc', label: 'Plain text', ext, color: '#8e8e93' };
+    if (/zip|rar|7z|compressed/.test(mime) || is(['ZIP', 'RAR', '7Z'])) return { group: 'archive', label: `${ext || 'ZIP'} archive`, ext: ext || 'ZIP', color: '#a2845e' };
+    return { group: 'other', label: ext ? `${ext} file` : 'Document', ext: ext || 'FILE', color: '#8e8e93' };
+  }
+
+  const _crmFmBytes = b => b >= 1048576 ? `${(b / 1048576).toFixed(1)} MB` : b >= 1024 ? `${(b / 1024).toFixed(1)} KB` : `${b || 0} bytes`;
+  const _crmFmItems = n => `${n} ${n === 1 ? 'item' : 'items'}`;
+
+  function _crmFmDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() && { year: 'numeric' }), hour: 'numeric', minute: '2-digit' });
+  }
+
+  /** A macOS document icon: folded corner, faint text lines and a tinted extension badge. */
+  const _crmFmDoc = (k, sm = false) => `<span class="crm-fm-doc${sm ? ' crm-fm-doc--sm' : ''}" style="--ic:${k.color}"><span class="crm-fm-doc-ext">${escHtml(k.ext)}</span></span>`;
+
+  /** The files left after the kind filter and search, in the chosen order. */
+  function _crmFmRows() {
+    const q    = (_crmWs.fmQuery || '').trim().toLowerCase();
+    const kind = _crmWs.fmKind || '';
+    const dir  = _crmWs.fmDir || -1;
+    const val  = {
+      name: f => (f.name || '').toLowerCase(),
+      date: f => f.created_at || '',
+      size: f => +f.size_bytes || 0,
+      kind: f => _crmFmKind(f).label.toLowerCase(),
+      by:   f => (f.uploaded_by?.name || '').toLowerCase(),
+    }[_crmWs.fmSort || 'date'];
+    return (_crmWs.files.data || [])
+      .filter(f => (!kind || _crmFmKind(f).group === kind) && (!q || (f.name || '').toLowerCase().includes(q)))
+      .sort((a, b) => { const x = val(a), y = val(b); return (x < y ? -1 : x > y ? 1 : 0) * dir; });
+  }
+
+  function _crmFmBodyHtml() {
+    const all  = _crmWs.files.data || [];
+    const rows = _crmFmRows();
+    const canUpload = !!_crmWs.files.meta?.can_upload;
+    if (!all.length) return `<div class="crm-fm-empty"><span class="crm-fm-empty-ic"><i class="fa fa-folder-open"></i></span><strong>No files yet</strong>
+      <small>${canUpload ? 'Drag files here, or click Upload to add quotes, photos and documents to this lead.' : 'Files added to this lead will show up here.'}</small>
+      ${canUpload ? '<button type="button" class="crm-fm-upload" data-ws-upload><i class="fa fa-plus"></i> Upload Files…</button>' : ''}</div>`;
+    if (!rows.length) return `<div class="crm-fm-empty crm-fm-empty--sm"><strong>No results</strong><small>No files match ${_crmWs.fmQuery?.trim() ? `“${escHtml(_crmWs.fmQuery.trim())}”` : 'this filter'}.</small></div>`;
+
+    const preview = f => f.is_image && _crmWsPreviews[`${_crmWs.leadId}:${f.id}`];
+    // Images open in Quick Look; everything else downloads
+    const open = f => f.is_image
+      ? `data-ws-quicklook="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Quick Look — ${escHtml(f.name)}"`
+      : `data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Download — ${escHtml(f.name)}"`;
+    const acts = f => `${f.is_image ? `<button type="button" class="crm-fm-act" data-ws-quicklook="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Quick Look"><i class="fa fa-eye"></i></button>` : ''}
+      <button type="button" class="crm-fm-act" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}" title="Download"><i class="fa fa-arrow-down"></i></button>
+      ${f.can_delete ? `<button type="button" class="crm-fm-act crm-fm-act--danger" data-ws-file-delete="${f.id}" title="Delete"><i class="fa fa-trash-can"></i></button>` : ''}`;
+
+    if (_crmFmView === 'list') {
+      const sort = _crmWs.fmSort || 'date';
+      const th = (key, label, cls = '') => `<button type="button" class="crm-fm-th${cls}${sort === key ? ' active' : ''}" data-fm-sort="${key}">${label}${sort === key ? `<i class="fa fa-chevron-${(_crmWs.fmDir || -1) > 0 ? 'up' : 'down'}"></i>` : ''}</button>`;
+      return `<div class="crm-fm-list">
+        <div class="crm-fm-tr crm-fm-tr--head">${th('name', 'Name')}${th('date', 'Date Added')}${th('size', 'Size', ' crm-fm-num')}${th('kind', 'Kind')}${th('by', 'Added By')}<span></span></div>
+        ${rows.map(f => {
+          const k = _crmFmKind(f), img = preview(f);
+          return `<div class="crm-fm-tr">
+            <span class="crm-fm-td crm-fm-td--name"><button type="button" class="crm-fm-namebtn" ${open(f)}>
+              <span class="crm-fm-mini"${f.is_image ? ` data-ws-preview="${f.id}"` : ''}>${img ? `<img src="${img}" alt="">` : _crmFmDoc(k, true)}</span><span>${escHtml(f.name)}</span></button></span>
+            <span class="crm-fm-td">${escHtml(_crmFmDate(f.created_at))}</span>
+            <span class="crm-fm-td crm-fm-num">${escHtml(f.size || '')}</span>
+            <span class="crm-fm-td">${escHtml(k.label)}</span>
+            <span class="crm-fm-td">${escHtml(f.uploaded_by?.name || '—')}</span>
+            <span class="crm-fm-td crm-fm-td--acts">${acts(f)}</span>
+          </div>`;
+        }).join('')}
       </div>`;
-    const threads = data.filter(m => !m.parent_id)
-      .map(root => item(root) + data.filter(m => m.parent_id === root.id).map(item).join('')).join('');
-    return composer + `<div class="crm-ws-msgs">${threads || _crmWsPanelHtml('No messages yet.')}</div>`;
+    }
+
+    return `<div class="crm-fm-grid">${rows.map(f => {
+      const k = _crmFmKind(f), img = preview(f);
+      return `<div class="crm-fm-item">
+        <div class="crm-fm-thumb">
+          <button type="button" class="crm-fm-open${f.is_image ? ' crm-fm-open--img' : ''}" ${open(f)}${f.is_image ? ` data-ws-preview="${f.id}"` : ''}>${img ? `<img src="${img}" alt="">` : _crmFmDoc(k)}</button>
+          <div class="crm-fm-acts">${acts(f)}</div>
+        </div>
+        <div class="crm-fm-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
+        <div class="crm-fm-sub">${escHtml(k.label)} · ${escHtml(f.size || '')}</div>
+        <div class="crm-fm-sub" title="Added by ${escHtml(f.uploaded_by?.name || 'Unknown')}">${escHtml(f.uploaded_by?.name || 'Unknown')} · ${escHtml(_crmFmDate(f.created_at))}</div>
+      </div>`;
+    }).join('')}</div>`;
+  }
+
+  function _crmFmCountText() {
+    const all = _crmWs.files.data || [];
+    const shown = _crmFmRows().length;
+    const total = all.reduce((s, f) => s + (+f.size_bytes || 0), 0);
+    return `${shown === all.length ? _crmFmItems(all.length) : `${shown} of ${_crmFmItems(all.length)}`}${total ? ` · ${_crmFmBytes(total)}` : ''}`;
+  }
+
+  /** Re-draw only the file area (keeps focus in the search field while typing). */
+  function _crmFmRefreshBody() {
+    const body = $('#crm-fm-body');
+    if (!body) return;
+    body.innerHTML = _crmFmBodyHtml();
+    const count = $('#crm-fm-count');
+    if (count) count.textContent = _crmFmCountText();
+    if (_crmViewLead) _crmWsLoadPreviews(_crmViewLead);
   }
 
   function _crmWsFilesHtml() {
     const { data = [], meta = {} } = _crmWs.files;
     const rules = meta.rules || {};
-    const upload = meta.can_upload
-      ? `<div class="crm-ws-upload"><button type="button" class="po-btn-primary" data-ws-upload><i class="fa fa-upload"></i> Upload files…</button><span class="crm-ws-muted">Up to ${Math.round((rules.max_kb || 0) / 1024)} MB each · ${escHtml((rules.mimes || []).join(', '))}</span></div>`
-      : '';
-    const icon = f => f.is_image ? 'fa-image' : /pdf/.test(f.mime_type || '') ? 'fa-file-pdf' : /sheet|excel|csv/.test(f.mime_type || '') ? 'fa-file-excel' : /word/.test(f.mime_type || '') ? 'fa-file-word' : 'fa-file';
-    const grid = data.map(f => `
-      <div class="crm-ws-file">
-        <div class="crm-ws-file-thumb"${f.is_image ? ` data-ws-preview="${f.id}"` : ''}><i class="fa ${icon(f)}"></i></div>
-        <div class="crm-ws-file-info">
-          <div class="crm-ws-file-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
-          <div class="crm-ws-muted">${escHtml(f.size || '')} · ${escHtml(f.uploaded_by?.name || 'Unknown')} · ${escHtml(_crmFmtDateTime(f.created_at))}</div>
-          <div class="crm-ws-file-actions">
-            <button type="button" class="crm-ws-link" data-ws-file-download="${f.id}" data-ws-file-name="${escHtml(f.name)}"><i class="fa fa-download"></i> Download</button>
-            ${f.can_delete ? `<button type="button" class="crm-ws-link crm-ws-link--danger" data-ws-file-delete="${f.id}"><i class="fa fa-trash"></i> Delete</button>` : ''}
-          </div>
-        </div>
-      </div>`).join('');
-    return upload + (grid ? `<div class="crm-ws-files">${grid}</div>` : _crmWsPanelHtml('No files on this lead yet.'));
+    const counts = data.reduce((c, f) => { const g = _crmFmKind(f).group; c[g] = (c[g] || 0) + 1; return c; }, {});
+    if (_crmWs.fmKind && !counts[_crmWs.fmKind]) _crmWs.fmKind = ''; // its last file was deleted
+    const kind  = _crmWs.fmKind || '';
+    const segs  = [['', 'All', data.length], ...Object.entries(_CRM_FM_KINDS).filter(([g]) => counts[g]).map(([g, l]) => [g, l, counts[g]])];
+    const maxMb = Math.round((rules.max_kb || 0) / 1024);
+    const types = (rules.mimes || []).join(', ');
+    const sort  = _crmWs.fmSort || 'date';
+    return `<div class="crm-fm${meta.can_upload ? ' crm-fm--droppable' : ''}" id="crm-fm">
+      <div class="crm-fm-bar">
+        ${data.length ? `<div class="crm-fm-seg">${segs.map(([g, l, n]) => `<button type="button" class="${g === kind ? 'active' : ''}" data-fm-kind="${g}">${l}<small>${n}</small></button>`).join('')}</div>` : ''}
+        <span class="crm-fm-spacer"></span>
+        ${data.length ? `<label class="crm-fm-search"><i class="fa fa-magnifying-glass"></i><input id="crm-fm-q" type="search" placeholder="Search files" value="${escHtml(_crmWs.fmQuery || '')}"></label>
+        <label class="crm-fm-pop" title="Sort by"><i class="fa fa-arrow-down-wide-short"></i><select id="crm-fm-sort">${_CRM_FM_SORTS.map(([k, l]) => `<option value="${k}"${k === sort ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+        <div class="crm-fm-seg crm-fm-seg--icons">
+          <button type="button" class="${_crmFmView === 'grid' ? 'active' : ''}" data-fm-view="grid" title="View as icons"><i class="fa fa-grip"></i></button>
+          <button type="button" class="${_crmFmView === 'list' ? 'active' : ''}" data-fm-view="list" title="View as list"><i class="fa fa-list"></i></button>
+        </div>` : ''}
+        ${meta.can_upload ? '<button type="button" class="crm-fm-upload" data-ws-upload><i class="fa fa-plus"></i> Upload</button>' : ''}
+      </div>
+      <div class="crm-fm-body" id="crm-fm-body">${_crmFmBodyHtml()}</div>
+      <div class="crm-fm-foot">
+        <span id="crm-fm-count">${_crmFmCountText()}</span>
+        ${meta.can_upload ? `<span title="Allowed: ${escHtml(types)}"><i class="fa fa-circle-info"></i> Drop files here to upload · up to ${maxMb} MB each</span>` : ''}
+      </div>
+      ${meta.can_upload ? `<div class="crm-fm-drop"><span><i class="fa fa-cloud-arrow-up"></i><strong>Drop to add to this lead</strong><small>Up to ${maxMb} MB each · ${escHtml(types)}</small></span></div>` : ''}
+    </div>`;
   }
 
   // Image thumbnails come through the authorised download route (?inline=1), never a public URL.
@@ -60307,34 +60753,92 @@ async function submitDsCreate() {
     }
   }
 
+  // ── Tasks tab: like macOS Reminders — progress, quick entry, open tasks grouped by when they are due ──
+  /** "Today, 5:23 PM" / "Tomorrow, …" / "Mon, Nov 30, …" and the day offset from today. */
+  function _crmTkDue(iso) {
+    const d = new Date(iso), now = new Date();
+    const day  = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const date = { '-1': 'Yesterday', 0: 'Today', 1: 'Tomorrow' }[day]
+      ?? d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' }) });
+    return { day, label: `${date}, ${time}` };
+  }
+
+  const _crmTkInitials = name => name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+  function _crmTkRowHtml(t, canWork, canDelete) {
+    const done = t.status === 'completed';
+    const due  = t.due_at ? _crmTkDue(t.due_at) : null;
+    const dueState = done ? '' : t.is_overdue ? ' crm-tk-chip--overdue' : due?.day === 0 ? ' crm-tk-chip--today' : '';
+    return `<div class="crm-tk${done ? ' crm-tk--done' : ''}">
+      <label class="crm-tk-check" title="${done ? 'Mark as not done' : 'Mark as done'}">
+        <input type="checkbox" data-ws-task-toggle="${t.id}"${done ? ' checked' : ''}${canWork ? '' : ' disabled'}><span><i class="fa fa-check"></i></span>
+      </label>
+      <div class="crm-tk-main">
+        <div class="crm-tk-title">${escHtml(t.title)}</div>
+        ${t.description ? `<div class="crm-tk-notes">${escHtml(t.description)}</div>` : ''}
+        <div class="crm-tk-meta">${due ? `<span class="crm-tk-chip${dueState}"><i class="fa fa-calendar"></i> ${escHtml(due.label)}</span>` : ''}${done && t.completed_at ? `<span class="crm-tk-chip"><i class="fa fa-check"></i> Done ${escHtml(_crmTkDue(t.completed_at).label)}</span>` : ''}${t.assigned_to_name ? `<span class="crm-tk-who"><span class="crm-tk-av">${escHtml(_crmTkInitials(t.assigned_to_name))}</span>${escHtml(t.assigned_to_name)}</span>` : ''}</div>
+      </div>
+      ${canDelete ? `<button type="button" class="crm-tk-del" data-ws-task-delete="${t.id}" title="Delete task"><i class="fa fa-trash-can"></i></button>` : ''}
+    </div>`;
+  }
+
   function _crmWsTasksHtml() {
-    const { data = [] } = _crmWs.tasks;
+    const { data = [], meta = {} } = _crmWs.tasks;
     const info = _crmWs.info || {};
-    const form = info.can_add_tasks ? `
-      <div class="crm-ws-task-form">
-        <input id="crm-ws-task-title" class="po-field-input" maxlength="255" placeholder="New task, e.g. Call back about the quote">
-        <input id="crm-ws-task-due" class="po-field-input" type="datetime-local">
-        <select id="crm-ws-task-assignee" class="po-field-input" style="appearance:auto">
-          <option value="">— Unassigned —</option>${(info.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('')}
-        </select>
-        <button type="button" class="po-btn-primary" data-ws-task-add><i class="fa fa-plus"></i> Add</button>
-      </div>` : '';
-    const rows = data.map(t => `
-      <label class="crm-ws-task${t.status === 'completed' ? ' crm-ws-task--done' : ''}">
-        <input type="checkbox" data-ws-task-toggle="${t.id}"${t.status === 'completed' ? ' checked' : ''}${info.can_add_tasks ? '' : ' disabled'}>
-        <span class="crm-ws-task-title">${escHtml(t.title)}</span>
-        <span class="crm-ws-muted">${t.due_at ? `<span class="${t.is_overdue ? 'crm-ws-overdue' : ''}"><i class="fa fa-calendar"></i> ${escHtml(_crmFmtDateTime(t.due_at))}</span>` : ''}${t.assigned_to_name ? ` · <i class="fa fa-user"></i> ${escHtml(t.assigned_to_name)}` : ''}</span>
-      </label>`).join('');
-    return form + `<div class="crm-ws-tasks">${rows || _crmWsPanelHtml('No tasks on this lead.')}</div>`;
+    const canWork = !!info.can_add_tasks;
+    const open = data.filter(t => t.status !== 'completed');
+    const done = data.filter(t => t.status === 'completed');
+    const overdue = open.filter(t => t.is_overdue).length;
+    const show = _crmWs.tkShow || 'open';
+    const pct = data.length ? Math.round(done.length / data.length * 100) : 0;
+
+    const head = `<div class="crm-tk-head">
+      <div class="crm-tk-ring" style="--p:${pct}" title="${pct}% done"><span>${pct}%</span></div>
+      <div class="crm-tk-head-txt"><strong>${open.length ? `${open.length} open ${open.length === 1 ? 'task' : 'tasks'}` : data.length ? 'All done' : 'No tasks yet'}</strong>
+        <small>${overdue ? `<b>${overdue} overdue</b> · ` : ''}${done.length} of ${data.length} completed</small></div>
+      <span class="crm-fm-spacer"></span>
+      ${data.length ? `<div class="crm-fm-seg">${[['open', 'Open', open.length], ['done', 'Completed', done.length], ['all', 'All', data.length]]
+        .map(([k, l, n]) => `<button type="button" class="${k === show ? 'active' : ''}" data-tk-show="${k}">${l}<small>${n}</small></button>`).join('')}</div>` : ''}
+    </div>`;
+
+    const form = canWork ? `<div class="crm-tk-new">
+      <div class="crm-tk-new-row"><span class="crm-tk-plus"><i class="fa fa-plus"></i></span>
+        <input id="crm-ws-task-title" class="crm-tk-new-input" maxlength="255" placeholder="New task — e.g. Call back about the quote" autocomplete="off"></div>
+      <div class="crm-tk-new-bar">
+        <label class="crm-tk-pill" title="Due date"><i class="fa fa-calendar"></i><input id="crm-ws-task-due" type="datetime-local"></label>
+        <label class="crm-tk-pill" title="Assign to"><i class="fa fa-user"></i><select id="crm-ws-task-assignee">
+          <option value="">Unassigned</option>${(info.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('')}</select></label>
+        <label class="crm-tk-pill crm-tk-pill--notes" title="Notes"><i class="fa fa-align-left"></i><input id="crm-ws-task-notes" maxlength="2000" placeholder="Add notes" autocomplete="off"></label>
+        <span class="crm-fm-spacer"></span>
+        <span class="crm-tk-hint"><kbd>Enter</kbd> to add</span>
+        <button type="button" class="crm-fm-upload" data-ws-task-add><i class="fa fa-plus"></i> Add Task</button>
+      </div>
+    </div>` : '';
+
+    const rows = list => list.map(t => _crmTkRowHtml(t, canWork, !!meta.can_delete)).join('');
+    const group = (title, list, cls = '') => list.length
+      ? `<div class="crm-tk-group-title${cls}">${title}<small>${list.length}</small></div><div class="crm-tk-group">${rows(list)}</div>` : '';
+    let body = '';
+    if (!data.length) {
+      body = `<div class="crm-tk-empty"><span class="crm-tk-empty-ic"><i class="fa fa-list-check"></i></span><strong>No tasks yet</strong>
+        <small>${canWork ? 'Add the next step for this lead above — a call back, a site visit, sending the quote.' : 'Tasks added to this lead will show up here.'}</small></div>`;
+    } else {
+      if (show !== 'done') {
+        const dueDay = t => (t.due_at ? _crmTkDue(t.due_at).day : null);
+        body += group('Overdue', open.filter(t => t.is_overdue), ' crm-tk-group-title--overdue')
+          + group('Today', open.filter(t => !t.is_overdue && dueDay(t) === 0), ' crm-tk-group-title--today')
+          + group('Upcoming', open.filter(t => !t.is_overdue && dueDay(t) !== null && dueDay(t) !== 0))
+          + group('No due date', open.filter(t => !t.is_overdue && !t.due_at));
+        if (show === 'open' && !open.length) body = `<div class="crm-tk-empty crm-tk-empty--done"><span class="crm-tk-empty-ic"><i class="fa fa-check"></i></span><strong>All caught up</strong>
+          <small>Every task on this lead is done.</small></div>`;
+      }
+      if (show !== 'open') body += group('Completed', [...done].sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')), ' crm-tk-group-title--done');
+    }
+    return `<div class="crm-tk-wrap">${head}${form}<div class="crm-tk-list">${body}</div></div>`;
   }
 
   // ── Follow-ups tab: planned contacts (auto from sent quotations), overdue in red, log one ──
-  function _crmFuDueHtml(f) {
-    const cls = f.is_overdue ? 'crm-fu-due crm-fu-due--overdue' : f.is_due_today ? 'crm-fu-due crm-fu-due--today' : 'crm-fu-due';
-    const tag = f.is_overdue ? ' · overdue' : f.is_due_today ? ' · today' : '';
-    return `<span class="${cls}"><i class="fa fa-calendar"></i> ${escHtml(_crmFmtDateTime(f.due_at))}${tag}</span>`;
-  }
-
   function _crmFuOptions(list, selected, empty) {
     return (empty ? `<option value="">${escHtml(empty)}</option>` : '')
       + (list || []).map(o => `<option value="${escHtml(o.key ?? o.id)}"${String(o.key ?? o.id) === String(selected ?? '') ? ' selected' : ''}>${escHtml(o.label ?? o.name)}</option>`).join('');
@@ -60343,35 +60847,50 @@ async function submitDsCreate() {
   /** The "Log follow-up" form: outcome, channel, notes and the next follow-up's date. */
   function _crmFuLogFormHtml(f, meta, prefix) {
     return `<div class="crm-fu-log" data-fu-log-form="${f.id}">
-      <select class="po-field-input" id="${prefix}-outcome-${f.id}" style="appearance:auto">${_crmFuOptions(meta.outcomes, '', '— What came of it? * —')}</select>
-      <select class="po-field-input" id="${prefix}-channel-${f.id}" style="appearance:auto">${_crmFuOptions(meta.channels, f.channel || 'call', '— Channel —')}</select>
-      <textarea class="po-field-input" id="${prefix}-notes-${f.id}" rows="2" maxlength="2000" placeholder="Notes"></textarea>
-      <label class="crm-ws-muted" style="display:flex;flex-direction:column;gap:3px">Next follow-up (optional)
+      <label class="crm-fu-field">Outcome <b>*</b>
+        <select class="po-field-input" id="${prefix}-outcome-${f.id}">${_crmFuOptions(meta.outcomes, '', 'What came of it?')}</select></label>
+      <label class="crm-fu-field">Channel
+        <select class="po-field-input" id="${prefix}-channel-${f.id}">${_crmFuOptions(meta.channels, f.channel || 'call', '— Channel —')}</select></label>
+      <label class="crm-fu-field">Next follow-up <span>(optional)</span>
         <input type="datetime-local" class="po-field-input" id="${prefix}-next-${f.id}"></label>
-      <div style="display:flex;gap:6px;justify-content:flex-end">
+      <label class="crm-fu-field crm-fu-field--wide">Notes
+        <textarea class="po-field-input" id="${prefix}-notes-${f.id}" rows="2" maxlength="2000" placeholder="What was discussed?"></textarea></label>
+      <div class="crm-fu-log-btns">
         <button type="button" class="po-btn-ghost" data-fu-log-cancel="${f.id}">Cancel</button>
-        <button type="button" class="po-btn-primary" data-fu-log-save="${f.id}"><i class="fa fa-check"></i> Log</button>
+        <button type="button" class="po-btn-primary" data-fu-log-save="${f.id}"><i class="fa fa-check"></i> Save log</button>
       </div>
     </div>`;
   }
 
+  const _CRM_FU_CHANNEL_ICONS = { call: 'fa-phone', whatsapp: 'fa-brands fa-whatsapp', email: 'fa-envelope', sms: 'fa-comment-sms', visit: 'fa-location-dot', other: 'fa-comments' };
+
   function _crmFuRowHtml(f, meta, { logging, prefix, showLead = false }) {
+    const chip = (html, cls = '') => `<span class="crm-fu-chip${cls ? ` ${cls}` : ''}">${html}</span>`;
+    const state = f.status === 'done' ? 'done' : f.status === 'cancelled' ? 'cancelled' : f.is_overdue ? 'overdue' : f.is_due_today ? 'today' : 'pending';
+    const when = f.status === 'pending'
+      ? chip(`<i class="fa fa-calendar"></i> ${escHtml(_crmFmtDateTime(f.due_at))}${f.is_overdue ? ' · Overdue' : f.is_due_today ? ' · Today' : ''}`, `crm-fu-chip--${state}`)
+      : chip(`<i class="fa fa-calendar-check"></i> ${escHtml(_crmFmtDateTime(f.done_at || f.cancelled_at || f.due_at))}`);
     const status = f.status === 'done'
-      ? `<span class="crm-fu-status crm-fu-status--done"><i class="fa fa-check"></i> ${escHtml(f.outcome_label || 'Done')}</span>`
-      : f.status === 'cancelled' ? '<span class="crm-fu-status">Cancelled</span>' : '';
+      ? chip(`<i class="fa fa-check"></i> ${escHtml(f.outcome_label || 'Done')}`, 'crm-fu-chip--done')
+      : f.status === 'cancelled' ? chip('<i class="fa fa-ban"></i> Cancelled') : '';
+    const chips = [
+      when, status,
+      f.channel_label ? chip(`<i class="fa ${_CRM_FU_CHANNEL_ICONS[f.channel] || 'fa-comments'}"></i> ${escHtml(f.channel_label)}`) : '',
+      f.user ? chip(`<i class="fa fa-user"></i> ${escHtml(f.user.name)}`) : '',
+      f.quotation ? chip(`<i class="fa fa-file-invoice"></i> ${escHtml(f.quotation.quote_number)}${f.quotation.version > 1 ? ` v${f.quotation.version}` : ''}`) : '',
+    ].join('');
     const lead = showLead && f.lead
-      ? `<button type="button" class="crm-fu-lead" data-fu-open-lead="${f.lead.id}" data-project="${f.lead.project_id}" title="Open the lead">${escHtml(f.lead.name)}${f.lead.company ? ` · ${escHtml(f.lead.company)}` : ''}</button>
-         <span class="crm-ws-muted">${escHtml(f.lead.project_name || '')}${f.lead.phone ? ` · <i class="fa fa-phone"></i> ${escHtml(f.lead.phone)}` : ''}</span>` : '';
+      ? `<button type="button" class="crm-fu-lead" data-fu-open-lead="${f.lead.id}" data-project="${f.lead.project_id}" title="Open the lead">${escHtml(f.lead.name)}${f.lead.company ? ` <span>· ${escHtml(f.lead.company)}</span>` : ''}</button>
+         ${f.lead.project_name ? `<span class="crm-fu-project">${escHtml(f.lead.project_name)}</span>` : ''}
+         ${f.lead.phone ? `<span class="crm-fu-phone"><i class="fa fa-phone"></i> ${escHtml(f.lead.phone)}</span>` : ''}` : '';
     const actions = f.can_log
       ? `<button type="button" class="po-btn-primary" data-fu-log="${f.id}"><i class="fa fa-pen-to-square"></i> Log</button>
          <button type="button" class="po-btn-ghost" data-fu-cancel="${f.id}" title="Cancel this follow-up"><i class="fa fa-xmark"></i></button>` : '';
-    return `<div class="crm-fu-row${f.is_overdue ? ' crm-fu-row--overdue' : ''}${f.status !== 'pending' ? ' crm-fu-row--closed' : ''}">
+    return `<div class="crm-fu-row crm-fu-row--${state}${f.is_overdue ? ' crm-fu-row--overdue' : ''}${f.status !== 'pending' ? ' crm-fu-row--closed' : ''}${logging ? ' crm-fu-row--logging' : ''}">
+      <span class="crm-fu-ico"><i class="fa ${_CRM_FU_CHANNEL_ICONS[f.channel] || 'fa-phone'}"></i></span>
       <div class="crm-fu-main">
         ${lead ? `<div class="crm-fu-lead-line">${lead}</div>` : ''}
-        <div>${f.status === 'pending' ? _crmFuDueHtml(f) : `<span class="crm-ws-muted"><i class="fa fa-calendar"></i> ${escHtml(_crmFmtDateTime(f.done_at || f.cancelled_at || f.due_at))}</span>`}
-          ${status}${f.channel_label ? ` <span class="crm-ws-muted">· ${escHtml(f.channel_label)}</span>` : ''}
-          ${f.user ? ` <span class="crm-ws-muted">· <i class="fa fa-user"></i> ${escHtml(f.user.name)}</span>` : ''}
-          ${f.quotation ? ` <span class="crm-ws-muted">· ${escHtml(f.quotation.quote_number)}${f.quotation.version > 1 ? ` v${f.quotation.version}` : ''}</span>` : ''}</div>
+        <div class="crm-fu-chips">${chips}</div>
         ${f.notes ? `<div class="crm-fu-notes">${escHtml(f.notes)}</div>` : ''}
       </div>
       <div class="crm-fu-actions">${logging ? '' : actions}</div>
@@ -60379,19 +60898,185 @@ async function submitDsCreate() {
     </div>`;
   }
 
-  function _crmWsFollowUpsHtml() {
-    const { data = [], meta = {} } = _crmWs.followups;
-    const form = meta.can_add ? `
-      <div class="crm-fu-form">
-        <input id="crm-ws-fu-due" class="po-field-input" type="datetime-local" title="When to follow up">
-        <select id="crm-ws-fu-channel" class="po-field-input" style="appearance:auto">${_crmFuOptions(meta.channels, 'call', '— Channel —')}</select>
-        <select id="crm-ws-fu-user" class="po-field-input" style="appearance:auto">${_crmFuOptions(meta.assignees, meta.default_user_id, '')}</select>
-        <input id="crm-ws-fu-notes" class="po-field-input" maxlength="2000" placeholder="What to follow up on">
-        <button type="button" class="po-btn-primary" data-ws-fu-add><i class="fa fa-plus"></i> Plan</button>
-      </div>` : '';
-    const rows = data.map(f => _crmFuRowHtml(f, meta, { logging: _crmWs.fuLogId === f.id, prefix: 'crm-ws-fu' })).join('');
-    return form + `<div class="crm-fu-list">${rows || _crmWsPanelHtml('No follow-ups yet. They are planned automatically when a quotation is sent.')}</div>`;
+  // ── Lead window → Follow-ups tab: Calendar-style date tiles, quick "when" presets, channel picker ──
+  const _CRM_FU_CHANNEL_TINTS = { call: '#34c759', whatsapp: '#25d366', email: '#0a84ff', sms: '#30b0c7', visit: '#ff9f0a', other: '#8e8e93' };
+
+  /** "In 2 days" / "Today, 3:00 PM" / "Overdue by 3 days" for a pending follow-up. */
+  function _crmFuRel(f) {
+    const d = new Date(f.due_at), now = new Date();
+    const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+    const days = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+    if (f.is_overdue) return days < 0 ? `Overdue by ${-days} ${days === -1 ? 'day' : 'days'}` : `Overdue since ${time}`;
+    if (days === 0) return `Today, ${time}`;
+    if (days === 1) return `Tomorrow, ${time}`;
+    return `In ${days} days · ${time}`;
   }
+
+  function _crmFuTileHtml(iso, cls) {
+    const d = iso ? new Date(iso) : null;
+    return `<span class="crm-fut-date${cls ? ` ${cls}` : ''}"><small>${d ? d.toLocaleDateString(undefined, { month: 'short' }) : '—'}</small><b>${d ? d.getDate() : ''}</b></span>`;
+  }
+
+  function _crmFuLeadRowHtml(f, meta) {
+    const logging = _crmWs.fuLogId === f.id;
+    const pending = f.status === 'pending';
+    const state = f.status === 'done' ? 'done' : f.status === 'cancelled' ? 'cancelled' : f.is_overdue ? 'overdue' : f.is_due_today ? 'today' : 'pending';
+    const tint = _CRM_FU_CHANNEL_TINTS[f.channel] || '#8e8e93';
+    const when = pending ? _crmFuRel(f) : `${f.status === 'done' ? 'Done' : 'Cancelled'} ${_crmFmtDateTime(f.done_at || f.cancelled_at || f.due_at)}`;
+    return `<div class="crm-fut crm-fut--${state}${logging ? ' crm-fut--logging' : ''}">
+      <div class="crm-fut-row">
+        ${_crmFuTileHtml(pending ? f.due_at : f.done_at || f.cancelled_at || f.due_at, `crm-fut-date--${state}`)}
+        <div class="crm-fut-main">
+          <div class="crm-fut-title">
+            <span class="crm-fut-ch" style="--ic:${tint}"><i class="fa ${_CRM_FU_CHANNEL_ICONS[f.channel] || 'fa-comments'}"></i>${escHtml(f.channel_label || 'Follow-up')}</span>
+            ${f.status === 'done' ? `<span class="crm-fut-outcome"><i class="fa fa-check"></i> ${escHtml(f.outcome_label || 'Done')}</span>` : ''}
+            ${f.status === 'cancelled' ? '<span class="crm-fut-outcome crm-fut-outcome--off"><i class="fa fa-ban"></i> Cancelled</span>' : ''}
+          </div>
+          <div class="crm-fut-meta">
+            <span class="crm-fut-when"><i class="fa fa-clock"></i> ${escHtml(when)}</span>
+            ${f.user ? `<span><span class="crm-tk-av">${escHtml(_crmTkInitials(f.user.name))}</span>${escHtml(f.user.name)}</span>` : ''}
+            ${f.quotation ? `<span><i class="fa fa-file-invoice"></i> ${escHtml(f.quotation.quote_number)}${f.quotation.version > 1 ? ` v${f.quotation.version}` : ''}</span>` : ''}
+          </div>
+          ${f.notes ? `<div class="crm-fut-notes">${escHtml(f.notes)}</div>` : ''}
+        </div>
+        ${f.can_log && !logging ? `<div class="crm-fut-acts">
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-fu-log="${f.id}"><i class="fa fa-pen-to-square"></i> Log outcome</button>
+          <button type="button" class="crm-fut-x" data-fu-cancel="${f.id}" title="Cancel this follow-up"><i class="fa fa-xmark"></i></button>
+        </div>` : ''}
+      </div>
+      ${logging ? _crmFuLogFormHtml(f, meta, 'crm-ws-fu') : ''}
+    </div>`;
+  }
+
+  /** Which follow-up status filter a row falls in (pending ones split into overdue / today / upcoming). */
+  const _crmFuBucket = f => f.status === 'done' ? 'done' : f.status === 'cancelled' ? 'cancelled' : f.is_overdue ? 'overdue' : f.is_due_today ? 'today' : 'upcoming';
+
+  /** The filter bar above the follow-up list: status, channel, person and a text search. */
+  function _crmFuFilterBarHtml(data, meta) {
+    const show = _crmWs.fuShow || '';
+    const count = k => data.filter(f => !k || (k === 'pending' ? f.status === 'pending' : _crmFuBucket(f) === k)).length;
+    const segs = [['', 'All'], ['pending', 'Pending'], ['overdue', 'Overdue'], ['today', 'Today'], ['done', 'Done'], ['cancelled', 'Cancelled']]
+      .filter(([k]) => !k || count(k) || show === k);
+    const channels = (meta.channels || []).filter(c => data.some(f => f.channel === c.key));
+    const people = [...new Map(data.filter(f => f.user).map(f => [f.user.id, f.user.name])).entries()];
+    const active = show || _crmWs.fuCh || _crmWs.fuWho || (_crmWs.fuQ || '').trim();
+    return `<div class="crm-fm-bar crm-qtl-bar crm-fut-bar">
+      <div class="crm-fm-seg">${segs.map(([k, l]) => `<button type="button" class="${k === show ? 'active' : ''}${k === 'overdue' ? ' crm-fut-seg--red' : ''}" data-fu-show="${k}">${l}<small>${count(k)}</small></button>`).join('')}</div>
+      <span class="crm-fm-spacer"></span>
+      ${channels.length > 1 ? `<label class="crm-fm-pop" title="Channel"><i class="fa fa-comments"></i><select id="crm-fu-f-ch"><option value="">All channels</option>${channels.map(c => `<option value="${escHtml(c.key)}"${c.key === _crmWs.fuCh ? ' selected' : ''}>${escHtml(c.label)}</option>`).join('')}</select></label>` : ''}
+      ${people.length > 1 ? `<label class="crm-fm-pop" title="Assigned to"><i class="fa fa-user"></i><select id="crm-fu-f-who"><option value="">Everyone</option>${people.map(([id, name]) => `<option value="${id}"${String(id) === String(_crmWs.fuWho || '') ? ' selected' : ''}>${escHtml(name)}</option>`).join('')}</select></label>` : ''}
+      <label class="crm-fm-search"><i class="fa fa-magnifying-glass"></i><input id="crm-fu-f-q" type="search" placeholder="Search notes" value="${escHtml(_crmWs.fuQ || '')}"></label>
+      ${active ? '<button type="button" class="crm-qtx-btn crm-fut-reset" data-fu-reset title="Clear all filters"><i class="fa fa-xmark"></i> Clear</button>' : ''}
+    </div>`;
+  }
+
+  function _crmWsFollowUpsHtml() {
+    const { data: all = [], meta = {} } = _crmWs.followups;
+    // Filters from the bar at the top
+    const show = _crmWs.fuShow || '', q = (_crmWs.fuQ || '').trim().toLowerCase();
+    const data = all.filter(f => (!show || (show === 'pending' ? f.status === 'pending' : _crmFuBucket(f) === show))
+      && (!_crmWs.fuCh || f.channel === _crmWs.fuCh)
+      && (!_crmWs.fuWho || String(f.user?.id) === String(_crmWs.fuWho))
+      && (!q || `${f.notes || ''} ${f.outcome_label || ''} ${f.quotation?.quote_number || ''}`.toLowerCase().includes(q)));
+    const filtered = data.length !== all.length;
+
+    const pending = data.filter(f => f.status === 'pending').sort((a, b) => (a.due_at || '').localeCompare(b.due_at || ''));
+    const closed  = data.filter(f => f.status !== 'pending').sort((a, b) => (b.done_at || b.cancelled_at || b.due_at || '').localeCompare(a.done_at || a.cancelled_at || a.due_at || ''));
+    const overdue = pending.filter(f => f.is_overdue);
+    const today   = pending.filter(f => !f.is_overdue && f.is_due_today);
+    const later   = pending.filter(f => !f.is_overdue && !f.is_due_today);
+    // The summary line always describes the whole lead, not the filtered view
+    const allPending = all.filter(f => f.status === 'pending');
+    const allOverdue = allPending.filter(f => f.is_overdue).length;
+    const next = allPending.sort((a, b) => (a.due_at || '').localeCompare(b.due_at || '')).find(f => !f.is_overdue);
+    const logged = all.length - allPending.length;
+
+    const head = `<div class="crm-qtl-head">
+      <div class="crm-qtl-head-txt"><strong>Follow-ups</strong>
+        <small>${allPending.length ? `${allPending.length} planned` : 'Nothing planned'}${allOverdue ? ` · <b class="crm-fut-red">${allOverdue} overdue</b>` : ''}${next ? ` · next ${escHtml(_crmFuRel(next).toLowerCase())}` : ''}${logged ? ` · ${logged} logged` : ''}</small></div>
+    </div>`;
+
+    const ch = _crmWs.fuChannel || 'call';
+    const form = meta.can_add ? `<div class="crm-tk-new crm-fut-new">
+      <div class="crm-fut-new-h"><span class="crm-tk-plus" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 1px 2px rgba(175,82,222,.4)"><i class="fa fa-plus"></i></span> Plan a follow-up</div>
+      <div class="crm-fut-new-grid">
+        <div class="crm-fut-field"><span>When</span>
+          <div class="crm-fut-presets">
+            ${[['today', 'Later today'], ['tomorrow', 'Tomorrow 10 AM'], ['3d', 'In 3 days'], ['week', 'Next week']].map(([k, l]) => `<button type="button" class="crm-fut-preset" data-fu-preset="${k}">${l}</button>`).join('')}
+            <input id="crm-ws-fu-due" class="po-field-input" type="datetime-local" title="When to follow up">
+          </div></div>
+        <div class="crm-fut-field"><span>How</span>
+          <div class="crm-fm-seg crm-fut-chs">${(meta.channels || []).map(c => `<button type="button" class="${c.key === ch ? 'active' : ''}" data-fu-ch="${escHtml(c.key)}" style="--ic:${_CRM_FU_CHANNEL_TINTS[c.key] || '#8e8e93'}" title="${escHtml(c.label)}"><i class="fa ${_CRM_FU_CHANNEL_ICONS[c.key] || 'fa-comments'}"></i>${escHtml(c.label)}</button>`).join('')}</div>
+          <input type="hidden" id="crm-ws-fu-channel" value="${escHtml(ch)}"></div>
+        <div class="crm-fut-field"><span>Who</span>
+          <label class="crm-tk-pill"><i class="fa fa-user"></i><select id="crm-ws-fu-user">${_crmFuOptions(meta.assignees, meta.default_user_id, '')}</select></label></div>
+        <div class="crm-fut-field crm-fut-field--wide"><span>About</span>
+          <input id="crm-ws-fu-notes" class="po-field-input" maxlength="2000" placeholder="What to follow up on — e.g. Check if they reviewed the quotation" autocomplete="off"></div>
+      </div>
+      <div class="crm-fut-new-foot"><span class="crm-tk-hint">Follow-ups are also planned automatically when a quotation is sent.</span><span class="crm-fm-spacer"></span>
+        <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-ws-fu-add><i class="fa fa-calendar-plus"></i> Plan follow-up</button></div>
+    </div>` : '';
+
+    const group = (title, list, cls = '') => list.length
+      ? `<div class="crm-tk-group-title${cls}">${title}<small>${list.length}</small></div><div class="crm-fut-group">${list.map(f => _crmFuLeadRowHtml(f, meta)).join('')}</div>` : '';
+    const body = data.length
+      ? group('Overdue', overdue, ' crm-tk-group-title--overdue') + group('Today', today, ' crm-tk-group-title--today') + group('Upcoming', later)
+        + (!pending.length && !filtered ? `<div class="crm-fut-clear"><i class="fa fa-circle-check"></i> No follow-ups pending on this lead.</div>` : '')
+        + group('History', closed, ' crm-tk-group-title--done')
+      : filtered
+        ? `<div class="crm-tk-empty"><strong>No matching follow-ups</strong><small>Nothing matches these filters.</small>
+            <button type="button" class="crm-qtx-btn" data-fu-reset style="margin-top:8px">Clear filters</button></div>`
+        : `<div class="crm-tk-empty"><span class="crm-tk-empty-ic" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 2px 8px rgba(175,82,222,.3)"><i class="fa fa-phone-volume"></i></span>
+          <strong>No follow-ups yet</strong><small>Plan when to contact the customer next. One is planned automatically when a quotation is sent.</small></div>`;
+    const bar = all.length ? _crmFuFilterBarHtml(all, meta) : '';
+    return `<div class="crm-tk-wrap">${head}${form}${bar}<div class="crm-tk-list">${body}</div></div>`;
+  }
+
+  // Follow-ups tab: filter bar, quick "when" presets and the channel picker
+  $('#crm-lead-view-body')?.addEventListener('click', e => {
+    const preset = e.target.closest('[data-fu-preset]');
+    const chBtn  = e.target.closest('[data-fu-ch]');
+    const showBtn = e.target.closest('[data-fu-show]');
+    if (showBtn) {
+      _crmWs.fuShow = showBtn.dataset.fuShow;
+      _crmRenderWsTab();
+    } else if (e.target.closest('[data-fu-reset]')) {
+      Object.assign(_crmWs, { fuShow: '', fuCh: '', fuWho: '', fuQ: '' });
+      _crmRenderWsTab();
+    } else if (preset) {
+      const d = new Date();
+      if (preset.dataset.fuPreset === 'today') d.setHours(Math.min(d.getHours() + 2, 23), 0, 0, 0);
+      else {
+        d.setDate(d.getDate() + { tomorrow: 1, '3d': 3, week: 7 }[preset.dataset.fuPreset]);
+        d.setHours(10, 0, 0, 0);
+      }
+      const pad = n => String(n).padStart(2, '0');
+      const input = $('#crm-ws-fu-due');
+      if (input) input.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      $$('#crm-ws-panel [data-fu-preset]').forEach(b => b.classList.toggle('active', b === preset));
+    } else if (chBtn) {
+      _crmWs.fuChannel = chBtn.dataset.fuCh;
+      $('#crm-ws-fu-channel').value = chBtn.dataset.fuCh;
+      $$('#crm-ws-panel [data-fu-ch]').forEach(b => b.classList.toggle('active', b === chBtn));
+    }
+  });
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    // Picking a date by hand clears the preset highlight
+    if (e.target.id === 'crm-ws-fu-due') $$('#crm-ws-panel [data-fu-preset]').forEach(b => b.classList.remove('active'));
+    if (e.target.id === 'crm-fu-f-q') {
+      // Search re-draws the tab; keep focus and caret in the box
+      _crmWs.fuQ = e.target.value;
+      const pos = e.target.selectionStart;
+      _crmRenderWsTab();
+      const box = $('#crm-fu-f-q');
+      box?.focus();
+      box?.setSelectionRange(pos, pos);
+    }
+  });
+  $('#crm-lead-view-body')?.addEventListener('change', e => {
+    if (e.target.id === 'crm-fu-f-ch') { _crmWs.fuCh = e.target.value; _crmRenderWsTab(); }
+    else if (e.target.id === 'crm-fu-f-who') { _crmWs.fuWho = e.target.value; _crmRenderWsTab(); }
+  });
 
   /** Reads and posts a log form; resolves the response (or null when the form is incomplete). */
   async function _crmFuSubmitLog(id, prefix) {
@@ -60429,7 +61114,7 @@ async function submitDsCreate() {
       _crmWsRefresh(lead, ['followups']);
       loadCrmPipeline(_crmProjectId, { silent: true });
     } else if (t.matches('[data-fu-cancel]')) {
-      if (!confirm('Cancel this follow-up?')) return;
+      if (!await appConfirm({ title: 'Cancel follow-up?', message: 'It will be removed from the pending list.', confirmText: '<i class="fa fa-xmark"></i> Cancel follow-up', cancelText: 'Keep it', icon: 'fa-phone-slash', danger: true })) return;
       const res = await API.crmCancelFollowUp(+t.dataset.fuCancel);
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not cancel it.'), 'error'); return; }
       _crmWsRefresh(lead, ['followups']);
@@ -60452,16 +61137,24 @@ async function submitDsCreate() {
     }
   });
 
-  async function _crmWsUpload(lead) {
-    const rules = _crmWs.files?.meta?.rules || {};
-    const result = await window.electronAPI.showOpenDialog({
-      title: 'Add files to the lead',
-      filters: [{ name: 'Allowed files', extensions: rules.mimes?.length ? rules.mimes : ['*'] }, { name: 'All Files', extensions: ['*'] }],
-      properties: ['openFile', 'multiSelections'],
-    });
-    if (result.canceled || !result.filePaths?.length) return;
+  /** Upload to the lead's Files — picked in a dialog, or the paths of files dropped on the tab. */
+  async function _crmWsUpload(lead, paths = null) {
+    if (!paths) {
+      const rules = _crmWs.files?.meta?.rules || {};
+      const result = await window.electronAPI.showOpenDialog({
+        title: 'Add files to the lead',
+        filters: [{ name: 'Allowed files', extensions: rules.mimes?.length ? rules.mimes : ['*'] }, { name: 'All Files', extensions: ['*'] }],
+        properties: ['openFile', 'multiSelections'],
+      });
+      if (result.canceled || !result.filePaths?.length) return;
+      paths = result.filePaths;
+    }
     let ok = 0;
-    for (const filePath of result.filePaths) {
+    for (const [i, filePath] of paths.entries()) {
+      $$('#crm-fm [data-ws-upload]').forEach(b => {
+        b.disabled = true;
+        b.innerHTML = `<i class="fa fa-spinner fa-spin"></i> ${paths.length > 1 ? `Uploading ${i + 1} of ${paths.length}…` : 'Uploading…'}`;
+      });
       const res = await window.electronAPI.apiUpload(API.crmLeadAttachmentUploadPath(lead.id), filePath);
       if (res.status === 201) ok++;
       else toast(`${filePath.split(/[\\/]/).pop()}: ${_crmWsError(res, 'upload failed')}`, 'error');
@@ -60507,8 +61200,14 @@ async function submitDsCreate() {
     if (!lead || !t) return;
 
     if (t.dataset.wsTab) {
+      if (t.dataset.wsTab === _crmLeadTab) return;
+      const from = $('#crm-lead-view-body .crm-ws-tab.active');
+      const fromRect = from && { left: from.offsetLeft, top: from.offsetTop, width: from.offsetWidth, height: from.offsetHeight };
+      const order = _CRM_LEAD_TABS.map(([k]) => k);
+      const dir = Math.sign(order.indexOf(t.dataset.wsTab) - order.indexOf(_crmLeadTab)) || 1;
       _crmLeadTab = t.dataset.wsTab;
       _crmRenderLeadModal(false);
+      _crmAnimateTabSwitch(fromRect, dir);
     } else if (t.matches('[data-ws-assign]')) {
       _crmOpenAssignModal(lead);
     } else if (t.dataset.wsTlType !== undefined) {
@@ -60560,41 +61259,180 @@ async function submitDsCreate() {
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the message.'), 'error'); return; }
       _crmWsRefresh(lead, ['messages', 'timeline']);
     } else if (t.matches('[data-ws-msg-delete]')) {
-      if (!confirm('Delete this message? Replies to it go too.')) return;
+      if (!await appConfirm({ title: 'Delete message?', message: 'Replies to it are deleted too.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
       const res = await API.crmDeleteLeadMessage(lead.id, +t.dataset.wsMsgDelete);
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the message.'), 'error'); return; }
       _crmWsRefresh(lead, ['messages', 'timeline']);
+    } else if (t.dataset.fmView) {
+      _crmFmView = t.dataset.fmView;
+      try { localStorage.setItem('crm.files.view', _crmFmView); } catch {}
+      _crmRenderWsTab();
+    } else if (t.dataset.fmKind !== undefined) {
+      _crmWs.fmKind = t.dataset.fmKind;
+      _crmRenderWsTab();
+    } else if (t.dataset.fmSort) {
+      // List header: same column flips the order; a new one starts A→Z for text, newest / largest first otherwise
+      const key = t.dataset.fmSort;
+      _crmWs.fmDir = key === (_crmWs.fmSort || 'date') ? -(_crmWs.fmDir || -1) : (['name', 'kind', 'by'].includes(key) ? 1 : -1);
+      _crmWs.fmSort = key;
+      _crmRenderWsTab();
     } else if (t.matches('[data-ws-upload]')) {
       _crmWsUpload(lead);
     } else if (t.matches('[data-ws-file-download]')) {
       // From the Files tab or from inside a message
-      const id = +t.dataset.wsFileDownload, name = t.dataset.wsFileName || `file-${id}`;
-      const res = await window.electronAPI.downloadFile(API.crmLeadAttachmentDownloadPath(lead.id, id), name);
-      if (res?.canceled) return;
-      if (res?.status !== 200) { toast(res?.message || 'Download failed', 'error'); return; }
-      toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+      const id = +t.dataset.wsFileDownload;
+      _crmWsDownload(lead, id, t.dataset.wsFileName || `file-${id}`);
+    } else if (t.matches('[data-ws-quicklook]')) {
+      const id = +t.dataset.wsQuicklook;
+      _crmWsQuickLook(lead, id, t.dataset.wsFileName || `image-${id}`);
+    } else if (t.matches('[data-ws-mention-remove]')) {
+      const box = $(`#crm-ws-panel [data-ws-mention][value="${+t.dataset.wsMentionRemove}"]`);
+      if (box) box.checked = false;
+      _crmChatRefreshTokens();
+    } else if (t.matches('[data-ws-jump]')) {
+      // Scroll to the quoted message and flash it
+      const row = $(`#crm-ws-panel [data-ws-msg="${+t.dataset.wsJump}"]`);
+      if (!row) return;
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      row.classList.remove('crm-chat-row--flash');
+      void row.offsetWidth;
+      row.classList.add('crm-chat-row--flash');
     } else if (t.matches('[data-ws-file-delete]')) {
-      if (!confirm('Delete this file from the lead?')) return;
+      if (!await appConfirm({ title: 'Delete file?', message: 'The file will be removed from this lead.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
       const res = await API.crmDeleteLeadAttachment(lead.id, +t.dataset.wsFileDelete);
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the file.'), 'error'); return; }
       toast('File deleted.', 'success');
       _crmWsRefresh(lead, ['files', 'timeline']);
     } else if (t.matches('[data-ws-task-add]')) {
       const title = $('#crm-ws-task-title').value.trim();
-      if (!title) { toast('Give the task a title.', 'error'); return; }
+      if (!title) { toast('Give the task a title.', 'error'); $('#crm-ws-task-title').focus(); return; }
+      t.disabled = true;
       const res = await API.crmCreateLeadTask(lead.id, {
         title,
+        description: $('#crm-ws-task-notes')?.value.trim() || null,
         due_at:      $('#crm-ws-task-due').value || null,
         assigned_to: $('#crm-ws-task-assignee').value ? +$('#crm-ws-task-assignee').value : null,
       });
+      t.disabled = false;
       if (res.status !== 201) { toast(_crmWsError(res, 'Could not add the task.'), 'error'); return; }
       toast('Task added.', 'success');
       _crmWsRefresh(lead, ['tasks', 'timeline']);
     } else if (t.matches('[data-ws-task-toggle]')) {
       const res = t.checked ? await API.crmCompleteTask(+t.dataset.wsTaskToggle) : await API.crmReopenTask(+t.dataset.wsTaskToggle);
       if (res.status !== 200) { t.checked = !t.checked; toast(_crmWsError(res, 'Could not update the task.'), 'error'); return; }
+      t.closest('.crm-tk')?.classList.toggle('crm-tk--done', t.checked);
+      delete _crmWs.timeline;
+      // Let the check animation play, then re-sort in place (no loading flash)
+      await new Promise(r => setTimeout(r, 450));
+      _crmLoadWsTab(lead, 'tasks');
+      _crmLoadWorkspace(lead);
+    } else if (t.dataset.tkShow) {
+      _crmWs.tkShow = t.dataset.tkShow;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-ws-task-delete]')) {
+      if (!await appConfirm({ title: 'Delete task?', message: 'The task will be removed from this lead.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
+      const res = await API.crmDeleteTask(+t.dataset.wsTaskDelete);
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the task.'), 'error'); return; }
+      toast('Task deleted.', 'success');
       _crmWsRefresh(lead, ['tasks', 'timeline']);
     }
+  });
+
+  // Quotations list: search by number / reference as you type (re-draws the list, keeps the caret)
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-qtl-q' || !_crmWs.qt) return;
+    _crmWs.qt.q = e.target.value;
+    const pos = e.target.selectionStart;
+    _crmRenderWsTab();
+    const box = $('#crm-qtl-q');
+    box?.focus();
+    box?.setSelectionRange(pos, pos);
+  });
+
+  // Tasks tab: Enter in the title or notes field adds the task
+  $('#crm-lead-view-body')?.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || e.isComposing || !['crm-ws-task-title', 'crm-ws-task-notes'].includes(e.target.id)) return;
+    e.preventDefault();
+    $('#crm-ws-panel [data-ws-task-add]')?.click();
+  });
+
+  // Files tab: search as you type, sort pop-up, and drop files from Explorer / Finder to upload them
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-fm-q') return;
+    _crmWs.fmQuery = e.target.value;
+    _crmFmRefreshBody();
+  });
+  $('#crm-lead-view-body')?.addEventListener('change', e => {
+    if (e.target.id !== 'crm-fm-sort') return;
+    _crmWs.fmSort = e.target.value;
+    _crmWs.fmDir = ['name', 'kind', 'by'].includes(e.target.value) ? 1 : -1;
+    _crmFmRefreshBody();
+  });
+  {
+    const body = $('#crm-lead-view-body');
+    const zone = e => (_crmLeadTab === 'files' && e.dataTransfer?.types?.includes('Files') ? $('#crm-fm.crm-fm--droppable') : null);
+    let depth = 0; // dragenter / dragleave fire for every child crossed
+    body?.addEventListener('dragenter', e => { const z = zone(e); if (!z) return; e.preventDefault(); depth++; z.classList.add('crm-fm--over'); });
+    body?.addEventListener('dragover', e => { if (!zone(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    body?.addEventListener('dragleave', e => { const z = zone(e); if (z && --depth <= 0) { depth = 0; z.classList.remove('crm-fm--over'); } });
+    body?.addEventListener('drop', e => {
+      const z = zone(e);
+      if (!z) return;
+      e.preventDefault();
+      depth = 0;
+      z.classList.remove('crm-fm--over');
+      const paths = [...e.dataTransfer.files].map(f => window.electronAPI.pathForFile?.(f)).filter(Boolean);
+      if (_crmViewLead && paths.length) _crmWsUpload(_crmViewLead, paths);
+    });
+  }
+
+  // Messages composer: Enter sends (Shift+Enter = new line); typing "@" opens the people menu,
+  // filtered by what follows it — Enter / Tab picks the first match, Esc closes.
+  let _crmChatAtOpen = false; // the @ menu was opened by typing, not by its button
+  $('#crm-lead-view-body')?.addEventListener('keydown', e => {
+    if (e.target.id !== 'crm-ws-msg-body') return;
+    const menu = $('#crm-ws-panel details.crm-msg-mention');
+    if (_crmChatAtOpen && menu?.open) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); menu.open = false; _crmChatAtOpen = false; return; }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const first = menu.querySelector('.crm-msg-menu-row--first input');
+        if (first) { e.preventDefault(); first.click(); return; }
+      }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      $('#crm-ws-panel [data-ws-msg-post]')?.click();
+    }
+  });
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-ws-msg-body') return;
+    _crmChatAutosize();
+    const menu = $('#crm-ws-panel details.crm-msg-mention');
+    if (!menu) return;
+    const q = _crmChatAtQuery(e.target);
+    if (q !== null) { _crmChatAtOpen = true; menu.open = true; _crmChatFilterMenu(q); }
+    else if (_crmChatAtOpen) { menu.open = false; _crmChatAtOpen = false; }
+  });
+  $('#crm-lead-view-body')?.addEventListener('change', e => {
+    if (!e.target.matches('[data-ws-mention]')) return;
+    _crmChatRefreshTokens();
+    if (!_crmChatAtOpen) return;
+    // Picked from a typed "@…": drop that text, close the menu, carry on typing
+    const box = $('#crm-ws-msg-body'), menu = e.target.closest('details');
+    const q = box && _crmChatAtQuery(box);
+    if (q !== null && q !== undefined) {
+      const at = box.selectionStart - q.length - 1;
+      box.value = box.value.slice(0, at) + box.value.slice(box.selectionStart);
+      box.setSelectionRange(at, at);
+    }
+    if (menu) menu.open = false;
+    _crmChatAtOpen = false;
+    _crmChatFilterMenu('');
+    box?.focus();
+  });
+  document.addEventListener('mousedown', e => {
+    const menu = $('#crm-ws-panel details.crm-msg-mention[open]');
+    if (menu && !menu.contains(e.target) && e.target.id !== 'crm-ws-msg-body') { menu.open = false; _crmChatAtOpen = false; _crmChatFilterMenu(''); }
   });
 
   // ── Lead quotations: build from inventory, approval, PDF and sending ─────
@@ -60622,27 +61460,108 @@ async function submitDsCreate() {
     return d ? new Date(d.length === 10 ? d + 'T00:00:00' : d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
   }
 
+  // macOS system tints per quotation status (list icon tile + status capsule)
+  const _CRM_QT_TINTS = { draft: '#8e8e93', pending_approval: '#af52de', returned: '#ff9f0a', approved: '#30b0c7', sent: '#0a84ff',
+    accepted: '#34c759', rejected: '#ff3b30', expired: '#ff9f0a', superseded: '#8e8e93' };
+  const _CRM_QT_ICONS = { draft: 'fa-pen', pending_approval: 'fa-hourglass-half', returned: 'fa-rotate-left', approved: 'fa-circle-check', sent: 'fa-paper-plane',
+    accepted: 'fa-handshake', rejected: 'fa-xmark', expired: 'fa-clock', superseded: 'fa-code-branch' };
+
   function _crmQtListHtml() {
     const { data = [], meta = {} } = _crmWs.quotations;
-    const bar = meta.can_create ? `<div class="crm-qt-bar">
-        <button type="button" class="po-btn-primary" data-qt-new><i class="fa fa-plus"></i> Create quotation</button>
-        <span class="crm-ws-muted">${meta.stock_mode === 'block' ? 'Lines over the stock in hand are refused.' : meta.stock_mode === 'warn' ? 'Lines over the stock in hand are flagged.' : ''}</span>
-      </div>` : '';
-    const row = (q, old = false) => `
-      <button type="button" class="crm-qt-row${old ? ' crm-qt-row--old' : ''}" data-qt-open="${q.id}">
-        <span class="crm-qt-num">${old ? '<i class="fa fa-code-branch crm-ws-muted"></i> ' : ''}${escHtml(q.quote_number)}${q.version > 1 ? ` <span class="crm-ws-muted">v${q.version}</span>` : ''}</span>
-        <span class="qt-badge qt-badge-${escHtml(q.status)}">${escHtml(q.status_label)}</span>
-        <span class="crm-ws-muted crm-qt-row-meta">${_crmQtDate(q.quote_date)}${q.submitted_by ? ` · submitted by ${escHtml(q.submitted_by.name)}` : ''}${q.approved_by ? ` · approved by ${escHtml(q.approved_by.name)}` : ''}${q.sent_at ? ` · sent ${escHtml(_crmFmtDateTime(q.sent_at))}` : ''}</span>
-        <span class="crm-qt-amt">${_crmQtMoney(q.total)}</span>
-      </button>`;
+    const s = _crmQtState();
+    const tint = q => _CRM_QT_TINTS[q.status] || '#8e8e93';
+
     // One group per quotation: its latest version, then the earlier (superseded) ones under it
     const groups = new Map();
     data.forEach(q => { const k = q.base_number || q.quote_number; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(q); });
-    const rows = [...groups.values()].map(list => {
-      list.sort((a, b) => b.version - a.version || b.id - a.id);
-      return row(list[0]) + list.slice(1).map(q => row(q, true)).join('');
+    const families = [...groups.entries()].map(([k, list]) => [k, list.sort((a, b) => b.version - a.version || b.id - a.id)]);
+    const latest = families.map(([, list]) => list[0]);
+
+    // Summary over the latest version of each quotation
+    const live    = latest.filter(q => !['rejected', 'expired', 'superseded'].includes(q.status));
+    const won     = latest.filter(q => q.status === 'accepted');
+    const pending = latest.filter(q => q.status === 'pending_approval').length;
+    const sum = list => list.reduce((t, q) => t + _crmQtNum(q.total), 0);
+    const stockNote = meta.stock_mode === 'block' ? 'Lines over the stock in hand are refused.' : meta.stock_mode === 'warn' ? 'Lines over the stock in hand are flagged.' : '';
+
+    // Filter groups over the latest version of each quotation
+    // "In progress" includes the ones awaiting approval (the tile's value counts them too)
+    const GROUPS = { open: ['draft', 'returned', 'pending_approval', 'approved', 'sent'], pending: ['pending_approval'], accepted: ['accepted'], closed: ['rejected', 'expired'] };
+    const filter = s.filter || '';
+    const query  = (s.q || '').trim().toLowerCase();
+    const inGroup = (q, g) => !g || GROUPS[g].includes(q.status);
+    const count = g => latest.filter(q => inGroup(q, g)).length;
+
+    const head = `<div class="crm-qtl-head">
+      <div class="crm-qtl-head-txt"><strong>Quotations</strong><small>${latest.length ? `${latest.length} ${latest.length === 1 ? 'quotation' : 'quotations'}${data.length > latest.length ? ` · ${data.length} versions` : ''}` : 'None yet'}${stockNote ? ` · ${stockNote}` : ''}</small></div>
+      <span class="crm-fm-spacer"></span>
+      ${meta.can_create ? '<button type="button" class="crm-fm-upload" data-qt-new><i class="fa fa-plus"></i> New Quotation</button>' : ''}
+    </div>`;
+    // The tiles double as filters
+    const tile = (g, ic, label, value) => `<button type="button" class="crm-qtl-stat${filter === g ? ' active' : ''}" data-qtl-filter="${filter === g ? '' : g}" style="--ic:${ic[1]}" title="${filter === g ? 'Show all' : `Show only: ${label}`}">
+      <span><i class="fa ${ic[0]}"></i></span><div><small>${label}</small><b>${value}</b></div></button>`;
+    const stats = latest.length ? `<div class="crm-qtl-stats">
+      ${tile('open', ['fa-file-invoice-dollar', '#0a84ff'], 'In progress', _crmQtMoney(sum(live.filter(q => q.status !== 'accepted'))))}
+      ${tile('accepted', ['fa-handshake', '#34c759'], 'Accepted', _crmQtMoney(sum(won)))}
+      ${tile('pending', ['fa-hourglass-half', '#af52de'], 'Awaiting approval', pending)}
+    </div>` : '';
+    const toolbar = latest.length > 1 ? `<div class="crm-fm-bar crm-qtl-bar">
+      <div class="crm-fm-seg">${[['', 'All'], ['open', 'In progress'], ['pending', 'Awaiting approval'], ['accepted', 'Accepted'], ['closed', 'Rejected / expired']]
+        .filter(([g]) => !g || count(g) || filter === g)
+        .map(([g, l]) => `<button type="button" class="${g === filter ? 'active' : ''}" data-qtl-filter="${g}">${l}<small>${count(g)}</small></button>`).join('')}</div>
+      <span class="crm-fm-spacer"></span>
+      <label class="crm-fm-search"><i class="fa fa-magnifying-glass"></i><input id="crm-qtl-q" type="search" placeholder="Search number" value="${escHtml(s.q || '')}"></label>
+    </div>` : '';
+
+    // What should happen next — so the list says what to do, not just where things are
+    const NEXT = { draft: ['fa-paper-plane', 'Submit it for approval'], returned: ['fa-pen', 'Make the requested changes'], pending_approval: ['fa-hourglass-half', 'Waiting for the department head'],
+      approved: ['fa-envelope', 'Ready to send to the customer'], sent: ['fa-comments', 'Waiting for the customer’s answer'], accepted: ['fa-circle-check', 'Won — create the invoice or order'] };
+    const expiry = q => {
+      if (!q.expiry_date || !['approved', 'sent'].includes(q.status)) return '';
+      const days = Math.round((new Date(q.expiry_date + 'T00:00:00') - new Date(new Date().toDateString())) / 86400000);
+      if (days < 0) return '<span class="crm-qtl-warn crm-qtl-warn--red"><i class="fa fa-triangle-exclamation"></i> Expired</span>';
+      if (days <= 3) return `<span class="crm-qtl-warn"><i class="fa fa-clock"></i> Expires ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`}</span>`;
+      return '';
+    };
+    const meta2 = q => [
+      `<span title="Quote date"><i class="fa fa-calendar"></i> ${_crmQtDate(q.quote_date)}</span>`,
+      q.expiry_date && !['accepted', 'rejected', 'superseded'].includes(q.status) ? `<span title="Valid until"><i class="fa fa-hourglass-end"></i> Valid until ${_crmQtDate(q.expiry_date)}</span>` : '',
+      q.submitted_by ? `<span><i class="fa fa-user"></i> By ${escHtml(q.submitted_by.name)}</span>` : '',
+      q.approved_by ? `<span><i class="fa fa-user-check"></i> Approved by ${escHtml(q.approved_by.name)}</span>` : '',
+      q.sent_at ? `<span><i class="fa fa-paper-plane"></i> Sent ${escHtml(_crmFmtDateTime(q.sent_at))}</span>` : '',
+    ].filter(Boolean).join('');
+    const row = (q, old = false) => `
+      <button type="button" class="crm-qtl-row${old ? ' crm-qtl-row--old' : ''}" data-qt-open="${q.id}" style="--ic:${tint(q)}">
+        <span class="crm-qtl-ic"><i class="fa ${_CRM_QT_ICONS[q.status] || 'fa-file-lines'}"></i></span>
+        <span class="crm-qtl-main">
+          <span class="crm-qtl-title"><b>${escHtml(q.quote_number)}</b>${q.version > 1 ? `<span class="crm-qtl-ver">v${q.version}</span>` : ''}
+            <span class="crm-qtl-status"><i></i>${escHtml(q.status_label)}</span>${old ? '' : expiry(q)}</span>
+          <span class="crm-qtl-meta">${meta2(q)}</span>
+          ${!old && NEXT[q.status] ? `<span class="crm-qtl-next"><i class="fa ${NEXT[q.status][0]}"></i> ${NEXT[q.status][1]}</span>` : ''}
+        </span>
+        <span class="crm-qtl-amt">${_crmQtMoney(q.total)}</span>
+        <i class="fa fa-chevron-right crm-qtl-chev"></i>
+      </button>`;
+
+    const shown = families.filter(([, versions]) => inGroup(versions[0], filter)
+      && (!query || versions.some(q => (q.quote_number || '').toLowerCase().includes(query) || (q.reference || '').toLowerCase().includes(query))));
+    const list = shown.map(([key, versions]) => {
+      const older = versions.slice(1);
+      const open = !!s.openVersions?.[key];
+      return `<div class="crm-qtl-group">${row(versions[0])}
+        ${older.length ? `<button type="button" class="crm-qtl-more${open ? ' open' : ''}" data-qt-versions="${escHtml(key)}">
+          <i class="fa fa-chevron-right"></i> ${older.length} earlier ${older.length === 1 ? 'version' : 'versions'}</button>
+          ${open ? `<div class="crm-qtl-older">${older.map(q => row(q, true)).join('')}</div>` : ''}` : ''}
+      </div>`;
     }).join('');
-    return bar + (rows ? `<div class="crm-qt-list">${rows}</div>` : _crmWsPanelHtml('No quotations on this lead yet.'));
+
+    const empty = `<div class="crm-tk-empty"><span class="crm-tk-empty-ic crm-qtl-empty-ic"><i class="fa fa-file-invoice-dollar"></i></span><strong>No quotations yet</strong>
+      <small>${meta.can_create ? 'Build a quotation from inventory — it goes for approval, then you can send it as a PDF.' : 'Quotations made for this lead will show up here.'}</small>
+      ${meta.can_create ? '<button type="button" class="crm-fm-upload" data-qt-new style="margin-top:8px"><i class="fa fa-plus"></i> New Quotation</button>' : ''}</div>`;
+
+    const noMatch = `<div class="crm-tk-empty crm-tk-empty--sm"><strong>No matching quotations</strong><small>Nothing ${query ? `matches “${escHtml(s.q.trim())}”` : 'in this group'}.</small>
+      <button type="button" class="crm-qtx-btn" data-qtl-filter="" data-qtl-clear style="margin-top:8px">Show all</button></div>`;
+    return `<div class="crm-qtl">${head}${stats}${toolbar}${list ? `<div class="crm-qtl-list">${list}</div>` : latest.length ? noMatch : empty}</div>`;
   }
 
   // ── Editor ──
@@ -60703,6 +61622,14 @@ async function submitDsCreate() {
       : '<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> Some lines ask for more than is in stock.</div>';
   }
 
+  /** Live version of the detail view's discount banner: the overall discount % against the department's limit (QuotationApprovalService::discountSummary). */
+  function _crmQtDiscountWarnHtml(t) {
+    const limit = _crmWs.quotations?.meta?.discount_limit;
+    const percent = t.subtotal > 0 ? _crmQtR2(t.discount / t.subtotal * 100) : 0;
+    if (limit == null || percent <= limit) return '';
+    return `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+  }
+
   function _crmQtFormHtml(s) {
     const f = s.form;
     const t = _crmQtTotals(f);
@@ -60720,47 +61647,72 @@ async function submitDsCreate() {
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" onwheel="this.blur()"></td>
         <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
         <td data-qt-stock="${i}">${_crmQtStockCellHtml(s, i)}</td>
-        <td><button type="button" class="po-btn-ghost crm-qt-del" data-qt-line-del="${i}" title="Remove"><i class="fa fa-xmark"></i></button></td>
+        <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-minus"></i></button></td>
       </tr>`).join('');
 
-    return `<div class="crm-qt-head">
-        <button type="button" class="po-btn-ghost" data-qt-back><i class="fa fa-arrow-left"></i> Back</button>
-        <strong>${f.id ? `Edit ${escHtml(f.number)}` : 'New quotation'}</strong>
+    const n = f.lines.length;
+    return `<div class="crm-qtx">
+      <div class="crm-qtx-bar"><button type="button" class="crm-qtx-back" data-qt-back><i class="fa fa-chevron-left"></i> Quotations</button></div>
+      <div class="crm-qtx-title" style="--ic:#8e8e93">
+        <span class="crm-qtl-ic"><i class="fa fa-pen"></i></span>
+        <div><strong>${f.id ? `Edit ${escHtml(f.number)}` : 'New Quotation'}</strong><small>Draft · ${n} ${n === 1 ? 'line' : 'lines'}</small></div>
       </div>
       ${returned}
       <div id="crm-qt-alert" class="svc-form-alert" style="display:none"></div>
-      <div class="crm-qt-grid">
-        <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
-        <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
-        <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
-      </div>
-      <div class="crm-qt-table-wrap"><table class="crm-qt-table">
-        <thead><tr><th>Item</th><th style="width:78px">Qty</th><th style="width:100px">Unit price</th><th style="width:90px">Discount</th><th style="width:70px">Tax %</th><th style="width:100px" class="crm-qt-right">Total</th><th style="width:110px">Stock</th><th style="width:34px"></th></tr></thead>
-        <tbody>${rows || `<tr><td colspan="8">${_crmWsPanelHtml('Add products from inventory below.')}</td></tr>`}</tbody>
-      </table></div>
-      <div id="crm-qt-stock-warn">${_crmQtStockWarnHtml(s.stock)}</div>
-      <div class="crm-qt-add">
-        <div style="position:relative;flex:1;min-width:220px">
-          <input id="crm-qt-product-search" class="po-field-input" type="search" autocomplete="off" placeholder="Add a product from inventory — search by name or SKU…">
-          <div id="crm-qt-product-results" class="crm-lead-product-results crm-qt-results" style="display:none"></div>
+
+      <section class="crm-qtx-card">
+        <div class="crm-qtx-card-h"><i class="fa fa-circle-info"></i> Details</div>
+        <div class="crm-qt-grid crm-qtx-fields">
+          <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
+          <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
+          <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
         </div>
-        <button type="button" class="po-btn-ghost" data-qt-add-custom><i class="fa fa-pen"></i> Custom line</button>
-      </div>
-      <div class="crm-qt-foot">
-        <label class="crm-qt-notes">Notes &amp; terms<textarea class="po-field-input" rows="3" maxlength="5000" data-qt-h="notes" style="resize:vertical">${escHtml(f.notes)}</textarea></label>
-        <div class="crm-qt-totals">
-          <div><span>Subtotal</span><span id="crm-qt-t-sub">${_crmQtMoney(t.subtotal)}</span></div>
-          <div><span>Extra discount</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="discount_amount" value="${f.discount_amount ? escHtml(String(f.discount_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
-          <div><span>Extra tax</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="tax_amount" value="${f.tax_amount ? escHtml(String(f.tax_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
-          <div><span>Discount (all)</span><span id="crm-qt-t-disc">−${_crmQtMoney(t.discount)}</span></div>
-          <div><span>Tax (all)</span><span id="crm-qt-t-tax">+${_crmQtMoney(t.tax)}</span></div>
-          <div class="crm-qt-grand"><span>Total</span><span id="crm-qt-t-total">${_crmQtMoney(t.total)}</span></div>
+      </section>
+
+      <section class="crm-qtx-card crm-qtx-card--flush">
+        <div class="crm-qtx-card-h"><i class="fa fa-list"></i> Items<small>${n}</small></div>
+        <div class="crm-qt-table-wrap"><table class="crm-qt-table">
+          <thead><tr><th>Item</th><th style="width:78px">Qty</th><th style="width:110px">Unit price</th><th style="width:96px">Discount</th><th style="width:74px">Tax %</th><th style="width:110px" class="crm-qt-right">Total</th><th style="width:120px">Stock</th><th style="width:40px"></th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="8"><div class="crm-qtx-noitems"><i class="fa fa-box-open"></i> No lines yet — search inventory below or add a custom line.</div></td></tr>`}</tbody>
+        </table></div>
+        <div id="crm-qt-stock-warn" class="crm-qtx-pad">${_crmQtStockWarnHtml(s.stock)}</div>
+        <div class="crm-qt-add crm-qtx-add">
+          <div class="crm-qtx-search">
+            <i class="fa fa-magnifying-glass"></i>
+            <input id="crm-qt-product-search" type="search" autocomplete="off" placeholder="Add a product from inventory — search by name or SKU…">
+            <div id="crm-qt-product-results" class="crm-lead-product-results crm-qt-results" style="display:none"></div>
+          </div>
+          <button type="button" class="crm-qtx-btn" data-qt-add-custom><i class="fa fa-pen"></i> Custom Line</button>
         </div>
+      </section>
+
+      <div id="crm-qt-disc-warn">${_crmQtDiscountWarnHtml(t)}</div>
+
+      <div class="crm-qtx-foot">
+        <section class="crm-qtx-card crm-qtx-notes">
+          <div class="crm-qtx-card-h"><i class="fa fa-note-sticky"></i> Notes &amp; terms</div>
+          <textarea class="po-field-input" rows="4" maxlength="5000" data-qt-h="notes" placeholder="Payment terms, delivery, warranty…">${escHtml(f.notes)}</textarea>
+        </section>
+        <section class="crm-qtx-card crm-qtx-sum">
+          <div class="crm-qtx-card-h"><i class="fa fa-calculator"></i> Summary</div>
+          <div class="crm-qt-totals">
+            <div><span>Subtotal</span><span id="crm-qt-t-sub">${_crmQtMoney(t.subtotal)}</span></div>
+            <div><span>Extra discount</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="discount_amount" value="${f.discount_amount ? escHtml(String(f.discount_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
+            <div><span>Extra tax</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="tax_amount" value="${f.tax_amount ? escHtml(String(f.tax_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
+            <div><span>Discount (all)</span><span id="crm-qt-t-disc">−${_crmQtMoney(t.discount)}</span></div>
+            <div><span>Tax (all)</span><span id="crm-qt-t-tax">+${_crmQtMoney(t.tax)}</span></div>
+            <div class="crm-qt-grand"><span>Total</span><span id="crm-qt-t-total">${_crmQtMoney(t.total)}</span></div>
+          </div>
+        </section>
       </div>
-      <div class="crm-qt-actions">
-        <button type="button" class="po-btn-ghost" data-qt-back>Cancel</button>
-        <button type="button" class="po-btn-primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
-      </div>`;
+
+      <div class="crm-qtx-dock">
+        <div class="crm-qtx-dock-total"><small>Total</small><b id="crm-qt-t-total-dock">${_crmQtMoney(t.total)}</b></div>
+        <span class="crm-fm-spacer"></span>
+        <button type="button" class="crm-qtx-btn" data-qt-back>Cancel</button>
+        <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
+      </div>
+    </div>`;
   }
 
   /** Re-draw totals and line totals only — keeps focus in the field being typed in. */
@@ -60774,6 +61726,9 @@ async function submitDsCreate() {
     set('#crm-qt-t-disc', '−' + _crmQtMoney(t.discount));
     set('#crm-qt-t-tax', '+' + _crmQtMoney(t.tax));
     set('#crm-qt-t-total', _crmQtMoney(t.total));
+    set('#crm-qt-t-total-dock', _crmQtMoney(t.total));
+    const warn = $('#crm-qt-disc-warn');
+    if (warn) warn.innerHTML = _crmQtDiscountWarnHtml(t);
   }
 
   function _crmQtScheduleStock(lead) {
@@ -60839,7 +61794,7 @@ async function submitDsCreate() {
 
   async function _crmQtOpen(lead, id) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'detail', detail: null, send: null, respond: null, versions: null });
+    Object.assign(s, { view: 'detail', detail: null, submit: null, send: null, respond: null, versions: null });
     const panel = $('#crm-ws-panel');
     if (panel) panel.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmLeadQuotation(lead.id, id).catch(() => ({ status: 0 }));
@@ -60853,7 +61808,7 @@ async function submitDsCreate() {
   /** After a save / approval step / send: show the quotation, reload the list and timeline, and the board (the lead's status moved). */
   async function _crmQtAfterChange(lead, res) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'detail', detail: res.body.data, form: null, send: null, respond: null, versions: null });
+    Object.assign(s, { view: 'detail', detail: res.body.data, form: null, submit: null, send: null, respond: null, versions: null });
     if (res.body?.message) toast(res.body.message, 'success');
     _crmQtLoadVersions(lead, s.detail);
     delete _crmWs.timeline;
@@ -60897,26 +61852,47 @@ async function submitDsCreate() {
     if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
     if (q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-lock"></i> This version was replaced${q.superseded_by ? ` by <button type="button" class="crm-ws-link" data-qt-open="${q.superseded_by.id}">${escHtml(q.superseded_by.quote_number)}</button>` : ''} — it is kept read-only as history.</div>`);
     if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
-    if (can.send_direct) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is within the department's limit of ${_crmQtQty(q.discount.limit)}% — you can send it to the customer without approval.</div>`);
     const lastAsk = [...(q.responses || [])].reverse().find(r => r.response === 'discount_request');
     if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Make a new version with the revised price.</div>`);
     if (stock.has_shortage) banners.push(_crmQtStockWarnHtml(stock));
 
-    const btn = (cond, attr, icon, label, cls = 'po-btn-ghost', style = '') => cond ? `<button type="button" class="${cls}" ${attr}${style ? ` style="${style}"` : ''}><i class="fa ${icon}"></i> ${label}</button>` : '';
-    const actions = [
+    const btn = (cond, attr, icon, label, kind = '') => cond ? `<button type="button" class="crm-qtx-btn${kind ? ` crm-qtx-btn--${kind}` : ''}" ${attr}><i class="fa ${icon}"></i> ${label}</button>` : '';
+    // Workflow steps on the left, document actions on the right (a macOS window toolbar)
+    const steps = [
+      btn(can.submit && !s.submit, 'data-qt-submit-open', 'fa-paper-plane', 'Submit for approval', 'primary'),
+      btn(can.approve, 'data-qt-act="approve"', 'fa-circle-check', 'Approve', 'primary'),
+      btn(can.return, 'data-qt-act="return"', 'fa-rotate-left', 'Return with comments', 'warn'),
+      btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'danger'),
+      btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : 'Send to customer', 'primary'),
+      btn(can.respond && !s.respond, 'data-qt-respond-open', 'fa-comments', 'Record customer response', 'primary'),
+    ].join('');
+    const tools = [
       btn(can.edit, 'data-qt-edit', 'fa-pen', 'Edit'),
-      btn(can.submit, 'data-qt-act="submit"', 'fa-paper-plane', 'Submit for approval', 'po-btn-primary'),
-      btn(can.approve, 'data-qt-act="approve"', 'fa-circle-check', 'Approve', 'po-btn-primary'),
-      btn(can.return, 'data-qt-act="return"', 'fa-rotate-left', 'Return with comments', 'po-btn-ghost', 'color:#f97316'),
-      btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'po-btn-ghost', 'color:#ef4444'),
-      btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : can.send_direct ? 'Send to customer (no approval needed)' : 'Send to customer', 'po-btn-primary'),
-      btn(can.respond && !s.respond, 'data-qt-respond-open', 'fa-comments', 'Record customer response', 'po-btn-primary'),
       btn(can.revise, 'data-qt-revise', 'fa-code-branch', 'New version'),
       btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
     ].join('');
+    const actions = steps || tools ? `<div class="crm-qtx-actions">${steps}<span class="crm-fm-spacer"></span>${tools}</div>` : '';
+
+    // Submit for approval: tick the heads to email — any one of them approving is enough
+    const approvers = q.approvers || [];
+    const submitForm = s.submit ? `<div class="crm-qt-send" id="crm-qt-submit">
+        <div class="crm-qtx-card-h"><i class="fa fa-paper-plane"></i> Submit ${escHtml(q.quote_number)} for approval</div>
+        ${approvers.length ? `<div class="crm-ws-muted">Email these heads a link to approve or reject it — they don't need to sign in. The first one to decide settles it.</div>
+        <div class="crm-qt-approvers">${approvers.map(a => `
+          <label class="crm-qt-approver"><input type="checkbox" data-qt-approver="${a.id}"${s.submit.ids.includes(a.id) ? ' checked' : ''}>
+            <span class="crm-qt-approver-main"><b>${escHtml(a.name)}</b><small>${escHtml(a.email)}</small></span>
+            <span class="crm-qt-approver-role">${escHtml(a.role)}</span></label>`).join('')}</div>`
+        : `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> No division or department head with an email is set for this lead — an admin will have to approve it in the CRM.</div>`}
+        <label class="crm-qt-field"><span>Note for the approver <span class="crm-ws-muted">(optional)</span></span>
+          <textarea class="po-field-input" id="crm-qt-submit-comment" rows="3" maxlength="2000" style="resize:vertical" placeholder="Why this price, anything to check…">${escHtml(s.submit.comment || '')}</textarea></label>
+        <div class="crm-qt-actions">
+          <button type="button" class="crm-qtx-btn" data-qt-submit-cancel>Cancel</button>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-submit><i class="fa fa-paper-plane"></i> ${approvers.length ? 'Submit & email' : 'Submit'}</button>
+        </div>
+      </div>` : '';
 
     const sendForm = s.send ? `<div class="crm-qt-send">
-        <div class="crm-lead-view-section" style="margin:0 0 6px">Send by email</div>
+        <div class="crm-qtx-card-h"><i class="fa fa-envelope"></i> Send by email</div>
         <div class="crm-qt-grid">
           <label style="grid-column:span 2">To<input class="po-field-input" type="email" id="crm-qt-send-to" value="${escHtml(s.send.to || '')}" placeholder="customer@example.com"></label>
           <div class="crm-qt-field" style="grid-column:span 2"><span>CC <span class="crm-ws-muted">(pick a team member or the customer, or type any email)</span></span>
@@ -60926,17 +61902,17 @@ async function submitDsCreate() {
           <label style="grid-column:1/-1">Subject<input class="po-field-input" id="crm-qt-send-subject" maxlength="255" value="${escHtml(s.send.subject || '')}"></label>
           <label style="grid-column:1/-1">Message<textarea class="po-field-input" id="crm-qt-send-message" rows="6" style="resize:vertical">${escHtml(s.send.message || '')}</textarea></label>
         </div>
-        <div class="crm-ws-muted"><i class="fa fa-paperclip"></i> ${escHtml(q.quote_number)}.pdf is attached.</div>
+        <div class="crm-qtx-attach"><span class="crm-fm-doc crm-fm-doc--sm" style="--ic:#ff3b30"><span class="crm-fm-doc-ext">PDF</span></span> ${escHtml(q.quote_number)}.pdf is attached</div>
         <div class="crm-qt-actions">
-          <button type="button" class="po-btn-ghost" data-qt-send-cancel>Cancel</button>
-          <button type="button" class="po-btn-primary" data-qt-send><i class="fa fa-paper-plane"></i> Send</button>
+          <button type="button" class="crm-qtx-btn" data-qt-send-cancel>Cancel</button>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-send><i class="fa fa-paper-plane"></i> Send</button>
         </div>
       </div>` : '';
 
     const r = s.respond;
     const lostReasons = _crmPipeline?.lost_reasons || [];
     const respondForm = r ? `<div class="crm-qt-send" id="crm-qt-respond">
-        <div class="crm-lead-view-section" style="margin:0 0 6px">What did the customer say about ${escHtml(q.quote_number)}?</div>
+        <div class="crm-qtx-card-h"><i class="fa fa-comments"></i> What did the customer say about ${escHtml(q.quote_number)}?</div>
         <div class="crm-qt-respond-opts">
           ${[['discount_request', 'fa-percent', 'Asked for a discount'], ['accept', 'fa-handshake', 'Accepted'], ['reject', 'fa-thumbs-down', 'Rejected']].map(([key, icon, label]) =>
             `<label><input type="radio" name="crm-qt-response" value="${key}"${r.response === key ? ' checked' : ''}> <i class="fa ${icon}"></i> ${label}</label>`).join('')}
@@ -60947,71 +61923,91 @@ async function submitDsCreate() {
           <label style="grid-column:1/-1">Notes<textarea class="po-field-input" id="crm-qt-resp-notes" rows="3" maxlength="2000" style="resize:vertical" placeholder="What exactly did they say?">${escHtml(r.notes || '')}</textarea></label>
         </div>
         <div class="crm-ws-muted" id="crm-qt-resp-hint">${{
-          discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount' + (q.discount?.limit != null ? ` — up to ${_crmQtQty(q.discount.limit)}% it can be sent without approval.` : '.'),
+          discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount and submit it for approval.',
           accept: 'The quotation is marked accepted and the lead is won.',
           reject: 'The quotation is marked rejected and the lead is lost.',
         }[r.response]}</div>
         <div class="crm-qt-actions">
-          <button type="button" class="po-btn-ghost" data-qt-respond-cancel>Cancel</button>
-          <button type="button" class="po-btn-primary" data-qt-respond><i class="fa fa-check"></i> Save response</button>
+          <button type="button" class="crm-qtx-btn" data-qt-respond-cancel>Cancel</button>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-respond><i class="fa fa-check"></i> Save response</button>
         </div>
       </div>` : '';
 
     const history = [
       ...(q.approvals || []).map(a => ({ at: a.at, icon: { submitted: 'fa-paper-plane', approved: 'fa-circle-check', returned: 'fa-rotate-left', rejected: 'fa-circle-xmark', within_limit: 'fa-percent' }[a.action] || 'fa-circle',
-        color: { submitted: '#a855f7', approved: '#0d9488', returned: '#f97316', rejected: '#ef4444', within_limit: '#0d9488' }[a.action] || '#64748b',
+        color: { submitted: '#af52de', approved: '#30b0c7', returned: '#ff9f0a', rejected: '#ff3b30', within_limit: '#30b0c7' }[a.action] || '#8e8e93',
         title: `${a.label}${a.version > 1 ? ` (v${a.version})` : ''}`, by: a.by?.name, body: a.comment })),
       ...(q.responses || []).map(x => ({ at: x.at, icon: { accept: 'fa-handshake', reject: 'fa-thumbs-down', discount_request: 'fa-percent' }[x.response] || 'fa-comment',
-        color: { accept: '#10b981', reject: '#ef4444', discount_request: '#f59e0b' }[x.response] || '#64748b',
+        color: { accept: '#34c759', reject: '#ff3b30', discount_request: '#ff9f0a' }[x.response] || '#8e8e93',
         title: `${x.label}${x.requested_discount != null ? ` — ${_crmQtQty(x.requested_discount)}%` : ''}`, by: x.by?.name, body: x.notes })),
-      ...(q.dispatches || []).map(d => ({ at: d.sent_at || d.at, icon: d.status === 'failed' ? 'fa-triangle-exclamation' : 'fa-envelope-circle-check', color: d.status === 'failed' ? '#ef4444' : '#f59e0b',
+      ...(q.dispatches || []).map(d => ({ at: d.sent_at || d.at, icon: d.status === 'failed' ? 'fa-triangle-exclamation' : 'fa-envelope-circle-check', color: d.status === 'failed' ? '#ff3b30' : '#0a84ff',
         title: `${d.status === 'sent' ? 'Sent' : d.status === 'failed' ? 'Could not send' : 'Queued'} by ${d.channel} to ${d.to}${d.cc?.length ? ` (cc ${d.cc.join(', ')})` : ''}`, by: d.by?.name, body: d.status === 'failed' ? d.error : d.subject })),
     ].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
-    const historyHtml = history.length ? `<div class="crm-lead-view-section">Approval, sending &amp; customer responses</div>` + history.map(h => `
-      <div class="crm-ws-tl-item">
-        <span class="crm-ws-tl-icon" style="--ic:${h.color}"><i class="fa ${h.icon}"></i></span>
-        <div class="crm-ws-tl-content">
-          <div>${escHtml(h.title)}</div>
-          ${h.body ? `<div class="crm-ws-tl-body">${escHtml(h.body)}</div>` : ''}
-          <div class="crm-ws-muted">${h.by ? escHtml(h.by) + ' · ' : ''}${h.at ? escHtml(_crmFmtDateTime(h.at)) : ''}</div>
+    // Same grouped panel as the Timeline tab
+    const historyHtml = history.length ? `<div class="crm-qtx-h">Activity<small>${history.length}</small></div><div class="crm-tlf-group">${history.map(h => `
+      <div class="crm-tlf-row">
+        <span class="crm-tlf-icon" style="--ic:${h.color}"><i class="fa ${h.icon}"></i></span>
+        <div class="crm-tlf-main">
+          <div class="crm-tlf-title"><strong>${escHtml(h.title)}</strong></div>
+          ${h.body ? `<div class="crm-tlf-body">${escHtml(h.body)}</div>` : ''}
         </div>
-      </div>`).join('') : '';
+        <div class="crm-tlf-time">${h.by ? `<span>${escHtml(h.by)}</span>` : ''}${h.at ? `<small>${escHtml(_crmFmtDateTime(h.at))}</small>` : ''}</div>
+      </div>`).join('')}</div>` : '';
 
-    return `<div class="crm-qt-head">
-        <button type="button" class="po-btn-ghost" data-qt-back><i class="fa fa-arrow-left"></i> All quotations</button>
-        <strong>${escHtml(q.quote_number)}</strong>${q.version > 1 ? `<span class="crm-ws-muted">version ${q.version}</span>` : ''}
-        <span class="qt-badge qt-badge-${escHtml(q.status)}">${escHtml(q.status_label)}</span>
-        <span class="crm-qt-amt" style="margin-left:auto">${_crmQtMoney(q.total)}</span>
-      </div>
+    const metaChips = [
+      `<span><i class="fa fa-calendar"></i> ${_crmQtDate(q.quote_date)}</span>`,
+      q.expiry_date ? `<span><i class="fa fa-hourglass-end"></i> Valid until ${_crmQtDate(q.expiry_date)}</span>` : '',
+      q.reference ? `<span><i class="fa fa-tag"></i> ${escHtml(q.reference)}</span>` : '',
+      q.customer_name ? `<span><i class="fa fa-user"></i> ${escHtml(q.customer_name)}</span>` : '',
+    ].join('');
+
+    return `<div class="crm-qtx">
+      <div class="crm-qtx-bar"><button type="button" class="crm-qtx-back" data-qt-back><i class="fa fa-chevron-left"></i> Quotations</button></div>
+      <section class="crm-qtx-card crm-qtd-hero" style="--ic:${_CRM_QT_TINTS[q.status] || '#8e8e93'}">
+        <span class="crm-qtl-ic crm-qtd-ic"><i class="fa ${_CRM_QT_ICONS[q.status] || 'fa-file-lines'}"></i></span>
+        <div class="crm-qtd-hero-main">
+          <div class="crm-qtl-title"><b class="crm-qtd-num">${escHtml(q.quote_number)}</b>${q.version > 1 ? `<span class="crm-qtl-ver">v${q.version}</span>` : ''}
+            <span class="crm-qtl-status"><i></i>${escHtml(q.status_label)}</span></div>
+          <div class="crm-qtl-meta">${metaChips}</div>
+        </div>
+        <div class="crm-qtd-total"><small>Total</small><b>${_crmQtMoney(q.total)}</b></div>
+      </section>
       ${banners.join('')}
-      <div class="crm-qt-actions" style="justify-content:flex-start;flex-wrap:wrap">${actions}</div>
+      ${actions}
+      ${submitForm}
       ${sendForm}
       ${respondForm}
-      <div class="crm-ws-muted" style="margin:6px 0">${_crmQtDate(q.quote_date)}${q.expiry_date ? ` · valid until ${_crmQtDate(q.expiry_date)}` : ''}${q.reference ? ` · ${escHtml(q.reference)}` : ''}${q.customer_name ? ` · ${escHtml(q.customer_name)}` : ''}</div>
-      <div class="crm-qt-table-wrap"><table class="crm-qt-table crm-qt-table--view">
-        <thead><tr><th style="width:28px">#</th><th>Item</th><th class="crm-qt-right">Qty</th><th class="crm-qt-right">Unit price</th>${lineDisc ? '<th class="crm-qt-right">Discount</th>' : ''}${lineTax ? '<th class="crm-qt-right">Tax</th>' : ''}<th class="crm-qt-right">Total</th>${stock.mode !== 'off' ? '<th>In stock</th>' : ''}</tr></thead>
-        <tbody>${rows}</tbody>
-      </table></div>
-      <div class="crm-qt-foot">
-        <div class="crm-qt-notes">${q.notes ? `<div class="crm-lead-view-section" style="margin:0 0 4px">Notes &amp; terms</div><div style="white-space:pre-line">${escHtml(q.notes)}</div>` : ''}</div>
-        <div class="crm-qt-totals">
-          <div><span>Subtotal</span><span>${_crmQtMoney(q.subtotal)}</span></div>
-          ${q.discount_amount > 0 ? `<div><span>Discount${q.discount?.percent ? ` (${_crmQtQty(q.discount.percent)}%)` : ''}</span><span>−${_crmQtMoney(q.discount_amount)}</span></div>` : ''}
-          ${q.tax_amount > 0 ? `<div><span>Tax</span><span>+${_crmQtMoney(q.tax_amount)}</span></div>` : ''}
-          <div class="crm-qt-grand"><span>Total</span><span>${_crmQtMoney(q.total)}</span></div>
-        </div>
+      <section class="crm-qtx-card crm-qtx-card--flush">
+        <div class="crm-qtx-card-h"><i class="fa fa-list"></i> Items<small>${(q.items || []).length}</small></div>
+        <div class="crm-qt-table-wrap"><table class="crm-qt-table crm-qt-table--view">
+          <thead><tr><th style="width:36px">#</th><th>Item</th><th class="crm-qt-right">Qty</th><th class="crm-qt-right">Unit price</th>${lineDisc ? '<th class="crm-qt-right">Discount</th>' : ''}${lineTax ? '<th class="crm-qt-right">Tax</th>' : ''}<th class="crm-qt-right">Total</th>${stock.mode !== 'off' ? '<th>In stock</th>' : ''}</tr></thead>
+          <tbody>${rows}</tbody>
+        </table></div>
+      </section>
+      <div class="crm-qtx-foot">
+        ${q.notes ? `<section class="crm-qtx-card crm-qtx-notes"><div class="crm-qtx-card-h"><i class="fa fa-note-sticky"></i> Notes &amp; terms</div><div class="crm-qtx-notes-txt">${escHtml(q.notes)}</div></section>` : '<span class="crm-fm-spacer"></span>'}
+        <section class="crm-qtx-card crm-qtx-sum">
+          <div class="crm-qtx-card-h"><i class="fa fa-calculator"></i> Summary</div>
+          <div class="crm-qt-totals">
+            <div><span>Subtotal</span><span>${_crmQtMoney(q.subtotal)}</span></div>
+            ${q.discount_amount > 0 ? `<div><span>Discount${q.discount?.percent ? ` (${_crmQtQty(q.discount.percent)}%)` : ''}</span><span>−${_crmQtMoney(q.discount_amount)}</span></div>` : ''}
+            ${q.tax_amount > 0 ? `<div><span>Tax</span><span>+${_crmQtMoney(q.tax_amount)}</span></div>` : ''}
+            <div class="crm-qt-grand"><span>Total</span><span>${_crmQtMoney(q.total)}</span></div>
+          </div>
+        </section>
       </div>
       ${_crmQtVersionsSectionHtml(s, q)}
-      ${historyHtml}`;
+      ${historyHtml}
+    </div>`;
   }
 
   /** The "Versions" section of a quotation with more than one version — loaded on first view. */
   function _crmQtVersionsSectionHtml(s, q) {
     if (q.version <= 1 && !q.is_superseded) return '';
     const v = s.versions;
-    if (!v || v.forId !== q.id) return `<div class="crm-lead-view-section">Versions</div>${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading the version history…')}`;
-    if (v.error) return `<div class="crm-lead-view-section">Versions</div>${_crmWsPanelHtml(escHtml(v.error))}`;
-    return `<div class="crm-lead-view-section">Versions</div>${_crmQtVersionsHtml(v.rows, { openAttr: 'data-qt-open' })}`;
+    if (!v || v.forId !== q.id) return `<div class="crm-qtx-h">Versions</div>${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading the version history…')}`;
+    if (v.error) return `<div class="crm-qtx-h">Versions</div>${_crmWsPanelHtml(escHtml(v.error))}`;
+    return `<div class="crm-qtx-h">Versions<small>${v.rows.length}</small></div>${_crmQtVersionsHtml(v.rows, { openAttr: 'data-qt-open' })}`;
   }
 
   async function _crmQtLoadVersions(lead, q) {
@@ -61133,6 +62129,14 @@ async function submitDsCreate() {
       _crmQtEdit(lead, _crmQtNewForm());
     } else if (t.dataset.qtOpen) {
       _crmQtOpen(lead, +t.dataset.qtOpen);
+    } else if (t.dataset.qtlFilter !== undefined) {
+      s.filter = t.dataset.qtlFilter;
+      if (t.dataset.qtlClear !== undefined) s.q = '';
+      _crmRenderWsTab();
+    } else if (t.dataset.qtVersions) {
+      // Show / hide the superseded versions under a quotation
+      s.openVersions = { ...s.openVersions, [t.dataset.qtVersions]: !s.openVersions?.[t.dataset.qtVersions] };
+      _crmRenderWsTab();
     } else if (t.matches('[data-qt-back]')) {
       // From the editor of a saved quotation back to it; otherwise to the list
       s.view = s.view === 'edit' && s.form?.id && s.detail?.id === s.form.id ? 'detail' : 'list';
@@ -61152,6 +62156,28 @@ async function submitDsCreate() {
       _crmQtScheduleStock(lead);
     } else if (t.matches('[data-qt-save]')) {
       _crmQtSave(lead, t);
+    } else if (t.matches('[data-qt-submit-open]') && s.detail) {
+      // Every head is ticked to start with
+      s.submit = { ids: (s.detail.approvers || []).map(a => a.id), comment: '' };
+      s.send = s.respond = null;
+      _crmRenderWsTab();
+      $('#crm-qt-submit')?.scrollIntoView({ block: 'nearest' });
+    } else if (t.matches('[data-qt-submit-cancel]')) {
+      s.submit = null;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-qt-submit]') && s.detail && s.submit) {
+      const approvers = s.detail.approvers || [];
+      s.submit.ids = [...$$('#crm-ws-panel [data-qt-approver]')].filter(c => c.checked).map(c => +c.dataset.qtApprover);
+      s.submit.comment = $('#crm-qt-submit-comment')?.value || '';
+      if (approvers.length && !s.submit.ids.length) { toast('Tick at least one head to send the approval request to.', 'error'); return; }
+      t.disabled = true;
+      t.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Submitting…';
+      const res = await API.crmLeadQuotationAction(lead.id, s.detail.id, 'submit', { comment: s.submit.comment.trim() || null, approver_ids: s.submit.ids });
+      t.disabled = false;
+      t.innerHTML = '<i class="fa fa-paper-plane"></i> Submit';
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not submit the quotation.'), 'error'); return; }
+      if (res.body?.emailed?.failed?.length) toast(`Could not email ${res.body.emailed.failed.join(', ')} — they can still approve in the CRM.`, 'warning');
+      _crmQtAfterChange(lead, res);
     } else if (t.dataset.qtAct && s.detail) {
       const action = t.dataset.qtAct;
       const labels = {
@@ -61189,9 +62215,9 @@ async function submitDsCreate() {
       if (response === 'discount_request' && !(body.requested_discount > 0 && body.requested_discount <= 100)) { toast('Enter the discount the customer asked for (a % up to 100).', 'error'); return; }
       if (response === 'reject' && !body.lost_reason_id) { toast('Pick a lost reason.', 'error'); return; }
       if (response === 'reject') body.lost_reason = body.notes;
-      if (response !== 'discount_request' && !confirm(response === 'accept'
-        ? `Mark ${s.detail.quote_number} as accepted? The lead is moved to Won.`
-        : `Mark ${s.detail.quote_number} as rejected? The lead is moved to Lost.`)) return;
+      if (response !== 'discount_request' && !await appConfirm(response === 'accept'
+        ? { title: `Accept ${s.detail.quote_number}?`, message: 'The lead is moved to Won.', confirmText: '<i class="fa fa-trophy"></i> Mark accepted', icon: 'fa-circle-check' }
+        : { title: `Reject ${s.detail.quote_number}?`, message: 'The lead is moved to Lost.', confirmText: '<i class="fa fa-xmark"></i> Mark rejected', icon: 'fa-circle-xmark', danger: true })) return;
       t.disabled = true;
       const res = await API.crmLeadQuotationRespond(lead.id, s.detail.id, body);
       t.disabled = false;
@@ -61200,9 +62226,14 @@ async function submitDsCreate() {
     } else if (t.matches('[data-qt-revise]') && s.detail) {
       const ask = [...(s.detail.responses || [])].reverse().find(r => r.response === 'discount_request');
       const limit = s.detail.discount?.limit;
-      if (!confirm(`Make a new version of ${s.detail.quote_number}? It starts as a draft with the same lines; ${s.detail.quote_number} becomes read-only.`
-        + (ask ? `\n\nThe customer asked for ${_crmQtQty(ask.requested_discount)}% discount.` : '')
-        + (limit != null ? `\nUp to ${_crmQtQty(limit)}% discount it can be sent without approval; above that the department head must approve it.` : '\nIt needs the department head\'s approval before it is sent.'))) return;
+      if (!await appConfirm({
+        title: `New version of ${s.detail.quote_number}?`,
+        message: `It starts as a draft with the same lines; ${s.detail.quote_number} becomes read-only.`
+          + (ask ? ` The customer asked for ${_crmQtQty(ask.requested_discount)}% discount.` : '')
+          + (limit != null ? ` Up to ${_crmQtQty(limit)}% discount it can be sent without approval; above that the department head must approve it.` : ' It needs the department head\'s approval before it is sent.'),
+        confirmText: '<i class="fa fa-code-branch"></i> Make new version',
+        icon: 'fa-file-invoice',
+      })) return;
       const res = await API.crmReviseLeadQuotation(lead.id, s.detail.id);
       if (res.status !== 201) { toast(_crmWsError(res, 'Could not make a new version.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
@@ -61340,7 +62371,7 @@ async function submitDsCreate() {
 
   // ── Approvals inbox: quotations waiting for this head's (or admin's) decision ──
   async function openCrmApprovalsModal() {
-    $('#crm-approvals-modal').style.display = 'flex';
+    _macShow($('#crm-approvals-modal'));
     await _crmLoadApprovals();
   }
 
@@ -61404,7 +62435,7 @@ async function submitDsCreate() {
   $('#crm-approvals-rows')?.addEventListener('click', async e => {
     const open = e.target.closest('[data-appr-open]');
     if (open) {
-      $('#crm-approvals-modal').style.display = 'none';
+      _macHide($('#crm-approvals-modal'));
       crmOpenLead(+open.dataset.project, +open.dataset.lead, { quotationId: +open.dataset.apprOpen });
       return;
     }
@@ -61425,7 +62456,7 @@ async function submitDsCreate() {
       if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
     }
   });
-  const _crmCloseApprovals = () => { $('#crm-approvals-modal').style.display = 'none'; };
+  const _crmCloseApprovals = () => { _macHide($('#crm-approvals-modal')); };
   $('#crm-approvals-close')?.addEventListener('click', _crmCloseApprovals);
   $('#crm-approvals-refresh')?.addEventListener('click', _crmLoadApprovals);
   $('#crm-approvals-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseApprovals(); });
@@ -61436,7 +62467,7 @@ async function submitDsCreate() {
 
   async function openCrmFollowUpsModal(scope = 'mine', status = 'pending') {
     Object.assign(_crmFu, { scope, status, logId: null });
-    $('#crm-fu-modal').style.display = 'flex';
+    _macShow($('#crm-fu-modal'));
     await _crmLoadFollowUps();
   }
   window.openCrmFollowUpsModal = openCrmFollowUpsModal;
@@ -61466,15 +62497,15 @@ async function submitDsCreate() {
   }
 
   $('#crm-fu-modal')?.addEventListener('click', async e => {
-    if (e.target === e.currentTarget) { $('#crm-fu-modal').style.display = 'none'; return; }
+    if (e.target === e.currentTarget) { _macHide($('#crm-fu-modal')); return; }
     const t = e.target.closest('button');
     if (!t) return;
     if (t.dataset.fuScope) { _crmFu.scope = t.dataset.fuScope; _crmFu.status = t.dataset.fuScope === 'team' ? 'overdue' : _crmFu.status; _crmFu.logId = null; _crmLoadFollowUps(); }
     else if (t.dataset.fuStatus) { _crmFu.status = t.dataset.fuStatus; _crmFu.logId = null; _crmLoadFollowUps(); }
-    else if (t.id === 'crm-fu-close' || t.id === 'crm-fu-close-btn') $('#crm-fu-modal').style.display = 'none';
+    else if (t.id === 'crm-fu-close' || t.id === 'crm-fu-close-btn') _macHide($('#crm-fu-modal'));
     else if (t.id === 'crm-fu-refresh') _crmLoadFollowUps();
     else if (t.matches('[data-fu-open-lead]')) {
-      $('#crm-fu-modal').style.display = 'none';
+      _macHide($('#crm-fu-modal'));
       crmOpenLead(+t.dataset.project, +t.dataset.fuOpenLead, { tab: 'followups' });
     } else if (t.matches('[data-fu-log]')) { _crmFu.logId = +t.dataset.fuLog; _crmRenderFollowUps(); }
     else if (t.matches('[data-fu-log-cancel]')) { _crmFu.logId = null; _crmRenderFollowUps(); }
@@ -61489,7 +62520,7 @@ async function submitDsCreate() {
       _crmLoadFollowUps();
       if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
     } else if (t.matches('[data-fu-cancel]')) {
-      if (!confirm('Cancel this follow-up?')) return;
+      if (!await appConfirm({ title: 'Cancel follow-up?', message: 'It will be removed from the pending list.', confirmText: '<i class="fa fa-xmark"></i> Cancel follow-up', cancelText: 'Keep it', icon: 'fa-phone-slash', danger: true })) return;
       const res = await API.crmCancelFollowUp(+t.dataset.fuCancel);
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not cancel it.'), 'error'); return; }
       _crmLoadFollowUps();
@@ -61718,7 +62749,8 @@ async function submitDsCreate() {
   let _crmAssign = null; // { lead, data }
 
   async function _crmOpenAssignModal(lead) {
-    $('#crm-assign-modal').style.display = 'flex';
+    _macShow($('#crm-assign-modal'));
+    $('#crm-assign-sub').textContent = lead.name || '';
     $('#crm-assign-note').value = '';
     $('#crm-assign-body').innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmLeadAssignees(lead.id).catch(() => ({ status: 0 }));
@@ -61738,8 +62770,10 @@ async function submitDsCreate() {
     ];
     const rows = pickable.map(u => `
       <div class="crm-assign-row">
-        <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}> ${escHtml(u.name)}</label>
-        <label class="crm-assign-primary" title="Primary assignee"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
+        <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}>
+          <span class="crm-assign-av">${escHtml(String(u.name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase())}</span>
+          <span class="crm-assign-name">${escHtml(u.name)}</span></label>
+        <label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
       </div>`).join('');
     const history = data.history.map(h => `
       <div class="crm-ws-tl-item">
@@ -61758,7 +62792,7 @@ async function submitDsCreate() {
   }
 
   function _crmCloseAssignModal() {
-    $('#crm-assign-modal').style.display = 'none';
+    _macHide($('#crm-assign-modal'));
     _crmAssign = null;
   }
 
@@ -62002,13 +63036,15 @@ async function submitDsCreate() {
     $('#crm-project-name').value = '';
     $('#crm-project-desc').value = '';
     $('#crm-project-alert').style.display = 'none';
-    $('#crm-project-modal').style.display = 'flex';
+    _macShow($('#crm-project-modal'));
     $('#crm-project-name').focus();
   }
 
-  $('#crm-project-modal-close')?.addEventListener('click',  () => { $('#crm-project-modal').style.display = 'none'; });
-  $('#crm-project-modal-cancel')?.addEventListener('click', () => { $('#crm-project-modal').style.display = 'none'; });
-  $('#crm-project-modal')?.addEventListener('click', e => { if (e.target === $('#crm-project-modal')) $('#crm-project-modal').style.display = 'none'; });
+  const _closeProjectModal = () => _macHide($('#crm-project-modal'));
+  $('#crm-project-modal-close')?.addEventListener('click',  _closeProjectModal);
+  $('#crm-project-modal-cancel')?.addEventListener('click', _closeProjectModal);
+  $('#crm-project-modal')?.addEventListener('click', e => { if (e.target === $('#crm-project-modal')) _closeProjectModal(); });
+  $('#crm-project-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-project-modal-save').click(); });
 
   $('#crm-project-modal-save')?.addEventListener('click', async () => {
     const name = $('#crm-project-name').value.trim();
@@ -62018,7 +63054,7 @@ async function submitDsCreate() {
     const res = await API.crmCreateProject({ name, description: $('#crm-project-desc').value.trim() || null });
     btn.disabled = false;
     if (res.status === 201) {
-      $('#crm-project-modal').style.display = 'none';
+      _closeProjectModal();
       toast('Relation created.', 'success');
       await loadCrmProjects();
       switchCrmView('relation', { skipLoad: true });
@@ -62241,7 +63277,7 @@ async function submitDsCreate() {
     // Delete
     tbody.querySelectorAll('.crm-task-del-btn').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Delete this task?')) return;
+        if (!await appConfirm({ title: 'Delete task?', message: 'This task will be removed.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
         const res = await API.crmDeleteTask(parseInt(btn.dataset.taskId));
         if (res.status === 200) { toast('Task deleted.', 'success'); loadCrmTasks(); }
         else toast(res.body?.message || 'Failed.', 'error');
@@ -62323,6 +63359,10 @@ async function submitDsCreate() {
   $('#rb-crm-audit')?.addEventListener('click',       () => openCrmAuditModal());
   $('#rb-crm-inbox')?.addEventListener('click',       () => { activateTab('crm'); openCrmInboxModal(); });
   $('#rb-crm-import-leads')?.addEventListener('click', () => { activateTab('crm'); openCrmImportModal(); });
+  $('#crm-relation-import-btn')?.addEventListener('click', () => {
+    const relation = _crmProjects.find(p => p.id === _crmProjectId);
+    if (relation) openCrmImportModal({ id: relation.id, name: relation.name });
+  });
 
   // ── Permissions modal ─────────────────────────────────────────────────────
   // Owner/admins pick a user, then toggle CRM functions and choose which stages
@@ -62335,7 +63375,7 @@ async function submitDsCreate() {
 
   async function openCrmPermissionsModal() {
     _crmPerms = null; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false;
-    $('#crm-perms-modal').style.display = 'flex';
+    _macShow($('#crm-perms-modal'));
     $('#crm-perms-alert').style.display = 'none';
     $('#crm-perms-user-search').value = _crmPermsUserQ = '';
     $('#crm-perms-user-list').innerHTML = '<span class="crm-perms-muted">Loading…</span>';
@@ -62353,9 +63393,22 @@ async function submitDsCreate() {
     if (first) _crmSelectPermsUser(first.user_id);
   }
 
-  function _crmClosePermsModal() {
-    if (_crmPermsDirty && !confirm('Discard unsaved permission changes?')) return;
-    $('#crm-perms-modal').style.display = 'none';
+  /** Resolves true when there is nothing unsaved, or the user agrees to drop it. */
+  function _crmPermsConfirmDiscard() {
+    if (!_crmPermsDirty) return true;
+    return appConfirm({
+      title: 'Discard changes?',
+      message: 'You have unsaved permission changes for this user. They will be lost.',
+      confirmText: '<i class="fa fa-trash-can"></i> Discard',
+      cancelText: 'Keep editing',
+      icon: 'fa-triangle-exclamation',
+      danger: true,
+    });
+  }
+
+  async function _crmClosePermsModal() {
+    if (!await _crmPermsConfirmDiscard()) return;
+    _macHide($('#crm-perms-modal'));
   }
 
   function _crmPermsUser(id = _crmPermsUserId) {
@@ -62384,8 +63437,8 @@ async function submitDsCreate() {
     }).join('');
   }
 
-  function _crmSelectPermsUser(userId) {
-    if (userId !== _crmPermsUserId && _crmPermsDirty && !confirm('Discard unsaved permission changes?')) return;
+  async function _crmSelectPermsUser(userId) {
+    if (userId !== _crmPermsUserId && !await _crmPermsConfirmDiscard()) return;
     const user = _crmPermsUser(userId);
     if (!user) return;
     _crmPermsUserId = userId;
@@ -62582,14 +63635,65 @@ async function submitDsCreate() {
   $('#crm-perms-cancel-btn')?.addEventListener('click',  _crmClosePermsModal);
 
   // ── Org structure modal ───────────────────────────────────────────────────
-  // Owner/admins pick an HR department, then link its pipeline, set its CRM
-  // settings and manage its divisions. Every action saves straight away.
+  // Owner/admins pick an HR department, then link its pipelines (the first is
+  // the main one), set its CRM settings and manage its divisions. Every action
+  // saves straight away.
+  // ── macOS-style windows (.mac-overlay > .mac-window) ──────────────────────
+  // Open zooms the window in from slightly smaller; close fades + shrinks it away.
+  function _macShow(overlay) {
+    overlay.classList.remove('mac-out');
+    overlay.style.display = 'flex';
+    overlay.classList.add('mac-in');
+  }
+
+  function _macHide(overlay) {
+    if (overlay.style.display === 'none') return;
+    overlay.classList.remove('mac-in');
+    overlay.classList.add('mac-out');
+    setTimeout(() => {
+      if (!overlay.classList.contains('mac-out')) return; // reopened meanwhile
+      overlay.classList.remove('mac-out');
+      overlay.style.display = 'none';
+    }, 190);
+  }
+
+  function _macToggleZoom(win) {
+    const zoomed = win.classList.toggle('mac-zoomed');
+    const btn = win.querySelector('[data-mac-zoom]');
+    if (!btn) return;
+    btn.title = zoomed ? 'Exit full screen' : 'Full screen';
+    btn.innerHTML = `<i class="fa ${zoomed ? 'fa-compress' : 'fa-expand'}"></i>`;
+  }
+
+  // Esc closes the front-most mac window through its own close button (so each modal's close logic runs)
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape' || e.defaultPrevented) return;
+    const open = [...document.querySelectorAll('.mac-overlay')].filter(o => o.style.display === 'flex' && !o.classList.contains('mac-out'));
+    const top = open.sort((a, b) => (parseInt(getComputedStyle(a).zIndex) || 0) - (parseInt(getComputedStyle(b).zIndex) || 0)).pop();
+    top?.querySelector('[data-mac-close]')?.click();
+  });
+
+  // The full-screen button, or double-clicking the title bar, zooms the window
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.mac-window [data-mac-zoom]');
+    if (btn) _macToggleZoom(btn.closest('.mac-window'));
+  });
+  document.addEventListener('dblclick', e => {
+    const bar = e.target.closest('.mac-titlebar');
+    if (bar && !e.target.closest('button')) _macToggleZoom(bar.closest('.mac-window'));
+  });
+
   let _crmOrg       = null;   // { departments, pipelines, users, marketing_intake_department_id } from /crm/org
   let _crmOrgDeptId = null;
 
   async function openCrmOrgModal() {
-    $('#crm-org-modal').style.display = 'flex';
+    $('#crm-org-dept-search').value = '';
+    _macShow($('#crm-org-modal'));
     await _crmLoadOrg();
+  }
+
+  function _crmCloseOrg() {
+    _macHide($('#crm-org-modal'));
   }
 
   async function _crmLoadOrg() {
@@ -62614,27 +63718,49 @@ async function submitDsCreate() {
 
   function _crmOrgError(res, fallback) {
     _crmOrgAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || fallback));
+    $('#crm-org-alert').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
+  // toast() drops success messages, so confirm on the button itself. The editor is
+  // re-rendered after a save, so the button is looked up again by selector.
+  function _crmOrgFlashSaved(sel, msg) {
+    const btn = sel && $('#crm-org-editor-body').querySelector(sel);
+    if (!btn) return;
+    const html = btn.innerHTML;
+    btn.innerHTML = `<i class="fa fa-check-circle"></i> ${escHtml(msg)}`;
+    btn.style.background = '#34c759';
+    btn.style.borderColor = '#34c759';
+    btn.disabled = true;
+    setTimeout(() => {
+      if (!btn.isConnected) return;
+      btn.innerHTML = html;
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.disabled = false;
+    }, 2000);
   }
 
   function _crmRenderOrgDepts() {
     const list = $('#crm-org-dept-list');
     if (!_crmOrg.departments.length) {
-      list.innerHTML = '<span class="crm-perms-muted">No departments yet. Create them in HR Management first.</span>';
+      list.innerHTML = '<span class="mac-side-empty">No departments yet. Create them in HR Management first.</span>';
       return;
     }
-    list.innerHTML = _crmOrg.departments.map(d => {
-      const tag = d.settings.is_marketing_intake ? '<span class="crm-perms-tag crm-perms-tag--admin">Intake</span>'
-                : d.warnings.length ? `<span class="crm-perms-tag crm-perms-tag--custom" title="${escHtml(d.warnings.join('\n'))}"><i class="fa fa-triangle-exclamation"></i></span>`
+    const q = $('#crm-org-dept-search').value.trim().toLowerCase();
+    const depts = _crmOrg.departments.filter(d => !q || d.name.toLowerCase().includes(q));
+    list.innerHTML = depts.map(d => {
+      const tag = d.settings.is_marketing_intake ? '<span class="mac-pill">Intake</span>'
+                : d.warnings.length ? `<i class="fa fa-triangle-exclamation mac-side-warn" title="${escHtml(d.warnings.join('\n'))}"></i>`
                 : '';
-      return `<button type="button" class="crm-perms-user${d.id === _crmOrgDeptId ? ' active' : ''}" data-org-dept="${d.id}">
-        <span class="crm-perms-avatar"><i class="fa fa-building"></i></span>
-        <span class="crm-perms-user-info">
-          <span class="crm-perms-user-name" style="display:block">${escHtml(d.name)}</span>
-          <span class="crm-perms-user-sub" style="display:block">${d.pipeline ? escHtml(d.pipeline.name) : 'No pipeline'} · ${d.divisions.length} division${d.divisions.length !== 1 ? 's' : ''}</span>
+      return `<button type="button" class="mac-side-item${d.id === _crmOrgDeptId ? ' active' : ''}" data-org-dept="${d.id}">
+        <span class="mac-side-icon"><i class="fa fa-building"></i></span>
+        <span class="mac-side-text">
+          <span class="mac-side-name">${escHtml(d.name)}</span>
+          <span class="mac-side-sub">${d.pipelines.length ? escHtml(d.pipelines.map(p => p.name).join(', ')) : 'No pipeline'} · ${d.divisions.length} division${d.divisions.length !== 1 ? 's' : ''}</span>
         </span>
         ${tag}
       </button>`;
-    }).join('');
+    }).join('') || `<span class="mac-side-empty">No department matches “${escHtml(q)}”.</span>`;
   }
 
   function _crmOrgUserOptions(selectedId) {
@@ -62648,76 +63774,109 @@ async function submitDsCreate() {
     if (!d) { body.innerHTML = '<span class="crm-perms-muted">Select a department.</span>'; return; }
 
     const person = p => p ? `${escHtml(p.name)}${p.user_name ? '' : ' <span class="crm-perms-muted">(no user)</span>'}` : '—';
-    const linkable = _crmOrg.pipelines.filter(p => p.department_id === null || p.department_id === d.id);
+    const linkable = _crmOrg.pipelines.filter(p => p.department_id === null);
     const s = d.settings;
 
     body.innerHTML = `
-      <div>
-        <div style="font-size:15px;font-weight:700">${escHtml(d.name)}</div>
-        <div class="crm-perms-muted">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''} · ${d.staff_count} staff</div>
-      </div>
-      ${d.warnings.map(w => `<div class="crm-org-warn"><i class="fa fa-triangle-exclamation"></i>${escHtml(w)}</div>`).join('')}
-
-      <div class="crm-org-box">
-        <div class="crm-perms-section-title" style="margin:0">Pipeline</div>
-        <div class="crm-org-row">
-          ${d.pipeline ? `<i class="fa fa-handshake" style="color:#7c3aed"></i><strong>${escHtml(d.pipeline.name)}</strong>
-            <button type="button" class="po-btn-ghost" data-org-unlink><i class="fa fa-link-slash"></i> Unlink</button>`
-            : '<span class="crm-perms-muted">No pipeline linked.</span>'}
+      <div class="mac-hero">
+        <span class="mac-hero-icon"><i class="fa fa-building"></i></span>
+        <div style="min-width:0;flex:1">
+          <div class="mac-hero-name">${escHtml(d.name)}</div>
+          <div class="mac-hero-sub">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''} · ${d.staff_count} staff</div>
         </div>
-        <div class="crm-org-row">
-          <select class="po-field-input" id="crm-org-pipeline-select">
-            <option value="">+ Create a new pipeline</option>
-            ${linkable.map(p => `<option value="${p.id}"${d.pipeline?.id === p.id ? ' selected' : ''}>${escHtml(p.name)}</option>`).join('')}
-          </select>
-          <button type="button" class="po-btn-primary" data-org-link>${d.pipeline ? 'Change' : 'Link'}</button>
-        </div>
+        ${s.is_marketing_intake ? '<span class="mac-pill">Marketing intake</span>' : ''}
       </div>
+      ${d.warnings.length ? `<div class="mac-callout"><i class="fa fa-triangle-exclamation"></i><div>
+        <strong>${d.warnings.length === 1 ? '1 thing needs' : `${d.warnings.length} things need`} attention</strong>
+        <ul>${d.warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div></div>` : ''}
 
-      <div class="crm-org-box">
-        <div class="crm-perms-section-title" style="margin:0">Settings</div>
-        <div class="crm-org-row"><label><input type="checkbox" id="crm-org-intake"${s.is_marketing_intake ? ' checked' : ''}> Marketing intake — every new lead lands here first (only one department)</label></div>
-        <div class="crm-org-row"><span style="min-width:180px">Discount approval limit (%)</span>
-          <input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:100px" placeholder="No limit" value="${s.discount_approval_limit_percent ?? ''}"></div>
-        <div class="crm-org-row"><span style="min-width:180px">Follow-up days</span>
-          <input type="text" class="po-field-input" id="crm-org-followups" style="width:100px" placeholder="2, 5" value="${escHtml(s.followup_days.join(', '))}"></div>
-        <div class="crm-org-row"><button type="button" class="po-btn-primary" data-org-save-settings><i class="fa fa-check"></i> Save settings</button></div>
-      </div>
-
-      <div class="crm-org-box">
-        <div class="crm-perms-section-title" style="margin:0">Divisions</div>
-        ${d.divisions.map(v => `<div class="crm-org-row" data-org-div="${v.id}">
-          <input type="text" class="po-field-input" data-f="name" value="${escHtml(v.name)}" maxlength="150" style="flex:1;min-width:150px">
-          <select class="po-field-input" data-f="head_user_id">${_crmOrgUserOptions(v.head_user_id)}</select>
-          <label><input type="checkbox" data-f="is_active"${v.is_active ? ' checked' : ''}> Active</label>
-          <button type="button" class="po-btn-ghost" data-org-div-save><i class="fa fa-check"></i> Save</button>
-          <button type="button" class="po-btn-ghost" data-org-div-delete title="Delete division"><i class="fa fa-trash" style="color:#ef4444"></i></button>
-        </div>`).join('') || '<span class="crm-perms-muted">No divisions yet.</span>'}
-        <div class="crm-org-row" data-org-div-new>
-          <input type="text" class="po-field-input" data-f="name" placeholder="New division name" maxlength="150" style="flex:1;min-width:150px">
-          <select class="po-field-input" data-f="head_user_id">${_crmOrgUserOptions(null)}</select>
-          <button type="button" class="po-btn-primary" data-org-div-add><i class="fa fa-plus"></i> Add division</button>
+      <div class="mac-section">
+        <div class="mac-section-title">Pipelines</div>
+        <div class="mac-group">
+          ${d.pipelines.map((p, i) => `<div class="mac-row">
+            <div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-handshake"></i></span>
+              <strong>${escHtml(p.name)}</strong>
+              ${i === 0 ? '<span class="mac-pill" title="Intake and forwarded leads land here unless another pipeline is picked">Main</span>' : ''}</div>
+            <button type="button" class="po-btn-ghost" data-org-unlink="${p.id}"><i class="fa fa-link-slash"></i> Unlink</button>
+          </div>`).join('') || '<div class="mac-row mac-muted-row">No pipeline linked.</div>'}
+          <div class="mac-row">
+            <div class="mac-row-label">Add a pipeline<small>Link an unlinked pipeline, or create a new one</small></div>
+            <div class="mac-inline">
+              <select class="po-field-input" id="crm-org-pipeline-select" style="width:220px">
+                <option value="">+ Create a new pipeline</option>
+                ${linkable.map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('')}
+              </select>
+              <button type="button" class="po-btn-primary" data-org-link><i class="fa fa-plus"></i> Add</button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="crm-org-box">
-        <div class="crm-perms-section-title" style="margin:0">Lead intake (whole business)</div>
-        <div class="crm-org-row"><span style="min-width:180px">Phone country code</span>
-          <input type="text" class="po-field-input" id="crm-org-phone-cc" maxlength="6" style="width:80px"
-            placeholder="${escHtml(_crmOrg.crm_settings?.default_phone_country_code || '')}" value="${escHtml(_crmOrg.crm_settings?.phone_country_code || '')}">
-          <button type="button" class="po-btn-primary" data-org-save-cc><i class="fa fa-check"></i> Save</button></div>
-        <div class="crm-perms-muted">Local numbers (077…) are matched as +${escHtml(_crmOrg.crm_settings?.effective_phone_country_code || '')} when checking new leads for duplicates.</div>
+      <div class="mac-section">
+        <div class="mac-section-title">Settings</div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">Marketing intake<small>Every new lead lands here first — only one department</small></div>
+            <input type="checkbox" class="mac-switch" id="crm-org-intake"${s.is_marketing_intake ? ' checked' : ''}>
+          </div>
+          <div class="mac-row">
+            <div class="mac-row-label">Discount approval limit<small>Percent — leave empty for no limit</small></div>
+            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:110px" placeholder="No limit" value="${s.discount_approval_limit_percent ?? ''}"> %</div>
+          </div>
+          <div class="mac-row">
+            <div class="mac-row-label">Follow-up days<small>Comma separated, e.g. 2, 5</small></div>
+            <input type="text" class="po-field-input" id="crm-org-followups" style="width:110px" placeholder="2, 5" value="${escHtml(s.followup_days.join(', '))}">
+          </div>
+          <div class="mac-group-foot"><button type="button" class="po-btn-primary" data-org-save-settings><i class="fa fa-check"></i> Save settings</button></div>
+        </div>
       </div>
 
-      <div class="crm-org-box">
-        <div class="crm-perms-section-title" style="margin:0">Lead quotations (whole business)</div>
-        <div class="crm-org-row"><span style="min-width:180px">When a line is over the stock</span>
-          <select class="po-field-input" id="crm-org-stock-check" style="width:auto;appearance:auto">
-            ${[['warn', 'Warn, but allow saving'], ['block', 'Block saving'], ['off', 'Don\'t check stock']].map(([k, l]) =>
-              `<option value="${k}"${(_crmOrg.crm_settings?.quotation_stock_check || 'warn') === k ? ' selected' : ''}>${l}</option>`).join('')}
-          </select>
-          <button type="button" class="po-btn-primary" data-org-save-stock><i class="fa fa-check"></i> Save</button></div>
-        <div class="crm-perms-muted">Stock is the quantity remaining across the product's stock batches — of the quotation's branch when branch mode is on.</div>
+      <div class="mac-section">
+        <div class="mac-section-title">Divisions</div>
+        <div class="mac-group">
+          ${d.divisions.map(v => `<div class="mac-row mac-row--fields" data-org-div="${v.id}">
+            <input type="text" class="po-field-input" data-f="name" value="${escHtml(v.name)}" maxlength="150" style="flex:1;min-width:150px">
+            <select class="po-field-input" data-f="head_user_id" style="width:210px">${_crmOrgUserOptions(v.head_user_id)}</select>
+            <label class="mac-switch-label"><input type="checkbox" class="mac-switch" data-f="is_active"${v.is_active ? ' checked' : ''}> Active</label>
+            <button type="button" class="po-btn-ghost" data-org-div-save><i class="fa fa-check"></i> Save</button>
+            <button type="button" class="po-btn-ghost mac-icon-btn" data-org-div-delete title="Delete division"><i class="fa fa-trash" style="color:#ff3b30"></i></button>
+          </div>`).join('') || '<div class="mac-row mac-muted-row">No divisions yet.</div>'}
+          <div class="mac-row mac-row--fields" data-org-div-new>
+            <input type="text" class="po-field-input" data-f="name" placeholder="New division name" maxlength="150" style="flex:1;min-width:150px">
+            <select class="po-field-input" data-f="head_user_id" style="width:210px">${_crmOrgUserOptions(null)}</select>
+            <button type="button" class="po-btn-primary" data-org-div-add><i class="fa fa-plus"></i> Add division</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-section-title">Lead intake <span class="crm-perms-muted" style="font-weight:400">· whole business</span></div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">Phone country code<small>Local numbers (077…) are matched as +${escHtml(_crmOrg.crm_settings?.effective_phone_country_code || '')} when checking new leads for duplicates</small></div>
+            <div class="mac-inline">
+              <input type="text" class="po-field-input" id="crm-org-phone-cc" maxlength="6" style="width:80px"
+                placeholder="${escHtml(_crmOrg.crm_settings?.default_phone_country_code || '')}" value="${escHtml(_crmOrg.crm_settings?.phone_country_code || '')}">
+              <button type="button" class="po-btn-primary" data-org-save-cc><i class="fa fa-check"></i> Save</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-section-title">Lead quotations <span class="crm-perms-muted" style="font-weight:400">· whole business</span></div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">When a line is over the stock<small>Stock is the quantity remaining across the product's stock batches — of the quotation's branch when branch mode is on</small></div>
+            <div class="mac-inline">
+              <select class="po-field-input" id="crm-org-stock-check" style="width:200px">
+                ${[['warn', 'Warn, but allow saving'], ['block', 'Block saving'], ['off', 'Don\'t check stock']].map(([k, l]) =>
+                  `<option value="${k}"${(_crmOrg.crm_settings?.quotation_stock_check || 'warn') === k ? ' selected' : ''}>${l}</option>`).join('')}
+              </select>
+              <button type="button" class="po-btn-primary" data-org-save-stock><i class="fa fa-check"></i> Save</button>
+            </div>
+          </div>
+        </div>
       </div>`;
   }
 
@@ -62744,15 +63903,16 @@ async function submitDsCreate() {
     const deptId = _crmOrgDeptId;
     const t = e.target.closest('button');
     if (!t || !deptId) return;
-    let call = null, msg = '';
+    let call = null, msg = '', flashSel = null;
 
     if (t.matches('[data-org-link]')) {
       const pid = $('#crm-org-pipeline-select').value;
       call = () => API.crmLinkDepartmentPipeline(deptId, pid ? Number(pid) : null);
       msg = 'Pipeline linked.';
     } else if (t.matches('[data-org-unlink]')) {
-      if (!confirm('Unlink this pipeline? Its leads stay where they are.')) return;
-      call = () => API.crmUnlinkDepartmentPipeline(deptId);
+      if (!await appConfirm({ title: 'Unlink pipeline?', message: 'Its leads stay where they are.', confirmText: '<i class="fa fa-link-slash"></i> Unlink', icon: 'fa-link-slash', danger: true })) return;
+      const projectId = Number(t.dataset.orgUnlink);
+      call = () => API.crmUnlinkDepartmentPipeline(deptId, projectId);
       msg = 'Pipeline unlinked.';
     } else if (t.matches('[data-org-save-settings]')) {
       const discount = $('#crm-org-discount').value;
@@ -62763,18 +63923,21 @@ async function submitDsCreate() {
       };
       call = () => API.crmSaveDepartmentSettings(deptId, body);
       msg = 'Department settings saved.';
+      flashSel = '[data-org-save-settings]';
     } else if (t.matches('[data-org-div-add]')) {
       const body = _crmOrgDivisionBody(t.closest('[data-org-div-new]'));
       if (!body.name) { _crmOrgAlert('Enter a division name.'); return; }
       call = () => API.crmCreateDivision(deptId, body);
       msg = 'Division added.';
+      flashSel = '[data-org-div-add]';
     } else if (t.matches('[data-org-div-save]')) {
       const row = t.closest('[data-org-div]');
       const body = _crmOrgDivisionBody(row);
       call = () => API.crmUpdateDivision(Number(row.dataset.orgDiv), body);
       msg = 'Division updated.';
+      flashSel = `[data-org-div="${row.dataset.orgDiv}"] [data-org-div-save]`;
     } else if (t.matches('[data-org-div-delete]')) {
-      if (!confirm('Delete this division?')) return;
+      if (!await appConfirm({ title: 'Delete division?', message: 'This division will be removed.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
       const divId = Number(t.closest('[data-org-div]').dataset.orgDiv);
       call = () => API.crmDeleteDivision(divId);
       msg = 'Division deleted.';
@@ -62782,10 +63945,12 @@ async function submitDsCreate() {
       const cc = $('#crm-org-phone-cc').value.trim();
       call = () => API.crmSaveSettings({ phone_country_code: cc || null });
       msg = 'CRM settings saved.';
+      flashSel = '[data-org-save-cc]';
     } else if (t.matches('[data-org-save-stock]')) {
       const mode = $('#crm-org-stock-check').value;
       call = () => API.crmSaveSettings({ quotation_stock_check: mode });
       msg = 'Stock check saved.';
+      flashSel = '[data-org-save-stock]';
     } else {
       return;
     }
@@ -62795,14 +63960,16 @@ async function submitDsCreate() {
     if (res.status === 200 || res.status === 201) {
       toast(msg, 'success');
       await _crmLoadOrg();
+      _crmOrgFlashSaved(flashSel, flashSel === '[data-org-div-add]' ? 'Added' : 'Saved');
     } else {
       t.disabled = false;
       _crmOrgError(res, 'Failed to save.');
     }
   });
 
-  $('#crm-org-modal-close')?.addEventListener('click', () => { $('#crm-org-modal').style.display = 'none'; });
-  $('#crm-org-close-btn')?.addEventListener('click',   () => { $('#crm-org-modal').style.display = 'none'; });
+  $('#crm-org-dept-search')?.addEventListener('input', () => _crmRenderOrgDepts());
+  $('#crm-org-modal-close')?.addEventListener('click', _crmCloseOrg);
+  $('#crm-org-close-btn')?.addEventListener('click',   _crmCloseOrg);
 
   // ── Marketing inbox modal ─────────────────────────────────────────────────
   // New leads in the intake pipeline plus every lead flagged "needs review".
@@ -62816,12 +63983,12 @@ async function submitDsCreate() {
   let _crmInboxSearchTimer = null;
 
   async function openCrmInboxModal() {
-    $('#crm-inbox-modal').style.display = 'flex';
+    _macShow($('#crm-inbox-modal'));
     await _crmLoadInbox();
   }
 
   function _crmCloseInbox() {
-    $('#crm-inbox-modal').style.display = 'none';
+    _macHide($('#crm-inbox-modal'));
     // Forwarded leads move between pipelines; refresh the board if one is open
     if (_crmView === 'relation' && $('#crm-relation-detail')?.style.display === 'flex') loadCrmPipeline();
   }
@@ -62845,7 +64012,7 @@ async function submitDsCreate() {
       return;
     }
     _crmInbox = res.body.data;
-    $('#crm-inbox-pipeline').textContent = _crmInbox.intake_project
+    $('#crm-inbox-subtitle').textContent = _crmInbox.intake_project
       ? `Intake pipeline: ${_crmInbox.intake_project.name}`
       : 'No intake pipeline set — new leads stay where they are entered';
     _crmRenderInboxTabs();
@@ -62897,6 +64064,13 @@ async function submitDsCreate() {
     return '<option value="">Whole department</option>' + (dept?.divisions || []).map(v => `<option value="${v.id}">${escHtml(v.name)}</option>`).join('');
   }
 
+  // The department's pipelines (main first), minus the one the lead is already in
+  function _crmInboxPipelineOptions(deptId) {
+    const dept = _crmInbox.forward_targets.find(d => d.id === Number(deptId));
+    return (dept?.pipelines || []).filter(p => p.id !== _crmInboxLead?.project?.id)
+      .map(p => `<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+  }
+
   function _crmRenderInboxEditor() {
     const body = $('#crm-inbox-editor-body');
     const l = _crmInboxLead;
@@ -62909,7 +64083,7 @@ async function submitDsCreate() {
     const area = (label, key, max) =>
       `<label>${label}<textarea class="po-field-input" data-f="${key}" rows="2" maxlength="${max}"${ro}>${escHtml(l[key] || '')}</textarea></label>`;
     // Never offer the pipeline the lead is already in (e.g. a repeat enquiry on a Sales lead)
-    const targets = _crmInbox.forward_targets.filter(d => d.pipeline.id !== l.project?.id);
+    const targets = _crmInbox.forward_targets.filter(d => d.pipelines.some(p => p.id !== l.project?.id));
     const askedFor = l.requested_department?.id;
     const firstDept = targets.some(d => d.id === askedFor) ? askedFor : '';
     const matches = l.duplicates || { leads: [], customers: [] };
@@ -62957,6 +64131,7 @@ async function submitDsCreate() {
             <option value="">Choose…</option>
             ${targets.map(d => `<option value="${d.id}"${d.id === firstDept ? ' selected' : ''}>${escHtml(d.name)}</option>`).join('')}
           </select></label>
+          <label>Pipeline<select class="po-field-input" id="crm-inbox-pipeline">${_crmInboxPipelineOptions(firstDept)}</select></label>
           <label>Division<select class="po-field-input" id="crm-inbox-div">${_crmInboxDivisionOptions(firstDept)}</select></label>
         </div>
         <label style="display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--text-muted,#6b7280)">Note for the department (optional)
@@ -63013,10 +64188,13 @@ async function submitDsCreate() {
   });
 
   $('#crm-inbox-editor-body')?.addEventListener('change', e => {
-    if (e.target.id === 'crm-inbox-dept') $('#crm-inbox-div').innerHTML = _crmInboxDivisionOptions(e.target.value);
+    if (e.target.id === 'crm-inbox-dept') {
+      $('#crm-inbox-div').innerHTML = _crmInboxDivisionOptions(e.target.value);
+      $('#crm-inbox-pipeline').innerHTML = _crmInboxPipelineOptions(e.target.value);
+    }
   });
 
-  $('#crm-inbox-editor-body')?.addEventListener('click', e => {
+  $('#crm-inbox-editor-body')?.addEventListener('click', async e => {
     const t = e.target.closest('button');
     const id = _crmInboxLeadId;
     if (!t || !id) return;
@@ -63034,14 +64212,16 @@ async function submitDsCreate() {
       const dept = $('#crm-inbox-dept').value;
       if (!dept) { _crmInboxAlert('Choose a department to forward to.'); return; }
       const div = $('#crm-inbox-div').value;
+      const pipeline = $('#crm-inbox-pipeline').value;
       _crmInboxRun(t, () => API.crmInboxForward(id, {
         department_id: Number(dept),
+        project_id: pipeline ? Number(pipeline) : null,
         division_id: div ? Number(div) : null,
         note: $('#crm-inbox-note').value.trim() || null,
       }), 'Lead forwarded.');
     } else if (t.matches('[data-inbox-merge]')) {
       const targetId = Number(t.dataset.inboxMerge);
-      if (!confirm(`Merge this lead into lead #${targetId}? Its activities and tasks move there and this lead is deleted.`)) return;
+      if (!await appConfirm({ title: `Merge into lead #${targetId}?`, message: 'Its activities and tasks move there and this lead is deleted.', confirmText: '<i class="fa fa-code-merge"></i> Merge', icon: 'fa-code-merge', danger: true })) return;
       _crmInboxRun(t, () => API.crmInboxMerge(id, targetId), 'Leads merged.');
     }
   });
@@ -63061,13 +64241,17 @@ async function submitDsCreate() {
   let _crmImpFilter  = 'all';
   let _crmImpPoll    = null;
   let _crmImpChanged = false;  // leads were added — refresh the board on close
+  let _crmImpRelsChanged = false; // a relation was created from "Import into" — refresh the relation list on close
+  let _crmImpRelHl   = 0;      // keyboard-highlighted entry in the "Import into" search list
+  let _crmImpLocked  = null;   // { id, name } when opened from inside a relation — the leads can only go there
 
   const _CRM_IMP_STATUS = { ok: 'OK', duplicate: 'Duplicate', error: 'Error', skipped: 'Skipped', failed: 'Failed',
                             queued: 'Queued', processing: 'Importing', completed: 'Completed' };
 
-  async function openCrmImportModal() {
-    _crmImp = null; _crmImpPreview = null; _crmImpFilter = 'all'; _crmImpChanged = false;
-    $('#crm-import-modal').style.display = 'flex';
+  async function openCrmImportModal(lockedRelation = null) {
+    _crmImp = null; _crmImpPreview = null; _crmImpFilter = 'all'; _crmImpChanged = false; _crmImpRelsChanged = false;
+    _crmImpLocked = lockedRelation;
+    _macShow($('#crm-import-modal'));
     await _crmImpLoadStart();
   }
 
@@ -63076,7 +64260,8 @@ async function submitDsCreate() {
     // A file that was uploaded but never imported is thrown away
     if (_crmImp && ['uploaded', 'previewed'].includes(_crmImp.status)) API.crmLeadImportDiscard(_crmImp.id);
     _crmImp = null;
-    $('#crm-import-modal').style.display = 'none';
+    _macHide($('#crm-import-modal'));
+    if (_crmImpRelsChanged) loadCrmProjects();
     if (_crmImpChanged && _crmView === 'relation' && $('#crm-relation-detail')?.style.display === 'flex') loadCrmPipeline();
   }
 
@@ -63096,7 +64281,10 @@ async function submitDsCreate() {
       s.classList.toggle('active', i === n);
       s.classList.toggle('done', i < n);
     });
-    $('#crm-import-file').textContent = _crmImp ? `${_crmImp.file_name} · ${_crmImp.format_label}` : '';
+    $('#crm-import-file').textContent = [
+      _crmImpLocked ? `Into ${_crmImpLocked.name}` : '',
+      _crmImp ? `${_crmImp.file_name} · ${_crmImp.format_label}` : '',
+    ].filter(Boolean).join(' — ');
   }
 
   function _crmImpStatus(status) {
@@ -63120,7 +64308,7 @@ async function submitDsCreate() {
 
   function _crmImpRenderStart() {
     const o = _crmImpOptions;
-    const history = o.imports.length ? `<table class="crm-imp-table">
+    const history = o.imports.length ? `<table class="crm-imp-table crm-imp-history">
         <thead><tr><th>When</th><th>File</th><th>Source</th><th>Pipeline</th><th>Status</th><th>New</th><th>Existing</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
         <tbody>${o.imports.map(i => `<tr>
           <td>${_crmAgo(i.created_at)}${i.user_name ? `<br><span class="crm-perms-muted">${escHtml(i.user_name)}</span>` : ''}</td>
@@ -63144,16 +64332,16 @@ async function submitDsCreate() {
         </div>
       </div>
       <div class="crm-imp-help">
-        <div><strong><i class="fa fa-file-csv" style="color:#16a34a"></i> CSV template</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4cd964,#248a3d)"><i class="fa fa-file-csv"></i></span> CSV template</strong>
           Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.</div>
-        <div><strong><i class="fa-brands fa-google" style="color:#ea4335"></i> Google Forms</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#ff6b5e,#ea4335)"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
           Open the form's responses sheet → File → Download → CSV, and upload it as it is. Each question becomes a field or a line in the notes.</div>
-        <div><strong><i class="fa-brands fa-facebook" style="color:#1877f2"></i> Facebook / Instagram Lead Ads</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4a9bff,#1877f2)"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
           Meta Business Suite → Leads Center (or the page's Lead Ads forms) → Download CSV. Instagram leads are recognised from the platform column.</div>
       </div>
-      <div class="crm-perms-muted"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
-      <div class="crm-org-box">
-        <div class="crm-perms-section-title" style="margin:0">Recent imports</div>
+      <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
+      <div class="mac-section">
+        <div class="mac-section-title">Recent imports</div>
         ${history}
       </div>`;
   }
@@ -63176,48 +64364,160 @@ async function submitDsCreate() {
     _crmImpRenderMapping();
   }
 
+  // Relations the leads can go into, as [id, name] — '' is the marketing inbox when one is set up
+  function _crmImpPipelines() {
+    const o = _crmImpOptions;
+    return o.intake_project
+      ? [['', `Marketing inbox (${o.intake_project.name})`], ...o.pipelines.filter(p => p.id !== o.intake_project.id).map(p => [p.id, p.name])]
+      : o.pipelines.map(p => [p.id, p.name]);
+  }
+
   // Step 2 — what each column is, the source, the pipeline and the duplicate rule
   function _crmImpRenderMapping() {
     _crmImpStep(2);
     const o = _crmImpOptions, imp = _crmImp;
     const targets = [...o.fields.map(f => [f.key, f.label]), ['note', 'Add to notes'], ['', "Don't import"]];
     const sampleOf = i => imp.sample.map(r => r[i]).filter(v => v).slice(0, 3).join(' · ');
-    const pipelines = o.intake_project
-      ? [['', `Marketing inbox (${o.intake_project.name})`], ...o.pipelines.filter(p => p.id !== o.intake_project.id).map(p => [p.id, p.name])]
-      : o.pipelines.map(p => [p.id, p.name]);
-    const curPipeline = imp.project && imp.project.id !== o.intake_project?.id ? imp.project.id : (o.intake_project ? '' : pipelines[0]?.[0]);
+    const pipelines = _crmImpPipelines();
+    const curPipeline = _crmImpLocked ? _crmImpLocked.id
+      : imp.project && imp.project.id !== o.intake_project?.id ? imp.project.id : (o.intake_project ? '' : pipelines[0]?.[0]);
+    const curName = pipelines.find(([id]) => String(id) === String(curPipeline ?? ''))?.[1];
+    const relCtl = _crmImpLocked
+      ? `<div class="mac-row-ctl">
+          <input type="hidden" id="crm-imp-project" value="${_crmImpLocked.id}">
+          <div class="mac-locked" title="Opened from this relation — leads are imported here"><i class="fa fa-lock"></i>${escHtml(_crmImpLocked.name)}</div>
+        </div>`
+      : `<div class="mac-row-ctl mac-combo" id="crm-imp-rel">
+          <input type="hidden" id="crm-imp-project" value="${escHtml(String(curPipeline ?? ''))}">
+          <button type="button" class="mac-popup" data-imp-combo>${escHtml(curName || 'Choose a relation…')}</button>
+        </div>`;
 
     $('#crm-import-body').innerHTML = `
       <div class="crm-perms-muted">
         <strong>${imp.total_rows.toLocaleString()}</strong> rows found. Detected as <strong>${escHtml(imp.format_label)}</strong> —
         check what each column holds. Columns set to <em>Add to notes</em> are kept on the lead as “Column: answer”.
       </div>
-      <div class="crm-inbox-grid">
-        <label>Lead source<select class="po-field-input" id="crm-imp-source">
-          ${o.sources.map(s => `<option value="${s.key}"${s.key === imp.source ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
-        </select></label>
-        <label>Import into<select class="po-field-input" id="crm-imp-project">
-          ${pipelines.length ? pipelines.map(([id, name]) => `<option value="${id}"${String(id) === String(curPipeline) ? ' selected' : ''}>${escHtml(name)}</option>`).join('')
-                             : '<option value="">No pipeline you can add leads to</option>'}
-        </select></label>
-        <label>Contact already has an open lead<select class="po-field-input" id="crm-imp-dups">
-          ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === imp.duplicates ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
-        </select></label>
+      <div class="mac-section">
+        <div class="mac-section-title">Import settings</div>
+        <div class="mac-group">
+          <div class="mac-row"><div class="mac-row-label">Lead source<small>Where these leads came from</small></div>
+            <div class="mac-row-ctl"><select class="po-field-input" id="crm-imp-source">
+              ${o.sources.map(s => `<option value="${s.key}"${s.key === imp.source ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
+            </select></div></div>
+          <div class="mac-row"><div class="mac-row-label">Import into<small>${_crmImpLocked ? 'The relation you opened the import from' : 'Search the relations, or type a new name to create one'}</small></div>
+            ${relCtl}</div>
+          <div class="mac-row"><div class="mac-row-label">Contact already has an open lead<small>What to do with repeat enquiries</small></div>
+            <div class="mac-row-ctl"><select class="po-field-input" id="crm-imp-dups">
+              ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === imp.duplicates ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
+            </select></div></div>
+        </div>
       </div>
-      <table class="crm-imp-table">
-        <thead><tr><th style="width:28%">Column in file</th><th>Sample values</th><th style="width:26%">Import as</th></tr></thead>
-        <tbody>${imp.headers.map((h, i) => `<tr>
-          <td><strong>${escHtml(h)}</strong></td>
-          <td><div class="crm-imp-sample" title="${escHtml(sampleOf(i))}">${escHtml(sampleOf(i)) || '<em>empty</em>'}</div></td>
-          <td><select class="po-field-input" data-imp-col="${i}">
-            ${targets.map(([k, label]) => `<option value="${k}"${k === (imp.mapping[i] ?? '') ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
-          </select></td>
-        </tr>`).join('')}</tbody>
-      </table>`;
+      <div class="mac-section">
+        <div class="mac-section-title">Columns</div>
+        <table class="crm-imp-table">
+          <thead><tr><th style="width:24%">Column in file</th><th>Sample values</th><th style="width:30%">Import as</th></tr></thead>
+          <tbody>${imp.headers.map((h, i) => `<tr>
+            <td><strong>${escHtml(h)}</strong></td>
+            <td><div class="crm-imp-sample" title="${escHtml(sampleOf(i))}">${escHtml(sampleOf(i)) || '<em>empty</em>'}</div></td>
+            <td><select class="po-field-input" data-imp-col="${i}">
+              ${targets.map(([k, label]) => `<option value="${k}"${k === (imp.mapping[i] ?? '') ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
+            </select></td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
 
     $('#crm-import-footer').innerHTML = `
       <button class="po-btn-ghost" data-imp-discard><i class="fa fa-arrow-left"></i> Choose another file</button>
       <button class="po-btn-primary" data-imp-preview><i class="fa fa-eye"></i> Preview</button>`;
+  }
+
+  // "Import into" — a searchable relation picker; typing a name that doesn't exist offers to create it
+  function _crmImpRelOpen() {
+    const combo = $('#crm-imp-rel');
+    if (!combo || combo.classList.contains('open')) return;
+    combo.classList.add('open');
+    combo.insertAdjacentHTML('beforeend', `<div class="mac-combo-pop">
+      <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" placeholder="Search or create a relation" autocomplete="off" data-imp-rel-q></div>
+      <div class="mac-combo-list"></div>
+    </div>`);
+    const cur = $('#crm-imp-project').value;
+    _crmImpRelHl = Math.max(0, _crmImpPipelines().findIndex(([id]) => String(id) === cur));
+    _crmImpRelRenderList();
+    combo.querySelector('[data-imp-rel-q]').focus();
+    combo.querySelector('.mac-combo-item.hl')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function _crmImpRelCloseList() {
+    const combo = $('#crm-imp-rel');
+    if (!combo?.classList.contains('open')) return false;
+    combo.classList.remove('open');
+    combo.querySelector('.mac-combo-pop')?.remove();
+    return true;
+  }
+
+  function _crmImpRelRenderList() {
+    const list = $('#crm-imp-rel .mac-combo-list');
+    if (!list) return;
+    const q = $('#crm-imp-rel [data-imp-rel-q]').value.trim();
+    const ql = q.toLowerCase();
+    const items = _crmImpPipelines().filter(([, name]) => !ql || name.toLowerCase().includes(ql));
+    const cur = $('#crm-imp-project').value;
+    const canCreate = !document.body.classList.contains('crm-deny-relations_create');
+    const exists = _crmImpPipelines().some(([, name]) => name.toLowerCase() === ql);
+    const mark = s => {
+      const e = escHtml(s);
+      if (!q) return e;
+      const re = new RegExp(escHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'ig');
+      return e.replace(re, m => `<mark>${m}</mark>`);
+    };
+
+    let html = items.map(([id, name]) => `<button type="button" class="mac-combo-item${String(id) === cur ? ' sel' : ''}" data-imp-rel="${id}">${mark(name)}${id === '' ? '<small>Inbox</small>' : ''}</button>`).join('')
+      || `<div class="mac-combo-empty">No relation matches “${escHtml(q)}”.</div>`;
+    if (canCreate && !exists) {
+      html += `<div class="mac-combo-sep"></div>` + (q
+        ? `<button type="button" class="mac-combo-item mac-combo-add" data-imp-rel-new><i class="fa fa-plus"></i> Create relation “${escHtml(q)}”</button>`
+        : `<button type="button" class="mac-combo-item mac-combo-add" disabled><i class="fa fa-plus"></i> Type a name to create a new relation</button>`);
+    }
+    list.innerHTML = html;
+
+    const opts = list.querySelectorAll('.mac-combo-item:not(:disabled)');
+    _crmImpRelHl = Math.min(_crmImpRelHl, opts.length - 1);
+    opts[_crmImpRelHl]?.classList.add('hl');
+  }
+
+  function _crmImpRelMove(delta) {
+    const opts = [...$$('#crm-imp-rel .mac-combo-item:not(:disabled)')];
+    if (!opts.length) return;
+    _crmImpRelHl = (_crmImpRelHl + delta + opts.length) % opts.length;
+    opts.forEach((b, i) => b.classList.toggle('hl', i === _crmImpRelHl));
+    opts[_crmImpRelHl].scrollIntoView({ block: 'nearest' });
+  }
+
+  function _crmImpRelSelect(id) {
+    $('#crm-imp-project').value = String(id);
+    $('#crm-imp-rel .mac-popup').textContent = _crmImpPipelines().find(([pid]) => String(pid) === String(id))?.[1] || 'Choose a relation…';
+    _crmImpRelCloseList();
+    $('#crm-imp-rel .mac-popup').focus();
+  }
+
+  async function _crmImpRelCreate(btn) {
+    const name = $('#crm-imp-rel [data-imp-rel-q]').value.trim();
+    if (!name) return;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Creating relation…';
+    _crmImpAlert('');
+    const res = await API.crmCreateProject({ name });
+    if (res.status !== 201) {
+      _crmImpRelRenderList();
+      _crmImpError(res, 'The relation could not be created.');
+      return;
+    }
+    const p = res.body.data;
+    _crmImpOptions.pipelines.push({ id: p.id, name: p.name });
+    _crmImpOptions.pipelines.sort((a, b) => a.name.localeCompare(b.name));
+    _crmImpRelsChanged = true;
+    _crmImpRelSelect(p.id);
+    toast(`Relation “${p.name}” created.`, 'success');
   }
 
   async function _crmImpRunPreview(btn) {
@@ -63341,10 +64641,17 @@ async function submitDsCreate() {
   }
 
   $('#crm-import-modal')?.addEventListener('click', async e => {
+    if (!e.target.closest('#crm-imp-rel')) _crmImpRelCloseList();
     const t = e.target.closest('button');
     if (!t) return;
     if (t.matches('[data-imp-close]') || t.id === 'crm-import-modal-close') {
       _crmImpClose();
+    } else if (t.matches('[data-imp-combo]')) {
+      if (!_crmImpRelCloseList()) _crmImpRelOpen();
+    } else if (t.matches('[data-imp-rel]')) {
+      _crmImpRelSelect(t.dataset.impRel);
+    } else if (t.matches('[data-imp-rel-new]')) {
+      _crmImpRelCreate(t);
     } else if (t.matches('[data-imp-pick]')) {
       _crmImpPick(t);
     } else if (t.matches('[data-imp-template]')) {
@@ -63375,6 +64682,33 @@ async function submitDsCreate() {
     }
   });
 
+  $('#crm-import-modal')?.addEventListener('input', e => {
+    if (!e.target.matches('[data-imp-rel-q]')) return;
+    _crmImpRelHl = 0;
+    _crmImpRelRenderList();
+  });
+
+  $('#crm-import-modal')?.addEventListener('mouseover', e => {
+    const item = e.target.closest('#crm-imp-rel .mac-combo-item:not(:disabled)');
+    if (!item || item.classList.contains('hl')) return;
+    const opts = [...$$('#crm-imp-rel .mac-combo-item:not(:disabled)')];
+    _crmImpRelMove(opts.indexOf(item) - _crmImpRelHl);
+  });
+
+  $('#crm-import-modal')?.addEventListener('keydown', e => {
+    // Esc closes an open relation list first, not the whole window
+    if (e.key === 'Escape' && _crmImpRelCloseList()) { e.preventDefault(); $('#crm-imp-rel .mac-popup')?.focus(); return; }
+    if (e.target.matches('[data-imp-rel-q]')) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); _crmImpRelMove(e.key === 'ArrowDown' ? 1 : -1); }
+      else if (e.key === 'Enter') { e.preventDefault(); $('#crm-imp-rel .mac-combo-item.hl')?.click(); }
+      else if (e.key === 'Tab') _crmImpRelCloseList();
+      else if (e.key === 'Escape') { e.stopPropagation(); _crmImpRelCloseList(); $('#crm-imp-rel .mac-popup').focus(); }
+      return;
+    }
+    if (e.target.matches('[data-imp-combo]') && (e.key === 'ArrowDown' || e.key === ' ')) { e.preventDefault(); _crmImpRelOpen(); }
+  });
+
+
   // ── Subnav ────────────────────────────────────────────────────────────────
   $$('[data-crmsub]').forEach(btn => btn.addEventListener('click', () => switchCrmView(btn.dataset.crmsub)));
 
@@ -63396,7 +64730,7 @@ async function submitDsCreate() {
     }
     $('#crm-stages-modal-title').textContent = `Manage Stages`;
     $('#crm-stages-alert').style.display = 'none';
-    $('#crm-stages-modal').style.display = 'flex';
+    _macShow($('#crm-stages-modal'));
     // Pipeline Automation is a shortcut into the Automation Editor feature —
     // hide it (and skip fetching/creating automation flows) when that
     // feature isn't installed, same as the standalone Automations tab.
@@ -63577,8 +64911,10 @@ async function submitDsCreate() {
     // Delete
     list.querySelectorAll('[data-del-stage]').forEach(btn => {
       btn.addEventListener('click', async () => {
-        if (!confirm('Delete this stage? Stages with leads cannot be deleted.')) return;
         const stageId = parseInt(btn.dataset.delStage);
+        const s = _stageListData.find(s => s.id === stageId);
+        const ok = await appConfirm({ title: 'Delete stage?', message: `"${s?.name || 'This stage'}" will be permanently deleted. Stages with leads cannot be deleted.`, danger: true, icon: 'fa-trash', confirmText: '<i class="fa fa-trash"></i> Delete' });
+        if (!ok) return;
         const res = await API.crmDeleteStage(_crmProjectId, stageId);
         if (res.status === 200) {
           toast('Stage deleted.', 'success');
@@ -63700,7 +65036,7 @@ async function submitDsCreate() {
     const stage     = _stageListData.find(s => s.id === stageId);
     const count     = stage?.leads_count || 0;
 
-    if (!confirm(`Send this email now to ${count} lead${count === 1 ? '' : 's'} currently in "${stage?.name || 'this stage'}"?`)) return;
+    if (!await appConfirm({ title: 'Send email now?', message: `It goes to ${count} lead${count === 1 ? '' : 's'} currently in "${stage?.name || 'this stage'}".`, confirmText: '<i class="fa fa-paper-plane"></i> Send', icon: 'fa-envelope' })) return;
 
     const btn = $('#crm-stage-mail-send');
     btn.disabled = true;
@@ -63730,7 +65066,7 @@ async function submitDsCreate() {
   });
 
   $('#crm-stage-mail-delete')?.addEventListener('click', async () => {
-    if (!confirm('Remove this stage\'s mail template?')) return;
+    if (!await appConfirm({ title: 'Remove mail template?', message: 'This stage will stop sending its mail.', confirmText: '<i class="fa fa-trash-can"></i> Remove', icon: 'fa-trash-can', danger: true })) return;
     const projectId = parseInt($('#crm-stage-mail-project-id').value);
     const stageId   = parseInt($('#crm-stage-mail-stage-id').value);
     const res = await API.crmDeleteStageMailTemplate(projectId, stageId);
@@ -63773,9 +65109,9 @@ async function submitDsCreate() {
   }
 
   // Stage management modal close/open
-  $('#crm-stages-modal-close')?.addEventListener('click',  () => { $('#crm-stages-modal').style.display = 'none'; });
-  $('#crm-stages-modal-cancel')?.addEventListener('click', () => { $('#crm-stages-modal').style.display = 'none'; });
-  $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) $('#crm-stages-modal').style.display = 'none'; });
+  $('#crm-stages-modal-close')?.addEventListener('click',  () => _macHide($('#crm-stages-modal')));
+  $('#crm-stages-modal-cancel')?.addEventListener('click', () => _macHide($('#crm-stages-modal')));
+  $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) _macHide($('#crm-stages-modal')); });
 
   // Add stage modal open/close
   function _openStageAddModal() {
@@ -63883,6 +65219,9 @@ async function submitDsCreate() {
     const empty = $('#crm-forms-empty');
     if (!list) return;
 
+    const countEl = $('#crm-forms-count');
+    if (countEl) countEl.textContent = _crmForms.length || '';
+
     if (_crmForms.length === 0) {
       list.innerHTML = '';
       list.style.display = 'none';
@@ -63890,25 +65229,28 @@ async function submitDsCreate() {
       return;
     }
     empty.style.display = 'none';
-    list.style.display  = 'flex';
+    list.style.display  = 'block';
 
-    list.innerHTML = _crmForms.map(f => `
-      <div class="crm-form-card" data-form-id="${f.id}">
-        <div class="crm-form-icon"><i class="fa fa-wpforms"></i></div>
-        <div class="crm-form-info">
-          <div class="crm-form-name">${escHtml(f.name)}</div>
-          <div class="crm-form-meta">${f.blocks_count} block${f.blocks_count !== 1 ? 's' : ''}${f.default_stage_name ? ` &bull; Default stage: ${escHtml(f.default_stage_name)}` : ''}</div>
+    list.innerHTML = `
+      <div class="crm-fm-row crm-rd-th"><span></span><div>Form</div><div>Status</div><div class="crm-rd-num">Actions</div></div>
+      ${_crmForms.map(f => `
+      <div class="crm-fm-row" data-form-id="${f.id}">
+        <span class="crm-fm-icon"><i class="fa fa-rectangle-list"></i></span>
+        <div class="crm-fm-info">
+          <div class="crm-fm-name">${escHtml(f.name)}</div>
+          <div class="crm-fm-meta">${f.blocks_count} field${f.blocks_count !== 1 ? 's' : ''}${f.default_stage_name ? ` <span>·</span> Lands in <b>${escHtml(f.default_stage_name)}</b>` : ''}</div>
         </div>
-        ${f.is_default ? '<span class="crm-form-pill crm-form-pill--default">Default form</span>' : ''}
-        <span class="crm-form-pill ${f.is_published ? 'crm-form-pill--pub' : 'crm-form-pill--unp'}">${f.is_published ? 'Published' : 'Draft'}</span>
-        <div class="crm-form-actions">
-          <button class="crm-card-btn crm-card-btn--default${f.is_default ? ' is-active' : ''}" data-form-default="${f.id}" title="${f.is_default ? 'Default form (click to unset)' : 'Set as default form'}"><i class="fa${f.is_default ? '-solid' : ''} fa-star"></i></button>
-          <button class="crm-card-btn" data-form-edit="${f.id}" title="Edit form"><i class="fa fa-pen"></i></button>
-          <button class="crm-card-btn" data-form-url="${escHtml(f.public_url)}" title="Copy public URL"><i class="fa fa-link"></i></button>
-          <button class="crm-card-btn" data-form-del="${f.id}" title="Delete form" style="color:#ef4444"><i class="fa fa-trash"></i></button>
+        <div class="crm-fm-status">
+          <span class="crm-fm-pill ${f.is_published ? 'crm-fm-pill--pub' : 'crm-fm-pill--draft'}">${f.is_published ? 'Published' : 'Draft'}</span>
+          ${f.is_default ? '<span class="crm-fm-pill crm-fm-pill--default">Default</span>' : ''}
         </div>
-      </div>
-    `).join('');
+        <div class="crm-fm-actions">
+          <button class="crm-fm-btn crm-fm-btn--star${f.is_default ? ' is-active' : ''}" data-form-default="${f.id}" title="${f.is_default ? 'Default form (click to unset)' : 'Set as default form'}"><i class="fa${f.is_default ? '-solid' : '-regular'} fa-star"></i></button>
+          <button class="crm-fm-btn" data-form-url="${escHtml(f.public_url)}" title="Copy public URL"><i class="fa fa-link"></i></button>
+          <button class="crm-fm-btn crm-fm-btn--danger" data-form-del="${f.id}" title="Delete form"><i class="fa fa-trash-can"></i></button>
+          <button class="crm-rd-btn" data-form-edit="${f.id}" title="Edit form"><i class="fa fa-pen"></i> Edit</button>
+        </div>
+      </div>`).join('')}`;
 
     list.querySelectorAll('[data-form-default]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -63934,7 +65276,7 @@ async function submitDsCreate() {
     list.querySelectorAll('[data-form-del]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const formId = parseInt(btn.dataset.formDel);
-        if (!confirm('Delete this form? This cannot be undone.')) return;
+        if (!await appConfirm({ title: 'Delete form?', message: 'This cannot be undone.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
         const res = await API.crmDeleteForm(_crmFormsProjectId, formId);
         if (res.status === 200) {
           toast('Form deleted.', 'success');
@@ -64184,7 +65526,7 @@ async function submitDsCreate() {
 
     _selectedTemplate = 'blank';
     $('#crm-form-modal-alert').style.display = 'none';
-    $('#crm-form-modal').style.display = 'flex';
+    _macShow($('#crm-form-modal'));
     _crmGoToWizStep(1);
   }
 
@@ -64194,10 +65536,10 @@ async function submitDsCreate() {
       const panel = $(`#crm-form-step-${n}`);
       if (panel) panel.style.display = (n === step) ? 'flex' : 'none';
     });
-    $('#crm-form-wiz-steps')?.querySelectorAll('.crm-wiz-step').forEach(el => {
+    $('#crm-form-wiz-steps')?.querySelectorAll('[data-wizstep]').forEach(el => {
       const n = parseInt(el.dataset.wizstep);
-      el.classList.toggle('is-active', n === step);
-      el.classList.toggle('is-done', n < step);
+      el.classList.toggle('active', n === step);
+      el.classList.toggle('done', n < step);
     });
     $('#crm-form-modal-back').style.display   = step === 1 ? 'none' : '';
     $('#crm-form-modal-next').style.display   = step === 3 ? 'none' : '';
@@ -64228,9 +65570,9 @@ async function submitDsCreate() {
     });
   }
 
-  $('#crm-form-modal-close')?.addEventListener('click',  () => { $('#crm-form-modal').style.display = 'none'; });
-  $('#crm-form-modal-cancel')?.addEventListener('click', () => { $('#crm-form-modal').style.display = 'none'; });
-  $('#crm-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-form-modal')) $('#crm-form-modal').style.display = 'none'; });
+  $('#crm-form-modal-close')?.addEventListener('click',  () => _macHide($('#crm-form-modal')));
+  $('#crm-form-modal-cancel')?.addEventListener('click', () => _macHide($('#crm-form-modal')));
+  $('#crm-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-form-modal')) _macHide($('#crm-form-modal')); });
 
   $('#crm-form-modal-back')?.addEventListener('click', () => {
     if (_crmWizStep > 1) _crmGoToWizStep(_crmWizStep - 1);
@@ -64271,7 +65613,7 @@ async function submitDsCreate() {
     });
     btn.disabled = false;
     if (res.status === 201) {
-      $('#crm-form-modal').style.display = 'none';
+      _macHide($('#crm-form-modal'));
       toast('Form created.', 'success');
       openFormBuilder(res.body.data.id);
     } else {
@@ -64623,23 +65965,30 @@ async function submitDsCreate() {
       success_message:    $('#crm-builder-success-msg').value,
       default_stage_id:   defaultStageVal ? Number(defaultStageVal) : null,
     };
-    const res = await API.crmUpdateForm(_crmFormsProjectId, _crmBuilderFormId, payload);
-    btn.disabled = false;
+    let res;
+    try {
+      res = await API.crmUpdateForm(_crmFormsProjectId, _crmBuilderFormId, payload);
+    } catch (e) {
+      res = { status: 0, body: { message: e?.message } };
+    } finally {
+      btn.disabled = false;
+    }
+    const alert = $('#crm-builder-alert');
     if (res.status === 200) {
       _crmBuilderData = Object.assign(_crmBuilderData, res.body.data);
-      toast('Form saved.', 'success');
-      const alert = $('#crm-builder-alert');
       if (alert) alert.style.display = 'none';
+      flashCopiedBadge(btn, 'Form saved!');
     } else {
       const msg = res.body?.message || 'Failed to save form.';
-      const alert = $('#crm-builder-alert');
       if (alert) { alert.textContent = msg; alert.style.display = ''; }
+      toast(msg, 'error');
     }
   });
 
   // Builder publish/unpublish toggle
-  $('#crm-builder-toggle-pub-btn')?.addEventListener('click', async () => {
+  $('#crm-builder-toggle-pub-btn')?.addEventListener('click', async (e) => {
     if (!_crmBuilderData) return;
+    const btn = e.currentTarget;
     const isPublished = _crmBuilderData.is_published;
     const res = isPublished
       ? await API.crmUnpublishForm(_crmFormsProjectId, _crmBuilderFormId)
@@ -64647,7 +65996,9 @@ async function submitDsCreate() {
     if (res.status === 200) {
       _crmBuilderData.is_published = !isPublished;
       _updatePubPill(_crmBuilderData.is_published);
-      toast(isPublished ? 'Form unpublished.' : 'Form published.', 'success');
+      flashCopiedBadge(btn, isPublished ? 'Form unpublished!' : 'Form published!');
+    } else {
+      toast(res.body?.message || 'Failed to update publish status.', 'error');
     }
   });
 
@@ -64888,7 +66239,7 @@ async function submitDsCreate() {
       if (!_ctxLead) return;
       const lead = _ctxLead;
       hideMenu();
-      if (!confirm(`Delete lead "${lead.name}"? This cannot be undone.`)) return;
+      if (!await appConfirm({ title: `Delete "${lead.name}"?`, message: 'This cannot be undone.', confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
       const res = await API.crmDeleteLead(lead.id);
       if (res.status === 200) {
         toast('Lead deleted.', 'success');

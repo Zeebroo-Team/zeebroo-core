@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // One pipeline per HR department; pipelines without a department keep working as before
+        // One pipeline per HR department (relaxed to many by 2026_11_08_100000); pipelines
+        // without a department keep working as before
         Schema::table('crm_projects', function (Blueprint $table) {
             $table->foreignId('department_id')->nullable()->after('business_id')
                 ->constrained('hr_departments')->nullOnDelete();

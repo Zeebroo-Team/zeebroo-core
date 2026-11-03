@@ -26,6 +26,7 @@ function crmOrgMigrations(): array
         $dir . '2026_10_31_100000_create_crm_divisions_table.php',
         $dir . '2026_10_31_100100_add_department_id_to_crm_projects_table.php',
         $dir . '2026_10_31_100200_create_crm_department_settings_table.php',
+        $dir . '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
     ];
 }
 
@@ -254,17 +255,29 @@ test('linking with no pipeline creates one named after the department', function
         ->and($project->business_id)->toBe(7);
 });
 
-test('a department has one pipeline and a pipeline serves one department', function () {
+test('a department has many pipelines, the first is its main one, and a pipeline serves one department', function () {
     $a = Project::create(['business_id' => 7, 'name' => 'A', 'status' => 'active']);
     $b = Project::create(['business_id' => 7, 'name' => 'B', 'status' => 'active']);
 
     $this->org->linkPipeline($this->business, $this->sales, $a->id);
     $this->org->linkPipeline($this->business, $this->sales, $b->id);
 
-    expect($a->fresh()->department_id)->toBeNull()
-        ->and($b->fresh()->department_id)->toBe(10);
+    expect($a->fresh()->department_id)->toBe(10)
+        ->and($b->fresh()->department_id)->toBe(10)
+        ->and($this->org->mainPipeline($this->business, 10)->id)->toBe($a->id)
+        ->and($this->org->departmentPipeline($this->business, $this->sales, $b->id)->id)->toBe($b->id)
+        ->and($this->org->departmentPipeline($this->business, $this->mkt, $b->id))->toBeNull();
 
     expect(fn () => $this->org->linkPipeline($this->business, $this->mkt, $b->id))
+        ->toThrow(ValidationException::class);
+
+    // Unlinking one keeps the other
+    $this->org->unlinkPipeline($this->business, $this->sales, $a->id);
+    expect($a->fresh()->department_id)->toBeNull()
+        ->and($b->fresh()->department_id)->toBe(10)
+        ->and($this->org->mainPipeline($this->business, 10)->id)->toBe($b->id);
+
+    expect(fn () => $this->org->unlinkPipeline($this->business, $this->sales, $a->id))
         ->toThrow(ValidationException::class);
 
     $this->org->unlinkPipeline($this->business, $this->sales);
@@ -292,6 +305,7 @@ test('the department list shows pipeline, settings, divisions and missing-user w
     $mkt   = $departments[11];
 
     expect($sales['pipeline']['name'])->toBe('Sales')
+        ->and(collect($sales['pipelines'])->pluck('name')->all())->toBe(['Sales'])
         ->and($sales['head_user_id'])->toBe(2)
         ->and($sales['settings']['is_marketing_intake'])->toBeTrue()
         ->and($sales['divisions'][0]['head_user_name'])->toBe('Kamala')
@@ -300,6 +314,7 @@ test('the department list shows pipeline, settings, divisions and missing-user w
         ->and($sales['warnings'])->toBe(['1 staff member has no linked Zeebroo user.']);
 
     expect($mkt['pipeline'])->toBeNull()
+        ->and($mkt['pipelines'])->toBe([])
         ->and($mkt['settings']['followup_days'])->toBe([2, 5])
         ->and($mkt['warnings'])->toContain('Head Amali (no login) has no linked Zeebroo user.');
 });

@@ -92,15 +92,12 @@ class LeadIntakeService
         });
     }
 
-    /** The marketing intake department's pipeline, if the business has one. */
+    /** The marketing intake department's main pipeline, if the business has one. */
     public function intakeProject(Business $business): ?Project
     {
         $department = $this->org->marketingIntakeDepartment($business);
 
-        return $department === null ? null : Project::query()
-            ->where('business_id', $business->id)
-            ->where('department_id', $department->id)
-            ->first();
+        return $department === null ? null : $this->org->mainPipeline($business, $department->id);
     }
 
     private function pipelineFor(Business $business, ?Project $target, array $data): Project

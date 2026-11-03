@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Window controls
@@ -42,6 +42,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
+  // Local path of a File dropped from Explorer / Finder (File.path is gone in recent Electron)
+  pathForFile:     (file)               => webUtils.getPathForFile(file),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
   readTextFile:    (filePath)           => ipcRenderer.invoke('read-text-file', filePath),
 

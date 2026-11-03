@@ -175,7 +175,8 @@ class PosCrmLeadWorkspaceApiController extends Controller
 
         return response()->json([
             'data' => $this->messages->forLead($lead)->map(fn (LeadMessage $m) => $this->presentMessage($access, $lead, $m))->values(),
-            'meta' => ['can_post' => $this->policy->canContribute($access, $lead)],
+            // me: the viewer's user id, so the desktop can put their own messages on the right
+            'meta' => ['can_post' => $this->policy->canContribute($access, $lead), 'me' => $access->userId],
         ]);
     }
 
@@ -314,7 +315,13 @@ class PosCrmLeadWorkspaceApiController extends Controller
                 'completed_at'     => $t->completed_at?->toIso8601String(),
             ]);
 
-        return response()->json(['data' => $rows, 'meta' => ['can_work' => $this->policy->canEdit($access, $lead) && $access->can('tasks_create')]]);
+        $canEdit = $this->policy->canEdit($access, $lead);
+
+        return response()->json(['data' => $rows, 'meta' => [
+            'can_work'   => $canEdit && $access->can('tasks_create'),
+            // DELETE crm/tasks/{task} — the desktop shows the delete action only when this is true
+            'can_delete' => $canEdit && $access->can('tasks_delete'),
+        ]]);
     }
 
     /** POST crm/leads/{lead}/tasks — { title, description?, due_at?, assigned_to? }: a task on this lead. */

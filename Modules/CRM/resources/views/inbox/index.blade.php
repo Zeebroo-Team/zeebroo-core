@@ -71,7 +71,10 @@
         @php
             $row = $rows[$lead->id];
             // Never offer the pipeline the lead is already in (e.g. a repeat enquiry on a Sales lead)
-            $leadTargets = collect($targets)->reject(fn ($t) => $t['pipeline']['id'] === $lead->project_id)->values()->all();
+            $leadTargets = collect($targets)
+                ->map(fn ($t) => ['pipelines' => collect($t['pipelines'])->reject(fn ($p) => $p['id'] === $lead->project_id)->values()->all()] + $t)
+                ->filter(fn ($t) => $t['pipelines'] !== [])
+                ->values()->all();
         @endphp
         <section class="crm-inbox-card {{ $row['needs_review'] ? 'crm-inbox-card--flag' : '' }}" id="lead-{{ $lead->id }}">
             <div class="crm-inbox-head">
@@ -150,7 +153,8 @@
                         @if(empty($leadTargets))
                             <p class="muted" style="font-size:12px;margin:0;">No other department has a pipeline. Link pipelines under CRM → Org Structure.</p>
                         @else
-                            <form method="POST" action="{{ route('crm.inbox.forward', [$lead] + $keep) }}" data-forward-form>
+                            <form method="POST" action="{{ route('crm.inbox.forward', [$lead] + $keep) }}" data-forward-form
+                                  data-pipelines='@json(collect($leadTargets)->mapWithKeys(fn ($t) => [$t['id'] => $t['pipelines']]))'>
                                 @csrf
                                 <label>Department</label>
                                 <select name="department_id" required data-forward-dept>
@@ -159,6 +163,8 @@
                                         <option value="{{ $t['id'] }}" @selected(($row['requested_department']['id'] ?? null) === $t['id'])>{{ $t['name'] }}</option>
                                     @endforeach
                                 </select>
+                                <label>Pipeline</label>
+                                <select name="project_id" data-forward-pipeline></select>
                                 <label>Division</label>
                                 <select name="division_id" data-forward-div><option value="">Whole department</option></select>
                                 <label>Note for the department (optional)</label>
@@ -211,12 +217,20 @@
         document.querySelectorAll('[data-forward-form]').forEach(function (form) {
             const dept = form.querySelector('[data-forward-dept]');
             const div  = form.querySelector('[data-forward-div]');
+            const pipe = form.querySelector('[data-forward-pipeline]');
+            const pipelines = JSON.parse(form.dataset.pipelines || '{}');
             const fill = function () {
                 div.innerHTML = '<option value="">Whole department</option>';
                 (divisions[dept.value] || []).forEach(function (d) {
                     const o = document.createElement('option');
                     o.value = d.id; o.textContent = d.name;
                     div.appendChild(o);
+                });
+                pipe.innerHTML = '';
+                (pipelines[dept.value] || []).forEach(function (p) {
+                    const o = document.createElement('option');
+                    o.value = p.id; o.textContent = p.name;
+                    pipe.appendChild(o);
                 });
             };
             dept.addEventListener('change', fill);

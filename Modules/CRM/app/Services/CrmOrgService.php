@@ -16,9 +16,10 @@ use Modules\HRManagement\Models\Department;
 use Modules\HRManagement\Models\Employee;
 
 /**
- * The org structure the CRM routes leads through: HR department → CRM division, one
- * pipeline (crm_projects) per department, and per-department CRM settings. The HR
- * department head is the CRM department head.
+ * The org structure the CRM routes leads through: HR department → CRM division, any
+ * number of pipelines (crm_projects) per department, and per-department CRM settings.
+ * The first pipeline linked is the department's main one — where intake and forwarded
+ * leads land unless another is picked. The HR department head is the CRM department head.
  */
 class CrmOrgService
 {
@@ -41,8 +42,9 @@ class CrmOrgService
         $pipelines = Project::query()
             ->where('business_id', $business->id)
             ->whereIn('department_id', $ids)
+            ->orderBy('id')
             ->get(['id', 'department_id', 'name', 'status'])
-            ->keyBy('department_id');
+            ->groupBy('department_id');
 
         $settings = DepartmentSetting::query()
             ->where('business_id', $business->id)
@@ -69,9 +71,13 @@ class CrmOrgService
             ->keyBy('department_id');
 
         return $departments->map(function (Department $d) use ($pipelines, $settings, $divisions, $staff) {
-            $pipeline = $pipelines->get($d->id);
-            $setting  = $settings->get($d->id);
-            $counts   = $staff->get($d->id);
+            $linked  = $pipelines->get($d->id, collect())->map(fn (Project $p) => [
+                'id'     => $p->id,
+                'name'   => $p->name,
+                'status' => $p->status,
+            ])->values();
+            $setting = $settings->get($d->id);
+            $counts  = $staff->get($d->id);
 
             return [
                 'id'            => $d->id,
@@ -79,11 +85,9 @@ class CrmOrgService
                 'head'          => $this->employeeSummary($d->headEmployee),
                 'co_head'       => $this->employeeSummary($d->coHeadEmployee),
                 'head_user_id'  => $this->headUserIdFromLoaded($d),
-                'pipeline'      => $pipeline ? [
-                    'id'     => $pipeline->id,
-                    'name'   => $pipeline->name,
-                    'status' => $pipeline->status,
-                ] : null,
+                // The main pipeline, then every linked one (main first)
+                'pipeline'      => $linked->first(),
+                'pipelines'     => $linked->all(),
                 'settings'      => $this->settingsSummary($setting),
                 'divisions'     => $divisions->get($d->id, collect())->map(fn (Division $v) => $this->divisionSummary($v))->values()->all(),
                 'staff_count'   => (int) ($counts->total ?? 0),
@@ -269,9 +273,32 @@ class CrmOrgService
 
     // ── Pipeline link ────────────────────────────────────────────────────
 
+    /** The department's main pipeline: the first one linked. */
+    public function mainPipeline(Business $business, int $departmentId): ?Project
+    {
+        return Project::query()
+            ->where('business_id', $business->id)
+            ->where('department_id', $departmentId)
+            ->orderBy('id')
+            ->first();
+    }
+
+    /** One of the department's pipelines, or its main one when no id is given. */
+    public function departmentPipeline(Business $business, Department $department, ?int $projectId): ?Project
+    {
+        if ($projectId === null) {
+            return $this->mainPipeline($business, $department->id);
+        }
+
+        return Project::query()
+            ->where('business_id', $business->id)
+            ->where('department_id', $department->id)
+            ->find($projectId);
+    }
+
     /**
-     * Link a pipeline to the department, replacing any pipeline linked before. With no
-     * project id a new pipeline named after the department is created.
+     * Link a pipeline to the department, next to any it already has. With no project id
+     * a new pipeline named after the department is created.
      */
     public function linkPipeline(Business $business, Department $department, ?int $projectId): Project
     {
@@ -291,14 +318,6 @@ class CrmOrgService
                 ]);
             }
 
-            $previous = Project::query()
-                ->where('business_id', $business->id)
-                ->where('department_id', $department->id)
-                ->whereKeyNot($project->id)
-                ->pluck('id');
-            Project::query()->whereIn('id', $previous)->update(['department_id' => null]);
-            Lead::query()->whereIn('project_id', $previous)->update(['department_id' => null, 'division_id' => null]);
-
             $project->update(['department_id' => $department->id]);
 
             // A department pipeline always carries every standard status
@@ -311,12 +330,18 @@ class CrmOrgService
         });
     }
 
-    public function unlinkPipeline(Business $business, Department $department): void
+    /** Unlink one of the department's pipelines, or all of them when no id is given. */
+    public function unlinkPipeline(Business $business, Department $department, ?int $projectId = null): void
     {
         $projectIds = Project::query()
             ->where('business_id', $business->id)
             ->where('department_id', $department->id)
+            ->when($projectId !== null, fn ($q) => $q->whereKey($projectId))
             ->pluck('id');
+
+        if ($projectId !== null && $projectIds->isEmpty()) {
+            throw ValidationException::withMessages(['project_id' => 'This pipeline is not linked to ' . $department->name . '.']);
+        }
 
         Project::query()->whereIn('id', $projectIds)->update(['department_id' => null]);
         Lead::query()->whereIn('project_id', $projectIds)->update(['department_id' => null, 'division_id' => null]);
