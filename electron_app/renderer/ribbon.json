@@ -478,20 +478,20 @@
           "label": "Tasks",
           "items": [
             { "type": "lg", "id": "rb-crm-tasks",         "icon": "fa-list-check",         "label": "Tasks" },
-            { "type": "lg", "id": "rb-crm-new-task",      "icon": "fa-plus",               "label": "New Task",        "primary": true }
+            { "type": "lg", "id": "rb-crm-new-task",      "icon": "fa-calendar-plus",              "label": "New Task",        "primary": true }
           ]
         },
         {
           "label": "Forms",
           "items": [
-            { "type": "lg", "id": "rb-crm-forms",         "icon": "fa-file-lines",         "label": "Forms" },
-            { "type": "lg", "id": "rb-crm-new-form",      "icon": "fa-plus",               "label": "New Form",        "primary": true }
+            { "type": "lg", "id": "rb-crm-forms",         "icon": "fa-rectangle-list",    "label": "Forms" },
+            { "type": "lg", "id": "rb-crm-new-form",      "icon": "fa-file-circle-plus",   "label": "New Form",        "primary": true }
           ]
         },
         {
           "label": "Manage",
           "items": [
-            { "type": "lg", "id": "rb-crm-projects",      "icon": "fa-plus",               "label": "New Relation" },
+            { "type": "lg", "id": "rb-crm-projects",      "icon": "fa-diagram-project",   "label": "New Relation" },
             { "type": "lg", "id": "rb-crm-stages",        "icon": "fa-stairs",             "label": "Stages" }
           ]
         },

@@ -432,6 +432,8 @@ body.crm-proj-deny-manage #rb-crm-stages, body.crm-proj-deny-manage #crm-relatio
 body.crm-proj-deny-manage #crm-stage-add-open-btn, body.crm-proj-deny-manage [data-edit-stage], body.crm-proj-deny-manage [data-del-stage],
 body.crm-proj-deny-manage [data-mail-stage], body.crm-proj-deny-manage #rb-crm-new-form, body.crm-proj-deny-manage #crm-forms-new-btn{display:none !important}
 body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
+/* Temporarily hidden: CRM ribbon Tasks + Forms groups */
+.ribbon-group:has(#rb-crm-tasks), .ribbon-group:has(#rb-crm-forms){display:none !important}
 /* ── CRM Kanban ── */
 .crm-board{display:flex;gap:12px;padding:10px;overflow-x:auto;flex:1;align-items:flex-start;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--text-muted,#6b7280) 35%,transparent) transparent}
 /* Apple-style pipeline: white canvas, borderless lanes on a faint fill, floating
@@ -3265,10 +3267,10 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
         <div class="ribbon-group">
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-crm-pipeline">
-              <i class="fa fa-table-columns"></i>Pipeline
+              <i class="fa fa-handshake"></i>Pipeline
             </button>
             <button class="ribbon-btn-lg primary" id="rb-crm-new-lead">
-              <i class="fa fa-plus"></i>New Lead
+              <i class="fa fa-user-plus"></i>New Lead
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-inbox">
               <i class="fa fa-inbox"></i>Marketing<br>Inbox
@@ -3304,7 +3306,7 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
               <i class="fa fa-list-check"></i>Tasks
             </button>
             <button class="ribbon-btn-lg primary" id="rb-crm-new-task">
-              <i class="fa fa-plus"></i>New Task
+              <i class="fa fa-calendar-plus"></i>New Task
             </button>
           </div>
           <div class="ribbon-group-label">Tasks</div>
@@ -3313,10 +3315,10 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
         <div class="ribbon-group">
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-crm-forms">
-              <i class="fa fa-wpforms"></i>Forms
+              <i class="fa fa-rectangle-list"></i>Forms
             </button>
             <button class="ribbon-btn-lg primary" id="rb-crm-new-form">
-              <i class="fa fa-plus"></i>New Form
+              <i class="fa fa-file-circle-plus"></i>New Form
             </button>
           </div>
           <div class="ribbon-group-label">Forms</div>
@@ -3325,10 +3327,10 @@ body.dark #crm-dashboard-view{--crm-dash-c1:#6366f1;--crm-dash-c2:#0d9488;--crm-
         <div class="ribbon-group">
           <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-crm-projects">
-              <i class="fa fa-folder-open"></i>Pipeline<br>Projects
+              <i class="fa fa-diagram-project"></i>Pipeline<br>Projects
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-stages">
-              <i class="fa fa-layer-group"></i>Stages
+              <i class="fa fa-stairs"></i>Stages
             </button>
           </div>
           <div class="ribbon-group-label">Manage</div>
