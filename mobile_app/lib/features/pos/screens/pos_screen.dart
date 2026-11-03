@@ -580,6 +580,7 @@ class _PosScreenState extends State<PosScreen>
     required String? couponCode,
     required String? giftCardCode,
     required double giftCardAmount,
+    Map<String, String>? cheque,
   }) async {
     if (_checkingOut) throw StateError('A sale is already being submitted.');
     setState(() => _checkingOut = true);
@@ -606,6 +607,7 @@ class _PosScreenState extends State<PosScreen>
         if (notes.isNotEmpty) 'notes': notes,
         if (paymentMethod == 'credit' && creditDueDate != null)
           'credit_due_date': creditDueDate,
+        if (paymentMethod == 'cheque') ...?cheque,
         'items': [
           for (final c in _cart)
             {
@@ -718,6 +720,7 @@ class _PosScreenState extends State<PosScreen>
       'payment_method_label': switch (paymentMethod) {
         'card' => 'Card',
         'credit' => 'Credit',
+        'cheque' => 'Cheque',
         _ => 'Cash',
       },
       if (customer != null) 'customer_name': customer['name'],
@@ -872,6 +875,7 @@ class _PosScreenState extends State<PosScreen>
               giftCardCode,
               required giftCardAmount,
               required amountPaid,
+              cheque,
             }) async {
               final pm = _paymentMethod;
               final dp = _discountType == 'pct' ? _discountValue : 0.0;
@@ -887,6 +891,7 @@ class _PosScreenState extends State<PosScreen>
                 couponCode: couponCode,
                 giftCardCode: giftCardCode,
                 giftCardAmount: giftCardAmount,
+                cheque: cheque,
               );
             },
       ),
@@ -1792,6 +1797,7 @@ class _CheckoutSheet extends StatefulWidget {
     String? giftCardCode,
     required double giftCardAmount,
     required double amountPaid,
+    Map<String, String>? cheque,
   })
   onComplete;
 
@@ -1813,6 +1819,9 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   final _notesCtrl = TextEditingController();
   final _couponCtrl = TextEditingController();
   final _giftCardCtrl = TextEditingController();
+  final _chequeNumberCtrl = TextEditingController();
+  final _chequeBankCtrl = TextEditingController();
+  DateTime _chequeDate = DateTime.now();
   bool _showCouponEntry = false;
   bool _showGiftCardEntry = false;
   bool _lookingUpCoupon = false;
@@ -1843,6 +1852,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     _notesCtrl.dispose();
     _couponCtrl.dispose();
     _giftCardCtrl.dispose();
+    _chequeNumberCtrl.dispose();
+    _chequeBankCtrl.dispose();
     super.dispose();
   }
 
@@ -1881,8 +1892,8 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
   static const _kPayMethods = [
     ('cash', 'Cash', Icons.payments_rounded),
     ('card', 'Card', Icons.credit_card_rounded),
-    ('transfer', 'Transfer', Icons.account_balance_rounded),
     ('credit', 'Credit', Icons.schedule_send_rounded),
+    ('cheque', 'Cheque', Icons.money_rounded),
   ];
 
   void _syncPaidToAmountDue() {
@@ -1993,6 +2004,29 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
       );
       return;
     }
+    if (_paymentMethod == 'credit') {
+      final over = _creditOverBy;
+      final error = _customer == null
+          ? 'Select a customer to sell on credit.'
+          : over != null
+          ? 'This sale is ${over.toStringAsFixed(2)} LKR over the customer\'s available credit.'
+          : null;
+      if (error != null) {
+        setState(() => _submitError = error);
+        return;
+      }
+    }
+    if (_paymentMethod == 'cheque') {
+      final error = _customer == null
+          ? 'Select a customer to take a cheque.'
+          : _chequeNumberCtrl.text.trim().isEmpty
+          ? 'Enter the cheque number.'
+          : null;
+      if (error != null) {
+        setState(() => _submitError = error);
+        return;
+      }
+    }
     FocusScope.of(context).unfocus();
     setState(() {
       _submitting = true;
@@ -2004,6 +2038,14 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
         giftCardCode: _giftCard?.code,
         giftCardAmount: _giftCardApplied,
         amountPaid: amountPaid,
+        cheque: _paymentMethod == 'cheque'
+            ? {
+                'cheque_number': _chequeNumberCtrl.text.trim(),
+                'cheque_date': _ymd(_chequeDate),
+                if (_chequeBankCtrl.text.trim().isNotEmpty)
+                  'cheque_bank': _chequeBankCtrl.text.trim(),
+              }
+            : null,
       );
       if (mounted) Navigator.pop(context, receipt);
     } catch (error) {
@@ -2107,8 +2149,10 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
                       // Cash / Credit sections
                       if (_paymentMethod == 'cash') _buildCashSection(),
                       if (_paymentMethod == 'credit') _buildCreditSection(),
+                      if (_paymentMethod == 'cheque') _buildChequeSection(),
                       if (_paymentMethod == 'cash' ||
-                          _paymentMethod == 'credit')
+                          _paymentMethod == 'credit' ||
+                          _paymentMethod == 'cheque')
                         const SizedBox(height: 12),
 
                       // Notes toggle
@@ -2799,9 +2843,258 @@ class _CheckoutSheetState extends State<_CheckoutSheet> {
     ),
   );
 
+  static String _ymd(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Widget _buildChequeSection() {
+    const label = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w600,
+      color: AppColors.textDark,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_customer == null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF7ED),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: const Color(0xFFFED7AA)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.person_search_outlined, size: 18, color: Color(0xFFC2410C)),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Select a customer to take a cheque.',
+                    style: TextStyle(fontSize: 12.5, color: Color(0xFFC2410C), fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF9FAFB),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Text('Cheque amount', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+              const Spacer(),
+              Text(
+                '${_amountDue.toStringAsFixed(2)} LKR',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.textDark),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Cheque number *', style: label),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _chequeNumberCtrl,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    maxLength: 60,
+                    decoration: const InputDecoration(hintText: 'e.g. 000123', counterText: ''),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Cheque date *', style: label),
+                  const SizedBox(height: 6),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(10),
+                    onTap: () async {
+                      final now = DateTime.now();
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _chequeDate,
+                        firstDate: now.subtract(const Duration(days: 365)),
+                        lastDate: now.add(const Duration(days: 365)),
+                      );
+                      if (picked != null) setState(() => _chequeDate = picked);
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        suffixIcon: Icon(Icons.calendar_today_outlined, size: 16),
+                      ),
+                      child: Text(_ymd(_chequeDate), style: const TextStyle(fontSize: 13.5)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text.rich(
+          TextSpan(
+            text: 'Bank ',
+            style: label,
+            children: [
+              TextSpan(
+                text: '(optional)',
+                style: TextStyle(fontWeight: FontWeight.w400, color: AppColors.textMuted),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _chequeBankCtrl,
+          textCapitalization: TextCapitalization.words,
+          maxLength: 120,
+          decoration: const InputDecoration(hintText: 'e.g. Bank of Ceylon — Kandy', counterText: ''),
+        ),
+        const SizedBox(height: 8),
+        const Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.info_rounded, size: 15, color: AppColors.warning),
+            SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Claim the cheque from Sales → Cheques once it is deposited — '
+                'the money goes into the account then.',
+                style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static double? _toDouble(dynamic value) =>
+      value is num ? value.toDouble() : double.tryParse('${value ?? ''}');
+
+  /// How far this sale goes past the customer's available credit; null when
+  /// it fits, or the customer has no limit.
+  double? get _creditOverBy {
+    final limit = _toDouble(_customer?['credit_limit']);
+    if (_customer == null || limit == null) return null;
+    final available =
+        _toDouble(_customer?['credit_available']) ??
+        (limit - (_toDouble(_customer?['credit_outstanding']) ?? 0));
+    final over = _amountDue - available;
+    return over > 0.005 ? over : null;
+  }
+
+  Widget _buildCreditLimitBox() {
+    final customer = _customer;
+    if (customer == null) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: const Color(0xFFFED7AA)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.person_search_outlined, size: 18, color: Color(0xFFC2410C)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Select a customer to sell on credit.',
+                style: TextStyle(fontSize: 12.5, color: Color(0xFFC2410C), fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final limit = _toDouble(customer['credit_limit']);
+    final outstanding = _toDouble(customer['credit_outstanding']) ?? 0;
+    final available =
+        _toDouble(customer['credit_available']) ??
+        (limit == null ? null : limit - outstanding);
+    final over = _creditOverBy;
+
+    Widget line(String label, String value, {Color? color}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted)),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: color ?? AppColors.textDark),
+          ),
+        ],
+      ),
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: over != null ? const Color(0xFFFEF2F2) : const Color(0xFFF9FAFB),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: over != null ? const Color(0xFFFCA5A5) : AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          line('Credit limit', limit == null ? 'No limit' : '${limit.toStringAsFixed(2)} LKR'),
+          line('Outstanding', '${outstanding.toStringAsFixed(2)} LKR'),
+          if (available != null)
+            line(
+              'Available',
+              '${available.toStringAsFixed(2)} LKR',
+              color: over != null ? AppColors.error : AppColors.success,
+            ),
+          if (over != null) ...[
+            const SizedBox(height: 6),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.warning_rounded, size: 16, color: AppColors.error),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'This sale (${_amountDue.toStringAsFixed(2)} LKR) is '
+                    '${over.toStringAsFixed(2)} LKR over the available credit.',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.error),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildCreditSection() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
+      _buildCreditLimitBox(),
+      const SizedBox(height: 12),
       const Text(
         'Credit due date (optional)',
         style: TextStyle(fontSize: 12, color: AppColors.textMuted),

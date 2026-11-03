@@ -63,6 +63,7 @@ class PosOfflineRecordService
                 'address'              => $data['address'] ?? null,
                 'notes'                => $data['notes'] ?? null,
                 'customer_type'        => $data['customer_type'] ?? 'retail',
+                'credit_limit'         => $data['credit_limit'] ?? null,
                 'customer_category_id' => $categoryId,
             ]);
         } catch (QueryException $e) {

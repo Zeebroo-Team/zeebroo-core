@@ -173,6 +173,10 @@ class ApiEndpoints {
   // POS — point of sale
   static const String customers = '/v1/pos/customers';
   static String customer(int id) => '/v1/pos/customers/$id';
+  static String customerCreditSales(int id) =>
+      '/v1/pos/customers/$id/credit-sales';
+  static String customerCreditPayments(int id) =>
+      '/v1/pos/customers/$id/credit-payments';
   static const String customerCategories = '/v1/pos/customer-categories';
   static const String couponLookup = '/v1/pos/coupons/lookup';
   static const String coupons = '/v1/pos/coupons';

@@ -59,6 +59,9 @@ class PosOfflineSaleApiController extends Controller
             'discount_flat'                 => ['nullable', 'numeric', 'min:0'],
             'notes'                         => ['nullable', 'string', 'max:2000'],
             'credit_due_date'               => ['nullable', 'date_format:Y-m-d'],
+            'cheque_number'                 => ['nullable', 'required_if:payment_method,cheque', 'string', 'max:60'],
+            'cheque_date'                   => ['nullable', 'required_if:payment_method,cheque', 'date_format:Y-m-d'],
+            'cheque_bank'                   => ['nullable', 'string', 'max:120'],
             'coupon_code'                   => ['prohibited'],
             'gift_card_code'                => ['prohibited'],
         ]);
@@ -93,6 +96,7 @@ class PosOfflineSaleApiController extends Controller
         $paymentMethod = match (strtolower((string) $data['payment_method'])) {
             'card', 'transfer' => Sale::PAYMENT_CARD,
             'credit'           => Sale::PAYMENT_CREDIT,
+            'cheque'           => Sale::PAYMENT_CHEQUE,
             default            => Sale::PAYMENT_CASH,
         };
 
@@ -115,6 +119,11 @@ class PosOfflineSaleApiController extends Controller
                 honourClientPrices: true,
                 clientUuid:         $data['client_uuid'],
                 offlineRef:         $data['offline_ref'] ?? null,
+                cheque:             $paymentMethod === Sale::PAYMENT_CHEQUE ? [
+                    'cheque_number' => $data['cheque_number'] ?? null,
+                    'cheque_date'   => $data['cheque_date'] ?? null,
+                    'bank_name'     => $data['cheque_bank'] ?? null,
+                ] : null,
             );
         } catch (ValidationException $e) {
             return response()->json([

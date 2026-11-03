@@ -112,3 +112,55 @@ test('a cheque sale needs a customer, a cheque number and a date', function (?in
 })->with([
     'no customer' => [null, ['cheque_number' => '000123', 'cheque_date' => '2026-11-01']],
 ])->throws(ValidationException::class);
+
+test('the mobile sale endpoint passes cheque details to checkout', function () {
+    $passed = null;
+    $sales = Mockery::mock(SaleService::class);
+    $sales->shouldReceive('checkout')->once()
+        ->andReturnUsing(function (...$args) use (&$passed) {
+            $passed = $args;
+            // Stop before the sale is reloaded from the database.
+            throw ValidationException::withMessages(['stop' => 'stop']);
+        });
+
+    $controller = new class($sales, Mockery::mock(PosOnlineApiService::class)) extends Modules\Pos\Http\Controllers\Api\PosSaleApiController {
+        protected function businessOrAbort(Request $request): Business
+        {
+            return (new Business)->forceFill(['id' => 12, 'user_id' => 1]);
+        }
+    };
+
+    $controller->store(chequeRequest('/sales', [
+        'items'          => [['product_id' => 1, 'qty' => 1]],
+        'payment_method' => 'cheque',
+        'customer_id'    => 5,
+        'cheque_number'  => '000123',
+        'cheque_date'    => '2026-11-03',
+        'cheque_bank'    => 'Bank of Ceylon',
+    ]));
+
+    expect($passed[3])->toBe('cheque') // paymentMethod
+        ->and(end($passed))->toBe([ // cheque (last parameter)
+            'cheque_number' => '000123',
+            'cheque_date'   => '2026-11-03',
+            'bank_name'     => 'Bank of Ceylon',
+        ]);
+});
+
+test('a mobile cheque sale needs a cheque number and date', function () {
+    $sales = Mockery::mock(SaleService::class);
+    $sales->shouldNotReceive('checkout');
+
+    $controller = new class($sales, Mockery::mock(PosOnlineApiService::class)) extends Modules\Pos\Http\Controllers\Api\PosSaleApiController {
+        protected function businessOrAbort(Request $request): Business
+        {
+            return (new Business)->forceFill(['id' => 12, 'user_id' => 1]);
+        }
+    };
+
+    $controller->store(chequeRequest('/sales', [
+        'items'          => [['product_id' => 1, 'qty' => 1]],
+        'payment_method' => 'cheque',
+        'customer_id'    => 5,
+    ]));
+})->throws(ValidationException::class);

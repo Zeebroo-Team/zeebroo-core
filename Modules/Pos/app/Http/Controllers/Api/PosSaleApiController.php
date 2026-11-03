@@ -42,6 +42,9 @@ class PosSaleApiController extends Controller
             'gift_card_amount'       => ['nullable', 'required_with:gift_card_code', 'numeric', 'min:0.01'],
             'notes'                  => ['nullable', 'string', 'max:2000'],
             'credit_due_date'        => ['nullable', 'date_format:Y-m-d'],
+            'cheque_number'          => ['nullable', 'required_if:payment_method,cheque', 'string', 'max:60'],
+            'cheque_date'            => ['nullable', 'required_if:payment_method,cheque', 'date_format:Y-m-d'],
+            'cheque_bank'            => ['nullable', 'string', 'max:120'],
         ]);
 
         $items = array_map(fn ($i) => [
@@ -53,6 +56,7 @@ class PosSaleApiController extends Controller
         $paymentMethod = match (strtolower((string) ($data['payment_method'] ?? 'cash'))) {
             'card', 'transfer' => Sale::PAYMENT_CARD,
             'credit'           => Sale::PAYMENT_CREDIT,
+            'cheque'           => Sale::PAYMENT_CHEQUE,
             default            => Sale::PAYMENT_CASH,
         };
 
@@ -74,6 +78,11 @@ class PosSaleApiController extends Controller
                 giftCardCode:    $data['gift_card_code'] ?? null,
                 giftCardAmount:  isset($data['gift_card_amount']) ? (float) $data['gift_card_amount'] : null,
                 couponCode:      $data['coupon_code'] ?? null,
+                cheque:          $paymentMethod === Sale::PAYMENT_CHEQUE ? [
+                    'cheque_number' => $data['cheque_number'] ?? null,
+                    'cheque_date'   => $data['cheque_date'] ?? null,
+                    'bank_name'     => $data['cheque_bank'] ?? null,
+                ] : null,
             );
         } catch (\Illuminate\Validation\ValidationException $e) {
             return response()->json([

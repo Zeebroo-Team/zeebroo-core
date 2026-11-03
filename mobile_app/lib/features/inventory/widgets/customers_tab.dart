@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
+import '../screens/customer_detail_screen.dart';
 import 'customer_form_sheet.dart';
 import 'list_states.dart';
 
@@ -72,6 +73,17 @@ class _CustomersTabState extends State<CustomersTab>
   Future<void> _openForm({Map<String, dynamic>? existing}) async {
     final saved = await showCustomerFormSheet(context, existing: existing);
     if (saved != null) await _load(forceRefresh: true);
+  }
+
+  Future<void> _openDetail(Map<String, dynamic> item) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            CustomerDetailScreen(customerId: (item['id'] as num).toInt()),
+      ),
+    );
+    if (changed == true) await _load(forceRefresh: true);
   }
 
   Future<void> _delete(Map<String, dynamic> item) async {
@@ -200,7 +212,7 @@ class _CustomersTabState extends State<CustomersTab>
     ].join(' · ');
 
     return InkWell(
-      onTap: () => _openForm(existing: item),
+      onTap: () => _openDetail(item),
       borderRadius: BorderRadius.circular(14),
       child: Container(
         padding: const EdgeInsets.all(14),

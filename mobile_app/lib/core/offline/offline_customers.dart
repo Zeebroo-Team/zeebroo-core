@@ -253,7 +253,7 @@ class OfflineCustomers extends ChangeNotifier {
             ApiEndpoints.offlineCustomers,
             data: {
               'client_uuid': uuid,
-              for (final k in ['name', 'phone', 'email', 'address', 'notes', 'customer_type', 'customer_category_id'])
+              for (final k in ['name', 'phone', 'email', 'address', 'notes', 'customer_type', 'customer_category_id', 'credit_limit'])
                 if (data[k] != null) k: data[k],
             },
             headers: {'X-Business-Id': '${row['business_id']}'},

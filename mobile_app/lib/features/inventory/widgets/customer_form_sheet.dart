@@ -1,7 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_common.dart';
+import '../../../core/offline/offline_customers.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/contact_autofill_button.dart';
 import 'picker_sheet.dart';
@@ -43,6 +47,9 @@ class _CustomerFormSheetState extends State<CustomerFormSheet> {
   late final _notesController = TextEditingController(
     text: widget.existing?['notes']?.toString() ?? '',
   );
+  late final _creditLimitController = TextEditingController(
+    text: _amountText(widget.existing?['credit_limit']),
+  );
 
   List<Map<String, dynamic>> _categories = [];
   late int? _categoryId = (widget.existing?['customer_category_id'] as num?)
@@ -70,7 +77,15 @@ class _CustomerFormSheetState extends State<CustomerFormSheet> {
     _emailController.dispose();
     _addressController.dispose();
     _notesController.dispose();
+    _creditLimitController.dispose();
     super.dispose();
+  }
+
+  /// `10000.00` → `10000`, `2500.5` → `2500.5`; empty when there's no limit.
+  static String _amountText(dynamic value) {
+    final n = value is num ? value : num.tryParse('${value ?? ''}');
+    if (n == null) return '';
+    return n == n.truncate() ? '${n.toInt()}' : '$n';
   }
 
   Future<void> _loadCategories() async {
@@ -119,13 +134,33 @@ class _CustomerFormSheetState extends State<CustomerFormSheet> {
         'notes': _optional(_notesController.text),
         'customer_category_id': _categoryId,
         'customer_type': _customerType,
+        // Empty means no limit: send null so editing can remove one.
+        'credit_limit': num.tryParse(_creditLimitController.text.trim()),
       };
-      final response = _isEdit
-          ? await ApiClient.instance.patch(
-              ApiEndpoints.customer((widget.existing!['id'] as num).toInt()),
-              data: data,
-            )
-          : await ApiClient.instance.post(ApiEndpoints.customers, data: data);
+      final Response<dynamic> response;
+      if (_isEdit) {
+        response = await ApiClient.instance.patch(
+          ApiEndpoints.customer((widget.existing!['id'] as num).toInt()),
+          data: data,
+        );
+      } else {
+        try {
+          response = await ApiClient.instance.post(
+            ApiEndpoints.customers,
+            data: data,
+          );
+        } catch (error) {
+          if (!couldNotReachServer(error) ||
+              !OfflineCustomers.instance.canRecord) {
+            rethrow;
+          }
+          // No connection: keep the customer on the phone; it uploads before
+          // any sale made to it.
+          final saved = await OfflineCustomers.instance.record(data);
+          if (mounted) Navigator.pop(context, saved);
+          return;
+        }
+      }
       final raw = response.data;
       final customer = raw is Map ? raw['data'] : null;
       if (customer is! Map) throw Exception('Unexpected customer response.');
@@ -295,6 +330,30 @@ class _CustomerFormSheetState extends State<CustomerFormSheet> {
                     selected: {_customerType},
                     onSelectionChanged: (selection) =>
                         setState(() => _customerType = selection.first),
+                  ),
+                  const SizedBox(height: 14),
+                  TextFormField(
+                    controller: _creditLimitController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                    ],
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Credit limit',
+                      helperText: 'Leave empty for no limit',
+                      prefixText: 'LKR ',
+                    ),
+                    validator: (value) {
+                      final text = value?.trim() ?? '';
+                      if (text.isEmpty) return null;
+                      final n = num.tryParse(text);
+                      return n == null || n < 0
+                          ? 'Enter a valid amount'
+                          : null;
+                    },
                   ),
                   const SizedBox(height: 14),
                   TextFormField(

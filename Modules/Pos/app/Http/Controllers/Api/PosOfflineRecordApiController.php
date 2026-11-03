@@ -44,6 +44,7 @@ class PosOfflineRecordApiController extends Controller
             'address'              => ['nullable', 'string', 'max:500'],
             'notes'                => ['nullable', 'string', 'max:1000'],
             'customer_type'        => ['nullable', 'string', 'in:retail,wholesale'],
+            'credit_limit'         => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'customer_category_id' => ['nullable', 'integer'],
         ]);
 
