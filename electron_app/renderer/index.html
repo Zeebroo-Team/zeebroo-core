@@ -310,6 +310,19 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm > .fin-subnav .fin-subnav-btn:hover{background:var(--mac-fill);color:var(--mac-text)}
 #panel-crm > .fin-subnav .fin-subnav-btn.active{background:var(--mac-fill);color:var(--mac-text);font-weight:600}
 #panel-crm > .fin-subnav .fin-subnav-btn.active i{color:var(--mac-accent)}
+/* same look as before — the active background is drawn by .crm-subnav-pill so it can slide between tabs */
+#panel-crm .crm-subnav-track{position:relative;display:flex;align-items:center;gap:2px}
+#panel-crm .crm-subnav-pill{position:absolute;top:0;bottom:0;left:0;width:0;border-radius:7px;background:var(--mac-fill);opacity:0;pointer-events:none;
+  transition:transform .5s cubic-bezier(.34,1.25,.5,1),width .5s cubic-bezier(.34,1.25,.5,1),opacity .25s ease}
+#panel-crm .crm-subnav-pill.no-anim{transition:none}
+#panel-crm .crm-subnav-track.has-pill .fin-subnav-btn{position:relative;z-index:1}
+#panel-crm .crm-subnav-track.has-pill .fin-subnav-btn.active{background:transparent}
+#panel-crm .crm-subnav-track .fin-subnav-btn{transition:background .2s,color .2s,transform .25s cubic-bezier(.34,1.4,.5,1)}
+#panel-crm .crm-subnav-track .fin-subnav-btn:active{transform:scale(.95);transition-duration:.08s}
+/* macOS-style view change: quick fade with a slight zoom-in and blur settling */
+#panel-crm .crm-view-enter{animation:crmViewIn .42s cubic-bezier(.32,.72,0,1);transform-origin:50% 0}
+@keyframes crmViewIn{from{opacity:0;transform:scale(.985);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
+@media (prefers-reduced-motion:reduce){#panel-crm .crm-subnav-pill,#panel-crm .crm-subnav-track .fin-subnav-btn{transition:none}#panel-crm .crm-view-enter{animation:none}}
 #crm-overview-view,#crm-relation-list{background:var(--mac-page)}
 #crm-overview-view{padding:22px 24px!important;gap:24px!important}
 #panel-crm .pm-welcome-card{border:0;border-radius:16px;padding:28px 30px;align-items:center;gap:20px;
@@ -11259,11 +11272,14 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
       <!-- Subnav -->
       <div class="fin-subnav">
-        <button class="fin-subnav-btn active" data-crmsub="overview"><i class="fa fa-house"></i> Overview</button>
-        <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
-        <button class="fin-subnav-btn" style="display:none" data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
-        <button class="fin-subnav-btn" style="display:none" data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
-        <button class="fin-subnav-btn"         data-crmsub="dashboard"><i class="fa fa-chart-line"></i> Dashboard</button>
+        <div class="crm-subnav-track" id="crm-subnav-track">
+          <span class="crm-subnav-pill" id="crm-subnav-pill"></span>
+          <button class="fin-subnav-btn active" data-crmsub="overview"><i class="fa fa-house"></i> Overview</button>
+          <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
+          <button class="fin-subnav-btn" style="display:none" data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
+          <button class="fin-subnav-btn" style="display:none" data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
+          <button class="fin-subnav-btn"         data-crmsub="dashboard"><i class="fa fa-chart-line"></i> Dashboard</button>
+        </div>
       </div>
 
       <!-- ── Overview view ── -->

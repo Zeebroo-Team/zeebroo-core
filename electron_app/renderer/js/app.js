@@ -57428,9 +57428,31 @@ async function submitDsCreate() {
       const btns = [...grp.querySelectorAll('button')];
       grp.classList.toggle('crm-perm-hidden', btns.length > 0 && btns.every(b => getComputedStyle(b).display === 'none'));
     });
+    _crmMoveSubnavPill(true); // a hidden subnav tab shifts the others
   }
 
   // ── View switch ──────────────────────────────────────────────────────────
+  let _crmLastAnimView = null;
+
+  // Slide the subnav highlight under the active tab (hidden when no tab is active, e.g. builder)
+  function _crmMoveSubnavPill(instant = false) {
+    const pill = $('#crm-subnav-pill');
+    if (!pill) return;
+    const btn = $('#crm-subnav-track .fin-subnav-btn.active');
+    if (!btn || !btn.offsetWidth) { pill.style.opacity = '0'; return; }
+    pill.classList.toggle('no-anim', instant);
+    pill.style.width = `${btn.offsetWidth}px`;
+    pill.style.transform = `translateX(${btn.offsetLeft}px)`;
+    pill.style.opacity = '1';
+    pill.parentElement.classList.add('has-pill');
+    if (instant) requestAnimationFrame(() => pill.classList.remove('no-anim'));
+  }
+  // The panel starts hidden (zero size) — re-place the pill without animating when it is shown or resized.
+  // Observes the full-width subnav, not the track, so the bold active tab's width change can't cut the slide short.
+  if (window.ResizeObserver && $('#crm-subnav-track')) {
+    new ResizeObserver(() => _crmMoveSubnavPill(true)).observe($('#crm-subnav-track').parentElement);
+  }
+
   function switchCrmView(view, opts = {}) {
     // Re-read access whenever the CRM tab opens, so changes and business switches apply
     if (view === 'overview' || !_crmAccess) loadCrmAccess();
@@ -57443,6 +57465,14 @@ async function submitDsCreate() {
     const dash = $('#crm-dashboard-view');
     if (dash) dash.style.display = view === 'dashboard' ? 'flex' : 'none';
     $$('[data-crmsub]').forEach(b => b.classList.toggle('active', b.dataset.crmsub === view));
+    _crmMoveSubnavPill();
+    const shown = $(`#crm-${view}-view`);
+    if (shown && view !== _crmLastAnimView) {
+      shown.classList.remove('crm-view-enter');
+      void shown.offsetWidth; // restart the animation
+      shown.classList.add('crm-view-enter');
+    }
+    _crmLastAnimView = view;
     if (view === 'overview') _crmGuideSyncLinks();
     // skipLoad: caller is about to open a specific relation's detail pane itself —
     // running loadCrmRelationsView() here would race with it and call closeRelationDetail()
