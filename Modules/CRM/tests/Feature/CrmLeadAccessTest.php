@@ -110,6 +110,7 @@ beforeEach(function () {
         '2026_10_31_100100_add_department_id_to_crm_projects_table.php',
         '2026_10_31_100200_create_crm_department_settings_table.php',
         '2026_11_02_100200_create_crm_lead_assignment_logs_table.php',
+        '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
     ] as $file) {
         (require $dir . $file)->up();
     }

@@ -126,7 +126,7 @@ class CrmOrgController extends Controller
         );
     }
 
-    public function unlinkPipeline(Request $request, int $department): RedirectResponse
+    public function unlinkPipeline(Request $request, int $department, int $project): RedirectResponse
     {
         $business = $this->requireAdmin($request);
         if ($business instanceof RedirectResponse) {
@@ -134,9 +134,8 @@ class CrmOrgController extends Controller
         }
 
         $dept = $this->org->departmentForBusiness($business, $department);
-        $this->org->unlinkPipeline($business, $dept);
 
-        return redirect()->route('crm.org.index')->with('status', 'Pipeline unlinked from ' . $dept->name . '.');
+        return $this->attempt(fn () => $this->org->unlinkPipeline($business, $dept, $project), 'Pipeline unlinked from ' . $dept->name . '.');
     }
 
     private function requireAdmin(Request $request): Business|RedirectResponse

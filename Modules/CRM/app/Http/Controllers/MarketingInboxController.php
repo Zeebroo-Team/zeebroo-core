@@ -106,6 +106,7 @@ class MarketingInboxController extends Controller
 
         $data = $request->validate([
             'department_id' => ['required', 'integer'],
+            'project_id'    => ['nullable', 'integer'],
             'division_id'   => ['nullable', 'integer'],
             'note'          => ['nullable', 'string', 'max:2000'],
         ]);
@@ -116,7 +117,8 @@ class MarketingInboxController extends Controller
             isset($data['division_id']) ? (int) $data['division_id'] : null,
             $data['note'] ?? null,
             $request->user()?->id,
-        ), 'Lead "' . $lead->name . '" forwarded.');
+            isset($data['project_id']) ? (int) $data['project_id'] : null,
+        ),'Lead "' . $lead->name . '" forwarded.');
     }
 
     public function merge(Request $request, Lead $lead): RedirectResponse

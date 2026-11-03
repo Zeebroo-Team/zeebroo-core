@@ -640,7 +640,7 @@ const API = (() => {
     crmDeleteDivision:           (divisionId)          => request('DELETE', `/crm/org/divisions/${divisionId}`),
     crmSaveDepartmentSettings:   (departmentId, body)  => request('PUT',    `/crm/org/departments/${departmentId}/settings`, body),
     crmLinkDepartmentPipeline:   (departmentId, projectId) => request('POST', `/crm/org/departments/${departmentId}/pipeline`, { project_id: projectId || null }),
-    crmUnlinkDepartmentPipeline: (departmentId)        => request('DELETE', `/crm/org/departments/${departmentId}/pipeline`),
+    crmUnlinkDepartmentPipeline: (departmentId, projectId) => request('DELETE', `/crm/org/departments/${departmentId}/pipelines/${projectId}`),
     crmSettings:                 ()                    => request('GET',    '/crm/settings'),
     crmSaveSettings:             (body)                => request('PUT',    '/crm/settings', body),
     // Marketing inbox
@@ -758,6 +758,7 @@ const API = (() => {
     // CRM Forms
     crmForms:             (projectId)                 => request('GET',    `/crm/projects/${projectId}/forms`),
     crmCreateForm:        (projectId, body)           => request('POST',   `/crm/projects/${projectId}/forms`, body),
+    crmManualEntryForm:   (projectId)                 => request('POST',   `/crm/projects/${projectId}/forms/manual-entry`),
     crmGetForm:           (projectId, formId)         => request('GET',    `/crm/projects/${projectId}/forms/${formId}`),
     crmUpdateForm:        (projectId, formId, body)   => request('PUT',    `/crm/projects/${projectId}/forms/${formId}`, body),
     crmSetDefaultForm:    (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/default`),

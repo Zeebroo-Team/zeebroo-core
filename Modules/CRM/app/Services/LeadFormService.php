@@ -243,6 +243,42 @@ class LeadFormService
         return $this->defaultForProject($project) ?? $this->listForProject($project)->first();
     }
 
+    /**
+     * The form manual "New Lead" entry uses. A pipeline that has no form yet (e.g. its leads
+     * so far came in by CSV import) gets an internal "Manual entry" form with the core contact
+     * fields, made the default and left unpublished so it is never a public web form. Staff
+     * can then key in a phone-call lead straight away instead of building a form first.
+     */
+    public function ensureManualEntryForm(Project $project): LeadForm
+    {
+        return DB::transaction(function () use ($project) {
+            // Serialise concurrent first clicks so the pipeline only ever gets one such form
+            Project::query()->whereKey($project->id)->lockForUpdate()->first();
+
+            if ($form = $this->defaultOrFirstForProject($project)) {
+                return $form;
+            }
+
+            return LeadForm::create([
+                'project_id'         => $project->id,
+                'name'               => 'Manual entry',
+                'type'               => LeadForm::TYPE_CUSTOM_DATA,
+                'token'              => LeadForm::generateToken(),
+                'blocks'             => [
+                    ['type' => 'field', 'field' => 'name', 'label' => 'Name', 'required' => true],
+                    ['type' => 'field', 'field' => 'phone', 'label' => 'Phone', 'required' => false],
+                    ['type' => 'field', 'field' => 'email', 'label' => 'Email', 'required' => false],
+                    ['type' => 'field', 'field' => 'company', 'label' => 'Company', 'required' => false],
+                ],
+                'style'              => LeadForm::defaultStyle(),
+                'submit_button_text' => 'Save lead',
+                'success_message'    => 'Lead saved.',
+                'is_published'       => false,
+                'is_default'         => true,
+            ]);
+        });
+    }
+
     public function findPublishedByToken(string $token): ?LeadForm
     {
         return LeadForm::query()

@@ -607,7 +607,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::put   ('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'update'])->whereNumber('user')->name('crm.permissions.update');
     Route::delete('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'reset']) ->whereNumber('user')->name('crm.permissions.reset');
 
-    // CRM org structure (departments → divisions, department pipeline, department settings)
+    // CRM org structure (departments → divisions, department pipelines, department settings)
     Route::get   ('crm/org',                                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'index'])          ->name('crm.org.index');
     Route::post  ('crm/org/departments/{department}/divisions', [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
     Route::put   ('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');
@@ -615,6 +615,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::put   ('crm/org/departments/{department}/settings',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateSettings']) ->whereNumber('department')->name('crm.org.settings.update');
     Route::post  ('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
     Route::delete('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
+    Route::delete('crm/org/departments/{department}/pipelines/{project}', [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'unlinkPipeline'])->whereNumber(['department', 'project'])->name('crm.org.pipeline.unlink-one');
 
     Route::get   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'crmSettings'])    ->name('crm.settings.show');
     Route::put   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'saveCrmSettings'])->name('crm.settings.update');
@@ -738,6 +739,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     // CRM Forms
     Route::get   ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'forms'])          ->name('crm.forms.index');
     Route::post  ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createForm'])      ->name('crm.forms.store');
+    Route::post  ('crm/projects/{project}/forms/manual-entry',         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'manualEntryForm']) ->name('crm.forms.manual-entry');
     Route::get   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'getForm'])         ->name('crm.forms.show');
     Route::put   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateForm'])      ->name('crm.forms.update');
     Route::post  ('crm/projects/{project}/forms/{form}/default',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'setDefaultForm'])  ->name('crm.forms.set-default');

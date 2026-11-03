@@ -133,7 +133,7 @@ Route::middleware(['web', 'auth', 'verified'])->group(function () {
     Route::delete('/crm/settings/org/divisions/{division}',              [CrmOrgController::class, 'destroyDivision'])->whereNumber('division')->name('crm.org.divisions.destroy');
     Route::put('/crm/settings/org/departments/{department}/settings',    [CrmOrgController::class, 'updateSettings']) ->whereNumber('department')->name('crm.org.settings.update');
     Route::post('/crm/settings/org/departments/{department}/pipeline',   [CrmOrgController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
-    Route::delete('/crm/settings/org/departments/{department}/pipeline', [CrmOrgController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
+    Route::delete('/crm/settings/org/departments/{department}/pipelines/{project}', [CrmOrgController::class, 'unlinkPipeline'])->whereNumber(['department', 'project'])->name('crm.org.pipeline.unlink');
 });
 
 // Public lead-capture form pages — no auth, reachable by anyone with the link.

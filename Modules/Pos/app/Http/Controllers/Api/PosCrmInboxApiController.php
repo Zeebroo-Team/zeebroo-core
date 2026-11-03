@@ -115,7 +115,7 @@ class PosCrmInboxApiController extends Controller
         return $this->leadResponse($request, $business, $lead, 'Review flag cleared.');
     }
 
-    /** POST /api/v1/pos/crm/inbox/leads/{lead}/forward — { department_id, division_id?, note? } */
+    /** POST /api/v1/pos/crm/inbox/leads/{lead}/forward — { department_id, project_id?, division_id?, note? } (no project_id = the main pipeline) */
     public function forward(Request $request, int $leadId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -126,6 +126,7 @@ class PosCrmInboxApiController extends Controller
 
         $data = $request->validate([
             'department_id' => ['required', 'integer'],
+            'project_id'    => ['nullable', 'integer'],
             'division_id'   => ['nullable', 'integer'],
             'note'          => ['nullable', 'string', 'max:2000'],
         ]);
@@ -136,6 +137,7 @@ class PosCrmInboxApiController extends Controller
             isset($data['division_id']) ? (int) $data['division_id'] : null,
             $data['note'] ?? null,
             $request->user()?->id,
+            isset($data['project_id']) ? (int) $data['project_id'] : null,
         );
 
         return $this->leadResponse($request, $business, $lead, 'Lead forwarded to ' . ($lead->department?->name ?? 'the department') . '.');

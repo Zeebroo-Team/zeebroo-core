@@ -60,7 +60,7 @@
 
     @foreach($departments as $d)
         @php
-            $linkable = $pipelines->filter(fn ($p) => $p->department_id === null || (int) $p->department_id === $d['id']);
+            $linkable = $pipelines->filter(fn ($p) => $p->department_id === null);
         @endphp
         <section class="crm-org-dept" id="dept-{{ $d['id'] }}">
             <div class="crm-org-dept__head">
@@ -81,30 +81,31 @@
             <div class="crm-org-grid">
                 {{-- Pipeline --}}
                 <div class="crm-org-box">
-                    <h3>Pipeline</h3>
-                    @if($d['pipeline'])
+                    <h3>Pipelines</h3>
+                    @forelse($d['pipelines'] as $i => $p)
                         <div class="crm-org-row">
-                            <a href="{{ route('crm.projects.show', $d['pipeline']['id']) }}" class="pcat-link">
-                                <i class="fa fa-diagram-project"></i> {{ $d['pipeline']['name'] }}
+                            <a href="{{ route('crm.projects.show', $p['id']) }}" class="pcat-link">
+                                <i class="fa fa-diagram-project"></i> {{ $p['name'] }}
                             </a>
-                            <form method="POST" action="{{ route('crm.org.pipeline.unlink', $d['id']) }}"
+                            @if($i === 0)<span class="pcat-muted" title="Intake and forwarded leads land here unless another pipeline is picked">Main</span>@endif
+                            <form method="POST" action="{{ route('crm.org.pipeline.unlink', [$d['id'], $p['id']]) }}"
                                   onsubmit="return confirm('Unlink this pipeline? Its leads stay where they are.');">
                                 @csrf @method('DELETE')
                                 <button class="crm-org-btn crm-org-btn--danger" type="submit"><i class="fa fa-link-slash"></i> Unlink</button>
                             </form>
                         </div>
-                    @else
+                    @empty
                         <p class="pcat-muted" style="margin:0 0 8px;">No pipeline linked.</p>
-                    @endif
+                    @endforelse
                     <form method="POST" action="{{ route('crm.org.pipeline.link', $d['id']) }}" class="crm-org-row">
                         @csrf
                         <select name="project_id">
                             <option value="">+ Create a new pipeline</option>
                             @foreach($linkable as $p)
-                                <option value="{{ $p->id }}" @selected($d['pipeline'] && $d['pipeline']['id'] === $p->id)>{{ $p->name }}</option>
+                                <option value="{{ $p->id }}">{{ $p->name }}</option>
                             @endforeach
                         </select>
-                        <button class="crm-org-btn crm-org-btn--primary" type="submit">{{ $d['pipeline'] ? 'Change' : 'Link' }}</button>
+                        <button class="crm-org-btn crm-org-btn--primary" type="submit">Add pipeline</button>
                     </form>
                 </div>
 
