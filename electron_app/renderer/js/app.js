@@ -57676,44 +57676,67 @@ async function submitDsCreate() {
       if (c.is_won) r.won++;
     }));
     const srcRows = Object.entries(bySrc).sort((a, b) => b[1].count - a[1].count);
-    const srcMax  = srcRows[0]?.[1].count || 1;
+    const open    = Math.max(0, totalLeads - won - lost);
+    const closed  = won + lost;
+    const pct     = (n, of) => of ? Math.round(n / of * 100) : 0;
+    const plural  = (n, w) => `${n} ${w}${n !== 1 ? 's' : ''}`;
+    const bar     = (share, color) => `<div class="crm-rd-bar"><span style="width:${share ? Math.max(2, share) : 0}%;background:${color}"></span></div>`;
+
     const srcHtml = srcRows.map(([key, r]) => {
       const s = _crmSource(key);
-      const meta = [`${r.count} lead${r.count !== 1 ? 's' : ''}`, r.value ? formatMoney(r.value) : '', r.won ? `${r.won} won (${Math.round(r.won / r.count * 100)}%)` : '']
-        .filter(Boolean).join(' · ');
-      return `<tr${key ? ` class="crm-dash-src-row" data-dash-source="${escHtml(key)}" title="Show ${escHtml(s.label)} leads in the pipeline"` : ''}>
-        <td class="inv-dt-label">${key ? _crmSourceBadge(key) : '<span class="inv-detail-none">No source</span>'}</td>
-        <td class="inv-dt-val"><div class="crm-dash-src-bar"><span style="width:${Math.max(4, Math.round(r.count / srcMax * 100))}%;background:${escHtml(s?.color || '#94a3b8')}"></span></div>${meta}</td>
-      </tr>`;
+      return `<div class="crm-rd-tr crm-rd-tr--src${key ? ' crm-dash-src-row' : ''}"${key ? ` data-dash-source="${escHtml(key)}" title="Show ${escHtml(s.label)} leads in the pipeline"` : ''}>
+        <div class="crm-rd-name">${key ? _crmSourceBadge(key) : '<span class="crm-rd-muted">No source</span>'}</div>
+        ${bar(pct(r.count, totalLeads), escHtml(s?.color || '#94a3b8'))}
+        <div class="crm-rd-num">${r.count}</div>
+        <div class="crm-rd-num${r.won ? '' : ' crm-rd-muted'}">${r.won ? `${r.won} <small>(${pct(r.won, r.count)}%)</small>` : '—'}</div>
+        <div class="crm-rd-num crm-rd-muted">${pct(r.count, totalLeads)}%</div>
+        <i class="fa fa-chevron-right crm-rd-chev"${key ? '' : ' style="visibility:hidden"'}></i>
+      </div>`;
     }).join('');
 
+    const stageHtml = cols.map(c => {
+      const color = c.is_won ? '#30a46c' : c.is_lost ? '#e5484d' : '#3b82f6';
+      const tag   = c.is_won ? '<span class="crm-rd-tag crm-rd-tag--won">Won</span>' : c.is_lost ? '<span class="crm-rd-tag crm-rd-tag--lost">Lost</span>' : '';
+      return `<div class="crm-rd-tr crm-rd-tr--stage">
+        <div class="crm-rd-name"><span class="crm-rd-dot" style="background:${color}"></span><span class="crm-rd-ellipsis">${escHtml(c.name)}</span>${tag}</div>
+        ${bar(pct(c.leads_count, totalLeads), color)}
+        <div class="crm-rd-num${c.leads_count ? '' : ' crm-rd-muted'}">${c.leads_count}</div>
+        <div class="crm-rd-num${c.value_total ? '' : ' crm-rd-muted'}">${c.value_total ? formatMoney(c.value_total) : '—'}</div>
+        <div class="crm-rd-num crm-rd-muted">${pct(c.leads_count, totalLeads)}%</div>
+      </div>`;
+    }).join('');
+
+    const kpi = (icon, tone, label, value, sub) => `
+      <div class="crm-rd-kpi">
+        <div class="crm-rd-kpi-head"><span>${label}</span><i class="fa ${icon} crm-rd-kpi-icon crm-rd-kpi-icon--${tone}"></i></div>
+        <div class="crm-rd-kpi-value">${value}</div>
+        <div class="crm-rd-kpi-sub">${sub}</div>
+      </div>`;
+
     pane.innerHTML = `
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-chart-simple"></i> Pipeline Overview</div>
-        <div class="inv-detail-grid">
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Total Leads</div><div class="inv-detail-cell-value">${totalLeads}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Total Value</div><div class="inv-detail-cell-value">${formatMoney(totalValue)}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Won</div><div class="inv-detail-cell-value">${won}</div></div>
-          <div class="inv-detail-cell"><div class="inv-detail-cell-label">Lost</div><div class="inv-detail-cell-value">${lost}</div></div>
+      <div class="crm-rd">
+        <div class="crm-rd-kpis">
+          ${kpi('fa-users', 'blue', 'Total leads', totalLeads, `${plural(open, 'open lead')}`)}
+          ${kpi('fa-coins', 'amber', 'Pipeline value', formatMoney(totalValue), totalLeads ? `Avg ${formatMoney(totalValue / totalLeads)} per lead` : 'No leads yet')}
+          ${kpi('fa-trophy', 'green', 'Won', won, closed ? `<b class="crm-rd-up">${pct(won, closed)}%</b> win rate` : 'No closed leads yet')}
+          ${kpi('fa-circle-xmark', 'red', 'Lost', lost, closed ? `<b class="crm-rd-down">${pct(lost, closed)}%</b> of closed leads` : 'No closed leads yet')}
         </div>
-      </div>
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-table-columns"></i> Stages</div>
-        <table class="inv-detail-table">
-          ${cols.length ? cols.map(c => `<tr><td class="inv-dt-label">${escHtml(c.name)}</td><td class="inv-dt-val">${c.leads_count} lead${c.leads_count !== 1 ? 's' : ''}${c.value_total ? ' · ' + formatMoney(c.value_total) : ''}</td></tr>`).join('') : '<tr><td class="inv-dt-val" colspan="2"><span class="inv-detail-none">No stages yet</span></td></tr>'}
-        </table>
-      </div>
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-bullhorn"></i> Lead Sources</div>
-        <table class="inv-detail-table">
-          ${srcHtml || '<tr><td class="inv-dt-val" colspan="2"><span class="inv-detail-none">No leads yet</span></td></tr>'}
-        </table>
-      </div>
-      <div class="inv-section">
-        <div class="inv-section-title"><i class="fa fa-circle-info"></i> Details</div>
-        <table class="inv-detail-table">
-          <tr><td class="inv-dt-label">Description</td><td class="inv-dt-val">${relation.description ? escHtml(relation.description) : '<span class="inv-detail-none">No description</span>'}</td></tr>
-        </table>
+        <div class="crm-rd-cols">
+          <section class="crm-rd-card">
+            <header class="crm-rd-card-head"><div><h4>Stages</h4><p>Where the ${plural(totalLeads, 'lead')} sit right now</p></div></header>
+            <div class="crm-rd-tr crm-rd-tr--stage crm-rd-th"><div>Stage</div><div>Share</div><div class="crm-rd-num">Leads</div><div class="crm-rd-num">Value</div><div class="crm-rd-num">%</div></div>
+            ${stageHtml || '<div class="crm-rd-empty">No stages yet</div>'}
+          </section>
+          <section class="crm-rd-card">
+            <header class="crm-rd-card-head"><div><h4>Lead sources</h4><p>Click a source to open its leads in the pipeline</p></div></header>
+            <div class="crm-rd-tr crm-rd-tr--src crm-rd-th"><div>Source</div><div>Share</div><div class="crm-rd-num">Leads</div><div class="crm-rd-num">Won</div><div class="crm-rd-num">%</div><span></span></div>
+            ${srcHtml || '<div class="crm-rd-empty">No leads yet</div>'}
+          </section>
+        </div>
+        <section class="crm-rd-card">
+          <header class="crm-rd-card-head"><div><h4>Details</h4></div></header>
+          <div class="crm-rd-desc">${relation.description ? escHtml(relation.description) : '<span class="crm-rd-muted">No description</span>'}</div>
+        </section>
       </div>
     `;
   }
@@ -57976,17 +57999,19 @@ async function submitDsCreate() {
   function _crmHfFlowApp(RF) {
     const { Controls, MiniMap, Background, useNodesState, useEdgesState } = RF;
     const isDark = document.body.classList.contains('dark');
-    return ({ nodes: initNodes, edges: initEdges, nodeTypes, edgeTypes, edgeTip, onNodeClick, onEdgeClick }) => {
+    // fitNodes: the nodes the window opens on, so it starts readable instead of zoomed out to the
+    // whole graph; the controls' fit button still fits everything. scrollPans: wheel scrolls (ctrl+wheel zooms).
+    return ({ nodes: initNodes, edges: initEdges, nodeTypes, edgeTypes, edgeTip, onNodeClick, onEdgeClick, fitNodes, scrollPans }) => {
       const [nodes, , onNodesChange] = useNodesState(initNodes);
       const [edges, , onEdgesChange] = useEdgesState(initEdges);
       const types = React.useMemo(() => nodeTypes, []);
       const eTypes = React.useMemo(() => edgeTypes || {}, []);
       return React.createElement(RF.ReactFlow, {
         nodes, edges, onNodesChange, onEdgesChange, nodeTypes: types, edgeTypes: eTypes,
-        fitView: true, fitViewOptions: { padding: 0.15, maxZoom: 1.1 },
+        fitView: true, fitViewOptions: { padding: 0.12, maxZoom: 1.1, ...(fitNodes?.length ? { nodes: fitNodes.map(id => ({ id })) } : {}) },
         minZoom: 0.1, maxZoom: 2.5,
         nodesDraggable: true, nodesConnectable: false, elementsSelectable: true,
-        zoomOnScroll: true, panOnDrag: true,
+        zoomOnScroll: !scrollPans, panOnScroll: !!scrollPans, panOnDrag: true,
         onlyRenderVisibleElements: initNodes.length > 120,
         proOptions: { hideAttribution: true },
         onNodeClick, onEdgeClick: (ev, edge) => { _crmHfTip(null); onEdgeClick(ev, edge); },
@@ -57994,15 +58019,16 @@ async function submitDsCreate() {
         onEdgeMouseMove:  ev => _crmHfTipMove(ev),
         onEdgeMouseLeave: () => _crmHfTip(null),
         onMoveStart:      () => _crmHfTip(null),
-        style: { background: isDark ? '#1a1b2e' : '#ffffff', width: '100%', height: '100%' },
+        style: { background: isDark ? '#1c1c1e' : '#f5f5f7', width: '100%', height: '100%' },
       },
-        Background && React.createElement(Background, { gap: 22, size: 1, color: isDark ? '#2a2c44' : '#e5e7eb' }),
+        Background && React.createElement(Background, { variant: RF.BackgroundVariant?.Dots, gap: 20, size: 1.2, color: isDark ? '#3a3a3e' : '#d1d1d6' }),
         MiniMap && React.createElement(MiniMap, {
-          pannable: true, zoomable: true,
+          pannable: true, zoomable: true, nodeBorderRadius: 4,
           nodeColor: n => n.data?.color || '#94a3b8',
-          style: { background: isDark ? '#111827' : '#f8fafc', width: 170, height: 110 },
+          maskColor: isDark ? 'rgba(0,0,0,.45)' : 'rgba(245,245,247,.65)',
+          style: { background: isDark ? '#2b2b30' : '#ffffff', width: 170, height: 110 },
         }),
-        React.createElement(Controls, { showInteractive: false })
+        React.createElement(Controls, { showInteractive: false, fitViewOptions: { padding: 0.12, maxZoom: 1.1 } })
       );
     };
   }
@@ -58011,11 +58037,12 @@ async function submitDsCreate() {
     const isDark = document.body.classList.contains('dark');
     return {
       isDark,
-      card:  isDark ? '#0f172a' : '#ffffff',
-      text:  isDark ? '#e5e7eb' : '#111827',
-      muted: isDark ? '#9ca3af' : '#6b7280',
-      soft:  isDark ? '#1e293b' : '#f1f5f9',
-      font:  "'Segoe UI',sans-serif",
+      card:  isDark ? '#2c2c2e' : '#ffffff',
+      text:  isDark ? '#f5f5f7' : '#1d1d1f',
+      muted: isDark ? '#98989d' : '#6e6e73',
+      soft:  isDark ? 'rgba(118,118,128,.22)' : 'rgba(118,118,128,.1)',
+      line:  isDark ? 'rgba(255,255,255,.1)' : 'rgba(0,0,0,.1)',
+      font:  '-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif',
     };
   }
 
@@ -58094,22 +58121,24 @@ async function submitDsCreate() {
 
     const StageNode = ({ data }) => {
       const s = data.stage, c = s.color;
-      const stat = (label, value) => h('div', { style: { background: T.soft, borderRadius: 6, padding: '3px 6px', textAlign: 'center' } },
-        h('div', { style: { fontWeight: 800, fontSize: 13, color: T.text } }, value),
-        h('div', { style: { fontSize: 9, color: T.muted, textTransform: 'uppercase', letterSpacing: '.04em' } }, label));
+      const stat = (label, value) => h('div', { style: { background: T.soft, borderRadius: 7, padding: '4px 6px', textAlign: 'center' } },
+        h('div', { style: { fontWeight: 600, fontSize: 14, color: T.text, fontVariantNumeric: 'tabular-nums' } }, value),
+        h('div', { style: { fontSize: 10, color: T.muted } }, label));
       return h('div', { style: {
-        width: 200, background: T.card, border: `1.5px solid ${c}`, borderLeft: `6px solid ${c}`, borderRadius: 11,
-        padding: '9px 11px', fontFamily: T.font, boxShadow: `0 6px 18px ${c}33`, cursor: 'pointer', opacity: s.deleted ? 0.75 : 1,
+        width: 200, background: T.card, borderRadius: 12, padding: '10px 12px', fontFamily: T.font, cursor: 'pointer', opacity: s.deleted ? 0.75 : 1,
+        boxShadow: `0 0 0 1px ${c}59, 0 1px 2px rgba(0,0,0,.06), 0 6px 18px ${c}26`,
       }},
         _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
         _crmHfHandle(RF, 'source', 'Bottom', 'src-b'), _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
         _crmHfHandle(RF, 'source', 'Top', 'src-t'), _crmHfHandle(RF, 'target', 'Top', 'tgt-t'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: 12.5, color: T.text } },
-          h('i', { className: `fa ${s.is_won ? 'fa-trophy' : s.is_lost ? 'fa-circle-xmark' : s.deleted ? 'fa-ghost' : 'fa-layer-group'}`, style: { color: c, fontSize: 11 } }),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, color: T.text } },
+          h('span', { style: { width: 22, height: 22, borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: c, boxShadow: '0 1px 2px rgba(0,0,0,.18)' } },
+            h('i', { className: `fa ${s.is_won ? 'fa-trophy' : s.is_lost ? 'fa-circle-xmark' : s.deleted ? 'fa-ghost' : 'fa-layer-group'}`, style: { color: '#fff', fontSize: 10.5 } })),
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, s.name)),
-        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 4, marginTop: 7 } },
+        h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 5, marginTop: 9 } },
           stat('Now', s.leads_count), stat('In', data.entered), stat('Out', data.left)),
-        h('div', { style: { marginTop: 6, fontSize: 10, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
+        h('div', { style: { marginTop: 7, fontSize: 10.5, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
           h('i', { className: 'fa fa-hourglass-half' }),
           data.avgStay != null ? `Avg stay ${_crmFmtDuration(data.avgStay)}` : 'No exits yet')
       );
@@ -58117,8 +58146,9 @@ async function submitDsCreate() {
 
     const TerminalNode = ({ data }) => h('div', { style: {
       background: data.color, color: '#fff', borderRadius: 24, padding: '0 18px', height: 46,
-      display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, fontSize: 12.5, fontFamily: T.font,
-      boxShadow: `0 6px 16px ${data.color}66`, cursor: 'pointer', whiteSpace: 'nowrap',
+      display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, fontFamily: T.font,
+      backgroundImage: 'linear-gradient(rgba(255,255,255,.18),rgba(255,255,255,0))',
+      boxShadow: `0 0 0 .5px rgba(0,0,0,.12), 0 6px 16px ${data.color}55`, cursor: 'pointer', whiteSpace: 'nowrap',
     }},
       _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
       _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
@@ -58134,6 +58164,8 @@ async function submitDsCreate() {
       }});
     });
     if (deleted) nodes.push({ id: 'end', type: 'hfTerminal', position: pos.end, data: { label: 'Deleted', icon: 'fa-trash', color: '#b91c1c', count: deleted } });
+    // Open on the stages that fit the canvas at ~75% zoom; a long pipeline pans right from there.
+    const fitSpan = ($('#crm-hf-canvas')?.clientWidth || 1200) / 0.75 - 200;
 
     const maxCount = Math.max(1, ...transitions.map(t => t.count));
     const stageById = new Map(stages.map(s => [s.id, s]));
@@ -58205,6 +58237,7 @@ async function submitDsCreate() {
 
     return {
       nodes, edges, edgeTip,
+      fitNodes: nodes.filter(n => n.position.x <= fitSpan).map(n => n.id),
       edgeTypes: { hfArc: ArcEdge },
       nodeTypes: { hfStage: StageNode, hfTerminal: TerminalNode },
       onNodeClick: (_e, n) => {
@@ -58232,15 +58265,15 @@ async function submitDsCreate() {
       const cur = stageById.get(j.current_stage_id);
       const src = _crmSource(j.lead.source);
       return h('div', { style: {
-        width: 210, background: T.card, border: `1.5px solid ${data.color}`, borderRadius: 12, padding: '8px 11px',
-        fontFamily: T.font, boxShadow: `0 4px 14px ${data.color}33`, cursor: 'pointer',
+        width: 210, background: T.card, borderRadius: 12, padding: '9px 12px', fontFamily: T.font, cursor: 'pointer',
+        boxShadow: `0 0 0 1px ${data.color}59, 0 1px 2px rgba(0,0,0,.06), 0 4px 14px ${data.color}22`,
       }},
         _crmHfHandle(RF, 'source', 'Right', 'src-r'),
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } },
-          h('div', { style: { width: 26, height: 26, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 800, fontSize: 12, color: '#7c3aed', background: 'rgba(124,58,237,.12)' } }, (j.lead.name || '?').trim().charAt(0).toUpperCase()),
+          h('div', { style: { width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontWeight: 600, fontSize: 12.5, color: '#fff', background: 'linear-gradient(#c084fc,#7c3aed)', boxShadow: '0 1px 2px rgba(0,0,0,.18)' } }, (j.lead.name || '?').trim().charAt(0).toUpperCase()),
           h('div', { style: { minWidth: 0 } },
-            h('div', { style: { fontWeight: 700, fontSize: 12.5, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, j.lead.name || `Lead #${j.lead.id}`),
+            h('div', { style: { fontWeight: 600, fontSize: 13, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, j.lead.name || `Lead #${j.lead.id}`),
             h('div', { style: { fontSize: 10, color: T.muted, display: 'flex', alignItems: 'center', gap: 5 } },
               src ? h('i', { className: src.icon, title: `Source: ${src.label}`, style: { color: src.color } }) : null,
               `${j.steps.length} move${j.steps.length === 1 ? '' : 's'}${src ? ' · ' + src.label : ''}`))),
@@ -58257,15 +58290,16 @@ async function submitDsCreate() {
       const stage = e.to_stage || e.from_stage;
       const d = new Date(e.created_at);
       return h('div', { style: {
-        width: 180, background: T.card, border: `1.5px solid ${data.color}`, borderRadius: 10, padding: '7px 10px',
-        fontFamily: T.font, cursor: 'pointer',
-        boxShadow: data.current ? `0 0 0 3px ${data.color}44, 0 4px 12px ${data.color}44` : '0 2px 8px rgba(0,0,0,.08)',
+        width: 180, background: T.card, borderRadius: 10, padding: '8px 10px', fontFamily: T.font, cursor: 'pointer',
+        boxShadow: data.current
+          ? `0 0 0 1.5px ${data.color}, 0 0 0 4.5px ${data.color}29, 0 4px 12px rgba(0,0,0,.08)`
+          : `0 0 0 .5px ${T.line}, 0 1px 3px rgba(0,0,0,.08)`,
       }},
         _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 9.5, fontWeight: 700, color: ev, textTransform: 'uppercase', letterSpacing: '.04em' } },
-          h('i', { className: `fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}` }), e.event_label,
-          data.current && h('span', { style: { marginLeft: 'auto', color: data.color } }, 'Current')),
-        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontWeight: 700, fontSize: 12, color: T.text } },
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, fontWeight: 600, color: ev } },
+          h('i', { className: `fa ${_CRM_AUDIT_ICONS[e.event] || 'fa-circle'}`, style: { fontSize: 9.5 } }), e.event_label,
+          data.current && h('span', { style: { marginLeft: 'auto', padding: '0 6px', borderRadius: 999, fontSize: 9.5, color: '#fff', background: data.color } }, 'Current')),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontWeight: 600, fontSize: 12.5, color: T.text } },
           h('span', { style: { width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: stage?.color || '#94a3b8' } }),
           h('span', { style: { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: e.to_stage ? 'none' : 'line-through' } }, stage?.name || 'No stage')),
         h('div', { style: { marginTop: 4, fontSize: 9.5, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } },
@@ -58308,8 +58342,11 @@ async function submitDsCreate() {
       y += Math.max(1, Math.ceil(j.steps.length / perLine)) * LINE + LEAD_GAP;
     });
 
+    // Open on the first leads at a readable zoom (the layout already fits the width); scroll down for the rest.
+    const fitHeight = ($('#crm-hf-canvas')?.clientHeight || 700) / 0.85 - LINE;
     return {
-      nodes, edges,
+      nodes, edges, scrollPans: true,
+      fitNodes: nodes.filter(n => n.position.y <= fitHeight).map(n => n.id),
       nodeTypes: { hfLead: LeadNode, hfStep: StepNode },
       onNodeClick: (_e, n) => n.type === 'hfLead' ? _crmHfPanelLead(n.data.journey) : _crmHfPanelStep(n.data.entry, n.data.journey),
       onEdgeClick: () => {},
@@ -62967,13 +63004,15 @@ async function submitDsCreate() {
     $('#crm-project-name').value = '';
     $('#crm-project-desc').value = '';
     $('#crm-project-alert').style.display = 'none';
-    $('#crm-project-modal').style.display = 'flex';
+    _macShow($('#crm-project-modal'));
     $('#crm-project-name').focus();
   }
 
-  $('#crm-project-modal-close')?.addEventListener('click',  () => { $('#crm-project-modal').style.display = 'none'; });
-  $('#crm-project-modal-cancel')?.addEventListener('click', () => { $('#crm-project-modal').style.display = 'none'; });
-  $('#crm-project-modal')?.addEventListener('click', e => { if (e.target === $('#crm-project-modal')) $('#crm-project-modal').style.display = 'none'; });
+  const _closeProjectModal = () => _macHide($('#crm-project-modal'));
+  $('#crm-project-modal-close')?.addEventListener('click',  _closeProjectModal);
+  $('#crm-project-modal-cancel')?.addEventListener('click', _closeProjectModal);
+  $('#crm-project-modal')?.addEventListener('click', e => { if (e.target === $('#crm-project-modal')) _closeProjectModal(); });
+  $('#crm-project-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-project-modal-save').click(); });
 
   $('#crm-project-modal-save')?.addEventListener('click', async () => {
     const name = $('#crm-project-name').value.trim();
@@ -62983,7 +63022,7 @@ async function submitDsCreate() {
     const res = await API.crmCreateProject({ name, description: $('#crm-project-desc').value.trim() || null });
     btn.disabled = false;
     if (res.status === 201) {
-      $('#crm-project-modal').style.display = 'none';
+      _closeProjectModal();
       toast('Relation created.', 'success');
       await loadCrmProjects();
       switchCrmView('relation', { skipLoad: true });
@@ -64237,7 +64276,7 @@ async function submitDsCreate() {
 
   function _crmImpRenderStart() {
     const o = _crmImpOptions;
-    const history = o.imports.length ? `<table class="crm-imp-table">
+    const history = o.imports.length ? `<table class="crm-imp-table crm-imp-history">
         <thead><tr><th>When</th><th>File</th><th>Source</th><th>Pipeline</th><th>Status</th><th>New</th><th>Existing</th><th>Skipped</th><th>Failed</th><th></th></tr></thead>
         <tbody>${o.imports.map(i => `<tr>
           <td>${_crmAgo(i.created_at)}${i.user_name ? `<br><span class="crm-perms-muted">${escHtml(i.user_name)}</span>` : ''}</td>
@@ -64261,14 +64300,14 @@ async function submitDsCreate() {
         </div>
       </div>
       <div class="crm-imp-help">
-        <div><strong><i class="fa fa-file-csv" style="color:#16a34a"></i> CSV template</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4cd964,#248a3d)"><i class="fa fa-file-csv"></i></span> CSV template</strong>
           Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.</div>
-        <div><strong><i class="fa-brands fa-google" style="color:#ea4335"></i> Google Forms</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#ff6b5e,#ea4335)"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
           Open the form's responses sheet → File → Download → CSV, and upload it as it is. Each question becomes a field or a line in the notes.</div>
-        <div><strong><i class="fa-brands fa-facebook" style="color:#1877f2"></i> Facebook / Instagram Lead Ads</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4a9bff,#1877f2)"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
           Meta Business Suite → Leads Center (or the page's Lead Ads forms) → Download CSV. Instagram leads are recognised from the platform column.</div>
       </div>
-      <div class="crm-perms-muted"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
+      <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
       <div class="mac-section">
         <div class="mac-section-title">Recent imports</div>
         ${history}
@@ -64659,7 +64698,7 @@ async function submitDsCreate() {
     }
     $('#crm-stages-modal-title').textContent = `Manage Stages`;
     $('#crm-stages-alert').style.display = 'none';
-    $('#crm-stages-modal').style.display = 'flex';
+    _macShow($('#crm-stages-modal'));
     // Pipeline Automation is a shortcut into the Automation Editor feature —
     // hide it (and skip fetching/creating automation flows) when that
     // feature isn't installed, same as the standalone Automations tab.
@@ -65038,9 +65077,9 @@ async function submitDsCreate() {
   }
 
   // Stage management modal close/open
-  $('#crm-stages-modal-close')?.addEventListener('click',  () => { $('#crm-stages-modal').style.display = 'none'; });
-  $('#crm-stages-modal-cancel')?.addEventListener('click', () => { $('#crm-stages-modal').style.display = 'none'; });
-  $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) $('#crm-stages-modal').style.display = 'none'; });
+  $('#crm-stages-modal-close')?.addEventListener('click',  () => _macHide($('#crm-stages-modal')));
+  $('#crm-stages-modal-cancel')?.addEventListener('click', () => _macHide($('#crm-stages-modal')));
+  $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) _macHide($('#crm-stages-modal')); });
 
   // Add stage modal open/close
   function _openStageAddModal() {
@@ -65148,6 +65187,9 @@ async function submitDsCreate() {
     const empty = $('#crm-forms-empty');
     if (!list) return;
 
+    const countEl = $('#crm-forms-count');
+    if (countEl) countEl.textContent = _crmForms.length || '';
+
     if (_crmForms.length === 0) {
       list.innerHTML = '';
       list.style.display = 'none';
@@ -65155,25 +65197,28 @@ async function submitDsCreate() {
       return;
     }
     empty.style.display = 'none';
-    list.style.display  = 'flex';
+    list.style.display  = 'block';
 
-    list.innerHTML = _crmForms.map(f => `
-      <div class="crm-form-card" data-form-id="${f.id}">
-        <div class="crm-form-icon"><i class="fa fa-wpforms"></i></div>
-        <div class="crm-form-info">
-          <div class="crm-form-name">${escHtml(f.name)}</div>
-          <div class="crm-form-meta">${f.blocks_count} block${f.blocks_count !== 1 ? 's' : ''}${f.default_stage_name ? ` &bull; Default stage: ${escHtml(f.default_stage_name)}` : ''}</div>
+    list.innerHTML = `
+      <div class="crm-fm-row crm-rd-th"><span></span><div>Form</div><div>Status</div><div class="crm-rd-num">Actions</div></div>
+      ${_crmForms.map(f => `
+      <div class="crm-fm-row" data-form-id="${f.id}">
+        <span class="crm-fm-icon"><i class="fa fa-rectangle-list"></i></span>
+        <div class="crm-fm-info">
+          <div class="crm-fm-name">${escHtml(f.name)}</div>
+          <div class="crm-fm-meta">${f.blocks_count} field${f.blocks_count !== 1 ? 's' : ''}${f.default_stage_name ? ` <span>·</span> Lands in <b>${escHtml(f.default_stage_name)}</b>` : ''}</div>
         </div>
-        ${f.is_default ? '<span class="crm-form-pill crm-form-pill--default">Default form</span>' : ''}
-        <span class="crm-form-pill ${f.is_published ? 'crm-form-pill--pub' : 'crm-form-pill--unp'}">${f.is_published ? 'Published' : 'Draft'}</span>
-        <div class="crm-form-actions">
-          <button class="crm-card-btn crm-card-btn--default${f.is_default ? ' is-active' : ''}" data-form-default="${f.id}" title="${f.is_default ? 'Default form (click to unset)' : 'Set as default form'}"><i class="fa${f.is_default ? '-solid' : ''} fa-star"></i></button>
-          <button class="crm-card-btn" data-form-edit="${f.id}" title="Edit form"><i class="fa fa-pen"></i></button>
-          <button class="crm-card-btn" data-form-url="${escHtml(f.public_url)}" title="Copy public URL"><i class="fa fa-link"></i></button>
-          <button class="crm-card-btn" data-form-del="${f.id}" title="Delete form" style="color:#ef4444"><i class="fa fa-trash"></i></button>
+        <div class="crm-fm-status">
+          <span class="crm-fm-pill ${f.is_published ? 'crm-fm-pill--pub' : 'crm-fm-pill--draft'}">${f.is_published ? 'Published' : 'Draft'}</span>
+          ${f.is_default ? '<span class="crm-fm-pill crm-fm-pill--default">Default</span>' : ''}
         </div>
-      </div>
-    `).join('');
+        <div class="crm-fm-actions">
+          <button class="crm-fm-btn crm-fm-btn--star${f.is_default ? ' is-active' : ''}" data-form-default="${f.id}" title="${f.is_default ? 'Default form (click to unset)' : 'Set as default form'}"><i class="fa${f.is_default ? '-solid' : '-regular'} fa-star"></i></button>
+          <button class="crm-fm-btn" data-form-url="${escHtml(f.public_url)}" title="Copy public URL"><i class="fa fa-link"></i></button>
+          <button class="crm-fm-btn crm-fm-btn--danger" data-form-del="${f.id}" title="Delete form"><i class="fa fa-trash-can"></i></button>
+          <button class="crm-rd-btn" data-form-edit="${f.id}" title="Edit form"><i class="fa fa-pen"></i> Edit</button>
+        </div>
+      </div>`).join('')}`;
 
     list.querySelectorAll('[data-form-default]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -65449,7 +65494,7 @@ async function submitDsCreate() {
 
     _selectedTemplate = 'blank';
     $('#crm-form-modal-alert').style.display = 'none';
-    $('#crm-form-modal').style.display = 'flex';
+    _macShow($('#crm-form-modal'));
     _crmGoToWizStep(1);
   }
 
@@ -65459,10 +65504,10 @@ async function submitDsCreate() {
       const panel = $(`#crm-form-step-${n}`);
       if (panel) panel.style.display = (n === step) ? 'flex' : 'none';
     });
-    $('#crm-form-wiz-steps')?.querySelectorAll('.crm-wiz-step').forEach(el => {
+    $('#crm-form-wiz-steps')?.querySelectorAll('[data-wizstep]').forEach(el => {
       const n = parseInt(el.dataset.wizstep);
-      el.classList.toggle('is-active', n === step);
-      el.classList.toggle('is-done', n < step);
+      el.classList.toggle('active', n === step);
+      el.classList.toggle('done', n < step);
     });
     $('#crm-form-modal-back').style.display   = step === 1 ? 'none' : '';
     $('#crm-form-modal-next').style.display   = step === 3 ? 'none' : '';
@@ -65493,9 +65538,9 @@ async function submitDsCreate() {
     });
   }
 
-  $('#crm-form-modal-close')?.addEventListener('click',  () => { $('#crm-form-modal').style.display = 'none'; });
-  $('#crm-form-modal-cancel')?.addEventListener('click', () => { $('#crm-form-modal').style.display = 'none'; });
-  $('#crm-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-form-modal')) $('#crm-form-modal').style.display = 'none'; });
+  $('#crm-form-modal-close')?.addEventListener('click',  () => _macHide($('#crm-form-modal')));
+  $('#crm-form-modal-cancel')?.addEventListener('click', () => _macHide($('#crm-form-modal')));
+  $('#crm-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-form-modal')) _macHide($('#crm-form-modal')); });
 
   $('#crm-form-modal-back')?.addEventListener('click', () => {
     if (_crmWizStep > 1) _crmGoToWizStep(_crmWizStep - 1);
@@ -65536,7 +65581,7 @@ async function submitDsCreate() {
     });
     btn.disabled = false;
     if (res.status === 201) {
-      $('#crm-form-modal').style.display = 'none';
+      _macHide($('#crm-form-modal'));
       toast('Form created.', 'success');
       openFormBuilder(res.body.data.id);
     } else {
@@ -65888,23 +65933,30 @@ async function submitDsCreate() {
       success_message:    $('#crm-builder-success-msg').value,
       default_stage_id:   defaultStageVal ? Number(defaultStageVal) : null,
     };
-    const res = await API.crmUpdateForm(_crmFormsProjectId, _crmBuilderFormId, payload);
-    btn.disabled = false;
+    let res;
+    try {
+      res = await API.crmUpdateForm(_crmFormsProjectId, _crmBuilderFormId, payload);
+    } catch (e) {
+      res = { status: 0, body: { message: e?.message } };
+    } finally {
+      btn.disabled = false;
+    }
+    const alert = $('#crm-builder-alert');
     if (res.status === 200) {
       _crmBuilderData = Object.assign(_crmBuilderData, res.body.data);
-      toast('Form saved.', 'success');
-      const alert = $('#crm-builder-alert');
       if (alert) alert.style.display = 'none';
+      flashCopiedBadge(btn, 'Form saved!');
     } else {
       const msg = res.body?.message || 'Failed to save form.';
-      const alert = $('#crm-builder-alert');
       if (alert) { alert.textContent = msg; alert.style.display = ''; }
+      toast(msg, 'error');
     }
   });
 
   // Builder publish/unpublish toggle
-  $('#crm-builder-toggle-pub-btn')?.addEventListener('click', async () => {
+  $('#crm-builder-toggle-pub-btn')?.addEventListener('click', async (e) => {
     if (!_crmBuilderData) return;
+    const btn = e.currentTarget;
     const isPublished = _crmBuilderData.is_published;
     const res = isPublished
       ? await API.crmUnpublishForm(_crmFormsProjectId, _crmBuilderFormId)
@@ -65912,7 +65964,9 @@ async function submitDsCreate() {
     if (res.status === 200) {
       _crmBuilderData.is_published = !isPublished;
       _updatePubPill(_crmBuilderData.is_published);
-      toast(isPublished ? 'Form unpublished.' : 'Form published.', 'success');
+      flashCopiedBadge(btn, isPublished ? 'Form unpublished!' : 'Form published!');
+    } else {
+      toast(res.body?.message || 'Failed to update publish status.', 'error');
     }
   });
 
