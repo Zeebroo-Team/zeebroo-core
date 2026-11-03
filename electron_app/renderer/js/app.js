@@ -35876,19 +35876,19 @@ function _osmRenderHistory() {
 
 // ── Panel: Sync activity ──
 const _osmEventStyle = {
-  online:     ['fa-wifi', '#16a34a', 'connection'],
-  offline:    ['fa-plug-circle-xmark', '#dc2626', 'connection'],
-  uploaded:   ['fa-cloud-arrow-up', '#2563eb', 'uploads'],
-  downloaded: ['fa-download', '#7c3aed', 'downloads'],
-  saved:      ['fa-floppy-disk', '#d97706', 'uploads'],
-  failed:     ['fa-triangle-exclamation', '#dc2626', 'problems'],
-  retry:      ['fa-rotate', '#0891b2', 'uploads'],
-  discarded:  ['fa-trash', '#64748b', 'problems'],
+  online:     ['fa-wifi', '#34c759', 'connection'],
+  offline:    ['fa-plug-circle-xmark', '#ff3b30', 'connection'],
+  uploaded:   ['fa-cloud-arrow-up', '#007aff', 'uploads'],
+  downloaded: ['fa-cloud-arrow-down', '#af52de', 'downloads'],
+  saved:      ['fa-floppy-disk', '#ff9500', 'uploads'],
+  failed:     ['fa-triangle-exclamation', '#ff3b30', 'problems'],
+  retry:      ['fa-rotate-right', '#30b0c7', 'uploads'],
+  discarded:  ['fa-trash-can', '#8e8e93', 'problems'],
 };
 function _osmEventHtml(e) {
   const [icon, color] = _osmEventStyle[e.type] || ['fa-circle', '#64748b'];
   return `<div class="osm-event">
-    <div class="osm-event-dot" style="background:${color}"><i class="fa ${icon}"></i></div>
+    <div class="osm-event-dot" style="background:color-mix(in srgb, ${color} 14%, var(--surface));color:${color}"><i class="fa ${icon}"></i></div>
     <div class="osm-event-text">${escHtml(e.text)}</div>
     <div class="osm-event-time">${escHtml(_osmTime(e.at))} · ${escHtml(_offlineAgo(e.at))}</div>
   </div>`;

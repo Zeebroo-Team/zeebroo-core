@@ -1329,10 +1329,10 @@ body.dark .tpm-item-danger:hover { background: #3b1515; }
 .osm-kv dd { margin: 0; word-break: break-word; user-select: text; }
 .osm-kv code { font-family: "SF Mono", Consolas, monospace; font-size: 11.5px; background: var(--osm-line); padding: 1px 6px; border-radius: 4px; }
 
-.osm-timeline { position: relative; padding-left: 24px; }
-.osm-timeline::before { content: ""; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 1px; background: var(--osm-line); }
-.osm-event { position: relative; padding: 2px 0 14px; }
-.osm-event-dot { position: absolute; left: -22px; top: 5px; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--surface); box-sizing: content-box; font-size: 0; }
+.osm-timeline { position: relative; padding-left: 40px; }
+.osm-timeline::before { content: ""; position: absolute; left: 13px; top: 14px; bottom: 14px; width: 1px; background: var(--osm-line); }
+.osm-event { position: relative; padding: 4px 0 16px; min-height: 28px; }
+.osm-event-dot { position: absolute; left: -40px; top: 1px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; box-shadow: 0 0 0 3px var(--surface); }
 .osm-event-text { font-size: 13px; }
 .osm-event-time { font-size: 11.5px; color: var(--text-muted); margin-top: 1px; }
 
