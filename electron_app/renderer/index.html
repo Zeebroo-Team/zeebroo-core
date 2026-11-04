@@ -87,6 +87,7 @@
 .crm-perms-rel-head{display:flex;align-items:center;gap:10px}
 .crm-perms-rel-name{font-size:13px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-perms-rel-head select{width:auto;padding:4px 8px;font-size:12px}
+.mac-window .crm-perms-rel-head select.po-field-input{width:auto;flex:0 0 180px;padding:0 30px 0 10px}
 .crm-perms-stages{display:flex;flex-wrap:wrap;gap:6px}
 .crm-perms-stage{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border,#e5e7eb);border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer;user-select:none}
 .crm-perms-stage input{accent-color:#7c3aed;margin:0}
@@ -209,6 +210,20 @@ body.dark .mac-titlebar--traffic{background:linear-gradient(rgba(255,255,255,.04
 .mac-side-item.active .mac-side-warn{color:#fff}
 .mac-side-item.active .mac-pill{background:rgba(255,255,255,.25);color:#fff}
 .mac-side-empty{padding:8px 10px;font-size:12.5px;color:var(--mac-muted)}
+/* CRM windows — flat blue, matching the ribbon icons */
+.modal-overlay[id^="crm-"] .mac-side-icon,.modal-overlay[id^="crm-"] .mac-hero-icon,.modal-overlay[id^="crm-"] .mac-row-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
+.modal-overlay[id^="crm-"] .mac-side-item.active .mac-side-icon{color:#fff;background:rgba(255,255,255,.22)}
+.crm-dept-new-btn{display:flex;align-items:center;justify-content:center;gap:7px;height:32px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:filter .12s}
+.crm-dept-new-btn:hover{filter:brightness(1.08)}
+.crm-dept-count{flex-shrink:0;min-width:22px;height:20px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.mac-side-item.active .crm-dept-count{background:rgba(255,255,255,.25);color:#fff}
+.crm-dept-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.crm-dept-stat{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.crm-dept-stat i{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;background:var(--accent);flex-shrink:0}
+.crm-dept-stat b{display:block;font-size:17px;line-height:1.15}
+.crm-dept-stat span{font-size:11.5px;color:var(--mac-muted)}
+.crm-dept-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.crm-dept-foot-count{margin-right:auto;font-size:12px;color:var(--mac-muted)}
 .mac-detail{flex:1;min-width:0;min-height:0;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:14px}
 .mac-detail-body{display:flex;flex-direction:column;gap:20px}
 /* simple form windows (e.g. CRM New Relation) */
@@ -227,7 +242,7 @@ body.dark .mac-callout{color:#ffb340}
 .mac-locked{display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;font-size:13px;font-weight:500;background:var(--mac-fill);color:var(--mac-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mac-locked i{font-size:11px;color:var(--mac-muted)}
 /* pop-up buttons — native selects and the searchable combo share the look */
-.mac-window select.po-field-input,.mac-popup{-webkit-appearance:none;appearance:none;width:100%;height:26px;padding:0 30px 0 10px;border:0;border-radius:6px;
+.mac-window select.po-field-input,.mac-popup{-webkit-appearance:none!important;appearance:none!important;width:100%;height:26px;padding:0 30px 0 10px;border:0;border-radius:6px;
   font:inherit;font-size:13px;color:var(--mac-text);text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   background:var(--mac-ctl) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect width='18' height='18' rx='4.5' fill='%23007aff'/%3E%3Cpath d='M6 7.4 9 4.6l3 2.8M6 10.6l3 2.8 3-2.8' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 4px center/18px 18px;
   box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 1px 1.5px rgba(0,0,0,.08);transition:box-shadow .15s}
@@ -266,13 +281,17 @@ body.dark .mac-window select.po-field-input option{background:#2c2c30;color:#f5f
 .crm-imp-drop{border:1.5px dashed rgba(0,122,255,.3);background:var(--mac-panel);border-radius:14px;padding:32px 30px 28px;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center;font-size:13px;
   box-shadow:0 1px 3px rgba(0,0,0,.04);transition:border-color .15s,background .15s}
 .crm-imp-drop:hover{border-color:rgba(0,122,255,.55);background:color-mix(in srgb,var(--mac-accent) 4%,var(--mac-panel))}
-.crm-imp-drop i.fa-file-csv{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;color:#fff;background:linear-gradient(#4cd964,#248a3d);box-shadow:0 6px 16px rgba(52,199,89,.32)}
+.crm-imp-drop i.fa-file-csv{width:64px;height:64px;border-radius:16px;display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-imp-drop strong{font-size:15px;font-weight:600;letter-spacing:-.01em}
 .crm-imp-drop .po-btn-primary,.crm-imp-drop .po-btn-ghost{height:30px;padding:0 16px}
 .crm-imp-help{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
 .crm-imp-help > div{background:var(--mac-panel,transparent);border-radius:12px;box-shadow:0 0 0 .5px var(--mac-line,#e5e7eb),0 1px 2px rgba(0,0,0,.04);padding:14px 16px;font-size:12px;line-height:1.55;color:var(--mac-muted,inherit)}
 .crm-imp-help strong{display:flex;align-items:center;gap:9px;margin-bottom:8px;font-size:13px;font-weight:600;color:var(--mac-text,inherit)}
-.crm-imp-help-icon{width:26px;height:26px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;background:var(--tile);box-shadow:0 1px 2px rgba(0,0,0,.18)}
+.crm-imp-help-icon{width:26px;height:26px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;background:var(--tile);box-shadow:none}
+.crm-imp-help-icon--plain{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+/* CRM dialogs: flat ribbon blue title icons and primary buttons, no gradients */
+.modal-overlay[id^="crm-"] .mac-title-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none;font-size:15px}
+.modal-overlay[id^="crm-"] .po-btn-primary{background:var(--accent);box-shadow:none}
 .crm-imp-note{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;background:rgba(0,122,255,.07);color:var(--mac-text);font-size:12.5px}
 .crm-imp-note i{color:var(--mac-accent)}
 .crm-imp-history td:nth-child(n+6):not(:last-child),.crm-imp-history th:nth-child(n+6):not(:last-child){text-align:right;font-variant-numeric:tabular-nums}
@@ -326,13 +345,14 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #crm-overview-view,#crm-relation-list{background:var(--mac-page)}
 #crm-overview-view{padding:22px 24px!important;gap:24px!important}
 #panel-crm .pm-welcome-card{border:0;border-radius:16px;padding:28px 30px;align-items:center;gap:20px;
-  background:radial-gradient(120% 140% at 100% 0%,rgba(175,82,222,.12),transparent 55%),linear-gradient(135deg,rgba(0,122,255,.10),var(--mac-panel) 70%);
+  background:var(--mac-panel);
   box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
 #panel-crm .pm-welcome-card::after{display:none}
-#panel-crm .pm-welcome-icon{width:60px;height:60px;border-radius:15px;font-size:24px;background:linear-gradient(#5ac8fa,#007aff);box-shadow:0 6px 16px rgba(0,122,255,.32)}
+/* Overview icons: flat ribbon blue on a light tint, no gradients */
+#panel-crm .pm-welcome-icon{width:60px;height:60px;border-radius:15px;font-size:26px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
 #panel-crm .pm-welcome-title{font-size:24px;letter-spacing:-.02em;color:var(--mac-text)}
 #panel-crm .pm-welcome-desc{font-size:13.5px;color:var(--mac-muted)}
-#panel-crm .svc-form-btn--primary{border:0;border-radius:8px;font-weight:500;background:linear-gradient(#3d95ff,#007aff);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.15);transition:filter .12s}
+#panel-crm .svc-form-btn--primary{border:0;border-radius:8px;font-weight:500;background:var(--accent);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.15);transition:filter .12s}
 #panel-crm .svc-form-btn--primary:hover{filter:brightness(1.05)}
 #panel-crm .svc-form-btn--primary:active{filter:brightness(.9)}
 #panel-crm .pm-welcome-secondary-btn{border:0;font-weight:500;font-size:13px;background:var(--mac-ctl);color:var(--mac-text);box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 1px 2px rgba(0,0,0,.08)}
@@ -340,7 +360,7 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .pm-stats-row{gap:14px}
 #panel-crm .pm-stat-tile{border:0;border-radius:14px;padding:16px 18px;gap:14px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
 #panel-crm .pm-stat-tile:hover{transform:translateY(-2px);box-shadow:0 0 0 .5px var(--mac-line),0 8px 22px rgba(0,0,0,.08)}
-#panel-crm .pm-stat-tile-icon{width:42px;height:42px;border-radius:11px;font-size:17px;color:#fff;background:var(--pm-stat-color,var(--mac-accent));box-shadow:0 3px 8px rgba(0,0,0,.12)}
+#panel-crm .pm-stat-tile-icon{width:42px;height:42px;border-radius:11px;font-size:18px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
 #panel-crm .pm-stat-tile-value{font-size:26px;font-weight:600;letter-spacing:-.02em;color:var(--mac-text)}
 #panel-crm .pm-stat-tile-label{font-size:12px;color:var(--mac-muted)}
 #panel-crm .pm-ov-section-head{margin-bottom:12px}
@@ -350,10 +370,7 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .pm-tips-row{gap:14px}
 #panel-crm .pm-tip-card{border:0;border-radius:14px;padding:16px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
 #panel-crm .pm-tip-card:hover{transform:translateY(-2px);box-shadow:0 0 0 .5px var(--mac-line),0 8px 22px rgba(0,0,0,.08)}
-#panel-crm .pm-tip-icon{width:36px;height:36px;border-radius:9px;color:#fff;background:linear-gradient(#5ac8fa,#007aff)}
-#panel-crm .pm-tip-card:nth-child(2) .pm-tip-icon{background:linear-gradient(#ffb340,#ff9500)}
-#panel-crm .pm-tip-card:nth-child(3) .pm-tip-icon{background:linear-gradient(#34c759,#248a3d)}
-#panel-crm .pm-tip-card:nth-child(4) .pm-tip-icon{background:linear-gradient(#c084fc,#9333ea)}
+#panel-crm .pm-tip-icon{width:36px;height:36px;border-radius:9px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 #panel-crm .pm-tip-title{font-size:13.5px;font-weight:600;color:var(--mac-text)}
 #panel-crm .pm-tip-desc{font-size:12.5px;color:var(--mac-muted)}
 #panel-crm .crm-guide-intro{font-size:13px;color:var(--mac-muted);line-height:1.55;margin:-4px 0 14px;max-width:820px}
@@ -362,11 +379,7 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .crm-guide-step{flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:7px;border-radius:14px;padding:16px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
 #panel-crm .crm-guide-step-head{display:flex;align-items:center;justify-content:space-between}
 #panel-crm .crm-guide-num{width:24px;height:24px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--mac-accent);background:color-mix(in srgb,var(--mac-accent) 14%,transparent)}
-#panel-crm .crm-guide-step-icon{width:36px;height:36px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:15px;background:linear-gradient(#a78bfa,#7c3aed)}
-#panel-crm .crm-guide-step:nth-child(3) .crm-guide-step-icon{background:linear-gradient(#ffb340,#ff9500)}
-#panel-crm .crm-guide-step:nth-child(5) .crm-guide-step-icon{background:linear-gradient(#5ac8fa,#007aff)}
-#panel-crm .crm-guide-step:nth-child(7) .crm-guide-step-icon{background:linear-gradient(#3d95ff,#0051d5)}
-#panel-crm .crm-guide-step:nth-child(9) .crm-guide-step-icon{background:linear-gradient(#34c759,#248a3d)}
+#panel-crm .crm-guide-step-icon{width:36px;height:36px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px;background:color-mix(in srgb,var(--accent) 12%,transparent)}
 #panel-crm .crm-guide-step-title{font-size:14.5px;font-weight:650;color:var(--mac-text)}
 #panel-crm .crm-guide-step-who{font-size:11.5px;font-weight:500;color:var(--mac-muted);display:flex;align-items:center;gap:5px}
 #panel-crm .crm-guide-step-desc{font-size:12.5px;line-height:1.5;color:var(--mac-muted);flex:1}
@@ -390,17 +403,22 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .pm-projects-grid{gap:14px}
 #panel-crm .crm-relation-card{border:0;border-radius:14px;padding:16px;gap:10px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
 #panel-crm .crm-relation-card:hover{transform:translateY(-2px);box-shadow:0 0 0 .5px var(--mac-line),0 10px 26px rgba(0,0,0,.1)}
-#panel-crm .crm-relation-card-icon{width:42px;height:42px;border-radius:11px;font-size:17px;color:#fff;background:linear-gradient(#5ac8fa,#007aff);box-shadow:0 3px 8px rgba(0,122,255,.25)}
+#panel-crm .crm-relation-card-icon{width:42px;height:42px;border-radius:11px;font-size:18px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
 #panel-crm .crm-relation-card-name{font-size:14.5px;font-weight:600;color:var(--mac-text)}
 #panel-crm .crm-relation-card-desc{font-size:12.5px;color:var(--mac-muted)}
-#panel-crm .crm-relation-card-count{font-size:12px;color:var(--mac-muted);border-top-color:var(--mac-line);padding-top:9px}
-#panel-crm .crm-relation-card-delete{background:var(--mac-fill);border-radius:50%}
+#panel-crm .crm-relation-card-count{font-size:12px;color:var(--mac-muted);border-top-color:var(--mac-line);padding-top:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#panel-crm .crm-relation-dept{display:inline-flex;align-items:center;gap:5px;max-width:60%;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-crm .crm-relation-dept--none{background:var(--mac-fill);color:var(--mac-muted)}
+#panel-crm #crm-relation-hero-badges .crm-relation-dept,#panel-crm #crm-relation-header-badges .crm-relation-dept{margin-right:6px;max-width:none}
+#panel-crm .crm-rd-visibility{display:flex;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--mac-line)}
+#panel-crm .crm-rd-visibility .crm-relation-dept{max-width:none}#panel-crm .crm-relation-card-delete{background:var(--mac-fill);border-radius:50%}
 #crm-relation-list > .finance-toolbar{padding:12px 20px;background:var(--surface);border-bottom-color:var(--mac-line)}
 #crm-relation-list .finance-search-wrap{border:0;border-radius:8px;padding:6px 12px;background:var(--mac-fill)}
 #crm-relation-list .finance-search-wrap:focus-within{box-shadow:0 0 0 3px rgba(0,122,255,.35)}
 #crm-relation-list > div:not(.finance-toolbar){padding:20px 24px!important}
 /* Relation → History tab — toolbar of pop-up buttons, day headers, timeline cards with colored icon tiles */
-#crm-relation-pane-history > .finance-toolbar{gap:8px;padding:10px 2px 12px;border-bottom:1px solid var(--mac-line)}
+#crm-relation-pane-history > .finance-toolbar{gap:8px;padding:10px 18px 12px;border-bottom:1px solid var(--mac-line);
+  position:sticky;top:-16px;z-index:5;margin:-16px -16px 0;padding-top:26px;background:var(--surface,#fff)}
 #crm-relation-pane-history .finance-search-wrap{height:28px;border:0;border-radius:8px;padding:0 10px;background:var(--mac-fill);transition:box-shadow .15s}
 #crm-relation-pane-history .finance-search-wrap:focus-within{box-shadow:0 0 0 3px rgba(0,122,255,.35)}
 #crm-relation-pane-history .finance-search-wrap i{font-size:11px;color:var(--mac-muted)}
@@ -423,13 +441,13 @@ body.dark #crm-relation-pane-history select.crm-history-filter option{background
 #crm-relation-pane-history .po-btn-ghost:disabled{opacity:.5;cursor:default;filter:none}
 #crm-history-flow-btn i{color:var(--mac-accent)}
 #crm-history-refresh{width:28px;padding:0!important;justify-content:center}
-#crm-relation-pane-history .crm-audit-day{position:sticky;top:0;z-index:2;margin:16px 0 8px;padding:6px 2px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mac-text);
+#crm-relation-pane-history .crm-audit-day{position:sticky;top:var(--crm-history-bar-h,51px);z-index:2;margin:16px 0 8px;padding:6px 2px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mac-text);
   background:color-mix(in srgb,var(--surface,#fff) 88%,transparent);backdrop-filter:blur(14px)}
 #crm-relation-pane-history .crm-audit-list{gap:8px}
 #crm-relation-pane-history .crm-audit-list::before{left:14px;width:2px;background:var(--mac-line)}
 #crm-relation-pane-history .crm-audit-item{gap:12px;padding:0}
-#crm-relation-pane-history .crm-audit-dot{width:30px;height:30px;margin-top:9px;border:0;border-radius:9px;font-size:12px;color:#fff;
-  background:linear-gradient(color-mix(in srgb,var(--audit) 70%,#fff),var(--audit));box-shadow:0 0 0 4px var(--surface,#fff),0 1px 3px rgba(0,0,0,.18)}
+#crm-relation-pane-history .crm-audit-dot{width:30px;height:30px;margin-top:9px;border:0;border-radius:9px;font-size:12px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,var(--surface,#fff));box-shadow:0 0 0 4px var(--surface,#fff)}
 #crm-relation-pane-history .crm-audit-content{border:0;border-radius:12px;padding:11px 15px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05);transition:box-shadow .15s}
 #crm-relation-pane-history .crm-audit-item:hover .crm-audit-content{box-shadow:0 0 0 .5px var(--mac-line),0 6px 18px rgba(0,0,0,.08)}
 #crm-relation-pane-history .crm-audit-title{font-size:13px;gap:5px;color:var(--mac-text)}
@@ -451,8 +469,8 @@ body.dark #crm-relation-pane-history select.crm-history-filter option{background
 .mac-window .crm-perms-user.active{background:var(--mac-accent);color:#fff}
 .mac-window .crm-perms-user.active .crm-perms-user-sub{color:rgba(255,255,255,.82)}
 .mac-window .crm-perms-user.active .crm-perms-tag,.mac-window .crm-perms-user.active .crm-inbox-flag,.mac-window .crm-perms-user.active .crm-inbox-ok{background:rgba(255,255,255,.25);color:#fff}
-.mac-window .crm-perms-user.active .crm-perms-avatar{box-shadow:0 0 0 1.5px rgba(255,255,255,.7)}
-.mac-window .crm-perms-avatar{background:linear-gradient(#a78bfa,#7c3aed);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.mac-window .crm-perms-avatar{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
+.mac-window .crm-perms-user.active .crm-perms-avatar{color:#fff;background:rgba(255,255,255,.25)}
 .mac-window .crm-perms-user-sub{color:var(--mac-muted)}
 .mac-window .crm-perms-tag--admin{background:rgba(0,122,255,.12);color:var(--mac-accent)}
 .mac-window .crm-perms-tag--custom{background:rgba(255,149,0,.15);color:#c93400}
@@ -492,8 +510,8 @@ body.dark .mac-window .crm-org-warn{color:#ffb340}
 .mac-window .crm-appr-route{background:var(--mac-stripe)}
 .mac-window .crm-appr-label{text-transform:none;letter-spacing:0;font-size:11px;font-weight:600;color:var(--mac-muted)}
 .mac-window .crm-appr-dept{border:0;background:var(--mac-fill);color:var(--mac-muted)}
-.mac-window .crm-appr-avatar{background:linear-gradient(#64d2ff,#007aff)}
-.mac-window .crm-appr-party--to .crm-appr-avatar{background:linear-gradient(#c084fc,#9333ea)}
+.mac-window .crm-appr-avatar,.mac-window .crm-appr-party--to .crm-appr-avatar{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.mac-window .crm-appr-head > i,.mac-window .crm-appr-note > i{color:var(--accent)}
 .mac-window .crm-appr-arrow{color:var(--mac-accent)}
 .mac-window .crm-appr-note{border-left-color:var(--mac-accent);background:var(--mac-fill);border-radius:0 8px 8px 0}
 .mac-window .crm-appr-fig,.mac-window .crm-ws-muted{color:var(--mac-muted)}
@@ -514,11 +532,16 @@ body.dark .mac-window .crm-org-warn{color:#ffb340}
 .mac-window .crm-fu-actions .po-btn-ghost{padding-left:10px;padding-right:10px}
 .mac-window .mac-toolbar:has(#crm-fu-scopes){justify-content:space-between}
 .mac-window .crm-fu-count--overdue{background:#ff3b30}
+/* Follow-ups: WhatsApp keeps its brand green */
+#crm-fu-modal .crm-fu-ico{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+#crm-fu-modal .crm-fu-project{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+#crm-fu-modal .crm-fu-ico:has(.fa-whatsapp){color:#25d366;background:rgba(37,211,102,.14)}
+#crm-fu-modal .crm-fu-chip .fa-whatsapp{color:#25d366;opacity:1}
 .mac-window .crm-fu-list:empty::before,.mac-window .crm-appr-list:empty::before{content:"Nothing here";display:block;padding:40px;text-align:center;color:var(--mac-muted)}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
 body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
 body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"],
-body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-unrestricted) #rb-crm-audit,
+body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-is-admin) #rb-crm-add-dept, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
 body.crm-deny-relations_create #rb-crm-projects, body.crm-deny-relations_create #crm-ov-new-relation-btn,
@@ -531,6 +554,8 @@ body.crm-deny-leads_edit .crm-card-edit, body.crm-deny-leads_edit #crm-ctx-edit,
 body.crm-deny-leads_delete .crm-card-del,
 body.crm-deny-stages_manage #rb-crm-stages, body.crm-deny-stages_manage #crm-relation-stages-btn,
 body.crm-deny-stages_manage #crm-stage-add-open-btn, body.crm-deny-stages_manage [data-edit-stage], body.crm-deny-stages_manage [data-del-stage],
+body.crm-deny-stages_manage [data-stage-tpl], body.crm-deny-stages_manage #crm-stages-custom-btn, body.crm-deny-stages_manage #crm-stages-restore-btn, body.crm-deny-stages_manage [data-dup-stage],
+body.crm-proj-deny-manage [data-stage-tpl], body.crm-proj-deny-manage #crm-stages-custom-btn, body.crm-proj-deny-manage #crm-stages-restore-btn, body.crm-proj-deny-manage [data-dup-stage],
 body.crm-deny-stage_mail [data-mail-stage],
 body.crm-deny-contacts_view #rb-crm-contacts, body.crm-deny-contacts_view [data-crmsub="contacts"], body.crm-deny-contacts_view #crm-tab-relation-contacts,
 body.crm-deny-tasks_view #rb-crm-tasks, body.crm-deny-tasks_view [data-crmsub="tasks"],
@@ -539,6 +564,9 @@ body.crm-deny-tasks_delete .crm-task-del-btn,
 body.crm-deny-forms_view #rb-crm-forms, body.crm-deny-forms_view [data-crmdtab="forms"],
 body.crm-deny-forms_manage #rb-crm-new-form, body.crm-deny-forms_manage #crm-forms-new-btn,
 body.crm-deny-custom_data_view #crm-tab-customdata,
+body.crm-deny-custom_fields_manage [data-addblock="custom_field"],
+body.crm-deny-leads_import #rb-crm-import-leads, body.crm-deny-leads_import #crm-relation-import-btn,
+body.crm-deny-followups_view #rb-crm-followups,
 /* Per-pipeline rules from the open pipeline's `can` (department head / marketing / admin) */
 body.crm-proj-deny-create #rb-crm-new-lead, body.crm-proj-deny-create #crm-relation-new-lead-btn, body.crm-proj-deny-create #crm-relation-import-btn,
 body.crm-proj-deny-manage #rb-crm-stages, body.crm-proj-deny-manage #crm-relation-stages-btn, body.crm-proj-deny-manage [data-add-stage],
@@ -692,6 +720,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-col-head{padding:14px 12px 10px;display:flex;flex-direction:column;gap:2px}
 .crm-col-title{display:flex;align-items:center;gap:7px;min-width:0}
 .crm-col-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--stage,#94a3b8);box-shadow:0 0 0 3px color-mix(in srgb,var(--stage,#94a3b8) 22%,transparent)}
+.crm-col-ico{font-size:12px;flex-shrink:0;color:var(--stage,#94a3b8)}
 .crm-col-name{font-size:12.5px;font-weight:700;color:var(--text,#111827);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-col-state{font-size:11px;color:var(--stage,#94a3b8);flex-shrink:0}
 .crm-col-count{font-size:11px;font-weight:600;line-height:18px;min-width:20px;text-align:center;color:var(--text-muted,#6b7280);background:color-mix(in srgb,var(--text-muted,#6b7280) 12%,transparent);border-radius:5px;padding:0 6px;flex-shrink:0;font-variant-numeric:tabular-nums}
@@ -730,10 +759,12 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-shell .mac-titlebar{height:48px}
 .crm-lead-view-shell .mac-win-btns{margin-left:auto}
-.crm-lead-view-icon{background:linear-gradient(#a78bfa,#7c3aed)}
-.crm-lead-view-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:18px 22px}
+/* Lead window — flat ribbon blue, no gradients */
+.crm-lead-view-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none;font-size:15px}
+.crm-lead-view-shell .po-btn-primary{background:var(--accent);box-shadow:none}.crm-lead-view-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:18px 22px}
 /* Lead Details as a macOS window — grouped panels, segmented tabs, hairline borders */
 .crm-lead-view-shell .crm-tl-wrap{border-bottom-color:var(--mac-line);background:var(--mac-side)}
+.crm-lead-view-shell .crm-lead-view-body .crm-tl-wrap{border:1px solid var(--mac-line);border-radius:10px;padding:10px 14px 12px}
 .crm-lead-view-shell .crm-tl-head{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--mac-text)}
 .crm-lead-view-shell .crm-tl-head i{color:var(--mac-accent)}
 .crm-lead-view-shell .crm-tl-count{color:var(--mac-muted)}
@@ -748,7 +779,7 @@ body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-shell .crm-audit-content{border:0;border-radius:10px;background:var(--mac-ctl);box-shadow:inset 3px 0 0 var(--audit),0 0 0 .5px var(--mac-line),0 1px 2px rgba(0,0,0,.04)}
 .crm-lead-view-shell .crm-audit-diff th,.crm-lead-view-shell .crm-audit-diff td{border-bottom-color:var(--mac-line)}
 .crm-lead-view-shell .crm-lead-view-head{gap:14px;padding-bottom:16px;border-bottom-color:var(--mac-line)}
-.crm-lead-view-shell .crm-lead-view-avatar{width:44px;height:44px;border-radius:12px;font-size:18px;color:#fff;background:linear-gradient(#a78bfa,#7c3aed);box-shadow:0 2px 6px rgba(124,58,237,.3)}
+.crm-lead-view-shell .crm-lead-view-avatar{width:44px;height:44px;border-radius:12px;font-size:18px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
 .crm-lead-view-shell .crm-lead-view-name{font-size:18px;letter-spacing:-.01em}
 .crm-lead-view-shell .crm-lead-view-sub{font-size:12px;color:var(--mac-muted);margin-top:4px}
 .crm-lead-view-shell .crm-lead-view-stage{color:var(--mac-text)}
@@ -757,8 +788,8 @@ body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-shell .crm-ws-tabs{align-self:flex-start;display:inline-flex;flex-wrap:wrap;gap:2px;margin:0;padding:3px;border:0;border-radius:10px;background:var(--mac-fill);box-shadow:inset 0 0 0 .5px var(--mac-line)}
 .crm-lead-view-shell .crm-ws-tab{position:relative;flex-direction:row;align-items:center;gap:7px;height:30px;margin:0;padding:0 12px 0 5px;border:0;border-radius:7px;
   font-size:12.5px;font-weight:500;color:var(--mac-muted);background:none;white-space:nowrap;transition:background .15s,color .15s}
-.crm-lead-view-shell .crm-ws-tab i{width:22px;height:22px;flex-shrink:0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#fff;
-  background:linear-gradient(color-mix(in srgb,var(--tab,#8e8e93) 72%,#fff),var(--tab,#8e8e93));box-shadow:0 1px 2px rgba(0,0,0,.18),inset 0 .5px 0 rgba(255,255,255,.35);transition:transform .18s cubic-bezier(.3,.7,.4,1.4)}
+.crm-lead-view-shell .crm-ws-tab i{width:22px;height:22px;flex-shrink:0;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);transition:transform .18s cubic-bezier(.3,.7,.4,1.4)}
 .crm-lead-view-shell .crm-ws-tab:hover{color:var(--mac-text);background:var(--mac-hover)}
 .crm-lead-view-shell .crm-ws-tab:active i{transform:scale(.94)}
 .crm-lead-view-shell .crm-ws-tab.active{color:var(--mac-text);font-weight:600;background:var(--mac-ctl);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.14)}
@@ -767,13 +798,6 @@ body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-shell .crm-ws-tab{z-index:1}
 .crm-ws-tab-pill{position:absolute;z-index:0;border-radius:7px;transform-origin:0 0;pointer-events:none;background:var(--mac-ctl);box-shadow:0 0 0 .5px rgba(0,0,0,.08),0 1px 3px rgba(0,0,0,.14)}
 .crm-lead-view-shell .crm-ws-tab.crm-ws-tab--arriving{background:none;box-shadow:none}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="overview"]{--tab:#8e8e93}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="timeline"]{--tab:#5856d6}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="messages"]{--tab:#0a84ff}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="files"]{--tab:#34c759}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="tasks"]{--tab:#ff9f0a}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="quotations"]{--tab:#30b0c7}
-.crm-lead-view-shell .crm-ws-tab[data-ws-tab="followups"]{--tab:#af52de}
 .crm-lead-view-shell .crm-ws-tab-count{min-width:18px;height:17px;margin-left:-1px;padding:0 5px;border-radius:999px;box-sizing:border-box;
   font-size:10.5px;font-weight:700;line-height:17px;text-align:center;color:#fff;background:var(--mac-accent)}
 .crm-lead-view-shell .crm-ws-tab-count.crm-ws-tab-count--overdue{background:#ff3b30;color:#fff}
@@ -790,6 +814,13 @@ body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-shell .crm-ws-filter:not(.active):hover{filter:brightness(.95)}
 .crm-lead-view-shell .crm-ws-filter.active{background:var(--mac-accent);color:#fff}
 /* Lead window → Timeline tab: day headers + one grouped panel per day (Notification Center style) */
+.crm-tlf-bar-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.crm-tlf-tools{display:flex;align-items:center;gap:8px;margin-left:auto}
+.crm-tlf-tools .crm-fm-pop select{max-width:160px}
+.crm-tlf-summary{display:flex;align-items:center;gap:8px;padding:0 4px 8px;font-size:12px;color:var(--mac-muted,var(--text-muted))}
+.crm-tlf-clear{border:0;padding:0;background:none;font:inherit;font-size:12px;color:var(--mac-accent,#007aff);cursor:pointer}
+.crm-tlf-clear:hover{text-decoration:underline}
+mark.crm-tlf-hit{background:rgba(255,204,0,.45);color:inherit;border-radius:3px;padding:0 1px}
 .crm-tlf-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;align-items:start}
 .crm-tlf{display:flex;flex-direction:column;min-width:0}
 /* inspector column — sticks while the feed scrolls */
@@ -812,8 +843,8 @@ button.crm-tlf-side-row:hover{background:var(--mac-hover,rgba(0,0,0,.04))}
 .crm-tlf-bar{display:block;height:4px;border-radius:999px;background:var(--mac-fill,rgba(0,0,0,.06));overflow:hidden}
 .crm-tlf-bar span{display:block;height:100%;border-radius:inherit;opacity:.85}
 .crm-tlf-icon.crm-tlf-icon--sm{width:24px;height:24px;border-radius:6px;font-size:10.5px}
-.crm-tlf-side .crm-assign-av{background:linear-gradient(#64d2ff,#0a84ff)}
-.crm-tlf-av--sys{background:linear-gradient(#b4b4b9,#8e8e93)!important;font-size:11px}
+.crm-tlf-side .crm-assign-av{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.crm-tlf-av--sys{color:var(--mac-muted,#8e8e93)!important;background:var(--mac-fill,rgba(118,118,128,.14))!important;font-size:11px}
 .crm-tlf-side-key{color:var(--mac-muted,var(--text-muted))}
 .crm-tlf-side-val{flex-shrink:0;font-weight:500;font-variant-numeric:tabular-nums}
 .crm-tlf-card>.crm-tlf-side-row+.crm-tlf-side-row:not(button){border-top:1px solid var(--mac-line,var(--border));border-radius:0}
@@ -824,8 +855,8 @@ button.crm-tlf-side-row:hover{background:var(--mac-hover,rgba(0,0,0,.04))}
 .crm-tlf-row{display:flex;align-items:flex-start;gap:12px;padding:10px 14px;transition:background .12s}
 .crm-tlf-row+.crm-tlf-row{border-top:1px solid var(--mac-line,var(--border));border-image:linear-gradient(to right,transparent 52px,var(--mac-line,var(--border)) 52px) 1}
 .crm-tlf-row:hover{background:var(--mac-hover,rgba(0,0,0,.04))}
-.crm-tlf-icon{width:28px;height:28px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:#fff;
-  background:linear-gradient(color-mix(in srgb,var(--ic) 78%,#fff),var(--ic));box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.crm-tlf-icon{width:28px;height:28px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-tlf-main{flex:1;min-width:0;padding-top:4px}
 .crm-tlf-title{font-size:13px;line-height:1.4;color:var(--mac-text,var(--text));overflow-wrap:anywhere}
 .crm-tlf-title strong{font-weight:600;margin-right:2px}
@@ -847,13 +878,13 @@ body.dark .crm-chat{--chat-them:#3a3a3c}
 .crm-chat-row{display:flex;align-items:flex-end;gap:8px;margin-top:8px;border-radius:12px;transition:background .6s}
 .crm-chat-row--cont{margin-top:2px}
 .crm-chat-row--mine{justify-content:flex-end}
-.crm-chat-row>.crm-av{margin-bottom:22px;color:#fff;background:linear-gradient(#b4b4b9,#8e8e93);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.crm-chat-row>.crm-av{margin-bottom:22px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-chat-gap{width:30px;flex-shrink:0}
 .crm-chat-col{display:flex;flex-direction:column;align-items:flex-start;gap:4px;max-width:min(72%,820px);min-width:0}
 .crm-chat-row--mine .crm-chat-col{align-items:flex-end}
 .crm-chat-name{padding:0 12px;font-size:11.5px;font-weight:600;color:var(--mac-muted,var(--text-muted))}
 .crm-chat-bubble{max-width:100%;padding:8px 13px;border-radius:18px;border-bottom-left-radius:6px;font-size:13.5px;line-height:1.45;color:var(--mac-text,var(--text));background:var(--chat-them)}
-.crm-chat-row--mine .crm-chat-bubble{border-bottom-left-radius:18px;border-bottom-right-radius:6px;color:#fff;background:linear-gradient(#2b95ff,var(--chat-me))}
+.crm-chat-row--mine .crm-chat-bubble{border-bottom-left-radius:18px;border-bottom-right-radius:6px;color:#fff;background:var(--accent)}
 .crm-chat-bubble .crm-ws-msg-body{white-space:pre-line;overflow-wrap:anywhere}
 /* editing in place: the bubble turns into a plain field */
 .crm-chat-bubble:has(textarea){width:min(520px,100%);padding:8px;border-radius:14px;color:var(--mac-text,var(--text));background:var(--mac-panel,var(--surface));box-shadow:0 0 0 .5px var(--mac-line,var(--border))}
@@ -879,6 +910,27 @@ body.dark .crm-chat{--chat-them:#3a3a3c}
 .crm-chat-act[data-ws-msg-edit],.crm-chat-act--danger{opacity:.55}
 .crm-chat-row:hover .crm-chat-act{opacity:1}
 .crm-chat-row--flash{background:color-mix(in srgb,var(--mac-accent,#007aff) 14%,transparent);transition:none}
+/* search bar over the conversation: text search with match stepping, and a calendar to jump to a day */
+.crm-chat-find{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--mac-line,var(--border));background:var(--mac-head,rgba(0,0,0,.015))}
+.crm-chat-find-q{flex:1;width:auto;max-width:420px}
+.crm-chat-find-meta{display:flex;align-items:center;gap:2px;font-size:12px;color:var(--mac-muted,var(--text-muted));font-variant-numeric:tabular-nums;white-space:nowrap}
+.crm-chat-find-meta>span{margin-right:4px}
+.crm-chat-find-meta .crm-chat-icon:disabled{opacity:.35;cursor:default}
+.crm-chat-find-date{margin-left:auto;display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:7px;cursor:pointer;background:var(--mac-fill,rgba(118,118,128,.12))}
+.crm-chat-find-date i{font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-chat-find-date input{border:0;outline:0;padding:0;background:none;font:inherit;font-size:12.5px;color:var(--mac-text,var(--text));cursor:pointer;color-scheme:light dark}
+.crm-chat-results{flex-shrink:0;max-height:168px;overflow-y:auto;border-bottom:1px solid var(--mac-line,var(--border))}
+.crm-chat-results:empty{display:none}
+.crm-chat-result{display:flex;flex-direction:column;gap:2px;width:100%;padding:7px 14px;border:0;border-bottom:.5px solid var(--mac-line,var(--border));font:inherit;text-align:left;cursor:pointer;color:var(--mac-text,var(--text));background:none}
+.crm-chat-result:last-child{border-bottom:0}
+.crm-chat-result:hover{background:var(--mac-hover,rgba(0,0,0,.04))}
+.crm-chat-result.active{background:color-mix(in srgb,var(--mac-accent,#007aff) 12%,transparent)}
+.crm-chat-result-top{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.crm-chat-result-top small{font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-chat-result-txt{font-size:12.5px;color:var(--mac-muted,var(--text-muted));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+mark.crm-chat-hit{background:rgba(255,204,0,.5);color:inherit;border-radius:3px;padding:0 1px}
+.crm-chat-row--mine mark.crm-chat-hit{background:#ffd60a;color:#1c1c1e}
+.crm-chat-row--hit .crm-chat-bubble{box-shadow:0 0 0 2px #ffcc00}
 /* composer dock */
 .crm-chat-dock{flex-shrink:0;padding:8px max(12px,calc((100% - 1300px) / 2)) 8px;border-top:1px solid var(--mac-line,var(--border));background:var(--mac-head,rgba(0,0,0,.015))}
 .crm-chat-compose{display:flex;flex-direction:column;border-radius:20px;background:var(--mac-panel,var(--surface));
@@ -913,7 +965,7 @@ body.dark .crm-chat-compose{background:#2c2c30}
 .crm-chat-input{flex:1;min-width:0;height:32px;max-height:180px;padding:6px 8px;border:0;outline:0;resize:none;background:transparent;font:inherit;font-size:13.5px;line-height:20px;color:var(--mac-text,var(--text))}
 .crm-chat-input::placeholder{color:var(--mac-muted,var(--text-muted));opacity:.8}
 .crm-chat-send{width:32px;height:32px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:50%;font-size:14px;cursor:pointer;color:#fff;
-  background:linear-gradient(#2b95ff,var(--chat-me));box-shadow:0 1px 3px rgba(10,132,255,.4);transition:filter .12s,transform .1s,opacity .12s}
+  background:var(--accent);transition:filter .12s,transform .1s,opacity .12s}
 .crm-chat-send:hover{filter:brightness(1.08)}
 .crm-chat-send:active{transform:scale(.92)}
 .crm-chat-send:disabled{opacity:.5;cursor:default}
@@ -927,6 +979,13 @@ body.dark .crm-chat-compose{background:#2c2c30}
 body.dark .crm-msg-menu{background:rgba(44,44,48,.96);box-shadow:0 0 0 .5px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.5)}
 @keyframes crmMsgMenu{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
 .crm-msg-menu-title{padding:4px 10px 6px;font-size:11px;font-weight:600;color:var(--mac-muted,var(--text-muted))}
+.crm-msg-menu-search{position:sticky;top:-5px;z-index:1;display:flex;align-items:center;gap:6px;height:28px;margin:0 2px 4px;padding:0 9px;border-radius:7px;cursor:text;
+  background:var(--mac-ctl,#fff);box-shadow:0 0 0 .5px var(--mac-line,rgba(0,0,0,.15))}
+body.dark .crm-msg-menu-search{background:#3a3a3c}
+.crm-msg-menu-search:focus-within{box-shadow:0 0 0 .5px var(--mac-accent,#007aff),0 0 0 3px color-mix(in srgb,var(--mac-accent,#007aff) 22%,transparent)}
+.crm-msg-menu-search i{font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-msg-menu-search input{flex:1;min-width:0;border:0;outline:0;padding:0;background:none;font:inherit;font-size:12.5px;color:var(--mac-text,var(--text))}
+.crm-msg-mention--typed .crm-msg-menu-search{display:none}
 .crm-msg-menu-row{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 6px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--mac-text,var(--text))}
 .crm-msg-menu-row[hidden]{display:none}
 .crm-msg-menu-row:hover{color:#fff;background:var(--mac-accent,#007aff)}
@@ -935,7 +994,7 @@ body.dark .crm-msg-menu{background:rgba(44,44,48,.96);box-shadow:0 0 0 .5px rgba
 .crm-msg-menu-row input{position:absolute;opacity:0;pointer-events:none}
 .crm-msg-check{width:14px;flex-shrink:0;font-size:11px;visibility:hidden}
 .crm-msg-menu-row input:checked~.crm-msg-check{visibility:visible}
-.crm-msg-menu-row input:checked~.crm-assign-av{background:linear-gradient(#64d2ff,#0a84ff)}
+.crm-msg-menu-row input:checked~.crm-assign-av{color:#fff;background:var(--accent)}
 .crm-msg-menu-row .crm-assign-av{width:22px;height:22px;font-size:9.5px}
 .crm-msg-menu-none{display:none;padding:8px 10px;font-size:12px;color:var(--mac-muted,var(--text-muted))}
 .crm-msg-mention--none .crm-msg-menu-none{display:block}
@@ -956,8 +1015,8 @@ body.dark .crm-msg-menu{background:rgba(44,44,48,.96);box-shadow:0 0 0 .5px rgba
 .crm-msg-token{padding:1px 8px;border-radius:999px;font-size:11.5px;font-weight:500;color:var(--mac-accent,#007aff);background:color-mix(in srgb,var(--mac-accent,#007aff) 11%,transparent)}
 .crm-msg-token--me{color:#fff;background:var(--mac-accent,#007aff)}
 .crm-msg-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:44px 20px;text-align:center}
-.crm-msg-empty>span{width:52px;height:52px;margin-bottom:4px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;
-  background:linear-gradient(#64d2ff,#0a84ff);box-shadow:0 2px 8px rgba(10,132,255,.3)}
+.crm-msg-empty>span{width:52px;height:52px;margin-bottom:4px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-msg-empty strong{font-size:14px;color:var(--mac-text,var(--text))}
 .crm-msg-empty small{max-width:340px;font-size:12px;color:var(--mac-muted,var(--text-muted))}
 /* Quick Look image preview */
@@ -1030,7 +1089,7 @@ body.dark :is(.crm-lead-view-shell,.crm-assign-win) :hover::-webkit-scrollbar-th
 .crm-assignee{display:inline-flex;align-items:center;gap:4px;max-width:150px;font-size:10.5px;font-weight:600;line-height:1;padding:2px 7px 2px 2px;border-radius:999px;border:1px solid var(--border);color:var(--text)}
 .crm-assignee--primary{border-color:color-mix(in srgb,#f59e0b 60%,transparent)}
 .crm-assignee--more{padding:2px 6px;color:var(--text-muted)}
-.crm-assignee-av{width:16px;height:16px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;background:var(--av,#7c3aed)}
+.crm-assignee-av{width:16px;height:16px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#fff;background:var(--accent)}
 .crm-assignee-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-ws-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border,#e5e7eb);margin-top:-4px}
 .crm-ws-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text-muted);background:none;border:none;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
@@ -1164,7 +1223,7 @@ body.dark .crm-qt-banner--amber,body.dark .crm-qt-banner--red,body.dark .crm-qt-
 .crm-fm-pop select{height:100%;padding:0 24px 0 7px;border:0;outline:0;appearance:none;cursor:pointer;font:inherit;font-size:12.5px;color:var(--mac-text,var(--text));
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 12'%3E%3Cpath d='M1.5 4.5 4 2l2.5 2.5M1.5 7.5 4 10l2.5-2.5' fill='none' stroke='%238e8e93' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 8px center/7px 11px}
 .crm-fm-upload{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 13px;border:0;border-radius:7px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;color:#fff;
-  background:linear-gradient(#2b95ff,var(--mac-accent,#007aff));box-shadow:0 1px 2px rgba(0,122,255,.35),inset 0 .5px 0 rgba(255,255,255,.25);transition:filter .12s,transform .1s}
+  background:var(--accent);transition:filter .12s,transform .1s}
 .crm-fm-upload:hover{filter:brightness(1.07)}
 .crm-fm-upload:active{transform:scale(.97)}
 .crm-fm-upload:disabled{opacity:.75;cursor:default;filter:none;transform:none}
@@ -1191,11 +1250,11 @@ body.dark .crm-fm-act{background:rgba(60,60,66,.85);box-shadow:0 0 0 .5px rgba(2
 /* macOS document icon: folded corner, faint text lines, tinted extension badge */
 .crm-fm-doc{position:relative;display:block;width:64px;height:84px;flex-shrink:0;filter:drop-shadow(0 0 .5px rgba(0,0,0,.4)) drop-shadow(0 2px 4px rgba(0,0,0,.12))}
 .crm-fm-doc::before{content:'';position:absolute;inset:0;border-radius:4px;clip-path:polygon(0 0,calc(100% - 17px) 0,100% 17px,100% 100%,0 100%);
-  background:repeating-linear-gradient(transparent 0 5px,rgba(0,0,0,.08) 5px 6.5px) 11px 24px/calc(100% - 22px) 26px no-repeat,linear-gradient(#fff,#f2f2f4)}
+  background:repeating-linear-gradient(transparent 0 5px,rgba(0,0,0,.08) 5px 6.5px) 11px 24px/calc(100% - 22px) 26px no-repeat,#fff}
 .crm-fm-doc::after{content:'';position:absolute;top:0;right:0;width:17px;height:17px;border-bottom-left-radius:3px;background:linear-gradient(to bottom left,transparent 50%,#d6d6db 50%)}
 .crm-fm-doc-ext{position:absolute;z-index:1;left:50%;bottom:10px;transform:translateX(-50%);padding:1px 5px;border-radius:3px;font-size:9.5px;font-weight:800;letter-spacing:.04em;line-height:13px;color:#fff;background:var(--ic)}
 .crm-fm-doc--sm{width:18px;height:23px;filter:drop-shadow(0 0 .4px rgba(0,0,0,.5))}
-.crm-fm-doc--sm::before{border-radius:2px;clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);background:linear-gradient(#fff,#f0f0f2)}
+.crm-fm-doc--sm::before{border-radius:2px;clip-path:polygon(0 0,calc(100% - 6px) 0,100% 6px,100% 100%,0 100%);background:#fff}
 .crm-fm-doc--sm::after{width:6px;height:6px;border-bottom-left-radius:1px}
 .crm-fm-doc--sm .crm-fm-doc-ext{left:3px;right:3px;bottom:4px;height:4px;padding:0;transform:none;font-size:0;border-radius:1px}
 /* list view */
@@ -1229,8 +1288,8 @@ body.dark .crm-fm-act{background:rgba(60,60,66,.85);box-shadow:0 0 0 .5px rgba(2
 .crm-fm-foot i{font-size:10px;margin-right:3px}
 .crm-fm-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:240px;height:100%;text-align:center}
 .crm-fm-empty--sm{min-height:160px}
-.crm-fm-empty-ic{width:56px;height:56px;margin-bottom:4px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;
-  background:linear-gradient(#6ee08a,#34c759);box-shadow:0 2px 8px rgba(52,199,89,.3)}
+.crm-fm-empty-ic{width:56px;height:56px;margin-bottom:4px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-fm-empty strong{font-size:14px;color:var(--mac-text,var(--text))}
 .crm-fm-empty small{max-width:340px;font-size:12px;color:var(--mac-muted,var(--text-muted))}
 .crm-fm-empty .crm-fm-upload{margin-top:8px}
@@ -1246,7 +1305,7 @@ body.dark .crm-fm-drop{background:rgba(30,30,34,.86)}
 .crm-tk-wrap{display:flex;flex-direction:column;gap:14px}
 .crm-tk-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:0 2px}
 .crm-tk-ring{--p:0;width:42px;height:42px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;
-  background:conic-gradient(#ff9f0a calc(var(--p) * 1%),var(--mac-fill,rgba(118,118,128,.14)) 0)}
+  background:conic-gradient(var(--accent) calc(var(--p) * 1%),var(--mac-fill,rgba(118,118,128,.14)) 0)}
 .crm-tk-ring span{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;font-variant-numeric:tabular-nums;
   color:var(--mac-text,var(--text));background:var(--mac-page,var(--bg,#f5f5f7))}
 body.dark .crm-tk-ring span{background:#26262a}
@@ -1259,7 +1318,7 @@ body.dark .crm-tk-ring span{background:#26262a}
 .crm-tk-new:focus-within{box-shadow:0 0 0 .5px var(--mac-accent,#007aff),0 0 0 3.5px color-mix(in srgb,var(--mac-accent,#007aff) 18%,transparent),0 1px 3px rgba(0,0,0,.05)}
 .crm-tk-new-row{display:flex;align-items:center;gap:10px;padding:10px 14px 6px}
 .crm-tk-plus{width:22px;height:22px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff;
-  background:linear-gradient(#ffb340,#ff9f0a);box-shadow:0 1px 2px rgba(255,159,10,.4)}
+  background:var(--accent)}
 .crm-tk-new-input{flex:1;min-width:0;height:28px;padding:0;border:0;outline:0;background:none;font:inherit;font-size:14px;color:var(--mac-text,var(--text))}
 .crm-tk-new-input::placeholder{color:var(--mac-muted,var(--text-muted));opacity:.85}
 .crm-tk-new-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 10px 10px 46px}
@@ -1308,17 +1367,16 @@ body.dark .crm-tk-pill input,body.dark .crm-tk-pill select{color-scheme:dark}
 .crm-tk-chip--overdue{color:#ff3b30;background:rgba(255,59,48,.1)}
 .crm-tk-chip--today{color:#0a84ff;background:rgba(10,132,255,.1)}
 .crm-tk-who{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--mac-muted,var(--text-muted))}
-.crm-tk-av{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;background:linear-gradient(#64d2ff,#0a84ff)}
+.crm-tk-av{width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-tk--done .crm-tk-title{color:var(--mac-muted,var(--text-muted))}
-.crm-tk--done .crm-tk-av{background:linear-gradient(#b4b4b9,#8e8e93)}
+.crm-tk--done .crm-tk-av{color:var(--mac-muted,#8e8e93);background:var(--mac-fill,rgba(118,118,128,.14))}
 .crm-tk-del{flex-shrink:0;width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;padding:0;border:0;border-radius:50%;font-size:11px;cursor:pointer;
   color:var(--mac-muted,var(--text-muted));background:none;opacity:0;transition:opacity .12s,background .12s,color .12s}
 .crm-tk:hover .crm-tk-del,.crm-tk-del:focus-visible{opacity:1}
 .crm-tk-del:hover{color:#ff3b30;background:rgba(255,59,48,.1)}
 .crm-tk-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:48px 20px;text-align:center}
-.crm-tk-empty-ic{width:56px;height:56px;margin-bottom:4px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;
-  background:linear-gradient(#ffb340,#ff9f0a);box-shadow:0 2px 8px rgba(255,159,10,.3)}
-.crm-tk-empty--done .crm-tk-empty-ic{background:linear-gradient(#6ee08a,#34c759);box-shadow:0 2px 8px rgba(52,199,89,.3)}
+.crm-tk-empty-ic{width:56px;height:56px;margin-bottom:4px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:24px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-tk-empty strong{font-size:14px;color:var(--mac-text,var(--text))}
 .crm-tk-empty small{max-width:360px;font-size:12px;color:var(--mac-muted,var(--text-muted))}
 /* Lead window → Quotations list: summary tiles + one inset-grouped card per quotation, earlier versions folded under it */
@@ -1329,8 +1387,8 @@ body.dark .crm-tk-pill input,body.dark .crm-tk-pill select{color-scheme:dark}
 .crm-qtl-head-txt small{font-size:12px;color:var(--mac-muted,var(--text-muted))}
 .crm-qtl-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
 .crm-qtl-stat{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--mac-panel,var(--surface));box-shadow:0 0 0 .5px var(--mac-line,var(--border)),0 1px 2px rgba(0,0,0,.04)}
-.crm-qtl-stat>span{width:34px;height:34px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;
-  background:linear-gradient(color-mix(in srgb,var(--ic) 72%,#fff),var(--ic));box-shadow:0 1px 3px color-mix(in srgb,var(--ic) 40%,transparent)}
+.crm-qtl-stat>span{width:34px;height:34px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-qtl-stat>div{display:flex;flex-direction:column;min-width:0}
 .crm-qtl-stat small{font-size:11.5px;color:var(--mac-muted,var(--text-muted))}
 .crm-qtl-stat b{font-size:17px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:var(--mac-text,var(--text));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -1339,8 +1397,8 @@ body.dark .crm-tk-pill input,body.dark .crm-tk-pill select{color-scheme:dark}
 .crm-qtl-row{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:0;background:none;font:inherit;text-align:left;cursor:pointer;color:var(--mac-text,var(--text));transition:background .12s}
 .crm-qtl-row:hover{background:var(--mac-hover,rgba(0,0,0,.035))}
 .crm-qtl-row:active{background:color-mix(in srgb,var(--mac-accent,#007aff) 8%,transparent)}
-.crm-qtl-ic{width:36px;height:36px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;
-  background:linear-gradient(color-mix(in srgb,var(--ic) 72%,#fff),var(--ic));box-shadow:0 1px 3px color-mix(in srgb,var(--ic) 35%,transparent)}
+.crm-qtl-ic{width:36px;height:36px;flex-shrink:0;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .crm-qtl-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .crm-qtl-title{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:13.5px}
 .crm-qtl-title b{font-weight:650}
@@ -1366,7 +1424,7 @@ body.dark .crm-qtl-status{color:color-mix(in srgb,var(--ic) 75%,#fff)}
 .crm-qtl-row--old .crm-qtl-ic{width:28px;height:28px;border-radius:7px;font-size:11px;opacity:.8}
 .crm-qtl-row--old .crm-qtl-title{font-size:12.5px}
 .crm-qtl-row--old .crm-qtl-amt{font-size:13px;font-weight:600;color:var(--mac-muted,var(--text-muted))}
-.crm-qtl-empty-ic{background:linear-gradient(#64d2ff,#0a84ff)!important;box-shadow:0 2px 8px rgba(10,132,255,.3)!important}
+.crm-qtl-empty-ic{color:var(--accent)!important;background:color-mix(in srgb,var(--accent) 12%,transparent)!important;box-shadow:none!important}
 @media (max-width:760px){.crm-qtl-chev{display:none}.crm-qtl-amt{font-size:13.5px}}
 /* Quotations list: tiles act as filters, toolbar, next-step hint, expiry warning */
 button.crm-qtl-stat{width:100%;border:0;font:inherit;text-align:left;cursor:pointer;transition:box-shadow .15s,transform .1s,background .15s}
@@ -1402,9 +1460,10 @@ body.dark .crm-qtl-next{color:color-mix(in srgb,var(--ic) 70%,#fff)}
 .crm-fut-new .po-field-input:focus{outline:0;background:var(--mac-ctl,#fff);box-shadow:0 0 0 .5px var(--mac-accent,#007aff),0 0 0 3px color-mix(in srgb,var(--mac-accent,#007aff) 22%,transparent)}
 body.dark .crm-fut-new .po-field-input{color-scheme:dark}
 .crm-fut-presets .po-field-input{width:auto}
+.crm-fu-who-hint{font-weight:400;opacity:.7}
 .crm-fut-chs{flex-wrap:wrap;justify-self:start}
-.crm-fut-chs button i{font-size:11px;color:var(--ic)}
-.crm-fut-chs button.active i{color:var(--ic)}
+.crm-fut-chs button i,.crm-fut-chs button.active i{font-size:11px;color:var(--accent)}
+.crm-fut-chs button i.fa-whatsapp{color:#25d366}
 .crm-fut-field .crm-tk-pill{justify-self:start}
 .crm-fut-new-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-top:10px;border-top:1px solid var(--mac-line,var(--border))}
 @media (max-width:700px){.crm-fut-new-grid{grid-template-columns:minmax(0,1fr)}.crm-fut-field>span:first-child{text-align:left;margin-bottom:-6px}}
@@ -1414,18 +1473,19 @@ body.dark .crm-fut-new .po-field-input{color-scheme:dark}
 .crm-fut-row:hover{background:var(--mac-hover,rgba(0,0,0,.03))}
 .crm-fut-date{width:44px;flex-shrink:0;border-radius:9px;overflow:hidden;display:flex;flex-direction:column;align-items:center;text-align:center;
   background:var(--mac-ctl,#fff);box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.08)}
-.crm-fut-date small{width:100%;padding:1px 0;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:#0a84ff}
+.crm-fut-date small{width:100%;padding:1px 0;font-size:9.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#fff;background:var(--accent)}
 .crm-fut-date b{padding:2px 0 4px;font-size:18px;font-weight:600;line-height:1.2;font-variant-numeric:tabular-nums;color:var(--mac-text,var(--text))}
 .crm-fut-date--overdue small{background:#ff3b30}
-.crm-fut-date--today small{background:#ff9f0a}
+.crm-fut-date--today small{background:var(--accent)}
 .crm-fut-date--done small{background:#34c759}
 .crm-fut-date--cancelled small{background:#8e8e93}
 .crm-fut--done .crm-fut-date,.crm-fut--cancelled .crm-fut-date{opacity:.8}
 .crm-fut-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .crm-fut-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .crm-fut-ch{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:600;color:var(--mac-text,var(--text))}
-.crm-fut-ch i{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;color:#fff;
-  background:linear-gradient(color-mix(in srgb,var(--ic) 72%,#fff),var(--ic));box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.crm-fut-ch i{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.crm-fut-ch i.fa-whatsapp{color:#25d366;background:rgba(37,211,102,.14)}
 .crm-fut-outcome{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:600;color:#248a3d;background:rgba(52,199,89,.13)}
 body.dark .crm-fut-outcome{color:#30d158}
 .crm-fut-outcome--off{color:var(--mac-muted,var(--text-muted));background:var(--mac-fill,rgba(118,118,128,.12))}
@@ -1435,8 +1495,7 @@ body.dark .crm-fut-outcome{color:#30d158}
 .crm-fut-meta i{font-size:10px}
 .crm-fut-when{font-weight:600;color:var(--mac-text,var(--text))}
 .crm-fut--overdue .crm-fut-when{color:#ff3b30}
-.crm-fut--today .crm-fut-when{color:#c93400}
-body.dark .crm-fut--today .crm-fut-when{color:#ffb340}
+.crm-fut--today .crm-fut-when{color:var(--accent)}
 .crm-fut--done .crm-fut-when,.crm-fut--cancelled .crm-fut-when{font-weight:500;color:var(--mac-muted,var(--text-muted))}
 .crm-fut-notes{padding:7px 11px;border-radius:8px;font-size:12.5px;line-height:1.45;white-space:pre-line;overflow-wrap:anywhere;color:var(--mac-text,var(--text));background:var(--mac-fill,rgba(118,118,128,.1))}
 .crm-fut-acts{flex-shrink:0;display:flex;align-items:center;gap:6px;align-self:center}
@@ -1535,7 +1594,7 @@ body.dark .crm-qtx-search .crm-qt-results{background:rgba(44,44,48,.97);box-shad
 .crm-qtx-btn:hover{filter:brightness(.97)}
 .crm-qtx-btn:active{transform:scale(.97)}
 .crm-qtx-btn:disabled{opacity:.6;cursor:default;transform:none}
-.crm-qtx-btn--primary{font-weight:600;color:#fff;background:linear-gradient(#2b95ff,var(--mac-accent,#007aff));box-shadow:0 1px 2px rgba(0,122,255,.35),inset 0 .5px 0 rgba(255,255,255,.25)}
+.crm-qtx-btn--primary{font-weight:600;color:#fff;background:var(--accent)}
 .crm-qtx-btn--primary:hover{filter:brightness(1.07)}
 .crm-qtx-btn--warn{color:#c93400}
 .crm-qtx-btn--danger{color:#d70015}
@@ -1614,8 +1673,8 @@ body.dark .crm-qtx-dock{background:linear-gradient(transparent,#222226 16px)}
 .crm-assign-win .crm-assign-row:hover{background:var(--mac-hover)}
 .crm-assign-win .crm-assign-row:has([data-assign-user]:checked){background:rgba(0,122,255,.08)}
 .crm-assign-win .crm-assign-row>label:first-child{flex:1;min-width:0;gap:10px}
-.crm-assign-av{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:#fff;background:linear-gradient(#b4b4b9,#8e8e93)}
-.crm-assign-row:has([data-assign-user]:checked) .crm-assign-av{background:linear-gradient(#64d2ff,#0a84ff)}
+.crm-assign-av{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.crm-assign-row:has([data-assign-user]:checked) .crm-assign-av{color:#fff;background:var(--accent)}
 .crm-assign-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-assign-win .crm-assign-primary{position:relative;height:26px;padding:0 8px;gap:5px;border-radius:6px;font-size:11.5px;font-weight:600;color:var(--mac-muted);opacity:.35;transition:opacity .12s,background .12s}
 .crm-assign-win .crm-assign-row:hover .crm-assign-primary{opacity:.75}
@@ -1779,7 +1838,7 @@ body.dark .crm-hf-popup option{background:#2c2c30;color:#f5f5f7}
 .crm-audit-meta{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:2px;font-size:11px;color:var(--text-muted)}
 .crm-audit-meta i{margin-right:4px;font-size:10px}
 .crm-audit-note{margin-top:6px;font-size:11.5px;color:var(--text-muted)}
-.crm-audit-note i{margin-right:5px;color:var(--audit)}
+.crm-audit-note i{margin-right:5px;color:var(--accent)}
 .crm-audit-note strong{color:var(--text)}
 .crm-audit-diff{width:100%;margin-top:8px;border-collapse:collapse;font-size:11.5px;table-layout:fixed}
 .crm-audit-diff th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:3px 8px;border-bottom:1px solid var(--border,#e5e7eb)}
@@ -1888,8 +1947,126 @@ body.dark .crm-hf-popup option{background:#2c2c30;color:#f5f5f7}
 #crm-stages-modal .crm-card-btn{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:12px;color:var(--mac-muted);transition:background .12s,color .12s}
 #crm-stages-modal .crm-card-btn:hover{background:rgba(0,122,255,.12);color:var(--mac-accent)}
 #crm-stages-modal .crm-card-btn[data-del-stage]:hover{background:rgba(255,59,48,.12);color:#ff3b30!important}
+#crm-stages-modal .crm-card-btn:disabled{opacity:.35;cursor:not-allowed;background:none!important;color:var(--mac-muted)!important}
+#crm-stages-modal .crm-stage-check{width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#ef4444}
+#crm-stages-modal .crm-stage-check:disabled{cursor:not-allowed;opacity:.35}
+#crm-stages-modal .crm-stage-row--selected{background:rgba(255,59,48,.06)}
 #crm-stages-modal .crm-card-btn--mail-set{color:#7c3aed}
 #crm-stages-modal .crm-card-btn--mail-set:hover{background:rgba(124,58,237,.12);color:#7c3aed}
+#crm-stages-modal .crm-stage-row{gap:10px;padding:9px 10px}
+#crm-stages-modal .crm-stage-row[hidden]{display:none}
+/* Stage icon: flat accent glyph, same style as the ribbon icons */
+.crm-stg-ico{width:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:18px;line-height:1;color:var(--accent,#4e8ef7)}
+.crm-stg-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.crm-stg-main .crm-stage-name{flex:none;display:flex;align-items:center;gap:7px}
+.crm-stg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--stg,#64748b)}
+.crm-stg-note{font-size:11.5px;color:var(--mac-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-stg-note i{font-size:10px;margin-right:3px;opacity:.7}
+.crm-stg-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:6px;padding:3px 9px;flex-shrink:0;cursor:help;white-space:nowrap;
+  color:var(--mac-text);background:var(--mac-fill)}
+.crm-stg-status i{color:var(--accent,#4e8ef7)}
+.crm-stg-status--none,.crm-stg-status--none i{color:#d97706}
+.crm-stg-flag{font-size:11px;color:var(--mac-muted);flex-shrink:0;cursor:help}
+.crm-stg-search{margin-left:auto;width:200px;flex-shrink:0}
+/* Pipeline at a glance */
+.crm-stg-summary{display:flex;flex-direction:column;gap:7px}
+.crm-stg-summary-bar{display:flex;height:9px;border-radius:999px;overflow:hidden;background:var(--mac-fill)}
+.crm-stg-summary-bar span{min-width:3px;transition:flex-grow .3s}
+.crm-stg-summary-stats{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--mac-muted)}
+.crm-stg-summary-stats b{color:var(--mac-text);font-weight:600}
+/* Templates side panel */
+/* Header and bottom actions stay put; only the template list scrolls */
+.crm-stg-guide{width:340px;flex-shrink:0;min-height:0;display:flex;flex-direction:column;gap:10px;padding:16px 14px;border-left:1px solid var(--mac-line);background:var(--mac-side);overflow:hidden}
+.crm-stg-guide-head{flex-shrink:0}
+.crm-stg-guide-title{font-size:13px;font-weight:600;color:var(--mac-text)}
+.crm-stg-guide-title i{color:var(--accent,#4e8ef7);margin-right:4px}
+.crm-stg-guide-sub{font-size:11.5px;color:var(--mac-muted);line-height:1.45;margin-top:3px}
+.crm-stg-templates{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:2px;margin:-2px}
+.crm-stg-guide > button{flex-shrink:0}
+.crm-stg-tpl{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border:1px solid var(--mac-line);border-radius:8px;padding:9px 10px;cursor:pointer;font:inherit;color:var(--mac-text);
+  background:var(--mac-panel);transition:border-color .12s,background .12s}
+.crm-stg-tpl:hover{border-color:var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 5%,var(--mac-panel))}
+.crm-stg-tpl .crm-stg-ico{font-size:17px;margin-top:1px}
+.crm-stg-tpl-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.crm-stg-tpl-text b{font-size:12.5px;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.crm-stg-tpl-text small{font-size:11px;color:var(--mac-muted);line-height:1.4}
+.crm-stg-tpl-fx{display:flex;flex-direction:column;gap:2px;margin-top:4px;padding-top:5px;border-top:1px dashed var(--mac-border,#e5e7eb);font-size:10.5px;line-height:1.35;color:var(--mac-text,#374151)}
+.crm-stg-tpl-fx span{display:flex;gap:5px;align-items:baseline}
+.crm-stg-tpl-fx i{color:var(--stg);font-size:9px;flex-shrink:0}
+.crm-stg-tpl-pill{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:600;border-radius:4px;padding:1px 6px;white-space:nowrap;background:var(--mac-fill);color:var(--mac-muted)}
+.crm-stg-tpl-pill--used{background:#d1fae5;color:#047857}
+.crm-stg-tpl-add{color:var(--mac-muted);font-size:12px;margin-top:3px;flex-shrink:0}
+.crm-stg-tpl:hover .crm-stg-tpl-add{color:var(--accent,#4e8ef7)}
+.crm-stg-tpl--custom{border-style:dashed;border-color:color-mix(in srgb,var(--accent,#4e8ef7) 55%,transparent)}
+#crm-stages-modal .mac-footer{align-items:center}
+.crm-stg-footer-note{margin-right:auto;font-size:12px;color:var(--mac-muted)}
+@media (max-width:900px){.crm-stg-guide{display:none}}
+/* Add / Edit stage form */
+.crm-stg-form{display:flex;flex-direction:column;gap:14px}
+.crm-stg-form-row{display:flex;gap:12px;align-items:flex-end}
+.crm-stg-color{width:52px;height:30px;padding:2px 3px;border:0;border-radius:7px;cursor:pointer;background:var(--mac-field);box-shadow:0 0 0 .5px rgba(0,0,0,.18)}
+.crm-stg-swatches{display:flex;flex-wrap:wrap;gap:6px;margin-top:-6px}
+.crm-stg-swatch-btn{width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);transition:transform .1s}
+.crm-stg-swatch-btn:hover{transform:scale(1.12)}
+.crm-stg-swatch-btn.is-on{box-shadow:0 0 0 2px var(--mac-panel,#fff),0 0 0 4px var(--mac-accent)}
+.crm-stg-icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:6px}
+.crm-stg-icon-btn{height:36px;border:1px solid var(--mac-line);border-radius:8px;cursor:pointer;font-size:15px;color:var(--accent,#4e8ef7);background:var(--mac-panel);transition:background .12s,border-color .12s}
+.crm-stg-icon-btn:hover{border-color:var(--accent,#4e8ef7)}
+.crm-stg-icon-btn.is-on{color:#fff;background:var(--accent,#4e8ef7);border-color:var(--accent,#4e8ef7)}
+.crm-stg-status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.crm-stg-status-grid .crm-stg-tpl{padding:8px 10px}
+.crm-stg-status-grid .crm-stg-tpl.is-on{border-color:var(--accent,#4e8ef7);box-shadow:inset 0 0 0 1px var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 8%,var(--mac-panel))}
+.crm-stg-status-grid .crm-stg-tpl:disabled{opacity:.45;cursor:not-allowed}
+/* Stage entry actions */
+.crm-stg-acts{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--mac-line);border-radius:10px;background:var(--mac-fill)}
+.crm-stg-acts-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--mac-text)}
+.crm-stg-acts-head > i{color:#f59e0b}
+.crm-stg-acts-head small{font-weight:400;font-size:11.5px;color:var(--mac-muted)}
+.crm-stg-act{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:8px;background:var(--mac-panel);border:1px solid var(--mac-line);min-width:0}
+.crm-stg-act-title{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--mac-text);cursor:default}
+.crm-stg-act-title > i{color:var(--accent,#4e8ef7);width:14px;text-align:center}
+.crm-stg-act-chips{display:flex;flex-wrap:wrap;gap:6px}
+.crm-stg-chk{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 9px;border:1px solid var(--mac-line);border-radius:999px;cursor:pointer;color:var(--mac-text);user-select:none}
+.crm-stg-chk:has(input:checked){border-color:var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 10%,var(--mac-panel))}
+.crm-stg-chk:has(input:disabled){opacity:.7;cursor:not-allowed}
+.crm-stg-act-hint{font-size:11.5px;color:var(--mac-muted)}
+.crm-stg-act-body{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crm-stg-act-body > .po-field-input{flex:1;min-width:200px}
+.crm-stg-act-inline{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mac-muted);white-space:nowrap}
+.crm-stg-act-inline input{width:70px}
+.crm-stg-act-row{display:flex;gap:10px;flex-wrap:wrap}
+.crm-stg-act-row > .crm-stg-act{min-width:220px}
+/* Stage behaviour settings: one row per behaviour with an on/off switch */
+.crm-stg-behave{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:var(--mac-panel);border:1px solid var(--mac-line);min-width:0}
+.crm-stg-behave.is-off{opacity:.6}
+.crm-stg-behave-ico{width:28px;height:28px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--mac-fill);color:var(--accent,#4e8ef7);font-size:13px}
+.crm-stg-behave-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;font-size:12.5px;color:var(--mac-text)}
+.crm-stg-behave-text small{font-size:11.5px;color:var(--mac-muted)}
+.crm-stg-behave-fixed{font-size:10.5px;font-weight:600;color:var(--mac-muted);display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+.crm-card-btn--behave-set{color:#7c3aed}
+/* The business's own statuses in the status grid / templates */
+.crm-stg-tpl-pill--own{background:color-mix(in srgb,#7c3aed 14%,transparent);color:#7c3aed}
+.crm-stg-tpl-edit{margin-left:auto;align-self:flex-start;border:0;background:none;color:var(--mac-muted);cursor:pointer;padding:2px 4px;border-radius:5px;font-size:11.5px}
+.crm-stg-tpl-edit:hover{color:var(--accent,#4e8ef7);background:var(--mac-fill)}
+.crm-stg-tpl--new{border-style:dashed;justify-content:center;align-items:center;color:var(--accent,#4e8ef7);font-size:12.5px;font-weight:600;gap:8px}
+.crm-stg-tpl-group{grid-column:1/-1;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mac-muted);margin-top:4px}
+.crm-stg-tpl--custom-pick .crm-stg-ico{color:#7c3aed}
+.crm-lead-stuck.crm-lead-locked{background:#e0e7ff;color:#3730a3}
+.crm-lead-check{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 8px;border:1px solid var(--mac-line,#e5e7eb);background:var(--mac-panel,#fff);color:var(--mac-muted,#6b7280);cursor:pointer;font-family:inherit}
+.crm-lead-check:hover{border-color:var(--accent,#4e8ef7);color:var(--accent,#4e8ef7)}
+.crm-lead-check.is-done{background:#d1fae5;border-color:#a7f3d0;color:#047857}
+.crm-checklist-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;cursor:pointer;font-size:13px}
+.crm-checklist-item:has(input:checked){background:color-mix(in srgb,#10b981 10%,transparent);border-color:#a7f3d0}
+.crm-checklist-item:has(input:checked) span{text-decoration:line-through;color:var(--text-muted,#6b7280)}
+.crm-lead-pending{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 4px 1px 8px;background:#ede9fe;color:#5b21b6}
+.crm-lead-pending button{border:0;border-radius:999px;width:18px;height:18px;cursor:pointer;font-size:10px;display:inline-flex;align-items:center;justify-content:center}
+.crm-lead-pending .is-yes{background:#10b981;color:#fff}
+.crm-lead-pending .is-no{background:#ef4444;color:#fff}
+.crm-lead-stuck{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;background:#fef3c7;color:#92400e}
+.crm-stg-preview{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:var(--mac-fill)}
+.crm-stg-preview-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mac-muted)}
+.crm-stg-preview-chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--mac-text)}
+.crm-stg-preview-counts{margin-left:auto;font-size:11.5px;color:var(--mac-muted)}
 .crm-stage-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.12)}
 .crm-stage-name{font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-stage-badge{font-size:10px;background:var(--border,#e5e7eb);color:var(--text-muted,#6b7280);border-radius:999px;padding:1px 6px;flex-shrink:0}
@@ -2058,7 +2235,7 @@ body.dark #crm-dashboard-view .crm-dash-filters input[type=date]{color-scheme:da
 #crm-dashboard-view .crm-dash-filters .crm-ws-muted{color:var(--mac-muted)}
 #crm-dashboard-view .po-btn-ghost,#crm-dashboard-view .po-btn-primary{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 14px;border:0;border-radius:7px;font:inherit;font-size:13px;font-weight:500;cursor:pointer;white-space:nowrap;transition:filter .12s}
 #crm-dashboard-view .po-btn-ghost{background:var(--mac-ctl);color:var(--mac-text);box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 1px 1.5px rgba(0,0,0,.08)}
-#crm-dashboard-view .po-btn-primary{background:linear-gradient(#3d95ff,#007aff);color:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 1.5px rgba(0,0,0,.14)}
+#crm-dashboard-view .po-btn-primary{background:var(--accent);color:#fff;box-shadow:none}
 #crm-dashboard-view .po-btn-ghost:hover,#crm-dashboard-view .po-btn-primary:hover{filter:brightness(1.04)}
 #crm-dashboard-view .po-btn-ghost:active,#crm-dashboard-view .po-btn-primary:active{filter:brightness(.9)}
 #crm-dashboard-view .crm-dash-body{padding:20px;gap:16px}
@@ -2067,13 +2244,13 @@ body.dark #crm-dashboard-view .crm-dash-filters input[type=date]{color-scheme:da
 #crm-dashboard-view .crm-dash-tile{padding:14px 16px;transition:box-shadow .15s}
 #crm-dashboard-view .crm-dash-tile:hover,#crm-dashboard-view .crm-dash-card:hover{box-shadow:0 0 0 .5px var(--mac-line),0 6px 18px rgba(0,0,0,.07)}
 #crm-dashboard-view .crm-dash-tile-label{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:500;color:var(--mac-muted)}
-#crm-dashboard-view .crm-dash-tile-label i{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;color:#fff;background:linear-gradient(#3d95ff,#007aff);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+#crm-dashboard-view .crm-dash-tile-label i{width:22px;height:22px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-size:10.5px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 #crm-dashboard-view .crm-dash-tile-value{font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--mac-text);margin-top:8px;font-variant-numeric:tabular-nums}
 #crm-dashboard-view .crm-dash-tile-sub{font-size:11.5px;color:var(--mac-muted);margin-top:3px}
 #crm-dashboard-view .crm-dash-tile--warn{box-shadow:0 0 0 .5px rgba(255,149,0,.55),0 1px 3px rgba(255,149,0,.1)}
-#crm-dashboard-view .crm-dash-tile--warn .crm-dash-tile-label i{background:linear-gradient(#ffb340,#ff9500)}
+#crm-dashboard-view .crm-dash-tile--warn .crm-dash-tile-label i{color:#ff9500;background:rgba(255,149,0,.14)}
 #crm-dashboard-view .crm-dash-tile--overdue{box-shadow:0 0 0 .5px rgba(255,59,48,.5),0 1px 3px rgba(255,59,48,.1)}
-#crm-dashboard-view .crm-dash-tile--overdue .crm-dash-tile-label i{background:linear-gradient(#ff6961,#ff3b30)}
+#crm-dashboard-view .crm-dash-tile--overdue .crm-dash-tile-label i{color:#ff3b30;background:rgba(255,59,48,.12)}
 #crm-dashboard-view .crm-dash-tile--overdue .crm-dash-tile-value,#crm-dashboard-view .crm-dash-tile--overdue .crm-dash-tile-sub{color:#ff3b30}
 #crm-dashboard-view .crm-dash-grid{gap:16px}
 #crm-dashboard-view .crm-dash-card{padding:16px 18px}
@@ -2089,6 +2266,130 @@ body.dark #crm-dashboard-view .crm-dash-filters input[type=date]{color-scheme:da
 #crm-dashboard-view .crm-dash-table td{border:0;border-bottom:1px solid var(--mac-line);color:var(--mac-text)}
 #crm-dashboard-view .crm-dash-table tr:last-child td{border-bottom:0}
 #crm-dashboard-view .crm-dash-table tbody tr:nth-child(even) td{background:rgba(0,0,0,.022)}
+/* CRM dashboard — minimal executive layout: flat cards, type does the work, colour only for change and risk */
+#crm-dashboard-view{--crm-dash-good:#15803d;--crm-dash-bad:#b91c1c;--crm-dash-warn:#b45309;--crm-dash-c1:var(--accent);--crm-dash-c2:#9ec2fa;--crm-dash-c3:#94a3b8}
+body.dark #crm-dashboard-view{--crm-dash-good:#4ade80;--crm-dash-bad:#f87171;--crm-dash-warn:#fbbf24;--crm-dash-c1:var(--accent);--crm-dash-c2:#9ec2fa;--crm-dash-c3:#64748b}
+#crm-dashboard-view .crm-dash-body{max-width:1500px;width:100%;margin:0 auto;box-sizing:border-box;gap:20px;padding:28px 32px}
+#crm-dashboard-view .crm-dash-card,#crm-dashboard-view .crm-dash-hero{border-radius:10px;background:var(--mac-panel);box-shadow:0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-card:hover{box-shadow:0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-card{padding:20px 22px}
+#crm-dashboard-view .crm-dash-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;padding-bottom:4px}
+#crm-dashboard-view .crm-dash-title{font-size:20px;font-weight:600;letter-spacing:-.015em;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-period{font-size:13px;color:var(--mac-muted);margin-top:4px}
+#crm-dashboard-view .crm-dash-sep{margin:0 6px;opacity:.6}
+#crm-dashboard-view .crm-dash-scope{font-size:13px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-heroes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border-radius:10px;background:var(--mac-panel);box-shadow:0 0 0 1px var(--mac-line);overflow:hidden}
+@media (max-width:1100px){#crm-dashboard-view .crm-dash-heroes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#crm-dashboard-view .crm-dash-hero{padding:22px 24px;border-radius:0;box-shadow:none;background:transparent;border-left:1px solid var(--mac-line)}
+#crm-dashboard-view .crm-dash-hero:first-child{border-left:0}
+#crm-dashboard-view .crm-dash-hero-label{font-size:13px;font-weight:500;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-hero-value{font-size:30px;font-weight:600;letter-spacing:-.025em;margin-top:10px;color:var(--mac-text);font-variant-numeric:tabular-nums;line-height:1.15}
+#crm-dashboard-view .crm-dash-cur{font-size:.5em;font-weight:500;color:var(--mac-muted);letter-spacing:0}
+#crm-dashboard-view .crm-dash-hero-sub{font-size:12.5px;color:var(--mac-muted);margin-top:6px}
+#crm-dashboard-view .crm-dash-hero-foot{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;margin-top:14px}
+#crm-dashboard-view .crm-dash-delta{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+#crm-dashboard-view .crm-dash-delta i{font-size:10px;margin-right:2px}
+#crm-dashboard-view .crm-dash-delta--up{color:var(--crm-dash-good)}
+#crm-dashboard-view .crm-dash-delta--down{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-delta--flat{color:var(--mac-muted);font-weight:500}
+#crm-dashboard-view .crm-dash-delta--flat i{display:none}
+#crm-dashboard-view .crm-dash-delta-vs{font-size:12px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-bad{color:var(--crm-dash-bad)!important}
+#crm-dashboard-view .crm-dash-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:20px}
+@media (max-width:1100px){#crm-dashboard-view .crm-dash-split{grid-template-columns:1fr}}
+#crm-dashboard-view .crm-dash-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,480px),1fr));gap:20px}
+#crm-dashboard-view .crm-dash-card-head{font-size:14px;font-weight:600;margin-bottom:16px}
+#crm-dashboard-view .crm-dash-card-sub{font-size:12px;font-weight:400}
+#crm-dashboard-view .crm-dash-card-tools{display:flex;align-items:center;gap:16px}
+#crm-dashboard-view .crm-dash-section{font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--mac-muted);margin:10px 0 -8px}
+#crm-dashboard-view .crm-dash-insights{list-style:none;margin:0;padding:0}
+#crm-dashboard-view .crm-dash-insight{display:flex;gap:12px;align-items:baseline;font-size:13px;line-height:1.5;padding:10px 0;color:var(--mac-text);border-top:1px solid var(--mac-line);--tone:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-insight:first-child{border-top:0;padding-top:0}
+#crm-dashboard-view .crm-dash-insight b{font-weight:600}
+#crm-dashboard-view .crm-dash-mark{flex:none;width:6px;height:6px;border-radius:50%;background:var(--tone);transform:translateY(-2px)}
+#crm-dashboard-view .crm-dash-insight--good{--tone:var(--crm-dash-good)}
+#crm-dashboard-view .crm-dash-insight--bad{--tone:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-insight--warn{--tone:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));row-gap:22px;column-gap:20px}
+@media (max-width:1300px){#crm-dashboard-view .crm-dash-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+#crm-dashboard-view .crm-dash-metric-label{font-size:12px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-metric-value{font-size:19px;font-weight:600;letter-spacing:-.015em;margin:4px 0 3px;color:var(--mac-text);font-variant-numeric:tabular-nums}
+#crm-dashboard-view .crm-dash-metric-sub{font-size:11.5px;color:var(--mac-muted);display:flex;gap:6px;flex-wrap:wrap;align-items:baseline}
+#crm-dashboard-view .crm-dash-metric--warn .crm-dash-metric-value{color:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-metric--bad .crm-dash-metric-value{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-chart{height:260px}
+#crm-dashboard-view .crm-dash-legend .crm-dash-key{border-top-color:var(--crm-dash-c1)}
+#crm-dashboard-view .crm-dash-legend .crm-dash-key--c2{border-top-color:var(--crm-dash-c2)}
+#crm-dashboard-view .crm-dash-seg{display:inline-flex;gap:2px}
+#crm-dashboard-view .crm-dash-seg button{border:0;background:transparent;font:inherit;font-size:12.5px;padding:3px 10px;border-radius:6px;color:var(--mac-muted);cursor:pointer}
+#crm-dashboard-view .crm-dash-seg button.active{color:var(--mac-text);font-weight:600;background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-table{width:100%;font-size:13px}
+#crm-dashboard-view .crm-dash-table th{font-size:12px;font-weight:500;position:sticky;top:0;z-index:1;background:#f1f5f9}
+body.dark #crm-dashboard-view .crm-dash-table th{background:#2c2c2e}
+#crm-dashboard-view .crm-dash-scroll{max-height:420px;overflow-y:auto}
+#crm-dashboard-view .crm-dash-table td{vertical-align:middle;padding-top:10px;padding-bottom:10px}
+#crm-dashboard-view .crm-dash-table td strong{font-weight:600}
+#crm-dashboard-view .crm-dash-table tbody tr:nth-child(even) td{background:transparent}
+#crm-dashboard-view .crm-dash-cell-sub{display:block;font-size:11.5px;color:var(--mac-muted);margin-top:2px}
+#crm-dashboard-view .crm-dash-link{cursor:pointer}
+#crm-dashboard-view .crm-dash-link:hover td{background:var(--mac-fill)!important}
+#crm-dashboard-view .crm-dash-pill{font-size:12px;white-space:nowrap;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-pill::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--pill);margin-right:7px;vertical-align:middle}
+#crm-dashboard-view .crm-dash-swatch{display:inline-block;width:6px;height:6px;border-radius:50%;margin-right:8px;vertical-align:middle}
+#crm-dashboard-view .crm-dash-share{display:block;height:4px;border-radius:2px;background:var(--mac-fill);overflow:hidden;min-width:70px;max-width:160px}
+#crm-dashboard-view .crm-dash-share>span{display:block;height:100%;background:var(--crm-dash-c1)!important}
+#crm-dashboard-view .crm-dash-bar-track{height:6px}
+#crm-dashboard-view .crm-dash-bar{background:var(--crm-dash-c1)!important}
+#crm-dashboard-view .crm-dash-subrow td{font-size:12px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-subrow td:first-child{padding-left:22px}
+#crm-dashboard-view .crm-dash-subrow td:first-child i{display:none}
+#crm-dashboard-view .crm-dash-avatar{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;margin-right:10px;font-size:10px;font-weight:600;color:var(--mac-muted);background:var(--mac-fill);vertical-align:middle}
+#crm-dashboard-view .crm-dash-rank{font-size:12px;color:var(--mac-muted);font-variant-numeric:tabular-nums}
+#crm-dashboard-view .crm-dash-ranges{padding:2px;border-radius:8px;background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-ranges button{padding:3px 9px}
+#crm-dashboard-view .crm-dash-ranges button.active{background:var(--mac-ctl);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.08)}
+#crm-dashboard-view .crm-dash-updated{font-size:12px}
+#crm-dashboard-view .crm-dash-help{font-size:11px;color:var(--mac-muted);opacity:.6;margin-left:5px;cursor:help}
+#crm-dashboard-view .crm-dash-help:hover{opacity:1}
+#crm-dashboard-view .crm-dash-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+#crm-dashboard-view .crm-dash-chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 10px;border:0;border-radius:999px;font:inherit;font-size:12px;color:var(--mac-text);background:var(--mac-fill);cursor:pointer}
+#crm-dashboard-view .crm-dash-chip i{width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-chip:hover i{background:var(--crm-dash-bad);color:#fff}
+#crm-dashboard-view .crm-dash-jump{display:flex;flex-wrap:wrap;gap:4px;margin:-8px 0 -6px}
+#crm-dashboard-view .crm-dash-jump button{border:0;background:transparent;font:inherit;font-size:12.5px;color:var(--mac-muted);padding:4px 10px;border-radius:6px;cursor:pointer}
+#crm-dashboard-view .crm-dash-jump button:hover{color:var(--mac-text);background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-jump b{display:inline-block;min-width:16px;margin-left:4px;padding:0 5px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;background:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-section{scroll-margin-top:12px}
+#crm-dashboard-view .crm-dash-hero--link,#crm-dashboard-view .crm-dash-metric--link{cursor:pointer;border-radius:8px;transition:background .12s}
+#crm-dashboard-view .crm-dash-hero--link:hover{background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-metric--link:hover .crm-dash-metric-label{color:var(--accent)}
+#crm-dashboard-view .crm-dash-att-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+#crm-dashboard-view .crm-dash-att-count{padding:10px 12px;border-radius:8px;background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-att-count b{display:block;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-att-count span{font-size:11.5px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-att-count--bad b{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-att-count--warn b{color:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-att-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:var(--mac-muted);margin:12px 0 4px}
+#crm-dashboard-view .crm-dash-att-head button{border:0;background:transparent;font:inherit;font-size:12px;color:var(--accent);cursor:pointer;padding:0}
+#crm-dashboard-view .crm-dash-att-list{list-style:none;margin:0;padding:0}
+#crm-dashboard-view .crm-dash-att-row{display:flex;align-items:center;gap:0;padding:7px 6px;border-radius:7px;font-size:13px;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-att-row:hover{background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-att-main{flex:1;min-width:0}
+#crm-dashboard-view .crm-dash-att-main strong{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#crm-dashboard-view .crm-dash-att-tag{font-size:12px;font-weight:600;white-space:nowrap;margin:0 8px}
+#crm-dashboard-view .crm-dash-att-tag--bad{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-att-tag--warn{color:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-chev{font-size:10px;color:var(--mac-muted);opacity:0}
+#crm-dashboard-view .crm-dash-att-row:hover .crm-dash-chev{opacity:1}
+#crm-dashboard-view .crm-dash-ok{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mac-muted);padding:6px}
+#crm-dashboard-view .crm-dash-ok i{color:var(--crm-dash-good)}
+#crm-dashboard-view .crm-dash-forecast{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+#crm-dashboard-view .crm-dash-stack{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--mac-fill);gap:2px}
+#crm-dashboard-view .crm-dash-stack span{display:block;height:100%}
+#crm-dashboard-view .crm-dash-filterable{cursor:pointer}
+#crm-dashboard-view .crm-dash-filterable:hover td{background:var(--mac-fill)!important}
+#crm-dashboard-view .crm-dash-tip-hint{font-size:11.5px;color:var(--mac-muted);margin-top:10px}
+@media (max-width:1300px){#crm-dashboard-view .crm-dash-att-counts,#crm-dashboard-view .crm-dash-forecast{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* CRM relation detail → Dashboard tab body — macOS look (header, hero and tabs keep the shared inv-* style) */
 #crm-relation-pane-dashboard,#crm-relation-pane-forms{--mac-accent:#007aff;--mac-bg:#f5f5f7;--mac-panel:#fff;--mac-line:rgba(0,0,0,.09);--mac-text:#1d1d1f;--mac-muted:#6e6e73;--mac-fill:rgba(118,118,128,.12);--mac-hover:rgba(0,0,0,.045);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--mac-text);background:var(--mac-bg);padding:20px 24px 24px}
@@ -2141,7 +2442,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 .crm-rd-btn{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border:0;border-radius:7px;font:inherit;font-size:12.5px;font-weight:500;cursor:pointer;white-space:nowrap;flex-shrink:0;
   background:var(--mac-panel);color:var(--mac-text);box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 1px 1.5px rgba(0,0,0,.08);transition:filter .12s}
 .crm-rd-btn i{font-size:11px}
-.crm-rd-btn--primary{background:linear-gradient(#3d95ff,#007aff);color:#fff;box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 1.5px rgba(0,0,0,.14)}
+.crm-rd-btn--primary{background:var(--accent);color:#fff;box-shadow:none}
 .crm-rd-btn:hover{filter:brightness(1.04)}
 .crm-rd-btn:active{filter:brightness(.9)}
 /* Forms list */
@@ -3627,6 +3928,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-org">
               <i class="fa fa-sitemap"></i>Org<br>Structure
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-add-dept">
+              <i class="fa fa-building-user"></i>Add<br>Department
             </button>
           </div>
           <div class="ribbon-group-label">Access</div>
@@ -11456,8 +11760,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <div id="crm-relation-detail" style="display:none;flex-direction:column;flex:1;overflow:hidden">
           <div class="inv-detail-header">
             <button class="inv-back-btn" id="crm-relation-back-btn"><i class="fa fa-arrow-left"></i> Relations</button>
-            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>
-            <span class="inv-badges-inline" id="crm-relation-header-badges" style="display:none"></span>
+            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>            <span class="inv-badges-inline" id="crm-relation-header-badges" style="display:none"></span>
             <button class="svc-form-btn" id="crm-relation-hero-toggle" title="Hide relation details" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-chevron-up"></i> <span>Hide details</span></button>
             <button class="svc-form-btn" id="crm-relation-delete-btn" style="margin-left:8px;padding:5px 12px;font-size:12px;flex-shrink:0;color:#ef4444;border-color:#ef4444"><i class="fa fa-trash"></i> Delete Relation</button>
           </div>
@@ -11652,19 +11955,21 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <!-- ── Dashboard view (view only: admin, CEO, heads — their departments) ── -->
       <div id="crm-dashboard-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
         <div class="crm-dash-filters">
-          <select id="crm-dash-range" class="po-field-input" style="appearance:auto" title="Quick range">
-            <option value="">Quick range…</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option><option value="month">This month</option><option value="quarter">This quarter</option><option value="year">This year</option>
-          </select>
+          <span class="crm-dash-seg crm-dash-ranges" id="crm-dash-range" title="Quick range">
+            <button type="button" data-range="7">7 days</button><button type="button" data-range="30">30 days</button><button type="button" data-range="90">90 days</button>
+            <button type="button" data-range="month">This month</button><button type="button" data-range="quarter">Quarter</button><button type="button" data-range="year">Year</button>
+          </span>
           <input type="date" id="crm-dash-from" class="po-field-input" title="Leads created from">
           <span class="crm-ws-muted">→</span>
           <input type="date" id="crm-dash-to" class="po-field-input" title="Leads created to">
-          <select id="crm-dash-dept" class="po-field-input" style="appearance:auto"></select>
-          <select id="crm-dash-div" class="po-field-input" style="appearance:auto"></select>
-          <select id="crm-dash-user" class="po-field-input" style="appearance:auto"></select>
-          <select id="crm-dash-source" class="po-field-input" style="appearance:auto"></select>
-          <button class="po-btn-primary" id="crm-dash-apply"><i class="fa fa-filter"></i> Apply</button>
+          <select id="crm-dash-dept" class="po-field-input" style="appearance:auto" title="Department"></select>
+          <select id="crm-dash-div" class="po-field-input" style="appearance:auto" title="Division"></select>
+          <select id="crm-dash-user" class="po-field-input" style="appearance:auto" title="Staff (lead owner)"></select>
+          <select id="crm-dash-source" class="po-field-input" style="appearance:auto" title="Lead source"></select>
+          <button class="po-btn-ghost" id="crm-dash-reset" title="Clear all filters and go back to the last 30 days"><i class="fa fa-rotate-left"></i> Reset</button>
           <span style="flex:1"></span>
+          <span class="crm-ws-muted crm-dash-updated" id="crm-dash-updated"></span>
+          <button class="po-btn-ghost" id="crm-dash-apply" title="Reload the dashboard"><i class="fa fa-rotate"></i></button>
           <button class="po-btn-ghost" id="crm-dash-pdf" title="Export this view to PDF"><i class="fa fa-file-pdf"></i> PDF</button>
           <button class="po-btn-ghost" id="crm-dash-excel" title="Export this view to Excel"><i class="fa fa-file-excel"></i> Excel</button>
         </div>
@@ -14060,7 +14365,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window crm-assign-win">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#64d2ff,#0a84ff)"><i class="fa fa-user-pen"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-user-pen"></i></span>
           <div style="min-width:0"><div class="mac-title-main">Assign Lead</div><div class="mac-title-sub" id="crm-assign-sub"></div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14083,7 +14388,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window" style="width:980px;max-width:96vw;max-height:86vh">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#ffb340,#ff9500)"><i class="fa fa-file-signature"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-file-signature"></i></span>
           <div style="min-width:0"><div class="mac-title-main">Quotation Approvals</div><div class="mac-title-sub" id="crm-approvals-count"></div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14125,7 +14430,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window" style="width:860px;max-width:96vw;height:84vh">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#34c759,#248a3d)"><i class="fa fa-phone-volume"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-phone-volume"></i></span>
           <div style="min-width:0"><div class="mac-title-main">Follow-ups</div><div class="mac-title-sub">Overdue calls are shown in red</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14208,6 +14513,19 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <label class="po-field-label" for="crm-move-reason-text" id="crm-move-reason-text-label">Reason</label>
           <textarea id="crm-move-reason-text" class="po-field-input" rows="3" maxlength="500" style="resize:vertical"></textarea>
         </div>
+        <!-- Details the target stage asks for (its entry rules) -->
+        <div class="po-field" data-move-field="follow_up_at" style="display:none">
+          <label class="po-field-label" for="crm-move-follow-up">Follow-up date *</label>
+          <input type="date" id="crm-move-follow-up" class="po-field-input">
+        </div>
+        <div class="po-field" data-move-field="expected_close_date" style="display:none">
+          <label class="po-field-label" for="crm-move-close-date">Expected close date *</label>
+          <input type="date" id="crm-move-close-date" class="po-field-input">
+        </div>
+        <div class="po-field" data-move-field="estimated_value" style="display:none">
+          <label class="po-field-label" for="crm-move-value">Deal value *</label>
+          <input type="number" id="crm-move-value" class="po-field-input" min="0" step="0.01">
+        </div>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-move-reason-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -14221,7 +14539,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="po-aim-shell crm-hf-shell">
       <div class="crm-hf-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#c084fc,#7c3aed)"><i class="fa fa-diagram-project"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-diagram-project"></i></span>
           <span class="mac-title-main" id="crm-history-flow-title">History Flow</span>
         </div>
         <div class="crm-hf-views" id="crm-hf-views">
@@ -14247,7 +14565,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window" style="width:460px;max-width:96vw">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#a78bfa,#7c3aed)"><i class="fa fa-handshake"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-handshake"></i></span>
           <div style="min-width:0"><div class="mac-title-main">New Relation</div><div class="mac-title-sub">Group leads into their own pipeline</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14302,13 +14620,114 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     </div>
   </div>
 
-  <!-- ── CRM: Stage Management Modal ── -->
-  <div class="modal-overlay mac-overlay" id="crm-stages-modal" style="display:none">
-    <div class="mac-window" style="width:620px;max-width:96vw;max-height:86vh">
+  <!-- ── CRM: Lead window → Tasks tab → Add Task ── -->
+  <div class="modal-overlay mac-overlay" id="crm-ws-task-modal" style="display:none;z-index:2050">
+    <div class="mac-window" style="width:460px;max-width:96vw">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#c084fc,#7c3aed)"><i class="fa fa-layer-group"></i></span>
-          <div style="min-width:0"><div class="mac-title-main" id="crm-stages-modal-title">Manage Stages</div><div class="mac-title-sub">Drag to reorder</div></div>
+          <span class="mac-title-icon"><i class="fa fa-list-check"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">New Task</div><div class="mac-title-sub">Plan the next step for this lead</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-ws-task-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-form-body">
+        <label class="mac-field">
+          <span>Title <span class="mac-required">*</span></span>
+          <input type="text" id="crm-ws-task-title" class="po-field-input" placeholder="e.g. Call back about the quote" maxlength="255" autocomplete="off">
+        </label>
+        <label class="mac-field">
+          <span>Due</span>
+          <input type="datetime-local" id="crm-ws-task-due" class="po-field-input">
+        </label>
+        <label class="mac-field">
+          <span>Assign to</span>
+          <select id="crm-ws-task-assignee" class="po-field-input" style="appearance:auto"></select>
+        </label>
+        <label class="mac-field">
+          <span>Notes</span>
+          <textarea id="crm-ws-task-notes" class="po-field-input" rows="3" maxlength="2000" placeholder="Optional details…" style="resize:vertical"></textarea>
+        </label>
+      </div>
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-ws-task-cancel">Cancel</button>
+        <button class="po-btn-primary" id="crm-ws-task-save">Add Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Lead window → Follow-ups tab → Plan follow-up ── -->
+  <div class="modal-overlay mac-overlay" id="crm-ws-fu-modal" style="display:none;z-index:2050">
+    <div class="mac-window" style="width:540px;max-width:96vw">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-phone-volume"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">Plan a Follow-up</div><div class="mac-title-sub">When to contact the customer next</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-ws-fu-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-form-body">
+        <div class="mac-field">
+          <span>When <span class="mac-required">*</span></span>
+          <div class="crm-fut-presets" id="crm-ws-fu-presets"></div>
+          <input type="datetime-local" id="crm-ws-fu-due" class="po-field-input">
+        </div>
+        <div class="mac-field">
+          <span>How</span>
+          <div class="crm-fm-seg crm-fut-chs" id="crm-ws-fu-chs"></div>
+        </div>
+        <div class="mac-field">
+          <span>Who <small class="crm-fu-who-hint">— pick several to plan one for each</small></span>
+          <select id="crm-ws-fu-user" multiple hidden></select>
+          <button type="button" class="mac-popup" id="crm-ws-fu-user-btn" style="height:30px"></button>
+        </div>
+        <label class="mac-field">
+          <span>About</span>
+          <textarea id="crm-ws-fu-notes" class="po-field-input" rows="3" maxlength="2000" placeholder="What to follow up on — e.g. Check if they reviewed the quotation" style="resize:vertical"></textarea>
+        </label>
+        <div class="crm-tk-hint">Follow-ups are also planned automatically when a quotation is sent.</div>
+      </div>
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-ws-fu-cancel">Cancel</button>
+        <button class="po-btn-primary" id="crm-ws-fu-save">Plan Follow-up</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Lead window → Quotations tab → New / Edit quotation ── -->
+  <div class="modal-overlay mac-overlay" id="crm-qt-edit-modal" style="display:none;z-index:2050">
+    <div class="mac-window" style="width:1080px;max-width:96vw;height:88vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-file-invoice"></i></span>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-qt-edit-title">New Quotation</div><div class="mac-title-sub" id="crm-qt-edit-sub">Draft</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+          <button type="button" class="mac-close-btn" data-mac-close data-qt-back title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-scroll" id="crm-qt-edit-body"></div>
+      <div class="po-aim-footer mac-footer" style="justify-content:space-between">
+        <div class="crm-qtx-dock-total"><small>Total</small><b id="crm-qt-t-total-dock"></b></div>
+        <div style="display:flex;gap:8px">
+          <button class="po-btn-ghost" data-qt-back>Cancel</button>
+          <button class="po-btn-primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Stage Management Modal ── -->
+  <div class="modal-overlay mac-overlay" id="crm-stages-modal" style="display:none">
+    <div class="mac-window" style="width:80vw;height:80vh;max-width:96vw;min-width:min(760px,96vw)">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-layer-group"></i></span>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-stages-modal-title">Manage Stages</div><div class="mac-title-sub">Drag to reorder · every stage counts as one standard status</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
@@ -14316,6 +14735,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         </div>
       </div>
 
+      <div class="mac-split">
       <div class="mac-scroll" style="display:flex;flex-direction:column;gap:14px">
         <div id="crm-stages-alert" class="svc-form-alert" style="display:none"></div>
 
@@ -14333,10 +14753,20 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           </button>
         </div>
 
+        <!-- Pipeline at a glance: one coloured segment per stage, sized by its leads -->
+        <div class="crm-stg-summary" id="crm-stages-summary"></div>
+
         <!-- Existing stages list -->
         <div>
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
-            Current Stages — drag to reorder
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;min-height:28px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">
+              <input type="checkbox" id="crm-stages-select-all" title="Select all deletable stages">
+              Current Stages — drag to reorder
+            </label>
+            <button class="po-btn-ghost" id="crm-stages-bulk-delete" style="display:none;padding:4px 10px;font-size:12px;color:#ef4444;border-color:#fecaca">
+              <i class="fa fa-trash"></i> Delete selected (<span id="crm-stages-selected-count">0</span>)
+            </button>
+            <div class="mac-search crm-stg-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="crm-stages-search" placeholder="Find a stage" autocomplete="off"></div>
           </div>
           <div id="crm-stages-list" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;min-height:40px">
             <span style="font-size:12px;color:var(--text-muted)">Loading…</span>
@@ -14345,7 +14775,26 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
       </div>
 
+      <!-- Standard statuses as templates: what each one means, one click to add it -->
+      <aside class="crm-stg-guide">
+        <div class="crm-stg-guide-head">
+          <div class="crm-stg-guide-title"><i class="fa fa-wand-magic-sparkles"></i> Stage templates</div>
+          <div class="crm-stg-guide-sub">Every stage counts as one of these standard statuses in reports and automations. Click one to add it as a stage.</div>
+        </div>
+        <div id="crm-stages-templates" class="crm-stg-templates"></div>
+        <button type="button" class="crm-stg-tpl crm-stg-tpl--custom" id="crm-stages-custom-btn">
+          <span class="crm-stg-ico"><i class="fa fa-palette"></i></span>
+          <span class="crm-stg-tpl-text"><b>Custom stage</b><small>Your own name, colour, icon and note — pick which standard status it counts as.</small></span>
+          <i class="fa fa-plus crm-stg-tpl-add"></i>
+        </button>
+        <button type="button" class="po-btn-ghost" id="crm-stages-restore-btn" style="width:100%;justify-content:center;font-size:12px">
+          <i class="fa fa-rotate-left"></i> Restore missing standard stages
+        </button>
+      </aside>
+      </div>
+
       <div class="po-aim-footer mac-footer">
+        <span class="crm-stg-footer-note" id="crm-stages-footer-note"></span>
         <button class="po-btn-ghost" id="crm-stages-modal-cancel"><i class="fa fa-xmark"></i> Close</button>
         <button class="po-btn-primary" id="crm-stage-add-open-btn"><i class="fa fa-plus"></i> Add Stage</button>
       </div>
@@ -14357,7 +14806,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window" style="width:1100px;max-width:96vw;height:82vh">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#8e8e93,#48484a)"><i class="fa fa-user-shield"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-user-shield"></i></span>
           <div style="min-width:0"><div class="mac-title-main">CRM Permissions</div><div class="mac-title-sub">Choose what each user can see and do in the CRM</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14393,7 +14842,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window" style="width:1100px;max-width:96vw;height:82vh">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#a78bfa,#7c3aed)"><i class="fa fa-sitemap"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-sitemap"></i></span>
           <div style="min-width:0"><div class="mac-title-main">CRM Org Structure</div><div class="mac-title-sub">Departments come from HR Management</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14422,12 +14871,49 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     </div>
   </div>
 
+  <!-- ── CRM: Departments Modal ── -->
+  <div class="modal-overlay mac-overlay" id="crm-dept-modal" style="display:none">
+    <div class="mac-window" style="width:1100px;max-width:96vw;height:84vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-building-user"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">Departments</div><div class="mac-title-sub">Shared with HR Management</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-dept-refresh-btn" title="Refresh"><i class="fa fa-rotate"></i></button>
+          <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+          <button type="button" class="mac-close-btn" id="crm-dept-modal-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+
+      <div class="mac-split">
+        <aside class="mac-sidebar">
+          <button type="button" class="crm-dept-new-btn" id="crm-dept-new-btn"><i class="fa fa-plus"></i> New Department</button>
+          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-dept-search" placeholder="Search departments" autocomplete="off"></div>
+          <div id="crm-dept-list" class="mac-side-list">
+            <span class="mac-side-empty">Loading…</span>
+          </div>
+        </aside>
+
+        <section class="mac-detail">
+          <div id="crm-dept-alert" class="svc-form-alert" style="display:none"></div>
+          <div id="crm-dept-body" class="mac-detail-body"><span class="crm-perms-muted">Select a department.</span></div>
+        </section>
+      </div>
+
+      <div class="po-aim-footer mac-footer">
+        <span class="crm-dept-foot-count" id="crm-dept-count"></span>
+        <button class="po-btn-ghost" id="crm-dept-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── CRM: Marketing Inbox Modal ── -->
   <div class="modal-overlay mac-overlay" id="crm-inbox-modal" style="display:none">
     <div class="mac-window" style="width:1150px;max-width:96vw;height:86vh">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#5ac8fa,#007aff)"><i class="fa fa-inbox"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-inbox"></i></span>
           <div style="min-width:0"><div class="mac-title-main">Marketing Inbox</div><div class="mac-title-sub" id="crm-inbox-subtitle"></div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
@@ -14482,73 +14968,242 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     </div>
   </div>
 
-  <!-- ── CRM: Add Stage Modal ── -->
-  <div class="modal-overlay" id="crm-stage-add-modal" style="display:none">
-    <div class="po-aim-shell" style="width:400px">
-      <div class="po-aim-header">
-        <i class="fa fa-plus" style="color:#7c3aed"></i>
-        <span>Add Stage</span>
-        <button class="psm-close" id="crm-stage-add-close"><i class="fa fa-xmark"></i></button>
+  <!-- ── CRM: Add / Edit Stage (one form for both) ── -->
+  <div class="modal-overlay mac-overlay" id="crm-stage-form-modal" style="display:none">
+    <div class="mac-window" style="width:min(860px,94vw);max-height:90vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-plus" id="crm-stage-form-title-icon"></i></span>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-stage-form-title">Add Stage</div><div class="mac-title-sub">Name it your way, choose what happens when a lead moves here</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-stage-form-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
       </div>
-      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
-        <div id="crm-stage-add-alert" class="svc-form-alert" style="display:none"></div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div class="po-field" style="flex:1">
-            <label class="po-field-label">Name <span class="po-required">*</span></label>
-            <input type="text" id="crm-stage-new-name" class="po-field-input" placeholder="Stage name" maxlength="60">
-          </div>
-          <div class="po-field" style="flex-shrink:0">
-            <label class="po-field-label">Colour</label>
-            <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
-          </div>
+
+      <div class="mac-scroll crm-stg-form">
+        <div id="crm-stage-form-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="crm-stage-form-id">
+        <input type="hidden" id="crm-stage-form-status">
+
+        <!-- Live preview of the board column header -->
+        <div class="crm-stg-preview">
+          <span class="crm-stg-preview-label">Preview</span>
+          <span class="crm-stg-preview-chip" id="crm-stage-form-preview"></span>
+          <span class="crm-stg-preview-counts" id="crm-stage-form-preview-counts"></span>
         </div>
-        <div class="po-field">
-          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
-          <select id="crm-stage-new-status" class="po-field-input" style="appearance:auto"></select>
+
+        <div class="crm-stg-form-row">
+          <label class="mac-field" style="flex:1">Name *
+            <input type="text" id="crm-stage-form-name" class="po-field-input" placeholder="e.g. Site Visit, Demo Booked, Follow-up 2" maxlength="60">
+          </label>
+          <label class="mac-field" style="flex-shrink:0">Colour
+            <input type="color" id="crm-stage-form-color" value="#64748b" title="Stage colour" class="crm-stg-color">
+          </label>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" id="crm-stage-new-reason"> Ask for a reason when a lead moves here
+        <div class="crm-stg-swatches" id="crm-stage-form-swatches"></div>
+
+        <div class="mac-field">Icon
+          <div class="crm-stg-icons" id="crm-stage-form-icons"></div>
+        </div>
+
+        <label>Note for the team <span style="font-weight:400">(optional — shown under the stage name)</span>
+          <textarea id="crm-stage-form-desc" class="po-field-input" rows="2" maxlength="255" placeholder="When should a lead be moved here? e.g. &quot;Customer agreed to a site visit date&quot;"></textarea>
         </label>
+
+        <div class="mac-field">Counts in reports as (standard status) *
+          <div class="crm-stg-status-grid" id="crm-stage-form-statuses"></div>
+        </div>
+
+        <!-- "Custom": none of the statuses fit, so the stage's behaviour is ticked here -->
+        <div class="crm-stg-acts" id="crm-stage-form-behaviour" style="display:none">
+          <div class="crm-stg-acts-head"><i class="fa fa-sliders" style="color:#7c3aed"></i> How this stage behaves
+            <small>Tick what fits. Reports count an open custom stage as "In Process".</small></div>
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-flag-checkered"></i> When a lead is here, the deal is</div>
+            <div class="crm-stg-act-chips" id="crm-stage-form-outcome">
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="in_process" checked> Still open</label>
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="on_hold"> Paused — can resume to the stage it came from</label>
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="won"> Won — closes the lead as a win</label>
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="lost"> Lost — closes it and asks for a lost reason</label>
+            </div>
+          </div>
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-shield-halved"></i> Rules</div>
+            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-needs-approval"> Must be approved — when staff move a lead here, the department head approves first</label>
+            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-locks-lead"> Lock the lead — only the head or an admin can edit or move it while it is here</label>
+            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-no-skip"> No skipping — leads can enter only from the stage right before it (going back is fine)</label>
+          </div>
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Checklist before leaving <span class="crm-stg-act-hint" style="font-weight:400">— every item must be ticked before the lead can move on</span></div>
+            <textarea id="crm-stage-form-checklist" class="po-field-input" rows="3" placeholder="One item per line, e.g.&#10;Site measurements taken&#10;Photos uploaded&#10;Customer signed the visit form"></textarea>
+          </div>
+        </div>
+
+        <!-- What this stage does when a lead enters it (LeadStage::entryRules) -->
+        <div class="crm-stg-acts">
+          <div class="crm-stg-acts-head"><i class="fa fa-bolt"></i> When a lead moves here
+            <small>Choose what this stage does. Leave everything off for a plain stage.</small></div>
+
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Ask the person moving it for</div>
+            <div class="crm-stg-act-chips">
+              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-reason"> Reason</label>
+              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="follow_up_at"> Follow-up date</label>
+              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="expected_close_date"> Expected close date</label>
+              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="estimated_value"> Deal value</label>
+            </div>
+            <span id="crm-stage-form-reason-hint" class="crm-stg-act-hint"></span>
+          </div>
+
+          <div class="crm-stg-act">
+            <label class="crm-stg-act-title"><input type="checkbox" id="crm-stage-form-task-on"> <i class="fa fa-calendar-plus"></i> Create a task for the lead owner</label>
+            <div class="crm-stg-act-body" id="crm-stage-form-task-body">
+              <input type="text" id="crm-stage-form-task-title" class="po-field-input" maxlength="255" placeholder="e.g. Confirm the site visit time with the customer">
+              <span class="crm-stg-act-inline">due in <input type="number" id="crm-stage-form-task-days" class="po-field-input" min="0" max="365" value="1"> day(s)</span>
+            </div>
+          </div>
+
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-bell"></i> Notify</div>
+            <div class="crm-stg-act-chips">
+              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-owner"> Lead owner</label>
+              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-head"> Department head</label>
+            </div>
+            <div class="crm-stg-act-chips" id="crm-stage-form-notify-users"></div>
+          </div>
+
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-user-plus"></i> Assign to</div>
+            <span class="crm-stg-act-hint">The people ticked are added to the lead. The current owner stays the owner — if the lead has none, the first one ticked becomes it.</span>
+            <div class="crm-stg-act-chips" id="crm-stage-form-assign-users"></div>
+          </div>
+
+          <div class="crm-stg-act-row">
+            <label class="crm-stg-act" style="flex:1"><span class="crm-stg-act-title"><i class="fa fa-stopwatch"></i> Flag leads stuck here longer than</span>
+              <span class="crm-stg-act-inline"><input type="number" id="crm-stage-form-max-days" class="po-field-input" min="0" max="365" placeholder="—"> day(s)</span>
+            </label>
+          </div>
+        </div>
       </div>
-      <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="crm-stage-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-        <button class="po-btn-primary" id="crm-stage-add-btn"><i class="fa fa-check"></i> Add Stage</button>
+
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-stage-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-stage-form-save"><i class="fa fa-check"></i> Add Stage</button>
       </div>
     </div>
   </div>
 
-  <!-- ── CRM: Edit Stage Modal ── -->
-  <div class="modal-overlay" id="crm-stage-edit-modal" style="display:none">
-    <div class="po-aim-shell" style="width:400px">
+  <!-- ── CRM: a lead's checklist for the stage it is in ── -->
+  <div class="modal-overlay" id="crm-checklist-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:min(440px,94vw);display:flex;flex-direction:column">
       <div class="po-aim-header">
-        <i class="fa fa-pen" style="color:#7c3aed"></i>
-        <span>Edit Stage</span>
-        <button class="psm-close" id="crm-stage-edit-close"><i class="fa fa-xmark"></i></button>
+        <i class="fa fa-list-check" style="color:#10b981"></i>
+        <span id="crm-checklist-title">Checklist</span>
+        <button class="psm-close" id="crm-checklist-close"><i class="fa fa-xmark"></i></button>
       </div>
-      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
-        <div id="crm-stage-edit-alert" class="svc-form-alert" style="display:none"></div>
-        <input type="hidden" id="crm-stage-edit-id">
-        <div style="display:flex;gap:8px;align-items:center">
-          <div class="po-field" style="flex:1">
-            <label class="po-field-label">Name <span class="po-required">*</span></label>
-            <input type="text" id="crm-stage-edit-name" class="po-field-input" maxlength="60">
-          </div>
-          <div class="po-field" style="flex-shrink:0">
-            <label class="po-field-label">Colour</label>
-            <input type="color" id="crm-stage-edit-color" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
-          </div>
-        </div>
-        <div class="po-field">
-          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
-          <select id="crm-stage-edit-status" class="po-field-input" style="appearance:auto"></select>
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" id="crm-stage-edit-reason"> Ask for a reason when a lead moves here
-        </label>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:8px">
+        <div id="crm-checklist-alert" class="svc-form-alert" style="display:none"></div>
+        <div id="crm-checklist-items" style="display:flex;flex-direction:column;gap:6px"></div>
       </div>
       <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="crm-stage-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-        <button class="po-btn-primary" id="crm-stage-edit-save"><i class="fa fa-check"></i> Save Stage</button>
+        <button class="po-btn-primary" id="crm-checklist-done"><i class="fa fa-check"></i> Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: a stage's behaviour settings (built-in behaviours on/off + rules any stage can add) ── -->
+  <div class="modal-overlay" id="crm-stage-behave-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:min(600px,94vw);max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-gear" style="color:#64748b"></i>
+        <span id="crm-stage-behave-title">Stage behaviour</span>
+        <button class="psm-close" id="crm-stage-behave-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body crm-stg-form" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+        <div id="crm-stage-behave-alert" class="svc-form-alert" style="display:none"></div>
+
+        <div class="crm-stg-acts">
+          <div class="crm-stg-acts-head"><i class="fa fa-cube" style="color:#64748b"></i> Built-in behaviour
+            <small id="crm-stage-behave-built-hint">What this stage does because of the standard status it counts as.</small></div>
+          <div id="crm-stage-behave-built" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
+        <div class="crm-stg-acts">
+          <div class="crm-stg-acts-head"><i class="fa fa-plus" style="color:#7c3aed"></i> Added behaviour
+            <small>Switch on extra rules for this stage.</small></div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-comment-dots"></i></span>
+            <span class="crm-stg-behave-text"><b>Ask for a reason</b><small>The person moving a lead here writes why.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-reason"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-shield-halved"></i></span>
+            <span class="crm-stg-behave-text"><b>Must be approved</b><small>When staff move a lead here, the department head approves first.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-approval"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-lock"></i></span>
+            <span class="crm-stg-behave-text"><b>Lock the lead</b><small>Only the head or an admin can edit or move it while it is here.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-lock"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-arrow-right-to-bracket"></i></span>
+            <span class="crm-stg-behave-text"><b>No skipping</b><small>Leads enter only from the stage right before it (going back is fine).</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-no-skip"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-clipboard-list"></i></span>
+            <span class="crm-stg-behave-text"><b>Checklist before leaving</b><small>Every item must be ticked before the lead can move on.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-checklist-on"><span class="psm-switch-track"></span></label>
+          </div>
+          <textarea id="crm-stage-behave-checklist" class="po-field-input" rows="3" style="display:none" placeholder="One item per line, e.g.&#10;Site measurements taken&#10;Photos uploaded"></textarea>
+          <span class="crm-stg-act-hint">Follow-up tasks, notifications and auto-assign are under <b>Edit stage → When a lead moves here</b>.</span>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-stage-behave-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-stage-behave-save"><i class="fa fa-check"></i> Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: the business's own status (a reusable stage template) ── -->
+  <div class="modal-overlay" id="crm-cstatus-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:min(560px,94vw);max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-wand-magic-sparkles" style="color:#7c3aed"></i>
+        <span id="crm-cstatus-title">New status</span>
+        <button class="psm-close" id="crm-cstatus-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body crm-stg-form" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+        <div id="crm-cstatus-alert" class="svc-form-alert" style="display:none"></div>
+        <p class="crm-stg-act-hint" style="margin:0">Your own status shows up next to the standard ones in every pipeline, ready to use as a stage template.</p>
+        <div class="crm-stg-form-row">
+          <label class="mac-field" style="flex:1">Name *
+            <input type="text" id="crm-cstatus-name" class="po-field-input" maxlength="60" placeholder="e.g. Site Visit, Demo Booked, Sample Sent">
+          </label>
+          <label class="mac-field" style="flex-shrink:0">Colour
+            <input type="color" id="crm-cstatus-color" value="#6366f1" class="crm-stg-color">
+          </label>
+        </div>
+        <div class="crm-stg-swatches" id="crm-cstatus-swatches"></div>
+        <div class="mac-field">Icon
+          <div class="crm-stg-icons" id="crm-cstatus-icons"></div>
+        </div>
+        <label class="mac-field">What it means <span style="font-weight:400">(optional)</span>
+          <textarea id="crm-cstatus-desc" class="po-field-input" rows="2" maxlength="255" placeholder="e.g. A technician visited the site and took measurements."></textarea>
+        </label>
+        <label class="mac-field">Counts in reports as *
+          <select id="crm-cstatus-base" class="po-field-input" style="appearance:auto"></select>
+        </label>
+        <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-cstatus-reason"> Ask for a reason when a lead moves here</label>
+        <label class="crm-stg-chk" style="align-self:flex-start" id="crm-cstatus-rules-wrap"><input type="checkbox" id="crm-cstatus-rules"> <span id="crm-cstatus-rules-label">Use the "When a lead moves here" actions set in the stage form as its defaults</span></label>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-cstatus-delete" style="margin-right:auto;color:#dc2626"><i class="fa fa-trash-can"></i> Delete</button>
+        <button class="po-btn-ghost" id="crm-cstatus-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-cstatus-save"><i class="fa fa-check"></i> Save Status</button>
       </div>
     </div>
   </div>
@@ -14613,7 +15268,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div class="mac-window" style="width:600px;max-width:96vw;max-height:86vh">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#c084fc,#7c3aed)"><i class="fa fa-wpforms"></i></span>
+          <span class="mac-title-icon"><i class="fa fa-wpforms"></i></span>
           <div style="min-width:0"><div class="mac-title-main">New Form</div><div class="mac-title-sub">Drops new leads into this pipeline</div></div>
         </div>
         <div class="crm-imp-steps" id="crm-form-wiz-steps">

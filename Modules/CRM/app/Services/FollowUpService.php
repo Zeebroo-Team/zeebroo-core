@@ -111,6 +111,21 @@ class FollowUpService
     }
 
     /**
+     * Plan the same follow-up for several people — one row each, so each gets their own reminder
+     * and logs it on their own. All or nothing.
+     *
+     * @param  list<int>  $userIds
+     * @return list<FollowUp>
+     */
+    public function createForUsers(Lead $lead, array $data, array $userIds, ?int $byUserId): array
+    {
+        return DB::transaction(fn () => array_map(
+            fn (int $userId) => $this->create($lead, ['user_id' => $userId] + $data, $byUserId),
+            array_values(array_unique(array_map('intval', $userIds))),
+        ));
+    }
+
+    /**
      * Record how a follow-up went; a next date plans the next follow-up (same person and quotation).
      *
      * @param  array{outcome: string, channel?: ?string, notes?: ?string, next_follow_up_at?: ?string}  $data
@@ -232,7 +247,7 @@ class FollowUpService
     /** Sees the team list: admins, "All Departments" and heads. */
     public function canSeeTeam(CrmAccess $access): bool
     {
-        return $access->worksAllLeads() || $access->isHead();
+        return ($access->worksAllLeads() || $access->isHead()) && $access->can('followups_view');
     }
 
     /**

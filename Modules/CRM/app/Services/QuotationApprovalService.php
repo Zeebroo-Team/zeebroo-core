@@ -116,7 +116,7 @@ class QuotationApprovalService
             ->with(['lead.stage', 'lead.project', 'lead.department.headEmployee.user:id,name', 'lead.department.coHeadEmployee.user:id,name', 'lead.division.headUser:id,name', 'customer', 'submittedBy:id,name'])
             ->orderBy('updated_at')
             ->get()
-            ->filter(fn (Quotation $q) => $q->lead !== null && $this->policy->canApprove($access, $q->lead))
+            ->filter(fn (Quotation $q) => $q->lead !== null && $this->policy->canApproveQuotation($access, $q->lead))
             ->values();
     }
 

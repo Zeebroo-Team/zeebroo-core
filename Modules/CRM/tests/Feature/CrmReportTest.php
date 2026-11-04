@@ -135,6 +135,23 @@ test('leads by source, department, the funnel, staff ranking and lost reasons', 
         ->and(collect($r['trend'])->sum('leads'))->toBe(5);
 });
 
+test('executive figures: win rate, deal size, open pipeline, top deals and the previous period', function () {
+    $r = crmReport(1);
+    $k = $r['kpis'];
+
+    expect($k['win_rate'])->toBe(50)                  // 2 won ÷ (2 won + 2 lost) closed in the range
+        ->and($k['avg_deal_value'])->toBe(1600)       // 3200 ÷ 2
+        ->and($k['open_pipeline_count'])->toBe(2)     // Kasun and the September lead, whatever their creation date
+        ->and($k['open_pipeline_value'])->toBe(9999)
+        ->and(collect($r['trend'])->sum('won_value'))->toBe(3200)
+        ->and(collect($r['recent_wins'])->map(fn ($w) => [$w['name'], $w['value']])->all())->toBe([['Chathu', 2000], ['Amal', 1200]])
+        ->and(collect($r['top_open'])->pluck('name')->all())->toBe(['Old'])
+        ->and($r['previous']['from'])->toBe('2026-10-02')
+        ->and($r['previous']['to'])->toBe('2026-10-31')
+        ->and($r['previous']['leads'])->toBe(0)
+        ->and($r['previous']['win_rate'])->toBeNull();
+});
+
 test('filters narrow every number', function () {
     expect(crmReport(1, ['source' => 'website'])['kpis']['leads'])->toBe(2)
         ->and(crmReport(1, ['user_id' => 6])['kpis']['won'])->toBe(1)

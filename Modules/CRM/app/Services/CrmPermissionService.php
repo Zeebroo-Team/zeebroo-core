@@ -43,7 +43,39 @@ class CrmPermissionService
                     ['key' => 'leads_create', 'label' => 'Add leads',     'desc' => 'Create leads from the default form'],
                     ['key' => 'leads_edit',   'label' => 'Edit leads',    'desc' => 'Change lead details'],
                     ['key' => 'leads_move',   'label' => 'Move leads',    'desc' => 'Drag leads between stages'],
+                    ['key' => 'leads_assign', 'label' => 'Assign leads',  'desc' => 'Choose who works a lead (heads and admins)'],
+                    ['key' => 'leads_close',  'label' => 'Win / lose leads', 'desc' => 'Mark leads won or lost and reopen closed ones'],
+                    ['key' => 'leads_import', 'label' => 'Import leads',  'desc' => 'Bulk-import leads from a spreadsheet'],
                     ['key' => 'leads_delete', 'label' => 'Delete leads',  'desc' => 'Remove leads from the pipeline'],
+                ],
+            ],
+            [
+                'key'   => 'workspace',
+                'label' => 'Lead Workspace',
+                'icon'  => 'fa-comments',
+                'items' => [
+                    ['key' => 'lead_collaborate', 'label' => 'Messages & files', 'desc' => 'Post internal messages and upload files on leads'],
+                    ['key' => 'followups_view',   'label' => 'View follow-ups',  'desc' => 'See the Follow-ups list and a lead\'s follow-ups'],
+                    ['key' => 'followups_manage', 'label' => 'Plan & log follow-ups', 'desc' => 'Plan, log and cancel follow-ups'],
+                ],
+            ],
+            [
+                'key'   => 'quotations',
+                'label' => 'Quotations',
+                'icon'  => 'fa-file-invoice-dollar',
+                'items' => [
+                    ['key' => 'quotations_view',    'label' => 'View quotations',   'desc' => 'See a lead\'s quotations, versions and PDFs'],
+                    ['key' => 'quotations_manage',  'label' => 'Create & send quotations', 'desc' => 'Build, revise, submit and send quotations'],
+                    ['key' => 'quotations_approve', 'label' => 'Approve quotations', 'desc' => 'Approve, return or reject quotations (heads and admins)'],
+                ],
+            ],
+            [
+                'key'   => 'insights',
+                'label' => 'Inbox & Reports',
+                'icon'  => 'fa-chart-line',
+                'items' => [
+                    ['key' => 'inbox_view',   'label' => 'Marketing inbox',      'desc' => 'Verify, review, merge and forward new leads (marketing)'],
+                    ['key' => 'reports_view', 'label' => 'Management dashboard', 'desc' => 'See the CRM dashboard and export it (heads and admins)'],
                 ],
             ],
             [

@@ -20,6 +20,7 @@ class CrmReportExportService
             'report'   => $report,
             'kpis'     => $this->kpiRows($report),
             'filters'  => $this->filterLine($report),
+            'attention'=> $this->attentionRows($report),
         ])->setPaper('a4')->output();
 
         return response($binary, 200, [
@@ -45,8 +46,15 @@ class CrmReportExportService
             array_map(fn ($r) => [$r['label'], $r['leads'], $r['won']], $report['by_division']));
         $this->sheet($book->createSheet(), 'Funnel', ['Status', 'Leads'],
             array_map(fn ($r) => [$r['label'], $r['leads']], $report['funnel']));
-        $this->sheet($book->createSheet(), 'Staff ranking', ['#', 'Staff', 'Leads', 'Won', 'Won value', 'Conversion %'],
-            array_map(fn ($r, $i) => [$i + 1, $r['name'], $r['leads'], $r['won'], $r['won_value'], $r['conversion_rate']], $report['staff'], array_keys($report['staff'])));
+        $this->sheet($book->createSheet(), 'Open by status', ['Status', 'Open deals', 'Estimated value', 'Past due'],
+            array_map(fn ($r) => [$r['label'], $r['leads'], $r['value'], $r['past_due']], $report['pipeline_stages']));
+        $this->sheet($book->createSheet(), 'Expected to close', ['When', 'Open deals', 'Estimated value'],
+            array_map(fn ($r) => [$r['label'], $r['leads'], $r['value']], $report['forecast']));
+        $this->sheet($book->createSheet(), 'Needs attention', ['Issue', 'Customer', 'Owner', 'Phone', 'Days'], $this->attentionRows($report));
+        $this->sheet($book->createSheet(), 'Staff ranking',
+            ['#', 'Staff', 'New leads', 'Won', 'Won value', 'Conversion %', 'Open deals', 'Open value', 'Overdue follow-ups', 'First response (h)'],
+            array_map(fn ($r, $i) => [$i + 1, $r['name'], $r['leads'], $r['won'], $r['won_value'], $r['conversion_rate'],
+                $r['open_deals'], $r['open_value'], $r['overdue_follow_ups'], $r['avg_response_hours'] ?? '—'], $report['staff'], array_keys($report['staff'])));
         $this->sheet($book->createSheet(), 'Lost reasons', ['Reason', 'Leads'],
             array_map(fn ($r) => [$r['label'], $r['leads']], $report['lost_reasons']));
         $this->sheet($book->createSheet(), 'Trend', ['Period', 'Leads', 'Won'],
@@ -81,6 +89,20 @@ class CrmReportExportService
             ['Overdue follow-ups', $k['overdue_follow_ups']],
             ['Average response time', $k['avg_response_hours'] !== null ? $k['avg_response_hours'] . ' h' : '—'],
             ['Average close time', $k['avg_close_days'] !== null ? $k['avg_close_days'] . ' days' : '—'],
+            ['Win rate', $k['win_rate'] !== null ? $k['win_rate'] . '%' : '—'],
+            ['Open deals now', $k['open_pipeline_count'] . ' · ' . $money($k['open_pipeline_value'])],
+            ['Past-due deals now', $k['past_due_deals'] . ' · ' . $money($k['past_due_deals_value'])],
+            ['Not contacted yet (now)', $k['uncontacted_leads']],
+            ['Unassigned leads (now)', $k['unassigned_leads']],
+        ];
+    }
+
+    /** The live to-do list: oldest overdue follow-ups, then assigned leads still waiting for first contact. */
+    public function attentionRows(array $report): array
+    {
+        return [
+            ...array_map(fn ($r) => ['Overdue follow-up', $r['name'], $r['owner'] ?? 'Unassigned', $r['phone'] ?? '', $this->days($r['days_overdue']) . ' late'], $report['attention']['follow_ups']),
+            ...array_map(fn ($r) => ['Not contacted yet', $r['name'], $r['owner'] ?? 'Unassigned', $r['phone'] ?? '', $this->days($r['age_days']) . ' waiting'], $report['attention']['uncontacted']),
         ];
     }
 
@@ -102,13 +124,18 @@ class CrmReportExportService
     private function sheet($sheet, string $title, array $head, array $rows): void
     {
         $sheet->setTitle($title);
-        $sheet->fromArray([$head, ...$rows]);
+        $sheet->fromArray([$head, ...$rows], null, 'A1', true); // strict: write 0 as 0, not a blank cell
         $last = chr(ord('A') + count($head) - 1);
         $sheet->getStyle("A1:{$last}1")->getFont()->setBold(true);
         $sheet->getStyle("A1:{$last}1")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E2E8F0');
         foreach (range('A', $last) as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
+    }
+
+    private function days(int $n): string
+    {
+        return $n . ($n === 1 ? ' day' : ' days');
     }
 
     private function fileName(array $report, string $ext): string

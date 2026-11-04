@@ -218,10 +218,10 @@ class LeadAssignmentService
             LeadAssigned::dispatch($lead, $added, $action, $byUserId, $newPrimary);
         }
 
-        // Someone is now working a new lead
+        // Someone is now working a new lead (unless the Assigned stage had that switched off)
         $lead->loadMissing(['stage', 'project']);
         if ($ids !== [] && $lead->statusKey() === LeadStage::STATUS_NEW
-            && $this->stages->stageForStatus($lead->project, LeadStage::STATUS_ASSIGNED) !== null) {
+            && $this->stages->stageForStatus($lead->project, LeadStage::STATUS_ASSIGNED)?->behaviourOn('auto_from_assign')) {
             $this->leads->moveToStatus($lead, LeadStage::STATUS_ASSIGNED, $byUserId);
         }
 

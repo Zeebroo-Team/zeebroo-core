@@ -10,6 +10,7 @@ use Modules\CRM\Events\FollowUpOverdue;
 use Modules\CRM\Events\LeadAssigned;
 use Modules\CRM\Events\LeadClosed;
 use Modules\CRM\Events\LeadEnteredInbox;
+use Modules\CRM\Events\LeadEnteredStage;
 use Modules\CRM\Events\LeadForwarded;
 use Modules\CRM\Events\QuotationDecided;
 use Modules\CRM\Events\QuotationSent;
@@ -19,6 +20,7 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\Task;
 use Modules\CRM\Services\CrmNotifier;
 use Modules\CRM\Services\FollowUpService;
+use Modules\CRM\Services\StageEntryActionService;
 use Modules\Sales\Models\QuotationApproval;
 
 /**
@@ -35,6 +37,7 @@ use Modules\Sales\Models\QuotationApproval;
  *   follow-up due                → its assignee
  *   follow-up overdue            → its assignee and the head
  *   won / lost                   → the head
+ *   entered a stage with actions → whoever that stage names (StageEntryActionService)
  */
 class CrmEventSubscriber
 {
@@ -55,7 +58,20 @@ class CrmEventSubscriber
             FollowUpDue::class        => 'onFollowUpDue',
             FollowUpOverdue::class    => 'onFollowUpOverdue',
             LeadClosed::class         => 'onLeadClosed',
+            LeadEnteredStage::class   => 'onLeadEnteredStage',
         ];
+    }
+
+    /** The stage's own entry actions: auto-assign, follow-up, task, notifications. */
+    public function onLeadEnteredStage(LeadEnteredStage $e): void
+    {
+        $steps = [];
+        $this->guard(function () use ($e, &$steps) {
+            $steps = app(StageEntryActionService::class)->steps($e->lead, $e->stage, $e->byUserId, $e->followUpAt);
+        });
+        foreach ($steps as $step) {
+            $this->guard($step);
+        }
     }
 
     public function onLeadEnteredInbox(LeadEnteredInbox $e): void

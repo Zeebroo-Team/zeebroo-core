@@ -41,6 +41,7 @@ class PosCrmFollowUpApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         [$business, $access] = $this->base($request);
+        $this->abortUnlessAllowed($access->can('followups_view'));
 
         $data = $request->validate([
             'scope'  => ['nullable', Rule::in(['mine', 'team'])],
@@ -74,10 +75,11 @@ class PosCrmFollowUpApiController extends Controller
     public function forLead(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
-        $canEdit = $this->policy->canEdit($access, $lead);
+        $this->abortUnlessAllowed($access->can('followups_view'));
+        $canEdit = $access->can('followups_manage') && $this->policy->canEdit($access, $lead);
 
         return response()->json([
-            'data' => $this->followUps->forLead($lead)->map(fn (FollowUp $f) => $this->followUps->present($f, $canEdit || $this->isAssignee($access, $f)))->values(),
+            'data' => $this->followUps->forLead($lead)->map(fn (FollowUp $f) => $this->followUps->present($f, $this->canWork($access, $f)))->values(),
             'meta' => [
                 'can_add'    => $canEdit,
                 'assignees'  => $canEdit ? $this->assignments->assignableUsers($lead)->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name])->values() : [],
@@ -87,19 +89,38 @@ class PosCrmFollowUpApiController extends Controller
         ]);
     }
 
-    /** POST crm/leads/{lead}/follow-ups — { due_at, user_id?, channel?, notes?, quotation_id? } */
+    /**
+     * POST crm/leads/{lead}/follow-ups — { due_at, user_id? | user_ids?[], channel?, notes?, quotation_id? }
+     * Several user_ids plan one follow-up per person; `data` is then a list.
+     */
     public function store(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
-        $this->abortUnlessAllowed($this->policy->canEdit($access, $lead));
+        $this->abortUnlessAllowed($access->can('followups_manage') && $this->policy->canEdit($access, $lead));
 
         $data = $request->validate([
             'due_at'       => ['required', 'date'],
             'user_id'      => ['nullable', 'integer'],
+            'user_ids'     => ['nullable', 'array', 'max:50'],
+            'user_ids.*'   => ['integer'],
             'channel'      => ['nullable', 'string', Rule::in(array_keys(FollowUp::CHANNELS))],
             'notes'        => ['nullable', 'string', 'max:2000'],
             'quotation_id' => ['nullable', 'integer'],
         ]);
+
+        $userIds = array_values(array_unique(array_map('intval', $data['user_ids'] ?? [])));
+        unset($data['user_ids']);
+        if (count($userIds) > 1) {
+            $created = $this->followUps->createForUsers($lead, $data, $userIds, $request->user()?->id);
+
+            return response()->json([
+                'message' => count($created) . ' follow-ups planned.',
+                'data'    => array_map(fn (FollowUp $f) => $this->followUps->present($f->load(['user:id,name', 'quotation']), true), $created),
+            ], 201);
+        }
+        if ($userIds) {
+            $data['user_id'] = $userIds[0];
+        }
 
         $followUp = $this->followUps->create($lead, $data, $request->user()?->id);
 
@@ -176,7 +197,8 @@ class PosCrmFollowUpApiController extends Controller
 
     private function canWork(CrmAccess $access, FollowUp $f): bool
     {
-        return $this->isAssignee($access, $f) || ($f->lead !== null && $this->policy->canEdit($access, $f->lead));
+        return $access->can('followups_manage')
+            && ($this->isAssignee($access, $f) || ($f->lead !== null && $this->policy->canEdit($access, $f->lead)));
     }
 
     private function isAssignee(CrmAccess $access, FollowUp $f): bool

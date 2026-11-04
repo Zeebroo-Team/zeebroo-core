@@ -185,7 +185,7 @@ class PosCrmInboxApiController extends Controller
     private function abortUnlessInbox(Request $request, Business $business): CrmAccess
     {
         $access = $this->access($request, $business);
-        if (! $access->usesInbox() || ! $access->can('leads_view')) {
+        if (! $access->usesInbox() || ! $access->can('leads_view') || ! $access->can('inbox_view')) {
             throw new HttpResponseException(response()->json(['message' => 'You do not have access to the marketing inbox.'], 403));
         }
 

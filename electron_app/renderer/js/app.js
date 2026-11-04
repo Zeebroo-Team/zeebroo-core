@@ -9936,6 +9936,9 @@ const _notifIconMap = {
   crm_follow_up_due:              { icon: 'fa-phone-volume',          cls: 'warning' },
   crm_follow_up_overdue:          { icon: 'fa-phone-slash',           cls: 'danger'  },
   crm_lead_closed:                { icon: 'fa-flag-checkered',        cls: 'success' },
+  crm_lead_stage:                 { icon: 'fa-bolt',                  cls: 'info'    },
+  crm_stage_approval:             { icon: 'fa-shield-halved',         cls: 'warning' },
+  crm_stage_approval_decided:     { icon: 'fa-shield-halved',         cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -41694,6 +41697,97 @@ function escAttr(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Swap a <select>'s native dropdown for a searchable popup. The select stays the source of truth:
+// picking an option sets its value and fires 'change', so existing listeners keep working.
+// `trigger` is what the user clicks (the select itself by default). On a <select multiple> each
+// pick toggles that option and the list stays open.
+function makeSelectSearchable(sel, trigger = sel) {
+  const multi = sel.multiple;
+  const open = () => {
+    document.querySelector('.pm-ss-pop')?._close?.();
+    const r   = trigger.getBoundingClientRect();
+    const pop = document.createElement('div');
+    pop.className = 'pm-ss-pop';
+    pop.style.left     = `${r.left}px`;
+    pop.style.minWidth = `${Math.max(r.width, 200)}px`;
+    pop.innerHTML = `<input type="text" class="pm-ss-input" placeholder="Search…"><div class="pm-ss-list"></div>`;
+    document.body.appendChild(pop);
+
+    const input = pop.querySelector('.pm-ss-input');
+    const list  = pop.querySelector('.pm-ss-list');
+    let items = [], active = 0;
+    const render = (keep = null) => {
+      const q = input.value.trim().toLowerCase();
+      items = [...sel.options].filter(o => !o.disabled && o.text.toLowerCase().includes(q));
+      active = keep ?? Math.max(0, items.findIndex(o => multi ? o.selected : o.value === sel.value));
+      list.innerHTML = items.length
+        ? items.map((o, i) => `<div class="cat-combo-item${i === active ? ' active' : ''}${multi && o.selected ? ' selected' : ''}" data-i="${i}">${multi ? '<i class="fa fa-check pm-ss-check"></i>' : ''}${escHtml(o.text)}</div>`).join('')
+        : '<div class="cat-combo-empty">No matches</div>';
+    };
+    const highlight = i => {
+      active = (i + items.length) % items.length;
+      list.querySelectorAll('.cat-combo-item').forEach((el, j) => el.classList.toggle('active', j === active));
+      list.children[active]?.scrollIntoView({ block: 'nearest' });
+    };
+    const pick = o => {
+      if (multi) {
+        if (!o) return;
+        o.selected = !o.selected;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        render(active);
+        return;
+      }
+      close();
+      if (!o || o.value === sel.value) return;
+      sel.value = o.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const onDocDown = e => { if (!pop.contains(e.target) && !trigger.contains(e.target)) close(); };
+    const onScroll  = e => { if (!pop.contains(e.target)) close(); };
+    function close() {
+      pop.remove();
+      document.removeEventListener('mousedown', onDocDown, true);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', close);
+    }
+    pop._close = close;
+
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown')      { e.preventDefault(); if (items.length) highlight(active + 1); }
+      else if (e.key === 'ArrowUp')   { e.preventDefault(); if (items.length) highlight(active - 1); }
+      else if (e.key === 'Enter')     { e.preventDefault(); pick(items[active]); }
+      else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); close(); trigger.focus(); }
+      else if (e.key === 'Tab')       { close(); }
+    });
+    list.addEventListener('mousedown', e => {
+      const el = e.target.closest('.cat-combo-item');
+      if (!el) return;
+      e.preventDefault();
+      pick(items[+el.dataset.i]);
+    });
+    document.addEventListener('mousedown', onDocDown, true);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', close);
+    render();
+    // Open upward when there isn't room below.
+    const below = window.innerHeight - r.bottom;
+    if (below < pop.offsetHeight + 8 && r.top > below) pop.style.bottom = `${window.innerHeight - r.top + 2}px`;
+    else pop.style.top = `${r.bottom + 2}px`;
+    list.children[active]?.scrollIntoView({ block: 'nearest' });
+    input.focus();
+  };
+  trigger.addEventListener('mousedown', e => {
+    e.preventDefault();
+    if (document.querySelector('.pm-ss-pop')) { document.querySelector('.pm-ss-pop')._close(); return; }
+    open();
+  });
+  trigger.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); open(); }
+  });
+}
+
+
 // ── PM task completion status (separate from the stage / board column) ─────
 const PM_COMPLETION = { incomplete: 'Incomplete', complete: 'Complete', cancelled: 'Cancelled' };
 function pmCompletionOf(t) { return t?.completion_status || (t?.status === 'done' ? 'complete' : 'incomplete'); }
@@ -48478,6 +48572,7 @@ async function submitDeptCreate() {
   if (res.status === 201 || res.status === 200) {
     closeDeptCreateModal();
     toast('Department created', 'success');
+    document.dispatchEvent(new CustomEvent('departments:changed'));
     await loadDepartments();
   } else {
     const msg = res.body?.message || res.body?.errors?.name?.[0] || 'Failed to create department.';
@@ -57573,6 +57668,14 @@ async function submitDsCreate() {
     renderCrmRelationsGrid();
   }
 
+  // The department that owns a pipeline decides who sees it: its members, plus admins / "All Departments".
+  // `full` spells out "… department pipeline" where there is room (the detail header).
+  function _crmRelationDeptChip(relation, full = false) {
+    return relation.department?.name
+      ? `<span class="crm-relation-dept" title="Visible to the ${escHtml(relation.department.name)} department"><i class="fa fa-sitemap"></i> ${escHtml(relation.department.name)} department${full ? ' pipeline' : ''}</span>`
+      : `<span class="crm-relation-dept crm-relation-dept--none" title="No department owns this pipeline — only admins and All Departments users see it"><i class="fa fa-sitemap"></i> No department${full ? ' pipeline' : ''}</span>`;
+  }
+
   function _crmRelationCardEl(relation, onClick) {
     const count = relation.leads_count || 0;
     const card = document.createElement('div');
@@ -57585,7 +57688,7 @@ async function submitDsCreate() {
         <div class="crm-relation-card-name" title="${escHtml(relation.name)}">${escHtml(relation.name)}</div>
         <div class="crm-relation-card-desc">${relation.description ? escHtml(relation.description) : 'No description'}</div>
       </div>
-      <div class="crm-relation-card-count"><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</div>
+      <div class="crm-relation-card-count"><span><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</span>${_crmRelationDeptChip(relation)}</div>
     `;
     card.addEventListener('click', onClick || (() => openRelationDetail(relation.id)));
     card.querySelector('[data-del-relation]')?.addEventListener('click', e => {
@@ -57679,7 +57782,7 @@ async function submitDsCreate() {
     if (metaEl) metaEl.innerHTML = relation.description ? `<span>${escHtml(relation.description)}</span>` : '';
     const count = relation.leads_count || 0;
     const badgesEl = $('#crm-relation-hero-badges');
-    const badgeHtml = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+    const badgeHtml = `${_crmRelationDeptChip(relation, true)}<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
     if (badgesEl) badgesEl.innerHTML = badgeHtml;
     const headerBadgesEl = $('#crm-relation-header-badges'); if (headerBadgesEl) headerBadgesEl.innerHTML = badgeHtml;
   }
@@ -57798,6 +57901,8 @@ async function submitDsCreate() {
         <section class="crm-rd-card">
           <header class="crm-rd-card-head"><div><h4>Details</h4></div></header>
           <div class="crm-rd-desc">${relation.description ? escHtml(relation.description) : '<span class="crm-rd-muted">No description</span>'}</div>
+          <div class="crm-rd-desc crm-rd-visibility"><span class="crm-rd-muted">Visible to</span> ${_crmRelationDeptChip(relation)}
+            <span class="crm-rd-muted">${relation.department?.name ? 'members of this department, plus admins and All Departments users' : 'admins and All Departments users only — assign it a department in Org Structure'}</span></div>
         </section>
       </div>
     `;
@@ -57937,13 +58042,21 @@ async function submitDsCreate() {
   });
   $('#crm-history-more')?.addEventListener('click', () => loadCrmHistory({ append: true }));
   $('#crm-history-refresh')?.addEventListener('click', () => loadCrmHistory());
+  // The filter bar is sticky; day headers stick just below it. Its height changes
+  // when the filters wrap, so keep the offset in a CSS variable.
+  const _crmHistoryBar = $('#crm-relation-pane-history > .finance-toolbar');
+  if (_crmHistoryBar && window.ResizeObserver) {
+    new ResizeObserver(() => {
+      if (_crmHistoryBar.offsetHeight) $('#crm-relation-pane-history').style.setProperty('--crm-history-bar-h', `${_crmHistoryBar.offsetHeight - 16}px`);
+    }).observe(_crmHistoryBar);
+  }
 
   // ── History "View more" — 90% window drawing the trail as a React Flow diagram ──
   // Two views over the same payload: "Stage flow" (stages as nodes, observed moves as
   // weighted edges) and "Lead journeys" (one row per lead, each stage it passed through
   // left → right). Clicking any node or edge lists the matching audit entries on the right.
   const _CRM_HF_EVENT_COLORS = {
-    created: '#2563eb', stage_changed: '#0891b2', converted: '#16a34a',
+    created: '#4e8ef7', stage_changed: '#4e8ef7', converted: '#16a34a',
     lost: '#dc2626', reopened: '#d97706', deleted: '#b91c1c',
   };
   let _crmHfData = null;
@@ -58209,8 +58322,7 @@ async function submitDsCreate() {
     const TerminalNode = ({ data }) => h('div', { style: {
       background: data.color, color: '#fff', borderRadius: 24, padding: '0 18px', height: 46,
       display: 'flex', alignItems: 'center', gap: 8, fontWeight: 600, fontSize: 13, fontFamily: T.font,
-      backgroundImage: 'linear-gradient(rgba(255,255,255,.18),rgba(255,255,255,0))',
-      boxShadow: `0 0 0 .5px rgba(0,0,0,.12), 0 6px 16px ${data.color}55`, cursor: 'pointer', whiteSpace: 'nowrap',
+      cursor: 'pointer', whiteSpace: 'nowrap',
     }},
       _crmHfHandle(RF, 'target', 'Left', 'tgt-l'), _crmHfHandle(RF, 'source', 'Right', 'src-r'),
       _crmHfHandle(RF, 'target', 'Bottom', 'tgt-b'),
@@ -58218,7 +58330,7 @@ async function submitDsCreate() {
       h('span', { style: { background: 'rgba(255,255,255,.25)', borderRadius: 10, padding: '1px 8px', fontSize: 11 } }, data.count)
     );
 
-    const nodes = [{ id: 'start', type: 'hfTerminal', position: pos.start, data: { label: 'New leads', icon: 'fa-plus', color: '#2563eb', count: created } }];
+    const nodes = [{ id: 'start', type: 'hfTerminal', position: pos.start, data: { label: 'New leads', icon: 'fa-plus', color: 'var(--accent)', count: created } }];
     stages.forEach(s => {
       const st = stats[s.id];
       nodes.push({ id: String(s.id), type: 'hfStage', position: pos[s.id], data: {
@@ -58303,7 +58415,7 @@ async function submitDsCreate() {
       edgeTypes: { hfArc: ArcEdge },
       nodeTypes: { hfStage: StageNode, hfTerminal: TerminalNode },
       onNodeClick: (_e, n) => {
-        if (n.id === 'start') return _crmHfPanelEntries('New leads', 'fa-plus', '#2563eb', _crmHfAllSteps().filter(e => !e.from_stage), `${created} lead${created === 1 ? '' : 's'} entered this relation.`);
+        if (n.id === 'start') return _crmHfPanelEntries('New leads', 'fa-plus', '#4e8ef7', _crmHfAllSteps().filter(e => !e.from_stage), `${created} lead${created === 1 ? '' : 's'} entered this relation.`);
         if (n.id === 'end')   return _crmHfPanelEntries('Deleted leads', 'fa-trash', '#b91c1c', _crmHfAllSteps().filter(e => !e.to_stage), `${deleted} lead${deleted === 1 ? '' : 's'} removed.`);
         _crmHfPanelStage(n.data);
       },
@@ -58827,6 +58939,47 @@ async function submitDsCreate() {
     return `<span class="crm-fu-badge${f.overdue ? ' crm-fu-badge--overdue' : today ? ' crm-fu-badge--today' : ''}" title="${escHtml(title)}"><i class="fa fa-phone-volume"></i>${escHtml(label)}</span>`;
   }
 
+  /** A move into a stage that must be approved, waiting for the head — who gets approve / reject buttons. */
+  function _crmPendingMoveBadge(lead) {
+    const p = lead.pending_move;
+    if (!p) return '';
+    const title = `${p.requested_by_name || 'Someone'} asked to move this lead to “${p.to_stage_name || 'another stage'}”${p.requested_at ? ` · ${new Date(p.requested_at).toLocaleString()}` : ''}`;
+    const buttons = lead.can?.approve
+      ? `<button type="button" class="is-yes" data-move-approve="${p.id}" data-lead="${lead.id}" title="Approve the move"><i class="fa fa-check"></i></button>`
+        + `<button type="button" class="is-no" data-move-reject="${p.id}" data-lead="${lead.id}" title="Reject the move"><i class="fa fa-xmark"></i></button>`
+      : '';
+    return `<span class="crm-lead-pending" title="${escHtml(title)}"><i class="fa fa-hourglass-half"></i>→ ${escHtml(p.to_stage_name || '…')}${buttons}</span>`;
+  }
+
+  async function _crmDecideStageMove(leadId, requestId, approve) {
+    const lead = _findLead(leadId);
+    const to = lead?.pending_move?.to_stage_name || 'the stage';
+    let res;
+    if (approve) {
+      res = await API.crmApproveStageMove(leadId, requestId);
+    } else {
+      const asked = await _crmAskReason({ title: `Reject move to ${to}`, submitLabel: 'Reject' });
+      if (asked === null) return;
+      res = await API.crmRejectStageMove(leadId, requestId, asked.reason);
+    }
+    if (res.status === 200) {
+      toast(res.body?.message || (approve ? 'Approved.' : 'Rejected.'), 'success');
+    } else {
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      toast(firstError || res.body?.message || 'Could not record the decision.', 'error');
+    }
+    loadCrmPipeline(_crmProjectId, { silent: true });
+  }
+
+  /** A lead that has sat in its stage longer than the stage's time limit (entry_rules.max_days). */
+  function _crmStuckBadge(lead, col) {
+    const max = col.entry_rules?.max_days;
+    if (!max || !lead.stage_entered_at) return '';
+    const days = Math.floor((Date.now() - Date.parse(lead.stage_entered_at)) / 86400000);
+    if (days <= max) return '';
+    return `<span class="crm-lead-stuck" title="In “${escHtml(col.name)}” for ${days} days — the limit is ${max}"><i class="fa fa-stopwatch"></i>${days}d here</span>`;
+  }
+
   /** The rule-based suggestion, shown only when it differs from the manual score. */
   function _crmSuggestedHint(lead) {
     const s = lead.suggested_score;
@@ -58859,25 +59012,104 @@ async function submitDsCreate() {
   // A lost stage needs a lost reason and some stages a free-text reason; pending approval /
   // quotation sent are only set by the quotation workflow. Resolves the extra move payload,
   // or null when the move isn't allowed or was cancelled.
-  function _crmMoveDetails(stageId) {
+  // Custom stages add their rules first: the checklist of the stage the lead leaves, and — for
+  // heads / admins, whom approval and the lock let through — a confirmation, so the rule is seen.
+  async function _crmMoveDetails(stageId, leadId = null) {
     const col = (_crmPipeline?.columns || []).find(c => c.id === stageId);
-    if (!col) return Promise.resolve({});
+    if (!col) return {};
     if (col.is_reserved) {
       toast(`"${col.name}" is set automatically by the quotation workflow.`, 'error');
-      return Promise.resolve(null);
+      return null;
     }
-    const lost = col.is_lost || col.system_key === 'lost';
-    if (!lost && !col.requires_reason) return Promise.resolve({});
-    return _crmAskReason({ title: `Move to ${col.name}`, lost, reasonRequired: !lost });
+    const lead = leadId ? _findLead(leadId) : null;
+    const fromCol = lead ? (_crmPipeline?.columns || []).find(c => c.id === lead.stage_id) : null;
+    if (lead && fromCol && fromCol.id !== col.id) {
+      const open = (fromCol.exit_checklist || []).filter(i => !(lead.checklist_done || []).includes(i));
+      if (open.length) {
+        _crmOpenChecklist(lead.id, `Finish the "${fromCol.name}" checklist before moving this lead on.`);
+        return null;
+      }
+      if (fromCol.locks_lead && !await appConfirm({ title: 'This lead is locked', message: `"${lead.name}" is locked in "${fromCol.name}" — staff can't edit or move it. As a head or admin you still can. Move it anyway?`, confirmText: '<i class="fa fa-lock-open"></i> Move anyway', icon: 'fa-lock' })) return null;
+      if (col.needs_approval && lead.can?.approve && !await appConfirm({ title: `"${col.name}" must be approved`, message: `Staff need approval to move leads here. You are an approver — approve and move "${lead.name}" now?`, confirmText: '<i class="fa fa-shield-halved"></i> Approve & move', icon: 'fa-shield-halved' })) return null;
+    }
+    // A lost stage can have its lost reason switched off (Stage behaviour); older servers don't send the flag
+    const lostStage = col.is_lost || col.system_key === 'lost';
+    const lost = lostStage && col.asks_lost_reason !== false;
+    const fields = col.entry_rules?.require || [];
+    const reasonRequired = !lostStage && !!col.requires_reason;
+    if (!lost && !reasonRequired && !fields.length) return {};
+    return _crmAskReason({ title: `Move to ${col.name}${col.needs_approval && !lead?.can?.approve ? ' (needs approval)' : ''}`, lost, reasonRequired, fields });
   }
 
-  function _crmAskReason({ title, lost = false, reasonRequired = false, submitLabel = 'Move' }) {
+  /** "☑ 1/3" on a card in a stage with a checklist; opens the checklist. */
+  function _crmChecklistChip(lead, col) {
+    const items = col.exit_checklist || [];
+    if (!items.length) return '';
+    const done = items.filter(i => (lead.checklist_done || []).includes(i)).length;
+    return `<button type="button" class="crm-lead-check${done === items.length ? ' is-done' : ''}" data-checklist-lead="${lead.id}" title="Checklist before leaving “${escHtml(col.name)}”"><i class="fa fa-${done === items.length ? 'square-check' : 'list-check'}"></i>${done}/${items.length}</button>`;
+  }
+
+  let _crmChecklistLeadId = null, _crmChecklistDirty = false;
+
+  function _crmOpenChecklist(leadId, notice = '') {
+    const lead = _findLead(leadId);
+    const col = lead && (_crmPipeline?.columns || []).find(c => c.id === lead.stage_id);
+    if (!col?.exit_checklist?.length) return;
+    _crmChecklistLeadId = leadId;
+    _crmChecklistDirty = false;
+    const canTick = _crmLeadCan(lead, 'edit');
+    $('#crm-checklist-title').textContent = `${col.name} — ${lead.name}`;
+    const alertEl = $('#crm-checklist-alert');
+    alertEl.textContent = notice || (canTick ? '' : 'Only someone who can edit this lead can tick items.');
+    alertEl.style.display = alertEl.textContent ? '' : 'none';
+    $('#crm-checklist-items').innerHTML = col.exit_checklist.map(item =>
+      `<label class="crm-checklist-item"><input type="checkbox" data-checklist-item="${escHtml(item)}"${(lead.checklist_done || []).includes(item) ? ' checked' : ''}${canTick ? '' : ' disabled'}> <span>${escHtml(item)}</span></label>`).join('');
+    $('#crm-checklist-modal').style.display = 'flex';
+  }
+
+  $('#crm-checklist-items')?.addEventListener('change', async e => {
+    const box = e.target.closest('[data-checklist-item]');
+    if (!box || !_crmChecklistLeadId) return;
+    box.disabled = true;
+    const res = await API.crmSetChecklistItem(_crmChecklistLeadId, box.dataset.checklistItem, box.checked);
+    box.disabled = false;
+    if (res.status !== 200) {
+      box.checked = !box.checked;
+      toast(res.body?.message || 'Could not update the checklist.', 'error');
+      return;
+    }
+    _crmChecklistDirty = true;
+    // Keep the board's copy in step so a move right after sees the ticks
+    for (const c of _crmPipeline?.columns || []) {
+      const l = c.leads.find(x => x.id === _crmChecklistLeadId);
+      if (l) l.checklist_done = res.body?.data?.checklist_done || [];
+    }
+  });
+  const _crmCloseChecklist = () => {
+    $('#crm-checklist-modal').style.display = 'none';
+    if (_crmChecklistDirty) loadCrmPipeline(_crmProjectId, { silent: true });
+    _crmChecklistLeadId = null;
+  };
+  $('#crm-checklist-close')?.addEventListener('click', _crmCloseChecklist);
+  $('#crm-checklist-done')?.addEventListener('click', _crmCloseChecklist);
+
+  // Inputs for the details a stage asks for on entry: key => [input, message when left empty]
+  const _CRM_MOVE_FIELDS = {
+    follow_up_at:        ['#crm-move-follow-up',  'Pick a follow-up date.'],
+    expected_close_date: ['#crm-move-close-date', 'Pick the expected close date.'],
+    estimated_value:     ['#crm-move-value',      'Enter the deal value.'],
+  };
+
+  function _crmAskReason({ title, lost = false, reasonRequired = false, submitLabel = 'Move', fields = [] }) {
     const modal   = $('#crm-move-reason-modal');
     const sel     = $('#crm-move-reason-lost');
     const text    = $('#crm-move-reason-text');
     const alertEl = $('#crm-move-reason-alert');
     $('#crm-move-reason-title').textContent = title;
     $('#crm-move-reason-lost-wrap').style.display = lost ? '' : 'none';
+    $$('#crm-move-reason-modal [data-move-field]').forEach(w => { w.style.display = fields.includes(w.dataset.moveField) ? '' : 'none'; });
+    Object.values(_CRM_MOVE_FIELDS).forEach(([id]) => { $(id).value = ''; });
+    $('#crm-move-follow-up').min = new Date().toLocaleDateString('en-CA');
     sel.innerHTML = '<option value="">— Pick a reason —</option>'
       + (_crmPipeline?.lost_reasons || []).map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
     $('#crm-move-reason-text-label').textContent = lost ? 'Note (optional)' : reasonRequired ? 'Reason *' : 'Reason (optional)';
@@ -58902,7 +59134,15 @@ async function submitDsCreate() {
         const note = text.value.trim();
         if (lost && !sel.value) return fail('Pick a lost reason.');
         if (reasonRequired && !note) return fail('A reason is required.');
-        finish(lost ? { lost_reason_id: parseInt(sel.value), lost_reason: note || null } : { reason: note || null });
+        const details = {};
+        for (const key of fields) {
+          const [id, msg] = _CRM_MOVE_FIELDS[key] || [];
+          if (!id) continue;
+          const v = $(id).value.trim();
+          if (!v) { $(id).focus(); return fail(msg); }
+          details[key] = key === 'estimated_value' ? parseFloat(v) : v;
+        }
+        finish({ ...(lost ? { lost_reason_id: parseInt(sel.value), lost_reason: note || null } : { reason: note || null }), ...details });
       };
       const onCancel   = () => finish(null);
       const onBackdrop = e => { if (e.target === modal) finish(null); };
@@ -59101,11 +59341,15 @@ async function submitDsCreate() {
   $('#crm-pipeline-list')?.addEventListener('change', async e => {
     const sel = e.target.closest('select[data-move-lead]');
     if (!sel) return;
-    const extra = await _crmMoveDetails(parseInt(sel.value));
+    const extra = await _crmMoveDetails(parseInt(sel.value), parseInt(sel.dataset.moveLead));
     if (extra === null) { sel.value = sel.dataset.fromStage; return; }
     sel.disabled = true;
     const res = await API.crmMoveLead(parseInt(sel.dataset.moveLead), parseInt(sel.value), extra);
     if (res.status === 200) {
+      loadCrmPipeline(_crmProjectId, { silent: true });
+    } else if (res.status === 202) {
+      // Sent for approval: the lead stays put until the head decides
+      toast(res.body?.message || 'Sent for approval.', 'info');
       loadCrmPipeline(_crmProjectId, { silent: true });
     } else {
       sel.value = sel.dataset.fromStage;
@@ -59189,6 +59433,10 @@ async function submitDsCreate() {
         const tags = (lead.is_customer ? `<span class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Customer</span>` : '')
           + (lead.needs_review ? `<span class="crm-inbox-flag" title="Flagged for Marketing to review"><i class="fa fa-flag"></i> Review</span>` : '')
           + _crmFollowUpBadge(lead)
+          + (closed ? '' : _crmStuckBadge(lead, col))
+          + _crmPendingMoveBadge(lead)
+          + (col.locks_lead ? '<span class="crm-lead-stuck crm-lead-locked" title="Locked in this stage — only the head or an admin can edit or move it"><i class="fa fa-lock"></i>Locked</span>' : '')
+          + _crmChecklistChip(lead, col)
           + _crmScoreBadge(lead.score)
           + (closed ? '' : _crmSuggestedHint(lead))
           + _crmSourceBadge(lead.source)
@@ -59220,14 +59468,19 @@ async function submitDsCreate() {
       const countHtml = filtering
         ? `<span class="crm-col-count crm-col-count--filtered" title="${matched.length} of ${col.leads_count} match">${matched.length}</span>`
         : `<span class="crm-col-count">${col.leads_count}</span>`;
-      const stateIcon = col.is_won ? '<i class="fa fa-trophy crm-col-state" title="Won stage"></i>'
-        : col.is_lost ? '<i class="fa fa-circle-xmark crm-col-state" title="Lost stage"></i>' : '';
+      const stateIcon = (col.is_won ? '<i class="fa fa-trophy crm-col-state" title="Won stage"></i>'
+        : col.is_lost ? '<i class="fa fa-circle-xmark crm-col-state" title="Lost stage"></i>' : '')
+        // A custom stage's rules, so the team sees them on the board
+        + (col.needs_approval ? '<i class="fa fa-shield-halved crm-col-state" title="Must be approved — the department head approves moves into this stage"></i>' : '')
+        + (col.locks_lead ? '<i class="fa fa-lock crm-col-state" title="Locked — only the head or an admin can edit or move leads here"></i>' : '')
+        + (col.no_skip ? '<i class="fa fa-arrow-right-to-bracket crm-col-state" title="No skipping — leads enter only from the stage before"></i>' : '')
+        + (col.exit_checklist?.length ? `<i class="fa fa-list-check crm-col-state" title="Checklist before leaving: ${escHtml(col.exit_checklist.join(', '))}"></i>` : '');
 
       return `<div class="crm-col${col.is_won ? ' crm-col--won' : ''}${col.is_lost ? ' crm-col--lost' : ''}" data-stage-id="${col.id}" style="--stage:${escHtml(col.color)}">
         <div class="crm-col-head">
           <div class="crm-col-title">
-            <span class="crm-col-swatch"></span>
-            <span class="crm-col-name">${escHtml(col.name)}</span>
+            ${col.icon ? `<i class="fa ${escHtml(col.icon)} crm-col-ico"></i>` : '<span class="crm-col-swatch"></span>'}
+            <span class="crm-col-name" title="${escHtml(col.description || _crmStatus(_crmStageStatusKey(col))?.description || '')}">${escHtml(col.name)}</span>
             ${stateIcon}
             ${countHtml}
             ${!closed
@@ -59293,7 +59546,7 @@ async function submitDsCreate() {
         if (!leadId || toStage === fromStage || !cardEl) return;
 
         // Lost / reason-requiring stages ask first; reserved stages refuse the drop
-        const extra = await _crmMoveDetails(toStage);
+        const extra = await _crmMoveDetails(toStage, leadId);
         if (extra === null) return;
 
         // Move the card in the DOM immediately — don't wait on the network
@@ -59315,12 +59568,17 @@ async function submitDsCreate() {
           // without blanking the board the optimistic move already updated.
           loadCrmPipeline(_crmProjectId, { silent: true });
         } else {
-          // Revert: move the card back to its original column.
+          // Revert: move the card back to its original column (also when the move went for approval).
           fromBody?.querySelector('.crm-col-empty')?.remove();
           fromBody?.insertBefore(cardEl, fromBody.querySelector('.crm-col-more'));
           cardEl.dataset.stageId = fromStage;
           _crmAdjustColCount(toStage, -1, col);
           _crmAdjustColCount(fromStage, 1, fromBody);
+          if (res.status === 202) {
+            toast(res.body?.message || 'Sent for approval.', 'info');
+            loadCrmPipeline(_crmProjectId, { silent: true });
+            return;
+          }
           const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
           toast(firstError || res.body?.message || 'Failed to move lead.', 'error');
         }
@@ -59349,6 +59607,23 @@ async function submitDsCreate() {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         _crmDeleteLead(parseInt(btn.dataset.leadId));
+      });
+    });
+
+    // ── A card's stage checklist ──────────────────────────────────────────
+    board.querySelectorAll('[data-checklist-lead]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _crmOpenChecklist(parseInt(btn.dataset.checklistLead));
+      });
+    });
+
+    // ── Approve / reject a move waiting for approval ──────────────────────
+    board.querySelectorAll('[data-move-approve], [data-move-reject]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const approve = !!btn.dataset.moveApprove;
+        _crmDecideStageMove(parseInt(btn.dataset.lead), parseInt(btn.dataset.moveApprove || btn.dataset.moveReject), approve);
       });
     });
 
@@ -59685,7 +59960,7 @@ async function submitDsCreate() {
     </div>`;
   }
 
-  // ── Horizontal lead timeline, pinned above the Lead Details body ──
+  // ── Horizontal lead timeline, shown at the top of the Lead Details "Timeline" tab ──
   // Oldest → newest left to right, cards alternating above/below the line and joined to it
   // by flowing dashed connectors. Clicking a card shows that event's full record underneath.
   let _crmTimelineSelected = null;
@@ -59706,7 +59981,7 @@ async function submitDsCreate() {
   function _crmRenderLeadHistory() {
     const box = $('#crm-lead-view-timeline');
     if (!box) return;
-    box.style.display = _crmViewEditing || _crmLeadTab !== 'overview' ? 'none' : '';
+    box.style.display = _crmViewEditing || _crmLeadTab !== 'timeline' ? 'none' : '';
     const msg = text => { box.innerHTML = `<div class="crm-tl-msg">${text}</div>`; };
     if (_crmViewHistory === null)  return msg('<i class="fa fa-spinner fa-spin"></i> Loading timeline…');
     if (_crmViewHistory === false) return msg('Failed to load timeline.');
@@ -59893,7 +60168,7 @@ async function submitDsCreate() {
     // Workspace counts — each row opens its tab
     const counts  = _crmWs.info?.counts;
     const overdue = _crmWs.info?.follow_ups_overdue || 0;
-    const wsRow = (tab, icon, color, label, n, note = '') => `
+    const wsRow = (tab, icon, color, label, n, note = '') => _CRM_LEAD_TAB_KEYS[tab] && !_crmCan(_CRM_LEAD_TAB_KEYS[tab]) ? '' : `
       <button type="button" class="crm-lead-view-item crm-lv-link" data-ws-tab="${tab}">
         <span class="crm-lead-view-label"><span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${color}"><i class="fa ${icon}"></i></span>${label}</span>
         <span class="crm-lead-view-value${n ? '' : ' crm-lead-view-value--empty'}">${note}${n ?? '—'}<i class="fa fa-chevron-right crm-lv-chev"></i></span>
@@ -59920,6 +60195,10 @@ async function submitDsCreate() {
 
     // Editing always shows the record; viewing shows the tab bar and the chosen tab
     const overview = editing || _crmLeadTab === 'overview';
+    // The horizontal timeline lives in the Timeline tab. Park it outside the body first so
+    // rebuilding the body doesn't destroy it (it keeps its listeners and scroll position).
+    const tl = $('#crm-lead-view-timeline');
+    if (tl) $('#crm-lead-view-body').before(tl);
     $('#crm-lead-view-body').innerHTML = head
       + (editing ? '' : _crmLeadTabsHtml())
       + (overview
@@ -59928,10 +60207,18 @@ async function submitDsCreate() {
             ? `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
             : `<div class="crm-lv-cols"><div class="crm-lv-stack"><div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>${pipeline}</div>${rest}</div>`)
         : '<div id="crm-ws-panel" class="crm-ws-panel"></div>');
-    // Only show/hide the timeline here — rebuilding it on every body render (e.g. when the
-    // form fields finish loading) re-laid it out and re-scrolled it for nothing.
-    const tl = $('#crm-lead-view-timeline');
-    if (tl) tl.style.display = overview && !editing ? '' : 'none';
+    // Only move / show / hide the timeline here — rebuilding it on every body render (e.g. when
+    // the form fields finish loading) re-laid it out and re-scrolled it for nothing.
+    const showTl = !editing && _crmLeadTab === 'timeline';
+    if (tl) {
+      const wasHidden = tl.style.display === 'none';
+      tl.style.display = showTl ? '' : 'none';
+      if (showTl) {
+        $('#crm-ws-panel').before(tl);
+        const scroller = tl.querySelector('.crm-tl-scroll');
+        if (scroller && wasHidden) scroller.scrollLeft = scroller.scrollWidth; // latest event in view
+      }
+    }
     if (!overview) _crmRenderWsTab();
 
     $('#crm-lead-view-title').textContent = editing ? 'Edit Lead' : 'Lead Details';
@@ -59956,7 +60243,7 @@ async function submitDsCreate() {
     // Won: links the lead to its customer (existing match by phone / email, or a new one) and can
     // create an invoice, sales order or project from the accepted quotation. A won lead can still
     // get its document afterwards.
-    if (!stage.is_lost && lead.can?.convert === true) {
+    if (!stage.is_lost && lead.can?.convert === true && lead.can?.close !== false) {
       btns.push(stage.is_won
         ? '<button class="po-btn-ghost" data-crm-lead-action="won" style="color:#10b981"><i class="fa fa-file-invoice"></i> Invoice / Order / Project…</button>'
         : '<button class="po-btn-ghost" data-crm-lead-action="won" style="color:#10b981"><i class="fa fa-trophy"></i> Mark Won…</button>');
@@ -59965,15 +60252,17 @@ async function submitDsCreate() {
     if (closed && lead.can?.reopen === true) {
       btns.push('<button class="po-btn-ghost" data-crm-lead-action="reopen"><i class="fa fa-rotate-left"></i> Reopen…</button>');
     }
-    if (!_crmLeadCan(lead, 'move')) return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
-    const hasHold = (_crmPipeline?.stages || []).some(s => s.is_on_hold);
-    if (stage.is_on_hold) {
-      const from = (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id);
-      btns.push(`<button class="po-btn-ghost" data-crm-lead-action="resume"><i class="fa fa-play"></i> Resume${from ? ` (back to ${escHtml(from.name)})` : ''}</button>`);
-    } else if (!closed && hasHold) {
-      btns.push('<button class="po-btn-ghost" data-crm-lead-action="hold"><i class="fa fa-pause"></i> Put on Hold</button>');
+    if (_crmLeadCan(lead, 'move')) {
+      const hasHold = (_crmPipeline?.stages || []).some(s => s.is_on_hold);
+      if (stage.is_on_hold) {
+        const from = (_crmPipeline?.stages || []).find(s => s.id === lead.on_hold_from_stage_id);
+        btns.push(`<button class="po-btn-ghost" data-crm-lead-action="resume"><i class="fa fa-play"></i> Resume${from ? ` (back to ${escHtml(from.name)})` : ''}</button>`);
+      } else if (!closed && hasHold) {
+        btns.push('<button class="po-btn-ghost" data-crm-lead-action="hold"><i class="fa fa-pause"></i> Put on Hold</button>');
+      }
     }
-    if (!closed) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
+    // Lost: "Win / lose leads" (lead.can.close), separate from moving
+    if (!closed && lead.can?.edit !== false && lead.can?.close !== false) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
     return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
   }
 
@@ -60247,6 +60536,8 @@ async function submitDsCreate() {
     ['quotations', 'fa-file-invoice-dollar', 'Quotations'],
     ['followups', 'fa-phone-volume', 'Follow-ups'],
   ];
+  // Lead-window tabs a blocked CRM function hides
+  const _CRM_LEAD_TAB_KEYS = { tasks: 'tasks_view', quotations: 'quotations_view', followups: 'followups_view' };
   let _crmLeadTab = 'overview';
   // { leadId, info (workspace), timeline / messages / files / tasks ({ data, meta } | false), timelineType, replyTo }
   let _crmWs = { leadId: null };
@@ -60258,7 +60549,7 @@ async function submitDsCreate() {
     const shown = compact ? list.slice(0, 2) : list;
     const title = 'Working on it: ' + list.map(a => a.name + (a.is_primary && list.length > 1 ? ' (primary)' : '')).join(', ');
     return `<span class="crm-assignees" title="${escHtml(title)}">${shown.map(a =>
-      `<span class="crm-assignee${a.is_primary && list.length > 1 ? ' crm-assignee--primary' : ''}"><span class="crm-assignee-av" style="--av:${_crmAvatarColor(a.name)}">${escHtml(_crmInitials(a.name))}</span><span class="crm-assignee-name">${escHtml(compact ? a.name.split(' ')[0] : a.name)}</span></span>`
+      `<span class="crm-assignee${a.is_primary && list.length > 1 ? ' crm-assignee--primary' : ''}"><span class="crm-assignee-av">${escHtml(_crmInitials(a.name))}</span><span class="crm-assignee-name">${escHtml(compact ? a.name.split(' ')[0] : a.name)}</span></span>`
     ).join('')}${list.length > shown.length ? `<span class="crm-assignee crm-assignee--more">+${list.length - shown.length}</span>` : ''}</span>`;
   }
 
@@ -60268,7 +60559,7 @@ async function submitDsCreate() {
 
   function _crmLeadTabsHtml() {
     const counts = _crmWs.info?.counts || {};
-    return `<div class="crm-ws-tabs">${_CRM_LEAD_TABS.map(([key, icon, label]) => {
+    return `<div class="crm-ws-tabs">${_CRM_LEAD_TABS.filter(([key]) => !_CRM_LEAD_TAB_KEYS[key] || _crmCan(_CRM_LEAD_TAB_KEYS[key])).map(([key, icon, label]) => {
       const n = key === 'followups' ? counts.follow_ups : counts[key];
       // Follow-ups: red when any is overdue
       const overdue = key === 'followups' && _crmWs.info?.follow_ups_overdue > 0;
@@ -60349,6 +60640,7 @@ async function submitDsCreate() {
     const panel = $('#crm-ws-panel');
     const lead  = _crmViewLead;
     const tab   = _crmLeadTab;
+    _crmQtSyncEditor();
     if (!panel || !lead) return;
     if (_crmWs[tab] === undefined) {
       panel.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
@@ -60362,6 +60654,7 @@ async function submitDsCreate() {
       _crmChatAutosize();
       const feed = $('#crm-ws-panel .crm-chat-feed');
       if (feed) feed.scrollTop = feed.scrollHeight;
+      _crmChatShowHit();   // while searching, keep the current match in view instead
     }
     if (tab === 'files' || tab === 'messages') _crmWsLoadPreviews(lead);
   }
@@ -60384,9 +60677,28 @@ async function submitDsCreate() {
   function _crmWsTimelineHtml() {
     const { data = [], meta = {} } = _crmWs.timeline;
     const type = _crmWs.timelineType || '';
-    const rows = type ? data.filter(e => e.type === type) : data;
+    const who  = _crmWs.timelineWho || '';
+    const q    = (_crmWs.timelineQuery || '').trim().toLowerCase();
+    const label = k => (meta.types || []).find(t => t.key === k)?.label || k;
+    // Type, person and search all apply together; search looks at who, what, the note and the type
+    const rows = data.filter(e => (!type || e.type === type)
+      && (!who || (e.user?.name || 'System') === who)
+      && (!q || [e.user?.name || 'System', e.title, e.body, label(e.type)].some(s => s && String(s).toLowerCase().includes(q))));
     const filters = [['', 'All'], ...(meta.types || []).map(t => [t.key, t.label])]
       .map(([k, l]) => `<button type="button" class="crm-ws-filter${k === type ? ' active' : ''}" data-ws-tl-type="${k}">${escHtml(l)}</button>`).join('');
+    const people = [...new Set(data.map(e => e.user?.name || 'System'))].sort();
+    const tools = data.length ? `<div class="crm-tlf-tools">
+        ${people.length > 1 ? `<label class="crm-fm-pop" title="Done by"><i class="fa fa-user"></i><select id="crm-tl-who"><option value="">Everyone</option>${people.map(n => `<option value="${escHtml(n)}"${n === who ? ' selected' : ''}>${escHtml(n)}</option>`).join('')}</select></label>` : ''}
+        <label class="crm-fm-search"><i class="fa fa-magnifying-glass"></i><input id="crm-tl-q" type="search" placeholder="Search timeline" value="${escHtml(_crmWs.timelineQuery || '')}"></label>
+      </div>` : '';
+    // Wrap search hits in <mark> — done on the escaped text, so the query is escaped the same way
+    const hl = s => {
+      const t = escHtml(s);
+      if (!q) return t;
+      const re = new RegExp(escHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      return t.replace(re, m => `<mark class="crm-tlf-hit">${m}</mark>`);
+    };
+    const filtered = type || who || q;
     // Grouped by day (Today / Yesterday / date), one rounded panel per day
     let list = '', lastDay = null;
     rows.forEach(e => {
@@ -60400,20 +60712,25 @@ async function submitDsCreate() {
         <div class="crm-tlf-row">
           <span class="crm-tlf-icon" style="--ic:${escHtml(e.color)}"><i class="fa ${escHtml(e.icon)}"></i></span>
           <div class="crm-tlf-main">
-            <div class="crm-tlf-title"><strong>${escHtml(e.user?.name || 'System')}</strong> ${escHtml(e.title)}</div>
-            ${e.body ? `<div class="crm-tlf-body">${escHtml(e.body)}</div>` : ''}
+            <div class="crm-tlf-title"><strong>${hl(e.user?.name || 'System')}</strong> ${hl(e.title)}</div>
+            ${e.body ? `<div class="crm-tlf-body">${hl(e.body)}</div>` : ''}
           </div>
           ${e.at ? `<div class="crm-tlf-time" title="${escHtml(_crmFmtDateTime(e.at))}">${escHtml(new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}<small>${escHtml(_crmFmtAgo(e.at))}</small></div>` : ''}
         </div>`;
     });
     if (lastDay !== null) list += '</div>';
-    return `<div class="crm-ws-filters">${filters}</div>
-      <div class="crm-tlf-layout"><div class="crm-tlf">${list || _crmWsPanelHtml('Nothing here yet.')}</div>${_crmWsTimelineSideHtml(data, meta, type)}</div>`;
+    const empty = data.length && filtered
+      ? _crmWsPanelHtml('No events match these filters. <button type="button" class="po-btn-ghost" data-ws-tl-clear>Clear filters</button>')
+      : _crmWsPanelHtml('Nothing here yet.');
+    const summary = filtered && rows.length
+      ? `<div class="crm-tlf-summary">Showing ${rows.length} of ${data.length} events <button type="button" class="crm-tlf-clear" data-ws-tl-clear>Clear filters</button></div>` : '';
+    return `<div class="crm-tlf-bar-top"><div class="crm-ws-filters">${filters}</div>${tools}</div>
+      <div class="crm-tlf-layout"><div class="crm-tlf">${summary}${list || empty}</div>${_crmWsTimelineSideHtml(data, meta, type, who)}</div>`;
   }
 
   // Inspector beside the timeline: totals, events by type (click to filter), people, first / latest activity.
   // Always counts the whole timeline, not just the current filter.
-  function _crmWsTimelineSideHtml(data, meta, type) {
+  function _crmWsTimelineSideHtml(data, meta, type, whoActive) {
     if (!data.length) return '';
     const byType = {}, people = {};
     data.forEach(e => {
@@ -60430,15 +60747,15 @@ async function submitDsCreate() {
     const types = Object.entries(byType).sort((a, b) => b[1].n - a[1].n).map(([k, t]) => `
       <button type="button" class="crm-tlf-side-row crm-tlf-type${k === type ? ' active' : ''}" data-ws-tl-type="${k === type ? '' : escHtml(k)}" title="${k === type ? 'Show all' : `Show only ${escHtml(label(k))}`}">
         <span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${escHtml(t.color)}"><i class="fa ${escHtml(t.icon)}"></i></span>
-        <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(label(k))}</span><span class="crm-tlf-bar"><span style="width:${Math.round(t.n / max * 100)}%;background:${escHtml(t.color)}"></span></span></span>
+        <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(label(k))}</span><span class="crm-tlf-bar"><span style="width:${Math.round(t.n / max * 100)}%;background:var(--accent)"></span></span></span>
         <span class="crm-tlf-side-n">${t.n}</span>
       </button>`).join('');
     const who = Object.entries(people).sort((a, b) => b[1] - a[1]).map(([name, n]) => `
-      <div class="crm-tlf-side-row">
+      <button type="button" class="crm-tlf-side-row crm-tlf-type${name === whoActive ? ' active' : ''}" data-ws-tl-who="${name === whoActive ? '' : escHtml(name)}" title="${name === whoActive ? 'Show everyone' : `Show only ${escHtml(name)}`}">
         <span class="crm-assign-av${name === 'System' ? ' crm-tlf-av--sys' : ''}">${name === 'System' ? '<i class="fa fa-gear"></i>' : escHtml(initials(name))}</span>
         <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(name)}</span></span>
         <span class="crm-tlf-side-n">${n}</span>
-      </div>`).join('');
+      </button>`).join('');
     const first = times[0], last = times[times.length - 1];
 
     return `<aside class="crm-tlf-side">
@@ -60488,6 +60805,7 @@ async function submitDsCreate() {
               <summary class="crm-chat-icon" title="Mention people (or type @)"><i class="fa fa-at"></i></summary>
               <div class="crm-msg-menu">
                 <div class="crm-msg-menu-title">Notify people</div>
+                <label class="crm-msg-menu-search"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-msg-menu-q" placeholder="Search people" autocomplete="off"></label>
                 ${users.map(u => `<label class="crm-msg-menu-row" data-name="${escHtml((u.name || '').toLowerCase())}"><input type="checkbox" value="${u.id}" data-ws-mention${chosen.includes(u.id) ? ' checked' : ''}><span class="crm-msg-check"><i class="fa fa-check"></i></span><span class="crm-assign-av">${escHtml(initials(u.name))}</span><span>${escHtml(u.name)}</span></label>`).join('')}
                 <div class="crm-msg-menu-none">No one matches</div>
               </div>
@@ -60512,24 +60830,52 @@ async function submitDsCreate() {
       </button>`;
     }).join('')}</div>` : '';
 
+    // Search: matches are highlighted in the bubbles and listed newest first above the feed (like WhatsApp)
+    const q    = (_crmWs.msgQ || '').trim();
+    const hits = _crmChatHits();
+    const cur  = hits[Math.min(_crmWs.msgHit ?? Infinity, hits.length - 1)];
+    const re   = q ? new RegExp(escHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi') : null;
+    const hl   = s => re ? escHtml(s).replace(re, x => `<mark class="crm-chat-hit">${x}</mark>`) : escHtml(s);
+    // A short piece of the text around the first match
+    const snippet = m => {
+      const text = m.body || (m.attachments || []).map(f => f.name).join(', ');
+      const at = text.toLowerCase().indexOf(q.toLowerCase());
+      const from = Math.max(0, at - 30);
+      return (from ? '…' : '') + hl(text.slice(from, from + 120)) + (text.length > from + 120 ? '…' : '');
+    };
+    const days  = data.map(m => m.created_at).filter(Boolean).map(_crmChatDayKey).sort();
+    const find  = data.length ? `
+      <div class="crm-chat-find">
+        <label class="crm-fm-search crm-chat-find-q"><i class="fa fa-magnifying-glass"></i><input id="crm-chat-q" type="search" placeholder="Search messages" autocomplete="off" value="${escHtml(_crmWs.msgQ || '')}"></label>
+        <span class="crm-chat-find-meta">${q ? `<span>${hits.length ? `${hits.indexOf(cur) + 1} of ${hits.length}` : 'No results'}</span>
+          <button type="button" class="crm-chat-icon" data-ws-find-step="-1" title="Older match (Enter)"${hits.indexOf(cur) > 0 ? '' : ' disabled'}><i class="fa fa-chevron-up"></i></button>
+          <button type="button" class="crm-chat-icon" data-ws-find-step="1" title="Newer match (Shift+Enter)"${cur && hits.indexOf(cur) < hits.length - 1 ? '' : ' disabled'}><i class="fa fa-chevron-down"></i></button>` : ''}</span>
+        <label class="crm-chat-find-date" title="Jump to a date"><i class="fa fa-calendar-day"></i><input id="crm-chat-date" type="date" min="${days[0] || ''}" max="${days[days.length - 1] || ''}"></label>
+      </div>` : '';
+    const results = `<div class="crm-chat-results">${q && hits.length ? [...hits].reverse().map(m => `
+      <button type="button" class="crm-chat-result${m === cur ? ' active' : ''}" data-ws-find-go="${hits.indexOf(m)}">
+        <span class="crm-chat-result-top"><b>${escHtml(m.user?.id === meta.me ? 'You' : m.user?.name || 'Deleted user')}</b><small>${escHtml(_crmFmtDateTime(m.created_at))}</small></span>
+        <span class="crm-chat-result-txt">${snippet(m)}</span>
+      </button>`).join('') : ''}</div>`;
+
     // Flat conversation, oldest first; a reply quotes the message it answers.
     // Back-to-back messages from one person (same day, < 5 min apart) share one avatar and name.
     let list = '', lastDay = null, prev = null;
     [...data].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).forEach(m => {
       const day = m.created_at ? _osmDay(m.created_at) : '';
-      if (day !== lastDay) { list += day ? `<div class="crm-chat-day"><span>${escHtml(day)}</span></div>` : ''; lastDay = day; prev = null; }
+      if (day !== lastDay) { list += day ? `<div class="crm-chat-day" data-ws-day="${_crmChatDayKey(m.created_at)}"><span>${escHtml(day)}</span></div>` : ''; lastDay = day; prev = null; }
       const mine = meta.me != null && m.user?.id === meta.me;
       const parent = m.parent_id ? byId[m.parent_id] : null;
       const cont = prev && !parent && prev.user?.id === m.user?.id && new Date(m.created_at) - new Date(prev.created_at) < 5 * 60000;
       prev = m;
       const time = new Date(m.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
       list += `
-        <div class="crm-chat-row${mine ? ' crm-chat-row--mine' : ''}${cont ? ' crm-chat-row--cont' : ''}" data-ws-msg="${m.id}">
+        <div class="crm-chat-row${mine ? ' crm-chat-row--mine' : ''}${cont ? ' crm-chat-row--cont' : ''}${m === cur ? ' crm-chat-row--hit' : ''}" data-ws-msg="${m.id}">
           ${mine ? '' : cont ? '<span class="crm-chat-gap"></span>' : _crmAvatarHtml(m.user, 30)}
           <div class="crm-chat-col">
             ${!mine && !cont ? `<div class="crm-chat-name">${escHtml(m.user?.name || 'Deleted user')}</div>` : ''}
             ${parent ? `<button type="button" class="crm-chat-quote" data-ws-jump="${parent.id}" title="Show the original message"><i class="fa fa-reply"></i><span><b>${escHtml(parent.user?.id === meta.me ? 'You' : parent.user?.name || 'Deleted user')}</b> ${escHtml(excerpt(parent.body, 60))}</span></button>` : ''}
-            ${m.body ? `<div class="crm-chat-bubble"><div class="crm-ws-msg-body">${escHtml(m.body)}</div></div>` : ''}
+            ${m.body ? `<div class="crm-chat-bubble"><div class="crm-ws-msg-body">${hl(m.body)}</div></div>` : ''}
             ${files(m)}
             ${(m.mentions || []).length ? `<div class="crm-chat-mentions">${m.mentions.map(id => `<span class="crm-msg-token${id === meta.me ? ' crm-msg-token--me' : ''}">@${escHtml(id === meta.me ? 'You' : names[id] || 'user #' + id)}</span>`).join('')}</div>` : ''}
             <div class="crm-chat-meta">
@@ -60542,7 +60888,63 @@ async function submitDsCreate() {
         </div>`;
     });
     const empty = `<div class="crm-msg-empty"><span><i class="fa fa-comments"></i></span><strong>No messages yet</strong><small>Start the conversation — notes here are shared with everyone working on this lead.</small></div>`;
-    return `<div class="crm-chat"><div class="crm-chat-feed">${list || empty}</div>${composer}</div>`;
+    return `<div class="crm-chat">${find}${results}<div class="crm-chat-feed">${list || empty}</div>${composer}</div>`;
+  }
+
+  /** Local calendar day of a timestamp as YYYY-MM-DD (what a date input gives back). */
+  function _crmChatDayKey(iso) {
+    const d = new Date(iso);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  /** Messages whose text or attached file names contain the search, oldest first. */
+  function _crmChatHits() {
+    const q = (_crmWs.msgQ || '').trim().toLowerCase();
+    if (!q) return [];
+    return (_crmWs.messages?.data || [])
+      .filter(m => [m.body, ...(m.attachments || []).map(f => f.name)].some(s => s && s.toLowerCase().includes(q)))
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  }
+
+  /** Re-draw the search bits and the feed only, so the search box keeps focus; then show the current match. */
+  function _crmChatRefreshFind() {
+    const panel = $('#crm-ws-panel');
+    if (!panel?.querySelector('.crm-chat')) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = _crmWsMessagesHtml();
+    ['.crm-chat-find-meta', '.crm-chat-results', '.crm-chat-feed'].forEach(sel => {
+      const next = tmp.querySelector(sel);
+      if (next) panel.querySelector(sel)?.replaceWith(next);
+    });
+    if (_crmViewLead) _crmWsLoadPreviews(_crmViewLead);
+    _crmChatShowHit();
+  }
+
+  function _crmChatShowHit() {
+    const row = $('#crm-ws-panel .crm-chat-row--hit');
+    row?.scrollIntoView({ block: 'center' });
+    $('#crm-ws-panel .crm-chat-result.active')?.scrollIntoView({ block: 'nearest' });
+  }
+
+  /** Step through the matches: -1 = older, 1 = newer. */
+  function _crmChatStep(dir) {
+    const n = _crmChatHits().length;
+    if (!n) return;
+    _crmWs.msgHit = Math.min(n - 1, Math.max(0, (_crmWs.msgHit ?? n - 1) + dir));
+    _crmChatRefreshFind();
+  }
+
+  /** Scroll to the first message on (or after) a day and flash it. */
+  function _crmChatJumpToDay(key) {
+    const sep = [...$$('#crm-ws-panel .crm-chat-day[data-ws-day]')].find(d => d.dataset.wsDay >= key);
+    if (!sep) { toast('No messages on or after that date.', 'info'); return; }
+    if (sep.dataset.wsDay !== key) toast('No messages that day — showing the next day with messages.', 'info');
+    sep.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const row = sep.nextElementSibling;
+    if (!row?.matches('.crm-chat-row')) return;
+    row.classList.remove('crm-chat-row--flash');
+    void row.offsetWidth;
+    row.classList.add('crm-chat-row--flash');
   }
 
   /** The people ticked in the @ menu, shown as removable tokens above the message field. */
@@ -60830,21 +61232,8 @@ async function submitDsCreate() {
       <span class="crm-fm-spacer"></span>
       ${data.length ? `<div class="crm-fm-seg">${[['open', 'Open', open.length], ['done', 'Completed', done.length], ['all', 'All', data.length]]
         .map(([k, l, n]) => `<button type="button" class="${k === show ? 'active' : ''}" data-tk-show="${k}">${l}<small>${n}</small></button>`).join('')}</div>` : ''}
+      ${canWork ? '<button type="button" class="crm-fm-upload" data-ws-task-add><i class="fa fa-plus"></i> Add Task</button>' : ''}
     </div>`;
-
-    const form = canWork ? `<div class="crm-tk-new">
-      <div class="crm-tk-new-row"><span class="crm-tk-plus"><i class="fa fa-plus"></i></span>
-        <input id="crm-ws-task-title" class="crm-tk-new-input" maxlength="255" placeholder="New task — e.g. Call back about the quote" autocomplete="off"></div>
-      <div class="crm-tk-new-bar">
-        <label class="crm-tk-pill" title="Due date"><i class="fa fa-calendar"></i><input id="crm-ws-task-due" type="datetime-local"></label>
-        <label class="crm-tk-pill" title="Assign to"><i class="fa fa-user"></i><select id="crm-ws-task-assignee">
-          <option value="">Unassigned</option>${(info.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('')}</select></label>
-        <label class="crm-tk-pill crm-tk-pill--notes" title="Notes"><i class="fa fa-align-left"></i><input id="crm-ws-task-notes" maxlength="2000" placeholder="Add notes" autocomplete="off"></label>
-        <span class="crm-fm-spacer"></span>
-        <span class="crm-tk-hint"><kbd>Enter</kbd> to add</span>
-        <button type="button" class="crm-fm-upload" data-ws-task-add><i class="fa fa-plus"></i> Add Task</button>
-      </div>
-    </div>` : '';
 
     const rows = list => list.map(t => _crmTkRowHtml(t, canWork, !!meta.can_delete)).join('');
     const group = (title, list, cls = '') => list.length
@@ -60852,7 +61241,7 @@ async function submitDsCreate() {
     let body = '';
     if (!data.length) {
       body = `<div class="crm-tk-empty"><span class="crm-tk-empty-ic"><i class="fa fa-list-check"></i></span><strong>No tasks yet</strong>
-        <small>${canWork ? 'Add the next step for this lead above — a call back, a site visit, sending the quote.' : 'Tasks added to this lead will show up here.'}</small></div>`;
+        <small>${canWork ? 'Click Add Task to plan the next step for this lead — a call back, a site visit, sending the quote.' : 'Tasks added to this lead will show up here.'}</small></div>`;
     } else {
       if (show !== 'done') {
         const dueDay = t => (t.due_at ? _crmTkDue(t.due_at).day : null);
@@ -60865,7 +61254,7 @@ async function submitDsCreate() {
       }
       if (show !== 'open') body += group('Completed', [...done].sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')), ' crm-tk-group-title--done');
     }
-    return `<div class="crm-tk-wrap">${head}${form}<div class="crm-tk-list">${body}</div></div>`;
+    return `<div class="crm-tk-wrap">${head}<div class="crm-tk-list">${body}</div></div>`;
   }
 
   // ── Follow-ups tab: planned contacts (auto from sent quotations), overdue in red, log one ──
@@ -61024,28 +61413,8 @@ async function submitDsCreate() {
     const head = `<div class="crm-qtl-head">
       <div class="crm-qtl-head-txt"><strong>Follow-ups</strong>
         <small>${allPending.length ? `${allPending.length} planned` : 'Nothing planned'}${allOverdue ? ` · <b class="crm-fut-red">${allOverdue} overdue</b>` : ''}${next ? ` · next ${escHtml(_crmFuRel(next).toLowerCase())}` : ''}${logged ? ` · ${logged} logged` : ''}</small></div>
+      ${meta.can_add ? '<button type="button" class="crm-fm-upload" data-ws-fu-add><i class="fa fa-calendar-plus"></i> Plan Follow-up</button>' : ''}
     </div>`;
-
-    const ch = _crmWs.fuChannel || 'call';
-    const form = meta.can_add ? `<div class="crm-tk-new crm-fut-new">
-      <div class="crm-fut-new-h"><span class="crm-tk-plus" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 1px 2px rgba(175,82,222,.4)"><i class="fa fa-plus"></i></span> Plan a follow-up</div>
-      <div class="crm-fut-new-grid">
-        <div class="crm-fut-field"><span>When</span>
-          <div class="crm-fut-presets">
-            ${[['today', 'Later today'], ['tomorrow', 'Tomorrow 10 AM'], ['3d', 'In 3 days'], ['week', 'Next week']].map(([k, l]) => `<button type="button" class="crm-fut-preset" data-fu-preset="${k}">${l}</button>`).join('')}
-            <input id="crm-ws-fu-due" class="po-field-input" type="datetime-local" title="When to follow up">
-          </div></div>
-        <div class="crm-fut-field"><span>How</span>
-          <div class="crm-fm-seg crm-fut-chs">${(meta.channels || []).map(c => `<button type="button" class="${c.key === ch ? 'active' : ''}" data-fu-ch="${escHtml(c.key)}" style="--ic:${_CRM_FU_CHANNEL_TINTS[c.key] || '#8e8e93'}" title="${escHtml(c.label)}"><i class="fa ${_CRM_FU_CHANNEL_ICONS[c.key] || 'fa-comments'}"></i>${escHtml(c.label)}</button>`).join('')}</div>
-          <input type="hidden" id="crm-ws-fu-channel" value="${escHtml(ch)}"></div>
-        <div class="crm-fut-field"><span>Who</span>
-          <label class="crm-tk-pill"><i class="fa fa-user"></i><select id="crm-ws-fu-user">${_crmFuOptions(meta.assignees, meta.default_user_id, '')}</select></label></div>
-        <div class="crm-fut-field crm-fut-field--wide"><span>About</span>
-          <input id="crm-ws-fu-notes" class="po-field-input" maxlength="2000" placeholder="What to follow up on — e.g. Check if they reviewed the quotation" autocomplete="off"></div>
-      </div>
-      <div class="crm-fut-new-foot"><span class="crm-tk-hint">Follow-ups are also planned automatically when a quotation is sent.</span><span class="crm-fm-spacer"></span>
-        <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-ws-fu-add><i class="fa fa-calendar-plus"></i> Plan follow-up</button></div>
-    </div>` : '';
 
     const group = (title, list, cls = '') => list.length
       ? `<div class="crm-tk-group-title${cls}">${title}<small>${list.length}</small></div><div class="crm-fut-group">${list.map(f => _crmFuLeadRowHtml(f, meta)).join('')}</div>` : '';
@@ -61056,16 +61425,14 @@ async function submitDsCreate() {
       : filtered
         ? `<div class="crm-tk-empty"><strong>No matching follow-ups</strong><small>Nothing matches these filters.</small>
             <button type="button" class="crm-qtx-btn" data-fu-reset style="margin-top:8px">Clear filters</button></div>`
-        : `<div class="crm-tk-empty"><span class="crm-tk-empty-ic" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 2px 8px rgba(175,82,222,.3)"><i class="fa fa-phone-volume"></i></span>
+        : `<div class="crm-tk-empty"><span class="crm-tk-empty-ic"><i class="fa fa-phone-volume"></i></span>
           <strong>No follow-ups yet</strong><small>Plan when to contact the customer next. One is planned automatically when a quotation is sent.</small></div>`;
     const bar = all.length ? _crmFuFilterBarHtml(all, meta) : '';
-    return `<div class="crm-tk-wrap">${head}${form}${bar}<div class="crm-tk-list">${body}</div></div>`;
+    return `<div class="crm-tk-wrap">${head}${bar}<div class="crm-tk-list">${body}</div></div>`;
   }
 
-  // Follow-ups tab: filter bar, quick "when" presets and the channel picker
+  // Follow-ups tab: filter bar
   $('#crm-lead-view-body')?.addEventListener('click', e => {
-    const preset = e.target.closest('[data-fu-preset]');
-    const chBtn  = e.target.closest('[data-fu-ch]');
     const showBtn = e.target.closest('[data-fu-show]');
     if (showBtn) {
       _crmWs.fuShow = showBtn.dataset.fuShow;
@@ -61073,6 +61440,59 @@ async function submitDsCreate() {
     } else if (e.target.closest('[data-fu-reset]')) {
       Object.assign(_crmWs, { fuShow: '', fuCh: '', fuWho: '', fuQ: '' });
       _crmRenderWsTab();
+    }
+  });
+
+  // Follow-ups tab → Plan Follow-up: the form lives in its own window above the lead window
+  function _crmFuPlanOpen() {
+    const meta = _crmWs.followups?.meta || {};
+    const ch = _crmWs.fuChannel || 'call';
+    $('#crm-ws-fu-presets').innerHTML = [['today', 'Later today'], ['tomorrow', 'Tomorrow 10 AM'], ['3d', 'In 3 days'], ['week', 'Next week']]
+      .map(([k, l]) => `<button type="button" class="crm-fut-preset" data-fu-preset="${k}">${l}</button>`).join('');
+    $('#crm-ws-fu-chs').innerHTML = (meta.channels || []).map(c => `<button type="button" class="${c.key === ch ? 'active' : ''}" data-fu-ch="${escHtml(c.key)}" style="--ic:${_CRM_FU_CHANNEL_TINTS[c.key] || '#8e8e93'}" title="${escHtml(c.label)}"><i class="fa ${_CRM_FU_CHANNEL_ICONS[c.key] || 'fa-comments'}"></i>${escHtml(c.label)}</button>`).join('');
+    $('#crm-ws-fu-user').innerHTML = _crmFuOptions(meta.assignees, meta.default_user_id, '');
+    _crmFuWhoLabel();
+    $('#crm-ws-fu-due').value = '';
+    $('#crm-ws-fu-notes').value = '';
+    _macShow($('#crm-ws-fu-modal'));
+  }
+  const _crmFuPlanClose = () => _macHide($('#crm-ws-fu-modal'));
+
+  // Who: "Name", "Name +2", or the default when nobody is picked
+  function _crmFuWhoLabel() {
+    const names = [...$('#crm-ws-fu-user').selectedOptions].map(o => o.text);
+    $('#crm-ws-fu-user-btn').textContent = !names.length ? "Lead's assignee"
+      : names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
+    $('#crm-ws-fu-user-btn').title = names.join(', ');
+  }
+
+  async function _crmFuPlanSave() {
+    const lead = _crmViewLead;
+    if (!lead) return;
+    const due = $('#crm-ws-fu-due').value;
+    if (!due) { toast('Pick when to follow up.', 'error'); $('#crm-ws-fu-due').focus(); return; }
+    const btn = $('#crm-ws-fu-save');
+    btn.disabled = true;
+    const res = await API.crmCreateLeadFollowUp(lead.id, {
+      due_at: new Date(due).toISOString(),
+      channel: $('#crm-ws-fu-chs [data-fu-ch].active')?.dataset.fuCh || null,
+      user_ids: [...$('#crm-ws-fu-user').selectedOptions].map(o => +o.value),
+      notes: $('#crm-ws-fu-notes').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status !== 201) { toast(_crmWsError(res, 'Could not plan the follow-up.'), 'error'); return; }
+    _crmFuPlanClose();
+    toast(res.body.message, 'success');
+    _crmWsRefresh(lead, ['followups']);
+    loadCrmPipeline(_crmProjectId, { silent: true });
+  }
+
+  // Quick "when" presets and the channel picker
+  $('#crm-ws-fu-modal')?.addEventListener('click', e => {
+    const preset = e.target.closest('[data-fu-preset]');
+    const chBtn  = e.target.closest('[data-fu-ch]');
+    if (e.target.id === 'crm-ws-fu-modal') {
+      _crmFuPlanClose();
     } else if (preset) {
       const d = new Date();
       if (preset.dataset.fuPreset === 'today') d.setHours(Math.min(d.getHours() + 2, 23), 0, 0, 0);
@@ -61081,18 +61501,25 @@ async function submitDsCreate() {
         d.setHours(10, 0, 0, 0);
       }
       const pad = n => String(n).padStart(2, '0');
-      const input = $('#crm-ws-fu-due');
-      if (input) input.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      $$('#crm-ws-panel [data-fu-preset]').forEach(b => b.classList.toggle('active', b === preset));
+      $('#crm-ws-fu-due').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      $$('#crm-ws-fu-presets [data-fu-preset]').forEach(b => b.classList.toggle('active', b === preset));
     } else if (chBtn) {
       _crmWs.fuChannel = chBtn.dataset.fuCh;
-      $('#crm-ws-fu-channel').value = chBtn.dataset.fuCh;
-      $$('#crm-ws-panel [data-fu-ch]').forEach(b => b.classList.toggle('active', b === chBtn));
+      $$('#crm-ws-fu-chs [data-fu-ch]').forEach(b => b.classList.toggle('active', b === chBtn));
     }
   });
+  // Picking a date by hand clears the preset highlight
+  $('#crm-ws-fu-due')?.addEventListener('input', () => $$('#crm-ws-fu-presets [data-fu-preset]').forEach(b => b.classList.remove('active')));
+  $('#crm-ws-fu-save')?.addEventListener('click', _crmFuPlanSave);
+  $('#crm-ws-fu-cancel')?.addEventListener('click', _crmFuPlanClose);
+  $('#crm-ws-fu-close')?.addEventListener('click', _crmFuPlanClose);
+  // Who: type to search the people list; pick one or several
+  if ($('#crm-ws-fu-user')) {
+    makeSelectSearchable($('#crm-ws-fu-user'), $('#crm-ws-fu-user-btn'));
+    $('#crm-ws-fu-user').addEventListener('change', _crmFuWhoLabel);
+  }
+
   $('#crm-lead-view-body')?.addEventListener('input', e => {
-    // Picking a date by hand clears the preset highlight
-    if (e.target.id === 'crm-ws-fu-due') $$('#crm-ws-panel [data-fu-preset]').forEach(b => b.classList.remove('active'));
     if (e.target.id === 'crm-fu-f-q') {
       // Search re-draws the tab; keep focus and caret in the box
       _crmWs.fuQ = e.target.value;
@@ -61150,20 +61577,7 @@ async function submitDsCreate() {
       _crmWsRefresh(lead, ['followups']);
       loadCrmPipeline(_crmProjectId, { silent: true });
     } else if (t.matches('[data-ws-fu-add]')) {
-      const due = $('#crm-ws-fu-due').value;
-      if (!due) { toast('Pick when to follow up.', 'error'); return; }
-      t.disabled = true;
-      const res = await API.crmCreateLeadFollowUp(lead.id, {
-        due_at: new Date(due).toISOString(),
-        channel: $('#crm-ws-fu-channel').value || null,
-        user_id: $('#crm-ws-fu-user').value ? +$('#crm-ws-fu-user').value : null,
-        notes: $('#crm-ws-fu-notes').value.trim() || null,
-      });
-      t.disabled = false;
-      if (res.status !== 201) { toast(_crmWsError(res, 'Could not plan the follow-up.'), 'error'); return; }
-      toast(res.body.message, 'success');
-      _crmWsRefresh(lead, ['followups']);
-      loadCrmPipeline(_crmProjectId, { silent: true });
+      _crmFuPlanOpen();
     }
   });
 
@@ -61243,6 +61657,12 @@ async function submitDsCreate() {
     } else if (t.dataset.wsTlType !== undefined) {
       _crmWs.timelineType = t.dataset.wsTlType;
       _crmRenderWsTab();
+    } else if (t.dataset.wsTlWho !== undefined) {
+      _crmWs.timelineWho = t.dataset.wsTlWho;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-ws-tl-clear]')) {
+      _crmWs.timelineType = _crmWs.timelineWho = _crmWs.timelineQuery = '';
+      _crmRenderWsTab();
     } else if (t.matches('[data-ws-msg-reply]')) {
       _crmWsKeepDraft();
       _crmWs.replyTo = +t.dataset.wsMsgReply;
@@ -61319,6 +61739,11 @@ async function submitDsCreate() {
       const box = $(`#crm-ws-panel [data-ws-mention][value="${+t.dataset.wsMentionRemove}"]`);
       if (box) box.checked = false;
       _crmChatRefreshTokens();
+    } else if (t.matches('[data-ws-find-step]')) {
+      _crmChatStep(+t.dataset.wsFindStep);
+    } else if (t.matches('[data-ws-find-go]')) {
+      _crmWs.msgHit = +t.dataset.wsFindGo;
+      _crmChatRefreshFind();
     } else if (t.matches('[data-ws-jump]')) {
       // Scroll to the quoted message and flash it
       const row = $(`#crm-ws-panel [data-ws-msg="${+t.dataset.wsJump}"]`);
@@ -61334,19 +61759,7 @@ async function submitDsCreate() {
       toast('File deleted.', 'success');
       _crmWsRefresh(lead, ['files', 'timeline']);
     } else if (t.matches('[data-ws-task-add]')) {
-      const title = $('#crm-ws-task-title').value.trim();
-      if (!title) { toast('Give the task a title.', 'error'); $('#crm-ws-task-title').focus(); return; }
-      t.disabled = true;
-      const res = await API.crmCreateLeadTask(lead.id, {
-        title,
-        description: $('#crm-ws-task-notes')?.value.trim() || null,
-        due_at:      $('#crm-ws-task-due').value || null,
-        assigned_to: $('#crm-ws-task-assignee').value ? +$('#crm-ws-task-assignee').value : null,
-      });
-      t.disabled = false;
-      if (res.status !== 201) { toast(_crmWsError(res, 'Could not add the task.'), 'error'); return; }
-      toast('Task added.', 'success');
-      _crmWsRefresh(lead, ['tasks', 'timeline']);
+      _crmWsTaskModalOpen();
     } else if (t.matches('[data-ws-task-toggle]')) {
       const res = t.checked ? await API.crmCompleteTask(+t.dataset.wsTaskToggle) : await API.crmReopenTask(+t.dataset.wsTaskToggle);
       if (res.status !== 200) { t.checked = !t.checked; toast(_crmWsError(res, 'Could not update the task.'), 'error'); return; }
@@ -61379,11 +61792,85 @@ async function submitDsCreate() {
     box?.setSelectionRange(pos, pos);
   });
 
-  // Tasks tab: Enter in the title or notes field adds the task
+  // Tasks tab → Add Task: the form lives in its own modal above the lead window
+  function _crmWsTaskModalOpen() {
+    $('#crm-ws-task-title').value = '';
+    $('#crm-ws-task-due').value = '';
+    $('#crm-ws-task-notes').value = '';
+    $('#crm-ws-task-assignee').innerHTML = '<option value="">Unassigned</option>'
+      + (_crmWs.info?.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('');
+    _macShow($('#crm-ws-task-modal'));
+    setTimeout(() => $('#crm-ws-task-title')?.focus(), 30);
+  }
+  const _crmWsTaskModalClose = () => _macHide($('#crm-ws-task-modal'));
+
+  async function _crmWsTaskSave() {
+    const lead = _crmViewLead;
+    if (!lead) return;
+    const title = $('#crm-ws-task-title').value.trim();
+    if (!title) { toast('Give the task a title.', 'error'); $('#crm-ws-task-title').focus(); return; }
+    const btn = $('#crm-ws-task-save');
+    btn.disabled = true;
+    const res = await API.crmCreateLeadTask(lead.id, {
+      title,
+      description: $('#crm-ws-task-notes').value.trim() || null,
+      due_at:      $('#crm-ws-task-due').value || null,
+      assigned_to: $('#crm-ws-task-assignee').value ? +$('#crm-ws-task-assignee').value : null,
+    });
+    btn.disabled = false;
+    if (res.status !== 201) { toast(_crmWsError(res, 'Could not add the task.'), 'error'); return; }
+    _crmWsTaskModalClose();
+    toast('Task added.', 'success');
+    _crmWsRefresh(lead, ['tasks', 'timeline']);
+  }
+
+  $('#crm-ws-task-save')?.addEventListener('click', _crmWsTaskSave);
+  $('#crm-ws-task-cancel')?.addEventListener('click', _crmWsTaskModalClose);
+  $('#crm-ws-task-close')?.addEventListener('click', _crmWsTaskModalClose);
+  $('#crm-ws-task-modal')?.addEventListener('click', e => { if (e.target.id === 'crm-ws-task-modal') _crmWsTaskModalClose(); });
+  // Enter in the title adds the task (Esc is handled by the shared mac-window handler)
+  $('#crm-ws-task-title')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); _crmWsTaskSave(); }
+  });
+  // Assign to: type to search the employee list
+  if ($('#crm-ws-task-assignee')) makeSelectSearchable($('#crm-ws-task-assignee'));
+
+  // Timeline tab: search as you type (the tab re-draws; keep focus and caret in the box), person pop-up
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-tl-q') return;
+    _crmWs.timelineQuery = e.target.value;
+    const pos = e.target.selectionStart;
+    _crmRenderWsTab();
+    const box = $('#crm-tl-q');
+    box?.focus();
+    box?.setSelectionRange(pos, pos);
+  });
+  $('#crm-lead-view-body')?.addEventListener('change', e => {
+    if (e.target.id !== 'crm-tl-who') return;
+    _crmWs.timelineWho = e.target.value;
+    _crmRenderWsTab();
+  });
+
+  // Messages tab: search as you type (newest match first), Enter / Shift+Enter step older / newer,
+  // Esc clears; the calendar jumps to a day
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-chat-q') return;
+    _crmWs.msgQ = e.target.value;
+    _crmWs.msgHit = undefined;
+    _crmChatRefreshFind();
+    if (!_crmWs.msgQ.trim()) { const feed = $('#crm-ws-panel .crm-chat-feed'); if (feed) feed.scrollTop = feed.scrollHeight; }
+  });
   $('#crm-lead-view-body')?.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' || e.isComposing || !['crm-ws-task-title', 'crm-ws-task-notes'].includes(e.target.id)) return;
-    e.preventDefault();
-    $('#crm-ws-panel [data-ws-task-add]')?.click();
+    if (e.target.id !== 'crm-chat-q') return;
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); _crmChatStep(e.shiftKey ? 1 : -1); }
+    else if (e.key === 'Escape' && e.target.value) {
+      e.preventDefault(); e.stopPropagation();
+      e.target.value = '';
+      e.target.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+  });
+  $('#crm-lead-view-body')?.addEventListener('change', e => {
+    if (e.target.id === 'crm-chat-date' && e.target.value) _crmChatJumpToDay(e.target.value);
   });
 
   // Files tab: search as you type, sort pop-up, and drop files from Explorer / Finder to upload them
@@ -61460,6 +61947,32 @@ async function submitDsCreate() {
     _crmChatFilterMenu('');
     box?.focus();
   });
+  // @ button: the menu opens with its own search box focused (typing "@…" in the message filters instead,
+  // so the box is hidden then); Enter ticks the first match, Esc closes back to the message field
+  $('#crm-lead-view-body')?.addEventListener('toggle', e => {
+    const menu = e.target;
+    if (!menu.matches?.('details.crm-msg-mention')) return;
+    const box = $('#crm-msg-menu-q');
+    menu.classList.toggle('crm-msg-mention--typed', menu.open && _crmChatAtOpen);
+    if (box) box.value = '';
+    if (!_crmChatAtOpen) _crmChatFilterMenu('');
+    if (menu.open && !_crmChatAtOpen) box?.focus();
+  }, true);
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id === 'crm-msg-menu-q') _crmChatFilterMenu(e.target.value.trim());
+  });
+  $('#crm-lead-view-body')?.addEventListener('keydown', e => {
+    if (e.target.id !== 'crm-msg-menu-q') return;
+    const menu = e.target.closest('details');
+    if (e.key === 'Enter' && !e.isComposing) {
+      e.preventDefault();
+      menu?.querySelector('.crm-msg-menu-row--first input')?.click();
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      if (menu) menu.open = false;
+      $('#crm-ws-msg-body')?.focus();
+    }
+  });
   document.addEventListener('mousedown', e => {
     const menu = $('#crm-ws-panel details.crm-msg-mention[open]');
     if (menu && !menu.contains(e.target) && e.target.id !== 'crm-ws-msg-body') { menu.open = false; _crmChatAtOpen = false; _crmChatFilterMenu(''); }
@@ -61481,7 +61994,8 @@ async function submitDsCreate() {
 
   function _crmQtHtml() {
     const s = _crmQtState();
-    if (s.view === 'edit' && s.form) return _crmQtFormHtml(s);
+    // While editing, the form is in its own window (_crmQtSyncEditor); show what it was opened from behind it
+    if (s.view === 'edit' && s.form) return s.form.id && s.detail?.id === s.form.id ? _crmQtDetailHtml(s) : _crmQtListHtml();
     if (s.view === 'detail' && s.detail) return _crmQtDetailHtml(s);
     return _crmQtListHtml();
   }
@@ -61682,11 +62196,6 @@ async function submitDsCreate() {
 
     const n = f.lines.length;
     return `<div class="crm-qtx">
-      <div class="crm-qtx-bar"><button type="button" class="crm-qtx-back" data-qt-back><i class="fa fa-chevron-left"></i> Quotations</button></div>
-      <div class="crm-qtx-title" style="--ic:#8e8e93">
-        <span class="crm-qtl-ic"><i class="fa fa-pen"></i></span>
-        <div><strong>${f.id ? `Edit ${escHtml(f.number)}` : 'New Quotation'}</strong><small>Draft · ${n} ${n === 1 ? 'line' : 'lines'}</small></div>
-      </div>
       ${returned}
       <div id="crm-qt-alert" class="svc-form-alert" style="display:none"></div>
 
@@ -61735,14 +62244,21 @@ async function submitDsCreate() {
           </div>
         </section>
       </div>
-
-      <div class="crm-qtx-dock">
-        <div class="crm-qtx-dock-total"><small>Total</small><b id="crm-qt-t-total-dock">${_crmQtMoney(t.total)}</b></div>
-        <span class="crm-fm-spacer"></span>
-        <button type="button" class="crm-qtx-btn" data-qt-back>Cancel</button>
-        <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
-      </div>
     </div>`;
+  }
+
+  /** The editor opens in its own window above the lead window; the list (or the quotation) stays behind it. */
+  function _crmQtSyncEditor() {
+    const modal = $('#crm-qt-edit-modal');
+    if (!modal) return;
+    const s = _crmWs.qt;
+    if (!_crmViewLead || _crmLeadTab !== 'quotations' || s?.view !== 'edit' || !s.form) { _macHide(modal); return; }
+    const n = s.form.lines.length;
+    $('#crm-qt-edit-title').textContent = s.form.id ? `Edit ${s.form.number}` : 'New Quotation';
+    $('#crm-qt-edit-sub').textContent = `Draft · ${n} ${n === 1 ? 'line' : 'lines'}`;
+    $('#crm-qt-edit-body').innerHTML = _crmQtFormHtml(s);
+    $('#crm-qt-t-total-dock').textContent = _crmQtMoney(_crmQtTotals(s.form).total);
+    if (modal.style.display === 'none' || modal.classList.contains('mac-out')) _macShow(modal);
   }
 
   /** Re-draw totals and line totals only — keeps focus in the field being typed in. */
@@ -61750,7 +62266,7 @@ async function submitDsCreate() {
     const s = _crmQtState();
     if (!s.form) return;
     const t = _crmQtTotals(s.form);
-    t.lines.forEach((l, i) => { const el = $(`#crm-ws-panel [data-qt-lt="${i}"]`); if (el) el.textContent = _crmQtMoney(l.net); });
+    t.lines.forEach((l, i) => { const el = $(`#crm-qt-edit-body [data-qt-lt="${i}"]`); if (el) el.textContent = _crmQtMoney(l.net); });
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     set('#crm-qt-t-sub', _crmQtMoney(t.subtotal));
     set('#crm-qt-t-disc', '−' + _crmQtMoney(t.discount));
@@ -61770,7 +62286,7 @@ async function submitDsCreate() {
       const res = await API.crmLeadQuotationStock(lead.id, { items }).catch(() => ({ status: 0 }));
       if (_crmViewLead?.id !== lead.id || s.view !== 'edit' || res.status !== 200) return;
       s.stock = res.body.data;
-      s.form.lines.forEach((_, i) => { const el = $(`#crm-ws-panel [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
+      s.form.lines.forEach((_, i) => { const el = $(`#crm-qt-edit-body [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
       const warn = $('#crm-qt-stock-warn');
       if (warn) warn.innerHTML = _crmQtStockWarnHtml(s.stock);
     }, 350);
@@ -61815,7 +62331,7 @@ async function submitDsCreate() {
       // Mark the lines the server refused (e.g. over the stock in hand under the "block" setting)
       Object.keys(res.body?.errors || {}).forEach(k => {
         const m = k.match(/^items\.(\d+)\./);
-        if (m) $(`#crm-ws-panel [data-qt-line="${m[1]}"]`)?.classList.add('crm-qt-line--error');
+        if (m) $(`#crm-qt-edit-body [data-qt-line="${m[1]}"]`)?.classList.add('crm-qt-line--error');
       });
       return fail(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Could not save the quotation.'));
     }
@@ -62104,7 +62620,7 @@ async function submitDsCreate() {
   }
 
   // Typing in the editor: keep the form state, re-draw the totals, re-check the stock
-  $('#crm-lead-view-body')?.addEventListener('input', e => {
+  ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('input', e => {
     const lead = _crmViewLead;
     const s = _crmWs.qt;
     if (!lead || !s?.form || s.view !== 'edit') return;
@@ -62137,9 +62653,9 @@ async function submitDsCreate() {
         results.style.display = '';
       }, 220);
     }
-  });
+  }));
 
-  $('#crm-lead-view-body')?.addEventListener('click', async e => {
+  ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('click', async e => {
     const lead = _crmViewLead;
     if (!lead || _crmLeadTab !== 'quotations') return;
     const s = _crmQtState();
@@ -62178,7 +62694,7 @@ async function submitDsCreate() {
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
       s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
       _crmRenderWsTab();
-      $$('#crm-ws-panel [data-qt-f="description"]').pop()?.focus();
+      $$('#crm-qt-edit-body [data-qt-f="description"]').pop()?.focus();
     } else if (t.dataset.qtLineDel !== undefined && s.form) {
       s.form.lines.splice(+t.dataset.qtLineDel, 1);
       s.stock = null;
@@ -62312,7 +62828,7 @@ async function submitDsCreate() {
       }
       _crmQtAfterChange(lead, res);
     }
-  });
+  }));
 
   // Send form CC: one chip per address, shown by the name of the team member / customer it belongs to
   function _crmQtCcChipsHtml(cc) {
@@ -62370,9 +62886,9 @@ async function submitDsCreate() {
   });
 
   // Close the product results when clicking elsewhere in the editor
-  $('#crm-lead-view-body')?.addEventListener('focusout', e => {
+  ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('focusout', e => {
     if (e.target.id === 'crm-qt-product-search') setTimeout(() => { const r = $('#crm-qt-product-results'); if (r) r.style.display = 'none'; }, 200);
-  });
+  }));
 
   /**
    * Open a lead's window from outside its pipeline (approvals inbox, Sales quotation) —
@@ -62434,7 +62950,7 @@ async function submitDsCreate() {
     return `
       <div class="crm-appr-card">
         <div class="crm-appr-head">
-          <i class="fa fa-file-invoice" style="color:#a855f7"></i>
+          <i class="fa fa-file-invoice"></i>
           <span class="crm-appr-num">${escHtml(q.quote_number)}</span>
           ${q.version > 1 ? `<span class="crm-appr-ver">v${q.version}</span>` : ''}
           <span class="crm-appr-status">Pending approval</span>
@@ -62448,7 +62964,7 @@ async function submitDsCreate() {
           <div class="crm-appr-arrow"><i class="fa fa-arrow-right-long"></i>${q.updated_at ? escHtml(_crmFmtDateTime(q.updated_at)) : ''}</div>
           ${party('to', 'Approver', to.name || 'Any admin', to.role, toDept)}
         </div>
-        ${q.routing?.note ? `<div class="crm-appr-note" style="margin-top:12px"><i class="fa fa-comment-dots" style="color:#a855f7"></i> ${escHtml(q.routing.note)}</div>` : ''}
+        ${q.routing?.note ? `<div class="crm-appr-note" style="margin-top:12px"><i class="fa fa-comment-dots"></i> ${escHtml(q.routing.note)}</div>` : ''}
         <div class="crm-appr-foot">
           ${q.items_count != null ? `<div class="crm-appr-fig">Items<b>${q.items_count}</b></div>` : ''}
           ${q.subtotal != null ? `<div class="crm-appr-fig">Subtotal<b>${_crmQtMoney(q.subtotal)}</b></div>` : ''}
@@ -62566,7 +63082,7 @@ async function submitDsCreate() {
   $('#rb-crm-followups')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmFollowUpsModal(); });
 
   // ── Management dashboard (view only): admin, CEO, heads (their departments) ──
-  let _crmDash = { filters: null, data: null };
+  let _crmDash = { filters: null, data: null, range: '30', loadedAt: null };
 
   const _crmIsoDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
@@ -62583,14 +63099,22 @@ async function submitDsCreate() {
   async function loadCrmDashboard() {
     const body = $('#crm-dash-body');
     if (!body) return;
-    _crmDash.filters ||= { ..._crmDashRange('30'), department_id: '', division_id: '', user_id: '', source: '' };
-    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    if (!_crmDash.filters) {
+      _crmDash.range = '30';
+      _crmDash.filters = { ..._crmDashRange('30'), department_id: '', division_id: '', user_id: '', source: '' };
+    }
+    // Keep the current figures on screen (dimmed) while reloading, so filtering doesn't flash the page
+    if (_crmDash.data) body.style.opacity = '.5';
+    else body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmDashboard(_crmDash.filters).catch(() => ({ status: 0 }));
+    body.style.opacity = '';
     if (res.status !== 200) {
+      if (_crmDash.data) { toast(_crmWsError(res, 'Failed to load the dashboard.'), 'error'); return; }
       body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the dashboard.')));
       return;
     }
     _crmDash.data = res.body.data;
+    _crmDash.loadedAt = new Date();
     _crmDashRenderFilters();
     _crmDashRender();
   }
@@ -62613,6 +63137,19 @@ async function submitDsCreate() {
     $('#crm-dash-div').value    = f.division_id || '';
     $('#crm-dash-user').value   = f.user_id || '';
     $('#crm-dash-source').value = f.source || '';
+    $$('#crm-dash-range [data-range]').forEach(b => b.classList.toggle('active', b.dataset.range === _crmDash.range));
+    const upd = $('#crm-dash-updated');
+    if (upd && _crmDash.loadedAt) upd.textContent = `Updated ${_crmDash.loadedAt.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+  }
+
+  /** Drill-down: set one filter (from a chip, table row or ×) and reload. */
+  function _crmDashSetFilter(key, value, departmentId = '') {
+    _crmDashReadFilters();
+    _crmDash.filters[key] = value ?? '';
+    if (key === 'department_id') _crmDash.filters.division_id = '';
+    if (key === 'division_id' && value && departmentId) _crmDash.filters.department_id = departmentId;
+    $('#crm-dash-body').scrollTop = 0;
+    loadCrmDashboard();
   }
 
   function _crmDashReadFilters() {
@@ -62637,127 +63174,427 @@ async function submitDsCreate() {
       </div>`).join('')}</div>`;
   }
 
+  const _crmDashPct = n => n == null ? '—' : `${(+n).toFixed(1).replace(/\.0$/, '')}%`;
+  const _crmDashPl  = (n, word) => `${_crmDashNum(n)} ${word}${n === 1 ? '' : 's'}`;
+  const _crmDashDay = s => s ? new Date(`${s}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  /** Grouped money; compact (245K / 1.2M) for headline figures from 100,000 up. html wraps the currency for smaller type. */
+  function _crmDashMoney(n, { compact = false, html = false } = {}) {
+    const v = Number(n) || 0;
+    const s = compact && Math.abs(v) >= 100000
+      ? new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(v)
+      : v.toLocaleString(undefined, { minimumFractionDigits: compact ? 0 : 2, maximumFractionDigits: compact ? 0 : 2 });
+    const cur = state.currency;
+    if (!cur) return s;
+    const c = html ? `<span class="crm-dash-cur">${escHtml(cur)}</span>` : cur;
+    return currencyPosition() === 'before' ? `${c} ${s}` : `${s} ${c}`;
+  }
+
+  /** Change against the previous period: % for amounts and counts, points for rates; invert where a fall is good. */
+  function _crmDashDelta(cur, prev, { pts = false, invert = false, vs = true } = {}) {
+    const tail = vs ? '<span class="crm-dash-delta-vs">vs previous period</span>' : '';
+    if (cur == null || prev == null) return `<span class="crm-dash-delta crm-dash-delta--flat">No prior data</span>`;
+    let diff, txt;
+    if (pts) {
+      diff = cur - prev;
+      txt = `${Math.abs(diff).toFixed(1).replace(/\.0$/, '')} pts`;
+    } else if (!prev) {
+      return cur ? `<span class="crm-dash-delta crm-dash-delta--up"><i class="fa fa-arrow-up"></i> New</span>${vs ? '<span class="crm-dash-delta-vs">none in previous period</span>' : ''}`
+        : `<span class="crm-dash-delta crm-dash-delta--flat"><i class="fa fa-minus"></i> Flat</span>${tail}`;
+    } else {
+      diff = (cur - prev) / Math.abs(prev) * 100;
+      txt = `${Math.abs(diff) < 10 ? Math.abs(diff).toFixed(1).replace(/\.0$/, '') : Math.round(Math.abs(diff))}%`;
+    }
+    if (Math.abs(diff) < 0.05) return `<span class="crm-dash-delta crm-dash-delta--flat"><i class="fa fa-minus"></i> Flat</span>${tail}`;
+    const good = invert ? diff < 0 : diff > 0;
+    return `<span class="crm-dash-delta crm-dash-delta--${good ? 'up' : 'down'}"><i class="fa fa-arrow-${diff > 0 ? 'up' : 'down'}"></i> ${txt}</span>${tail}`;
+  }
+
+  /** Plain-language takeaways for the top of the page: wins first, then risks. */
+  function _crmDashInsights(d) {
+    const k = d.kpis, p = d.previous || {}, out = [];
+    const add = (tone, html) => out.push({ tone, html });
+    const money = v => escHtml(_crmDashMoney(v, { compact: true }));
+
+    if (k.won_value_in_range && p.won_value_in_range) {
+      const ch = (k.won_value_in_range - p.won_value_in_range) / p.won_value_in_range * 100;
+      add(ch >= 0 ? 'good' : 'bad',
+        `Revenue won is <b>${ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(ch))}%</b> on the previous period (${money(k.won_value_in_range)} vs ${money(p.won_value_in_range)}).`);
+    } else if (k.won_value_in_range) {
+      add('good', `<b>${money(k.won_value_in_range)}</b> won from ${_crmDashPl(k.won_in_range, 'deal')} — nothing was won in the previous period.`);
+    } else {
+      add('warn', 'No deals were closed won in this period.');
+    }
+    const top = d.staff.find(s => s.won_value > 0);
+    if (top) {
+      const share = k.won_value_in_range ? ` (${Math.round(top.won_value / k.won_value_in_range * 100)}% of revenue)` : '';
+      add('good', `<b>${escHtml(top.name)}</b> is the top performer — ${money(top.won_value)} from ${_crmDashPl(top.won, 'deal')}${share}.`);
+    }
+    const src = d.by_source.filter(s => s.won > 0).sort((a, b) => b.won / b.leads - a.won / a.leads || b.won - a.won)[0];
+    if (src) add('good', `<b>${escHtml(src.label)}</b> converts best: ${src.won} of ${_crmDashPl(src.leads, 'lead')} won (${_crmDashPct(src.won / src.leads * 100)}).`);
+    if (k.past_due_deals) add('bad', `<b>${_crmDashPl(k.past_due_deals, 'open deal')}</b> worth ${money(k.past_due_deals_value)} ${k.past_due_deals === 1 ? 'is' : 'are'} past the expected close date.`);
+    if (k.overdue_follow_ups) add('bad', `<b>${_crmDashPl(k.overdue_follow_ups, 'follow-up')}</b> ${k.overdue_follow_ups === 1 ? 'is' : 'are'} overdue — customers are waiting for a call back.`);
+    if (k.uncontacted_leads) add('warn', `<b>${_crmDashPl(k.uncontacted_leads, 'assigned lead')}</b> ${k.uncontacted_leads === 1 ? 'has' : 'have'} not been contacted yet.`);
+    if (k.unassigned_leads) add('warn', `<b>${_crmDashPl(k.unassigned_leads, 'open lead')}</b> ${k.unassigned_leads === 1 ? 'has' : 'have'} nobody assigned — assign ${k.unassigned_leads === 1 ? 'it' : 'them'} so they get followed up.`);
+    if (k.pending_approvals) add('warn', `<b>${_crmDashPl(k.pending_approvals, 'quotation')}</b> worth ${money(k.pending_approval_value)} ${k.pending_approvals === 1 ? 'is' : 'are'} waiting for approval.`);
+    const lr = d.lost_reasons[0];
+    if (lr) add('warn', `“${escHtml(lr.label)}” is the main reason deals are lost (${lr.leads} of ${k.lost_in_range}).`);
+    if (k.open_pipeline_count && !k.open_pipeline_value) add('warn', `None of the ${_crmDashPl(k.open_pipeline_count, 'open deal')} has an estimated value — the pipeline value cannot be measured.`);
+    if (!k.overdue_follow_ups && !k.past_due_deals) add('good', 'No overdue follow-ups or past-due deals — the pipeline is on schedule.');
+    return out.slice(0, 8);
+  }
+
   function _crmDashRender() {
     const d = _crmDash.data;
-    const k = d.kpis;
-    const tile = (icon, label, value, sub = '', cls = '') => `
-      <div class="crm-dash-tile${cls ? ' ' + cls : ''}">
-        <div class="crm-dash-tile-label"><i class="fa ${icon}"></i> ${label}</div>
-        <div class="crm-dash-tile-value">${value}</div>
-        ${sub ? `<div class="crm-dash-tile-sub">${sub}</div>` : ''}
-      </div>`;
+    const k = d.kpis, p = d.previous || {}, f = d.filters || {}, o = d.options || {};
     const hours = h => h == null ? '—' : h < 48 ? `${h} h` : `${(h / 24).toFixed(1)} d`;
+    const money = (v, compact = true) => _crmDashMoney(v, { compact, html: true });
+    // Active filters as removable chips: [filter key, label]
+    const scope = [
+      ['department_id', f.department_id && (o.departments || []).find(x => x.id === f.department_id)?.name],
+      ['division_id', f.division_id && (o.divisions || []).find(x => x.id === f.division_id)?.name],
+      ['user_id', f.user_id && (o.staff || []).find(x => x.id === f.user_id)?.name],
+      ['source', f.source && (o.sources || []).find(x => x.key === f.source)?.label],
+    ].filter(([, label]) => label);
+    const weekly = d.trend.length && d.trend[0].label.startsWith('Wk');
+
+    const help = tip => tip ? `<i class="fa fa-circle-question crm-dash-help" title="${escHtml(tip)}"></i>` : '';
+    const hero = (label, value, sub, foot, { tip = '', jump = '' } = {}) => `
+      <div class="crm-dash-hero${jump ? ' crm-dash-hero--link' : ''}"${jump ? ` data-dash-jump="${jump}"` : ''}>
+        <div class="crm-dash-hero-label">${label}${help(tip)}</div>
+        <div class="crm-dash-hero-value">${value}</div>
+        <div class="crm-dash-hero-sub">${sub}</div>
+        <div class="crm-dash-hero-foot">${foot}</div>
+      </div>`;
+    const metric = (label, value, sub, cls = '', tip = '') => `
+      <div class="crm-dash-metric${cls ? ' ' + cls : ''}">
+        <div class="crm-dash-metric-label">${label}${help(tip)}</div>
+        <div class="crm-dash-metric-value">${value}</div>
+        <div class="crm-dash-metric-sub">${sub}</div>
+      </div>`;
+    const card = (title, sub, body, cls = '', id = '') => `
+      <div class="crm-dash-card${cls ? ' ' + cls : ''}"${id ? ` id="${id}"` : ''}>
+        <div class="crm-dash-card-head"><span>${title}</span>${sub ? `<span class="crm-ws-muted crm-dash-card-sub">${sub}</span>` : ''}</div>
+        ${body.startsWith('<table') ? `<div class="crm-dash-scroll">${body}</div>` : body}
+      </div>`;
+    const share = (pct, color) => `<span class="crm-dash-share"><span style="width:${Math.max(pct ? 2 : 0, Math.min(100, pct))}%;background:${color}"></span></span>`;
+    const R = 'crm-qt-right';
+
+    // Funnel: statuses that hold leads, as a share of all leads created in the period
+    const funnelRows = d.funnel.filter(r => r.leads);
+    const funnelHtml = funnelRows.length
+      ? _crmDashBarsHtml(funnelRows, { extra: r => _crmDashPct(r.leads / Math.max(1, k.leads) * 100) })
+      : _crmWsPanelHtml('No leads in this period.');
+
+    const openHtml = d.top_open?.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Deal</th><th>Stage</th><th>Owner</th><th>Expected close</th><th class="${R}">Value</th></tr></thead>
+        <tbody>${d.top_open.map(l => `<tr class="crm-dash-link" data-dash-lead="${l.id}" data-project="${l.project_id}" title="Open this lead">
+          <td><strong>${escHtml(l.name)}</strong>${l.contact ? `<div class="crm-dash-cell-sub">${escHtml(l.contact)}</div>` : ''}<div class="crm-dash-cell-sub">${_crmDashPl(l.age_days, 'day')} old</div></td>
+          <td><span class="crm-dash-pill" style="--pill:${escHtml(l.stage_color)}">${escHtml(l.stage)}</span></td>
+          <td>${escHtml(l.owner || 'Unassigned')}</td>
+          <td class="${l.past_due ? 'crm-dash-bad' : ''}">${l.expected_close_date ? `${l.past_due ? '<i class="fa fa-triangle-exclamation"></i> ' : ''}${escHtml(_crmDashDay(l.expected_close_date))}` : '<span class="crm-ws-muted">Not set</span>'}</td>
+          <td class="${R}"><strong>${_crmDashMoney(l.value)}</strong></td></tr>`).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No open deals with an estimated value.');
+
+    const winsHtml = d.recent_wins?.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Customer</th><th>Won by</th><th>Closed</th><th class="${R}">Value</th></tr></thead>
+        <tbody>${d.recent_wins.map(l => `<tr class="crm-dash-link" data-dash-lead="${l.id}" data-project="${l.project_id}" title="Open this lead">
+          <td><strong>${escHtml(l.name)}</strong></td>
+          <td>${escHtml(l.owner || '—')}</td><td>${escHtml(_crmDashDay(l.closed_at))}</td>
+          <td class="${R}"><strong>${_crmDashMoney(l.value)}</strong></td></tr>`).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No deals won in this period.');
+
+    const srcTotal = Math.max(1, d.by_source.reduce((a, r) => a + r.leads, 0));
+    const sourceHtml = d.by_source.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Source</th><th class="${R}">Leads</th><th>Share</th><th class="${R}">Won</th><th class="${R}">Conversion</th></tr></thead>
+        <tbody>${d.by_source.map(s => `<tr${s.key && s.key !== f.source ? ` class="crm-dash-filterable" data-dash-filter="source" data-value="${escHtml(s.key)}" title="Show only ${escHtml(s.label)} leads"` : ''}>
+          <td><span class="crm-dash-swatch" style="background:${escHtml(s.color || '#94a3b8')}"></span>${escHtml(s.label)}</td>
+          <td class="${R}">${_crmDashNum(s.leads)}</td>
+          <td>${share(s.leads / srcTotal * 100, escHtml(s.color || '#94a3b8'))}<span class="crm-dash-cell-sub">${_crmDashPct(s.leads / srcTotal * 100)}</span></td>
+          <td class="${R}">${_crmDashNum(s.won)}</td><td class="${R}"><strong>${_crmDashPct(s.leads ? s.won / s.leads * 100 : 0)}</strong></td></tr>`).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No leads in this period.');
+
+    const divDept = Object.fromEntries((o.divisions || []).map(v => [v.id, v.department_id]));
+    const deptFilter = (r, sub) => {
+      if (r.id == null || r.id === (sub ? f.division_id : f.department_id)) return '';
+      return ` data-dash-filter="${sub ? 'division_id' : 'department_id'}" data-value="${r.id}"${sub ? ` data-dept="${divDept[r.id] ?? ''}"` : ''} title="Show only ${escHtml(r.label)}"`;
+    };
+    const deptRow = (r, sub = false) => `<tr class="${sub ? 'crm-dash-subrow' : ''}${deptFilter(r, sub) ? ' crm-dash-filterable' : ''}"${deptFilter(r, sub)}>
+        <td>${sub ? '<i class="fa fa-turn-up fa-rotate-90"></i> ' : ''}${escHtml(r.label)}</td>
+        <td class="${R}">${_crmDashNum(r.leads)}</td><td class="${R}">${_crmDashNum(r.won)}</td>
+        <td>${share(r.leads ? r.won / r.leads * 100 : 0, 'var(--crm-dash-c2)')}</td>
+        <td class="${R}"><strong>${_crmDashPct(r.leads ? r.won / r.leads * 100 : 0)}</strong></td></tr>`;
+    const placed = new Set();
+    const deptHtml = d.by_department.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Department</th><th class="${R}">Leads</th><th class="${R}">Won</th><th></th><th class="${R}">Conversion</th></tr></thead>
+        <tbody>${d.by_department.map(r => deptRow(r) + d.by_division.filter(v => divDept[v.id] === r.id).map(v => { placed.add(v.id); return deptRow(v, true); }).join('')).join('')}
+          ${d.by_division.filter(v => !placed.has(v.id)).map(v => deptRow(v, true)).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No leads in this period.');
+
+    const staffHtml = d.staff.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th style="width:44px">#</th><th>Staff</th><th class="${R}">New leads</th><th class="${R}">Won</th><th>Conversion</th><th class="${R}">Won value</th>
+          <th class="${R}" title="Open deals they own right now">Open deals</th><th class="${R}" title="Their follow-ups past the due date, right now">Overdue</th><th class="${R}" title="Average time from assignment to first contact">First response</th></tr></thead>
+        <tbody>${d.staff.map((s, i) => {
+          const sh = k.won_value_in_range ? s.won_value / k.won_value_in_range * 100 : 0;
+          const pick = s.user_id !== f.user_id;
+          return `<tr${pick ? ` class="crm-dash-filterable" data-dash-filter="user_id" data-value="${s.user_id}" title="Show only ${escHtml(s.name)}’s figures"` : ''}>
+            <td><span class="crm-dash-rank">${i + 1}</span></td>
+            <td><span class="crm-dash-avatar">${escHtml(_crmInitials(s.name))}</span><strong>${escHtml(s.name)}</strong></td>
+            <td class="${R}">${_crmDashNum(s.leads)}</td><td class="${R}">${_crmDashNum(s.won)}</td>
+            <td>${share(s.conversion_rate, 'var(--crm-dash-c2)')}<span class="crm-dash-cell-sub">${_crmDashPct(s.conversion_rate)}</span></td>
+            <td class="${R}"><strong>${_crmDashMoney(s.won_value)}</strong>${sh ? `<span class="crm-dash-cell-sub">${_crmDashPct(sh)} of revenue</span>` : ''}</td>
+            <td class="${R}">${_crmDashNum(s.open_deals)}${s.open_value ? `<span class="crm-dash-cell-sub">${escHtml(_crmDashMoney(s.open_value, { compact: true }))}</span>` : ''}</td>
+            <td class="${R}${s.overdue_follow_ups ? ' crm-dash-bad' : ''}">${s.overdue_follow_ups ? `<strong>${_crmDashNum(s.overdue_follow_ups)}</strong>` : '<span class="crm-ws-muted">0</span>'}</td>
+            <td class="${R}">${hours(s.avg_response_hours)}</td></tr>`;
+        }).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No assigned leads in this period.');
+
+    // Needs attention (live): counts, then the oldest overdue follow-ups and leads nobody has contacted
+    const att = d.attention || { follow_ups: [], uncontacted: [] };
+    const attCount = (n, label, tone, tip) => `<div class="crm-dash-att-count${n ? ' crm-dash-att-count--' + tone : ''}" title="${escHtml(tip)}"><b>${_crmDashNum(n)}</b><span>${label}</span></div>`;
+    const attRow = (a, tag, tone) => `<li class="crm-dash-att-row crm-dash-link" data-dash-lead="${a.lead_id}" data-project="${a.project_id}" title="Open this lead">
+        <span class="crm-dash-avatar">${escHtml(_crmInitials(a.name || '?'))}</span>
+        <span class="crm-dash-att-main"><strong>${escHtml(a.name || '—')}</strong><span class="crm-dash-cell-sub">${escHtml(a.owner || 'Unassigned')}${a.phone ? ` · ${escHtml(a.phone)}` : ''}</span></span>
+        <span class="crm-dash-att-tag crm-dash-att-tag--${tone}">${tag}</span><i class="fa fa-chevron-right crm-dash-chev"></i></li>`;
+    const urgent = (k.overdue_follow_ups || 0) + (k.past_due_deals || 0);
+    const attentionHtml = `<div class="crm-dash-att-counts">
+        ${attCount(k.overdue_follow_ups, 'Overdue follow-ups', 'bad', 'Pending follow-ups whose due date has passed')}
+        ${attCount(k.uncontacted_leads, 'Not contacted yet', 'warn', 'Open leads with an owner who has not contacted the customer yet')}
+        ${attCount(k.unassigned_leads, 'Unassigned', 'warn', 'Open leads that nobody owns')}
+        ${attCount(k.past_due_deals, 'Past-due deals', 'bad', 'Open deals past their expected close date')}
+      </div>
+      ${att.follow_ups.length ? `<div class="crm-dash-att-head"><span>Oldest overdue follow-ups</span><button type="button" data-dash-followups>View all <i class="fa fa-arrow-right"></i></button></div>
+        <ul class="crm-dash-att-list">${att.follow_ups.slice(0, 5).map(a => attRow(a, `${_crmDashPl(a.days_overdue, 'day')} late`, 'bad')).join('')}</ul>` : ''}
+      ${att.uncontacted.length ? `<div class="crm-dash-att-head"><span>Assigned but not contacted yet</span></div>
+        <ul class="crm-dash-att-list">${att.uncontacted.slice(0, 5).map(a => attRow(a, a.age_days ? `waiting ${_crmDashPl(a.age_days, 'day')}` : 'new today', a.age_days >= 2 ? 'bad' : 'warn')).join('')}</ul>` : ''}
+      ${!urgent && !att.uncontacted.length ? '<div class="crm-dash-ok"><i class="fa fa-circle-check"></i> No overdue follow-ups, past-due deals or uncontacted leads.</div>' : ''}`;
+
+    // Open pipeline right now, per status, and by expected close date
+    const stages = (d.pipeline_stages || []).filter(s => s.leads);
+    const stagesHtml = stages.length
+      ? _crmDashBarsHtml(stages, { extra: r => `${r.value ? _crmDashMoney(r.value, { compact: true }) : 'no value'}${r.past_due ? ` · ${r.past_due} past due` : ''}` })
+      : _crmWsPanelHtml('No open deals.');
+    const fc = d.forecast || [];
+    const fcTotal = Math.max(1, fc.reduce((a, r) => a + r.leads, 0));
+    const fcColor = { past: 'var(--crm-dash-bad)', soon: 'var(--crm-dash-c1)', later: 'var(--crm-dash-c2)', none: 'var(--crm-dash-c3)' };
+    const noDate = fc.find(r => r.key === 'none')?.leads || 0;
+    const forecastHtml = k.open_pipeline_count ? `<div class="crm-dash-forecast">${fc.map(r => metric(
+        `<span class="crm-dash-swatch" style="background:${fcColor[r.key]}"></span>${r.label}`, _crmDashNum(r.leads),
+        r.value ? escHtml(_crmDashMoney(r.value, { compact: true })) : 'no value', r.key === 'past' && r.leads ? 'crm-dash-metric--bad' : '')).join('')}</div>
+      <div class="crm-dash-stack">${fc.filter(r => r.leads).map(r => `<span style="width:${r.leads / fcTotal * 100}%;background:${fcColor[r.key]}" title="${escHtml(r.label)}: ${r.leads}"></span>`).join('')}</div>
+      ${noDate / fcTotal > 0.5 ? '<div class="crm-dash-tip-hint"><i class="fa fa-lightbulb"></i> Most open deals have no expected close date. Set one on each lead to make this forecast useful.</div>' : ''}`
+      : _crmWsPanelHtml('No open deals.');
+
+    const mode = _crmDash.trendMode || 'revenue';
+    const insights = _crmDashInsights(d);
+    const jump = (id, label, badge = 0) => `<button type="button" data-dash-jump="${id}">${label}${badge ? `<b>${badge}</b>` : ''}</button>`;
 
     $('#crm-dash-body').innerHTML = `
-      <div class="crm-dash-tiles">
-        ${tile('fa-user-plus', 'Leads', _crmDashNum(k.leads), `${_crmDashNum(k.open)} still open`)}
-        ${tile('fa-trophy', 'Conversion', `${k.conversion_rate}%`, `${_crmDashNum(k.won)} won · ${_crmDashNum(k.lost)} lost`)}
-        ${tile('fa-sack-dollar', 'Won value', formatMoney(k.won_value_in_range), `${_crmDashNum(k.won_in_range)} closed won in the period`)}
-        ${tile('fa-paper-plane', 'Quotations sent', formatMoney(k.quotation_value_sent), `${_crmDashNum(k.quotations_sent)} sent · ${_crmDashNum(k.quotations_won)} won (${formatMoney(k.quotation_value_won)}) · ${_crmDashNum(k.quotations_lost)} lost (${formatMoney(k.quotation_value_lost)})`)}
-        ${tile('fa-file-signature', 'Pending approvals', _crmDashNum(k.pending_approvals), formatMoney(k.pending_approval_value), k.pending_approvals ? 'crm-dash-tile--warn' : '')}
-        ${tile('fa-phone-slash', 'Overdue follow-ups', _crmDashNum(k.overdue_follow_ups), k.overdue_follow_ups ? '<i class="fa fa-triangle-exclamation"></i> Needs chasing' : 'All on time', k.overdue_follow_ups ? 'crm-dash-tile--overdue' : '')}
-        ${tile('fa-stopwatch', 'Avg response', hours(k.avg_response_hours), 'assignment → first contact')}
-        ${tile('fa-hourglass-end', 'Avg close time', k.avg_close_days == null ? '—' : `${k.avg_close_days} d`, 'created → won / lost')}
+      <div class="crm-dash-head">
+        <div>
+          <div class="crm-dash-title">Sales performance</div>
+          <div class="crm-dash-period">${escHtml(_crmDashDay(f.from))} – ${escHtml(_crmDashDay(f.to))}
+            ${p.from ? `<span class="crm-dash-sep">·</span> compared with ${escHtml(_crmDashDay(p.from))} – ${escHtml(_crmDashDay(p.to))}` : ''}</div>
+        </div>
+        <div class="crm-dash-chips">${scope.length
+          ? scope.map(([key, label]) => `<button type="button" class="crm-dash-chip" data-dash-clear="${key}" title="Remove this filter">${escHtml(label)}<i class="fa fa-xmark"></i></button>`).join('')
+          : `<span class="crm-dash-scope">${o.scope === 'headed' ? 'My departments' : 'Whole business'}</span>`}</div>
       </div>
 
-      <div class="crm-dash-card crm-dash-card--wide">
-        <div class="crm-dash-card-head"><span>Leads created per ${d.trend.length && d.trend[0].label.startsWith('Wk') ? 'week' : 'day'}</span>
-          <span class="crm-dash-legend"><span class="crm-dash-key crm-dash-key--c1"></span>Leads <span class="crm-dash-key crm-dash-key--c2"></span>Won (of those)</span></div>
+      <div class="crm-dash-jump">
+        ${jump('crm-dash-s-attention', 'Needs attention', urgent)}${jump('crm-dash-s-trend', 'Trend')}${jump('crm-dash-s-pipeline', 'Pipeline')}${jump('crm-dash-s-channels', 'Channels &amp; teams')}${jump('crm-dash-s-team', 'Team')}
+      </div>
+
+      <div class="crm-dash-heroes">
+        ${hero('Revenue won', money(k.won_value_in_range), `${_crmDashPl(k.won_in_range, 'deal')} closed won`,
+          _crmDashDelta(k.won_value_in_range, p.won_value_in_range),
+          { tip: 'Deals closed as won in the period. Uses the accepted quotation total, otherwise the estimated value.', jump: 'crm-dash-s-team' })}
+        ${hero('Open pipeline', k.open_pipeline_value ? money(k.open_pipeline_value) : '—',
+          `${_crmDashPl(k.open_pipeline_count, 'open deal')}${k.open_pipeline_count && !k.open_pipeline_value ? ' · no values estimated' : ''}${k.past_due_deals ? ` · <span class="crm-dash-bad">${_crmDashNum(k.past_due_deals)} past due</span>` : ''}`,
+          '<span class="crm-dash-delta-vs">Live — all open deals in scope</span>',
+          { tip: 'Sum of estimated values of every open deal right now, whatever its creation date.', jump: 'crm-dash-s-pipeline' })}
+        ${hero('Win rate', _crmDashPct(k.win_rate), `${_crmDashNum(k.won_in_range)} won · ${_crmDashNum(k.lost_in_range)} lost in the period`,
+          _crmDashDelta(k.win_rate, p.win_rate, { pts: true }),
+          { tip: 'Won ÷ (won + lost) among deals closed in the period.', jump: 'crm-dash-s-pipeline' })}
+        ${hero('New leads', _crmDashNum(k.leads), `${_crmDashNum(k.open)} still open · ${_crmDashPct(k.conversion_rate)} converted`,
+          _crmDashDelta(k.leads, p.leads),
+          { tip: 'Leads created in the period, and how many of them are now won.', jump: 'crm-dash-s-channels' })}
+      </div>
+
+      <div class="crm-dash-split" id="crm-dash-s-attention">
+        ${card('Key insights', '', `<ul class="crm-dash-insights">${insights.map(i => `
+          <li class="crm-dash-insight crm-dash-insight--${i.tone}"><span class="crm-dash-mark"></span><span>${i.html}</span></li>`).join('')}</ul>`)}
+        ${card('Needs attention', 'live · click a customer to open', attentionHtml)}
+      </div>
+
+      ${card('Sales efficiency', 'figures for the selected period unless marked live', `<div class="crm-dash-metrics">
+          ${metric('Avg deal size', k.avg_deal_value == null ? '—' : money(k.avg_deal_value), _crmDashDelta(k.avg_deal_value, p.avg_deal_value, { vs: false }), '', 'Revenue won ÷ deals won')}
+          ${metric('Lead conversion', _crmDashPct(k.conversion_rate), _crmDashDelta(k.conversion_rate, p.conversion_rate, { pts: true, vs: false }), '', 'Leads created in the period that are now won ÷ all leads created in the period')}
+          ${metric('Quotations sent', money(k.quotation_value_sent), `${_crmDashNum(k.quotations_sent)} sent · ${_crmDashNum(k.quotations_won)} accepted · ${_crmDashNum(k.quotations_lost)} rejected`, '', 'Latest quotation versions sent in the period')}
+          ${metric('Pending approval', _crmDashNum(k.pending_approvals), k.pending_approvals ? `${_crmDashMoney(k.pending_approval_value, { compact: true })} waiting` : 'Nothing waiting', k.pending_approvals ? 'crm-dash-metric--warn' : '', 'Live: quotations waiting for a manager to approve')}
+          ${metric('Overdue follow-ups', _crmDashNum(k.overdue_follow_ups), k.overdue_follow_ups ? 'Needs chasing' : 'All on time', k.overdue_follow_ups ? 'crm-dash-metric--bad' : '', 'Live: pending follow-ups past their due date')}
+          ${metric('First response', hours(k.avg_response_hours), 'assignment → first contact', '', 'Average time from a lead being assigned to the first contact with the customer')}
+          ${metric('Sales cycle', k.avg_close_days == null ? '—' : `${k.avg_close_days} d`, 'created → won / lost', '', 'Average days from lead creation to won or lost, for deals closed in the period')}
+          ${metric('Past-due deals', _crmDashNum(k.past_due_deals), k.past_due_deals ? `${_crmDashMoney(k.past_due_deals_value, { compact: true })} at risk` : 'None', k.past_due_deals ? 'crm-dash-metric--bad' : '', 'Live: open deals past their expected close date')}
+        </div>`)}
+
+      <div class="crm-dash-card" id="crm-dash-s-trend">
+        <div class="crm-dash-card-head">
+          <span>${mode === 'revenue' ? `Revenue won per ${weekly ? 'week' : 'day'}` : `Leads created per ${weekly ? 'week' : 'day'}`}</span>
+          <span class="crm-dash-card-tools">
+            ${mode === 'leads' ? '<span class="crm-dash-legend"><span class="crm-dash-key crm-dash-key--c1"></span>Leads <span class="crm-dash-key crm-dash-key--c2"></span>Won (of those)</span>' : ''}
+            <span class="crm-dash-seg">
+              <button type="button" data-dash-trend="revenue" class="${mode === 'revenue' ? 'active' : ''}">Revenue</button>
+              <button type="button" data-dash-trend="leads" class="${mode === 'leads' ? 'active' : ''}">Leads</button>
+            </span>
+          </span>
+        </div>
         <div id="crm-dash-trend" class="crm-dash-chart"></div>
       </div>
 
-      <div class="crm-dash-grid">
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Funnel — current status of the leads</span></div>
-          ${_crmDashBarsHtml(d.funnel)}</div>
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Leads by source</span></div>
-          ${_crmDashBarsHtml(d.by_source, { extra: r => `${r.won} won` })}</div>
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Leads by department</span></div>
-          ${_crmDashBarsHtml(d.by_department, { extra: r => `${r.won} won` })}
-          ${d.by_division.length ? `<div class="crm-dash-sub-head">By division</div>${_crmDashBarsHtml(d.by_division, { extra: r => `${r.won} won` })}` : ''}</div>
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Top lost reasons</span></div>
-          ${_crmDashBarsHtml(d.lost_reasons, { color: 'var(--crm-dash-c3)', empty: 'No leads lost in this period.' })}</div>
+      <div class="crm-dash-section" id="crm-dash-s-pipeline">Pipeline</div>
+      <div class="crm-dash-grid2">
+        ${card('Open deals by status', `live · ${_crmDashPl(k.open_pipeline_count, 'deal')}`, stagesHtml)}
+        ${card('Expected to close', 'live · by expected close date', forecastHtml)}
+        ${card('Largest open deals', 'live · click to open', openHtml)}
+        ${card('Where this period’s leads are now', `${_crmDashPl(k.leads, 'lead')}`, funnelHtml)}
+        ${card('Biggest wins in the period', '', winsHtml)}
+        ${card('Why deals are lost', `${_crmDashNum(k.lost_in_range)} lost`, _crmDashBarsHtml(d.lost_reasons, {
+          color: 'var(--crm-dash-c3)', empty: 'No leads lost in this period.', extra: r => _crmDashPct(r.leads / Math.max(1, k.lost_in_range) * 100) }))}
       </div>
 
-      <div class="crm-dash-card crm-dash-card--wide">
-        <div class="crm-dash-card-head"><span>Staff ranking</span><span class="crm-ws-muted">by won value, then won count</span></div>
-        ${d.staff.length ? `<table class="crm-audit-table crm-dash-table">
-          <thead><tr><th>#</th><th>Staff</th><th class="crm-qt-right">Leads</th><th class="crm-qt-right">Won</th><th class="crm-qt-right">Won value</th><th class="crm-qt-right">Conversion</th></tr></thead>
-          <tbody>${d.staff.map((s, i) => `<tr>
-            <td>${i + 1}</td><td><strong>${escHtml(s.name)}</strong></td>
-            <td class="crm-qt-right">${_crmDashNum(s.leads)}</td><td class="crm-qt-right">${_crmDashNum(s.won)}</td>
-            <td class="crm-qt-right">${formatMoney(s.won_value)}</td><td class="crm-qt-right">${s.conversion_rate}%</td></tr>`).join('')}</tbody>
-        </table>` : _crmWsPanelHtml('No assigned leads in this period.')}
-      </div>`;
-    requestAnimationFrame(() => _crmDashTrendChart($('#crm-dash-trend'), d.trend));
+      <div class="crm-dash-section" id="crm-dash-s-channels">Channels &amp; teams</div>
+      <div class="crm-dash-grid2">
+        ${card('Lead sources', 'click a source to filter by it', sourceHtml)}
+        ${card('Departments', 'click a department or division to filter by it', deptHtml)}
+      </div>
+      ${card('Team leaderboard', 'ranked by won value · click a person to see only their figures', staffHtml, '', 'crm-dash-s-team')}`;
+    requestAnimationFrame(() => _crmDashTrendChart($('#crm-dash-trend'), d.trend, mode));
   }
 
-  /** Leads and won per day: two lines on one axis, Won dashed (a second cue besides colour), hover tooltip. */
-  function _crmDashTrendChart(container, rows) {
+  /**
+   * Revenue mode: won value per day as bars. Leads mode: leads and won per day as two lines,
+   * Won dashed (a second cue besides colour). Both with a hover tooltip.
+   */
+  function _crmDashTrendChart(container, rows, mode = 'revenue') {
     if (!container || !window.d3) return;
     container.innerHTML = '';
-    if (!rows.length || rows.every(r => !r.leads)) { container.innerHTML = _crmWsPanelHtml('No leads in this period.'); return; }
-    const W = container.clientWidth || 600, H = container.clientHeight || 220;
-    const m = { top: 14, right: 56, bottom: 26, left: 36 };
+    const revenue = mode === 'revenue';
+    const val = r => revenue ? r.won_value || 0 : r.leads;
+    if (!rows.length || rows.every(r => !val(r))) {
+      container.innerHTML = _crmWsPanelHtml(revenue ? 'No deals won in this period.' : 'No leads in this period.');
+      return;
+    }
+    const W = container.clientWidth || 600, H = container.clientHeight || 240;
+    const m = { top: 14, right: revenue ? 16 : 64, bottom: 26, left: revenue ? 56 : 36 };
     const w = W - m.left - m.right, h = H - m.top - m.bottom;
     if (w <= 0 || h <= 0) return;
     const st = getComputedStyle(container);
     const c1 = st.getPropertyValue('--crm-dash-c1').trim() || '#4f46e5';
     const c2 = st.getPropertyValue('--crm-dash-c2').trim() || '#0d9488';
-    const muted = st.getPropertyValue('--text-muted').trim() || '#94a3b8';
-    const border = st.getPropertyValue('--border').trim() || '#e2e8f0';
+    const muted = st.getPropertyValue('--mac-muted').trim() || '#94a3b8';
+    const border = st.getPropertyValue('--mac-line').trim() || '#e2e8f0';
     const surface = st.getPropertyValue('--surface').trim() || '#fff';
+    const compact = v => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(v);
 
     const svg = d3.select(container).append('svg').attr('width', W).attr('height', H);
     const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
-    const x = d3.scalePoint().domain(rows.map(r => r.date)).range([0, w]);
-    const yMax = d3.max(rows, r => r.leads) || 1;
+    const dates = rows.map(r => r.date);
+    const x = revenue ? d3.scaleBand().domain(dates).range([0, w]).padding(0.28) : d3.scalePoint().domain(dates).range([0, w]);
+    const cx = dt => revenue ? x(dt) + x.bandwidth() / 2 : x(dt);
+    const yMax = d3.max(rows, val) || 1;
     const y = d3.scaleLinear().domain([0, yMax * 1.15]).nice().range([h, 0]);
+    const ticks = revenue ? y.ticks(4) : y.ticks(4).filter(Number.isInteger);
 
-    g.append('g').call(d3.axisLeft(y).ticks(4).tickSize(-w).tickFormat(''))
+    g.append('g').call(d3.axisLeft(y).tickValues(ticks).tickSize(-w).tickFormat(''))
       .call(a => { a.select('.domain').remove(); a.selectAll('line').attr('stroke', border).attr('stroke-dasharray', '3,3'); });
     const every = Math.max(1, Math.ceil(rows.length / 8));
     g.append('g').attr('transform', `translate(0,${h})`)
-      .call(d3.axisBottom(x).tickValues(rows.filter((_, i) => i % every === 0).map(r => r.date)).tickFormat(dt => rows.find(r => r.date === dt)?.label.replace('Wk ', '') || ''))
-      .call(a => { a.select('.domain').attr('stroke', border); a.selectAll('text').attr('fill', muted).style('font-size', '10px'); a.selectAll('line').attr('stroke', border); });
-    g.append('g').call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('d')))
-      .call(a => { a.select('.domain').remove(); a.selectAll('line').remove(); a.selectAll('text').attr('fill', muted).style('font-size', '10px'); });
+      .call(d3.axisBottom(x).tickValues(dates.filter((_, i) => i % every === 0)).tickFormat(dt => rows.find(r => r.date === dt)?.label.replace('Wk ', '') || ''))
+      .call(a => { a.select('.domain').attr('stroke', border); a.selectAll('text').attr('fill', muted).style('font-size', '10.5px'); a.selectAll('line').attr('stroke', border); });
+    g.append('g').call(d3.axisLeft(y).tickValues(ticks).tickFormat(revenue ? compact : d3.format('d')))
+      .call(a => { a.select('.domain').remove(); a.selectAll('line').remove(); a.selectAll('text').attr('fill', muted).style('font-size', '10.5px'); });
+
+    const tip = d3.select(container).append('div').attr('class', 'crm-dash-tip').style('display', 'none');
+    const step = rows.length > 1 ? cx(rows[1].date) - cx(rows[0].date) : w;
+    const place = r => tip.style('display', null).style('left', `${Math.min(m.left + cx(r.date) + 12, W - 160)}px`).style('top', `${m.top}px`);
+
+    if (revenue) {
+      const bars = g.selectAll('.crm-dash-col').data(rows).join('rect').attr('class', 'crm-dash-col')
+        .attr('x', r => x(r.date)).attr('width', x.bandwidth())
+        .attr('y', r => y(val(r))).attr('height', r => h - y(val(r)))
+        .attr('rx', Math.min(2, x.bandwidth() / 2)).attr('fill', c1);
+      g.selectAll('.crm-dash-hit').data(rows).join('rect').attr('class', 'crm-dash-hit')
+        .attr('x', r => cx(r.date) - step / 2).attr('y', 0).attr('width', Math.max(step, 6)).attr('height', h).attr('fill', 'transparent')
+        .on('mouseenter', (ev, r) => {
+          bars.attr('opacity', b => b === r ? 1 : 0.45);
+          place(r).html(`<strong>${escHtml(r.label)}</strong><div>Revenue won <b>${escHtml(_crmDashMoney(r.won_value))}</b></div>`);
+        })
+        .on('mouseleave', () => { bars.attr('opacity', 1); tip.style('display', 'none'); });
+      return;
+    }
+
+    const grad = svg.append('defs').append('linearGradient').attr('id', 'crm-dash-area').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 1);
+    grad.append('stop').attr('offset', '0%').attr('stop-color', c1).attr('stop-opacity', 0.22);
+    grad.append('stop').attr('offset', '100%').attr('stop-color', c1).attr('stop-opacity', 0);
+    g.append('path').datum(rows).attr('fill', 'url(#crm-dash-area)')
+      .attr('d', d3.area().x(r => x(r.date)).y0(h).y1(r => y(r.leads)).curve(d3.curveMonotoneX));
 
     const series = [
       { key: 'leads', name: 'Leads', color: c1, dash: null },
       { key: 'won',   name: 'Won',   color: c2, dash: '5,4' },
     ];
     series.forEach(s => {
-      g.append('path').datum(rows).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2)
+      g.append('path').datum(rows).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2.2)
         .attr('stroke-dasharray', s.dash).attr('d', d3.line().x(r => x(r.date)).y(r => y(r[s.key])).curve(d3.curveMonotoneX));
+      const total = d3.sum(rows, r => r[s.key]);
       const last = rows[rows.length - 1];
-      g.append('text').attr('x', w + 6).attr('y', y(last[s.key]) + 4).attr('fill', muted).style('font-size', '10.5px').text(`${s.name} ${last[s.key]}`);
+      g.append('text').attr('x', w + 6).attr('y', y(last[s.key]) + 4).attr('fill', muted).style('font-size', '10.5px').text(`${s.name} ${total}`);
     });
 
     // Hover: a crosshair and a tooltip with both values, over a full-height hit area per day
     const cross = g.append('line').attr('y1', 0).attr('y2', h).attr('stroke', muted).attr('stroke-width', 1).style('display', 'none');
     const dots = series.map(s => g.append('circle').attr('r', 4).attr('fill', s.color).attr('stroke', surface).attr('stroke-width', 2).style('display', 'none'));
-    const tip = d3.select(container).append('div').attr('class', 'crm-dash-tip').style('display', 'none');
-    const step = rows.length > 1 ? x(rows[1].date) - x(rows[0].date) : w;
     g.selectAll('.crm-dash-hit').data(rows).join('rect').attr('class', 'crm-dash-hit')
       .attr('x', r => x(r.date) - step / 2).attr('y', 0).attr('width', Math.max(step, 6)).attr('height', h).attr('fill', 'transparent')
       .on('mouseenter', (ev, r) => {
         cross.attr('x1', x(r.date)).attr('x2', x(r.date)).style('display', null);
         series.forEach((s, i) => dots[i].attr('cx', x(r.date)).attr('cy', y(r[s.key])).style('display', null));
-        tip.style('display', null).style('left', `${Math.min(m.left + x(r.date) + 10, W - 130)}px`).style('top', `${m.top}px`)
-          .html(`<strong>${escHtml(r.label)}</strong><div>Leads <b>${r.leads}</b></div><div>Won <b>${r.won}</b></div>`);
+        place(r).html(`<strong>${escHtml(r.label)}</strong><div>Leads <b>${r.leads}</b></div><div>Won <b>${r.won}</b></div>`);
       })
       .on('mouseleave', () => { cross.style('display', 'none'); dots.forEach(dot => dot.style('display', 'none')); tip.style('display', 'none'); });
   }
 
+  $('#crm-dash-body')?.addEventListener('click', e => {
+    const seg = e.target.closest('[data-dash-trend]');
+    if (seg && _crmDash.data) { _crmDash.trendMode = seg.dataset.dashTrend; _crmDashRender(); return; }
+    const jumpTo = e.target.closest('[data-dash-jump]');
+    if (jumpTo) { document.getElementById(jumpTo.dataset.dashJump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (e.target.closest('[data-dash-followups]')) { openCrmFollowUpsModal('team', 'overdue'); return; }
+    const clear = e.target.closest('[data-dash-clear]');
+    if (clear) { _crmDashSetFilter(clear.dataset.dashClear, ''); return; }
+    const row = e.target.closest('[data-dash-lead]');
+    if (row) { crmOpenLead(+row.dataset.project, +row.dataset.dashLead); return; }
+    const pick = e.target.closest('[data-dash-filter]');
+    if (pick) _crmDashSetFilter(pick.dataset.dashFilter, pick.dataset.value, pick.dataset.dept);
+  });
+
   $('#crm-dash-apply')?.addEventListener('click', () => { _crmDashReadFilters(); loadCrmDashboard(); });
-  $('#crm-dash-range')?.addEventListener('change', e => {
-    if (!e.target.value) return;
-    Object.assign(_crmDash.filters ||= {}, _crmDashRange(e.target.value));
-    $('#crm-dash-from').value = _crmDash.filters.from;
-    $('#crm-dash-to').value = _crmDash.filters.to;
+  $('#crm-dash-reset')?.addEventListener('click', () => { _crmDash.filters = null; loadCrmDashboard(); });
+  $('#crm-dash-range')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-range]');
+    if (!b) return;
     _crmDashReadFilters();
+    Object.assign(_crmDash.filters, _crmDashRange(b.dataset.range));
+    _crmDash.range = b.dataset.range;
     loadCrmDashboard();
   });
+  ['#crm-dash-from', '#crm-dash-to'].forEach(sel => $(sel)?.addEventListener('change', () => {
+    if (!$('#crm-dash-from').value || !$('#crm-dash-to').value) return;
+    _crmDash.range = null;
+    _crmDashReadFilters();
+    loadCrmDashboard();
+  }));
   $('#crm-dash-dept')?.addEventListener('change', () => { _crmDashReadFilters(); _crmDash.filters.division_id = ''; loadCrmDashboard(); });
   ['#crm-dash-div', '#crm-dash-user', '#crm-dash-source'].forEach(sel => $(sel)?.addEventListener('change', () => { _crmDashReadFilters(); loadCrmDashboard(); }));
   ['pdf', 'excel'].forEach(format => $(`#crm-dash-${format}`)?.addEventListener('click', async e => {
@@ -62772,7 +63609,7 @@ async function submitDsCreate() {
     if (res?.status !== 200) { toast(res?.message || 'Export failed', 'error'); return; }
     toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
   }));
-  window.addEventListener('resize', () => { if (_crmView === 'dashboard' && _crmDash.data) _crmDashTrendChart($('#crm-dash-trend'), _crmDash.data.trend); });
+  window.addEventListener('resize', () => { if (_crmView === 'dashboard' && _crmDash.data) _crmDashTrendChart($('#crm-dash-trend'), _crmDash.data.trend, _crmDash.trendMode || 'revenue'); });
   $('#rb-crm-dashboard')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); switchCrmView('dashboard'); });
 
   // ── Assign modal: department members as checkboxes, a star for the primary, and the history ──
@@ -63016,7 +63853,7 @@ async function submitDsCreate() {
     // A stage that asks for a reason gets it before saving
     const newStageId = parseInt(payload.stage_id);
     if (newStageId && newStageId !== lead.stage_id) {
-      const extra = await _crmMoveDetails(newStageId);
+      const extra = await _crmMoveDetails(newStageId, lead.id);
       if (extra === null) return;
       Object.assign(payload, extra);
     }
@@ -63052,7 +63889,9 @@ async function submitDsCreate() {
       _crmRenderLeadModal(false);
       _crmLoadLeadHistory(_crmViewLead);
       _crmWsRefresh(_crmViewLead, ['timeline']);
-      toast('Lead updated.', 'success');
+      // A stage that needs approval: the rest is saved, the move waits for the head
+      if (res.body?.pending_move) _crmViewLead.pending_move = res.body.pending_move;
+      toast(res.body?.message || 'Lead updated.', res.body?.pending_move ? 'info' : 'success');
       loadCrmPipeline(_crmProjectId, { silent: true });
       if (_crmDetailLoaded.customData) loadCrmCustomData();
       if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
@@ -63388,6 +64227,11 @@ async function submitDsCreate() {
   });
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
   $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
+  $('#rb-crm-add-dept')?.addEventListener('click',    () => { activateTab('crm'); openCrmDeptModal(); });
+  // A department added from CRM (or HR) shows up in Org Structure straight away.
+  document.addEventListener('departments:changed', () => {
+    if ($('#crm-org-modal')?.style.display === 'flex') _crmLoadOrg();
+  });
   $('#rb-crm-audit')?.addEventListener('click',       () => openCrmAuditModal());
   $('#rb-crm-inbox')?.addEventListener('click',       () => { activateTab('crm'); openCrmInboxModal(); });
   $('#rb-crm-import-leads')?.addEventListener('click', () => { activateTab('crm'); openCrmImportModal(); });
@@ -63404,9 +64248,10 @@ async function submitDsCreate() {
   let _crmPermsDraft  = null;   // { permissions: { key: bool }, stage_access: { projectId: [stageIds] } }
   let _crmPermsDirty  = false;
   let _crmPermsUserQ  = '';
+  let _crmPermsRelQ   = '';
 
   async function openCrmPermissionsModal() {
-    _crmPerms = null; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false;
+    _crmPerms = null; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false; _crmPermsRelQ = '';
     _macShow($('#crm-perms-modal'));
     $('#crm-perms-alert').style.display = 'none';
     $('#crm-perms-user-search').value = _crmPermsUserQ = '';
@@ -63537,9 +64382,9 @@ async function submitDsCreate() {
           ${escHtml(s.name)}${s.is_won ? ' <i class="fa fa-trophy" style="color:#16a34a;font-size:10px"></i>' : ''}${s.is_lost ? ' <i class="fa fa-circle-xmark" style="color:#ef4444;font-size:10px"></i>' : ''}
         </label>`).join('') || '<span class="crm-perms-muted">This relation has no stages yet.</span>'}
       </div>` : '';
-      return `<div class="crm-perms-rel">
+      return `<div class="crm-perms-rel" data-rel-name="${escHtml(r.name.toLowerCase())}">
         <div class="crm-perms-rel-head">
-          <i class="fa fa-handshake" style="color:#7c3aed"></i>
+          <i class="fa fa-handshake" style="color:var(--accent)"></i>
           <span class="crm-perms-rel-name" title="${escHtml(r.name)}">${escHtml(r.name)}</span>
           <select class="po-field-input" data-rel-mode="${r.id}">
             <option value="all"${mode === 'all' ? ' selected' : ''}>All stages</option>
@@ -63559,10 +64404,30 @@ async function submitDsCreate() {
         <div class="crm-perms-groups">${groups}</div>
       </div>
       <div>
-        <div class="crm-perms-section-title">Stage visibility</div>
+        <div class="crm-perms-section-title">Stage visibility
+          ${_crmPerms.relations.length ? `<div class="mac-search" style="margin-left:auto;width:220px"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-perms-rel-search" placeholder="Search relations" autocomplete="off" value="${escHtml(_crmPermsRelQ)}"></div>` : ''}
+        </div>
         <div class="crm-perms-muted" style="margin-bottom:8px">Choose which pipeline stages this user sees in each relation. Leads in other stages stay out of their pipeline, contacts and custom data; hidden relations don't appear at all.</div>
-        <div style="display:flex;flex-direction:column;gap:8px">${relations}</div>
+        <div style="display:flex;flex-direction:column;gap:8px">${relations}
+          <span class="crm-perms-muted" id="crm-perms-rel-empty" style="display:none">No relations match your search.</span>
+        </div>
       </div>`;
+    _crmFilterPermsRelations();
+  }
+
+  // Hides non-matching relation cards in place, so the search box keeps focus while typing
+  function _crmFilterPermsRelations() {
+    const body = $('#crm-perms-editor-body');
+    if (!body) return;
+    const q = _crmPermsRelQ.trim().toLowerCase();
+    let shown = 0;
+    body.querySelectorAll('.crm-perms-rel[data-rel-name]').forEach(el => {
+      const match = !q || el.dataset.relName.includes(q);
+      el.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    const empty = $('#crm-perms-rel-empty');
+    if (empty) empty.style.display = q && !shown ? '' : 'none';
   }
 
   function _crmPermsSyncFooter() {
@@ -63599,6 +64464,12 @@ async function submitDsCreate() {
       _crmPermsDraft.stage_access[pid] = [...ids];
       _crmPermsDirty = true;   // no re-render: unticking the last stage keeps "Selected" open
     }
+  });
+
+  $('#crm-perms-editor-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-perms-rel-search') return;
+    _crmPermsRelQ = e.target.value;
+    _crmFilterPermsRelations();
   });
 
   $('#crm-perms-editor-body')?.addEventListener('click', e => {
@@ -64003,6 +64874,253 @@ async function submitDsCreate() {
   $('#crm-org-modal-close')?.addEventListener('click', _crmCloseOrg);
   $('#crm-org-close-btn')?.addEventListener('click',   _crmCloseOrg);
 
+  // ── Departments modal ─────────────────────────────────────────────────────
+  // The HR departments, browsable from CRM: pick one on the left to see its
+  // head, staff and members; add or delete departments without leaving CRM.
+  let _crmDepts      = [];     // from /hr/departments
+  let _crmDeptId     = null;   // selected department, or 'new' for the add form
+  let _crmDeptDetail = null;   // selected department from /hr/departments/{id}
+
+  async function openCrmDeptModal() {
+    $('#crm-dept-search').value = '';
+    _macShow($('#crm-dept-modal'));
+    await _crmLoadDepts();
+  }
+
+  function _crmCloseDept() {
+    _macHide($('#crm-dept-modal'));
+  }
+
+  function _crmDeptAlert(msg) {
+    const el = $('#crm-dept-alert');
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
+  }
+
+  async function _crmLoadDepts(selectId) {
+    _crmDeptAlert('');
+    const res = await API.departments();
+    if (res.status !== 200) {
+      $('#crm-dept-list').innerHTML = `<span class="mac-side-empty">${escHtml(res.body?.message || 'Failed to load departments.')}</span>`;
+      $('#crm-dept-body').innerHTML = '';
+      return;
+    }
+    _crmDepts = res.body.data || [];
+    if (selectId !== undefined) _crmDeptId = selectId;
+    if (_crmDeptId !== 'new' && !_crmDepts.some(d => d.id === _crmDeptId)) _crmDeptId = _crmDepts[0]?.id ?? 'new';
+    $('#crm-dept-count').textContent = `${_crmDepts.length} department${_crmDepts.length !== 1 ? 's' : ''}`;
+    _crmRenderDeptList();
+    await _crmSelectDept(_crmDeptId);
+  }
+
+  function _crmRenderDeptList() {
+    const list = $('#crm-dept-list');
+    if (!_crmDepts.length) {
+      list.innerHTML = '<span class="mac-side-empty">No departments yet. Click New Department to add one.</span>';
+      return;
+    }
+    const q = $('#crm-dept-search').value.trim().toLowerCase();
+    const depts = _crmDepts.filter(d => !q || d.name.toLowerCase().includes(q));
+    list.innerHTML = depts.map(d => {
+      const n = d.employees_count || 0;
+      return `<button type="button" class="mac-side-item${d.id === _crmDeptId ? ' active' : ''}" data-dept="${d.id}">
+        <span class="mac-side-icon"><i class="fa fa-building"></i></span>
+        <span class="mac-side-text">
+          <span class="mac-side-name">${escHtml(d.name)}</span>
+          <span class="mac-side-sub">${n} employee${n !== 1 ? 's' : ''}</span>
+        </span>
+        <span class="crm-dept-count">${n}</span>
+      </button>`;
+    }).join('') || `<span class="mac-side-empty">No department matches “${escHtml(q)}”.</span>`;
+  }
+
+  async function _crmSelectDept(id) {
+    _crmDeptId = id;
+    _crmDeptDetail = null;
+    $$('#crm-dept-list [data-dept]').forEach(b => b.classList.toggle('active', Number(b.dataset.dept) === id));
+    if (id === 'new') { _crmRenderDeptNew(); return; }
+    if (!id) { $('#crm-dept-body').innerHTML = '<span class="crm-perms-muted">Select a department.</span>'; return; }
+    $('#crm-dept-body').innerHTML = '<span class="crm-perms-muted"><i class="fa fa-spinner fa-spin"></i> Loading…</span>';
+    const res = await API.department(id);
+    if (_crmDeptId !== id) return;
+    if (res.status !== 200) {
+      $('#crm-dept-body').innerHTML = '';
+      _crmDeptAlert(res.body?.message || 'Failed to load the department.');
+      return;
+    }
+    _crmDeptDetail = res.body.data || {};
+    _crmRenderDeptDetail();
+  }
+
+  function _crmRenderDeptNew() {
+    $('#crm-dept-body').innerHTML = `
+      <div class="mac-hero">
+        <span class="mac-hero-icon"><i class="fa fa-plus"></i></span>
+        <div style="min-width:0;flex:1">
+          <div class="mac-hero-name">New Department</div>
+          <div class="mac-hero-sub">Teams, divisions or sites — used when registering employees and routing CRM leads</div>
+        </div>
+      </div>
+      <div class="mac-section">
+        <div class="mac-section-title">Details</div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">Department name <span class="mac-required">*</span><small>Names are unique per business</small></div>
+            <input type="text" class="po-field-input" id="crm-dept-name" maxlength="255" placeholder="e.g. Sales, Marketing" style="width:280px">
+          </div>
+          <div class="mac-group-foot">
+            ${_crmDepts.length ? '<button type="button" class="po-btn-ghost" data-dept-cancel style="margin-right:8px">Cancel</button>' : ''}
+            <button type="button" class="po-btn-primary" data-dept-create><i class="fa fa-plus"></i> Save department</button>
+          </div>
+        </div>
+      </div>
+      <div class="mac-section">
+        <div class="mac-section-title">Next steps</div>
+        <div class="mac-group">
+          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-user-tie"></i></span>Assign employees and a head in HR Management</div></div>
+          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-sitemap"></i></span>Link a pipeline to it in CRM → Org Structure</div></div>
+        </div>
+      </div>`;
+    setTimeout(() => $('#crm-dept-name')?.focus(), 60);
+  }
+
+  function _crmRenderDeptDetail() {
+    const d = _crmDeptDetail;
+    const n = d.employees_count || 0;
+    const t = d.employment_types || {};
+    const range = _deptRangeText(d);
+    const lead = (label, name) => `<div class="mac-row">
+        <div class="mac-row-label">${label}</div>
+        <div>${name ? `<strong>${escHtml(name)}</strong>` : '<span class="crm-perms-muted">Not assigned</span>'}</div>
+      </div>`;
+    const employees = d.employees || [];
+
+    $('#crm-dept-body').innerHTML = `
+      <div class="mac-hero">
+        <span class="mac-hero-icon"><i class="fa fa-building"></i></span>
+        <div style="min-width:0;flex:1">
+          <div class="mac-hero-name">${escHtml(d.name || '—')}</div>
+          <div class="mac-hero-sub">${d.head ? 'Head: ' + escHtml(d.head) : 'No head assigned'}${d.co_head ? ' · Co-head: ' + escHtml(d.co_head) : ''}</div>
+        </div>
+        <button type="button" class="po-btn-ghost" data-dept-org><i class="fa fa-sitemap"></i> Org Structure</button>
+      </div>
+
+      <div class="crm-dept-stats">
+        <div class="crm-dept-stat"><i class="fa fa-users"></i><div><b>${n}</b><span>Employees</span></div></div>
+        <div class="crm-dept-stat"><i class="fa fa-briefcase"></i><div><b>${t.full_time || 0}</b><span>Full time</span></div></div>
+        <div class="crm-dept-stat"><i class="fa fa-clock"></i><div><b>${t.part_time || 0}</b><span>Part time</span></div></div>
+        <div class="crm-dept-stat"><i class="fa fa-file-signature"></i><div><b>${t.contract || 0}</b><span>Contract</span></div></div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-section-title">Leadership</div>
+        <div class="mac-group">
+          ${lead('Head', d.head)}
+          ${lead('Co-head', d.co_head)}
+          ${range ? `<div class="mac-row"><div class="mac-row-label">Salary range</div><div>${escHtml(range)}</div></div>` : ''}
+        </div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-section-title">Employees <span class="crm-perms-muted" style="font-weight:400">· ${n}</span></div>
+        <div class="mac-group">
+          ${employees.map(e => `<div class="mac-row">
+            <div class="mac-row-label mac-row-label--icon">
+              <span class="crm-dept-avatar">${escHtml(_crmInitials(e.name || '?'))}</span>
+              <span style="min-width:0"><strong>${escHtml(e.name || '—')}</strong>
+                <small>${[e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</small></span>
+            </div>
+            <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+          </div>`).join('') || '<div class="mac-row mac-muted-row">No employees in this department yet. Add them in HR Management.</div>'}
+        </div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">Delete department<small>${n ? 'Move its employees to another department first' : 'This cannot be undone'}</small></div>
+            <button type="button" class="po-btn-ghost" data-dept-delete${n ? ' disabled style="opacity:.5"' : ''}><i class="fa fa-trash" style="color:#ff3b30"></i> Delete</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function _crmCreateDept(btn) {
+    const name = $('#crm-dept-name').value.trim();
+    if (!name) { _crmDeptAlert('Department name is required.'); $('#crm-dept-name').focus(); return; }
+    btn.disabled = true;
+    _crmDeptAlert('');
+    const res = await API.createDepartment({ name });
+    if (res.status === 201 || res.status === 200) {
+      toast(`Department “${name}” created.`, 'info');
+      document.dispatchEvent(new CustomEvent('departments:changed'));
+      await _crmLoadDepts(res.body?.data?.id);
+    } else {
+      btn.disabled = false;
+      _crmDeptAlert(res.body?.errors?.name?.[0] || res.body?.message || 'Failed to create the department.');
+    }
+  }
+
+  $('#crm-dept-list')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-dept]');
+    if (!b) return;
+    _crmDeptAlert('');
+    _crmSelectDept(Number(b.dataset.dept));
+  });
+
+  $('#crm-dept-new-btn')?.addEventListener('click', () => {
+    _crmDeptAlert('');
+    _crmSelectDept('new');
+  });
+
+  $('#crm-dept-body')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.id === 'crm-dept-name') _crmCreateDept($('#crm-dept-body [data-dept-create]'));
+  });
+
+  $('#crm-dept-body')?.addEventListener('click', async e => {
+    const t = e.target.closest('button');
+    if (!t || t.disabled) return;
+
+    if (t.matches('[data-dept-create]')) { _crmCreateDept(t); return; }
+    if (t.matches('[data-dept-cancel]')) { _crmDeptAlert(''); _crmSelectDept(_crmDepts[0]?.id ?? null); return; }
+
+    if (t.matches('[data-dept-org]')) {
+      _crmOrgDeptId = _crmDeptDetail?.id ?? null;
+      _crmCloseDept();
+      openCrmOrgModal();
+      return;
+    }
+
+    if (t.matches('[data-dept-delete]')) {
+      const d = _crmDeptDetail;
+      if (!d) return;
+      const ok = await appConfirm({
+        title: 'Delete department?',
+        message: `“${d.name}” will be removed from HR and CRM.`,
+        confirmText: '<i class="fa fa-trash-can"></i> Delete',
+        icon: 'fa-trash-can',
+        danger: true,
+      });
+      if (!ok) return;
+      t.disabled = true;
+      const res = await API.deleteDepartment(d.id);
+      if (res.status === 200) {
+        toast('Department deleted.', 'info');
+        document.dispatchEvent(new CustomEvent('departments:changed'));
+        _crmDeptId = null;
+        await _crmLoadDepts();
+      } else {
+        t.disabled = false;
+        _crmDeptAlert(res.body?.message || 'Failed to delete the department.');
+      }
+    }
+  });
+
+  $('#crm-dept-search')?.addEventListener('input', () => _crmRenderDeptList());
+  $('#crm-dept-refresh-btn')?.addEventListener('click', () => _crmLoadDepts());
+  $('#crm-dept-modal-close')?.addEventListener('click', _crmCloseDept);
+  $('#crm-dept-close-btn')?.addEventListener('click',   _crmCloseDept);
+
   // ── Marketing inbox modal ─────────────────────────────────────────────────
   // New leads in the intake pipeline plus every lead flagged "needs review".
   // Marketing cleans the details, verifies, forwards to a department / division,
@@ -64068,7 +65186,7 @@ async function submitDsCreate() {
       const tag = l.needs_review ? `<span class="crm-inbox-flag" title="${escHtml(l.review_reason_label || 'Needs review')}"><i class="fa fa-flag"></i></span>`
                 : l.verified_at ? '<span class="crm-inbox-ok"><i class="fa fa-check"></i></span>' : '';
       return `<button type="button" class="crm-perms-user${l.id === _crmInboxLeadId ? ' active' : ''}" data-inbox-lead="${l.id}">
-        <span class="crm-perms-avatar" style="background:${_crmAvatarColor(l.name)};color:#fff">${escHtml(_crmInitials(l.name))}</span>
+        <span class="crm-perms-avatar">${escHtml(_crmInitials(l.name))}</span>
         <span class="crm-perms-user-info">
           <span class="crm-perms-user-name" style="display:block">${escHtml(l.name)}</span>
           <span class="crm-perms-user-sub" style="display:block">${escHtml(l.phone || l.email || '—')} · ${escHtml(l.source_label || '')} · ${_crmAgo(l.created_at)}</span>
@@ -64364,11 +65482,11 @@ async function submitDsCreate() {
         </div>
       </div>
       <div class="crm-imp-help">
-        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4cd964,#248a3d)"><i class="fa fa-file-csv"></i></span> CSV template</strong>
+        <div><strong><span class="crm-imp-help-icon crm-imp-help-icon--plain"><i class="fa fa-file-csv"></i></span> CSV template</strong>
           Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.</div>
-        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#ff6b5e,#ea4335)"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:#ea4335"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
           Open the form's responses sheet → File → Download → CSV, and upload it as it is. Each question becomes a field or a line in the notes.</div>
-        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4a9bff,#1877f2)"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:#1877f2"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
           Meta Business Suite → Leads Center (or the page's Lead Ads forms) → Download CSV. Instagram leads are recognised from the platform column.</div>
       </div>
       <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
@@ -64752,6 +65870,7 @@ async function submitDsCreate() {
   let _stageDragId   = null;
   let _stageDragIdx  = null;
   let _stageListData = [];
+  const _stageSelected = new Set(); // stage ids ticked for bulk delete
   const PIPELINE_AUTOMATION_TRIGGER = 'crm.lead.stage_changed';
   let _pipelineFlow = null; // automation flow linked to the currently-open relation, or null
 
@@ -64762,6 +65881,7 @@ async function submitDsCreate() {
     }
     $('#crm-stages-modal-title').textContent = `Manage Stages`;
     $('#crm-stages-alert').style.display = 'none';
+    _stageSelected.clear();
     _macShow($('#crm-stages-modal'));
     // Pipeline Automation is a shortcut into the Automation Editor feature —
     // hide it (and skip fetching/creating automation flows) when that
@@ -64862,22 +65982,162 @@ async function submitDsCreate() {
     const res = await API.crmStages(_crmProjectId);
     if (res.status !== 200) { list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Failed to load.</span>'; return; }
     _stageListData = res.body?.data || [];
+    // Drop selections for stages that no longer exist or became undeletable
+    const deletable = new Set(_stageListData.filter(s => !s.is_protected).map(s => s.id));
+    [..._stageSelected].forEach(id => { if (!deletable.has(id)) _stageSelected.delete(id); });
     _renderStagesList();
   }
 
+  function _updateStageBulkBar() {
+    const deletableIds = _stageListData.filter(s => !s.is_protected).map(s => s.id);
+    const count = _stageSelected.size;
+    const allEl = $('#crm-stages-select-all');
+    allEl.disabled      = deletableIds.length === 0;
+    allEl.checked       = count > 0 && count === deletableIds.length;
+    allEl.indeterminate = count > 0 && count < deletableIds.length;
+    $('#crm-stages-selected-count').textContent = count;
+    $('#crm-stages-bulk-delete').style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+
+  $('#crm-stages-select-all')?.addEventListener('change', e => {
+    _stageSelected.clear();
+    if (e.target.checked) _stageListData.filter(s => !s.is_protected).forEach(s => _stageSelected.add(s.id));
+    _renderStagesList();
+  });
+
+  $('#crm-stages-bulk-delete')?.addEventListener('click', async () => {
+    const ids = [..._stageSelected];
+    if (!ids.length) return;
+    const names = _stageListData.filter(s => _stageSelected.has(s.id)).map(s => `"${s.name}"`).join(', ');
+    const ok = await appConfirm({ title: `Delete ${ids.length} stage${ids.length > 1 ? 's' : ''}?`, message: `${names} will be permanently deleted. Stages with leads will be skipped.`, danger: true, icon: 'fa-trash', confirmText: '<i class="fa fa-trash"></i> Delete' });
+    if (!ok) return;
+    const btn = $('#crm-stages-bulk-delete');
+    btn.disabled = true;
+    const res = await API.crmBulkDeleteStages(_crmProjectId, ids);
+    btn.disabled = false;
+    if (res.status === 200) {
+      const { deleted = 0, failed = [] } = res.body?.data || {};
+      _stageSelected.clear();
+      if (deleted) toast(`${deleted} stage${deleted > 1 ? 's' : ''} deleted.`, 'success');
+      if (failed.length) toast(`Skipped ${failed.map(f => `"${f.name}" (${f.message})`).join('; ')}`, 'error');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      toast(res.body?.message || 'Failed to delete stages.', 'error');
+    }
+  });
+
+  // Pipeline at a glance: a bar of every stage sized by its leads, plus totals
+  function _renderStagesSummary() {
+    const el = $('#crm-stages-summary');
+    if (!el) return;
+    const total = _stageListData.reduce((n, s) => n + (s.leads_count || 0), 0);
+    const sumBy = test => _stageListData.filter(test).reduce((n, s) => n + (s.leads_count || 0), 0);
+    const won = sumBy(s => s.system_key === 'won'), lost = sumBy(s => s.system_key === 'lost');
+    const bar = total
+      ? _stageListData.map(s => `<span style="flex:${s.leads_count || 0} 1 0;background:${escHtml(s.color || '#64748b')}" title="${escHtml(s.name)}: ${s.leads_count || 0} lead${s.leads_count === 1 ? '' : 's'}"></span>`).join('')
+      : '';
+    el.innerHTML = `<div class="crm-stg-summary-bar">${bar}</div>
+      <div class="crm-stg-summary-stats">
+        <span><b>${_stageListData.length}</b> stage${_stageListData.length === 1 ? '' : 's'}</span>
+        <span><b>${total}</b> lead${total === 1 ? '' : 's'}</span>
+        <span><b>${total - won - lost}</b> open</span>
+        <span style="color:#059669"><b style="color:inherit">${won}</b> won</span>
+        <span style="color:#dc2626"><b style="color:inherit">${lost}</b> lost</span>
+      </div>`;
+  }
+
+  // Standard statuses as templates — used count per status, one click opens a pre-filled form
+  function _renderStageTemplates() {
+    const box = $('#crm-stages-templates');
+    if (!box) return;
+    const used = key => _stageListData.filter(s => s.system_key === key).length;
+    box.innerHTML = _crmStatuses().map(st => {
+      const n = used(st.key);
+      const pill = n ? `<span class="crm-stg-tpl-pill crm-stg-tpl-pill--used">In pipeline${n > 1 ? ` ×${n}` : ''}</span>` : '<span class="crm-stg-tpl-pill">Not added</span>';
+      return `<button type="button" class="crm-stg-tpl" data-stage-tpl="${st.key}" style="--stg:${st.color}" title="Add a stage that counts as ${escHtml(st.label)}">
+        <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+        <span class="crm-stg-tpl-text"><b>${escHtml(st.label)} ${st.reserved ? '<span class="crm-stg-tpl-pill"><i class="fa fa-lock"></i> Automatic</span>' : ''}${pill}</b><small>${escHtml(st.description)}</small>${_crmStatusEffectsHtml(st)}</span>
+        <i class="fa fa-plus crm-stg-tpl-add"></i>
+      </button>`;
+    }).join('');
+    const own = _crmCustomStatuses();
+    if (own.length) {
+      box.innerHTML += '<div class="crm-stg-tpl-group">Your statuses</div>' + own.map(st => {
+        const n = _stageListData.filter(s => s.custom_status_id === st.id).length;
+        const pill = n ? `<span class="crm-stg-tpl-pill crm-stg-tpl-pill--used">In pipeline${n > 1 ? ` ×${n}` : ''}</span>` : '<span class="crm-stg-tpl-pill">Not added</span>';
+        return `<button type="button" class="crm-stg-tpl" data-stage-tpl="${st.key}" style="--stg:${st.color}" title="Add a ${escHtml(st.label)} stage — counts as ${escHtml(st.base_label)}">
+          <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+          <span class="crm-stg-tpl-text"><b>${escHtml(st.label)} <span class="crm-stg-tpl-pill crm-stg-tpl-pill--own">Yours · ${escHtml(st.base_label)}</span>${pill}</b><small>${escHtml(st.description)}</small>${_crmStatusEffectsHtml(st)}</span>
+          <i class="fa fa-plus crm-stg-tpl-add"></i>
+        </button>`;
+      }).join('');
+    }
+    const missing = _crmStatuses().filter(st => !used(st.key)).length;
+    const restore = $('#crm-stages-restore-btn');
+    restore.disabled = missing === 0;
+    restore.innerHTML = `<i class="fa fa-rotate-left"></i> ${missing ? `Restore ${missing} missing standard stage${missing > 1 ? 's' : ''}` : 'All standard stages are in the pipeline'}`;
+  }
+
+  // Search: hide rows that don't match the name or the status they count as
+  function _filterStageRows() {
+    const q = ($('#crm-stages-search')?.value || '').trim().toLowerCase();
+    $$('#crm-stages-list .crm-stage-row').forEach(row => {
+      const s = _stageListData[parseInt(row.dataset.stageIdx)];
+      row.hidden = !!q && !`${s?.name} ${s?.status_label || ''} ${s?.description || ''}`.toLowerCase().includes(q);
+    });
+  }
+  $('#crm-stages-search')?.addEventListener('input', _filterStageRows);
+
+  $('#crm-stages-templates')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-stage-tpl]');
+    if (!btn) return;
+    const own = _crmStatus(btn.dataset.stageTpl);
+    // One of the business's own statuses pre-fills its look, reason flag and actions
+    _openStageForm(null, own?.custom
+      ? { system_key: own.base_key, custom_status_id: own.id, color: own.color, description: own.note || '', requires_reason: own.requires_reason, entry_rules: own.entry_rules }
+      : { system_key: btn.dataset.stageTpl });
+  });
+  // The "Custom Stage" template opens with Custom picked, so its behaviour ticks are showing
+  $('#crm-stages-custom-btn')?.addEventListener('click', () => _openStageForm(null, { system_key: 'in_process', is_custom: true, custom: true }));
+
+  $('#crm-stages-restore-btn')?.addEventListener('click', async () => {
+    const btn = $('#crm-stages-restore-btn');
+    btn.disabled = true;
+    const res = await API.crmRestoreStandardStages(_crmProjectId);
+    if (res.status === 200) {
+      const created = res.body?.data?.created || [];
+      toast(created.length ? `Added ${created.map(c => `"${c.name}"`).join(', ')}.` : 'Nothing to restore.', 'success');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      btn.disabled = false;
+      toast(res.body?.message || 'Failed to restore standard stages.', 'error');
+    }
+  });
+
   function _renderStagesList() {
     const list = $('#crm-stages-list');
+    _renderStagesSummary();
+    _renderStageTemplates();
+    $('#crm-stages-footer-note').textContent = _stageListData.length ? 'Tip: double-click a stage to edit it' : '';
     if (_stageListData.length === 0) {
-      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet.</p>';
+      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet — pick a template on the right to add one.</p>';
+      _updateStageBulkBar();
       return;
     }
     const pipelineAutoActive = !!(_pipelineFlow && _pipelineFlow.is_active);
     list.innerHTML = _stageListData.map((s, idx) => {
-      const wonTag  = s.is_won  ? '<span class="crm-stage-tag crm-stage-tag--won">Won</span>'
-        : s.is_lost ? '<span class="crm-stage-tag crm-stage-tag--lost">Lost</span>'
-        : `<span class="crm-stage-tag"${s.system_key ? '' : ' style="color:#f59e0b"'} title="Standard status">${escHtml(s.status_label || 'No status')}</span>`;
-      const lostTag = (s.is_reserved ? '<span class="crm-stage-tag" title="Set by the quotation workflow"><i class="fa fa-lock"></i></span>' : '')
-        + (s.requires_reason ? '<span class="crm-stage-tag" title="Asks for a reason"><i class="fa fa-comment"></i></span>' : '');
+      const st = _crmStatus(_crmStageStatusKey(s));
+      const statusChip = st
+        ? `<span class="crm-stg-status" style="--stg:${st.color}" title="${st.custom ? `Your status “${escHtml(st.label)}” — counts as “${escHtml(st.base_label)}” in reports` : `Counts as “${escHtml(st.label)}” — ${escHtml(st.description)}`}"><i class="fa ${st.icon}"></i> ${escHtml(st.label)}</span>`
+        : '<span class="crm-stg-status crm-stg-status--none" title="Pick the standard status this stage counts as"><i class="fa fa-triangle-exclamation"></i> No status</span>';
+      const flags = (s.is_reserved ? '<span class="crm-stg-flag" title="Set automatically by the quotation workflow — leads cannot be moved here by hand"><i class="fa fa-lock"></i></span>' : '')
+        + (s.requires_reason ? '<span class="crm-stg-flag" title="Asks for a reason when a lead moves here"><i class="fa fa-comment-dots"></i></span>' : '')
+        + _stageActionFlags({ ...(s.entry_rules || {}), needs_approval: s.needs_approval, locks_lead: s.locks_lead, no_skip: s.no_skip, exit_checklist: s.exit_checklist });
+      const note = s.description
+        ? `<span class="crm-stg-note" title="${escHtml(s.description)}"><i class="fa fa-note-sticky"></i>${escHtml(s.description)}</span>`
+        : (st ? `<span class="crm-stg-note">${escHtml(st.description)}</span>` : '');
       const countBadge = s.leads_count > 0 ? `<span class="crm-stage-badge">${s.leads_count} lead${s.leads_count > 1 ? 's' : ''}</span>` : '';
       // While Pipeline Automation is on, matching stage templates fire automatically —
       // the manual send button is hidden so it isn't offered twice. When a template
@@ -64885,16 +66145,41 @@ async function submitDsCreate() {
       // Stage mail templates send through the Mail feature's mailer — hide the
       // shortcut entirely when Mail isn't installed.
       const mailBtn = (pipelineAutoActive || !hasFeature('mail')) ? '' : `<button class="crm-card-btn${s.has_mail_template ? ' crm-card-btn--mail-set' : ''}" data-mail-stage="${s.id}" title="${s.has_mail_template ? 'Send email to leads in this stage' : 'Set up a mail template for this stage'}" style="flex-shrink:0"><i class="fa fa-bolt"></i></button>`;
-      return `<div class="crm-stage-row" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
+      // Behaviour settings — purple when a built-in behaviour is switched off or a rule was added
+      const behaveSet = (s.behaviours || []).some(b => !b.on) || s.needs_approval || s.locks_lead || s.no_skip || s.exit_checklist?.length;
+      const behaveBtn = `<button class="crm-card-btn${behaveSet ? ' crm-card-btn--behave-set' : ''}" data-behave-stage="${s.id}" title="Stage behaviour — switch built-in behaviour on or off, add rules" style="flex-shrink:0"><i class="fa fa-gear"></i></button>`;
+      // The pipeline's "New" stage is where leads land — it can't be ticked or deleted.
+      const checked = _stageSelected.has(s.id);
+      const check = s.is_protected
+        ? `<input type="checkbox" class="crm-stage-check" disabled title="The New stage cannot be deleted">`
+        : `<input type="checkbox" class="crm-stage-check" data-check-stage="${s.id}"${checked ? ' checked' : ''} title="Select for bulk delete">`;
+      const delBtn = s.is_protected
+        ? `<button class="crm-card-btn" disabled title="The New stage cannot be deleted — new leads land here" style="flex-shrink:0"><i class="fa fa-lock"></i></button>`
+        : `<button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>`;
+      return `<div class="crm-stage-row${checked ? ' crm-stage-row--selected' : ''}" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
         <span class="crm-stage-handle"><i class="fa fa-grip-vertical"></i></span>
-        <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
-        <span class="crm-stage-name">${escHtml(s.name)}</span>
-        ${wonTag}${lostTag}${countBadge}
-        ${mailBtn}
+        ${check}
+        <span class="crm-stg-ico"><i class="fa ${escHtml(s.icon || st?.icon || 'fa-circle')}"></i></span>
+        <span class="crm-stg-main"><span class="crm-stage-name"><span class="crm-stg-dot" style="--stg:${escHtml(s.color || '#64748b')}" title="Stage colour"></span>${escHtml(s.name)}</span>${note}</span>
+        ${statusChip}${flags}${countBadge}
+        ${mailBtn}${behaveBtn}
+        <button class="crm-card-btn" data-dup-stage="${s.id}" title="Duplicate stage" style="flex-shrink:0"><i class="fa fa-clone"></i></button>
         <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
-        <button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>
+        ${delBtn}
       </div>`;
     }).join('');
+    _updateStageBulkBar();
+    _filterStageRows();
+
+    // Tick for bulk delete
+    list.querySelectorAll('[data-check-stage]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = parseInt(cb.dataset.checkStage);
+        cb.checked ? _stageSelected.add(id) : _stageSelected.delete(id);
+        cb.closest('.crm-stage-row').classList.toggle('crm-stage-row--selected', cb.checked);
+        _updateStageBulkBar();
+      });
+    });
 
     // Drag to reorder
     list.querySelectorAll('.crm-stage-row').forEach(row => {
@@ -64925,18 +66210,30 @@ async function submitDsCreate() {
       });
     });
 
-    // Edit
+    // Edit, duplicate, and double-click a row to edit (when the user may edit)
     list.querySelectorAll('[data-edit-stage]').forEach(btn => {
       btn.addEventListener('click', () => {
         const s = _stageListData.find(s => s.id === parseInt(btn.dataset.editStage));
-        if (!s) return;
-        $('#crm-stage-edit-id').value    = s.id;
-        $('#crm-stage-edit-name').value  = s.name;
-        $('#crm-stage-edit-color').value = s.color || '#64748b';
-        _crmFillStatusSelect('#crm-stage-edit-status', '#crm-stage-edit-reason', s.system_key || 'in_process', s.requires_reason);
-        $('#crm-stage-edit-alert').style.display = 'none';
-        $('#crm-stage-edit-modal').style.display = 'flex';
-        $('#crm-stage-edit-name').focus();
+        if (s) _openStageForm(s);
+      });
+    });
+    list.querySelectorAll('[data-behave-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = _stageListData.find(s => s.id === parseInt(btn.dataset.behaveStage));
+        if (s) _openStageBehaviour(s);
+      });
+    });
+    list.querySelectorAll('[data-dup-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = _stageListData.find(s => s.id === parseInt(btn.dataset.dupStage));
+        if (s) _openStageForm(null, { ...s, name: `${s.name} (copy)`.slice(0, 60) });
+      });
+    });
+    list.querySelectorAll('.crm-stage-row').forEach(row => {
+      row.addEventListener('dblclick', e => {
+        if (e.target.closest('button, input')) return;
+        const edit = row.querySelector('[data-edit-stage]');
+        if (edit?.offsetParent) edit.click();
       });
     });
 
@@ -64967,6 +66264,96 @@ async function submitDsCreate() {
       });
     });
   }
+
+  // ── Stage behaviour settings ──────────────────────────────────────────
+  // Built-in behaviour comes with the stage's standard status (some can be switched off);
+  // the added rules — reason, approval, lock, no skipping, checklist — can go on any stage.
+
+  const _BEHAVE_ICONS = {
+    lands_new: 'fa-inbox', auto_from_assign: 'fa-user-check', workflow_only: 'fa-lock', remember_from: 'fa-clock-rotate-left',
+    closes_won: 'fa-trophy', closes_lost: 'fa-circle-xmark', lost_reason: 'fa-comment-slash',
+  };
+  let _stageBehaveId = null;
+
+  function _openStageBehaviour(s) {
+    _stageBehaveId = s.id;
+    const st = _crmStatus(_crmStageStatusKey(s));
+    const lost = s.is_lost || s.system_key === 'lost';
+    $('#crm-stage-behave-title').textContent = `Stage behaviour — ${s.name}`;
+    $('#crm-stage-behave-alert').style.display = 'none';
+    $('#crm-stage-behave-built-hint').textContent = `What this stage does because it counts as “${st?.base_label || st?.label || s.status_label || 'its status'}”.`;
+
+    const built = s.behaviours || [];
+    $('#crm-stage-behave-built').innerHTML = built.length
+      ? built.map(b => `<div class="crm-stg-behave${b.on ? '' : ' is-off'}">
+          <span class="crm-stg-behave-ico"><i class="fa ${_BEHAVE_ICONS[b.key] || 'fa-cube'}"></i></span>
+          <span class="crm-stg-behave-text"><b>${escHtml(b.label)}</b><small>${escHtml(b.description)}</small></span>
+          ${b.switchable
+            ? `<label class="psm-switch" title="Switch on or off"><input type="checkbox" data-behave-key="${b.key}"${b.on ? ' checked' : ''}><span class="psm-switch-track"></span></label>`
+            : '<span class="crm-stg-behave-fixed" title="Part of what this status means — always on"><i class="fa fa-lock"></i> Always on</span>'}
+        </div>`).join('')
+      : `<span class="crm-stg-act-hint">No built-in behaviour — it just counts as “${escHtml(st?.base_label || st?.label || 'its status')}” in reports. Add rules below.</span>`;
+
+    // Lost stages ask for a lost reason instead (built-in above), so the free-text one is hidden
+    $('#crm-stage-behave-reason').checked = !!s.requires_reason || lost;
+    $('#crm-stage-behave-reason').closest('.crm-stg-behave').style.display = lost ? 'none' : '';
+    $('#crm-stage-behave-approval').checked = !!s.needs_approval;
+    $('#crm-stage-behave-lock').checked = !!s.locks_lead;
+    $('#crm-stage-behave-no-skip').checked = !!s.no_skip;
+    $('#crm-stage-behave-checklist-on').checked = !!s.exit_checklist?.length;
+    $('#crm-stage-behave-checklist').value = (s.exit_checklist || []).join('\n');
+    _syncStageBehaveChecklist();
+    $('#crm-stage-behave-modal').style.display = 'flex';
+  }
+
+  function _syncStageBehaveChecklist() {
+    $('#crm-stage-behave-checklist').style.display = $('#crm-stage-behave-checklist-on').checked ? '' : 'none';
+  }
+  $('#crm-stage-behave-checklist-on')?.addEventListener('change', () => {
+    _syncStageBehaveChecklist();
+    if ($('#crm-stage-behave-checklist-on').checked) $('#crm-stage-behave-checklist').focus();
+  });
+  $('#crm-stage-behave-built')?.addEventListener('change', e => {
+    const c = e.target.closest('[data-behave-key]');
+    if (c) c.closest('.crm-stg-behave').classList.toggle('is-off', !c.checked);
+  });
+
+  const _closeStageBehaviour = () => { $('#crm-stage-behave-modal').style.display = 'none'; };
+  $('#crm-stage-behave-close')?.addEventListener('click', _closeStageBehaviour);
+  $('#crm-stage-behave-cancel')?.addEventListener('click', _closeStageBehaviour);
+  $('#crm-stage-behave-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-behave-modal')) _closeStageBehaviour(); });
+
+  $('#crm-stage-behave-save')?.addEventListener('click', async () => {
+    const alertEl = $('#crm-stage-behave-alert');
+    const checklist = $('#crm-stage-behave-checklist-on').checked
+      ? $('#crm-stage-behave-checklist').value.split('\n').map(i => i.trim()).filter(Boolean) : [];
+    if ($('#crm-stage-behave-checklist-on').checked && !checklist.length) {
+      alertEl.textContent = 'Add at least one checklist item, or switch the checklist off.'; alertEl.style.display = '';
+      $('#crm-stage-behave-checklist').focus();
+      return;
+    }
+    const body = {
+      disabled_behaviours: [...$$('#crm-stage-behave-built [data-behave-key]')].filter(c => !c.checked).map(c => c.dataset.behaveKey),
+      requires_reason: $('#crm-stage-behave-reason').checked,
+      needs_approval:  $('#crm-stage-behave-approval').checked,
+      locks_lead:      $('#crm-stage-behave-lock').checked,
+      no_skip:         $('#crm-stage-behave-no-skip').checked,
+      exit_checklist:  checklist,
+    };
+    const btn = $('#crm-stage-behave-save');
+    btn.disabled = true;
+    const res = await API.crmUpdateStageBehaviours(_crmProjectId, _stageBehaveId, body);
+    btn.disabled = false;
+    if (res.status !== 200) {
+      alertEl.textContent = res.body?.message || 'Failed to save the stage behaviour.';
+      alertEl.style.display = '';
+      return;
+    }
+    _closeStageBehaviour();
+    toast('Stage behaviour saved.', 'success');
+    await _loadStagesList();
+    loadCrmPipeline();
+  });
 
   // ── Stage mail template (manual send) ──────────────────────────────────
 
@@ -65112,110 +66499,451 @@ async function submitDsCreate() {
   });
 
   // Every stage stands for one of the standard statuses; lost stages always ask for a lost reason.
+  // Mirrors LeadStage::STATUSES / STATUS_GUIDE, for servers that don't send icon/description yet.
   const _CRM_STATUS_FALLBACK = [
-    ['new', 'New'], ['assigned', 'Assigned'], ['contacted', 'Contacted'], ['in_process', 'In Process'],
-    ['quotation_preparing', 'Quotation Preparing'], ['pending_approval', 'Pending Approval', true],
-    ['quotation_sent', 'Quotation Sent', true], ['negotiation', 'Negotiation'], ['on_hold', 'On Hold'],
-    ['won', 'Won'], ['lost', 'Lost'],
-  ].map(([key, label, reserved]) => ({ key, label, reserved: !!reserved }));
+    ['new',                 'New',                 '#64748b', 'fa-inbox',          'Fresh lead that nobody has picked up yet. Every new lead lands here first.'],
+    ['assigned',            'Assigned',            '#0ea5e9', 'fa-user-check',     'A team member now owns the lead but has not reached out yet.'],
+    ['contacted',           'Contacted',           '#3b82f6', 'fa-phone',          'First call, message or email done — the conversation has started.'],
+    ['in_process',          'In Process',          '#6366f1', 'fa-gears',          'Actively working the lead: meetings, site visits, gathering needs.'],
+    ['quotation_preparing', 'Quotation Preparing', '#8b5cf6', 'fa-file-pen',       'A quotation is being drafted for this lead.'],
+    ['pending_approval',    'Pending Approval',    '#a855f7', 'fa-hourglass-half', 'Automatic: the quotation waits for a manager to approve it.', true],
+    ['quotation_sent',      'Quotation Sent',      '#f59e0b', 'fa-paper-plane',    'Automatic: the approved quotation has gone to the customer.', true],
+    ['negotiation',         'Negotiation',         '#f97316', 'fa-handshake',      'Discussing price, terms or changes before the customer decides.'],
+    ['on_hold',             'On Hold',             '#94a3b8', 'fa-circle-pause',   'Paused for now — the customer asked to wait or is not ready.'],
+    ['won',                 'Won',                 '#10b981', 'fa-trophy',         'Deal closed. Counts as a win in reports and conversion rates.'],
+    ['lost',                'Lost',                '#ef4444', 'fa-circle-xmark',   'Deal did not happen. A lost reason is always asked for.'],
+  ].map(([key, label, color, icon, description, reserved]) => ({ key, label, color, icon, description, reserved: !!reserved }));
+  // What the system does with a lead in a stage of each status (mirrors LeadStage::STATUS_GUIDE[...][2])
+  const _CRM_STATUS_EFFECTS = {
+    new:                 ['Every new lead starts here — added by hand, imported or from the website', 'Waits in the Marketing inbox until someone picks it up', 'Counts as an open lead in reports'],
+    assigned:            ['A lead in "New" moves here by itself when someone is assigned', 'Can also be moved here by hand', 'Counts as an open lead in reports'],
+    contacted:           ['Moved here by hand after the first call, message or email', 'Nothing automatic — it marks progress', 'Counts as an open lead in reports'],
+    in_process:          ['Moved here by hand while the work goes on', 'Nothing automatic — use it for meetings, visits, demos', 'Counts as an open lead in reports'],
+    quotation_preparing: ['Lead moves here by itself when a quotation is created or revised', 'Comes back here when a manager returns or rejects the quotation', 'Counts as an open lead in reports'],
+    pending_approval:    ['Lead moves here by itself when a quotation is sent for approval', 'Managers see it in their approval queue', 'Cannot be moved here by hand (unless you switch that off)'],
+    quotation_sent:      ['Lead moves here by itself when the approved quotation is sent', 'Lead score goes up — it shows as a warmer lead', 'Cannot be moved here by hand (unless you switch that off)'],
+    negotiation:         ['Lead moves here by itself when the customer asks for a discount', 'Can also be moved here by hand', 'Lead score goes up — it shows as a warmer lead'],
+    on_hold:             ['Turns on the "Put on hold" button on each lead', 'Remembers the stage it came from — "Resume" takes it back there', 'Still an open lead — not counted as lost'],
+    won:                 ['Closes the lead — it leaves the open list', 'Counts as a win; its deal value adds to won revenue', 'Can be reopened later if needed'],
+    lost:                ['Closes the lead — it leaves the open list', 'Asks for a reason from your lost-reason list (can be made optional)', 'Counts as a loss in reports; can be reopened later'],
+  };
+  _CRM_STATUS_FALLBACK.forEach(s => { s.effects = _CRM_STATUS_EFFECTS[s.key]; });
+  // A status card's "what happens" lines; the business's own statuses behave like the one they count as
+  const _crmStatusEffectsHtml = st => {
+    const fx = st.effects || (st.base_key && _CRM_STATUS_EFFECTS[st.base_key]) || [];
+    return fx.length ? `<span class="crm-stg-tpl-fx">${fx.map(t => `<span><i class="fa fa-angle-right"></i>${escHtml(t)}</span>`).join('')}</span>` : '';
+  };
 
-  function _crmFillStatusSelect(selectSel, reasonSel, selected, requiresReason) {
-    const sel = $(selectSel), reason = $(reasonSel);
-    const statuses = _crmPipeline?.statuses?.length ? _crmPipeline.statuses : _CRM_STATUS_FALLBACK;
-    sel.innerHTML = statuses.map(s =>
-      `<option value="${s.key}"${s.key === selected ? ' selected' : ''}>${escHtml(s.label)}${s.reserved ? ' (automatic)' : ''}</option>`).join('');
-    reason.checked = !!requiresReason;
-    const sync = () => { const lost = sel.value === 'lost'; if (lost) reason.checked = true; reason.disabled = lost; };
-    sel.onchange = sync;
-    sync();
+  function _crmStatuses() {
+    const server = _crmPipeline?.statuses;
+    if (!server?.length) return _CRM_STATUS_FALLBACK;
+    return server.map(s => ({ ..._CRM_STATUS_FALLBACK.find(f => f.key === s.key), ...s }));
+  }
+  // The business's own statuses (key "custom:<id>"): stage templates that count as base_key in reports
+  const _crmCustomStatuses = () => _crmPipeline?.custom_statuses || [];
+  // "Custom": none of the statuses fit — the stage's behaviour is ticked in the form instead
+  const _CRM_CUSTOM_STAGE = { key: 'custom', label: 'Custom', color: '#7c3aed', icon: 'fa-sliders',
+    description: 'None of these fit? Name it your way and tick how it behaves — approval, lock, won / lost, pause.',
+    effects: ['Nothing happens by itself — only what you tick below', 'Choose if it stays open, closes as won / lost, or pauses', 'Can need approval to enter, or lock the lead'] };
+  const _crmStatus = key => key === 'custom' ? _CRM_CUSTOM_STAGE
+    : _crmStatuses().find(s => s.key === key) || _crmCustomStatuses().find(s => s.key === key) || null;
+  // The status a stage shows: Custom, or its own status when it was made from one that still exists
+  const _crmStageStatusKey = s => s.is_custom ? 'custom'
+    : (s.custom_status_id && _crmStatus(`custom:${s.custom_status_id}`)) ? `custom:${s.custom_status_id}` : s.system_key;
+  // The standard status a key counts as; a Custom stage counts as its ticked outcome
+  const _crmBaseKey = key => key === 'custom'
+    ? (document.querySelector('input[name="crm-stage-outcome"]:checked')?.value || 'in_process')
+    : _crmStatus(key)?.base_key || key;
+
+  const _STAGE_ICONS = [
+    'fa-inbox', 'fa-user-check', 'fa-phone', 'fa-gears', 'fa-file-pen', 'fa-hourglass-half', 'fa-paper-plane', 'fa-handshake',
+    'fa-circle-pause', 'fa-trophy', 'fa-circle-xmark', 'fa-calendar-check', 'fa-location-dot', 'fa-video', 'fa-envelope', 'fa-comments',
+    'fa-clipboard-check', 'fa-magnifying-glass', 'fa-truck', 'fa-screwdriver-wrench', 'fa-money-bill-wave', 'fa-file-contract', 'fa-star', 'fa-flag',
+    'fa-fire', 'fa-bell', 'fa-clock', 'fa-user-tie', 'fa-cart-shopping', 'fa-thumbs-up', 'fa-rotate', 'fa-flag-checkered',
+  ];
+  const _STAGE_SWATCHES = ['#64748b', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#14b8a6', '#94a3b8'];
+
+  // Add / edit form state: the icon and colour follow the chosen status until the user picks their own
+  const _stageForm = { id: null, status: 'in_process', icon: null, colorTouched: false, nameAuto: '' };
+
+  function _openStageForm(stage, preset = {}) {
+    const editing = !!stage;
+    const src = stage || preset;
+    const st = _crmStatus(_crmStageStatusKey(src)) || _crmStatus('in_process');
+    _stageForm.id           = editing ? stage.id : null;
+    _stageForm.status       = null; // set below; null = opening, so the name isn't auto-filled
+    _stageForm.icon        = (editing || src.id) && src.has_custom_icon ? src.icon : null;
+    _stageForm.colorTouched = editing || !!src.id;
+    // A template pre-fills its label as the name; switching status then renames it until the user types
+    _stageForm.nameAuto     = (!editing && !src.name && !preset.custom) ? st.label : '';
+
+    $('#crm-stage-form-title').textContent = editing ? `Edit Stage — ${stage.name}` : (preset.custom ? 'Custom Stage' : 'Add Stage');
+    $('#crm-stage-form-title-icon').className = `fa ${editing ? 'fa-pen' : 'fa-plus'}`;
+    $('#crm-stage-form-save').innerHTML = `<i class="fa fa-check"></i> ${editing ? 'Save Stage' : 'Add Stage'}`;
+    $('#crm-stage-form-alert').style.display = 'none';
+    $('#crm-stage-form-id').value     = _stageForm.id || '';
+    $('#crm-stage-form-name').value   = src.name || _stageForm.nameAuto;
+    $('#crm-stage-form-color').value  = src.color || st.color;
+    $('#crm-stage-form-desc').value   = src.description || '';
+    $('#crm-stage-form-reason').checked = !!src.requires_reason;
+    _fillStageFormActions(src.entry_rules || {});
+    // A Custom stage's ticks (its outcome is the standard status it was saved with)
+    const outcome = src.is_custom && ['in_process', 'won', 'lost', 'on_hold'].includes(src.system_key) ? src.system_key : 'in_process';
+    $$('input[name="crm-stage-outcome"]').forEach(r => { r.checked = r.value === outcome; });
+    $('#crm-stage-form-needs-approval').checked = !!src.needs_approval;
+    $('#crm-stage-form-locks-lead').checked = !!src.locks_lead;
+    $('#crm-stage-form-no-skip').checked = !!src.no_skip;
+    $('#crm-stage-form-checklist').value = (src.exit_checklist || []).join('\n');
+    $('#crm-stage-form-preview-counts').textContent = editing
+      ? `${stage.leads_count || 0} lead${stage.leads_count === 1 ? '' : 's'} in this stage` : '';
+
+    _renderStageFormStatuses();
+    _setStageFormStatus(st.key);
+    _macShow($('#crm-stage-form-modal'));
+    setTimeout(() => { const n = $('#crm-stage-form-name'); n.focus(); n.select(); }, 60);
   }
 
-  function _crmStagePayload(prefix) {
-    const key = $(`#crm-stage-${prefix}-status`).value;
+  // Small icons in the stage list for what a stage does when a lead enters it
+  function _stageActionFlags(r) {
+    if (!r) return '';
+    const flag = (icon, title) => `<span class="crm-stg-flag" title="${escHtml(title)}"><i class="fa ${icon}"></i></span>`;
+    const asks = (r.require || []).map(k => ({ follow_up_at: 'follow-up date', expected_close_date: 'expected close date', estimated_value: 'deal value' })[k]).filter(Boolean);
+    const notifies = (r.notify?.owner || r.notify?.head || r.notify?.user_ids?.length);
+    return (asks.length ? flag('fa-list-check', `Asks for the ${asks.join(', ')}`) : '')
+      + (r.task ? flag('fa-square-check', `Creates a task: ${r.task.title} (due in ${r.task.due_days} day${r.task.due_days === 1 ? '' : 's'})`) : '')
+      + (notifies ? flag('fa-bell', 'Notifies people when a lead moves here') : '')
+      + (r.assign_user_ids?.length ? flag('fa-user-plus', `Assigns ${r.assign_user_ids.length} ${r.assign_user_ids.length === 1 ? 'person' : 'people'} to the lead`) : '')
+      + (r.needs_approval ? flag('fa-shield-halved', 'Must be approved — the head approves moves into this stage') : '')
+      + (r.locks_lead ? flag('fa-lock', 'Locks the lead — only the head or an admin can edit or move it here') : '')
+      + (r.no_skip ? flag('fa-arrow-right-to-bracket', 'No skipping — leads enter only from the stage before') : '')
+      + (r.exit_checklist?.length ? flag('fa-clipboard-list', `Checklist before leaving: ${r.exit_checklist.join(', ')}`) : '')
+      + (r.max_days ? flag('fa-stopwatch', `Flags leads here longer than ${r.max_days} day${r.max_days === 1 ? '' : 's'}`) : '');
+  }
+
+  // "When a lead moves here": the people pickers list who works this pipeline's department
+  function _fillStageFormActions(rules) {
+    const users = _crmPipeline?.assignable_users || [];
+    const require = rules.require || [];
+    $$('#crm-stage-form-modal [data-stage-require]').forEach(c => { c.checked = require.includes(c.dataset.stageRequire); });
+    $('#crm-stage-form-notify-users').style.display = users.length ? '' : 'none';
+
+    $('#crm-stage-form-task-on').checked = !!rules.task;
+    $('#crm-stage-form-task-title').value = rules.task?.title || '';
+    $('#crm-stage-form-task-days').value = rules.task?.due_days ?? 1;
+    _syncStageTaskBody();
+
+    $('#crm-stage-form-notify-owner').checked = !!rules.notify?.owner;
+    $('#crm-stage-form-notify-head').checked = !!rules.notify?.head;
+    const notifyIds = (rules.notify?.user_ids || []).map(Number);
+    $('#crm-stage-form-notify-users').innerHTML = users.map(u =>
+      `<label class="crm-stg-chk"><input type="checkbox" data-stage-notify-user="${u.id}"${notifyIds.includes(Number(u.id)) ? ' checked' : ''}> ${escHtml(u.name)}</label>`).join('');
+
+    // data-order keeps the order people were ticked in — the first becomes owner of an unowned lead
+    const assignIds = (rules.assign_user_ids || []).map(Number);
+    $('#crm-stage-form-assign-users').innerHTML = users.length
+      ? users.map(u => {
+          const at = assignIds.indexOf(Number(u.id));
+          return `<label class="crm-stg-chk"><input type="checkbox" data-stage-assign-user="${u.id}"${at >= 0 ? ` checked data-order="${at}"` : ''}> ${escHtml(u.name)}</label>`;
+        }).join('')
+      : '<span class="crm-stg-act-hint">No one works this pipeline\'s department yet.</span>';
+    $('#crm-stage-form-max-days').value = rules.max_days || '';
+  }
+
+  function _syncStageTaskBody() {
+    $('#crm-stage-form-task-body').style.display = $('#crm-stage-form-task-on').checked ? '' : 'none';
+  }
+  $('#crm-stage-form-task-on')?.addEventListener('change', () => {
+    _syncStageTaskBody();
+    if ($('#crm-stage-form-task-on').checked) $('#crm-stage-form-task-title').focus();
+  });
+  $('#crm-stage-form-assign-users')?.addEventListener('change', e => {
+    const c = e.target.closest('[data-stage-assign-user]');
+    if (c?.checked) c.dataset.order = Date.now();
+  });
+
+  function _stageFormActions() {
+    const taskOn = $('#crm-stage-form-task-on').checked;
     return {
-      system_key:      key,
-      requires_reason: $(`#crm-stage-${prefix}-reason`).checked,
-      is_won:          key === 'won',
-      is_lost:         key === 'lost',
+      require:   [...$$('#crm-stage-form-modal [data-stage-require]')].filter(c => c.checked).map(c => c.dataset.stageRequire),
+      task:      taskOn ? { enabled: true, title: $('#crm-stage-form-task-title').value.trim(), due_days: parseInt($('#crm-stage-form-task-days').value) || 0 } : null,
+      notify:    {
+        owner:    $('#crm-stage-form-notify-owner').checked,
+        head:     $('#crm-stage-form-notify-head').checked,
+        user_ids: [...$$('#crm-stage-form-notify-users [data-stage-notify-user]')].filter(c => c.checked).map(c => parseInt(c.dataset.stageNotifyUser)),
+      },
+      assign_user_ids: [...$$('#crm-stage-form-assign-users [data-stage-assign-user]')].filter(c => c.checked)
+        .sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order)).map(c => parseInt(c.dataset.stageAssignUser)),
+      max_days:  parseInt($('#crm-stage-form-max-days').value) || null,
     };
   }
+
+  function _renderStageFormStatuses() {
+    const card = st =>
+      `<button type="button" class="crm-stg-tpl" data-stage-status="${st.key}" style="--stg:${st.color}">
+        <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+        <span class="crm-stg-tpl-text"><b>${escHtml(st.label)}${st.reserved ? ' <span class="crm-stg-tpl-pill"><i class="fa fa-lock"></i> Automatic</span>' : ''}${st.custom ? ` <span class="crm-stg-tpl-pill crm-stg-tpl-pill--own" title="Counts as ${escHtml(st.base_label)} in reports">Yours · ${escHtml(st.base_label)}</span>` : ''}</b><small>${escHtml(st.description)}</small>${_crmStatusEffectsHtml(st)}</span>
+        ${st.custom ? `<span class="crm-stg-tpl-edit" role="button" data-cstatus-edit="${st.id}" title="Edit this status"><i class="fa fa-pen"></i></span>` : ''}
+      </button>`;
+    const own = _crmCustomStatuses();
+    $('#crm-stage-form-statuses').innerHTML = _crmStatuses().map(card).join('')
+      + card(_CRM_CUSTOM_STAGE).replace('class="crm-stg-tpl"', 'class="crm-stg-tpl crm-stg-tpl--custom-pick"')
+      + '<div class="crm-stg-tpl-group">Your statuses</div>'
+      + own.map(card).join('')
+      + `<button type="button" class="crm-stg-tpl crm-stg-tpl--new" data-cstatus-new><i class="fa fa-plus"></i> New status${own.length ? '' : ' — make your own, e.g. "Site Visit"'}</button>`;
+    $('#crm-stage-form-swatches').innerHTML = _STAGE_SWATCHES.map(c =>
+      `<button type="button" class="crm-stg-swatch-btn" data-stage-swatch="${c}" style="background:${c}" title="${c}"></button>`).join('');
+  }
+
+  function _setStageFormStatus(key) {
+    const prev = _crmStatus(_stageForm.status);
+    const st = _crmStatus(key);
+    _stageForm.status = key;
+    $('#crm-stage-form-status').value = key;
+    if (!_stageForm.colorTouched) $('#crm-stage-form-color').value = st.color;
+    const nameEl = $('#crm-stage-form-name');
+    const custom = key === 'custom';
+    // "Custom" is never a name: the user names the stage themselves
+    if (custom) { if (_stageForm.nameAuto && nameEl.value === _stageForm.nameAuto) nameEl.value = ''; _stageForm.nameAuto = ''; }
+    else if (_stageForm.nameAuto && nameEl.value === _stageForm.nameAuto) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
+    else if (!nameEl.value.trim() && prev && !_stageForm.id) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
+    $$('#crm-stage-form-statuses [data-stage-status]').forEach(b => b.classList.toggle('is-on', b.dataset.stageStatus === key));
+    $('#crm-stage-form-behaviour').style.display = custom ? '' : 'none';
+    if (custom && prev && prev.key !== 'custom') setTimeout(() => $('#crm-stage-form-behaviour').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 30);
+    _syncStageReasonHint();
+    _refreshStageFormLook();
+  }
+
+  // The reason tick follows what the stage counts as: lost always asks for a lost reason
+  function _syncStageReasonHint() {
+    const key = _stageForm.status;
+    const reason = $('#crm-stage-form-reason'), hint = $('#crm-stage-form-reason-hint');
+    const base = _crmBaseKey(key);
+    const lost = base === 'lost';
+    if (lost) reason.checked = true;
+    reason.disabled = lost;
+    hint.textContent = lost ? '— lost stages always ask for a lost reason'
+      : base === 'on_hold' ? '— handy here, so the team knows why it is paused' : '';
+  }
+  $('#crm-stage-form-outcome')?.addEventListener('change', _syncStageReasonHint);
+
+  function _refreshStageFormLook() {
+    const st = _crmStatus(_stageForm.status);
+    const color = $('#crm-stage-form-color').value;
+    const icon = _stageForm.icon || st.icon;
+    const name = $('#crm-stage-form-name').value.trim() || 'Stage name';
+    $('#crm-stage-form-preview').innerHTML = `<span class="crm-stg-ico"><i class="fa ${icon}"></i></span>
+      <span class="crm-stg-dot" style="--stg:${escHtml(color)}"></span>${escHtml(name)}
+      <span class="crm-stg-status"><i class="fa ${st.icon}"></i> ${escHtml(st.label)}</span>`;
+    $('#crm-stage-form-icons').innerHTML = _STAGE_ICONS.map(i =>
+      `<button type="button" class="crm-stg-icon-btn${i === icon ? ' is-on' : ''}" data-stage-icon="${i}" title="${i.replace('fa-', '').replace(/-/g, ' ')}${i === st.icon ? ' (status default)' : ''}"><i class="fa ${i}"></i></button>`).join('');
+    $$('#crm-stage-form-swatches [data-stage-swatch]').forEach(b => b.classList.toggle('is-on', b.dataset.stageSwatch.toLowerCase() === color.toLowerCase()));
+  }
+
+  $('#crm-stage-form-statuses')?.addEventListener('click', e => {
+    const edit = e.target.closest('[data-cstatus-edit]');
+    if (edit) { e.stopPropagation(); _openCustomStatus(_crmStatus(`custom:${edit.dataset.cstatusEdit}`)); return; }
+    if (e.target.closest('[data-cstatus-new]')) { _openCustomStatus(null); return; }
+    const b = e.target.closest('[data-stage-status]');
+    if (!b) return;
+    _setStageFormStatus(b.dataset.stageStatus);
+    const st = _crmStatus(b.dataset.stageStatus);
+    if (st?.custom) _applyCustomStatusPreset(st);
+  });
+
+  // Picking one of the business's own statuses fills in its note, reason flag and actions;
+  // people already picked in the form stay (a status never names people)
+  function _applyCustomStatusPreset(st) {
+    if (st.note && !$('#crm-stage-form-desc').value.trim()) $('#crm-stage-form-desc').value = st.note;
+    if (!$('#crm-stage-form-reason').disabled) $('#crm-stage-form-reason').checked = !!st.requires_reason;
+    const current = _stageFormActions();
+    const r = st.entry_rules || {};
+    _fillStageFormActions({ ...r, notify: { ...(r.notify || {}), user_ids: current.notify.user_ids }, assign_user_ids: current.assign_user_ids });
+  }
+
+  // ── The business's own statuses: new / edit / delete ──
+  let _cstatusEditing = null, _cstatusIcon = 'fa-star';
+
+  function _openCustomStatus(st) {
+    _cstatusEditing = st;
+    _cstatusIcon = st?.icon || 'fa-star';
+    $('#crm-cstatus-title').textContent = st ? `Edit status — ${st.label}` : 'New status';
+    $('#crm-cstatus-alert').style.display = 'none';
+    $('#crm-cstatus-name').value = st?.label || '';
+    $('#crm-cstatus-color').value = st?.color || '#6366f1';
+    $('#crm-cstatus-desc').value = st?.note || '';
+    $('#crm-cstatus-base').innerHTML = _crmStatuses().filter(s => !s.reserved).map(s =>
+      `<option value="${s.key}"${s.key === (st?.base_key || _crmBaseKey(_stageForm.status) || 'in_process') ? ' selected' : ''}>${escHtml(s.label)} — ${escHtml(s.description)}</option>`).join('');
+    $('#crm-cstatus-reason').checked = !!st?.requires_reason;
+    // New: take the actions set in the stage form; edit: keep its own unless asked to replace them
+    $('#crm-cstatus-rules').checked = !st;
+    $('#crm-cstatus-rules-label').textContent = st
+      ? 'Replace its default actions with the "When a lead moves here" actions set in the stage form'
+      : 'Use the "When a lead moves here" actions set in the stage form as its defaults';
+    $('#crm-cstatus-delete').style.display = st ? '' : 'none';
+    $('#crm-cstatus-swatches').innerHTML = _STAGE_SWATCHES.map(c =>
+      `<button type="button" class="crm-stg-swatch-btn" data-cstatus-swatch="${c}" style="background:${c}" title="${c}"></button>`).join('');
+    _refreshCustomStatusLook();
+    $('#crm-cstatus-modal').style.display = 'flex';
+    setTimeout(() => $('#crm-cstatus-name').focus(), 30);
+  }
+
+  function _refreshCustomStatusLook() {
+    const color = $('#crm-cstatus-color').value;
+    $('#crm-cstatus-icons').innerHTML = _STAGE_ICONS.map(i =>
+      `<button type="button" class="crm-stg-icon-btn${i === _cstatusIcon ? ' is-on' : ''}" data-cstatus-icon="${i}" title="${i.replace('fa-', '').replace(/-/g, ' ')}"><i class="fa ${i}"></i></button>`).join('');
+    $$('#crm-cstatus-swatches [data-cstatus-swatch]').forEach(b => b.classList.toggle('is-on', b.dataset.cstatusSwatch.toLowerCase() === color.toLowerCase()));
+  }
+
+  $('#crm-cstatus-icons')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-cstatus-icon]');
+    if (b) { _cstatusIcon = b.dataset.cstatusIcon; _refreshCustomStatusLook(); }
+  });
+  $('#crm-cstatus-swatches')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-cstatus-swatch]');
+    if (b) { $('#crm-cstatus-color').value = b.dataset.cstatusSwatch; _refreshCustomStatusLook(); }
+  });
+  $('#crm-cstatus-color')?.addEventListener('input', _refreshCustomStatusLook);
+
+  const _closeCustomStatus = () => { $('#crm-cstatus-modal').style.display = 'none'; };
+  $('#crm-cstatus-close')?.addEventListener('click', _closeCustomStatus);
+  $('#crm-cstatus-cancel')?.addEventListener('click', _closeCustomStatus);
+
+  // Refresh the list everywhere it shows: the stage form grid, the templates panel and the stage list
+  async function _reloadCustomStatuses() {
+    const res = await API.crmCustomStatuses();
+    if (res.status === 200 && _crmPipeline) _crmPipeline.custom_statuses = res.body?.data || [];
+    const current = _stageForm.status;
+    _renderStageFormStatuses();
+    if (current) _setStageFormStatus(_crmStatus(current) ? current : _crmBaseKey(current) || 'in_process');
+    _renderStagesList();
+  }
+
+  $('#crm-cstatus-save')?.addEventListener('click', async () => {
+    const alertEl = $('#crm-cstatus-alert');
+    const name = $('#crm-cstatus-name').value.trim();
+    if (!name) { alertEl.textContent = 'Give the status a name.'; alertEl.style.display = ''; $('#crm-cstatus-name').focus(); return; }
+    const body = {
+      name,
+      color:           $('#crm-cstatus-color').value,
+      icon:            _cstatusIcon,
+      description:     $('#crm-cstatus-desc').value.trim() || null,
+      base_key:        $('#crm-cstatus-base').value,
+      requires_reason: $('#crm-cstatus-reason').checked,
+    };
+    if ($('#crm-cstatus-rules').checked) {
+      const actions = _stageFormActions();
+      if (actions.task && !actions.task.title) actions.task = null;
+      body.entry_rules = actions;
+    }
+    const btn = $('#crm-cstatus-save');
+    btn.disabled = true;
+    const res = _cstatusEditing ? await API.crmUpdateCustomStatus(_cstatusEditing.id, body) : await API.crmCreateCustomStatus(body);
+    btn.disabled = false;
+    if (res.status !== 200 && res.status !== 201) {
+      alertEl.textContent = res.body?.message || 'Failed to save the status.';
+      alertEl.style.display = '';
+      return;
+    }
+    _closeCustomStatus();
+    toast(_cstatusEditing ? 'Status updated.' : `Status "${name}" created — it is now a template in every pipeline.`, 'success');
+    await _reloadCustomStatuses();
+    // A new status is picked for the stage being made
+    if (!_cstatusEditing && res.body?.data?.key) _setStageFormStatus(res.body.data.key);
+  });
+
+  $('#crm-cstatus-delete')?.addEventListener('click', async () => {
+    const st = _cstatusEditing;
+    if (!st) return;
+    const used = st.stages_count ? ` ${st.stages_count} stage${st.stages_count === 1 ? '' : 's'} made from it will stay and count as ${st.base_label}.` : '';
+    if (!await appConfirm({ title: `Delete "${st.label}"?`, message: `It will no longer be offered as a template.${used}`, confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
+    const res = await API.crmDeleteCustomStatus(st.id);
+    if (res.status !== 200) { toast(res.body?.message || 'Failed to delete the status.', 'error'); return; }
+    _closeCustomStatus();
+    toast('Status deleted.', 'success');
+    await _reloadCustomStatuses();
+  });
+  $('#crm-stage-form-icons')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-stage-icon]');
+    if (!b) return;
+    // The status's own icon means "follow the status" (saved as no custom icon)
+    _stageForm.icon = b.dataset.stageIcon === _crmStatus(_stageForm.status).icon ? null : b.dataset.stageIcon;
+    _refreshStageFormLook();
+  });
+  $('#crm-stage-form-swatches')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-stage-swatch]');
+    if (!b) return;
+    $('#crm-stage-form-color').value = b.dataset.stageSwatch;
+    _stageForm.colorTouched = true;
+    _refreshStageFormLook();
+  });
+  $('#crm-stage-form-color')?.addEventListener('input', () => { _stageForm.colorTouched = true; _refreshStageFormLook(); });
+  $('#crm-stage-form-name')?.addEventListener('input', () => {
+    if ($('#crm-stage-form-name').value !== _stageForm.nameAuto) _stageForm.nameAuto = '';
+    _refreshStageFormLook();
+  });
+  $('#crm-stage-form-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-stage-form-save')?.click(); });
+
+  const _closeStageForm = () => _macHide($('#crm-stage-form-modal'));
+  $('#crm-stage-form-close')?.addEventListener('click', _closeStageForm);
+  $('#crm-stage-form-cancel')?.addEventListener('click', _closeStageForm);
+  $('#crm-stage-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-form-modal')) _closeStageForm(); });
+
+  $('#crm-stage-form-save')?.addEventListener('click', async () => {
+    const alertEl = $('#crm-stage-form-alert');
+    const name = $('#crm-stage-form-name').value.trim();
+    if (!name) { alertEl.textContent = 'Stage name is required.'; alertEl.style.display = ''; $('#crm-stage-form-name').focus(); return; }
+    const key = _stageForm.status;
+    const actions = _stageFormActions();
+    if (actions.task && !actions.task.title) {
+      alertEl.textContent = 'Give the task a title, or untick "Create a task".'; alertEl.style.display = '';
+      $('#crm-stage-form-task-title').focus();
+      return;
+    }
+    // One of the business's own statuses is saved as its standard status plus a link to it
+    const st = _crmStatus(key);
+    const base = _crmBaseKey(key);
+    const isCustom = key === 'custom';
+    const body = {
+      name,
+      color:            $('#crm-stage-form-color').value || '#64748b',
+      icon:             _stageForm.icon || (st?.custom || isCustom ? st.icon : null),
+      description:      $('#crm-stage-form-desc').value.trim() || null,
+      system_key:       base,
+      custom_status_id: st?.custom ? st.id : null,
+      is_custom:        isCustom,
+      // Any stage may carry these rules (set here for Custom, under ⚙ Stage behaviour for the rest)
+      needs_approval:   $('#crm-stage-form-needs-approval').checked,
+      locks_lead:       $('#crm-stage-form-locks-lead').checked,
+      no_skip:          $('#crm-stage-form-no-skip').checked,
+      exit_checklist:   $('#crm-stage-form-checklist').value.split('\n').map(s => s.trim()).filter(Boolean),
+      requires_reason:  $('#crm-stage-form-reason').checked,
+      entry_rules:      actions,
+      is_won:           base === 'won',
+      is_lost:          base === 'lost',
+    };
+    const btn = $('#crm-stage-form-save');
+    btn.disabled = true;
+    const res = _stageForm.id
+      ? await API.crmUpdateStage(_crmProjectId, _stageForm.id, body)
+      : await API.crmCreateStage(_crmProjectId, body);
+    btn.disabled = false;
+    if (res.status === 200 || res.status === 201) {
+      _closeStageForm();
+      toast(_stageForm.id ? 'Stage updated.' : `Stage "${name}" added.`, 'success');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      alertEl.textContent = res.body?.message || 'Failed to save stage.';
+      alertEl.style.display = '';
+    }
+  });
 
   // Stage management modal close/open
   $('#crm-stages-modal-close')?.addEventListener('click',  () => _macHide($('#crm-stages-modal')));
   $('#crm-stages-modal-cancel')?.addEventListener('click', () => _macHide($('#crm-stages-modal')));
   $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) _macHide($('#crm-stages-modal')); });
 
-  // Add stage modal open/close
-  function _openStageAddModal() {
-    $('#crm-stage-add-alert').style.display = 'none';
-    $('#crm-stage-new-name').value  = '';
-    $('#crm-stage-new-color').value = '#64748b';
-    _crmFillStatusSelect('#crm-stage-new-status', '#crm-stage-new-reason', 'in_process', false);
-    $('#crm-stage-add-modal').style.display = 'flex';
-    $('#crm-stage-new-name')?.focus();
-  }
-  $('#crm-stage-add-open-btn')?.addEventListener('click', _openStageAddModal);
-  $('#crm-stage-add-close')?.addEventListener('click',  () => { $('#crm-stage-add-modal').style.display = 'none'; });
-  $('#crm-stage-add-cancel')?.addEventListener('click', () => { $('#crm-stage-add-modal').style.display = 'none'; });
-  $('#crm-stage-add-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-add-modal')) $('#crm-stage-add-modal').style.display = 'none'; });
-
-  // Add stage
-  $('#crm-stage-add-btn')?.addEventListener('click', async () => {
-    const name = $('#crm-stage-new-name').value.trim();
-    if (!name) {
-      $('#crm-stage-add-alert').textContent = 'Stage name is required.';
-      $('#crm-stage-add-alert').style.display = '';
-      return;
-    }
-    const btn = $('#crm-stage-add-btn');
-    btn.disabled = true;
-    const res = await API.crmCreateStage(_crmProjectId, {
-      name,
-      color:   $('#crm-stage-new-color').value || '#64748b',
-      ..._crmStagePayload('new'),
-    });
-    btn.disabled = false;
-    if (res.status === 201) {
-      $('#crm-stage-add-modal').style.display = 'none';
-      toast('Stage added.', 'success');
-      await _loadStagesList();
-      loadCrmPipeline();
-    } else {
-      $('#crm-stage-add-alert').textContent = res.body?.message || 'Failed to add stage.';
-      $('#crm-stage-add-alert').style.display = '';
-    }
-  });
-
-  // Also allow Enter key in name field
-  $('#crm-stage-new-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-stage-add-btn')?.click(); });
-
-  // Edit stage modal
-  $('#crm-stage-edit-close')?.addEventListener('click',  () => { $('#crm-stage-edit-modal').style.display = 'none'; });
-  $('#crm-stage-edit-cancel')?.addEventListener('click', () => { $('#crm-stage-edit-modal').style.display = 'none'; });
-  $('#crm-stage-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-edit-modal')) $('#crm-stage-edit-modal').style.display = 'none'; });
-
-  $('#crm-stage-edit-save')?.addEventListener('click', async () => {
-    const stageId = parseInt($('#crm-stage-edit-id').value);
-    const name    = $('#crm-stage-edit-name').value.trim();
-    if (!name) { $('#crm-stage-edit-alert').textContent = 'Name is required.'; $('#crm-stage-edit-alert').style.display = ''; return; }
-    const btn = $('#crm-stage-edit-save');
-    btn.disabled = true;
-    const res = await API.crmUpdateStage(_crmProjectId, stageId, {
-      name,
-      color:   $('#crm-stage-edit-color').value || '#64748b',
-      ..._crmStagePayload('edit'),
-    });
-    btn.disabled = false;
-    if (res.status === 200) {
-      $('#crm-stage-edit-modal').style.display = 'none';
-      toast('Stage updated.', 'success');
-      await _loadStagesList();
-      loadCrmPipeline();
-    } else {
-      $('#crm-stage-edit-alert').textContent = res.body?.message || 'Failed to update stage.';
-      $('#crm-stage-edit-alert').style.display = '';
-    }
-  });
+  $('#crm-stage-add-open-btn')?.addEventListener('click', () => _openStageForm(null, { system_key: 'in_process', custom: true }));
 
   // Ribbon button
   $('#rb-crm-stages')?.addEventListener('click', () => {
@@ -66054,6 +67782,7 @@ async function submitDsCreate() {
   let _crmCfAssignToBlockIdx = null; // set when opened from a Field block's "+ Add new field…"
 
   function _openCfModal(assignToBlockIdx) {
+    if (!_crmCan('custom_fields_manage')) { toast('You do not have permission to add custom fields.', 'error'); return; }
     _crmCfAssignToBlockIdx = assignToBlockIdx === undefined ? null : assignToBlockIdx;
     $('#crm-cf-name').value = '';
     $('#crm-cf-type').value = 'text';
@@ -68285,86 +70014,6 @@ const TeamProfile = (() => {
       const ids = [...overlay.querySelectorAll('#pm-as-list input:checked')].map(i => +i.value);
       overlay.remove();
       _pmAssignTask(t.id, ids);
-    });
-  }
-
-  // Swap a <select>'s native dropdown for a searchable popup. The select stays the source of truth:
-  // picking an option sets its value and fires 'change', so existing listeners keep working.
-  function _pmMakeSelectSearchable(sel) {
-    const open = () => {
-      document.querySelector('.pm-ss-pop')?._close?.();
-      const r   = sel.getBoundingClientRect();
-      const pop = document.createElement('div');
-      pop.className = 'pm-ss-pop';
-      pop.style.left     = `${r.left}px`;
-      pop.style.minWidth = `${Math.max(r.width, 200)}px`;
-      pop.innerHTML = `<input type="text" class="pm-ss-input" placeholder="Search…"><div class="pm-ss-list"></div>`;
-      document.body.appendChild(pop);
-
-      const input = pop.querySelector('.pm-ss-input');
-      const list  = pop.querySelector('.pm-ss-list');
-      let items = [], active = 0;
-      const render = () => {
-        const q = input.value.trim().toLowerCase();
-        items = [...sel.options].filter(o => !o.disabled && o.text.toLowerCase().includes(q));
-        active = Math.max(0, items.findIndex(o => o.value === sel.value));
-        list.innerHTML = items.length
-          ? items.map((o, i) => `<div class="cat-combo-item${i === active ? ' active' : ''}" data-i="${i}">${esc(o.text)}</div>`).join('')
-          : '<div class="cat-combo-empty">No matches</div>';
-      };
-      const highlight = i => {
-        active = (i + items.length) % items.length;
-        list.querySelectorAll('.cat-combo-item').forEach((el, j) => el.classList.toggle('active', j === active));
-        list.children[active]?.scrollIntoView({ block: 'nearest' });
-      };
-      const pick = o => {
-        close();
-        if (!o || o.value === sel.value) return;
-        sel.value = o.value;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-      };
-      const onDocDown = e => { if (!pop.contains(e.target) && e.target !== sel) close(); };
-      const onScroll  = e => { if (!pop.contains(e.target)) close(); };
-      function close() {
-        pop.remove();
-        document.removeEventListener('mousedown', onDocDown, true);
-        window.removeEventListener('scroll', onScroll, true);
-        window.removeEventListener('resize', close);
-      }
-      pop._close = close;
-
-      input.addEventListener('input', render);
-      input.addEventListener('keydown', e => {
-        if (e.key === 'ArrowDown')      { e.preventDefault(); if (items.length) highlight(active + 1); }
-        else if (e.key === 'ArrowUp')   { e.preventDefault(); if (items.length) highlight(active - 1); }
-        else if (e.key === 'Enter')     { e.preventDefault(); pick(items[active]); }
-        else if (e.key === 'Escape')    { e.preventDefault(); close(); sel.focus(); }
-        else if (e.key === 'Tab')       { close(); }
-      });
-      list.addEventListener('mousedown', e => {
-        const el = e.target.closest('.cat-combo-item');
-        if (!el) return;
-        e.preventDefault();
-        pick(items[+el.dataset.i]);
-      });
-      document.addEventListener('mousedown', onDocDown, true);
-      window.addEventListener('scroll', onScroll, true);
-      window.addEventListener('resize', close);
-      render();
-      // Open upward when there isn't room below.
-      const below = window.innerHeight - r.bottom;
-      if (below < pop.offsetHeight + 8 && r.top > below) pop.style.bottom = `${window.innerHeight - r.top + 2}px`;
-      else pop.style.top = `${r.bottom + 2}px`;
-      list.children[active]?.scrollIntoView({ block: 'nearest' });
-      input.focus();
-    };
-    sel.addEventListener('mousedown', e => {
-      e.preventDefault();
-      if (document.querySelector('.pm-ss-pop')) { document.querySelector('.pm-ss-pop')._close(); return; }
-      open();
-    });
-    sel.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); open(); }
     });
   }
 

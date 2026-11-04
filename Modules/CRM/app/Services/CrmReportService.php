@@ -31,13 +31,17 @@ use Modules\Sales\Models\Quotation;
  *   close time        created → closed_at, for leads closed in the range
  *   won value         per won lead: its accepted quotation's total, else its estimated value
  *
- * Pending approvals and overdue follow-ups are "right now", not limited to the date range.
+ *   win rate          won ÷ (won + lost) among leads closed in the range
+ *   previous          the headline figures for the equally long period just before, for deltas
+ *
+ * Pending approvals, overdue follow-ups, the open pipeline and the top open deals are
+ * "right now", not limited to the date range.
  */
 class CrmReportService
 {
     public function canView(CrmAccess $access): bool
     {
-        return $access->hasCrm() && ($access->viewsAllLeads() || $access->isHead());
+        return $access->hasCrm() && ($access->viewsAllLeads() || $access->isHead()) && $access->can('reports_view');
     }
 
     /**
@@ -63,6 +67,9 @@ class CrmReportService
             ->selectRaw('count(*) as n, sum(coalesce(wq.won_total, crm_leads.estimated_value, 0)) as value')
             ->first();
         $lostInRange = $closed()->whereIn('crm_leads.stage_id', $this->terminalStageIds($business, 'is_lost'))->count();
+        $wonN        = (int) $wonInRange->n;
+        $wonValue    = round((float) $wonInRange->value, 2);
+        $quotations  = $this->quotationValues($business, $access, $filters);
 
         return [
             'filters' => [
@@ -80,22 +87,32 @@ class CrmReportService
                 'open'                => $leadsCount - $wonCount - (int) $totals->lost,
                 'conversion_rate'     => $leadsCount > 0 ? round($wonCount / $leadsCount * 100, 1) : 0.0,
                 'pipeline_value'      => round((float) $totals->pipeline_value, 2),
-                'won_in_range'        => (int) $wonInRange->n,
-                'won_value_in_range'  => round((float) $wonInRange->value, 2),
+                'won_in_range'        => $wonN,
+                'won_value_in_range'  => $wonValue,
                 'lost_in_range'       => $lostInRange,
+                'win_rate'            => $wonN + $lostInRange > 0 ? round($wonN / ($wonN + $lostInRange) * 100, 1) : null,
+                'avg_deal_value'      => $wonN > 0 ? round($wonValue / $wonN, 2) : null,
                 'avg_response_hours'  => $this->averageResponseHours($created()),
                 'avg_close_days'      => $this->averageCloseDays($closed()),
-                ...$this->quotationValues($business, $access, $filters),
+                ...$quotations,
                 ...$this->pendingApprovals($business, $access, $filters),
+                ...$this->openPipeline($business, $access, $filters),
                 'overdue_follow_ups'  => FollowUp::query()->overdue($business->id)
                     ->whereIn('lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))->count(),
+                ...$this->contactGaps($business, $access, $filters),
             ],
-            'trend'        => $this->trend($created(), $from, $to),
+            'previous'     => $this->previousPeriod($business, $access, $filters),
+            'trend'        => $this->trend($created(), $from, $to, $this->wonValueByDay($closed(), $business)),
+            'top_open'     => $this->topOpenDeals($business, $access, $filters),
+            'recent_wins'  => $this->recentWins($business, $closed()),
+            'pipeline_stages' => $this->pipelineByStage($business, $access, $filters),
+            'forecast'     => $this->closeForecast($business, $access, $filters),
+            'attention'    => $this->attention($business, $access, $filters),
             'by_source'    => $this->bySource($created()),
             'by_department'=> $this->byDepartment($business, $created()),
             'by_division'  => $this->byDivision($business, $created()),
             'funnel'       => $this->funnel($created()),
-            'staff'        => $this->staffRanking($created()),
+            'staff'        => $this->withStaffWorkload($business, $access, $filters, $this->staffRanking($created()), $created()),
             'lost_reasons' => $this->lostReasons($closed()),
             'options'      => $this->options($business, $access),
         ];
@@ -240,8 +257,124 @@ class CrmReportService
         return $seconds === null ? null : round((float) $seconds / 86400, 1);
     }
 
-    /** Leads created per day (per week over 92 days). @return list<array{label: string, date: string, leads: int, won: int}> */
-    private function trend(Builder $leads, Carbon $from, Carbon $to): array
+    /** The same headline figures for the equally long period just before this one, for the "vs previous" deltas. */
+    private function previousPeriod(Business $business, CrmAccess $access, array $filters): array
+    {
+        $days = (int) $filters['from']->diffInDays($filters['to']) + 1;
+        $prev = [...$filters, 'from' => $filters['from']->copy()->subDays($days), 'to' => $filters['from']->copy()->subSecond()];
+
+        $created = $this->leads($business, $access, $prev)->whereBetween('crm_leads.created_at', [$prev['from'], $prev['to']])
+            ->leftJoin('crm_lead_stages as s', 's.id', '=', 'crm_leads.stage_id')
+            ->selectRaw('count(*) as leads, sum(case when s.is_won = 1 then 1 else 0 end) as won')
+            ->first();
+        $closed = fn () => $this->leads($business, $access, $prev)->whereBetween('crm_leads.closed_at', [$prev['from'], $prev['to']]);
+        $won    = $this->withWonValue($closed()->whereIn('crm_leads.stage_id', $this->terminalStageIds($business, 'is_won')))
+            ->selectRaw('count(*) as n, sum(coalesce(wq.won_total, crm_leads.estimated_value, 0)) as value')
+            ->first();
+        $lost   = $closed()->whereIn('crm_leads.stage_id', $this->terminalStageIds($business, 'is_lost'))->count();
+        [$leads, $wonN] = [(int) $created->leads, (int) $won->n];
+
+        return [
+            'from'                 => $prev['from']->toDateString(),
+            'to'                   => $prev['to']->toDateString(),
+            'leads'                => $leads,
+            'conversion_rate'      => $leads > 0 ? round((int) $created->won / $leads * 100, 1) : 0.0,
+            'won_in_range'         => $wonN,
+            'won_value_in_range'   => round((float) $won->value, 2),
+            'win_rate'             => $wonN + $lost > 0 ? round($wonN / ($wonN + $lost) * 100, 1) : null,
+            'avg_deal_value'       => $wonN > 0 ? round((float) $won->value / $wonN, 2) : null,
+            'quotation_value_sent' => $this->quotationValues($business, $access, $prev)['quotation_value_sent'],
+        ];
+    }
+
+    /** Open leads in scope right now (any creation date): count, estimated value, and those past their expected close date. */
+    private function openPipeline(Business $business, CrmAccess $access, array $filters): array
+    {
+        $row = $this->openLeads($business, $access, $filters)
+            ->selectRaw('count(*) as n, sum(coalesce(crm_leads.estimated_value, 0)) as value,
+                sum(case when crm_leads.expected_close_date < ? then 1 else 0 end) as past_due,
+                sum(case when crm_leads.expected_close_date < ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as past_due_value',
+                [now()->toDateString(), now()->toDateString()])
+            ->first();
+
+        return [
+            'open_pipeline_count'  => (int) $row->n,
+            'open_pipeline_value'  => round((float) $row->value, 2),
+            'past_due_deals'       => (int) $row->past_due,
+            'past_due_deals_value' => round((float) $row->past_due_value, 2),
+        ];
+    }
+
+    private function openLeads(Business $business, CrmAccess $access, array $filters): Builder
+    {
+        return $this->leads($business, $access, $filters)
+            ->leftJoin('crm_lead_stages as s', 's.id', '=', 'crm_leads.stage_id')
+            ->whereRaw('coalesce(s.is_won, 0) = 0 and coalesce(s.is_lost, 0) = 0');
+    }
+
+    /** The five largest open deals by estimated value. */
+    private function topOpenDeals(Business $business, CrmAccess $access, array $filters): array
+    {
+        return $this->openLeads($business, $access, $filters)
+            ->leftJoin('users as u', 'u.id', '=', 'crm_leads.assigned_to')
+            ->where('crm_leads.estimated_value', '>', 0)
+            ->orderByDesc('crm_leads.estimated_value')
+            ->limit(5)
+            ->get(['crm_leads.id', 'crm_leads.project_id', 'crm_leads.name', 'crm_leads.company', 'crm_leads.estimated_value',
+                'crm_leads.expected_close_date', 'crm_leads.created_at', 's.system_key', 'u.name as owner'])
+            ->map(fn ($l) => [
+                'id'                  => (int) $l->id,
+                'project_id'          => (int) $l->project_id,
+                'name'                => $l->company ?: $l->name,
+                'contact'             => $l->company ? $l->name : null,
+                'value'               => round((float) $l->estimated_value, 2),
+                'stage'               => LeadStage::STATUSES[$l->system_key][0] ?? 'Open',
+                'stage_color'         => LeadStage::STATUSES[$l->system_key][1] ?? '#94a3b8',
+                'owner'               => $l->owner,
+                'expected_close_date' => $l->expected_close_date?->toDateString(),
+                'past_due'            => $l->expected_close_date !== null && $l->expected_close_date->lt(today()),
+                'age_days'            => (int) Carbon::parse($l->created_at)->diffInDays(now()),
+            ])
+            ->all();
+    }
+
+    /** The five largest deals won in the period. */
+    private function recentWins(Business $business, Builder $closedLeads): array
+    {
+        return $this->withWonValue($closedLeads->whereIn('crm_leads.stage_id', $this->terminalStageIds($business, 'is_won')))
+            ->leftJoin('users as u', 'u.id', '=', 'crm_leads.assigned_to')
+            ->orderByRaw('coalesce(wq.won_total, crm_leads.estimated_value, 0) desc')
+            ->limit(5)
+            ->get(['crm_leads.id', 'crm_leads.project_id', 'crm_leads.name', 'crm_leads.company', 'crm_leads.closed_at', 'u.name as owner',
+                DB::raw('coalesce(wq.won_total, crm_leads.estimated_value, 0) as won_value')])
+            ->map(fn ($l) => [
+                'id'         => (int) $l->id,
+                'project_id' => (int) $l->project_id,
+                'name'       => $l->company ?: $l->name,
+                'value'      => round((float) $l->won_value, 2),
+                'owner'      => $l->owner,
+                'closed_at'  => $l->closed_at?->toDateString(),
+            ])
+            ->all();
+    }
+
+    /** Won value per close day. @return array<string, float> date => value */
+    private function wonValueByDay(Builder $closedLeads, Business $business): array
+    {
+        return $this->withWonValue($closedLeads->whereIn('crm_leads.stage_id', $this->terminalStageIds($business, 'is_won')))
+            ->selectRaw('date(crm_leads.closed_at) as d, sum(coalesce(wq.won_total, crm_leads.estimated_value, 0)) as v')
+            ->groupByRaw('date(crm_leads.closed_at)')
+            ->get()
+            ->mapWithKeys(fn ($r) => [Carbon::parse($r->d)->toDateString() => (float) $r->v])
+            ->all();
+    }
+
+    /**
+     * Leads created per day (per week over 92 days), with won value by close day.
+     * @param  array<string, float>  $wonValues
+     * @return list<array{label: string, date: string, leads: int, won: int, won_value: float}>
+     */
+    private function trend(Builder $leads, Carbon $from, Carbon $to, array $wonValues = []): array
     {
         $rows = $leads
             ->leftJoin('crm_lead_stages as s', 's.id', '=', 'crm_leads.stage_id')
@@ -254,15 +387,16 @@ class CrmReportService
         $out    = [];
         for ($day = $from->copy()->startOfDay(); $day->lte($to); $day->addDay()) {
             $key = $weekly ? $day->copy()->startOfWeek()->toDateString() : $day->toDateString();
-            $out[$key] ??= ['label' => ($weekly ? 'Wk ' : '') . Carbon::parse($key)->format('M j'), 'date' => $key, 'leads' => 0, 'won' => 0];
+            $out[$key] ??= ['label' => ($weekly ? 'Wk ' : '') . Carbon::parse($key)->format('M j'), 'date' => $key, 'leads' => 0, 'won' => 0, 'won_value' => 0.0];
             $row = $rows->get($day->toDateString());
             if ($row) {
                 $out[$key]['leads'] += (int) $row->n;
                 $out[$key]['won']   += (int) $row->won;
             }
+            $out[$key]['won_value'] += $wonValues[$day->toDateString()] ?? 0.0;
         }
 
-        return array_values($out);
+        return array_values(array_map(fn ($r) => [...$r, 'won_value' => round($r['won_value'], 2)], $out));
     }
 
     private function bySource(Builder $leads): array
@@ -349,6 +483,164 @@ class CrmReportService
             ->sortBy([['won_value', 'desc'], ['won', 'desc'], ['conversion_rate', 'desc']])
             ->values()
             ->all();
+    }
+
+    /** Open leads right now with no assignee, and assigned ones nobody has contacted yet. */
+    private function contactGaps(Business $business, CrmAccess $access, array $filters): array
+    {
+        $row = $this->openLeads($business, $access, $filters)
+            ->selectRaw('sum(case when crm_leads.assigned_to is null then 1 else 0 end) as unassigned,
+                sum(case when crm_leads.assigned_to is not null and crm_leads.first_response_at is null then 1 else 0 end) as uncontacted')
+            ->first();
+
+        return ['unassigned_leads' => (int) $row->unassigned, 'uncontacted_leads' => (int) $row->uncontacted];
+    }
+
+    /** All open deals right now, per standard status in pipeline order: count, estimated value, past due. */
+    private function pipelineByStage(Business $business, CrmAccess $access, array $filters): array
+    {
+        $rows = $this->openLeads($business, $access, $filters)
+            ->selectRaw('s.system_key as k, count(*) as n, sum(coalesce(crm_leads.estimated_value, 0)) as value,
+                sum(case when crm_leads.expected_close_date < ? then 1 else 0 end) as past_due', [now()->toDateString()])
+            ->groupBy('s.system_key')
+            ->get()
+            ->keyBy('k');
+
+        return collect(LeadStage::STATUSES)
+            ->except([LeadStage::STATUS_WON, LeadStage::STATUS_LOST])
+            ->map(fn ($s, $key) => [
+                'key'      => $key,
+                'label'    => $s[0],
+                'color'    => $s[1],
+                'leads'    => (int) ($rows[$key]->n ?? 0),
+                'value'    => round((float) ($rows[$key]->value ?? 0), 2),
+                'past_due' => (int) ($rows[$key]->past_due ?? 0),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** Open deals by expected close date: past due, the next 30 days, later, not set. */
+    private function closeForecast(Business $business, CrmAccess $access, array $filters): array
+    {
+        $today = now()->toDateString();
+        $in30  = now()->addDays(30)->toDateString();
+        $row   = $this->openLeads($business, $access, $filters)
+            ->selectRaw('
+                sum(case when crm_leads.expected_close_date < ? then 1 else 0 end) as past_n,
+                sum(case when crm_leads.expected_close_date < ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as past_v,
+                sum(case when crm_leads.expected_close_date >= ? and crm_leads.expected_close_date <= ? then 1 else 0 end) as soon_n,
+                sum(case when crm_leads.expected_close_date >= ? and crm_leads.expected_close_date <= ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as soon_v,
+                sum(case when crm_leads.expected_close_date > ? then 1 else 0 end) as later_n,
+                sum(case when crm_leads.expected_close_date > ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as later_v,
+                sum(case when crm_leads.expected_close_date is null then 1 else 0 end) as none_n,
+                sum(case when crm_leads.expected_close_date is null then coalesce(crm_leads.estimated_value, 0) else 0 end) as none_v',
+                [$today, $today, $today, $in30, $today, $in30, $in30, $in30])
+            ->first();
+
+        return collect(['past' => 'Past due', 'soon' => 'Next 30 days', 'later' => 'Later', 'none' => 'No close date'])
+            ->map(fn ($label, $key) => ['key' => $key, 'label' => $label, 'leads' => (int) $row->{$key . '_n'}, 'value' => round((float) $row->{$key . '_v'}, 2)])
+            ->values()
+            ->all();
+    }
+
+    /** Live to-do list for managers: the oldest overdue follow-ups and assigned leads still waiting for first contact. */
+    private function attention(Business $business, CrmAccess $access, array $filters): array
+    {
+        $startOfToday = now()->startOfDay();
+
+        $followUps = FollowUp::query()->overdue($business->id)
+            ->whereIn('crm_follow_ups.lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))
+            ->join('crm_leads as l', 'l.id', '=', 'crm_follow_ups.lead_id')
+            ->leftJoin('users as u', 'u.id', '=', 'crm_follow_ups.user_id')
+            ->orderBy('crm_follow_ups.due_at')
+            ->limit(8)
+            ->get(['crm_follow_ups.id', 'crm_follow_ups.due_at', 'l.id as lead_id', 'l.project_id', 'l.name', 'l.company', 'l.phone', 'u.name as owner'])
+            ->map(fn ($f) => [
+                'id'           => (int) $f->id,
+                'lead_id'      => (int) $f->lead_id,
+                'project_id'   => (int) $f->project_id,
+                'name'         => $f->company ?: $f->name,
+                'phone'        => $f->phone,
+                'owner'        => $f->owner,
+                'due_at'       => $f->due_at?->toDateString(),
+                'days_overdue' => max(1, (int) $f->due_at?->copy()->startOfDay()->diffInDays($startOfToday)),
+            ])
+            ->all();
+
+        $uncontacted = $this->openLeads($business, $access, $filters)
+            ->leftJoin('users as u', 'u.id', '=', 'crm_leads.assigned_to')
+            ->whereNotNull('crm_leads.assigned_to')
+            ->whereNull('crm_leads.first_response_at')
+            ->orderBy('crm_leads.created_at')
+            ->limit(8)
+            ->get(['crm_leads.id', 'crm_leads.project_id', 'crm_leads.name', 'crm_leads.company', 'crm_leads.phone', 'crm_leads.created_at', 'u.name as owner'])
+            ->map(fn ($l) => [
+                'lead_id'    => (int) $l->id,
+                'project_id' => (int) $l->project_id,
+                'name'       => $l->company ?: $l->name,
+                'phone'      => $l->phone,
+                'owner'      => $l->owner,
+                'age_days'   => (int) Carbon::parse($l->created_at)->diffInDays(now()),
+            ])
+            ->all();
+
+        return ['follow_ups' => $followUps, 'uncontacted' => $uncontacted];
+    }
+
+    /**
+     * Adds each person's live workload (open deals and their value, overdue follow-ups) and their
+     * average first response for leads created in the range. Staff with open work but no new
+     * leads in the range are appended at the end.
+     */
+    private function withStaffWorkload(Business $business, CrmAccess $access, array $filters, array $staff, Builder $createdLeads): array
+    {
+        $open = $this->openLeads($business, $access, $filters)
+            ->leftJoin('users as u', 'u.id', '=', 'crm_leads.assigned_to')
+            ->whereNotNull('crm_leads.assigned_to')
+            ->selectRaw('crm_leads.assigned_to as uid, max(u.name) as name, count(*) as n, sum(coalesce(crm_leads.estimated_value, 0)) as value')
+            ->groupBy('crm_leads.assigned_to')
+            ->get()
+            ->keyBy('uid');
+        $overdue = FollowUp::query()->overdue($business->id)
+            ->whereIn('crm_follow_ups.lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))
+            ->selectRaw('crm_follow_ups.user_id as uid, count(*) as n')
+            ->groupBy('crm_follow_ups.user_id')
+            ->pluck('n', 'uid');
+
+        $firstAssigned = DB::table('crm_lead_assignment_logs')
+            ->whereIn('action', [LeadAssignmentLog::ACTION_ASSIGNED, LeadAssignmentLog::ACTION_REASSIGNED])
+            ->groupBy('lead_id')
+            ->selectRaw('lead_id, min(created_at) as assigned_at');
+        $response = $createdLeads
+            ->joinSub($firstAssigned, 'fa', 'fa.lead_id', '=', 'crm_leads.id')
+            ->whereNotNull('crm_leads.assigned_to')
+            ->whereNotNull('crm_leads.first_response_at')
+            ->whereColumn('crm_leads.first_response_at', '>=', 'fa.assigned_at')
+            ->selectRaw('crm_leads.assigned_to as uid, avg(' . $this->secondsBetween('fa.assigned_at', 'crm_leads.first_response_at') . ') as s')
+            ->groupBy('crm_leads.assigned_to')
+            ->pluck('s', 'uid');
+
+        $extra = fn (int $uid) => [
+            'open_deals'         => (int) ($open[$uid]->n ?? 0),
+            'open_value'         => round((float) ($open[$uid]->value ?? 0), 2),
+            'overdue_follow_ups' => (int) ($overdue[$uid] ?? 0),
+            'avg_response_hours' => isset($response[$uid]) ? round((float) $response[$uid] / 3600, 1) : null,
+        ];
+
+        $seen = [];
+        $rows = array_map(function ($s) use ($extra, &$seen) {
+            $seen[$s['user_id']] = true;
+
+            return [...$s, ...$extra($s['user_id'])];
+        }, $staff);
+        foreach ($open as $uid => $o) {
+            if (! isset($seen[(int) $uid])) {
+                $rows[] = ['user_id' => (int) $uid, 'name' => $o->name ?? 'User #' . $uid, 'leads' => 0, 'won' => 0, 'won_value' => 0.0, 'conversion_rate' => 0.0, ...$extra((int) $uid)];
+            }
+        }
+
+        return $rows;
     }
 
     private function lostReasons(Builder $closedLeads): array

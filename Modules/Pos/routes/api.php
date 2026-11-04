@@ -709,8 +709,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stages'])       ->name('crm.projects.stages.index');
     Route::post  ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createStage'])  ->name('crm.projects.stages.store');
     Route::post  ('crm/projects/{project}/stages/reorder', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reorderStages'])->name('crm.projects.stages.reorder');
+    Route::post  ('crm/projects/{project}/stages/bulk-delete', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'bulkDeleteStages'])->name('crm.projects.stages.bulk-delete');
+    Route::post  ('crm/projects/{project}/stages/restore-standard', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'restoreStandardStages'])->name('crm.projects.stages.restore-standard');
     Route::put   ('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStage'])  ->name('crm.projects.stages.update');
     Route::delete('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStage'])  ->name('crm.projects.stages.destroy');
+    Route::put   ('crm/projects/{project}/stages/{stage}/behaviours', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStageBehaviours'])->name('crm.projects.stages.behaviours');
     Route::get   ('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stageMailTemplate'])      ->name('crm.projects.stages.mail-template.show');
     Route::put   ('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'saveStageMailTemplate'])  ->name('crm.projects.stages.mail-template.save');
     Route::delete('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStageMailTemplate'])->name('crm.projects.stages.mail-template.destroy');
@@ -722,7 +725,14 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::post  ('crm/leads/{lead}/resume',           [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'resumeLead'])  ->name('crm.leads.resume');
     Route::post  ('crm/leads/{lead}/convert',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'convertLead']) ->name('crm.leads.convert');
     Route::get   ('crm/statuses',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'statuses'])    ->name('crm.statuses.index');
-    Route::get   ('crm/lost-reasons',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'lostReasons']) ->name('crm.lost-reasons.index');
+    Route::post  ('crm/leads/{lead}/checklist', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'setLeadChecklistItem'])->name('crm.leads.checklist');
+    Route::post  ('crm/leads/{lead}/stage-requests/{moveRequest}/approve', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'approveStageMove'])->name('crm.leads.stage-requests.approve');
+    Route::post  ('crm/leads/{lead}/stage-requests/{moveRequest}/reject',  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'rejectStageMove']) ->name('crm.leads.stage-requests.reject');
+    Route::get   ('crm/custom-statuses',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customStatuses'])     ->name('crm.custom-statuses.index');
+    Route::post  ('crm/custom-statuses',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createCustomStatus']) ->name('crm.custom-statuses.store');
+    Route::put   ('crm/custom-statuses/{status}',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateCustomStatus']) ->name('crm.custom-statuses.update');
+    Route::delete('crm/custom-statuses/{status}',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteCustomStatus']) ->name('crm.custom-statuses.destroy');
+    Route::get   ('crm/lost-reasons',                 [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'lostReasons']) ->name('crm.lost-reasons.index');
     Route::get   ('crm/lead-sources',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadSources']) ->name('crm.lead-sources.index');
     Route::delete('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteLead'])  ->name('crm.leads.destroy');
     Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');

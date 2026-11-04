@@ -233,6 +233,26 @@ test('linking a legacy pipeline to a department maps its stages by name and adds
         ->and($lead->fresh()->department_id)->toBe(10);
 });
 
+test('re-linking an already-mapped pipeline does not bring back stages the user deleted', function () {
+    $org     = app(CrmOrgService::class);
+    $project = $org->linkPipeline($this->business, Department::find(10), null);
+    $deleted = ['assigned', 'contacted', 'on_hold'];
+    LeadStage::where('project_id', $project->id)->whereIn('system_key', $deleted)->get()
+        ->each(fn (LeadStage $s) => $this->stages->delete($s));
+
+    $org->unlinkPipeline($this->business, Department::find(10), $project->id);
+    $org->linkPipeline($this->business, Department::find(10), $project->id);
+
+    expect(LeadStage::where('project_id', $project->id)->whereIn('system_key', $deleted)->count())->toBe(0)
+        ->and(LeadStage::where('project_id', $project->id)->count())->toBe(count(LeadStage::STATUSES) - count($deleted));
+});
+
+test('the "New" stage cannot be deleted while it is the only one', function () {
+    $new = $this->stages->stageForStatus($this->project, LeadStage::STATUS_NEW);
+
+    expect(fn () => $this->stages->delete($new))->toThrow(ValidationException::class);
+});
+
 test('the mapping helper maps won, lost, the first stage and the rest, and reports it', function () {
     $legacy = Project::create(['business_id' => 7, 'name' => 'Legacy', 'status' => 'active']);
     foreach (['Lead in', 'Demo', 'Proposal', 'Closed won', 'Closed lost'] as $i => $name) {
@@ -575,4 +595,239 @@ test('older desktop builds can still create stages with the won flag only', func
 
     expect($res->getStatusCode())->toBe(201)
         ->and(LeadStage::where('project_id', $this->project->id)->where('name', 'Signed')->value('system_key'))->toBe('won');
+});
+
+// ── Stage entry actions ──────────────────────────────────────────────────
+
+test('a stage saves what happens when a lead enters it, cleaned up', function () {
+    $stage = $this->stages->create($this->project, [
+        'name'        => 'Site Visit',
+        'system_key'  => 'in_process',
+        'entry_rules' => [
+            'require'   => ['follow_up_at', 'estimated_value', 'not_a_field'],
+            'task'      => ['enabled' => true, 'title' => 'Confirm the visit time', 'due_days' => 2],
+            'notify'    => ['owner' => true, 'head' => false, 'user_ids' => []],
+            'max_days'  => 5,
+        ],
+    ]);
+
+    expect($stage->entryRules())->toBe([
+        'require'   => ['follow_up_at', 'estimated_value'],
+        'task'      => ['title' => 'Confirm the visit time', 'due_days' => 2],
+        'notify'    => ['owner' => true, 'head' => false, 'user_ids' => []],
+        'assign_user_ids' => [],
+        'max_days'  => 5,
+    ])->and($stage->hasEntryActions())->toBeTrue();
+
+    // Everything switched off is stored as no rules at all
+    $plain = $this->stages->update($stage, ['name' => 'Site Visit', 'entry_rules' => ['task' => null]]);
+    expect($plain->entry_rules)->toBeNull()->and($plain->hasEntryActions())->toBeFalse();
+
+    expect(fn () => $this->stages->update($stage, ['name' => 'Site Visit', 'entry_rules' => ['task' => ['enabled' => true, 'title' => ' ']]]))
+        ->toThrow(ValidationException::class);
+    expect(fn () => $this->stages->update($stage, ['name' => 'Site Visit', 'entry_rules' => ['assign_user_ids' => [9]]]))
+        ->toThrow(ValidationException::class);
+});
+
+test('moving a lead into a stage asks for the details it requires and saves them', function () {
+    \Illuminate\Support\Facades\Event::fake([\Modules\CRM\Events\LeadEnteredStage::class]);
+    $stage = ($this->stage)('negotiation');
+    $stage->update(['entry_rules' => ['require' => ['follow_up_at', 'expected_close_date', 'estimated_value']]]);
+    $lead = ($this->newLead)();
+
+    expect(fn () => $this->leads->moveStage($lead, $stage->id, 1, ['expected_close_date' => '2030-01-31', 'estimated_value' => 5000]))
+        ->toThrow(ValidationException::class);
+    expect(fn () => $this->leads->moveStage($lead->fresh(), $stage->id, 1, ['follow_up_at' => '2000-01-01', 'expected_close_date' => '2030-01-31', 'estimated_value' => 5000]))
+        ->toThrow(ValidationException::class);
+    expect($lead->fresh()->stage_id)->not->toBe($stage->id);
+
+    $this->leads->moveStage($lead->fresh(), $stage->id, 1, ['follow_up_at' => '2030-01-10', 'expected_close_date' => '2030-01-31', 'estimated_value' => 5000]);
+
+    $lead = $lead->fresh();
+    expect($lead->stage_id)->toBe($stage->id)
+        ->and($lead->expected_close_date->toDateString())->toBe('2030-01-31')
+        ->and((float) $lead->estimated_value)->toBe(5000.0);
+    \Illuminate\Support\Facades\Event::assertDispatched(\Modules\CRM\Events\LeadEnteredStage::class,
+        fn ($e) => $e->stage->id === $stage->id && $e->followUpAt === '2030-01-10 09:00:00' && $e->byUserId === 1);
+});
+
+test('a stage without entry actions raises no entry event, and system moves skip the asked details', function () {
+    \Illuminate\Support\Facades\Event::fake([\Modules\CRM\Events\LeadEnteredStage::class]);
+    $lead = ($this->newLead)();
+    $this->leads->moveStage($lead, ($this->stage)('contacted')->id, 1);
+    \Illuminate\Support\Facades\Event::assertNotDispatched(\Modules\CRM\Events\LeadEnteredStage::class);
+
+    $sent = ($this->stage)('quotation_sent');
+    $sent->update(['entry_rules' => ['require' => ['estimated_value'], 'notify' => ['head' => true]]]);
+    $this->leads->moveToStatus($lead->fresh(), 'quotation_sent', 1, system: true);
+    expect($lead->fresh()->stage_id)->toBe($sent->id);
+    \Illuminate\Support\Facades\Event::assertDispatched(\Modules\CRM\Events\LeadEnteredStage::class, fn ($e) => $e->followUpAt === null);
+});
+
+// ── The business's own statuses ──────────────────────────────────────────
+
+test('a business makes its own status and stages made from it count as its standard status', function () {
+    $service = app(\Modules\CRM\Services\CustomStatusService::class);
+    $visit = $service->create($this->business, [
+        'name'        => 'Site Visit',
+        'icon'        => 'fa-location-dot',
+        'base_key'    => 'in_process',
+        'entry_rules' => ['require' => ['follow_up_at'], 'notify' => ['head' => true, 'user_ids' => [1]], 'assign_user_ids' => [1]],
+    ]);
+
+    // A template never names people
+    expect($visit->entry_rules['notify']['user_ids'])->toBe([])
+        ->and($visit->entry_rules['assign_user_ids'])->toBe([])
+        ->and($visit->entry_rules['require'])->toBe(['follow_up_at']);
+
+    $stage = $this->stages->create($this->project, ['name' => 'Site Visit', 'custom_status_id' => $visit->id, 'system_key' => 'won']);
+    expect($stage->system_key)->toBe('in_process')
+        ->and($stage->custom_status_id)->toBe($visit->id)
+        ->and($stage->is_won)->toBeFalse();
+
+    // Another business's status can't be used; a standard name can't be taken; reserved bases are refused
+    $theirs = $service->create($this->other, ['name' => 'Theirs', 'base_key' => 'contacted']);
+    expect(fn () => $this->stages->create($this->project, ['name' => 'X', 'custom_status_id' => $theirs->id]))->toThrow(ValidationException::class)
+        ->and(fn () => $service->create($this->business, ['name' => 'won', 'base_key' => 'won']))->toThrow(ValidationException::class)
+        ->and(fn () => $service->create($this->business, ['name' => 'Waiting', 'base_key' => 'quotation_sent']))->toThrow(ValidationException::class);
+
+    // Editing without new actions keeps them; deleting keeps the stage on its standard status
+    $service->update($visit, ['name' => 'Site Survey', 'base_key' => 'in_process']);
+    expect($visit->fresh()->entry_rules['require'])->toBe(['follow_up_at']);
+
+    $service->delete($visit);
+    expect($stage->fresh()->custom_status_id)->toBeNull()->and($stage->fresh()->system_key)->toBe('in_process');
+});
+
+// ── Custom stages (behaviour by ticks) ───────────────────────────────────
+
+test('a custom stage takes its behaviour from its ticks', function () {
+    $stage = $this->stages->create($this->project, [
+        'name' => 'test1', 'system_key' => 'won', 'is_custom' => true, 'needs_approval' => true, 'locks_lead' => true,
+    ]);
+    expect($stage->is_custom)->toBeTrue()
+        ->and($stage->is_won)->toBeTrue()
+        ->and($stage->needs_approval)->toBeTrue()
+        ->and($stage->locks_lead)->toBeTrue();
+
+    // Only open / won / lost / paused, and the ticks go when it becomes an ordinary stage again
+    expect(fn () => $this->stages->update($stage, ['name' => 'test1', 'system_key' => 'quotation_sent', 'is_custom' => true]))
+        ->toThrow(ValidationException::class);
+    $plain = $this->stages->update($stage, ['name' => 'test1', 'system_key' => 'negotiation', 'is_custom' => false]);
+    expect($plain->is_custom)->toBeFalse()->and($plain->needs_approval)->toBeFalse()->and($plain->locks_lead)->toBeFalse();
+});
+
+test('a move into a stage that must be approved waits until the head approves or rejects it', function () {
+    $stage = $this->stages->create($this->project, [
+        'name' => 'test1', 'system_key' => 'in_process', 'is_custom' => true, 'needs_approval' => true,
+    ]);
+    $lead     = ($this->newLead)();
+    $from     = $lead->stage_id;
+    $requests = app(\Modules\CRM\Services\StageMoveRequestService::class);
+
+    $first = $requests->request($lead, $stage, 1, ['reason' => 'Customer agreed', 'junk' => 'x']);
+    expect($lead->fresh()->stage_id)->toBe($from)
+        ->and($first->context)->toBe(['reason' => 'Customer agreed'])
+        ->and($requests->pendingByLead([$lead->id])[$lead->id]['to_stage_name'])->toBe('test1');
+
+    // Asking again replaces the waiting request; rejecting leaves the lead where it is
+    $second = $requests->request($lead->fresh(), $stage, 1);
+    expect($first->fresh()->status)->toBe('cancelled');
+    $requests->reject($second, 1, 'Not yet');
+    expect($second->fresh()->status)->toBe('rejected')->and($lead->fresh()->stage_id)->toBe($from);
+    expect(fn () => $requests->approve($second->fresh(), 1))->toThrow(ValidationException::class);
+
+    $third = $requests->request($lead->fresh(), $stage, 1);
+    $requests->approve($third, 1);
+    expect($lead->fresh()->stage_id)->toBe($stage->id)
+        ->and($third->fresh()->status)->toBe('approved')
+        ->and($requests->pendingByLead([$lead->id]))->toBe([]);
+});
+
+test('a custom stage checklist must be done before the lead moves on', function () {
+    $visit = $this->stages->create($this->project, [
+        'name' => 'Site Visit', 'system_key' => 'in_process', 'is_custom' => true,
+        'exit_checklist' => ['Measurements taken', ' ', 'Photos uploaded', 'Measurements taken'],
+    ]);
+    expect($visit->exitChecklist())->toBe(['Measurements taken', 'Photos uploaded']);
+
+    $lead = ($this->newLead)();
+    $this->leads->moveStage($lead, $visit->id, 1);
+    $next = ($this->stage)('negotiation');
+
+    expect(fn () => $this->leads->moveStage($lead->fresh(), $next->id, 1))->toThrow(ValidationException::class);
+    $this->leads->setChecklistItem($lead->fresh(), 'Measurements taken', true);
+    expect(fn () => $this->leads->setChecklistItem($lead->fresh(), 'Not on the list', true))->toThrow(ValidationException::class);
+    expect(fn () => $this->leads->moveStage($lead->fresh(), $next->id, 1))->toThrow(ValidationException::class);
+
+    $this->leads->setChecklistItem($lead->fresh(), 'Photos uploaded', true);
+    $this->leads->moveStage($lead->fresh(), $next->id, 1);
+    // Ticks belong to the stage the lead was in
+    expect($lead->fresh()->stage_id)->toBe($next->id)->and($lead->fresh()->checklist_done)->toBeNull();
+});
+
+// ── Stage behaviour settings (built-in behaviour on/off, rules on any stage) ──
+
+test('a standard stage can switch its built-in behaviour off and take the rules custom stages have', function () {
+    $sent = ($this->stage)('quotation_sent');
+    expect($sent->isReserved())->toBeTrue()
+        ->and(collect($sent->builtInBehaviours())->pluck('key')->all())->toBe(['workflow_only']);
+
+    // Keys the status doesn't have are ignored; the rules don't make it a custom stage
+    $sent = $this->stages->updateBehaviours($sent, ['disabled_behaviours' => ['workflow_only', 'lost_reason'], 'locks_lead' => true]);
+    expect($sent->disabled_behaviours)->toBe(['workflow_only'])
+        ->and($sent->isReserved())->toBeFalse()
+        ->and($sent->locks_lead)->toBeTrue()
+        ->and($sent->is_custom)->toBeFalse()
+        ->and($sent->system_key)->toBe('quotation_sent');
+
+    $lead = ($this->newLead)();
+    $this->leads->moveStage($lead, $sent->id, 1);
+    expect($lead->fresh()->stage_id)->toBe($sent->id);
+
+    // Saving the stage form with the rules keeps them on an ordinary stage
+    $sent = $this->stages->update($sent, ['name' => $sent->name, 'system_key' => 'quotation_sent', 'is_custom' => false, 'locks_lead' => true]);
+    expect($sent->locks_lead)->toBeTrue();
+});
+
+test('a lost stage with its lost reason switched off closes the lead without one', function () {
+    $lost = ($this->stage)('lost');
+    // "Closes the lead as lost" is what the status means — it can't be switched off
+    $lost = $this->stages->updateBehaviours($lost, ['disabled_behaviours' => ['lost_reason', 'closes_lost'], 'requires_reason' => false]);
+    expect($lost->disabled_behaviours)->toBe(['lost_reason'])->and($lost->requires_reason)->toBeTrue();
+
+    $lead = ($this->newLead)();
+    $this->leads->moveStage($lead, $lost->id, 1);
+    expect($lead->fresh()->stage_id)->toBe($lost->id)
+        ->and($lead->fresh()->lost_reason_id)->toBeNull()
+        ->and($lead->fresh()->closed_at)->not->toBeNull();
+});
+
+test('an on-hold stage that does not remember where the lead paused resumes to the default stage', function () {
+    $hold = $this->stages->updateBehaviours(($this->stage)('on_hold'), ['disabled_behaviours' => ['remember_from']]);
+    $lead = ($this->newLead)();
+    $this->leads->moveStage($lead, ($this->stage)('negotiation')->id, 1);
+    $this->leads->moveStage($lead->fresh(), $hold->id, 1);
+    expect($lead->fresh()->on_hold_from_stage_id)->toBeNull();
+
+    $this->leads->resume($lead->fresh(), 1);
+    expect($lead->fresh()->stage_id)->toBe(($this->stage)('new')->id);
+});
+
+test('a no-skipping stage is entered only from the stage right before it, or by going back', function () {
+    $stages = $this->stages->listForProject($this->project)->values();
+    $target = $stages[4]; // after new, assigned, contacted, in process
+    $this->stages->update($target, ['name' => $target->name, 'system_key' => 'in_process', 'is_custom' => true, 'no_skip' => true]);
+
+    $lead = ($this->newLead)();
+    expect(fn () => $this->leads->moveStage($lead, $target->id, 1))->toThrow(ValidationException::class);
+
+    $this->leads->moveStage($lead->fresh(), $stages[3]->id, 1);
+    $this->leads->moveStage($lead->fresh(), $target->id, 1);
+    expect($lead->fresh()->stage_id)->toBe($target->id);
+
+    // Coming back from a later stage is fine
+    $this->leads->moveStage($lead->fresh(), $stages[7]->id, 1);
+    $this->leads->moveStage($lead->fresh(), $target->id, 1);
+    expect($lead->fresh()->stage_id)->toBe($target->id);
 });

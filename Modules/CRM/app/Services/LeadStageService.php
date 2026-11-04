@@ -5,6 +5,7 @@ namespace Modules\CRM\Services;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Modules\CRM\Models\CustomStatus;
 use Modules\CRM\Models\LeadStage;
 use Modules\CRM\Models\Project;
 
@@ -16,6 +17,7 @@ class LeadStageService
 
         return LeadStage::query()
             ->where('project_id', $project->id)
+            ->with('customStatus')
             ->orderBy('sort_order')
             ->get();
     }
@@ -24,6 +26,22 @@ class LeadStageService
     public function ensureDefaults(Project $project): void
     {
         if (LeadStage::query()->where('project_id', $project->id)->exists()) {
+            return;
+        }
+
+        $this->seedStandard($project);
+    }
+
+    /**
+     * Standardise a pipeline that has never been mapped (no stages, or stages without a status).
+     * A pipeline whose stages all carry a status was already set up, so stages the user deleted
+     * stay deleted.
+     */
+    public function seedIfUnmapped(Project $project): void
+    {
+        $stages = LeadStage::query()->where('project_id', $project->id);
+
+        if ($stages->exists() && ! (clone $stages)->whereNull('system_key')->exists()) {
             return;
         }
 
@@ -122,32 +140,231 @@ class LeadStageService
     public function create(Project $project, array $data): LeadStage
     {
         $nextOrder = (int) LeadStage::query()->where('project_id', $project->id)->max('sort_order') + 1;
+        $custom    = $this->customStatusAttributes($data, $project);
 
         return LeadStage::create([
             'project_id' => $project->id,
             'name'       => $data['name'],
             'color'      => filled($data['color'] ?? '') ? $data['color'] : '#64748b',
             'sort_order' => $nextOrder,
-        ] + $this->statusAttributes($data, null));
+        ] + $custom + $this->behaviourAttributes($data) + $this->statusAttributes($data, null) + $this->lookAttributes($data) + $this->entryRulesAttributes($data, $project));
     }
 
     public function update(LeadStage $stage, array $data): LeadStage
     {
+        $custom = $this->customStatusAttributes($data, $stage->project);
+
         $stage->update([
             'name'    => $data['name'],
             'color'   => filled($data['color'] ?? '') ? $data['color'] : $stage->color,
-        ] + $this->statusAttributes($data, $stage));
+        ] + $custom + $this->behaviourAttributes($data) + $this->statusAttributes($data, $stage) + $this->lookAttributes($data) + $this->entryRulesAttributes($data, $stage->project));
 
         return $stage->fresh();
     }
 
+    /**
+     * A "Custom" stage and its ticks, only when the caller sent them. A custom stage counts as
+     * one of LeadStage::CUSTOM_KEYS (open / won / lost / paused) and is never one of your own
+     * statuses. Any stage may carry the ticks; an ordinary stage saved without them clears them.
+     */
+    private function behaviourAttributes(array $data): array
+    {
+        if (! array_key_exists('is_custom', $data)) {
+            return $this->tickAttributes($data);
+        }
+        if (! (bool) $data['is_custom']) {
+            return ['is_custom' => false] + $this->tickAttributes($data)
+                + ['needs_approval' => false, 'locks_lead' => false, 'exit_checklist' => null, 'no_skip' => false];
+        }
+
+        if (! in_array($data['system_key'] ?? null, LeadStage::CUSTOM_KEYS, true)) {
+            throw ValidationException::withMessages(['system_key' => 'A custom stage stays open, closes the lead as won or lost, or pauses it.']);
+        }
+
+        return ['is_custom' => true, 'custom_status_id' => null] + $this->tickAttributes($data);
+    }
+
+    /** Approval, lead lock, no skipping and the exit checklist, only those the caller sent. */
+    private function tickAttributes(array $data): array
+    {
+        $attrs = [];
+        foreach (['needs_approval', 'locks_lead', 'no_skip'] as $tick) {
+            if (array_key_exists($tick, $data)) {
+                $attrs[$tick] = (bool) $data[$tick];
+            }
+        }
+        if (array_key_exists('exit_checklist', $data)) {
+            $checklist = collect((array) ($data['exit_checklist'] ?? []))
+                ->map(fn ($i) => mb_substr(trim((string) $i), 0, 120))
+                ->filter(fn ($i) => $i !== '')
+                ->unique()
+                ->take(10)
+                ->values()
+                ->all();
+            $attrs['exit_checklist'] = $checklist ?: null;
+        }
+
+        return $attrs;
+    }
+
+    /**
+     * The stage's behaviour settings: built-in behaviours of its standard status switched on or
+     * off (LeadStage::BUILT_IN_BEHAVIOURS), plus the ticks and the reason prompt any stage can add.
+     * Keys the stage's status doesn't have, or that can't be switched off, are ignored.
+     */
+    public function updateBehaviours(LeadStage $stage, array $data): LeadStage
+    {
+        $attrs = $this->tickAttributes($data);
+
+        if (array_key_exists('disabled_behaviours', $data)) {
+            $off = array_values(array_intersect(LeadStage::switchableBehaviours($stage->system_key), (array) ($data['disabled_behaviours'] ?? [])));
+            $attrs['disabled_behaviours'] = $off ?: null;
+        }
+        if (array_key_exists('requires_reason', $data)) {
+            $attrs['requires_reason'] = (bool) $data['requires_reason'] || $stage->isLostStage();
+        }
+
+        $stage->update($attrs);
+
+        return $stage->fresh();
+    }
+
+    /**
+     * The business's own status the stage is made from, only when the caller sent it. The stage
+     * then counts as that status's standard one, so $data's system_key is set to match.
+     */
+    private function customStatusAttributes(array &$data, Project $project): array
+    {
+        if (! array_key_exists('custom_status_id', $data)) {
+            return [];
+        }
+        if (blank($data['custom_status_id'])) {
+            return ['custom_status_id' => null];
+        }
+
+        $custom = CustomStatus::query()->where('business_id', $project->business_id)->find((int) $data['custom_status_id']);
+        if ($custom === null) {
+            throw ValidationException::withMessages(['custom_status_id' => 'That status no longer exists.']);
+        }
+        $data['system_key'] = $custom->base_key;
+
+        return ['custom_status_id' => $custom->id];
+    }
+
+    /**
+     * What happens when a lead enters the stage, only when the caller sent it. People picked for
+     * auto-assign / notify must work the pipeline's department; a task needs a title.
+     */
+    private function entryRulesAttributes(array $data, ?Project $project): array
+    {
+        if (! array_key_exists('entry_rules', $data)) {
+            return [];
+        }
+
+        return ['entry_rules' => $this->cleanEntryRules((array) ($data['entry_rules'] ?? []), $project)];
+    }
+
+    /**
+     * Entry rules in the LeadStage::ENTRY_RULES_DEFAULT shape, or null when they do nothing.
+     * People are checked against the pipeline's department when one is given.
+     */
+    public function cleanEntryRules(array $in, ?Project $project): ?array
+    {
+        $userIds  = array_values(array_unique(array_filter(array_map('intval', (array) ($in['notify']['user_ids'] ?? [])))));
+        $assignIds = array_values(array_unique(array_filter(array_map('intval', (array) ($in['assign_user_ids'] ?? [])))));
+        $picked    = array_values(array_unique([...$userIds, ...$assignIds]));
+        if ($picked !== [] && $project !== null) {
+            $project->loadMissing('business');
+            $allowed = app(CrmOrgService::class)->assignableUsers($project->business, $project->department_id)->pluck('id')->map(fn ($id) => (int) $id)->all();
+            if (array_diff($picked, $allowed) !== []) {
+                throw ValidationException::withMessages(['entry_rules' => 'Only people who work this pipeline\'s department can be picked.']);
+            }
+        }
+
+        $task = null;
+        if ((bool) ($in['task']['enabled'] ?? filled($in['task']['title'] ?? null))) {
+            $title = trim((string) ($in['task']['title'] ?? ''));
+            if ($title === '') {
+                throw ValidationException::withMessages(['entry_rules' => 'Give the follow-up task a title.']);
+            }
+            $task = ['title' => mb_substr($title, 0, 255), 'due_days' => max(0, min(365, (int) ($in['task']['due_days'] ?? 0)))];
+        }
+
+        $rules = [
+            'require'   => array_values(array_intersect(array_keys(LeadStage::ENTRY_FIELDS), (array) ($in['require'] ?? []))),
+            'task'      => $task,
+            'notify'    => [
+                'owner'    => (bool) ($in['notify']['owner'] ?? false),
+                'head'     => (bool) ($in['notify']['head'] ?? false),
+                'user_ids' => $userIds,
+            ],
+            'assign_user_ids' => $assignIds,
+            'max_days'  => filled($in['max_days'] ?? null) && (int) $in['max_days'] > 0 ? min(365, (int) $in['max_days']) : null,
+        ];
+
+        return $rules === LeadStage::ENTRY_RULES_DEFAULT ? null : $rules;
+    }
+
+    /** Icon and description, only when the caller sent them; blank = fall back to the status's own. */
+    private function lookAttributes(array $data): array
+    {
+        $attrs = [];
+        foreach (['icon', 'description'] as $field) {
+            if (array_key_exists($field, $data)) {
+                $attrs[$field] = filled($data[$field]) ? trim($data[$field]) : null;
+            }
+        }
+
+        return $attrs;
+    }
+
     public function delete(LeadStage $stage): void
     {
+        if ($this->isProtected($stage)) {
+            throw ValidationException::withMessages(['stage' => 'The "New" stage cannot be deleted — new leads land there.']);
+        }
+
         if ($stage->leads()->exists()) {
             throw ValidationException::withMessages(['stage' => 'Move or remove leads in this stage before deleting it.']);
         }
 
         $stage->delete();
+    }
+
+    /**
+     * Delete several stages of one pipeline. Stages that can't be deleted (protected or
+     * still holding leads) are skipped and reported back instead of failing the batch.
+     *
+     * @param  list<int>  $ids
+     * @return array{deleted:int, failed:list<array{id:int,name:string,message:string}>}
+     */
+    public function bulkDelete(Project $project, array $ids): array
+    {
+        $stages  = LeadStage::query()->where('project_id', $project->id)->whereIn('id', $ids)->get();
+        $deleted = 0;
+        $failed  = [];
+
+        foreach ($stages as $stage) {
+            try {
+                $this->delete($stage);
+                $deleted++;
+            } catch (ValidationException $e) {
+                $failed[] = ['id' => $stage->id, 'name' => $stage->name, 'message' => $e->errors()['stage'][0] ?? 'Cannot delete stage.'];
+            }
+        }
+
+        return ['deleted' => $deleted, 'failed' => $failed];
+    }
+
+    /** The "New" stage is where leads land, so the pipeline's only stage carrying that status is kept. */
+    public function isProtected(LeadStage $stage): bool
+    {
+        return $stage->system_key === LeadStage::STATUS_NEW
+            && ! LeadStage::query()
+                ->where('project_id', $stage->project_id)
+                ->where('system_key', LeadStage::STATUS_NEW)
+                ->where('id', '!=', $stage->id)
+                ->exists();
     }
 
     public function reorder(Project $project, array $ids): void

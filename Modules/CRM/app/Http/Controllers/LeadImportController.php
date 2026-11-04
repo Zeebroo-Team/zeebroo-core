@@ -273,7 +273,7 @@ class LeadImportController extends Controller
     /** Whether the CRM nav shows "Import leads". */
     public static function canImport(CrmAccess $access): bool
     {
-        return $access->hasCrm() && $access->can('leads_create') && ! $access->isReadOnly();
+        return $access->hasCrm() && $access->can('leads_create') && $access->can('leads_import') && ! $access->isReadOnly();
     }
 
     /** @return Collection<int, Project> pipelines the user may add leads to */

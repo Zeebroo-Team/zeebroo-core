@@ -255,7 +255,7 @@ class PosCrmLeadImportApiController extends Controller
     {
         $this->abortUnlessPerm($request, $business, 'crm_pipeline');
         $access = $this->access($request, $business);
-        $this->abortUnlessAllowed($access->can('leads_create') && ! $access->isReadOnly());
+        $this->abortUnlessAllowed($access->can('leads_create') && $access->can('leads_import') && ! $access->isReadOnly());
 
         return $access;
     }

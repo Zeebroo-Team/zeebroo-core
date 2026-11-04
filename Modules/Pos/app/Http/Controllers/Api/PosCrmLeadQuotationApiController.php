@@ -65,7 +65,7 @@ class PosCrmLeadQuotationApiController extends Controller
             'data' => $this->leadQuotations->forLead($lead)->map(fn (Quotation $q) => $this->presentListItem($q))->values(),
             'meta' => [
                 'can_create'  => $this->policy->canQuote($access, $lead),
-                'can_approve' => $this->policy->canApprove($access, $lead),
+                'can_approve' => $this->policy->canApproveQuotation($access, $lead),
                 'stock_mode'  => $this->leadQuotations->stockCheck($business, [])['mode'],
                 // So the editor can warn live when the discount goes over it (null = no limit set)
                 'discount_limit' => $this->approvals->discountLimit($lead),
@@ -309,7 +309,7 @@ class PosCrmLeadQuotationApiController extends Controller
             'items_count' => $q->items()->count(),
         ])->values();
 
-        return response()->json(['data' => $rows, 'meta' => ['can_approve' => $access->unrestricted || $access->isHead()]]);
+        return response()->json(['data' => $rows, 'meta' => ['can_approve' => ($access->unrestricted || $access->isHead()) && $access->can('quotations_approve')]]);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────
@@ -317,7 +317,7 @@ class PosCrmLeadQuotationApiController extends Controller
     private function decide(Request $request, int $leadId, int $quotationId, string $decision): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
-        $this->abortUnlessAllowed($this->policy->canApprove($access, $lead));
+        $this->abortUnlessAllowed($this->policy->canApproveQuotation($access, $lead));
         $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
 
         $data   = $request->validate(['comment' => [$decision === 'approve' ? 'nullable' : 'required', 'string', 'max:2000']]);
@@ -406,7 +406,7 @@ class PosCrmLeadQuotationApiController extends Controller
         ])->values()->all();
 
         $canQuote   = $this->policy->canQuote($access, $lead);
-        $canApprove = $this->policy->canApprove($access, $lead);
+        $canApprove = $this->policy->canApproveQuotation($access, $lead);
         $pending    = $q->status === Quotation::STATUS_PENDING_APPROVAL;
         $canSubmit  = $canQuote && in_array($q->status, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], true);
         $canSend    = $canQuote && in_array($q->status, [Quotation::STATUS_APPROVED, Quotation::STATUS_SENT], true);
@@ -551,7 +551,7 @@ class PosCrmLeadQuotationApiController extends Controller
     {
         $business = $this->businessOrAbort($request);
         $access   = $this->access($request, $business);
-        if (! $access->can('leads_view')) {
+        if (! $access->can('leads_view') || ! $access->can('quotations_view')) {
             $this->abortUnlessAllowed(false);
         }
 
