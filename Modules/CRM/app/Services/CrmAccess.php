@@ -26,7 +26,7 @@ final class CrmAccess
     /** The functions a view-only role (the CEO) keeps. */
     private const VIEW_KEYS = [
         'relations_view', 'leads_view', 'contacts_view', 'tasks_view', 'forms_view', 'custom_data_view',
-        'followups_view', 'quotations_view', 'reports_view',
+        'followups_view', 'quotations_view', 'reports_view', 'inbox_view',
     ];
 
     /** Functions that act on the whole business rather than one department. */
