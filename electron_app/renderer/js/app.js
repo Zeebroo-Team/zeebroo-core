@@ -62948,7 +62948,9 @@ async function submitDsCreate() {
       duration: opening ? 300 : 260, easing: 'ease', direction: opening ? 'normal' : 'reverse', fill: 'forwards',
     });
     _crmLeadModalAnim = [shellAnim, fadeAnim];
-    shellAnim.onfinish = () => { _crmLeadModalAnim = null; if (!opening) fadeAnim.cancel(); done?.(); };
+    // Always drop the fill-forwards fade once done: while it's held, Chromium keeps the overlay
+    // composited and doesn't paint the text caret in the Edit Lead inputs.
+    shellAnim.onfinish = () => { _crmLeadModalAnim = null; fadeAnim.cancel(); done?.(); };
   }
 
   function _closeViewLeadModal() {
