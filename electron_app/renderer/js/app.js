@@ -60538,7 +60538,7 @@ async function submitDsCreate() {
     const shown = compact ? list.slice(0, 2) : list;
     const title = 'Working on it: ' + list.map(a => a.name + (a.is_primary && list.length > 1 ? ' (primary)' : '')).join(', ');
     return `<span class="crm-assignees" title="${escHtml(title)}">${shown.map(a =>
-      `<span class="crm-assignee${a.is_primary && list.length > 1 ? ' crm-assignee--primary' : ''}"><span class="crm-assignee-av" style="--av:${_crmAvatarColor(a.name)}">${escHtml(_crmInitials(a.name))}</span><span class="crm-assignee-name">${escHtml(compact ? a.name.split(' ')[0] : a.name)}</span></span>`
+      `<span class="crm-assignee${a.is_primary && list.length > 1 ? ' crm-assignee--primary' : ''}"><span class="crm-assignee-av">${escHtml(_crmInitials(a.name))}</span><span class="crm-assignee-name">${escHtml(compact ? a.name.split(' ')[0] : a.name)}</span></span>`
     ).join('')}${list.length > shown.length ? `<span class="crm-assignee crm-assignee--more">+${list.length - shown.length}</span>` : ''}</span>`;
   }
 
@@ -60735,7 +60735,7 @@ async function submitDsCreate() {
     const types = Object.entries(byType).sort((a, b) => b[1].n - a[1].n).map(([k, t]) => `
       <button type="button" class="crm-tlf-side-row crm-tlf-type${k === type ? ' active' : ''}" data-ws-tl-type="${k === type ? '' : escHtml(k)}" title="${k === type ? 'Show all' : `Show only ${escHtml(label(k))}`}">
         <span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${escHtml(t.color)}"><i class="fa ${escHtml(t.icon)}"></i></span>
-        <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(label(k))}</span><span class="crm-tlf-bar"><span style="width:${Math.round(t.n / max * 100)}%;background:${escHtml(t.color)}"></span></span></span>
+        <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(label(k))}</span><span class="crm-tlf-bar"><span style="width:${Math.round(t.n / max * 100)}%;background:var(--accent)"></span></span></span>
         <span class="crm-tlf-side-n">${t.n}</span>
       </button>`).join('');
     const who = Object.entries(people).sort((a, b) => b[1] - a[1]).map(([name, n]) => `
@@ -61328,7 +61328,7 @@ async function submitDsCreate() {
       : filtered
         ? `<div class="crm-tk-empty"><strong>No matching follow-ups</strong><small>Nothing matches these filters.</small>
             <button type="button" class="crm-qtx-btn" data-fu-reset style="margin-top:8px">Clear filters</button></div>`
-        : `<div class="crm-tk-empty"><span class="crm-tk-empty-ic" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 2px 8px rgba(175,82,222,.3)"><i class="fa fa-phone-volume"></i></span>
+        : `<div class="crm-tk-empty"><span class="crm-tk-empty-ic"><i class="fa fa-phone-volume"></i></span>
           <strong>No follow-ups yet</strong><small>Plan when to contact the customer next. One is planned automatically when a quotation is sent.</small></div>`;
     const bar = all.length ? _crmFuFilterBarHtml(all, meta) : '';
     return `<div class="crm-tk-wrap">${head}${bar}<div class="crm-tk-list">${body}</div></div>`;
@@ -62800,7 +62800,7 @@ async function submitDsCreate() {
     return `
       <div class="crm-appr-card">
         <div class="crm-appr-head">
-          <i class="fa fa-file-invoice" style="color:#a855f7"></i>
+          <i class="fa fa-file-invoice"></i>
           <span class="crm-appr-num">${escHtml(q.quote_number)}</span>
           ${q.version > 1 ? `<span class="crm-appr-ver">v${q.version}</span>` : ''}
           <span class="crm-appr-status">Pending approval</span>
@@ -62814,7 +62814,7 @@ async function submitDsCreate() {
           <div class="crm-appr-arrow"><i class="fa fa-arrow-right-long"></i>${q.updated_at ? escHtml(_crmFmtDateTime(q.updated_at)) : ''}</div>
           ${party('to', 'Approver', to.name || 'Any admin', to.role, toDept)}
         </div>
-        ${q.routing?.note ? `<div class="crm-appr-note" style="margin-top:12px"><i class="fa fa-comment-dots" style="color:#a855f7"></i> ${escHtml(q.routing.note)}</div>` : ''}
+        ${q.routing?.note ? `<div class="crm-appr-note" style="margin-top:12px"><i class="fa fa-comment-dots"></i> ${escHtml(q.routing.note)}</div>` : ''}
         <div class="crm-appr-foot">
           ${q.items_count != null ? `<div class="crm-appr-fig">Items<b>${q.items_count}</b></div>` : ''}
           ${q.subtotal != null ? `<div class="crm-appr-fig">Subtotal<b>${_crmQtMoney(q.subtotal)}</b></div>` : ''}
@@ -64135,7 +64135,7 @@ async function submitDsCreate() {
       </div>` : '';
       return `<div class="crm-perms-rel">
         <div class="crm-perms-rel-head">
-          <i class="fa fa-handshake" style="color:#7c3aed"></i>
+          <i class="fa fa-handshake" style="color:var(--accent)"></i>
           <span class="crm-perms-rel-name" title="${escHtml(r.name)}">${escHtml(r.name)}</span>
           <select class="po-field-input" data-rel-mode="${r.id}">
             <option value="all"${mode === 'all' ? ' selected' : ''}>All stages</option>
@@ -64911,7 +64911,7 @@ async function submitDsCreate() {
       const tag = l.needs_review ? `<span class="crm-inbox-flag" title="${escHtml(l.review_reason_label || 'Needs review')}"><i class="fa fa-flag"></i></span>`
                 : l.verified_at ? '<span class="crm-inbox-ok"><i class="fa fa-check"></i></span>' : '';
       return `<button type="button" class="crm-perms-user${l.id === _crmInboxLeadId ? ' active' : ''}" data-inbox-lead="${l.id}">
-        <span class="crm-perms-avatar" style="background:${_crmAvatarColor(l.name)};color:#fff">${escHtml(_crmInitials(l.name))}</span>
+        <span class="crm-perms-avatar">${escHtml(_crmInitials(l.name))}</span>
         <span class="crm-perms-user-info">
           <span class="crm-perms-user-name" style="display:block">${escHtml(l.name)}</span>
           <span class="crm-perms-user-sub" style="display:block">${escHtml(l.phone || l.email || '—')} · ${escHtml(l.source_label || '')} · ${_crmAgo(l.created_at)}</span>
@@ -65207,11 +65207,11 @@ async function submitDsCreate() {
         </div>
       </div>
       <div class="crm-imp-help">
-        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4cd964,#248a3d)"><i class="fa fa-file-csv"></i></span> CSV template</strong>
+        <div><strong><span class="crm-imp-help-icon crm-imp-help-icon--plain"><i class="fa fa-file-csv"></i></span> CSV template</strong>
           Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.</div>
-        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#ff6b5e,#ea4335)"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:#ea4335"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
           Open the form's responses sheet → File → Download → CSV, and upload it as it is. Each question becomes a field or a line in the notes.</div>
-        <div><strong><span class="crm-imp-help-icon" style="--tile:linear-gradient(#4a9bff,#1877f2)"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
+        <div><strong><span class="crm-imp-help-icon" style="--tile:#1877f2"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
           Meta Business Suite → Leads Center (or the page's Lead Ads forms) → Download CSV. Instagram leads are recognised from the platform column.</div>
       </div>
       <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Uploading a newer export of the same form only adds the new responses — rows imported before are skipped.</div>
