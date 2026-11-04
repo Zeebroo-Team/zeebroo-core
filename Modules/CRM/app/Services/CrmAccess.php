@@ -24,7 +24,10 @@ final class CrmAccess
     public const ROLE_NONE       = 'none';
 
     /** The functions a view-only role (the CEO) keeps. */
-    private const VIEW_KEYS = ['relations_view', 'leads_view', 'contacts_view', 'tasks_view', 'forms_view', 'custom_data_view'];
+    private const VIEW_KEYS = [
+        'relations_view', 'leads_view', 'contacts_view', 'tasks_view', 'forms_view', 'custom_data_view',
+        'followups_view', 'quotations_view', 'reports_view',
+    ];
 
     /** Functions that act on the whole business rather than one department. */
     private const BUSINESS_KEYS = ['relations_create', 'relations_delete'];
@@ -229,12 +232,12 @@ final class CrmAccess
             'can_view_all_leads'   => $this->viewsAllLeads(),
             'can_work_all_leads'   => $this->worksAllLeads(),
             'can_forward'          => $this->unrestricted || ($this->isMarketing() && $this->intakeDepartmentId !== null),
-            'uses_inbox'           => $this->usesInbox(),
-            'can_assign'           => $this->worksAllLeads() || $this->isHead(),
-            'can_approve'          => $this->unrestricted || $this->isHead(),
+            'uses_inbox'           => $this->usesInbox() && $this->can('inbox_view'),
+            'can_assign'           => ($this->worksAllLeads() || $this->isHead()) && $this->can('leads_assign'),
+            'can_approve'          => ($this->unrestricted || $this->isHead()) && $this->can('quotations_approve'),
             // The management dashboard (CrmReportService::canView) and the team follow-up list
-            'can_view_reports'     => $this->hasCrm() && ($this->viewsAllLeads() || $this->isHead()),
-            'can_see_team'         => $this->worksAllLeads() || $this->isHead(),
+            'can_view_reports'     => $this->hasCrm() && ($this->viewsAllLeads() || $this->isHead()) && $this->can('reports_view'),
+            'can_see_team'         => ($this->worksAllLeads() || $this->isHead()) && $this->can('followups_view'),
             'permissions'          => $permissions,
             'stage_access'         => $this->unrestricted ? (object) [] : (object) $this->stageAccess,
         ];

@@ -269,7 +269,7 @@ class LeadController extends Controller
 
     public function markLost(Request $request, Lead $lead): RedirectResponse
     {
-        $business = $this->requireLead($request, $lead, 'canMove');
+        $business = $this->requireLead($request, $lead, 'canClose');
         if ($business instanceof RedirectResponse) {
             return $business;
         }

@@ -208,6 +208,7 @@ class PosCrmApiController extends Controller
                 'forward'    => $this->policy->canForward($access, $lead),
                 'contribute' => $this->policy->canContribute($access, $lead),
                 'convert'    => isset($editable[$lead->id]) && $access->can('leads_edit'),
+                'close'      => isset($editable[$lead->id]) && $access->can('leads_close'),
                 'reopen'     => $this->policy->canReopen($access, $lead),
             ];
             unset($lead->customFieldValues);

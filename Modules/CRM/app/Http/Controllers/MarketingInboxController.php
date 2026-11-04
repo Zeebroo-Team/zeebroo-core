@@ -32,7 +32,7 @@ class MarketingInboxController extends Controller
         }
 
         $access = $this->crmAccess($request, $business);
-        abort_unless($access->usesInbox(), 403);
+        abort_unless($access->usesInbox() && $access->can('inbox_view'), 403);
 
         $filter = array_key_exists((string) $request->query('filter'), MarketingInboxService::FILTERS) ? (string) $request->query('filter') : 'all';
         $search = trim((string) $request->query('q', ''));
@@ -148,7 +148,7 @@ class MarketingInboxController extends Controller
         abort_unless((int) $lead->business_id === (int) $business->id, 404);
 
         $access = $this->crmAccess($request, $business);
-        abort_unless($access->usesInbox() && $this->leadPolicy()->canView($access, $lead), 404);
+        abort_unless($access->usesInbox() && $access->can('inbox_view') && $this->leadPolicy()->canView($access, $lead), 404);
         abort_unless($this->leadPolicy()->{$ability}($access, $lead), 403);
 
         return $business;

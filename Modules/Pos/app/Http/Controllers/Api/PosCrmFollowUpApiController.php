@@ -41,6 +41,7 @@ class PosCrmFollowUpApiController extends Controller
     public function index(Request $request): JsonResponse
     {
         [$business, $access] = $this->base($request);
+        $this->abortUnlessAllowed($access->can('followups_view'));
 
         $data = $request->validate([
             'scope'  => ['nullable', Rule::in(['mine', 'team'])],
@@ -74,10 +75,11 @@ class PosCrmFollowUpApiController extends Controller
     public function forLead(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
-        $canEdit = $this->policy->canEdit($access, $lead);
+        $this->abortUnlessAllowed($access->can('followups_view'));
+        $canEdit = $access->can('followups_manage') && $this->policy->canEdit($access, $lead);
 
         return response()->json([
-            'data' => $this->followUps->forLead($lead)->map(fn (FollowUp $f) => $this->followUps->present($f, $canEdit || $this->isAssignee($access, $f)))->values(),
+            'data' => $this->followUps->forLead($lead)->map(fn (FollowUp $f) => $this->followUps->present($f, $this->canWork($access, $f)))->values(),
             'meta' => [
                 'can_add'    => $canEdit,
                 'assignees'  => $canEdit ? $this->assignments->assignableUsers($lead)->map(fn ($u) => ['id' => (int) $u->id, 'name' => $u->name])->values() : [],
@@ -94,7 +96,7 @@ class PosCrmFollowUpApiController extends Controller
     public function store(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
-        $this->abortUnlessAllowed($this->policy->canEdit($access, $lead));
+        $this->abortUnlessAllowed($access->can('followups_manage') && $this->policy->canEdit($access, $lead));
 
         $data = $request->validate([
             'due_at'       => ['required', 'date'],
@@ -195,7 +197,8 @@ class PosCrmFollowUpApiController extends Controller
 
     private function canWork(CrmAccess $access, FollowUp $f): bool
     {
-        return $this->isAssignee($access, $f) || ($f->lead !== null && $this->policy->canEdit($access, $f->lead));
+        return $access->can('followups_manage')
+            && ($this->isAssignee($access, $f) || ($f->lead !== null && $this->policy->canEdit($access, $f->lead)));
     }
 
     private function isAssignee(CrmAccess $access, FollowUp $f): bool

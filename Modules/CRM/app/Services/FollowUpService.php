@@ -247,7 +247,7 @@ class FollowUpService
     /** Sees the team list: admins, "All Departments" and heads. */
     public function canSeeTeam(CrmAccess $access): bool
     {
-        return $access->worksAllLeads() || $access->isHead();
+        return ($access->worksAllLeads() || $access->isHead()) && $access->can('followups_view');
     }
 
     /**

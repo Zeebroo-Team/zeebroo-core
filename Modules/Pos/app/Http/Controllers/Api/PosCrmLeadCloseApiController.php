@@ -55,8 +55,8 @@ class PosCrmLeadCloseApiController extends Controller
             'documents'     => $this->close->documents($lead),
             'lost_reasons'  => $this->lostReasons->present($this->lostReasons->listForBusiness($business)),
             'can'           => [
-                'win'    => $this->policy->canEdit($access, $lead) && ! $lead->isLost(),
-                'lose'   => $this->policy->canMove($access, $lead) && $lead->isOpen(),
+                'win'    => $this->policy->canClose($access, $lead) && ! $lead->isLost(),
+                'lose'   => $this->policy->canClose($access, $lead) && $lead->isOpen(),
                 'reopen' => $this->policy->canReopen($access, $lead) && ! $lead->isOpen(),
             ],
         ]]);
@@ -66,7 +66,7 @@ class PosCrmLeadCloseApiController extends Controller
     public function won(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->context($request, $leadId);
-        $this->abortUnlessAllowed($access->can('leads_edit') && $this->policy->canEdit($access, $lead));
+        $this->abortUnlessAllowed($access->can('leads_edit') && $this->policy->canClose($access, $lead));
 
         $data = $request->validate([
             'quotation_id' => ['nullable', 'integer'],
@@ -94,7 +94,7 @@ class PosCrmLeadCloseApiController extends Controller
     public function lost(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->context($request, $leadId);
-        $this->abortUnlessAllowed($this->policy->canMove($access, $lead));
+        $this->abortUnlessAllowed($this->policy->canClose($access, $lead));
 
         $data = $request->validate([
             'lost_reason_id' => ['required', 'integer'],

@@ -211,8 +211,8 @@ body.dark .mac-titlebar--traffic{background:linear-gradient(rgba(255,255,255,.04
 .mac-side-item.active .mac-pill{background:rgba(255,255,255,.25);color:#fff}
 .mac-side-empty{padding:8px 10px;font-size:12.5px;color:var(--mac-muted)}
 /* CRM windows — flat blue, matching the ribbon icons */
-.mac-overlay[id^="crm-"] .mac-side-icon,.mac-overlay[id^="crm-"] .mac-hero-icon,.mac-overlay[id^="crm-"] .mac-row-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
-.mac-overlay[id^="crm-"] .mac-side-item.active .mac-side-icon{color:#fff;background:rgba(255,255,255,.22)}
+.modal-overlay[id^="crm-"] .mac-side-icon,.modal-overlay[id^="crm-"] .mac-hero-icon,.modal-overlay[id^="crm-"] .mac-row-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
+.modal-overlay[id^="crm-"] .mac-side-item.active .mac-side-icon{color:#fff;background:rgba(255,255,255,.22)}
 .crm-dept-new-btn{display:flex;align-items:center;justify-content:center;gap:7px;height:32px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:filter .12s}
 .crm-dept-new-btn:hover{filter:brightness(1.08)}
 .crm-dept-count{flex-shrink:0;min-width:22px;height:20px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
@@ -290,8 +290,8 @@ body.dark .mac-window select.po-field-input option{background:#2c2c30;color:#f5f
 .crm-imp-help-icon{width:26px;height:26px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;background:var(--tile);box-shadow:none}
 .crm-imp-help-icon--plain{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
 /* CRM dialogs: flat ribbon blue title icons and primary buttons, no gradients */
-.mac-overlay[id^="crm-"] .mac-title-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none;font-size:15px}
-.mac-overlay[id^="crm-"] .po-btn-primary{background:var(--accent);box-shadow:none}
+.modal-overlay[id^="crm-"] .mac-title-icon{color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none;font-size:15px}
+.modal-overlay[id^="crm-"] .po-btn-primary{background:var(--accent);box-shadow:none}
 .crm-imp-note{display:flex;align-items:center;gap:8px;padding:9px 14px;border-radius:10px;background:rgba(0,122,255,.07);color:var(--mac-text);font-size:12.5px}
 .crm-imp-note i{color:var(--mac-accent)}
 .crm-imp-history td:nth-child(n+6):not(:last-child),.crm-imp-history th:nth-child(n+6):not(:last-child){text-align:right;font-variant-numeric:tabular-nums}
@@ -407,7 +407,7 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .crm-relation-card-name{font-size:14.5px;font-weight:600;color:var(--mac-text)}
 #panel-crm .crm-relation-card-desc{font-size:12.5px;color:var(--mac-muted)}
 #panel-crm .crm-relation-card-count{font-size:12px;color:var(--mac-muted);border-top-color:var(--mac-line);padding-top:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}
-#panel-crm .crm-relation-dept{display:inline-flex;align-items:center;gap:5px;max-width:60%;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;background:rgba(124,58,237,.1);color:#7c3aed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-crm .crm-relation-dept{display:inline-flex;align-items:center;gap:5px;max-width:60%;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #panel-crm .crm-relation-dept--none{background:var(--mac-fill);color:var(--mac-muted)}
 #panel-crm #crm-relation-hero-badges .crm-relation-dept,#panel-crm #crm-relation-header-badges .crm-relation-dept{margin-right:6px;max-width:none}
 #panel-crm .crm-rd-visibility{display:flex;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--mac-line)}
@@ -417,7 +417,8 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #crm-relation-list .finance-search-wrap:focus-within{box-shadow:0 0 0 3px rgba(0,122,255,.35)}
 #crm-relation-list > div:not(.finance-toolbar){padding:20px 24px!important}
 /* Relation → History tab — toolbar of pop-up buttons, day headers, timeline cards with colored icon tiles */
-#crm-relation-pane-history > .finance-toolbar{gap:8px;padding:10px 2px 12px;border-bottom:1px solid var(--mac-line)}
+#crm-relation-pane-history > .finance-toolbar{gap:8px;padding:10px 18px 12px;border-bottom:1px solid var(--mac-line);
+  position:sticky;top:-16px;z-index:5;margin:-16px -16px 0;padding-top:26px;background:var(--surface,#fff)}
 #crm-relation-pane-history .finance-search-wrap{height:28px;border:0;border-radius:8px;padding:0 10px;background:var(--mac-fill);transition:box-shadow .15s}
 #crm-relation-pane-history .finance-search-wrap:focus-within{box-shadow:0 0 0 3px rgba(0,122,255,.35)}
 #crm-relation-pane-history .finance-search-wrap i{font-size:11px;color:var(--mac-muted)}
@@ -440,7 +441,7 @@ body.dark #crm-relation-pane-history select.crm-history-filter option{background
 #crm-relation-pane-history .po-btn-ghost:disabled{opacity:.5;cursor:default;filter:none}
 #crm-history-flow-btn i{color:var(--mac-accent)}
 #crm-history-refresh{width:28px;padding:0!important;justify-content:center}
-#crm-relation-pane-history .crm-audit-day{position:sticky;top:0;z-index:2;margin:16px 0 8px;padding:6px 2px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mac-text);
+#crm-relation-pane-history .crm-audit-day{position:sticky;top:var(--crm-history-bar-h,51px);z-index:2;margin:16px 0 8px;padding:6px 2px;font-size:13px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--mac-text);
   background:color-mix(in srgb,var(--surface,#fff) 88%,transparent);backdrop-filter:blur(14px)}
 #crm-relation-pane-history .crm-audit-list{gap:8px}
 #crm-relation-pane-history .crm-audit-list::before{left:14px;width:2px;background:var(--mac-line)}
@@ -563,6 +564,9 @@ body.crm-deny-tasks_delete .crm-task-del-btn,
 body.crm-deny-forms_view #rb-crm-forms, body.crm-deny-forms_view [data-crmdtab="forms"],
 body.crm-deny-forms_manage #rb-crm-new-form, body.crm-deny-forms_manage #crm-forms-new-btn,
 body.crm-deny-custom_data_view #crm-tab-customdata,
+body.crm-deny-custom_fields_manage [data-addblock="custom_field"],
+body.crm-deny-leads_import #rb-crm-import-leads, body.crm-deny-leads_import #crm-relation-import-btn,
+body.crm-deny-followups_view #rb-crm-followups,
 /* Per-pipeline rules from the open pipeline's `can` (department head / marketing / admin) */
 body.crm-proj-deny-create #rb-crm-new-lead, body.crm-proj-deny-create #crm-relation-new-lead-btn, body.crm-proj-deny-create #crm-relation-import-btn,
 body.crm-proj-deny-manage #rb-crm-stages, body.crm-proj-deny-manage #crm-relation-stages-btn, body.crm-proj-deny-manage [data-add-stage],
@@ -906,6 +910,27 @@ body.dark .crm-chat{--chat-them:#3a3a3c}
 .crm-chat-act[data-ws-msg-edit],.crm-chat-act--danger{opacity:.55}
 .crm-chat-row:hover .crm-chat-act{opacity:1}
 .crm-chat-row--flash{background:color-mix(in srgb,var(--mac-accent,#007aff) 14%,transparent);transition:none}
+/* search bar over the conversation: text search with match stepping, and a calendar to jump to a day */
+.crm-chat-find{flex-shrink:0;display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--mac-line,var(--border));background:var(--mac-head,rgba(0,0,0,.015))}
+.crm-chat-find-q{flex:1;width:auto;max-width:420px}
+.crm-chat-find-meta{display:flex;align-items:center;gap:2px;font-size:12px;color:var(--mac-muted,var(--text-muted));font-variant-numeric:tabular-nums;white-space:nowrap}
+.crm-chat-find-meta>span{margin-right:4px}
+.crm-chat-find-meta .crm-chat-icon:disabled{opacity:.35;cursor:default}
+.crm-chat-find-date{margin-left:auto;display:flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:7px;cursor:pointer;background:var(--mac-fill,rgba(118,118,128,.12))}
+.crm-chat-find-date i{font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-chat-find-date input{border:0;outline:0;padding:0;background:none;font:inherit;font-size:12.5px;color:var(--mac-text,var(--text));cursor:pointer;color-scheme:light dark}
+.crm-chat-results{flex-shrink:0;max-height:168px;overflow-y:auto;border-bottom:1px solid var(--mac-line,var(--border))}
+.crm-chat-results:empty{display:none}
+.crm-chat-result{display:flex;flex-direction:column;gap:2px;width:100%;padding:7px 14px;border:0;border-bottom:.5px solid var(--mac-line,var(--border));font:inherit;text-align:left;cursor:pointer;color:var(--mac-text,var(--text));background:none}
+.crm-chat-result:last-child{border-bottom:0}
+.crm-chat-result:hover{background:var(--mac-hover,rgba(0,0,0,.04))}
+.crm-chat-result.active{background:color-mix(in srgb,var(--mac-accent,#007aff) 12%,transparent)}
+.crm-chat-result-top{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.crm-chat-result-top small{font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-chat-result-txt{font-size:12.5px;color:var(--mac-muted,var(--text-muted));overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+mark.crm-chat-hit{background:rgba(255,204,0,.5);color:inherit;border-radius:3px;padding:0 1px}
+.crm-chat-row--mine mark.crm-chat-hit{background:#ffd60a;color:#1c1c1e}
+.crm-chat-row--hit .crm-chat-bubble{box-shadow:0 0 0 2px #ffcc00}
 /* composer dock */
 .crm-chat-dock{flex-shrink:0;padding:8px max(12px,calc((100% - 1300px) / 2)) 8px;border-top:1px solid var(--mac-line,var(--border));background:var(--mac-head,rgba(0,0,0,.015))}
 .crm-chat-compose{display:flex;flex-direction:column;border-radius:20px;background:var(--mac-panel,var(--surface));
@@ -954,6 +979,13 @@ body.dark .crm-chat-compose{background:#2c2c30}
 body.dark .crm-msg-menu{background:rgba(44,44,48,.96);box-shadow:0 0 0 .5px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.5)}
 @keyframes crmMsgMenu{from{opacity:0;transform:translateY(4px) scale(.98)}to{opacity:1;transform:none}}
 .crm-msg-menu-title{padding:4px 10px 6px;font-size:11px;font-weight:600;color:var(--mac-muted,var(--text-muted))}
+.crm-msg-menu-search{position:sticky;top:-5px;z-index:1;display:flex;align-items:center;gap:6px;height:28px;margin:0 2px 4px;padding:0 9px;border-radius:7px;cursor:text;
+  background:var(--mac-ctl,#fff);box-shadow:0 0 0 .5px var(--mac-line,rgba(0,0,0,.15))}
+body.dark .crm-msg-menu-search{background:#3a3a3c}
+.crm-msg-menu-search:focus-within{box-shadow:0 0 0 .5px var(--mac-accent,#007aff),0 0 0 3px color-mix(in srgb,var(--mac-accent,#007aff) 22%,transparent)}
+.crm-msg-menu-search i{font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-msg-menu-search input{flex:1;min-width:0;border:0;outline:0;padding:0;background:none;font:inherit;font-size:12.5px;color:var(--mac-text,var(--text))}
+.crm-msg-mention--typed .crm-msg-menu-search{display:none}
 .crm-msg-menu-row{display:flex;align-items:center;gap:8px;height:32px;padding:0 8px 0 6px;border-radius:6px;font-size:13px;cursor:pointer;color:var(--mac-text,var(--text))}
 .crm-msg-menu-row[hidden]{display:none}
 .crm-msg-menu-row:hover{color:#fff;background:var(--mac-accent,#007aff)}
@@ -1806,7 +1838,7 @@ body.dark .crm-hf-popup option{background:#2c2c30;color:#f5f5f7}
 .crm-audit-meta{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:2px;font-size:11px;color:var(--text-muted)}
 .crm-audit-meta i{margin-right:4px;font-size:10px}
 .crm-audit-note{margin-top:6px;font-size:11.5px;color:var(--text-muted)}
-.crm-audit-note i{margin-right:5px;color:var(--audit)}
+.crm-audit-note i{margin-right:5px;color:var(--accent)}
 .crm-audit-note strong{color:var(--text)}
 .crm-audit-diff{width:100%;margin-top:8px;border-collapse:collapse;font-size:11.5px;table-layout:fixed}
 .crm-audit-diff th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted);padding:3px 8px;border-bottom:1px solid var(--border,#e5e7eb)}
@@ -2313,6 +2345,51 @@ body.dark #crm-dashboard-view .crm-dash-table th{background:#2c2c2e}
 #crm-dashboard-view .crm-dash-subrow td:first-child i{display:none}
 #crm-dashboard-view .crm-dash-avatar{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;margin-right:10px;font-size:10px;font-weight:600;color:var(--mac-muted);background:var(--mac-fill);vertical-align:middle}
 #crm-dashboard-view .crm-dash-rank{font-size:12px;color:var(--mac-muted);font-variant-numeric:tabular-nums}
+#crm-dashboard-view .crm-dash-ranges{padding:2px;border-radius:8px;background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-ranges button{padding:3px 9px}
+#crm-dashboard-view .crm-dash-ranges button.active{background:var(--mac-ctl);box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.08)}
+#crm-dashboard-view .crm-dash-updated{font-size:12px}
+#crm-dashboard-view .crm-dash-help{font-size:11px;color:var(--mac-muted);opacity:.6;margin-left:5px;cursor:help}
+#crm-dashboard-view .crm-dash-help:hover{opacity:1}
+#crm-dashboard-view .crm-dash-chips{display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end}
+#crm-dashboard-view .crm-dash-chip{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 4px 0 10px;border:0;border-radius:999px;font:inherit;font-size:12px;color:var(--mac-text);background:var(--mac-fill);cursor:pointer}
+#crm-dashboard-view .crm-dash-chip i{width:16px;height:16px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-chip:hover i{background:var(--crm-dash-bad);color:#fff}
+#crm-dashboard-view .crm-dash-jump{display:flex;flex-wrap:wrap;gap:4px;margin:-8px 0 -6px}
+#crm-dashboard-view .crm-dash-jump button{border:0;background:transparent;font:inherit;font-size:12.5px;color:var(--mac-muted);padding:4px 10px;border-radius:6px;cursor:pointer}
+#crm-dashboard-view .crm-dash-jump button:hover{color:var(--mac-text);background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-jump b{display:inline-block;min-width:16px;margin-left:4px;padding:0 5px;border-radius:999px;font-size:11px;font-weight:600;color:#fff;background:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-section{scroll-margin-top:12px}
+#crm-dashboard-view .crm-dash-hero--link,#crm-dashboard-view .crm-dash-metric--link{cursor:pointer;border-radius:8px;transition:background .12s}
+#crm-dashboard-view .crm-dash-hero--link:hover{background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-metric--link:hover .crm-dash-metric-label{color:var(--accent)}
+#crm-dashboard-view .crm-dash-att-counts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:14px}
+#crm-dashboard-view .crm-dash-att-count{padding:10px 12px;border-radius:8px;background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-att-count b{display:block;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-att-count span{font-size:11.5px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-att-count--bad b{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-att-count--warn b{color:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-att-head{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;color:var(--mac-muted);margin:12px 0 4px}
+#crm-dashboard-view .crm-dash-att-head button{border:0;background:transparent;font:inherit;font-size:12px;color:var(--accent);cursor:pointer;padding:0}
+#crm-dashboard-view .crm-dash-att-list{list-style:none;margin:0;padding:0}
+#crm-dashboard-view .crm-dash-att-row{display:flex;align-items:center;gap:0;padding:7px 6px;border-radius:7px;font-size:13px;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-att-row:hover{background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-att-main{flex:1;min-width:0}
+#crm-dashboard-view .crm-dash-att-main strong{display:block;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#crm-dashboard-view .crm-dash-att-tag{font-size:12px;font-weight:600;white-space:nowrap;margin:0 8px}
+#crm-dashboard-view .crm-dash-att-tag--bad{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-att-tag--warn{color:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-chev{font-size:10px;color:var(--mac-muted);opacity:0}
+#crm-dashboard-view .crm-dash-att-row:hover .crm-dash-chev{opacity:1}
+#crm-dashboard-view .crm-dash-ok{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mac-muted);padding:6px}
+#crm-dashboard-view .crm-dash-ok i{color:var(--crm-dash-good)}
+#crm-dashboard-view .crm-dash-forecast{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+#crm-dashboard-view .crm-dash-stack{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--mac-fill);gap:2px}
+#crm-dashboard-view .crm-dash-stack span{display:block;height:100%}
+#crm-dashboard-view .crm-dash-filterable{cursor:pointer}
+#crm-dashboard-view .crm-dash-filterable:hover td{background:var(--mac-fill)!important}
+#crm-dashboard-view .crm-dash-tip-hint{font-size:11.5px;color:var(--mac-muted);margin-top:10px}
+@media (max-width:1300px){#crm-dashboard-view .crm-dash-att-counts,#crm-dashboard-view .crm-dash-forecast{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* CRM relation detail → Dashboard tab body — macOS look (header, hero and tabs keep the shared inv-* style) */
 #crm-relation-pane-dashboard,#crm-relation-pane-forms{--mac-accent:#007aff;--mac-bg:#f5f5f7;--mac-panel:#fff;--mac-line:rgba(0,0,0,.09);--mac-text:#1d1d1f;--mac-muted:#6e6e73;--mac-fill:rgba(118,118,128,.12);--mac-hover:rgba(0,0,0,.045);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--mac-text);background:var(--mac-bg);padding:20px 24px 24px}
@@ -11878,19 +11955,21 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <!-- ── Dashboard view (view only: admin, CEO, heads — their departments) ── -->
       <div id="crm-dashboard-view" style="display:none;flex-direction:column;flex:1;overflow:hidden">
         <div class="crm-dash-filters">
-          <select id="crm-dash-range" class="po-field-input" style="appearance:auto" title="Quick range">
-            <option value="">Quick range…</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option><option value="month">This month</option><option value="quarter">This quarter</option><option value="year">This year</option>
-          </select>
+          <span class="crm-dash-seg crm-dash-ranges" id="crm-dash-range" title="Quick range">
+            <button type="button" data-range="7">7 days</button><button type="button" data-range="30">30 days</button><button type="button" data-range="90">90 days</button>
+            <button type="button" data-range="month">This month</button><button type="button" data-range="quarter">Quarter</button><button type="button" data-range="year">Year</button>
+          </span>
           <input type="date" id="crm-dash-from" class="po-field-input" title="Leads created from">
           <span class="crm-ws-muted">→</span>
           <input type="date" id="crm-dash-to" class="po-field-input" title="Leads created to">
-          <select id="crm-dash-dept" class="po-field-input" style="appearance:auto"></select>
-          <select id="crm-dash-div" class="po-field-input" style="appearance:auto"></select>
-          <select id="crm-dash-user" class="po-field-input" style="appearance:auto"></select>
-          <select id="crm-dash-source" class="po-field-input" style="appearance:auto"></select>
-          <button class="po-btn-primary" id="crm-dash-apply"><i class="fa fa-filter"></i> Apply</button>
+          <select id="crm-dash-dept" class="po-field-input" style="appearance:auto" title="Department"></select>
+          <select id="crm-dash-div" class="po-field-input" style="appearance:auto" title="Division"></select>
+          <select id="crm-dash-user" class="po-field-input" style="appearance:auto" title="Staff (lead owner)"></select>
+          <select id="crm-dash-source" class="po-field-input" style="appearance:auto" title="Lead source"></select>
+          <button class="po-btn-ghost" id="crm-dash-reset" title="Clear all filters and go back to the last 30 days"><i class="fa fa-rotate-left"></i> Reset</button>
           <span style="flex:1"></span>
+          <span class="crm-ws-muted crm-dash-updated" id="crm-dash-updated"></span>
+          <button class="po-btn-ghost" id="crm-dash-apply" title="Reload the dashboard"><i class="fa fa-rotate"></i></button>
           <button class="po-btn-ghost" id="crm-dash-pdf" title="Export this view to PDF"><i class="fa fa-file-pdf"></i> PDF</button>
           <button class="po-btn-ghost" id="crm-dash-excel" title="Export this view to Excel"><i class="fa fa-file-excel"></i> Excel</button>
         </div>

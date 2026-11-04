@@ -41,7 +41,7 @@ class CrmReportService
 {
     public function canView(CrmAccess $access): bool
     {
-        return $access->hasCrm() && ($access->viewsAllLeads() || $access->isHead());
+        return $access->hasCrm() && ($access->viewsAllLeads() || $access->isHead()) && $access->can('reports_view');
     }
 
     /**
@@ -99,16 +99,20 @@ class CrmReportService
                 ...$this->openPipeline($business, $access, $filters),
                 'overdue_follow_ups'  => FollowUp::query()->overdue($business->id)
                     ->whereIn('lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))->count(),
+                ...$this->contactGaps($business, $access, $filters),
             ],
             'previous'     => $this->previousPeriod($business, $access, $filters),
             'trend'        => $this->trend($created(), $from, $to, $this->wonValueByDay($closed(), $business)),
             'top_open'     => $this->topOpenDeals($business, $access, $filters),
             'recent_wins'  => $this->recentWins($business, $closed()),
+            'pipeline_stages' => $this->pipelineByStage($business, $access, $filters),
+            'forecast'     => $this->closeForecast($business, $access, $filters),
+            'attention'    => $this->attention($business, $access, $filters),
             'by_source'    => $this->bySource($created()),
             'by_department'=> $this->byDepartment($business, $created()),
             'by_division'  => $this->byDivision($business, $created()),
             'funnel'       => $this->funnel($created()),
-            'staff'        => $this->staffRanking($created()),
+            'staff'        => $this->withStaffWorkload($business, $access, $filters, $this->staffRanking($created()), $created()),
             'lost_reasons' => $this->lostReasons($closed()),
             'options'      => $this->options($business, $access),
         ];
@@ -479,6 +483,164 @@ class CrmReportService
             ->sortBy([['won_value', 'desc'], ['won', 'desc'], ['conversion_rate', 'desc']])
             ->values()
             ->all();
+    }
+
+    /** Open leads right now with no assignee, and assigned ones nobody has contacted yet. */
+    private function contactGaps(Business $business, CrmAccess $access, array $filters): array
+    {
+        $row = $this->openLeads($business, $access, $filters)
+            ->selectRaw('sum(case when crm_leads.assigned_to is null then 1 else 0 end) as unassigned,
+                sum(case when crm_leads.assigned_to is not null and crm_leads.first_response_at is null then 1 else 0 end) as uncontacted')
+            ->first();
+
+        return ['unassigned_leads' => (int) $row->unassigned, 'uncontacted_leads' => (int) $row->uncontacted];
+    }
+
+    /** All open deals right now, per standard status in pipeline order: count, estimated value, past due. */
+    private function pipelineByStage(Business $business, CrmAccess $access, array $filters): array
+    {
+        $rows = $this->openLeads($business, $access, $filters)
+            ->selectRaw('s.system_key as k, count(*) as n, sum(coalesce(crm_leads.estimated_value, 0)) as value,
+                sum(case when crm_leads.expected_close_date < ? then 1 else 0 end) as past_due', [now()->toDateString()])
+            ->groupBy('s.system_key')
+            ->get()
+            ->keyBy('k');
+
+        return collect(LeadStage::STATUSES)
+            ->except([LeadStage::STATUS_WON, LeadStage::STATUS_LOST])
+            ->map(fn ($s, $key) => [
+                'key'      => $key,
+                'label'    => $s[0],
+                'color'    => $s[1],
+                'leads'    => (int) ($rows[$key]->n ?? 0),
+                'value'    => round((float) ($rows[$key]->value ?? 0), 2),
+                'past_due' => (int) ($rows[$key]->past_due ?? 0),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** Open deals by expected close date: past due, the next 30 days, later, not set. */
+    private function closeForecast(Business $business, CrmAccess $access, array $filters): array
+    {
+        $today = now()->toDateString();
+        $in30  = now()->addDays(30)->toDateString();
+        $row   = $this->openLeads($business, $access, $filters)
+            ->selectRaw('
+                sum(case when crm_leads.expected_close_date < ? then 1 else 0 end) as past_n,
+                sum(case when crm_leads.expected_close_date < ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as past_v,
+                sum(case when crm_leads.expected_close_date >= ? and crm_leads.expected_close_date <= ? then 1 else 0 end) as soon_n,
+                sum(case when crm_leads.expected_close_date >= ? and crm_leads.expected_close_date <= ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as soon_v,
+                sum(case when crm_leads.expected_close_date > ? then 1 else 0 end) as later_n,
+                sum(case when crm_leads.expected_close_date > ? then coalesce(crm_leads.estimated_value, 0) else 0 end) as later_v,
+                sum(case when crm_leads.expected_close_date is null then 1 else 0 end) as none_n,
+                sum(case when crm_leads.expected_close_date is null then coalesce(crm_leads.estimated_value, 0) else 0 end) as none_v',
+                [$today, $today, $today, $in30, $today, $in30, $in30, $in30])
+            ->first();
+
+        return collect(['past' => 'Past due', 'soon' => 'Next 30 days', 'later' => 'Later', 'none' => 'No close date'])
+            ->map(fn ($label, $key) => ['key' => $key, 'label' => $label, 'leads' => (int) $row->{$key . '_n'}, 'value' => round((float) $row->{$key . '_v'}, 2)])
+            ->values()
+            ->all();
+    }
+
+    /** Live to-do list for managers: the oldest overdue follow-ups and assigned leads still waiting for first contact. */
+    private function attention(Business $business, CrmAccess $access, array $filters): array
+    {
+        $startOfToday = now()->startOfDay();
+
+        $followUps = FollowUp::query()->overdue($business->id)
+            ->whereIn('crm_follow_ups.lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))
+            ->join('crm_leads as l', 'l.id', '=', 'crm_follow_ups.lead_id')
+            ->leftJoin('users as u', 'u.id', '=', 'crm_follow_ups.user_id')
+            ->orderBy('crm_follow_ups.due_at')
+            ->limit(8)
+            ->get(['crm_follow_ups.id', 'crm_follow_ups.due_at', 'l.id as lead_id', 'l.project_id', 'l.name', 'l.company', 'l.phone', 'u.name as owner'])
+            ->map(fn ($f) => [
+                'id'           => (int) $f->id,
+                'lead_id'      => (int) $f->lead_id,
+                'project_id'   => (int) $f->project_id,
+                'name'         => $f->company ?: $f->name,
+                'phone'        => $f->phone,
+                'owner'        => $f->owner,
+                'due_at'       => $f->due_at?->toDateString(),
+                'days_overdue' => max(1, (int) $f->due_at?->copy()->startOfDay()->diffInDays($startOfToday)),
+            ])
+            ->all();
+
+        $uncontacted = $this->openLeads($business, $access, $filters)
+            ->leftJoin('users as u', 'u.id', '=', 'crm_leads.assigned_to')
+            ->whereNotNull('crm_leads.assigned_to')
+            ->whereNull('crm_leads.first_response_at')
+            ->orderBy('crm_leads.created_at')
+            ->limit(8)
+            ->get(['crm_leads.id', 'crm_leads.project_id', 'crm_leads.name', 'crm_leads.company', 'crm_leads.phone', 'crm_leads.created_at', 'u.name as owner'])
+            ->map(fn ($l) => [
+                'lead_id'    => (int) $l->id,
+                'project_id' => (int) $l->project_id,
+                'name'       => $l->company ?: $l->name,
+                'phone'      => $l->phone,
+                'owner'      => $l->owner,
+                'age_days'   => (int) Carbon::parse($l->created_at)->diffInDays(now()),
+            ])
+            ->all();
+
+        return ['follow_ups' => $followUps, 'uncontacted' => $uncontacted];
+    }
+
+    /**
+     * Adds each person's live workload (open deals and their value, overdue follow-ups) and their
+     * average first response for leads created in the range. Staff with open work but no new
+     * leads in the range are appended at the end.
+     */
+    private function withStaffWorkload(Business $business, CrmAccess $access, array $filters, array $staff, Builder $createdLeads): array
+    {
+        $open = $this->openLeads($business, $access, $filters)
+            ->leftJoin('users as u', 'u.id', '=', 'crm_leads.assigned_to')
+            ->whereNotNull('crm_leads.assigned_to')
+            ->selectRaw('crm_leads.assigned_to as uid, max(u.name) as name, count(*) as n, sum(coalesce(crm_leads.estimated_value, 0)) as value')
+            ->groupBy('crm_leads.assigned_to')
+            ->get()
+            ->keyBy('uid');
+        $overdue = FollowUp::query()->overdue($business->id)
+            ->whereIn('crm_follow_ups.lead_id', $this->leads($business, $access, $filters)->select('crm_leads.id'))
+            ->selectRaw('crm_follow_ups.user_id as uid, count(*) as n')
+            ->groupBy('crm_follow_ups.user_id')
+            ->pluck('n', 'uid');
+
+        $firstAssigned = DB::table('crm_lead_assignment_logs')
+            ->whereIn('action', [LeadAssignmentLog::ACTION_ASSIGNED, LeadAssignmentLog::ACTION_REASSIGNED])
+            ->groupBy('lead_id')
+            ->selectRaw('lead_id, min(created_at) as assigned_at');
+        $response = $createdLeads
+            ->joinSub($firstAssigned, 'fa', 'fa.lead_id', '=', 'crm_leads.id')
+            ->whereNotNull('crm_leads.assigned_to')
+            ->whereNotNull('crm_leads.first_response_at')
+            ->whereColumn('crm_leads.first_response_at', '>=', 'fa.assigned_at')
+            ->selectRaw('crm_leads.assigned_to as uid, avg(' . $this->secondsBetween('fa.assigned_at', 'crm_leads.first_response_at') . ') as s')
+            ->groupBy('crm_leads.assigned_to')
+            ->pluck('s', 'uid');
+
+        $extra = fn (int $uid) => [
+            'open_deals'         => (int) ($open[$uid]->n ?? 0),
+            'open_value'         => round((float) ($open[$uid]->value ?? 0), 2),
+            'overdue_follow_ups' => (int) ($overdue[$uid] ?? 0),
+            'avg_response_hours' => isset($response[$uid]) ? round((float) $response[$uid] / 3600, 1) : null,
+        ];
+
+        $seen = [];
+        $rows = array_map(function ($s) use ($extra, &$seen) {
+            $seen[$s['user_id']] = true;
+
+            return [...$s, ...$extra($s['user_id'])];
+        }, $staff);
+        foreach ($open as $uid => $o) {
+            if (! isset($seen[(int) $uid])) {
+                $rows[] = ['user_id' => (int) $uid, 'name' => $o->name ?? 'User #' . $uid, 'leads' => 0, 'won' => 0, 'won_value' => 0.0, 'conversion_rate' => 0.0, ...$extra((int) $uid)];
+            }
+        }
+
+        return $rows;
     }
 
     private function lostReasons(Builder $closedLeads): array
