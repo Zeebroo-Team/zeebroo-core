@@ -210,6 +210,20 @@ body.dark .mac-titlebar--traffic{background:linear-gradient(rgba(255,255,255,.04
 .mac-side-item.active .mac-side-warn{color:#fff}
 .mac-side-item.active .mac-pill{background:rgba(255,255,255,.25);color:#fff}
 .mac-side-empty{padding:8px 10px;font-size:12.5px;color:var(--mac-muted)}
+/* CRM Departments window — flat blue, matching the ribbon icons */
+#crm-dept-modal .mac-title-icon,#crm-dept-modal .mac-side-icon,#crm-dept-modal .mac-hero-icon,#crm-dept-modal .mac-row-icon{background:var(--accent);box-shadow:none}
+#crm-dept-modal .mac-side-item.active .mac-side-icon{background:rgba(255,255,255,.22)}
+.crm-dept-new-btn{display:flex;align-items:center;justify-content:center;gap:7px;height:32px;border:0;border-radius:8px;background:var(--accent);color:#fff;font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:filter .12s}
+.crm-dept-new-btn:hover{filter:brightness(1.08)}
+.crm-dept-count{flex-shrink:0;min-width:22px;height:20px;padding:0 7px;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.mac-side-item.active .crm-dept-count{background:rgba(255,255,255,.25);color:#fff}
+.crm-dept-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.crm-dept-stat{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.crm-dept-stat i{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;background:var(--accent);flex-shrink:0}
+.crm-dept-stat b{display:block;font-size:17px;line-height:1.15}
+.crm-dept-stat span{font-size:11.5px;color:var(--mac-muted)}
+.crm-dept-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.crm-dept-foot-count{margin-right:auto;font-size:12px;color:var(--mac-muted)}
 .mac-detail{flex:1;min-width:0;min-height:0;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:14px}
 .mac-detail-body{display:flex;flex-direction:column;gap:20px}
 /* simple form windows (e.g. CRM New Relation) */
@@ -523,7 +537,7 @@ body.dark .mac-window .crm-org-warn{color:#ffb340}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
 body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
 body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"],
-body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-unrestricted) #rb-crm-audit,
+body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-is-admin) #rb-crm-add-dept, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
 body.crm-deny-relations_create #rb-crm-projects, body.crm-deny-relations_create #crm-ov-new-relation-btn,
@@ -3832,6 +3846,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-org">
               <i class="fa fa-sitemap"></i>Org<br>Structure
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-add-dept">
+              <i class="fa fa-building-user"></i>Add<br>Department
             </button>
           </div>
           <div class="ribbon-group-label">Access</div>
@@ -14665,6 +14682,43 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
       <div class="po-aim-footer mac-footer">
         <button class="po-btn-ghost" id="crm-org-close-btn">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Departments Modal ── -->
+  <div class="modal-overlay mac-overlay" id="crm-dept-modal" style="display:none">
+    <div class="mac-window" style="width:1100px;max-width:96vw;height:84vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-building-user"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">Departments</div><div class="mac-title-sub">Shared with HR Management</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-dept-refresh-btn" title="Refresh"><i class="fa fa-rotate"></i></button>
+          <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+          <button type="button" class="mac-close-btn" id="crm-dept-modal-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+
+      <div class="mac-split">
+        <aside class="mac-sidebar">
+          <button type="button" class="crm-dept-new-btn" id="crm-dept-new-btn"><i class="fa fa-plus"></i> New Department</button>
+          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-dept-search" placeholder="Search departments" autocomplete="off"></div>
+          <div id="crm-dept-list" class="mac-side-list">
+            <span class="mac-side-empty">Loading…</span>
+          </div>
+        </aside>
+
+        <section class="mac-detail">
+          <div id="crm-dept-alert" class="svc-form-alert" style="display:none"></div>
+          <div id="crm-dept-body" class="mac-detail-body"><span class="crm-perms-muted">Select a department.</span></div>
+        </section>
+      </div>
+
+      <div class="po-aim-footer mac-footer">
+        <span class="crm-dept-foot-count" id="crm-dept-count"></span>
+        <button class="po-btn-ghost" id="crm-dept-close-btn">Close</button>
       </div>
     </div>
   </div>

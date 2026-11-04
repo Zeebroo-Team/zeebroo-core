@@ -48481,6 +48481,7 @@ async function submitDeptCreate() {
   if (res.status === 201 || res.status === 200) {
     closeDeptCreateModal();
     toast('Department created', 'success');
+    document.dispatchEvent(new CustomEvent('departments:changed'));
     await loadDepartments();
   } else {
     const msg = res.body?.message || res.body?.errors?.name?.[0] || 'Failed to create department.';
@@ -63789,6 +63790,11 @@ async function submitDsCreate() {
   });
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
   $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
+  $('#rb-crm-add-dept')?.addEventListener('click',    () => { activateTab('crm'); openCrmDeptModal(); });
+  // A department added from CRM (or HR) shows up in Org Structure straight away.
+  document.addEventListener('departments:changed', () => {
+    if ($('#crm-org-modal')?.style.display === 'flex') _crmLoadOrg();
+  });
   $('#rb-crm-audit')?.addEventListener('click',       () => openCrmAuditModal());
   $('#rb-crm-inbox')?.addEventListener('click',       () => { activateTab('crm'); openCrmInboxModal(); });
   $('#rb-crm-import-leads')?.addEventListener('click', () => { activateTab('crm'); openCrmImportModal(); });
@@ -64403,6 +64409,253 @@ async function submitDsCreate() {
   $('#crm-org-dept-search')?.addEventListener('input', () => _crmRenderOrgDepts());
   $('#crm-org-modal-close')?.addEventListener('click', _crmCloseOrg);
   $('#crm-org-close-btn')?.addEventListener('click',   _crmCloseOrg);
+
+  // ── Departments modal ─────────────────────────────────────────────────────
+  // The HR departments, browsable from CRM: pick one on the left to see its
+  // head, staff and members; add or delete departments without leaving CRM.
+  let _crmDepts      = [];     // from /hr/departments
+  let _crmDeptId     = null;   // selected department, or 'new' for the add form
+  let _crmDeptDetail = null;   // selected department from /hr/departments/{id}
+
+  async function openCrmDeptModal() {
+    $('#crm-dept-search').value = '';
+    _macShow($('#crm-dept-modal'));
+    await _crmLoadDepts();
+  }
+
+  function _crmCloseDept() {
+    _macHide($('#crm-dept-modal'));
+  }
+
+  function _crmDeptAlert(msg) {
+    const el = $('#crm-dept-alert');
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
+  }
+
+  async function _crmLoadDepts(selectId) {
+    _crmDeptAlert('');
+    const res = await API.departments();
+    if (res.status !== 200) {
+      $('#crm-dept-list').innerHTML = `<span class="mac-side-empty">${escHtml(res.body?.message || 'Failed to load departments.')}</span>`;
+      $('#crm-dept-body').innerHTML = '';
+      return;
+    }
+    _crmDepts = res.body.data || [];
+    if (selectId !== undefined) _crmDeptId = selectId;
+    if (_crmDeptId !== 'new' && !_crmDepts.some(d => d.id === _crmDeptId)) _crmDeptId = _crmDepts[0]?.id ?? 'new';
+    $('#crm-dept-count').textContent = `${_crmDepts.length} department${_crmDepts.length !== 1 ? 's' : ''}`;
+    _crmRenderDeptList();
+    await _crmSelectDept(_crmDeptId);
+  }
+
+  function _crmRenderDeptList() {
+    const list = $('#crm-dept-list');
+    if (!_crmDepts.length) {
+      list.innerHTML = '<span class="mac-side-empty">No departments yet. Click New Department to add one.</span>';
+      return;
+    }
+    const q = $('#crm-dept-search').value.trim().toLowerCase();
+    const depts = _crmDepts.filter(d => !q || d.name.toLowerCase().includes(q));
+    list.innerHTML = depts.map(d => {
+      const n = d.employees_count || 0;
+      return `<button type="button" class="mac-side-item${d.id === _crmDeptId ? ' active' : ''}" data-dept="${d.id}">
+        <span class="mac-side-icon"><i class="fa fa-building"></i></span>
+        <span class="mac-side-text">
+          <span class="mac-side-name">${escHtml(d.name)}</span>
+          <span class="mac-side-sub">${n} employee${n !== 1 ? 's' : ''}</span>
+        </span>
+        <span class="crm-dept-count">${n}</span>
+      </button>`;
+    }).join('') || `<span class="mac-side-empty">No department matches “${escHtml(q)}”.</span>`;
+  }
+
+  async function _crmSelectDept(id) {
+    _crmDeptId = id;
+    _crmDeptDetail = null;
+    $$('#crm-dept-list [data-dept]').forEach(b => b.classList.toggle('active', Number(b.dataset.dept) === id));
+    if (id === 'new') { _crmRenderDeptNew(); return; }
+    if (!id) { $('#crm-dept-body').innerHTML = '<span class="crm-perms-muted">Select a department.</span>'; return; }
+    $('#crm-dept-body').innerHTML = '<span class="crm-perms-muted"><i class="fa fa-spinner fa-spin"></i> Loading…</span>';
+    const res = await API.department(id);
+    if (_crmDeptId !== id) return;
+    if (res.status !== 200) {
+      $('#crm-dept-body').innerHTML = '';
+      _crmDeptAlert(res.body?.message || 'Failed to load the department.');
+      return;
+    }
+    _crmDeptDetail = res.body.data || {};
+    _crmRenderDeptDetail();
+  }
+
+  function _crmRenderDeptNew() {
+    $('#crm-dept-body').innerHTML = `
+      <div class="mac-hero">
+        <span class="mac-hero-icon"><i class="fa fa-plus"></i></span>
+        <div style="min-width:0;flex:1">
+          <div class="mac-hero-name">New Department</div>
+          <div class="mac-hero-sub">Teams, divisions or sites — used when registering employees and routing CRM leads</div>
+        </div>
+      </div>
+      <div class="mac-section">
+        <div class="mac-section-title">Details</div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">Department name <span class="mac-required">*</span><small>Names are unique per business</small></div>
+            <input type="text" class="po-field-input" id="crm-dept-name" maxlength="255" placeholder="e.g. Sales, Marketing" style="width:280px">
+          </div>
+          <div class="mac-group-foot">
+            ${_crmDepts.length ? '<button type="button" class="po-btn-ghost" data-dept-cancel style="margin-right:8px">Cancel</button>' : ''}
+            <button type="button" class="po-btn-primary" data-dept-create><i class="fa fa-plus"></i> Save department</button>
+          </div>
+        </div>
+      </div>
+      <div class="mac-section">
+        <div class="mac-section-title">Next steps</div>
+        <div class="mac-group">
+          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-user-tie"></i></span>Assign employees and a head in HR Management</div></div>
+          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-sitemap"></i></span>Link a pipeline to it in CRM → Org Structure</div></div>
+        </div>
+      </div>`;
+    setTimeout(() => $('#crm-dept-name')?.focus(), 60);
+  }
+
+  function _crmRenderDeptDetail() {
+    const d = _crmDeptDetail;
+    const n = d.employees_count || 0;
+    const t = d.employment_types || {};
+    const range = _deptRangeText(d);
+    const lead = (label, name) => `<div class="mac-row">
+        <div class="mac-row-label">${label}</div>
+        <div>${name ? `<strong>${escHtml(name)}</strong>` : '<span class="crm-perms-muted">Not assigned</span>'}</div>
+      </div>`;
+    const employees = d.employees || [];
+
+    $('#crm-dept-body').innerHTML = `
+      <div class="mac-hero">
+        <span class="mac-hero-icon"><i class="fa fa-building"></i></span>
+        <div style="min-width:0;flex:1">
+          <div class="mac-hero-name">${escHtml(d.name || '—')}</div>
+          <div class="mac-hero-sub">${d.head ? 'Head: ' + escHtml(d.head) : 'No head assigned'}${d.co_head ? ' · Co-head: ' + escHtml(d.co_head) : ''}</div>
+        </div>
+        <button type="button" class="po-btn-ghost" data-dept-org><i class="fa fa-sitemap"></i> Org Structure</button>
+      </div>
+
+      <div class="crm-dept-stats">
+        <div class="crm-dept-stat"><i class="fa fa-users"></i><div><b>${n}</b><span>Employees</span></div></div>
+        <div class="crm-dept-stat"><i class="fa fa-briefcase"></i><div><b>${t.full_time || 0}</b><span>Full time</span></div></div>
+        <div class="crm-dept-stat"><i class="fa fa-clock"></i><div><b>${t.part_time || 0}</b><span>Part time</span></div></div>
+        <div class="crm-dept-stat"><i class="fa fa-file-signature"></i><div><b>${t.contract || 0}</b><span>Contract</span></div></div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-section-title">Leadership</div>
+        <div class="mac-group">
+          ${lead('Head', d.head)}
+          ${lead('Co-head', d.co_head)}
+          ${range ? `<div class="mac-row"><div class="mac-row-label">Salary range</div><div>${escHtml(range)}</div></div>` : ''}
+        </div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-section-title">Employees <span class="crm-perms-muted" style="font-weight:400">· ${n}</span></div>
+        <div class="mac-group">
+          ${employees.map(e => `<div class="mac-row">
+            <div class="mac-row-label mac-row-label--icon">
+              <span class="crm-dept-avatar">${escHtml(_crmInitials(e.name || '?'))}</span>
+              <span style="min-width:0"><strong>${escHtml(e.name || '—')}</strong>
+                <small>${[e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</small></span>
+            </div>
+            <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+          </div>`).join('') || '<div class="mac-row mac-muted-row">No employees in this department yet. Add them in HR Management.</div>'}
+        </div>
+      </div>
+
+      <div class="mac-section">
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label">Delete department<small>${n ? 'Move its employees to another department first' : 'This cannot be undone'}</small></div>
+            <button type="button" class="po-btn-ghost" data-dept-delete${n ? ' disabled style="opacity:.5"' : ''}><i class="fa fa-trash" style="color:#ff3b30"></i> Delete</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function _crmCreateDept(btn) {
+    const name = $('#crm-dept-name').value.trim();
+    if (!name) { _crmDeptAlert('Department name is required.'); $('#crm-dept-name').focus(); return; }
+    btn.disabled = true;
+    _crmDeptAlert('');
+    const res = await API.createDepartment({ name });
+    if (res.status === 201 || res.status === 200) {
+      toast(`Department “${name}” created.`, 'info');
+      document.dispatchEvent(new CustomEvent('departments:changed'));
+      await _crmLoadDepts(res.body?.data?.id);
+    } else {
+      btn.disabled = false;
+      _crmDeptAlert(res.body?.errors?.name?.[0] || res.body?.message || 'Failed to create the department.');
+    }
+  }
+
+  $('#crm-dept-list')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-dept]');
+    if (!b) return;
+    _crmDeptAlert('');
+    _crmSelectDept(Number(b.dataset.dept));
+  });
+
+  $('#crm-dept-new-btn')?.addEventListener('click', () => {
+    _crmDeptAlert('');
+    _crmSelectDept('new');
+  });
+
+  $('#crm-dept-body')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && e.target.id === 'crm-dept-name') _crmCreateDept($('#crm-dept-body [data-dept-create]'));
+  });
+
+  $('#crm-dept-body')?.addEventListener('click', async e => {
+    const t = e.target.closest('button');
+    if (!t || t.disabled) return;
+
+    if (t.matches('[data-dept-create]')) { _crmCreateDept(t); return; }
+    if (t.matches('[data-dept-cancel]')) { _crmDeptAlert(''); _crmSelectDept(_crmDepts[0]?.id ?? null); return; }
+
+    if (t.matches('[data-dept-org]')) {
+      _crmOrgDeptId = _crmDeptDetail?.id ?? null;
+      _crmCloseDept();
+      openCrmOrgModal();
+      return;
+    }
+
+    if (t.matches('[data-dept-delete]')) {
+      const d = _crmDeptDetail;
+      if (!d) return;
+      const ok = await appConfirm({
+        title: 'Delete department?',
+        message: `“${d.name}” will be removed from HR and CRM.`,
+        confirmText: '<i class="fa fa-trash-can"></i> Delete',
+        icon: 'fa-trash-can',
+        danger: true,
+      });
+      if (!ok) return;
+      t.disabled = true;
+      const res = await API.deleteDepartment(d.id);
+      if (res.status === 200) {
+        toast('Department deleted.', 'info');
+        document.dispatchEvent(new CustomEvent('departments:changed'));
+        _crmDeptId = null;
+        await _crmLoadDepts();
+      } else {
+        t.disabled = false;
+        _crmDeptAlert(res.body?.message || 'Failed to delete the department.');
+      }
+    }
+  });
+
+  $('#crm-dept-search')?.addEventListener('input', () => _crmRenderDeptList());
+  $('#crm-dept-refresh-btn')?.addEventListener('click', () => _crmLoadDepts());
+  $('#crm-dept-modal-close')?.addEventListener('click', _crmCloseDept);
+  $('#crm-dept-close-btn')?.addEventListener('click',   _crmCloseDept);
 
   // ── Marketing inbox modal ─────────────────────────────────────────────────
   // New leads in the intake pipeline plus every lead flagged "needs review".
