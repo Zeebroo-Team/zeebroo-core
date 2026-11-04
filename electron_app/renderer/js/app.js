@@ -9936,6 +9936,9 @@ const _notifIconMap = {
   crm_follow_up_due:              { icon: 'fa-phone-volume',          cls: 'warning' },
   crm_follow_up_overdue:          { icon: 'fa-phone-slash',           cls: 'danger'  },
   crm_lead_closed:                { icon: 'fa-flag-checkered',        cls: 'success' },
+  crm_lead_stage:                 { icon: 'fa-bolt',                  cls: 'info'    },
+  crm_stage_approval:             { icon: 'fa-shield-halved',         cls: 'warning' },
+  crm_stage_approval_decided:     { icon: 'fa-shield-halved',         cls: 'info'    },
 };
 
 function _notifTimeAgo(dateStr) {
@@ -58837,6 +58840,47 @@ async function submitDsCreate() {
     return `<span class="crm-fu-badge${f.overdue ? ' crm-fu-badge--overdue' : today ? ' crm-fu-badge--today' : ''}" title="${escHtml(title)}"><i class="fa fa-phone-volume"></i>${escHtml(label)}</span>`;
   }
 
+  /** A move into a stage that must be approved, waiting for the head — who gets approve / reject buttons. */
+  function _crmPendingMoveBadge(lead) {
+    const p = lead.pending_move;
+    if (!p) return '';
+    const title = `${p.requested_by_name || 'Someone'} asked to move this lead to “${p.to_stage_name || 'another stage'}”${p.requested_at ? ` · ${new Date(p.requested_at).toLocaleString()}` : ''}`;
+    const buttons = lead.can?.approve
+      ? `<button type="button" class="is-yes" data-move-approve="${p.id}" data-lead="${lead.id}" title="Approve the move"><i class="fa fa-check"></i></button>`
+        + `<button type="button" class="is-no" data-move-reject="${p.id}" data-lead="${lead.id}" title="Reject the move"><i class="fa fa-xmark"></i></button>`
+      : '';
+    return `<span class="crm-lead-pending" title="${escHtml(title)}"><i class="fa fa-hourglass-half"></i>→ ${escHtml(p.to_stage_name || '…')}${buttons}</span>`;
+  }
+
+  async function _crmDecideStageMove(leadId, requestId, approve) {
+    const lead = _findLead(leadId);
+    const to = lead?.pending_move?.to_stage_name || 'the stage';
+    let res;
+    if (approve) {
+      res = await API.crmApproveStageMove(leadId, requestId);
+    } else {
+      const asked = await _crmAskReason({ title: `Reject move to ${to}`, submitLabel: 'Reject' });
+      if (asked === null) return;
+      res = await API.crmRejectStageMove(leadId, requestId, asked.reason);
+    }
+    if (res.status === 200) {
+      toast(res.body?.message || (approve ? 'Approved.' : 'Rejected.'), 'success');
+    } else {
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      toast(firstError || res.body?.message || 'Could not record the decision.', 'error');
+    }
+    loadCrmPipeline(_crmProjectId, { silent: true });
+  }
+
+  /** A lead that has sat in its stage longer than the stage's time limit (entry_rules.max_days). */
+  function _crmStuckBadge(lead, col) {
+    const max = col.entry_rules?.max_days;
+    if (!max || !lead.stage_entered_at) return '';
+    const days = Math.floor((Date.now() - Date.parse(lead.stage_entered_at)) / 86400000);
+    if (days <= max) return '';
+    return `<span class="crm-lead-stuck" title="In “${escHtml(col.name)}” for ${days} days — the limit is ${max}"><i class="fa fa-stopwatch"></i>${days}d here</span>`;
+  }
+
   /** The rule-based suggestion, shown only when it differs from the manual score. */
   function _crmSuggestedHint(lead) {
     const s = lead.suggested_score;
@@ -58869,25 +58913,104 @@ async function submitDsCreate() {
   // A lost stage needs a lost reason and some stages a free-text reason; pending approval /
   // quotation sent are only set by the quotation workflow. Resolves the extra move payload,
   // or null when the move isn't allowed or was cancelled.
-  function _crmMoveDetails(stageId) {
+  // Custom stages add their rules first: the checklist of the stage the lead leaves, and — for
+  // heads / admins, whom approval and the lock let through — a confirmation, so the rule is seen.
+  async function _crmMoveDetails(stageId, leadId = null) {
     const col = (_crmPipeline?.columns || []).find(c => c.id === stageId);
-    if (!col) return Promise.resolve({});
+    if (!col) return {};
     if (col.is_reserved) {
       toast(`"${col.name}" is set automatically by the quotation workflow.`, 'error');
-      return Promise.resolve(null);
+      return null;
     }
-    const lost = col.is_lost || col.system_key === 'lost';
-    if (!lost && !col.requires_reason) return Promise.resolve({});
-    return _crmAskReason({ title: `Move to ${col.name}`, lost, reasonRequired: !lost });
+    const lead = leadId ? _findLead(leadId) : null;
+    const fromCol = lead ? (_crmPipeline?.columns || []).find(c => c.id === lead.stage_id) : null;
+    if (lead && fromCol && fromCol.id !== col.id) {
+      const open = (fromCol.exit_checklist || []).filter(i => !(lead.checklist_done || []).includes(i));
+      if (open.length) {
+        _crmOpenChecklist(lead.id, `Finish the "${fromCol.name}" checklist before moving this lead on.`);
+        return null;
+      }
+      if (fromCol.locks_lead && !await appConfirm({ title: 'This lead is locked', message: `"${lead.name}" is locked in "${fromCol.name}" — staff can't edit or move it. As a head or admin you still can. Move it anyway?`, confirmText: '<i class="fa fa-lock-open"></i> Move anyway', icon: 'fa-lock' })) return null;
+      if (col.needs_approval && lead.can?.approve && !await appConfirm({ title: `"${col.name}" must be approved`, message: `Staff need approval to move leads here. You are an approver — approve and move "${lead.name}" now?`, confirmText: '<i class="fa fa-shield-halved"></i> Approve & move', icon: 'fa-shield-halved' })) return null;
+    }
+    // A lost stage can have its lost reason switched off (Stage behaviour); older servers don't send the flag
+    const lostStage = col.is_lost || col.system_key === 'lost';
+    const lost = lostStage && col.asks_lost_reason !== false;
+    const fields = col.entry_rules?.require || [];
+    const reasonRequired = !lostStage && !!col.requires_reason;
+    if (!lost && !reasonRequired && !fields.length) return {};
+    return _crmAskReason({ title: `Move to ${col.name}${col.needs_approval && !lead?.can?.approve ? ' (needs approval)' : ''}`, lost, reasonRequired, fields });
   }
 
-  function _crmAskReason({ title, lost = false, reasonRequired = false, submitLabel = 'Move' }) {
+  /** "☑ 1/3" on a card in a stage with a checklist; opens the checklist. */
+  function _crmChecklistChip(lead, col) {
+    const items = col.exit_checklist || [];
+    if (!items.length) return '';
+    const done = items.filter(i => (lead.checklist_done || []).includes(i)).length;
+    return `<button type="button" class="crm-lead-check${done === items.length ? ' is-done' : ''}" data-checklist-lead="${lead.id}" title="Checklist before leaving “${escHtml(col.name)}”"><i class="fa fa-${done === items.length ? 'square-check' : 'list-check'}"></i>${done}/${items.length}</button>`;
+  }
+
+  let _crmChecklistLeadId = null, _crmChecklistDirty = false;
+
+  function _crmOpenChecklist(leadId, notice = '') {
+    const lead = _findLead(leadId);
+    const col = lead && (_crmPipeline?.columns || []).find(c => c.id === lead.stage_id);
+    if (!col?.exit_checklist?.length) return;
+    _crmChecklistLeadId = leadId;
+    _crmChecklistDirty = false;
+    const canTick = _crmLeadCan(lead, 'edit');
+    $('#crm-checklist-title').textContent = `${col.name} — ${lead.name}`;
+    const alertEl = $('#crm-checklist-alert');
+    alertEl.textContent = notice || (canTick ? '' : 'Only someone who can edit this lead can tick items.');
+    alertEl.style.display = alertEl.textContent ? '' : 'none';
+    $('#crm-checklist-items').innerHTML = col.exit_checklist.map(item =>
+      `<label class="crm-checklist-item"><input type="checkbox" data-checklist-item="${escHtml(item)}"${(lead.checklist_done || []).includes(item) ? ' checked' : ''}${canTick ? '' : ' disabled'}> <span>${escHtml(item)}</span></label>`).join('');
+    $('#crm-checklist-modal').style.display = 'flex';
+  }
+
+  $('#crm-checklist-items')?.addEventListener('change', async e => {
+    const box = e.target.closest('[data-checklist-item]');
+    if (!box || !_crmChecklistLeadId) return;
+    box.disabled = true;
+    const res = await API.crmSetChecklistItem(_crmChecklistLeadId, box.dataset.checklistItem, box.checked);
+    box.disabled = false;
+    if (res.status !== 200) {
+      box.checked = !box.checked;
+      toast(res.body?.message || 'Could not update the checklist.', 'error');
+      return;
+    }
+    _crmChecklistDirty = true;
+    // Keep the board's copy in step so a move right after sees the ticks
+    for (const c of _crmPipeline?.columns || []) {
+      const l = c.leads.find(x => x.id === _crmChecklistLeadId);
+      if (l) l.checklist_done = res.body?.data?.checklist_done || [];
+    }
+  });
+  const _crmCloseChecklist = () => {
+    $('#crm-checklist-modal').style.display = 'none';
+    if (_crmChecklistDirty) loadCrmPipeline(_crmProjectId, { silent: true });
+    _crmChecklistLeadId = null;
+  };
+  $('#crm-checklist-close')?.addEventListener('click', _crmCloseChecklist);
+  $('#crm-checklist-done')?.addEventListener('click', _crmCloseChecklist);
+
+  // Inputs for the details a stage asks for on entry: key => [input, message when left empty]
+  const _CRM_MOVE_FIELDS = {
+    follow_up_at:        ['#crm-move-follow-up',  'Pick a follow-up date.'],
+    expected_close_date: ['#crm-move-close-date', 'Pick the expected close date.'],
+    estimated_value:     ['#crm-move-value',      'Enter the deal value.'],
+  };
+
+  function _crmAskReason({ title, lost = false, reasonRequired = false, submitLabel = 'Move', fields = [] }) {
     const modal   = $('#crm-move-reason-modal');
     const sel     = $('#crm-move-reason-lost');
     const text    = $('#crm-move-reason-text');
     const alertEl = $('#crm-move-reason-alert');
     $('#crm-move-reason-title').textContent = title;
     $('#crm-move-reason-lost-wrap').style.display = lost ? '' : 'none';
+    $$('#crm-move-reason-modal [data-move-field]').forEach(w => { w.style.display = fields.includes(w.dataset.moveField) ? '' : 'none'; });
+    Object.values(_CRM_MOVE_FIELDS).forEach(([id]) => { $(id).value = ''; });
+    $('#crm-move-follow-up').min = new Date().toLocaleDateString('en-CA');
     sel.innerHTML = '<option value="">— Pick a reason —</option>'
       + (_crmPipeline?.lost_reasons || []).map(r => `<option value="${r.id}">${escHtml(r.label)}</option>`).join('');
     $('#crm-move-reason-text-label').textContent = lost ? 'Note (optional)' : reasonRequired ? 'Reason *' : 'Reason (optional)';
@@ -58912,7 +59035,15 @@ async function submitDsCreate() {
         const note = text.value.trim();
         if (lost && !sel.value) return fail('Pick a lost reason.');
         if (reasonRequired && !note) return fail('A reason is required.');
-        finish(lost ? { lost_reason_id: parseInt(sel.value), lost_reason: note || null } : { reason: note || null });
+        const details = {};
+        for (const key of fields) {
+          const [id, msg] = _CRM_MOVE_FIELDS[key] || [];
+          if (!id) continue;
+          const v = $(id).value.trim();
+          if (!v) { $(id).focus(); return fail(msg); }
+          details[key] = key === 'estimated_value' ? parseFloat(v) : v;
+        }
+        finish({ ...(lost ? { lost_reason_id: parseInt(sel.value), lost_reason: note || null } : { reason: note || null }), ...details });
       };
       const onCancel   = () => finish(null);
       const onBackdrop = e => { if (e.target === modal) finish(null); };
@@ -59111,11 +59242,15 @@ async function submitDsCreate() {
   $('#crm-pipeline-list')?.addEventListener('change', async e => {
     const sel = e.target.closest('select[data-move-lead]');
     if (!sel) return;
-    const extra = await _crmMoveDetails(parseInt(sel.value));
+    const extra = await _crmMoveDetails(parseInt(sel.value), parseInt(sel.dataset.moveLead));
     if (extra === null) { sel.value = sel.dataset.fromStage; return; }
     sel.disabled = true;
     const res = await API.crmMoveLead(parseInt(sel.dataset.moveLead), parseInt(sel.value), extra);
     if (res.status === 200) {
+      loadCrmPipeline(_crmProjectId, { silent: true });
+    } else if (res.status === 202) {
+      // Sent for approval: the lead stays put until the head decides
+      toast(res.body?.message || 'Sent for approval.', 'info');
       loadCrmPipeline(_crmProjectId, { silent: true });
     } else {
       sel.value = sel.dataset.fromStage;
@@ -59199,6 +59334,10 @@ async function submitDsCreate() {
         const tags = (lead.is_customer ? `<span class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Customer</span>` : '')
           + (lead.needs_review ? `<span class="crm-inbox-flag" title="Flagged for Marketing to review"><i class="fa fa-flag"></i> Review</span>` : '')
           + _crmFollowUpBadge(lead)
+          + (closed ? '' : _crmStuckBadge(lead, col))
+          + _crmPendingMoveBadge(lead)
+          + (col.locks_lead ? '<span class="crm-lead-stuck crm-lead-locked" title="Locked in this stage — only the head or an admin can edit or move it"><i class="fa fa-lock"></i>Locked</span>' : '')
+          + _crmChecklistChip(lead, col)
           + _crmScoreBadge(lead.score)
           + (closed ? '' : _crmSuggestedHint(lead))
           + _crmSourceBadge(lead.source)
@@ -59230,14 +59369,19 @@ async function submitDsCreate() {
       const countHtml = filtering
         ? `<span class="crm-col-count crm-col-count--filtered" title="${matched.length} of ${col.leads_count} match">${matched.length}</span>`
         : `<span class="crm-col-count">${col.leads_count}</span>`;
-      const stateIcon = col.is_won ? '<i class="fa fa-trophy crm-col-state" title="Won stage"></i>'
-        : col.is_lost ? '<i class="fa fa-circle-xmark crm-col-state" title="Lost stage"></i>' : '';
+      const stateIcon = (col.is_won ? '<i class="fa fa-trophy crm-col-state" title="Won stage"></i>'
+        : col.is_lost ? '<i class="fa fa-circle-xmark crm-col-state" title="Lost stage"></i>' : '')
+        // A custom stage's rules, so the team sees them on the board
+        + (col.needs_approval ? '<i class="fa fa-shield-halved crm-col-state" title="Must be approved — the department head approves moves into this stage"></i>' : '')
+        + (col.locks_lead ? '<i class="fa fa-lock crm-col-state" title="Locked — only the head or an admin can edit or move leads here"></i>' : '')
+        + (col.no_skip ? '<i class="fa fa-arrow-right-to-bracket crm-col-state" title="No skipping — leads enter only from the stage before"></i>' : '')
+        + (col.exit_checklist?.length ? `<i class="fa fa-list-check crm-col-state" title="Checklist before leaving: ${escHtml(col.exit_checklist.join(', '))}"></i>` : '');
 
       return `<div class="crm-col${col.is_won ? ' crm-col--won' : ''}${col.is_lost ? ' crm-col--lost' : ''}" data-stage-id="${col.id}" style="--stage:${escHtml(col.color)}">
         <div class="crm-col-head">
           <div class="crm-col-title">
-            <span class="crm-col-swatch"></span>
-            <span class="crm-col-name">${escHtml(col.name)}</span>
+            ${col.icon ? `<i class="fa ${escHtml(col.icon)} crm-col-ico"></i>` : '<span class="crm-col-swatch"></span>'}
+            <span class="crm-col-name" title="${escHtml(col.description || _crmStatus(_crmStageStatusKey(col))?.description || '')}">${escHtml(col.name)}</span>
             ${stateIcon}
             ${countHtml}
             ${!closed
@@ -59303,7 +59447,7 @@ async function submitDsCreate() {
         if (!leadId || toStage === fromStage || !cardEl) return;
 
         // Lost / reason-requiring stages ask first; reserved stages refuse the drop
-        const extra = await _crmMoveDetails(toStage);
+        const extra = await _crmMoveDetails(toStage, leadId);
         if (extra === null) return;
 
         // Move the card in the DOM immediately — don't wait on the network
@@ -59325,12 +59469,17 @@ async function submitDsCreate() {
           // without blanking the board the optimistic move already updated.
           loadCrmPipeline(_crmProjectId, { silent: true });
         } else {
-          // Revert: move the card back to its original column.
+          // Revert: move the card back to its original column (also when the move went for approval).
           fromBody?.querySelector('.crm-col-empty')?.remove();
           fromBody?.insertBefore(cardEl, fromBody.querySelector('.crm-col-more'));
           cardEl.dataset.stageId = fromStage;
           _crmAdjustColCount(toStage, -1, col);
           _crmAdjustColCount(fromStage, 1, fromBody);
+          if (res.status === 202) {
+            toast(res.body?.message || 'Sent for approval.', 'info');
+            loadCrmPipeline(_crmProjectId, { silent: true });
+            return;
+          }
           const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
           toast(firstError || res.body?.message || 'Failed to move lead.', 'error');
         }
@@ -59359,6 +59508,23 @@ async function submitDsCreate() {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         _crmDeleteLead(parseInt(btn.dataset.leadId));
+      });
+    });
+
+    // ── A card's stage checklist ──────────────────────────────────────────
+    board.querySelectorAll('[data-checklist-lead]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _crmOpenChecklist(parseInt(btn.dataset.checklistLead));
+      });
+    });
+
+    // ── Approve / reject a move waiting for approval ──────────────────────
+    board.querySelectorAll('[data-move-approve], [data-move-reject]').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const approve = !!btn.dataset.moveApprove;
+        _crmDecideStageMove(parseInt(btn.dataset.lead), parseInt(btn.dataset.moveApprove || btn.dataset.moveReject), approve);
       });
     });
 
@@ -63249,7 +63415,7 @@ async function submitDsCreate() {
     // A stage that asks for a reason gets it before saving
     const newStageId = parseInt(payload.stage_id);
     if (newStageId && newStageId !== lead.stage_id) {
-      const extra = await _crmMoveDetails(newStageId);
+      const extra = await _crmMoveDetails(newStageId, lead.id);
       if (extra === null) return;
       Object.assign(payload, extra);
     }
@@ -63285,7 +63451,9 @@ async function submitDsCreate() {
       _crmRenderLeadModal(false);
       _crmLoadLeadHistory(_crmViewLead);
       _crmWsRefresh(_crmViewLead, ['timeline']);
-      toast('Lead updated.', 'success');
+      // A stage that needs approval: the rest is saved, the move waits for the head
+      if (res.body?.pending_move) _crmViewLead.pending_move = res.body.pending_move;
+      toast(res.body?.message || 'Lead updated.', res.body?.pending_move ? 'info' : 'success');
       loadCrmPipeline(_crmProjectId, { silent: true });
       if (_crmDetailLoaded.customData) loadCrmCustomData();
       if (_crmDetailLoaded.contacts) loadCrmRelationContacts();
@@ -65142,20 +65310,117 @@ async function submitDsCreate() {
     }
   });
 
+  // Pipeline at a glance: a bar of every stage sized by its leads, plus totals
+  function _renderStagesSummary() {
+    const el = $('#crm-stages-summary');
+    if (!el) return;
+    const total = _stageListData.reduce((n, s) => n + (s.leads_count || 0), 0);
+    const sumBy = test => _stageListData.filter(test).reduce((n, s) => n + (s.leads_count || 0), 0);
+    const won = sumBy(s => s.system_key === 'won'), lost = sumBy(s => s.system_key === 'lost');
+    const bar = total
+      ? _stageListData.map(s => `<span style="flex:${s.leads_count || 0} 1 0;background:${escHtml(s.color || '#64748b')}" title="${escHtml(s.name)}: ${s.leads_count || 0} lead${s.leads_count === 1 ? '' : 's'}"></span>`).join('')
+      : '';
+    el.innerHTML = `<div class="crm-stg-summary-bar">${bar}</div>
+      <div class="crm-stg-summary-stats">
+        <span><b>${_stageListData.length}</b> stage${_stageListData.length === 1 ? '' : 's'}</span>
+        <span><b>${total}</b> lead${total === 1 ? '' : 's'}</span>
+        <span><b>${total - won - lost}</b> open</span>
+        <span style="color:#059669"><b style="color:inherit">${won}</b> won</span>
+        <span style="color:#dc2626"><b style="color:inherit">${lost}</b> lost</span>
+      </div>`;
+  }
+
+  // Standard statuses as templates — used count per status, one click opens a pre-filled form
+  function _renderStageTemplates() {
+    const box = $('#crm-stages-templates');
+    if (!box) return;
+    const used = key => _stageListData.filter(s => s.system_key === key).length;
+    box.innerHTML = _crmStatuses().map(st => {
+      const n = used(st.key);
+      const pill = n ? `<span class="crm-stg-tpl-pill crm-stg-tpl-pill--used">In pipeline${n > 1 ? ` ×${n}` : ''}</span>` : '<span class="crm-stg-tpl-pill">Not added</span>';
+      return `<button type="button" class="crm-stg-tpl" data-stage-tpl="${st.key}" style="--stg:${st.color}" title="Add a stage that counts as ${escHtml(st.label)}">
+        <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+        <span class="crm-stg-tpl-text"><b>${escHtml(st.label)} ${st.reserved ? '<span class="crm-stg-tpl-pill"><i class="fa fa-lock"></i> Automatic</span>' : ''}${pill}</b><small>${escHtml(st.description)}</small>${_crmStatusEffectsHtml(st)}</span>
+        <i class="fa fa-plus crm-stg-tpl-add"></i>
+      </button>`;
+    }).join('');
+    const own = _crmCustomStatuses();
+    if (own.length) {
+      box.innerHTML += '<div class="crm-stg-tpl-group">Your statuses</div>' + own.map(st => {
+        const n = _stageListData.filter(s => s.custom_status_id === st.id).length;
+        const pill = n ? `<span class="crm-stg-tpl-pill crm-stg-tpl-pill--used">In pipeline${n > 1 ? ` ×${n}` : ''}</span>` : '<span class="crm-stg-tpl-pill">Not added</span>';
+        return `<button type="button" class="crm-stg-tpl" data-stage-tpl="${st.key}" style="--stg:${st.color}" title="Add a ${escHtml(st.label)} stage — counts as ${escHtml(st.base_label)}">
+          <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+          <span class="crm-stg-tpl-text"><b>${escHtml(st.label)} <span class="crm-stg-tpl-pill crm-stg-tpl-pill--own">Yours · ${escHtml(st.base_label)}</span>${pill}</b><small>${escHtml(st.description)}</small>${_crmStatusEffectsHtml(st)}</span>
+          <i class="fa fa-plus crm-stg-tpl-add"></i>
+        </button>`;
+      }).join('');
+    }
+    const missing = _crmStatuses().filter(st => !used(st.key)).length;
+    const restore = $('#crm-stages-restore-btn');
+    restore.disabled = missing === 0;
+    restore.innerHTML = `<i class="fa fa-rotate-left"></i> ${missing ? `Restore ${missing} missing standard stage${missing > 1 ? 's' : ''}` : 'All standard stages are in the pipeline'}`;
+  }
+
+  // Search: hide rows that don't match the name or the status they count as
+  function _filterStageRows() {
+    const q = ($('#crm-stages-search')?.value || '').trim().toLowerCase();
+    $$('#crm-stages-list .crm-stage-row').forEach(row => {
+      const s = _stageListData[parseInt(row.dataset.stageIdx)];
+      row.hidden = !!q && !`${s?.name} ${s?.status_label || ''} ${s?.description || ''}`.toLowerCase().includes(q);
+    });
+  }
+  $('#crm-stages-search')?.addEventListener('input', _filterStageRows);
+
+  $('#crm-stages-templates')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-stage-tpl]');
+    if (!btn) return;
+    const own = _crmStatus(btn.dataset.stageTpl);
+    // One of the business's own statuses pre-fills its look, reason flag and actions
+    _openStageForm(null, own?.custom
+      ? { system_key: own.base_key, custom_status_id: own.id, color: own.color, description: own.note || '', requires_reason: own.requires_reason, entry_rules: own.entry_rules }
+      : { system_key: btn.dataset.stageTpl });
+  });
+  // The "Custom Stage" template opens with Custom picked, so its behaviour ticks are showing
+  $('#crm-stages-custom-btn')?.addEventListener('click', () => _openStageForm(null, { system_key: 'in_process', is_custom: true, custom: true }));
+
+  $('#crm-stages-restore-btn')?.addEventListener('click', async () => {
+    const btn = $('#crm-stages-restore-btn');
+    btn.disabled = true;
+    const res = await API.crmRestoreStandardStages(_crmProjectId);
+    if (res.status === 200) {
+      const created = res.body?.data?.created || [];
+      toast(created.length ? `Added ${created.map(c => `"${c.name}"`).join(', ')}.` : 'Nothing to restore.', 'success');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      btn.disabled = false;
+      toast(res.body?.message || 'Failed to restore standard stages.', 'error');
+    }
+  });
+
   function _renderStagesList() {
     const list = $('#crm-stages-list');
+    _renderStagesSummary();
+    _renderStageTemplates();
+    $('#crm-stages-footer-note').textContent = _stageListData.length ? 'Tip: double-click a stage to edit it' : '';
     if (_stageListData.length === 0) {
-      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet.</p>';
+      list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet — pick a template on the right to add one.</p>';
       _updateStageBulkBar();
       return;
     }
     const pipelineAutoActive = !!(_pipelineFlow && _pipelineFlow.is_active);
     list.innerHTML = _stageListData.map((s, idx) => {
-      const wonTag  = s.is_won  ? '<span class="crm-stage-tag crm-stage-tag--won">Won</span>'
-        : s.is_lost ? '<span class="crm-stage-tag crm-stage-tag--lost">Lost</span>'
-        : `<span class="crm-stage-tag"${s.system_key ? '' : ' style="color:#f59e0b"'} title="Standard status">${escHtml(s.status_label || 'No status')}</span>`;
-      const lostTag = (s.is_reserved ? '<span class="crm-stage-tag" title="Set by the quotation workflow"><i class="fa fa-lock"></i></span>' : '')
-        + (s.requires_reason ? '<span class="crm-stage-tag" title="Asks for a reason"><i class="fa fa-comment"></i></span>' : '');
+      const st = _crmStatus(_crmStageStatusKey(s));
+      const statusChip = st
+        ? `<span class="crm-stg-status" style="--stg:${st.color}" title="${st.custom ? `Your status “${escHtml(st.label)}” — counts as “${escHtml(st.base_label)}” in reports` : `Counts as “${escHtml(st.label)}” — ${escHtml(st.description)}`}"><i class="fa ${st.icon}"></i> ${escHtml(st.label)}</span>`
+        : '<span class="crm-stg-status crm-stg-status--none" title="Pick the standard status this stage counts as"><i class="fa fa-triangle-exclamation"></i> No status</span>';
+      const flags = (s.is_reserved ? '<span class="crm-stg-flag" title="Set automatically by the quotation workflow — leads cannot be moved here by hand"><i class="fa fa-lock"></i></span>' : '')
+        + (s.requires_reason ? '<span class="crm-stg-flag" title="Asks for a reason when a lead moves here"><i class="fa fa-comment-dots"></i></span>' : '')
+        + _stageActionFlags({ ...(s.entry_rules || {}), needs_approval: s.needs_approval, locks_lead: s.locks_lead, no_skip: s.no_skip, exit_checklist: s.exit_checklist });
+      const note = s.description
+        ? `<span class="crm-stg-note" title="${escHtml(s.description)}"><i class="fa fa-note-sticky"></i>${escHtml(s.description)}</span>`
+        : (st ? `<span class="crm-stg-note">${escHtml(st.description)}</span>` : '');
       const countBadge = s.leads_count > 0 ? `<span class="crm-stage-badge">${s.leads_count} lead${s.leads_count > 1 ? 's' : ''}</span>` : '';
       // While Pipeline Automation is on, matching stage templates fire automatically —
       // the manual send button is hidden so it isn't offered twice. When a template
@@ -65163,6 +65428,9 @@ async function submitDsCreate() {
       // Stage mail templates send through the Mail feature's mailer — hide the
       // shortcut entirely when Mail isn't installed.
       const mailBtn = (pipelineAutoActive || !hasFeature('mail')) ? '' : `<button class="crm-card-btn${s.has_mail_template ? ' crm-card-btn--mail-set' : ''}" data-mail-stage="${s.id}" title="${s.has_mail_template ? 'Send email to leads in this stage' : 'Set up a mail template for this stage'}" style="flex-shrink:0"><i class="fa fa-bolt"></i></button>`;
+      // Behaviour settings — purple when a built-in behaviour is switched off or a rule was added
+      const behaveSet = (s.behaviours || []).some(b => !b.on) || s.needs_approval || s.locks_lead || s.no_skip || s.exit_checklist?.length;
+      const behaveBtn = `<button class="crm-card-btn${behaveSet ? ' crm-card-btn--behave-set' : ''}" data-behave-stage="${s.id}" title="Stage behaviour — switch built-in behaviour on or off, add rules" style="flex-shrink:0"><i class="fa fa-gear"></i></button>`;
       // The pipeline's "New" stage is where leads land — it can't be ticked or deleted.
       const checked = _stageSelected.has(s.id);
       const check = s.is_protected
@@ -65174,15 +65442,17 @@ async function submitDsCreate() {
       return `<div class="crm-stage-row${checked ? ' crm-stage-row--selected' : ''}" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
         <span class="crm-stage-handle"><i class="fa fa-grip-vertical"></i></span>
         ${check}
-        <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
-        <span class="crm-stage-name">${escHtml(s.name)}</span>
-        ${wonTag}${lostTag}${countBadge}
-        ${mailBtn}
+        <span class="crm-stg-ico"><i class="fa ${escHtml(s.icon || st?.icon || 'fa-circle')}"></i></span>
+        <span class="crm-stg-main"><span class="crm-stage-name"><span class="crm-stg-dot" style="--stg:${escHtml(s.color || '#64748b')}" title="Stage colour"></span>${escHtml(s.name)}</span>${note}</span>
+        ${statusChip}${flags}${countBadge}
+        ${mailBtn}${behaveBtn}
+        <button class="crm-card-btn" data-dup-stage="${s.id}" title="Duplicate stage" style="flex-shrink:0"><i class="fa fa-clone"></i></button>
         <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
         ${delBtn}
       </div>`;
     }).join('');
     _updateStageBulkBar();
+    _filterStageRows();
 
     // Tick for bulk delete
     list.querySelectorAll('[data-check-stage]').forEach(cb => {
@@ -65223,18 +65493,30 @@ async function submitDsCreate() {
       });
     });
 
-    // Edit
+    // Edit, duplicate, and double-click a row to edit (when the user may edit)
     list.querySelectorAll('[data-edit-stage]').forEach(btn => {
       btn.addEventListener('click', () => {
         const s = _stageListData.find(s => s.id === parseInt(btn.dataset.editStage));
-        if (!s) return;
-        $('#crm-stage-edit-id').value    = s.id;
-        $('#crm-stage-edit-name').value  = s.name;
-        $('#crm-stage-edit-color').value = s.color || '#64748b';
-        _crmFillStatusSelect('#crm-stage-edit-status', '#crm-stage-edit-reason', s.system_key || 'in_process', s.requires_reason);
-        $('#crm-stage-edit-alert').style.display = 'none';
-        $('#crm-stage-edit-modal').style.display = 'flex';
-        $('#crm-stage-edit-name').focus();
+        if (s) _openStageForm(s);
+      });
+    });
+    list.querySelectorAll('[data-behave-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = _stageListData.find(s => s.id === parseInt(btn.dataset.behaveStage));
+        if (s) _openStageBehaviour(s);
+      });
+    });
+    list.querySelectorAll('[data-dup-stage]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const s = _stageListData.find(s => s.id === parseInt(btn.dataset.dupStage));
+        if (s) _openStageForm(null, { ...s, name: `${s.name} (copy)`.slice(0, 60) });
+      });
+    });
+    list.querySelectorAll('.crm-stage-row').forEach(row => {
+      row.addEventListener('dblclick', e => {
+        if (e.target.closest('button, input')) return;
+        const edit = row.querySelector('[data-edit-stage]');
+        if (edit?.offsetParent) edit.click();
       });
     });
 
@@ -65265,6 +65547,96 @@ async function submitDsCreate() {
       });
     });
   }
+
+  // ── Stage behaviour settings ──────────────────────────────────────────
+  // Built-in behaviour comes with the stage's standard status (some can be switched off);
+  // the added rules — reason, approval, lock, no skipping, checklist — can go on any stage.
+
+  const _BEHAVE_ICONS = {
+    lands_new: 'fa-inbox', auto_from_assign: 'fa-user-check', workflow_only: 'fa-lock', remember_from: 'fa-clock-rotate-left',
+    closes_won: 'fa-trophy', closes_lost: 'fa-circle-xmark', lost_reason: 'fa-comment-slash',
+  };
+  let _stageBehaveId = null;
+
+  function _openStageBehaviour(s) {
+    _stageBehaveId = s.id;
+    const st = _crmStatus(_crmStageStatusKey(s));
+    const lost = s.is_lost || s.system_key === 'lost';
+    $('#crm-stage-behave-title').textContent = `Stage behaviour — ${s.name}`;
+    $('#crm-stage-behave-alert').style.display = 'none';
+    $('#crm-stage-behave-built-hint').textContent = `What this stage does because it counts as “${st?.base_label || st?.label || s.status_label || 'its status'}”.`;
+
+    const built = s.behaviours || [];
+    $('#crm-stage-behave-built').innerHTML = built.length
+      ? built.map(b => `<div class="crm-stg-behave${b.on ? '' : ' is-off'}">
+          <span class="crm-stg-behave-ico"><i class="fa ${_BEHAVE_ICONS[b.key] || 'fa-cube'}"></i></span>
+          <span class="crm-stg-behave-text"><b>${escHtml(b.label)}</b><small>${escHtml(b.description)}</small></span>
+          ${b.switchable
+            ? `<label class="psm-switch" title="Switch on or off"><input type="checkbox" data-behave-key="${b.key}"${b.on ? ' checked' : ''}><span class="psm-switch-track"></span></label>`
+            : '<span class="crm-stg-behave-fixed" title="Part of what this status means — always on"><i class="fa fa-lock"></i> Always on</span>'}
+        </div>`).join('')
+      : `<span class="crm-stg-act-hint">No built-in behaviour — it just counts as “${escHtml(st?.base_label || st?.label || 'its status')}” in reports. Add rules below.</span>`;
+
+    // Lost stages ask for a lost reason instead (built-in above), so the free-text one is hidden
+    $('#crm-stage-behave-reason').checked = !!s.requires_reason || lost;
+    $('#crm-stage-behave-reason').closest('.crm-stg-behave').style.display = lost ? 'none' : '';
+    $('#crm-stage-behave-approval').checked = !!s.needs_approval;
+    $('#crm-stage-behave-lock').checked = !!s.locks_lead;
+    $('#crm-stage-behave-no-skip').checked = !!s.no_skip;
+    $('#crm-stage-behave-checklist-on').checked = !!s.exit_checklist?.length;
+    $('#crm-stage-behave-checklist').value = (s.exit_checklist || []).join('\n');
+    _syncStageBehaveChecklist();
+    $('#crm-stage-behave-modal').style.display = 'flex';
+  }
+
+  function _syncStageBehaveChecklist() {
+    $('#crm-stage-behave-checklist').style.display = $('#crm-stage-behave-checklist-on').checked ? '' : 'none';
+  }
+  $('#crm-stage-behave-checklist-on')?.addEventListener('change', () => {
+    _syncStageBehaveChecklist();
+    if ($('#crm-stage-behave-checklist-on').checked) $('#crm-stage-behave-checklist').focus();
+  });
+  $('#crm-stage-behave-built')?.addEventListener('change', e => {
+    const c = e.target.closest('[data-behave-key]');
+    if (c) c.closest('.crm-stg-behave').classList.toggle('is-off', !c.checked);
+  });
+
+  const _closeStageBehaviour = () => { $('#crm-stage-behave-modal').style.display = 'none'; };
+  $('#crm-stage-behave-close')?.addEventListener('click', _closeStageBehaviour);
+  $('#crm-stage-behave-cancel')?.addEventListener('click', _closeStageBehaviour);
+  $('#crm-stage-behave-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-behave-modal')) _closeStageBehaviour(); });
+
+  $('#crm-stage-behave-save')?.addEventListener('click', async () => {
+    const alertEl = $('#crm-stage-behave-alert');
+    const checklist = $('#crm-stage-behave-checklist-on').checked
+      ? $('#crm-stage-behave-checklist').value.split('\n').map(i => i.trim()).filter(Boolean) : [];
+    if ($('#crm-stage-behave-checklist-on').checked && !checklist.length) {
+      alertEl.textContent = 'Add at least one checklist item, or switch the checklist off.'; alertEl.style.display = '';
+      $('#crm-stage-behave-checklist').focus();
+      return;
+    }
+    const body = {
+      disabled_behaviours: [...$$('#crm-stage-behave-built [data-behave-key]')].filter(c => !c.checked).map(c => c.dataset.behaveKey),
+      requires_reason: $('#crm-stage-behave-reason').checked,
+      needs_approval:  $('#crm-stage-behave-approval').checked,
+      locks_lead:      $('#crm-stage-behave-lock').checked,
+      no_skip:         $('#crm-stage-behave-no-skip').checked,
+      exit_checklist:  checklist,
+    };
+    const btn = $('#crm-stage-behave-save');
+    btn.disabled = true;
+    const res = await API.crmUpdateStageBehaviours(_crmProjectId, _stageBehaveId, body);
+    btn.disabled = false;
+    if (res.status !== 200) {
+      alertEl.textContent = res.body?.message || 'Failed to save the stage behaviour.';
+      alertEl.style.display = '';
+      return;
+    }
+    _closeStageBehaviour();
+    toast('Stage behaviour saved.', 'success');
+    await _loadStagesList();
+    loadCrmPipeline();
+  });
 
   // ── Stage mail template (manual send) ──────────────────────────────────
 
@@ -65410,110 +65782,451 @@ async function submitDsCreate() {
   });
 
   // Every stage stands for one of the standard statuses; lost stages always ask for a lost reason.
+  // Mirrors LeadStage::STATUSES / STATUS_GUIDE, for servers that don't send icon/description yet.
   const _CRM_STATUS_FALLBACK = [
-    ['new', 'New'], ['assigned', 'Assigned'], ['contacted', 'Contacted'], ['in_process', 'In Process'],
-    ['quotation_preparing', 'Quotation Preparing'], ['pending_approval', 'Pending Approval', true],
-    ['quotation_sent', 'Quotation Sent', true], ['negotiation', 'Negotiation'], ['on_hold', 'On Hold'],
-    ['won', 'Won'], ['lost', 'Lost'],
-  ].map(([key, label, reserved]) => ({ key, label, reserved: !!reserved }));
+    ['new',                 'New',                 '#64748b', 'fa-inbox',          'Fresh lead that nobody has picked up yet. Every new lead lands here first.'],
+    ['assigned',            'Assigned',            '#0ea5e9', 'fa-user-check',     'A team member now owns the lead but has not reached out yet.'],
+    ['contacted',           'Contacted',           '#3b82f6', 'fa-phone',          'First call, message or email done — the conversation has started.'],
+    ['in_process',          'In Process',          '#6366f1', 'fa-gears',          'Actively working the lead: meetings, site visits, gathering needs.'],
+    ['quotation_preparing', 'Quotation Preparing', '#8b5cf6', 'fa-file-pen',       'A quotation is being drafted for this lead.'],
+    ['pending_approval',    'Pending Approval',    '#a855f7', 'fa-hourglass-half', 'Automatic: the quotation waits for a manager to approve it.', true],
+    ['quotation_sent',      'Quotation Sent',      '#f59e0b', 'fa-paper-plane',    'Automatic: the approved quotation has gone to the customer.', true],
+    ['negotiation',         'Negotiation',         '#f97316', 'fa-handshake',      'Discussing price, terms or changes before the customer decides.'],
+    ['on_hold',             'On Hold',             '#94a3b8', 'fa-circle-pause',   'Paused for now — the customer asked to wait or is not ready.'],
+    ['won',                 'Won',                 '#10b981', 'fa-trophy',         'Deal closed. Counts as a win in reports and conversion rates.'],
+    ['lost',                'Lost',                '#ef4444', 'fa-circle-xmark',   'Deal did not happen. A lost reason is always asked for.'],
+  ].map(([key, label, color, icon, description, reserved]) => ({ key, label, color, icon, description, reserved: !!reserved }));
+  // What the system does with a lead in a stage of each status (mirrors LeadStage::STATUS_GUIDE[...][2])
+  const _CRM_STATUS_EFFECTS = {
+    new:                 ['Every new lead starts here — added by hand, imported or from the website', 'Waits in the Marketing inbox until someone picks it up', 'Counts as an open lead in reports'],
+    assigned:            ['A lead in "New" moves here by itself when someone is assigned', 'Can also be moved here by hand', 'Counts as an open lead in reports'],
+    contacted:           ['Moved here by hand after the first call, message or email', 'Nothing automatic — it marks progress', 'Counts as an open lead in reports'],
+    in_process:          ['Moved here by hand while the work goes on', 'Nothing automatic — use it for meetings, visits, demos', 'Counts as an open lead in reports'],
+    quotation_preparing: ['Lead moves here by itself when a quotation is created or revised', 'Comes back here when a manager returns or rejects the quotation', 'Counts as an open lead in reports'],
+    pending_approval:    ['Lead moves here by itself when a quotation is sent for approval', 'Managers see it in their approval queue', 'Cannot be moved here by hand (unless you switch that off)'],
+    quotation_sent:      ['Lead moves here by itself when the approved quotation is sent', 'Lead score goes up — it shows as a warmer lead', 'Cannot be moved here by hand (unless you switch that off)'],
+    negotiation:         ['Lead moves here by itself when the customer asks for a discount', 'Can also be moved here by hand', 'Lead score goes up — it shows as a warmer lead'],
+    on_hold:             ['Turns on the "Put on hold" button on each lead', 'Remembers the stage it came from — "Resume" takes it back there', 'Still an open lead — not counted as lost'],
+    won:                 ['Closes the lead — it leaves the open list', 'Counts as a win; its deal value adds to won revenue', 'Can be reopened later if needed'],
+    lost:                ['Closes the lead — it leaves the open list', 'Asks for a reason from your lost-reason list (can be made optional)', 'Counts as a loss in reports; can be reopened later'],
+  };
+  _CRM_STATUS_FALLBACK.forEach(s => { s.effects = _CRM_STATUS_EFFECTS[s.key]; });
+  // A status card's "what happens" lines; the business's own statuses behave like the one they count as
+  const _crmStatusEffectsHtml = st => {
+    const fx = st.effects || (st.base_key && _CRM_STATUS_EFFECTS[st.base_key]) || [];
+    return fx.length ? `<span class="crm-stg-tpl-fx">${fx.map(t => `<span><i class="fa fa-angle-right"></i>${escHtml(t)}</span>`).join('')}</span>` : '';
+  };
 
-  function _crmFillStatusSelect(selectSel, reasonSel, selected, requiresReason) {
-    const sel = $(selectSel), reason = $(reasonSel);
-    const statuses = _crmPipeline?.statuses?.length ? _crmPipeline.statuses : _CRM_STATUS_FALLBACK;
-    sel.innerHTML = statuses.map(s =>
-      `<option value="${s.key}"${s.key === selected ? ' selected' : ''}>${escHtml(s.label)}${s.reserved ? ' (automatic)' : ''}</option>`).join('');
-    reason.checked = !!requiresReason;
-    const sync = () => { const lost = sel.value === 'lost'; if (lost) reason.checked = true; reason.disabled = lost; };
-    sel.onchange = sync;
-    sync();
+  function _crmStatuses() {
+    const server = _crmPipeline?.statuses;
+    if (!server?.length) return _CRM_STATUS_FALLBACK;
+    return server.map(s => ({ ..._CRM_STATUS_FALLBACK.find(f => f.key === s.key), ...s }));
+  }
+  // The business's own statuses (key "custom:<id>"): stage templates that count as base_key in reports
+  const _crmCustomStatuses = () => _crmPipeline?.custom_statuses || [];
+  // "Custom": none of the statuses fit — the stage's behaviour is ticked in the form instead
+  const _CRM_CUSTOM_STAGE = { key: 'custom', label: 'Custom', color: '#7c3aed', icon: 'fa-sliders',
+    description: 'None of these fit? Name it your way and tick how it behaves — approval, lock, won / lost, pause.',
+    effects: ['Nothing happens by itself — only what you tick below', 'Choose if it stays open, closes as won / lost, or pauses', 'Can need approval to enter, or lock the lead'] };
+  const _crmStatus = key => key === 'custom' ? _CRM_CUSTOM_STAGE
+    : _crmStatuses().find(s => s.key === key) || _crmCustomStatuses().find(s => s.key === key) || null;
+  // The status a stage shows: Custom, or its own status when it was made from one that still exists
+  const _crmStageStatusKey = s => s.is_custom ? 'custom'
+    : (s.custom_status_id && _crmStatus(`custom:${s.custom_status_id}`)) ? `custom:${s.custom_status_id}` : s.system_key;
+  // The standard status a key counts as; a Custom stage counts as its ticked outcome
+  const _crmBaseKey = key => key === 'custom'
+    ? (document.querySelector('input[name="crm-stage-outcome"]:checked')?.value || 'in_process')
+    : _crmStatus(key)?.base_key || key;
+
+  const _STAGE_ICONS = [
+    'fa-inbox', 'fa-user-check', 'fa-phone', 'fa-gears', 'fa-file-pen', 'fa-hourglass-half', 'fa-paper-plane', 'fa-handshake',
+    'fa-circle-pause', 'fa-trophy', 'fa-circle-xmark', 'fa-calendar-check', 'fa-location-dot', 'fa-video', 'fa-envelope', 'fa-comments',
+    'fa-clipboard-check', 'fa-magnifying-glass', 'fa-truck', 'fa-screwdriver-wrench', 'fa-money-bill-wave', 'fa-file-contract', 'fa-star', 'fa-flag',
+    'fa-fire', 'fa-bell', 'fa-clock', 'fa-user-tie', 'fa-cart-shopping', 'fa-thumbs-up', 'fa-rotate', 'fa-flag-checkered',
+  ];
+  const _STAGE_SWATCHES = ['#64748b', '#0ea5e9', '#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#ec4899', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#10b981', '#14b8a6', '#94a3b8'];
+
+  // Add / edit form state: the icon and colour follow the chosen status until the user picks their own
+  const _stageForm = { id: null, status: 'in_process', icon: null, colorTouched: false, nameAuto: '' };
+
+  function _openStageForm(stage, preset = {}) {
+    const editing = !!stage;
+    const src = stage || preset;
+    const st = _crmStatus(_crmStageStatusKey(src)) || _crmStatus('in_process');
+    _stageForm.id           = editing ? stage.id : null;
+    _stageForm.status       = null; // set below; null = opening, so the name isn't auto-filled
+    _stageForm.icon        = (editing || src.id) && src.has_custom_icon ? src.icon : null;
+    _stageForm.colorTouched = editing || !!src.id;
+    // A template pre-fills its label as the name; switching status then renames it until the user types
+    _stageForm.nameAuto     = (!editing && !src.name && !preset.custom) ? st.label : '';
+
+    $('#crm-stage-form-title').textContent = editing ? `Edit Stage — ${stage.name}` : (preset.custom ? 'Custom Stage' : 'Add Stage');
+    $('#crm-stage-form-title-icon').className = `fa ${editing ? 'fa-pen' : 'fa-plus'}`;
+    $('#crm-stage-form-save').innerHTML = `<i class="fa fa-check"></i> ${editing ? 'Save Stage' : 'Add Stage'}`;
+    $('#crm-stage-form-alert').style.display = 'none';
+    $('#crm-stage-form-id').value     = _stageForm.id || '';
+    $('#crm-stage-form-name').value   = src.name || _stageForm.nameAuto;
+    $('#crm-stage-form-color').value  = src.color || st.color;
+    $('#crm-stage-form-desc').value   = src.description || '';
+    $('#crm-stage-form-reason').checked = !!src.requires_reason;
+    _fillStageFormActions(src.entry_rules || {});
+    // A Custom stage's ticks (its outcome is the standard status it was saved with)
+    const outcome = src.is_custom && ['in_process', 'won', 'lost', 'on_hold'].includes(src.system_key) ? src.system_key : 'in_process';
+    $$('input[name="crm-stage-outcome"]').forEach(r => { r.checked = r.value === outcome; });
+    $('#crm-stage-form-needs-approval').checked = !!src.needs_approval;
+    $('#crm-stage-form-locks-lead').checked = !!src.locks_lead;
+    $('#crm-stage-form-no-skip').checked = !!src.no_skip;
+    $('#crm-stage-form-checklist').value = (src.exit_checklist || []).join('\n');
+    $('#crm-stage-form-preview-counts').textContent = editing
+      ? `${stage.leads_count || 0} lead${stage.leads_count === 1 ? '' : 's'} in this stage` : '';
+
+    _renderStageFormStatuses();
+    _setStageFormStatus(st.key);
+    _macShow($('#crm-stage-form-modal'));
+    setTimeout(() => { const n = $('#crm-stage-form-name'); n.focus(); n.select(); }, 60);
   }
 
-  function _crmStagePayload(prefix) {
-    const key = $(`#crm-stage-${prefix}-status`).value;
+  // Small icons in the stage list for what a stage does when a lead enters it
+  function _stageActionFlags(r) {
+    if (!r) return '';
+    const flag = (icon, title) => `<span class="crm-stg-flag" title="${escHtml(title)}"><i class="fa ${icon}"></i></span>`;
+    const asks = (r.require || []).map(k => ({ follow_up_at: 'follow-up date', expected_close_date: 'expected close date', estimated_value: 'deal value' })[k]).filter(Boolean);
+    const notifies = (r.notify?.owner || r.notify?.head || r.notify?.user_ids?.length);
+    return (asks.length ? flag('fa-list-check', `Asks for the ${asks.join(', ')}`) : '')
+      + (r.task ? flag('fa-square-check', `Creates a task: ${r.task.title} (due in ${r.task.due_days} day${r.task.due_days === 1 ? '' : 's'})`) : '')
+      + (notifies ? flag('fa-bell', 'Notifies people when a lead moves here') : '')
+      + (r.assign_user_ids?.length ? flag('fa-user-plus', `Assigns ${r.assign_user_ids.length} ${r.assign_user_ids.length === 1 ? 'person' : 'people'} to the lead`) : '')
+      + (r.needs_approval ? flag('fa-shield-halved', 'Must be approved — the head approves moves into this stage') : '')
+      + (r.locks_lead ? flag('fa-lock', 'Locks the lead — only the head or an admin can edit or move it here') : '')
+      + (r.no_skip ? flag('fa-arrow-right-to-bracket', 'No skipping — leads enter only from the stage before') : '')
+      + (r.exit_checklist?.length ? flag('fa-clipboard-list', `Checklist before leaving: ${r.exit_checklist.join(', ')}`) : '')
+      + (r.max_days ? flag('fa-stopwatch', `Flags leads here longer than ${r.max_days} day${r.max_days === 1 ? '' : 's'}`) : '');
+  }
+
+  // "When a lead moves here": the people pickers list who works this pipeline's department
+  function _fillStageFormActions(rules) {
+    const users = _crmPipeline?.assignable_users || [];
+    const require = rules.require || [];
+    $$('#crm-stage-form-modal [data-stage-require]').forEach(c => { c.checked = require.includes(c.dataset.stageRequire); });
+    $('#crm-stage-form-notify-users').style.display = users.length ? '' : 'none';
+
+    $('#crm-stage-form-task-on').checked = !!rules.task;
+    $('#crm-stage-form-task-title').value = rules.task?.title || '';
+    $('#crm-stage-form-task-days').value = rules.task?.due_days ?? 1;
+    _syncStageTaskBody();
+
+    $('#crm-stage-form-notify-owner').checked = !!rules.notify?.owner;
+    $('#crm-stage-form-notify-head').checked = !!rules.notify?.head;
+    const notifyIds = (rules.notify?.user_ids || []).map(Number);
+    $('#crm-stage-form-notify-users').innerHTML = users.map(u =>
+      `<label class="crm-stg-chk"><input type="checkbox" data-stage-notify-user="${u.id}"${notifyIds.includes(Number(u.id)) ? ' checked' : ''}> ${escHtml(u.name)}</label>`).join('');
+
+    // data-order keeps the order people were ticked in — the first becomes owner of an unowned lead
+    const assignIds = (rules.assign_user_ids || []).map(Number);
+    $('#crm-stage-form-assign-users').innerHTML = users.length
+      ? users.map(u => {
+          const at = assignIds.indexOf(Number(u.id));
+          return `<label class="crm-stg-chk"><input type="checkbox" data-stage-assign-user="${u.id}"${at >= 0 ? ` checked data-order="${at}"` : ''}> ${escHtml(u.name)}</label>`;
+        }).join('')
+      : '<span class="crm-stg-act-hint">No one works this pipeline\'s department yet.</span>';
+    $('#crm-stage-form-max-days').value = rules.max_days || '';
+  }
+
+  function _syncStageTaskBody() {
+    $('#crm-stage-form-task-body').style.display = $('#crm-stage-form-task-on').checked ? '' : 'none';
+  }
+  $('#crm-stage-form-task-on')?.addEventListener('change', () => {
+    _syncStageTaskBody();
+    if ($('#crm-stage-form-task-on').checked) $('#crm-stage-form-task-title').focus();
+  });
+  $('#crm-stage-form-assign-users')?.addEventListener('change', e => {
+    const c = e.target.closest('[data-stage-assign-user]');
+    if (c?.checked) c.dataset.order = Date.now();
+  });
+
+  function _stageFormActions() {
+    const taskOn = $('#crm-stage-form-task-on').checked;
     return {
-      system_key:      key,
-      requires_reason: $(`#crm-stage-${prefix}-reason`).checked,
-      is_won:          key === 'won',
-      is_lost:         key === 'lost',
+      require:   [...$$('#crm-stage-form-modal [data-stage-require]')].filter(c => c.checked).map(c => c.dataset.stageRequire),
+      task:      taskOn ? { enabled: true, title: $('#crm-stage-form-task-title').value.trim(), due_days: parseInt($('#crm-stage-form-task-days').value) || 0 } : null,
+      notify:    {
+        owner:    $('#crm-stage-form-notify-owner').checked,
+        head:     $('#crm-stage-form-notify-head').checked,
+        user_ids: [...$$('#crm-stage-form-notify-users [data-stage-notify-user]')].filter(c => c.checked).map(c => parseInt(c.dataset.stageNotifyUser)),
+      },
+      assign_user_ids: [...$$('#crm-stage-form-assign-users [data-stage-assign-user]')].filter(c => c.checked)
+        .sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order)).map(c => parseInt(c.dataset.stageAssignUser)),
+      max_days:  parseInt($('#crm-stage-form-max-days').value) || null,
     };
   }
+
+  function _renderStageFormStatuses() {
+    const card = st =>
+      `<button type="button" class="crm-stg-tpl" data-stage-status="${st.key}" style="--stg:${st.color}">
+        <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+        <span class="crm-stg-tpl-text"><b>${escHtml(st.label)}${st.reserved ? ' <span class="crm-stg-tpl-pill"><i class="fa fa-lock"></i> Automatic</span>' : ''}${st.custom ? ` <span class="crm-stg-tpl-pill crm-stg-tpl-pill--own" title="Counts as ${escHtml(st.base_label)} in reports">Yours · ${escHtml(st.base_label)}</span>` : ''}</b><small>${escHtml(st.description)}</small>${_crmStatusEffectsHtml(st)}</span>
+        ${st.custom ? `<span class="crm-stg-tpl-edit" role="button" data-cstatus-edit="${st.id}" title="Edit this status"><i class="fa fa-pen"></i></span>` : ''}
+      </button>`;
+    const own = _crmCustomStatuses();
+    $('#crm-stage-form-statuses').innerHTML = _crmStatuses().map(card).join('')
+      + card(_CRM_CUSTOM_STAGE).replace('class="crm-stg-tpl"', 'class="crm-stg-tpl crm-stg-tpl--custom-pick"')
+      + '<div class="crm-stg-tpl-group">Your statuses</div>'
+      + own.map(card).join('')
+      + `<button type="button" class="crm-stg-tpl crm-stg-tpl--new" data-cstatus-new><i class="fa fa-plus"></i> New status${own.length ? '' : ' — make your own, e.g. "Site Visit"'}</button>`;
+    $('#crm-stage-form-swatches').innerHTML = _STAGE_SWATCHES.map(c =>
+      `<button type="button" class="crm-stg-swatch-btn" data-stage-swatch="${c}" style="background:${c}" title="${c}"></button>`).join('');
+  }
+
+  function _setStageFormStatus(key) {
+    const prev = _crmStatus(_stageForm.status);
+    const st = _crmStatus(key);
+    _stageForm.status = key;
+    $('#crm-stage-form-status').value = key;
+    if (!_stageForm.colorTouched) $('#crm-stage-form-color').value = st.color;
+    const nameEl = $('#crm-stage-form-name');
+    const custom = key === 'custom';
+    // "Custom" is never a name: the user names the stage themselves
+    if (custom) { if (_stageForm.nameAuto && nameEl.value === _stageForm.nameAuto) nameEl.value = ''; _stageForm.nameAuto = ''; }
+    else if (_stageForm.nameAuto && nameEl.value === _stageForm.nameAuto) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
+    else if (!nameEl.value.trim() && prev && !_stageForm.id) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
+    $$('#crm-stage-form-statuses [data-stage-status]').forEach(b => b.classList.toggle('is-on', b.dataset.stageStatus === key));
+    $('#crm-stage-form-behaviour').style.display = custom ? '' : 'none';
+    if (custom && prev && prev.key !== 'custom') setTimeout(() => $('#crm-stage-form-behaviour').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 30);
+    _syncStageReasonHint();
+    _refreshStageFormLook();
+  }
+
+  // The reason tick follows what the stage counts as: lost always asks for a lost reason
+  function _syncStageReasonHint() {
+    const key = _stageForm.status;
+    const reason = $('#crm-stage-form-reason'), hint = $('#crm-stage-form-reason-hint');
+    const base = _crmBaseKey(key);
+    const lost = base === 'lost';
+    if (lost) reason.checked = true;
+    reason.disabled = lost;
+    hint.textContent = lost ? '— lost stages always ask for a lost reason'
+      : base === 'on_hold' ? '— handy here, so the team knows why it is paused' : '';
+  }
+  $('#crm-stage-form-outcome')?.addEventListener('change', _syncStageReasonHint);
+
+  function _refreshStageFormLook() {
+    const st = _crmStatus(_stageForm.status);
+    const color = $('#crm-stage-form-color').value;
+    const icon = _stageForm.icon || st.icon;
+    const name = $('#crm-stage-form-name').value.trim() || 'Stage name';
+    $('#crm-stage-form-preview').innerHTML = `<span class="crm-stg-ico"><i class="fa ${icon}"></i></span>
+      <span class="crm-stg-dot" style="--stg:${escHtml(color)}"></span>${escHtml(name)}
+      <span class="crm-stg-status"><i class="fa ${st.icon}"></i> ${escHtml(st.label)}</span>`;
+    $('#crm-stage-form-icons').innerHTML = _STAGE_ICONS.map(i =>
+      `<button type="button" class="crm-stg-icon-btn${i === icon ? ' is-on' : ''}" data-stage-icon="${i}" title="${i.replace('fa-', '').replace(/-/g, ' ')}${i === st.icon ? ' (status default)' : ''}"><i class="fa ${i}"></i></button>`).join('');
+    $$('#crm-stage-form-swatches [data-stage-swatch]').forEach(b => b.classList.toggle('is-on', b.dataset.stageSwatch.toLowerCase() === color.toLowerCase()));
+  }
+
+  $('#crm-stage-form-statuses')?.addEventListener('click', e => {
+    const edit = e.target.closest('[data-cstatus-edit]');
+    if (edit) { e.stopPropagation(); _openCustomStatus(_crmStatus(`custom:${edit.dataset.cstatusEdit}`)); return; }
+    if (e.target.closest('[data-cstatus-new]')) { _openCustomStatus(null); return; }
+    const b = e.target.closest('[data-stage-status]');
+    if (!b) return;
+    _setStageFormStatus(b.dataset.stageStatus);
+    const st = _crmStatus(b.dataset.stageStatus);
+    if (st?.custom) _applyCustomStatusPreset(st);
+  });
+
+  // Picking one of the business's own statuses fills in its note, reason flag and actions;
+  // people already picked in the form stay (a status never names people)
+  function _applyCustomStatusPreset(st) {
+    if (st.note && !$('#crm-stage-form-desc').value.trim()) $('#crm-stage-form-desc').value = st.note;
+    if (!$('#crm-stage-form-reason').disabled) $('#crm-stage-form-reason').checked = !!st.requires_reason;
+    const current = _stageFormActions();
+    const r = st.entry_rules || {};
+    _fillStageFormActions({ ...r, notify: { ...(r.notify || {}), user_ids: current.notify.user_ids }, assign_user_ids: current.assign_user_ids });
+  }
+
+  // ── The business's own statuses: new / edit / delete ──
+  let _cstatusEditing = null, _cstatusIcon = 'fa-star';
+
+  function _openCustomStatus(st) {
+    _cstatusEditing = st;
+    _cstatusIcon = st?.icon || 'fa-star';
+    $('#crm-cstatus-title').textContent = st ? `Edit status — ${st.label}` : 'New status';
+    $('#crm-cstatus-alert').style.display = 'none';
+    $('#crm-cstatus-name').value = st?.label || '';
+    $('#crm-cstatus-color').value = st?.color || '#6366f1';
+    $('#crm-cstatus-desc').value = st?.note || '';
+    $('#crm-cstatus-base').innerHTML = _crmStatuses().filter(s => !s.reserved).map(s =>
+      `<option value="${s.key}"${s.key === (st?.base_key || _crmBaseKey(_stageForm.status) || 'in_process') ? ' selected' : ''}>${escHtml(s.label)} — ${escHtml(s.description)}</option>`).join('');
+    $('#crm-cstatus-reason').checked = !!st?.requires_reason;
+    // New: take the actions set in the stage form; edit: keep its own unless asked to replace them
+    $('#crm-cstatus-rules').checked = !st;
+    $('#crm-cstatus-rules-label').textContent = st
+      ? 'Replace its default actions with the "When a lead moves here" actions set in the stage form'
+      : 'Use the "When a lead moves here" actions set in the stage form as its defaults';
+    $('#crm-cstatus-delete').style.display = st ? '' : 'none';
+    $('#crm-cstatus-swatches').innerHTML = _STAGE_SWATCHES.map(c =>
+      `<button type="button" class="crm-stg-swatch-btn" data-cstatus-swatch="${c}" style="background:${c}" title="${c}"></button>`).join('');
+    _refreshCustomStatusLook();
+    $('#crm-cstatus-modal').style.display = 'flex';
+    setTimeout(() => $('#crm-cstatus-name').focus(), 30);
+  }
+
+  function _refreshCustomStatusLook() {
+    const color = $('#crm-cstatus-color').value;
+    $('#crm-cstatus-icons').innerHTML = _STAGE_ICONS.map(i =>
+      `<button type="button" class="crm-stg-icon-btn${i === _cstatusIcon ? ' is-on' : ''}" data-cstatus-icon="${i}" title="${i.replace('fa-', '').replace(/-/g, ' ')}"><i class="fa ${i}"></i></button>`).join('');
+    $$('#crm-cstatus-swatches [data-cstatus-swatch]').forEach(b => b.classList.toggle('is-on', b.dataset.cstatusSwatch.toLowerCase() === color.toLowerCase()));
+  }
+
+  $('#crm-cstatus-icons')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-cstatus-icon]');
+    if (b) { _cstatusIcon = b.dataset.cstatusIcon; _refreshCustomStatusLook(); }
+  });
+  $('#crm-cstatus-swatches')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-cstatus-swatch]');
+    if (b) { $('#crm-cstatus-color').value = b.dataset.cstatusSwatch; _refreshCustomStatusLook(); }
+  });
+  $('#crm-cstatus-color')?.addEventListener('input', _refreshCustomStatusLook);
+
+  const _closeCustomStatus = () => { $('#crm-cstatus-modal').style.display = 'none'; };
+  $('#crm-cstatus-close')?.addEventListener('click', _closeCustomStatus);
+  $('#crm-cstatus-cancel')?.addEventListener('click', _closeCustomStatus);
+
+  // Refresh the list everywhere it shows: the stage form grid, the templates panel and the stage list
+  async function _reloadCustomStatuses() {
+    const res = await API.crmCustomStatuses();
+    if (res.status === 200 && _crmPipeline) _crmPipeline.custom_statuses = res.body?.data || [];
+    const current = _stageForm.status;
+    _renderStageFormStatuses();
+    if (current) _setStageFormStatus(_crmStatus(current) ? current : _crmBaseKey(current) || 'in_process');
+    _renderStagesList();
+  }
+
+  $('#crm-cstatus-save')?.addEventListener('click', async () => {
+    const alertEl = $('#crm-cstatus-alert');
+    const name = $('#crm-cstatus-name').value.trim();
+    if (!name) { alertEl.textContent = 'Give the status a name.'; alertEl.style.display = ''; $('#crm-cstatus-name').focus(); return; }
+    const body = {
+      name,
+      color:           $('#crm-cstatus-color').value,
+      icon:            _cstatusIcon,
+      description:     $('#crm-cstatus-desc').value.trim() || null,
+      base_key:        $('#crm-cstatus-base').value,
+      requires_reason: $('#crm-cstatus-reason').checked,
+    };
+    if ($('#crm-cstatus-rules').checked) {
+      const actions = _stageFormActions();
+      if (actions.task && !actions.task.title) actions.task = null;
+      body.entry_rules = actions;
+    }
+    const btn = $('#crm-cstatus-save');
+    btn.disabled = true;
+    const res = _cstatusEditing ? await API.crmUpdateCustomStatus(_cstatusEditing.id, body) : await API.crmCreateCustomStatus(body);
+    btn.disabled = false;
+    if (res.status !== 200 && res.status !== 201) {
+      alertEl.textContent = res.body?.message || 'Failed to save the status.';
+      alertEl.style.display = '';
+      return;
+    }
+    _closeCustomStatus();
+    toast(_cstatusEditing ? 'Status updated.' : `Status "${name}" created — it is now a template in every pipeline.`, 'success');
+    await _reloadCustomStatuses();
+    // A new status is picked for the stage being made
+    if (!_cstatusEditing && res.body?.data?.key) _setStageFormStatus(res.body.data.key);
+  });
+
+  $('#crm-cstatus-delete')?.addEventListener('click', async () => {
+    const st = _cstatusEditing;
+    if (!st) return;
+    const used = st.stages_count ? ` ${st.stages_count} stage${st.stages_count === 1 ? '' : 's'} made from it will stay and count as ${st.base_label}.` : '';
+    if (!await appConfirm({ title: `Delete "${st.label}"?`, message: `It will no longer be offered as a template.${used}`, confirmText: '<i class="fa fa-trash-can"></i> Delete', icon: 'fa-trash-can', danger: true })) return;
+    const res = await API.crmDeleteCustomStatus(st.id);
+    if (res.status !== 200) { toast(res.body?.message || 'Failed to delete the status.', 'error'); return; }
+    _closeCustomStatus();
+    toast('Status deleted.', 'success');
+    await _reloadCustomStatuses();
+  });
+  $('#crm-stage-form-icons')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-stage-icon]');
+    if (!b) return;
+    // The status's own icon means "follow the status" (saved as no custom icon)
+    _stageForm.icon = b.dataset.stageIcon === _crmStatus(_stageForm.status).icon ? null : b.dataset.stageIcon;
+    _refreshStageFormLook();
+  });
+  $('#crm-stage-form-swatches')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-stage-swatch]');
+    if (!b) return;
+    $('#crm-stage-form-color').value = b.dataset.stageSwatch;
+    _stageForm.colorTouched = true;
+    _refreshStageFormLook();
+  });
+  $('#crm-stage-form-color')?.addEventListener('input', () => { _stageForm.colorTouched = true; _refreshStageFormLook(); });
+  $('#crm-stage-form-name')?.addEventListener('input', () => {
+    if ($('#crm-stage-form-name').value !== _stageForm.nameAuto) _stageForm.nameAuto = '';
+    _refreshStageFormLook();
+  });
+  $('#crm-stage-form-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-stage-form-save')?.click(); });
+
+  const _closeStageForm = () => _macHide($('#crm-stage-form-modal'));
+  $('#crm-stage-form-close')?.addEventListener('click', _closeStageForm);
+  $('#crm-stage-form-cancel')?.addEventListener('click', _closeStageForm);
+  $('#crm-stage-form-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-form-modal')) _closeStageForm(); });
+
+  $('#crm-stage-form-save')?.addEventListener('click', async () => {
+    const alertEl = $('#crm-stage-form-alert');
+    const name = $('#crm-stage-form-name').value.trim();
+    if (!name) { alertEl.textContent = 'Stage name is required.'; alertEl.style.display = ''; $('#crm-stage-form-name').focus(); return; }
+    const key = _stageForm.status;
+    const actions = _stageFormActions();
+    if (actions.task && !actions.task.title) {
+      alertEl.textContent = 'Give the task a title, or untick "Create a task".'; alertEl.style.display = '';
+      $('#crm-stage-form-task-title').focus();
+      return;
+    }
+    // One of the business's own statuses is saved as its standard status plus a link to it
+    const st = _crmStatus(key);
+    const base = _crmBaseKey(key);
+    const isCustom = key === 'custom';
+    const body = {
+      name,
+      color:            $('#crm-stage-form-color').value || '#64748b',
+      icon:             _stageForm.icon || (st?.custom || isCustom ? st.icon : null),
+      description:      $('#crm-stage-form-desc').value.trim() || null,
+      system_key:       base,
+      custom_status_id: st?.custom ? st.id : null,
+      is_custom:        isCustom,
+      // Any stage may carry these rules (set here for Custom, under ⚙ Stage behaviour for the rest)
+      needs_approval:   $('#crm-stage-form-needs-approval').checked,
+      locks_lead:       $('#crm-stage-form-locks-lead').checked,
+      no_skip:          $('#crm-stage-form-no-skip').checked,
+      exit_checklist:   $('#crm-stage-form-checklist').value.split('\n').map(s => s.trim()).filter(Boolean),
+      requires_reason:  $('#crm-stage-form-reason').checked,
+      entry_rules:      actions,
+      is_won:           base === 'won',
+      is_lost:          base === 'lost',
+    };
+    const btn = $('#crm-stage-form-save');
+    btn.disabled = true;
+    const res = _stageForm.id
+      ? await API.crmUpdateStage(_crmProjectId, _stageForm.id, body)
+      : await API.crmCreateStage(_crmProjectId, body);
+    btn.disabled = false;
+    if (res.status === 200 || res.status === 201) {
+      _closeStageForm();
+      toast(_stageForm.id ? 'Stage updated.' : `Stage "${name}" added.`, 'success');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      alertEl.textContent = res.body?.message || 'Failed to save stage.';
+      alertEl.style.display = '';
+    }
+  });
 
   // Stage management modal close/open
   $('#crm-stages-modal-close')?.addEventListener('click',  () => _macHide($('#crm-stages-modal')));
   $('#crm-stages-modal-cancel')?.addEventListener('click', () => _macHide($('#crm-stages-modal')));
   $('#crm-stages-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stages-modal')) _macHide($('#crm-stages-modal')); });
 
-  // Add stage modal open/close
-  function _openStageAddModal() {
-    $('#crm-stage-add-alert').style.display = 'none';
-    $('#crm-stage-new-name').value  = '';
-    $('#crm-stage-new-color').value = '#64748b';
-    _crmFillStatusSelect('#crm-stage-new-status', '#crm-stage-new-reason', 'in_process', false);
-    $('#crm-stage-add-modal').style.display = 'flex';
-    $('#crm-stage-new-name')?.focus();
-  }
-  $('#crm-stage-add-open-btn')?.addEventListener('click', _openStageAddModal);
-  $('#crm-stage-add-close')?.addEventListener('click',  () => { $('#crm-stage-add-modal').style.display = 'none'; });
-  $('#crm-stage-add-cancel')?.addEventListener('click', () => { $('#crm-stage-add-modal').style.display = 'none'; });
-  $('#crm-stage-add-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-add-modal')) $('#crm-stage-add-modal').style.display = 'none'; });
-
-  // Add stage
-  $('#crm-stage-add-btn')?.addEventListener('click', async () => {
-    const name = $('#crm-stage-new-name').value.trim();
-    if (!name) {
-      $('#crm-stage-add-alert').textContent = 'Stage name is required.';
-      $('#crm-stage-add-alert').style.display = '';
-      return;
-    }
-    const btn = $('#crm-stage-add-btn');
-    btn.disabled = true;
-    const res = await API.crmCreateStage(_crmProjectId, {
-      name,
-      color:   $('#crm-stage-new-color').value || '#64748b',
-      ..._crmStagePayload('new'),
-    });
-    btn.disabled = false;
-    if (res.status === 201) {
-      $('#crm-stage-add-modal').style.display = 'none';
-      toast('Stage added.', 'success');
-      await _loadStagesList();
-      loadCrmPipeline();
-    } else {
-      $('#crm-stage-add-alert').textContent = res.body?.message || 'Failed to add stage.';
-      $('#crm-stage-add-alert').style.display = '';
-    }
-  });
-
-  // Also allow Enter key in name field
-  $('#crm-stage-new-name')?.addEventListener('keydown', e => { if (e.key === 'Enter') $('#crm-stage-add-btn')?.click(); });
-
-  // Edit stage modal
-  $('#crm-stage-edit-close')?.addEventListener('click',  () => { $('#crm-stage-edit-modal').style.display = 'none'; });
-  $('#crm-stage-edit-cancel')?.addEventListener('click', () => { $('#crm-stage-edit-modal').style.display = 'none'; });
-  $('#crm-stage-edit-modal')?.addEventListener('click', e => { if (e.target === $('#crm-stage-edit-modal')) $('#crm-stage-edit-modal').style.display = 'none'; });
-
-  $('#crm-stage-edit-save')?.addEventListener('click', async () => {
-    const stageId = parseInt($('#crm-stage-edit-id').value);
-    const name    = $('#crm-stage-edit-name').value.trim();
-    if (!name) { $('#crm-stage-edit-alert').textContent = 'Name is required.'; $('#crm-stage-edit-alert').style.display = ''; return; }
-    const btn = $('#crm-stage-edit-save');
-    btn.disabled = true;
-    const res = await API.crmUpdateStage(_crmProjectId, stageId, {
-      name,
-      color:   $('#crm-stage-edit-color').value || '#64748b',
-      ..._crmStagePayload('edit'),
-    });
-    btn.disabled = false;
-    if (res.status === 200) {
-      $('#crm-stage-edit-modal').style.display = 'none';
-      toast('Stage updated.', 'success');
-      await _loadStagesList();
-      loadCrmPipeline();
-    } else {
-      $('#crm-stage-edit-alert').textContent = res.body?.message || 'Failed to update stage.';
-      $('#crm-stage-edit-alert').style.display = '';
-    }
-  });
+  $('#crm-stage-add-open-btn')?.addEventListener('click', () => _openStageForm(null, { system_key: 'in_process', custom: true }));
 
   // Ribbon button
   $('#rb-crm-stages')?.addEventListener('click', () => {

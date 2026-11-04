@@ -8,6 +8,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\AutomationEditor\Models\AutomationFlow;
 use Modules\CRM\Events\LeadClosed;
 use Modules\CRM\Events\LeadEnteredInbox;
+use Modules\CRM\Events\LeadEnteredStage;
 use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadAuditLog;
@@ -383,8 +384,15 @@ class LeadService
 
         $stageAttributes = [];
         $reason          = null;
+        $newStage        = null;
+        $followUpAt      = null;
         if ($newStageId !== $oldStageId) {
-            [$stageAttributes, $reason] = $this->stageEntry($lead, $lead->business_id, $lead->stage, $this->stageOfProject($lead->project_id, $newStageId), $data);
+            $newStage = $this->stageOfProject($lead->project_id, $newStageId);
+            $this->assertMayEnter($lead, $newStage);
+            [$stageAttributes, $reason] = $this->stageEntry($lead, $lead->business_id, $lead->stage, $newStage, $data);
+            $stageAttributes['checklist_done'] = null;
+            [$details, $followUpAt]     = $this->entryDetails($newStage, $data);
+            $stageAttributes += $details;
         } elseif ($lead->isLost() && filled($data['lost_reason_id'] ?? null)) {
             // Changing the reason of a lead that stays lost
             $stageAttributes = [
@@ -438,6 +446,10 @@ class LeadService
         $this->syncCustomFieldValues($lead, $data['custom_fields'] ?? []);
         $this->audit->recordUpdated($lead, $before, $userId);
         $this->logStageChange($lead, $oldStageId, $newStageId, $userId, reason: $reason);
+
+        if ($newStage !== null && ($followUpAt !== null || $newStage->hasEntryActions())) {
+            LeadEnteredStage::dispatch($lead, $newStage, $userId, $followUpAt);
+        }
 
         return $lead->fresh();
     }
@@ -619,18 +631,131 @@ class LeadService
             return $lead;
         }
 
+        if (! $system) {
+            $this->assertMayEnter($lead, $to);
+        }
         [$attributes, $reason] = $this->stageEntry($lead, $lead->business_id, $lead->stage, $to, $context, $system);
+        $attributes['checklist_done'] = null;
         if (filled($context['reopen_reason'] ?? null)) {
             $reason = $context['reopen_reason'];
         }
+        // The workflows that move leads themselves can't fill in what a stage asks for
+        [$details, $followUpAt] = $system ? [[], null] : $this->entryDetails($to, $context);
 
-        $lead->update(['stage_id' => $to->id] + $attributes);
+        $lead->update(['stage_id' => $to->id] + $attributes + $details);
         $lead->setRelation('stage', $to);
 
         $meta = in_array($event, [LeadAuditLog::EVENT_LOST, LeadAuditLog::EVENT_REOPENED], true) ? array_filter(['reason' => $reason]) : [];
         $this->logStageChange($lead, $oldStageId, $to->id, $userId, $event, $meta, $reason);
 
+        if ($followUpAt !== null || $to->hasEntryActions()) {
+            LeadEnteredStage::dispatch($lead, $to, $userId, $followUpAt);
+        }
+
         return $lead;
+    }
+
+    /**
+     * The custom-stage rules on a move by hand: the stage the lead is in must have its checklist
+     * done, and a "no skipping" stage is entered only from the stage right before it (or by going
+     * back from a later one). Also checked when someone asks for an approved move.
+     */
+    public function assertMayEnter(Lead $lead, LeadStage $to): void
+    {
+        $lead->loadMissing('stage');
+        $from = $lead->stage;
+
+        if ($from !== null && (int) $from->id !== (int) $to->id) {
+            $open = array_values(array_diff($from->exitChecklist(), (array) ($lead->checklist_done ?? [])));
+            if ($open !== []) {
+                throw ValidationException::withMessages([
+                    'stage_id' => 'Finish the "' . $from->name . '" checklist first: ' . implode(', ', $open) . '.',
+                ]);
+            }
+        }
+
+        if ($to->no_skip && $from !== null && (int) $from->sort_order < (int) $to->sort_order) {
+            $before = LeadStage::query()
+                ->where('project_id', $to->project_id)
+                ->where('sort_order', '<', $to->sort_order)
+                ->orderByDesc('sort_order')
+                ->first();
+            if ($before !== null && (int) $before->id !== (int) $from->id) {
+                throw ValidationException::withMessages([
+                    'stage_id' => 'Leads can enter "' . $to->name . '" only from "' . $before->name . '" — no skipping.',
+                ]);
+            }
+        }
+    }
+
+    /** Tick or untick an item of the checklist of the stage the lead is in. */
+    public function setChecklistItem(Lead $lead, string $item, bool $done): Lead
+    {
+        $lead->loadMissing('stage');
+        $items = $lead->stage?->exitChecklist() ?? [];
+        if (! in_array($item, $items, true)) {
+            throw ValidationException::withMessages(['item' => 'That item is not on this stage\'s checklist.']);
+        }
+
+        $current = array_values(array_intersect($items, (array) ($lead->checklist_done ?? [])));
+        $next = $done ? array_values(array_intersect($items, [...$current, $item])) : array_values(array_diff($current, [$item]));
+        $lead->update(['checklist_done' => $next ?: null]);
+
+        return $lead;
+    }
+
+    /**
+     * The lead details the stage asks for on entry (LeadStage::ENTRY_FIELDS), as lead attributes
+     * plus the follow-up date to plan. Each is optional unless the stage requires it.
+     *
+     * @return array{0: array<string, mixed>, 1: ?string}
+     */
+    private function entryDetails(LeadStage $to, array $context): array
+    {
+        $required   = $to->entryRules()['require'];
+        $attributes = [];
+        $missing    = fn (string $key) => ValidationException::withMessages([
+            $key => LeadStage::ENTRY_FIELDS[$key] . ' is required to move a lead to "' . $to->name . '".',
+        ]);
+
+        $followUpAt = null;
+        if (filled($context['follow_up_at'] ?? null)) {
+            $date = $this->entryDate($context['follow_up_at'], 'follow_up_at');
+            if ($date->lt(now()->startOfDay())) {
+                throw ValidationException::withMessages(['follow_up_at' => 'The follow-up date cannot be in the past.']);
+            }
+            // A bare date means that morning; today's morning already gone means an hour from now
+            if ($date->isStartOfDay()) {
+                $date->setTime(9, 0);
+            }
+            $followUpAt = $date->max(now()->addHour())->toDateTimeString();
+        } elseif (in_array('follow_up_at', $required, true)) {
+            throw $missing('follow_up_at');
+        }
+
+        if (filled($context['expected_close_date'] ?? null)) {
+            $attributes['expected_close_date'] = $this->entryDate($context['expected_close_date'], 'expected_close_date')->toDateString();
+        } elseif (in_array('expected_close_date', $required, true)) {
+            throw $missing('expected_close_date');
+        }
+
+        $value = $context['estimated_value'] ?? null;
+        if (is_numeric($value) && (float) $value >= 0) {
+            $attributes['estimated_value'] = round((float) $value, 2);
+        } elseif (in_array('estimated_value', $required, true)) {
+            throw $missing('estimated_value');
+        }
+
+        return [$attributes, $followUpAt];
+    }
+
+    private function entryDate(mixed $value, string $field): \Illuminate\Support\Carbon
+    {
+        try {
+            return \Illuminate\Support\Carbon::parse((string) $value);
+        } catch (\Throwable) {
+            throw ValidationException::withMessages([$field => 'Enter a valid date.']);
+        }
     }
 
     /**
@@ -653,12 +778,15 @@ class LeadService
         $reason     = null;
 
         if ($to->isLostStage()) {
-            $lostReason = $this->lostReasons->requireActive($businessId, $context['lost_reason_id'] ?? null);
+            // The stage may have its lost reason switched off: then one is only checked when given
+            $lostReason = $to->behaviourOn('lost_reason') || filled($context['lost_reason_id'] ?? null)
+                ? $this->lostReasons->requireActive($businessId, $context['lost_reason_id'] ?? null)
+                : null;
             $note       = $this->lostNote($context['lost_reason'] ?? null);
 
-            $attributes['lost_reason_id'] = $lostReason->id;
+            $attributes['lost_reason_id'] = $lostReason?->id;
             $attributes['lost_reason']    = $note;
-            $reason = $lostReason->label . ($note !== null ? ': ' . $note : '');
+            $reason = $lostReason ? $lostReason->label . ($note !== null ? ': ' . $note : '') : $note;
         } else {
             if ($to->requires_reason) {
                 $reason = trim((string) ($context['reason'] ?? ''));
@@ -684,7 +812,7 @@ class LeadService
 
         if ($to->isOnHold()) {
             if (! $from?->isOnHold()) {
-                $attributes['on_hold_from_stage_id'] = $from?->id;
+                $attributes['on_hold_from_stage_id'] = $to->behaviourOn('remember_from') ? $from?->id : null;
             }
         } elseif ($lead?->on_hold_from_stage_id) {
             $attributes['on_hold_from_stage_id'] = null;

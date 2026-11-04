@@ -35,6 +35,9 @@ class CrmNotifier
     const TYPE_FOLLOW_UP_DUE        = 'crm_follow_up_due';
     const TYPE_FOLLOW_UP_OVERDUE    = 'crm_follow_up_overdue';
     const TYPE_LEAD_CLOSED          = 'crm_lead_closed';
+    const TYPE_LEAD_STAGE           = 'crm_lead_stage';
+    const TYPE_STAGE_APPROVAL       = 'crm_stage_approval';
+    const TYPE_STAGE_APPROVAL_DECIDED = 'crm_stage_approval_decided';
 
     public function __construct(private readonly CrmOrgService $org) {}
 

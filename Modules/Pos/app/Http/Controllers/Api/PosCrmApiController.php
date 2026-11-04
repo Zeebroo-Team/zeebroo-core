@@ -25,6 +25,7 @@ use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\CustomerProfileService;
+use Modules\CRM\Services\CustomStatusService;
 use Modules\CRM\Services\FollowUpService;
 use Modules\CRM\Services\LeadScoreService;
 use Modules\CRM\Services\IntakeResult;
@@ -39,6 +40,8 @@ use Modules\CRM\Services\LeadStageMailTemplateService;
 use Modules\CRM\Services\LeadStageService;
 use Modules\CRM\Services\LostReasonService;
 use Modules\CRM\Services\ProjectService;
+use Modules\CRM\Services\StageEntryActionService;
+use Modules\CRM\Services\StageMoveRequestService;
 use Modules\CRM\Services\TaskService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\Customer;
@@ -66,6 +69,8 @@ class PosCrmApiController extends Controller
         private readonly CustomerProfileService      $customerProfiles,
         private readonly FollowUpService             $followUps,
         private readonly LeadScoreService            $scores,
+        private readonly CustomStatusService         $customStatuses,
+        private readonly StageMoveRequestService     $moveRequests,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -155,7 +160,7 @@ class PosCrmApiController extends Controller
             ->get(['id', 'project_id', 'department_id', 'division_id', 'stage_id', 'form_id', 'name', 'company', 'email', 'phone', 'source', 'source_id',
                 'estimated_value', 'score', 'expected_close_date', 'notes', 'product_interest_note', 'lost_reason_id', 'lost_reason',
                 'on_hold_from_stage_id', 'closed_at', 'assigned_to', 'created_by', 'created_at', 'updated_at',
-                'needs_review', 'review_reason', 'verified_at', 'forwarded_at', 'customer_id', 'converted_at']);
+                'needs_review', 'review_reason', 'verified_at', 'forwarded_at', 'customer_id', 'converted_at', 'checklist_done']);
 
         $editable = $this->policy->editableLeadIds($access, $leads);
 
@@ -175,8 +180,12 @@ class PosCrmApiController extends Controller
         // Follow-up badge (next due / overdue in red) and the suggested Hot / Warm / Cold hint
         $followUps = $this->followUps->summaryForLeads($business, $leads->pluck('id')->map(fn ($id) => (int) $id)->all());
         $suggested = $this->scores->suggestFor($leads);
+        // When each lead entered its stage, for the stage's "too long here" flag
+        $enteredAt = app(StageEntryActionService::class)->enteredAt($leads);
+        // Moves waiting for the head's approval
+        $pendingMoves = $this->moveRequests->pendingByLead($leads->pluck('id')->map(fn ($id) => (int) $id)->all());
 
-        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable, $sellPrices, $followUps, $suggested) {
+        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable, $sellPrices, $followUps, $suggested, $enteredAt, $pendingMoves) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
             $lead->is_customer    = $lead->customer_id !== null || $byEmail || $byPhone;
@@ -188,6 +197,8 @@ class PosCrmApiController extends Controller
             $lead->product_items  = $this->presentLeadProducts($lead, $sellPrices);
             $lead->follow_up       = $followUps[$lead->id] ?? null;
             $lead->suggested_score = $suggested[$lead->id] ?? null;
+            $lead->stage_entered_at = $enteredAt[$lead->id] ?? null;
+            $lead->pending_move     = $pendingMoves[$lead->id] ?? null;
             $lead->can = [
                 'edit'       => isset($editable[$lead->id]),
                 'move'       => isset($editable[$lead->id]) && $access->can('leads_move'),
@@ -241,6 +252,7 @@ class PosCrmApiController extends Controller
                 'custom_data_count'  => $access->can('custom_data_view') ? $this->leads->customDataLeadCount($project) : 0,
                 'sources'            => Lead::sourceOptions(),
                 'statuses'           => LeadStage::statusOptions(),
+                'custom_statuses'    => $this->customStatuses->present($this->customStatuses->listForBusiness($business)),
                 'scores'             => collect(Lead::SCORES)->map(fn ($s, $key) => ['key' => $key, 'label' => $s[0], 'color' => $s[1]])->values(),
                 'lost_reasons'       => $this->lostReasons->present($this->lostReasons->listForBusiness($business)),
                 // Divisions of the pipeline's department, for those who place leads in one
@@ -465,6 +477,11 @@ class PosCrmApiController extends Controller
             if ($target !== null) {
                 $this->abortUnlessMayLeaveClosed($access, $lead, $target);
             }
+            // The rest is saved now; the move itself waits for the head
+            if ($target?->needs_approval && ! $this->policy->canApprove($access, $lead)) {
+                $approvalTarget = $target;
+                $validated['stage_id'] = $lead->stage_id;
+            }
         }
 
         // The single "Assigned to" field sets the primary assignee (the others stay on the lead):
@@ -488,8 +505,15 @@ class PosCrmApiController extends Controller
         if ($changeAssignee) {
             $lead = $this->assignments->setPrimaryAssignee($lead, $assignee, $request->user()?->id);
         }
+        $pending = isset($approvalTarget)
+            ? $this->moveRequests->request($lead, $approvalTarget, $request->user()?->id, $validated)
+            : null;
 
-        return response()->json(['data' => $lead->load('stage')->toArray() + ['assignee_list' => $this->assignments->present($this->assignments->assignees($lead))]]);
+        return response()->json([
+            'data'    => $lead->load('stage')->toArray() + ['assignee_list' => $this->assignments->present($this->assignments->assignees($lead))],
+            'message' => $pending ? 'Saved. Moving to "' . $approvalTarget->name . '" needs approval — the head has been asked.' : null,
+            'pending_move' => $pending ? $this->moveRequests->pendingByLead([(int) $lead->id])[(int) $lead->id] ?? null : null,
+        ]);
     }
 
     public function moveLead(Request $request, int $leadId): JsonResponse
@@ -506,6 +530,10 @@ class PosCrmApiController extends Controller
             'lost_reason_id' => ['nullable', 'integer'],
             'lost_reason'    => ['nullable', 'string', 'max:255'],
             'reason'         => ['nullable', 'string', 'max:500'],
+            // Details the stage may ask for on entry (LeadStage::ENTRY_FIELDS)
+            'follow_up_at'        => ['nullable', 'date'],
+            'expected_close_date' => ['nullable', 'date'],
+            'estimated_value'     => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
         ]);
 
         // Ensure stage belongs to the same project
@@ -513,9 +541,68 @@ class PosCrmApiController extends Controller
         $this->abortUnlessStageVisible($request, $business, $lead->project_id, $stage->id);
         $this->abortUnlessMayLeaveClosed($access, $lead, $stage);
 
+        // Only the head / an admin moves straight into a stage that needs approval; others ask (202)
+        if ($stage->needs_approval && ! $this->policy->canApprove($access, $lead)) {
+            $this->moveRequests->request($lead, $stage, $request->user()?->id, $validated);
+
+            return response()->json([
+                'message'      => 'Moving to "' . $stage->name . '" needs approval — the head has been asked.',
+                'pending_move' => $this->moveRequests->pendingByLead([(int) $lead->id])[(int) $lead->id] ?? null,
+            ], 202);
+        }
+
         $lead = $this->leads->moveStage($lead, $stage->id, $request->user()?->id, $validated);
 
         return response()->json(['data' => $lead->load('stage')]);
+    }
+
+    /** Tick / untick an item of the checklist of the stage the lead is in. */
+    public function setLeadChecklistItem(Request $request, int $leadId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_edit');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canEdit($access, $lead));
+
+        $validated = $request->validate([
+            'item' => ['required', 'string', 'max:120'],
+            'done' => ['required', 'boolean'],
+        ]);
+        $lead = $this->leads->setChecklistItem($lead, $validated['item'], (bool) $validated['done']);
+
+        return response()->json(['data' => ['checklist_done' => $lead->checklist_done ?? []]]);
+    }
+
+    /** The head / an admin lets a waiting stage move through. */
+    public function approveStageMove(Request $request, int $leadId, int $requestId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canApprove($access, $lead));
+
+        $lead = $this->moveRequests->approve($this->moveRequests->pendingForLead($lead, $requestId), $request->user()?->id);
+
+        return response()->json(['message' => 'Approved — the lead was moved.', 'data' => $lead->load('stage')]);
+    }
+
+    public function rejectStageMove(Request $request, int $leadId, int $requestId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access = $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        $lead = $this->visibleLead($request, $business, $leadId);
+        $this->abortUnlessAllowed($this->policy->canApprove($access, $lead));
+
+        $validated = $request->validate(['note' => ['nullable', 'string', 'max:500']]);
+        $this->moveRequests->reject($this->moveRequests->pendingForLead($lead, $requestId), $request->user()?->id, $validated['note'] ?? null);
+
+        return response()->json(['message' => 'Rejected — the lead stays where it is.']);
     }
 
     /** Put the lead in the pipeline's "On Hold" stage, remembering where it was. */
@@ -866,6 +953,32 @@ class PosCrmApiController extends Controller
         return response()->json(['data' => $stage]);
     }
 
+    /** The stage's behaviour settings: built-in behaviours on/off, plus the rules any stage can add. */
+    public function updateStageBehaviours(Request $request, int $projectId, int $stageId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $this->abortUnlessCrm($request, $business, 'stages_manage');
+        $project  = $this->manageableProject($request, $business, $projectId);
+        $stage    = LeadStage::where('project_id', $project->id)->findOrFail($stageId);
+        $this->abortUnlessStageVisible($request, $business, $project->id, $stage->id);
+
+        $validated = $request->validate([
+            'disabled_behaviours'   => ['sometimes', 'nullable', 'array'],
+            'disabled_behaviours.*' => ['string', Rule::in(array_keys(LeadStage::BUILT_IN_BEHAVIOURS))],
+            'needs_approval'        => ['sometimes', 'boolean'],
+            'locks_lead'            => ['sometimes', 'boolean'],
+            'no_skip'               => ['sometimes', 'boolean'],
+            'exit_checklist'        => ['sometimes', 'nullable', 'array', 'max:10'],
+            'exit_checklist.*'      => ['nullable', 'string', 'max:120'],
+            'requires_reason'       => ['sometimes', 'boolean'],
+        ]);
+
+        $stage = $this->stages->updateBehaviours($stage, $validated);
+
+        return response()->json(['message' => 'Stage behaviour saved.', 'data' => $this->presentStage($stage)]);
+    }
+
     public function deleteStage(Request $request, int $projectId, int $stageId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -901,6 +1014,74 @@ class PosCrmApiController extends Controller
         return response()->json([
             'message' => "{$result['deleted']} stage(s) deleted.",
             'data'    => $result,
+        ]);
+    }
+
+    // ── Custom statuses (the business's own stage templates) ──────────────
+
+    public function customStatuses(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrm($request, $business, 'leads_view');
+
+        return response()->json(['data' => $this->customStatuses->present($this->customStatuses->listForBusiness($business))]);
+    }
+
+    public function createCustomStatus(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $this->abortUnlessCrm($request, $business, 'stages_manage');
+
+        $status = $this->customStatuses->create($business, $request->validate($this->customStatusRules()));
+
+        return response()->json(['data' => $this->customStatuses->present(collect([$status]))[0]], 201);
+    }
+
+    public function updateCustomStatus(Request $request, int $statusId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $this->abortUnlessCrm($request, $business, 'stages_manage');
+
+        $status = $this->customStatuses->update(
+            $this->customStatuses->statusForBusiness($business, $statusId),
+            $request->validate($this->customStatusRules()),
+        );
+
+        return response()->json(['data' => $this->customStatuses->present(collect([$status->loadCount('stages')]))[0]]);
+    }
+
+    /** Stages made from it stay, counting as its standard status. */
+    public function deleteCustomStatus(Request $request, int $statusId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $this->abortUnlessCrm($request, $business, 'stages_manage');
+
+        $this->customStatuses->delete($this->customStatuses->statusForBusiness($business, $statusId));
+
+        return response()->json(['message' => 'Status deleted.']);
+    }
+
+    /** Add a stage for every standard status the pipeline is missing (deleted ones come back). */
+    public function restoreStandardStages(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access   = $this->abortUnlessCrm($request, $business, 'stages_manage');
+        $project  = $this->manageableProject($request, $business, $projectId);
+
+        // New stages are slotted between existing ones, which needs the whole pipeline in view
+        if ($access->visibleStageIds($project->id) !== null) {
+            return response()->json(['message' => 'You need access to every stage of this relation to restore standard stages.'], 403);
+        }
+
+        $created = array_values(array_filter($this->stages->seedStandard($project), fn ($r) => $r['action'] === 'created'));
+
+        return response()->json([
+            'message' => count($created) . ' standard stage(s) added.',
+            'data'    => ['created' => $created],
         ]);
     }
 
@@ -1311,8 +1492,46 @@ class PosCrmApiController extends Controller
             'is_won'          => ['nullable', 'boolean'],
             'is_lost'         => ['nullable', 'boolean'],
             'system_key'      => ['sometimes', 'nullable', Rule::in(array_keys(LeadStage::STATUSES))],
+            'custom_status_id' => ['sometimes', 'nullable', 'integer'],
+            // A "Custom" stage: behaviour by ticks (system_key is then open / won / lost / on hold)
+            'is_custom'       => ['sometimes', 'boolean'],
+            'needs_approval'  => ['sometimes', 'boolean'],
+            'locks_lead'      => ['sometimes', 'boolean'],
+            'no_skip'         => ['sometimes', 'boolean'],
+            'exit_checklist'  => ['sometimes', 'nullable', 'array', 'max:10'],
+            'exit_checklist.*' => ['nullable', 'string', 'max:120'],
             'requires_reason' => ['sometimes', 'nullable', 'boolean'],
+            'icon'        => ['sometimes', 'nullable', 'string', 'max:40', 'regex:/^fa-[a-z0-9-]+$/'],
+            'description'     => ['sometimes', 'nullable', 'string', 'max:255'],
+            // What happens when a lead enters the stage (LeadStage::entryRules)
+            'entry_rules'                   => ['sometimes', 'nullable', 'array'],
+            'entry_rules.require'           => ['nullable', 'array'],
+            'entry_rules.require.*'         => ['string', Rule::in(array_keys(LeadStage::ENTRY_FIELDS))],
+            'entry_rules.task'              => ['nullable', 'array'],
+            'entry_rules.task.enabled'      => ['nullable', 'boolean'],
+            'entry_rules.task.title'        => ['nullable', 'string', 'max:255'],
+            'entry_rules.task.due_days'     => ['nullable', 'integer', 'min:0', 'max:365'],
+            'entry_rules.notify'            => ['nullable', 'array'],
+            'entry_rules.notify.owner'      => ['nullable', 'boolean'],
+            'entry_rules.notify.head'       => ['nullable', 'boolean'],
+            'entry_rules.notify.user_ids'   => ['nullable', 'array', 'max:20'],
+            'entry_rules.notify.user_ids.*' => ['integer'],
+            'entry_rules.assign_user_ids'   => ['nullable', 'array', 'max:20'],
+            'entry_rules.assign_user_ids.*' => ['integer'],
+            'entry_rules.max_days'          => ['nullable', 'integer', 'min:0', 'max:365'],
         ];
+    }
+
+    private function customStatusRules(): array
+    {
+        return [
+            'name'            => ['required', 'string', 'max:60'],
+            'color'           => ['nullable', 'string', 'max:20'],
+            'icon'            => ['nullable', 'string', 'max:40', 'regex:/^fa-[a-z0-9-]+$/'],
+            'description'     => ['nullable', 'string', 'max:255'],
+            'base_key'        => ['required', Rule::in(array_diff(array_keys(LeadStage::STATUSES), LeadStage::RESERVED_STATUSES))],
+            'requires_reason' => ['nullable', 'boolean'],
+        ] + array_filter($this->stageRules(), fn ($k) => str_starts_with($k, 'entry_rules'), ARRAY_FILTER_USE_KEY);
     }
 
     private function presentStage(LeadStage $stage): array
@@ -1321,13 +1540,31 @@ class PosCrmApiController extends Controller
             'id'              => $stage->id,
             'name'            => $stage->name,
             'color'           => $stage->color,
+            'icon'            => $stage->icon ?: LeadStage::statusIcon($stage->system_key),
+            'has_custom_icon' => filled($stage->icon),
+            'description'     => $stage->description,
             'is_won'          => (bool) $stage->is_won,
             'is_lost'         => (bool) $stage->is_lost,
             'system_key'      => $stage->system_key,
-            'status_label'    => LeadStage::statusLabel($stage->system_key),
+            'custom_status_id' => $stage->custom_status_id,
+            // A stage made from the business's own status shows that name; reports use system_key
+            'status_label'    => match (true) {
+                (bool) $stage->is_custom            => 'Custom',
+                (bool) $stage->custom_status_id     => $stage->customStatus?->name ?? LeadStage::statusLabel($stage->system_key),
+                default                             => LeadStage::statusLabel($stage->system_key),
+            },
+            'is_custom'       => (bool) $stage->is_custom,
+            'needs_approval'  => (bool) $stage->needs_approval,
+            'locks_lead'      => (bool) $stage->locks_lead,
+            'no_skip'         => (bool) $stage->no_skip,
+            'exit_checklist'  => $stage->exitChecklist(),
             'requires_reason' => (bool) $stage->requires_reason,
+            'entry_rules'     => $stage->entryRules(),
             'is_reserved'     => $stage->isReserved(),
             'is_on_hold'      => $stage->isOnHold(),
+            // What the stage does through its standard status, each switched on or off
+            'behaviours'      => $stage->builtInBehaviours(),
+            'asks_lost_reason' => $stage->isLostStage() && $stage->behaviourOn('lost_reason'),
         ];
     }
 
@@ -1345,6 +1582,7 @@ class PosCrmApiController extends Controller
             'lost_reason_id'        => ['sometimes', 'nullable', 'integer'],
             'lost_reason'           => ['sometimes', 'nullable', 'string', 'max:255'],
             'reason'                => ['sometimes', 'nullable', 'string', 'max:500'],
+            'follow_up_at'          => ['sometimes', 'nullable', 'date'],
         ];
     }
 

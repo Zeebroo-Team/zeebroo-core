@@ -130,9 +130,11 @@ class Lead extends Model
         'requested_department_id',
         'forwarded_at',
         'forwarded_by',
+        'checklist_done',
     ];
 
     protected $casts = [
+        'checklist_done'      => 'array',
         'estimated_value'     => 'decimal:2',
         'expected_close_date' => 'date',
         'converted_at'        => 'datetime',

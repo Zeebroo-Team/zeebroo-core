@@ -351,7 +351,14 @@ class LeadPolicy
     /** Edit rights before looking at who works the lead. */
     private function mayEdit(CrmAccess $access, Lead $lead): bool
     {
-        return $access->can('leads_edit') && $this->mayAct($access, $lead);
+        return $access->can('leads_edit') && $this->mayAct($access, $lead) && ! $this->lockedFor($access, $lead);
+    }
+
+    /** A stage that locks its leads (LeadStage::locks_lead) leaves editing and moving to the head and admins. */
+    public function lockedFor(CrmAccess $access, Lead $lead): bool
+    {
+        return (bool) $lead->stage?->locks_lead
+            && ! ($access->unrestricted || $this->headsLead($access, $lead));
     }
 
     /** Works the lead without being assigned: all-departments, its head, or marketing in intake. */

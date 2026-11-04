@@ -536,6 +536,8 @@ body.crm-deny-leads_edit .crm-card-edit, body.crm-deny-leads_edit #crm-ctx-edit,
 body.crm-deny-leads_delete .crm-card-del,
 body.crm-deny-stages_manage #rb-crm-stages, body.crm-deny-stages_manage #crm-relation-stages-btn,
 body.crm-deny-stages_manage #crm-stage-add-open-btn, body.crm-deny-stages_manage [data-edit-stage], body.crm-deny-stages_manage [data-del-stage],
+body.crm-deny-stages_manage [data-stage-tpl], body.crm-deny-stages_manage #crm-stages-custom-btn, body.crm-deny-stages_manage #crm-stages-restore-btn, body.crm-deny-stages_manage [data-dup-stage],
+body.crm-proj-deny-manage [data-stage-tpl], body.crm-proj-deny-manage #crm-stages-custom-btn, body.crm-proj-deny-manage #crm-stages-restore-btn, body.crm-proj-deny-manage [data-dup-stage],
 body.crm-deny-stage_mail [data-mail-stage],
 body.crm-deny-contacts_view #rb-crm-contacts, body.crm-deny-contacts_view [data-crmsub="contacts"], body.crm-deny-contacts_view #crm-tab-relation-contacts,
 body.crm-deny-tasks_view #rb-crm-tasks, body.crm-deny-tasks_view [data-crmsub="tasks"],
@@ -697,6 +699,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-col-head{padding:14px 12px 10px;display:flex;flex-direction:column;gap:2px}
 .crm-col-title{display:flex;align-items:center;gap:7px;min-width:0}
 .crm-col-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--stage,#94a3b8);box-shadow:0 0 0 3px color-mix(in srgb,var(--stage,#94a3b8) 22%,transparent)}
+.crm-col-ico{font-size:12px;flex-shrink:0;color:var(--stage,#94a3b8)}
 .crm-col-name{font-size:12.5px;font-weight:700;color:var(--text,#111827);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-col-state{font-size:11px;color:var(--stage,#94a3b8);flex-shrink:0}
 .crm-col-count{font-size:11px;font-weight:600;line-height:18px;min-width:20px;text-align:center;color:var(--text-muted,#6b7280);background:color-mix(in srgb,var(--text-muted,#6b7280) 12%,transparent);border-radius:5px;padding:0 6px;flex-shrink:0;font-variant-numeric:tabular-nums}
@@ -1899,6 +1902,120 @@ body.dark .crm-hf-popup option{background:#2c2c30;color:#f5f5f7}
 #crm-stages-modal .crm-stage-row--selected{background:rgba(255,59,48,.06)}
 #crm-stages-modal .crm-card-btn--mail-set{color:#7c3aed}
 #crm-stages-modal .crm-card-btn--mail-set:hover{background:rgba(124,58,237,.12);color:#7c3aed}
+#crm-stages-modal .crm-stage-row{gap:10px;padding:9px 10px}
+#crm-stages-modal .crm-stage-row[hidden]{display:none}
+/* Stage icon: flat accent glyph, same style as the ribbon icons */
+.crm-stg-ico{width:26px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:18px;line-height:1;color:var(--accent,#4e8ef7)}
+.crm-stg-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.crm-stg-main .crm-stage-name{flex:none;display:flex;align-items:center;gap:7px}
+.crm-stg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--stg,#64748b)}
+.crm-stg-note{font-size:11.5px;color:var(--mac-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.crm-stg-note i{font-size:10px;margin-right:3px;opacity:.7}
+.crm-stg-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;border-radius:6px;padding:3px 9px;flex-shrink:0;cursor:help;white-space:nowrap;
+  color:var(--mac-text);background:var(--mac-fill)}
+.crm-stg-status i{color:var(--accent,#4e8ef7)}
+.crm-stg-status--none,.crm-stg-status--none i{color:#d97706}
+.crm-stg-flag{font-size:11px;color:var(--mac-muted);flex-shrink:0;cursor:help}
+.crm-stg-search{margin-left:auto;width:200px;flex-shrink:0}
+/* Pipeline at a glance */
+.crm-stg-summary{display:flex;flex-direction:column;gap:7px}
+.crm-stg-summary-bar{display:flex;height:9px;border-radius:999px;overflow:hidden;background:var(--mac-fill)}
+.crm-stg-summary-bar span{min-width:3px;transition:flex-grow .3s}
+.crm-stg-summary-stats{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--mac-muted)}
+.crm-stg-summary-stats b{color:var(--mac-text);font-weight:600}
+/* Templates side panel */
+/* Header and bottom actions stay put; only the template list scrolls */
+.crm-stg-guide{width:340px;flex-shrink:0;min-height:0;display:flex;flex-direction:column;gap:10px;padding:16px 14px;border-left:1px solid var(--mac-line);background:var(--mac-side);overflow:hidden}
+.crm-stg-guide-head{flex-shrink:0}
+.crm-stg-guide-title{font-size:13px;font-weight:600;color:var(--mac-text)}
+.crm-stg-guide-title i{color:var(--accent,#4e8ef7);margin-right:4px}
+.crm-stg-guide-sub{font-size:11.5px;color:var(--mac-muted);line-height:1.45;margin-top:3px}
+.crm-stg-templates{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:2px;margin:-2px}
+.crm-stg-guide > button{flex-shrink:0}
+.crm-stg-tpl{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;border:1px solid var(--mac-line);border-radius:8px;padding:9px 10px;cursor:pointer;font:inherit;color:var(--mac-text);
+  background:var(--mac-panel);transition:border-color .12s,background .12s}
+.crm-stg-tpl:hover{border-color:var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 5%,var(--mac-panel))}
+.crm-stg-tpl .crm-stg-ico{font-size:17px;margin-top:1px}
+.crm-stg-tpl-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.crm-stg-tpl-text b{font-size:12.5px;font-weight:600;display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px}
+.crm-stg-tpl-text small{font-size:11px;color:var(--mac-muted);line-height:1.4}
+.crm-stg-tpl-fx{display:flex;flex-direction:column;gap:2px;margin-top:4px;padding-top:5px;border-top:1px dashed var(--mac-border,#e5e7eb);font-size:10.5px;line-height:1.35;color:var(--mac-text,#374151)}
+.crm-stg-tpl-fx span{display:flex;gap:5px;align-items:baseline}
+.crm-stg-tpl-fx i{color:var(--stg);font-size:9px;flex-shrink:0}
+.crm-stg-tpl-pill{display:inline-flex;align-items:center;gap:3px;font-size:9.5px;font-weight:600;border-radius:4px;padding:1px 6px;white-space:nowrap;background:var(--mac-fill);color:var(--mac-muted)}
+.crm-stg-tpl-pill--used{background:#d1fae5;color:#047857}
+.crm-stg-tpl-add{color:var(--mac-muted);font-size:12px;margin-top:3px;flex-shrink:0}
+.crm-stg-tpl:hover .crm-stg-tpl-add{color:var(--accent,#4e8ef7)}
+.crm-stg-tpl--custom{border-style:dashed;border-color:color-mix(in srgb,var(--accent,#4e8ef7) 55%,transparent)}
+#crm-stages-modal .mac-footer{align-items:center}
+.crm-stg-footer-note{margin-right:auto;font-size:12px;color:var(--mac-muted)}
+@media (max-width:900px){.crm-stg-guide{display:none}}
+/* Add / Edit stage form */
+.crm-stg-form{display:flex;flex-direction:column;gap:14px}
+.crm-stg-form-row{display:flex;gap:12px;align-items:flex-end}
+.crm-stg-color{width:52px;height:30px;padding:2px 3px;border:0;border-radius:7px;cursor:pointer;background:var(--mac-field);box-shadow:0 0 0 .5px rgba(0,0,0,.18)}
+.crm-stg-swatches{display:flex;flex-wrap:wrap;gap:6px;margin-top:-6px}
+.crm-stg-swatch-btn{width:22px;height:22px;border-radius:50%;border:0;cursor:pointer;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12);transition:transform .1s}
+.crm-stg-swatch-btn:hover{transform:scale(1.12)}
+.crm-stg-swatch-btn.is-on{box-shadow:0 0 0 2px var(--mac-panel,#fff),0 0 0 4px var(--mac-accent)}
+.crm-stg-icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(36px,1fr));gap:6px}
+.crm-stg-icon-btn{height:36px;border:1px solid var(--mac-line);border-radius:8px;cursor:pointer;font-size:15px;color:var(--accent,#4e8ef7);background:var(--mac-panel);transition:background .12s,border-color .12s}
+.crm-stg-icon-btn:hover{border-color:var(--accent,#4e8ef7)}
+.crm-stg-icon-btn.is-on{color:#fff;background:var(--accent,#4e8ef7);border-color:var(--accent,#4e8ef7)}
+.crm-stg-status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px}
+.crm-stg-status-grid .crm-stg-tpl{padding:8px 10px}
+.crm-stg-status-grid .crm-stg-tpl.is-on{border-color:var(--accent,#4e8ef7);box-shadow:inset 0 0 0 1px var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 8%,var(--mac-panel))}
+.crm-stg-status-grid .crm-stg-tpl:disabled{opacity:.45;cursor:not-allowed}
+/* Stage entry actions */
+.crm-stg-acts{display:flex;flex-direction:column;gap:10px;padding:12px;border:1px solid var(--mac-line);border-radius:10px;background:var(--mac-fill)}
+.crm-stg-acts-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px;font-weight:700;color:var(--mac-text)}
+.crm-stg-acts-head > i{color:#f59e0b}
+.crm-stg-acts-head small{font-weight:400;font-size:11.5px;color:var(--mac-muted)}
+.crm-stg-act{display:flex;flex-direction:column;gap:6px;padding:10px;border-radius:8px;background:var(--mac-panel);border:1px solid var(--mac-line);min-width:0}
+.crm-stg-act-title{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;color:var(--mac-text);cursor:default}
+.crm-stg-act-title > i{color:var(--accent,#4e8ef7);width:14px;text-align:center}
+.crm-stg-act-chips{display:flex;flex-wrap:wrap;gap:6px}
+.crm-stg-chk{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 9px;border:1px solid var(--mac-line);border-radius:999px;cursor:pointer;color:var(--mac-text);user-select:none}
+.crm-stg-chk:has(input:checked){border-color:var(--accent,#4e8ef7);background:color-mix(in srgb,var(--accent,#4e8ef7) 10%,var(--mac-panel))}
+.crm-stg-chk:has(input:disabled){opacity:.7;cursor:not-allowed}
+.crm-stg-act-hint{font-size:11.5px;color:var(--mac-muted)}
+.crm-stg-act-body{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crm-stg-act-body > .po-field-input{flex:1;min-width:200px}
+.crm-stg-act-inline{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mac-muted);white-space:nowrap}
+.crm-stg-act-inline input{width:70px}
+.crm-stg-act-row{display:flex;gap:10px;flex-wrap:wrap}
+.crm-stg-act-row > .crm-stg-act{min-width:220px}
+/* Stage behaviour settings: one row per behaviour with an on/off switch */
+.crm-stg-behave{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;background:var(--mac-panel);border:1px solid var(--mac-line);min-width:0}
+.crm-stg-behave.is-off{opacity:.6}
+.crm-stg-behave-ico{width:28px;height:28px;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;background:var(--mac-fill);color:var(--accent,#4e8ef7);font-size:13px}
+.crm-stg-behave-text{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;font-size:12.5px;color:var(--mac-text)}
+.crm-stg-behave-text small{font-size:11.5px;color:var(--mac-muted)}
+.crm-stg-behave-fixed{font-size:10.5px;font-weight:600;color:var(--mac-muted);display:inline-flex;align-items:center;gap:4px;flex-shrink:0}
+.crm-card-btn--behave-set{color:#7c3aed}
+/* The business's own statuses in the status grid / templates */
+.crm-stg-tpl-pill--own{background:color-mix(in srgb,#7c3aed 14%,transparent);color:#7c3aed}
+.crm-stg-tpl-edit{margin-left:auto;align-self:flex-start;border:0;background:none;color:var(--mac-muted);cursor:pointer;padding:2px 4px;border-radius:5px;font-size:11.5px}
+.crm-stg-tpl-edit:hover{color:var(--accent,#4e8ef7);background:var(--mac-fill)}
+.crm-stg-tpl--new{border-style:dashed;justify-content:center;align-items:center;color:var(--accent,#4e8ef7);font-size:12.5px;font-weight:600;gap:8px}
+.crm-stg-tpl-group{grid-column:1/-1;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mac-muted);margin-top:4px}
+.crm-stg-tpl--custom-pick .crm-stg-ico{color:#7c3aed}
+.crm-lead-stuck.crm-lead-locked{background:#e0e7ff;color:#3730a3}
+.crm-lead-check{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 8px;border:1px solid var(--mac-line,#e5e7eb);background:var(--mac-panel,#fff);color:var(--mac-muted,#6b7280);cursor:pointer;font-family:inherit}
+.crm-lead-check:hover{border-color:var(--accent,#4e8ef7);color:var(--accent,#4e8ef7)}
+.crm-lead-check.is-done{background:#d1fae5;border-color:#a7f3d0;color:#047857}
+.crm-checklist-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid var(--border,#e5e7eb);border-radius:8px;cursor:pointer;font-size:13px}
+.crm-checklist-item:has(input:checked){background:color-mix(in srgb,#10b981 10%,transparent);border-color:#a7f3d0}
+.crm-checklist-item:has(input:checked) span{text-decoration:line-through;color:var(--text-muted,#6b7280)}
+.crm-lead-pending{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 4px 1px 8px;background:#ede9fe;color:#5b21b6}
+.crm-lead-pending button{border:0;border-radius:999px;width:18px;height:18px;cursor:pointer;font-size:10px;display:inline-flex;align-items:center;justify-content:center}
+.crm-lead-pending .is-yes{background:#10b981;color:#fff}
+.crm-lead-pending .is-no{background:#ef4444;color:#fff}
+.crm-lead-stuck{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;background:#fef3c7;color:#92400e}
+.crm-stg-preview{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:var(--mac-fill)}
+.crm-stg-preview-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mac-muted)}
+.crm-stg-preview-chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--mac-text)}
+.crm-stg-preview-counts{margin-left:auto;font-size:11.5px;color:var(--mac-muted)}
 .crm-stage-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.12)}
 .crm-stage-name{font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .crm-stage-badge{font-size:10px;background:var(--border,#e5e7eb);color:var(--text-muted,#6b7280);border-radius:999px;padding:1px 6px;flex-shrink:0}
@@ -14295,6 +14412,19 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <label class="po-field-label" for="crm-move-reason-text" id="crm-move-reason-text-label">Reason</label>
           <textarea id="crm-move-reason-text" class="po-field-input" rows="3" maxlength="500" style="resize:vertical"></textarea>
         </div>
+        <!-- Details the target stage asks for (its entry rules) -->
+        <div class="po-field" data-move-field="follow_up_at" style="display:none">
+          <label class="po-field-label" for="crm-move-follow-up">Follow-up date *</label>
+          <input type="date" id="crm-move-follow-up" class="po-field-input">
+        </div>
+        <div class="po-field" data-move-field="expected_close_date" style="display:none">
+          <label class="po-field-label" for="crm-move-close-date">Expected close date *</label>
+          <input type="date" id="crm-move-close-date" class="po-field-input">
+        </div>
+        <div class="po-field" data-move-field="estimated_value" style="display:none">
+          <label class="po-field-label" for="crm-move-value">Deal value *</label>
+          <input type="number" id="crm-move-value" class="po-field-input" min="0" step="0.01">
+        </div>
       </div>
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-move-reason-cancel"><i class="fa fa-xmark"></i> Cancel</button>
@@ -14391,11 +14521,11 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
   <!-- ── CRM: Stage Management Modal ── -->
   <div class="modal-overlay mac-overlay" id="crm-stages-modal" style="display:none">
-    <div class="mac-window" style="width:620px;max-width:96vw;max-height:86vh">
+    <div class="mac-window" style="width:80vw;height:80vh;max-width:96vw;min-width:min(760px,96vw)">
       <div class="mac-titlebar">
         <div class="mac-title">
-          <span class="mac-title-icon" style="background:linear-gradient(#c084fc,#7c3aed)"><i class="fa fa-layer-group"></i></span>
-          <div style="min-width:0"><div class="mac-title-main" id="crm-stages-modal-title">Manage Stages</div><div class="mac-title-sub">Drag to reorder</div></div>
+          <span class="mac-title-icon" style="background:var(--accent,#4e8ef7)"><i class="fa fa-layer-group"></i></span>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-stages-modal-title">Manage Stages</div><div class="mac-title-sub">Drag to reorder · every stage counts as one standard status</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
@@ -14403,6 +14533,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         </div>
       </div>
 
+      <div class="mac-split">
       <div class="mac-scroll" style="display:flex;flex-direction:column;gap:14px">
         <div id="crm-stages-alert" class="svc-form-alert" style="display:none"></div>
 
@@ -14420,16 +14551,20 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           </button>
         </div>
 
+        <!-- Pipeline at a glance: one coloured segment per stage, sized by its leads -->
+        <div class="crm-stg-summary" id="crm-stages-summary"></div>
+
         <!-- Existing stages list -->
         <div>
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;min-height:28px">
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap">
               <input type="checkbox" id="crm-stages-select-all" title="Select all deletable stages">
               Current Stages — drag to reorder
             </label>
-            <button class="po-btn-ghost" id="crm-stages-bulk-delete" style="display:none;margin-left:auto;padding:4px 10px;font-size:12px;color:#ef4444;border-color:#fecaca">
+            <button class="po-btn-ghost" id="crm-stages-bulk-delete" style="display:none;padding:4px 10px;font-size:12px;color:#ef4444;border-color:#fecaca">
               <i class="fa fa-trash"></i> Delete selected (<span id="crm-stages-selected-count">0</span>)
             </button>
+            <div class="mac-search crm-stg-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="crm-stages-search" placeholder="Find a stage" autocomplete="off"></div>
           </div>
           <div id="crm-stages-list" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;min-height:40px">
             <span style="font-size:12px;color:var(--text-muted)">Loading…</span>
@@ -14438,7 +14573,26 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
       </div>
 
+      <!-- Standard statuses as templates: what each one means, one click to add it -->
+      <aside class="crm-stg-guide">
+        <div class="crm-stg-guide-head">
+          <div class="crm-stg-guide-title"><i class="fa fa-wand-magic-sparkles"></i> Stage templates</div>
+          <div class="crm-stg-guide-sub">Every stage counts as one of these standard statuses in reports and automations. Click one to add it as a stage.</div>
+        </div>
+        <div id="crm-stages-templates" class="crm-stg-templates"></div>
+        <button type="button" class="crm-stg-tpl crm-stg-tpl--custom" id="crm-stages-custom-btn">
+          <span class="crm-stg-ico"><i class="fa fa-palette"></i></span>
+          <span class="crm-stg-tpl-text"><b>Custom stage</b><small>Your own name, colour, icon and note — pick which standard status it counts as.</small></span>
+          <i class="fa fa-plus crm-stg-tpl-add"></i>
+        </button>
+        <button type="button" class="po-btn-ghost" id="crm-stages-restore-btn" style="width:100%;justify-content:center;font-size:12px">
+          <i class="fa fa-rotate-left"></i> Restore missing standard stages
+        </button>
+      </aside>
+      </div>
+
       <div class="po-aim-footer mac-footer">
+        <span class="crm-stg-footer-note" id="crm-stages-footer-note"></span>
         <button class="po-btn-ghost" id="crm-stages-modal-cancel"><i class="fa fa-xmark"></i> Close</button>
         <button class="po-btn-primary" id="crm-stage-add-open-btn"><i class="fa fa-plus"></i> Add Stage</button>
       </div>
@@ -14575,73 +14729,242 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     </div>
   </div>
 
-  <!-- ── CRM: Add Stage Modal ── -->
-  <div class="modal-overlay" id="crm-stage-add-modal" style="display:none">
-    <div class="po-aim-shell" style="width:400px">
-      <div class="po-aim-header">
-        <i class="fa fa-plus" style="color:#7c3aed"></i>
-        <span>Add Stage</span>
-        <button class="psm-close" id="crm-stage-add-close"><i class="fa fa-xmark"></i></button>
+  <!-- ── CRM: Add / Edit Stage (one form for both) ── -->
+  <div class="modal-overlay mac-overlay" id="crm-stage-form-modal" style="display:none">
+    <div class="mac-window" style="width:min(860px,94vw);max-height:90vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon" style="background:var(--accent,#4e8ef7)"><i class="fa fa-plus" id="crm-stage-form-title-icon"></i></span>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-stage-form-title">Add Stage</div><div class="mac-title-sub">Name it your way, choose what happens when a lead moves here</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-stage-form-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
       </div>
-      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
-        <div id="crm-stage-add-alert" class="svc-form-alert" style="display:none"></div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div class="po-field" style="flex:1">
-            <label class="po-field-label">Name <span class="po-required">*</span></label>
-            <input type="text" id="crm-stage-new-name" class="po-field-input" placeholder="Stage name" maxlength="60">
-          </div>
-          <div class="po-field" style="flex-shrink:0">
-            <label class="po-field-label">Colour</label>
-            <input type="color" id="crm-stage-new-color" value="#64748b" title="Stage colour" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
-          </div>
+
+      <div class="mac-scroll crm-stg-form">
+        <div id="crm-stage-form-alert" class="svc-form-alert" style="display:none"></div>
+        <input type="hidden" id="crm-stage-form-id">
+        <input type="hidden" id="crm-stage-form-status">
+
+        <!-- Live preview of the board column header -->
+        <div class="crm-stg-preview">
+          <span class="crm-stg-preview-label">Preview</span>
+          <span class="crm-stg-preview-chip" id="crm-stage-form-preview"></span>
+          <span class="crm-stg-preview-counts" id="crm-stage-form-preview-counts"></span>
         </div>
-        <div class="po-field">
-          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
-          <select id="crm-stage-new-status" class="po-field-input" style="appearance:auto"></select>
+
+        <div class="crm-stg-form-row">
+          <label class="mac-field" style="flex:1">Name *
+            <input type="text" id="crm-stage-form-name" class="po-field-input" placeholder="e.g. Site Visit, Demo Booked, Follow-up 2" maxlength="60">
+          </label>
+          <label class="mac-field" style="flex-shrink:0">Colour
+            <input type="color" id="crm-stage-form-color" value="#64748b" title="Stage colour" class="crm-stg-color">
+          </label>
         </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" id="crm-stage-new-reason"> Ask for a reason when a lead moves here
+        <div class="crm-stg-swatches" id="crm-stage-form-swatches"></div>
+
+        <div class="mac-field">Icon
+          <div class="crm-stg-icons" id="crm-stage-form-icons"></div>
+        </div>
+
+        <label>Note for the team <span style="font-weight:400">(optional — shown under the stage name)</span>
+          <textarea id="crm-stage-form-desc" class="po-field-input" rows="2" maxlength="255" placeholder="When should a lead be moved here? e.g. &quot;Customer agreed to a site visit date&quot;"></textarea>
         </label>
+
+        <div class="mac-field">Counts in reports as (standard status) *
+          <div class="crm-stg-status-grid" id="crm-stage-form-statuses"></div>
+        </div>
+
+        <!-- "Custom": none of the statuses fit, so the stage's behaviour is ticked here -->
+        <div class="crm-stg-acts" id="crm-stage-form-behaviour" style="display:none">
+          <div class="crm-stg-acts-head"><i class="fa fa-sliders" style="color:#7c3aed"></i> How this stage behaves
+            <small>Tick what fits. Reports count an open custom stage as "In Process".</small></div>
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-flag-checkered"></i> When a lead is here, the deal is</div>
+            <div class="crm-stg-act-chips" id="crm-stage-form-outcome">
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="in_process" checked> Still open</label>
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="on_hold"> Paused — can resume to the stage it came from</label>
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="won"> Won — closes the lead as a win</label>
+              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="lost"> Lost — closes it and asks for a lost reason</label>
+            </div>
+          </div>
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-shield-halved"></i> Rules</div>
+            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-needs-approval"> Must be approved — when staff move a lead here, the department head approves first</label>
+            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-locks-lead"> Lock the lead — only the head or an admin can edit or move it while it is here</label>
+            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-no-skip"> No skipping — leads can enter only from the stage right before it (going back is fine)</label>
+          </div>
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Checklist before leaving <span class="crm-stg-act-hint" style="font-weight:400">— every item must be ticked before the lead can move on</span></div>
+            <textarea id="crm-stage-form-checklist" class="po-field-input" rows="3" placeholder="One item per line, e.g.&#10;Site measurements taken&#10;Photos uploaded&#10;Customer signed the visit form"></textarea>
+          </div>
+        </div>
+
+        <!-- What this stage does when a lead enters it (LeadStage::entryRules) -->
+        <div class="crm-stg-acts">
+          <div class="crm-stg-acts-head"><i class="fa fa-bolt"></i> When a lead moves here
+            <small>Choose what this stage does. Leave everything off for a plain stage.</small></div>
+
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Ask the person moving it for</div>
+            <div class="crm-stg-act-chips">
+              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-reason"> Reason</label>
+              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="follow_up_at"> Follow-up date</label>
+              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="expected_close_date"> Expected close date</label>
+              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="estimated_value"> Deal value</label>
+            </div>
+            <span id="crm-stage-form-reason-hint" class="crm-stg-act-hint"></span>
+          </div>
+
+          <div class="crm-stg-act">
+            <label class="crm-stg-act-title"><input type="checkbox" id="crm-stage-form-task-on"> <i class="fa fa-calendar-plus"></i> Create a task for the lead owner</label>
+            <div class="crm-stg-act-body" id="crm-stage-form-task-body">
+              <input type="text" id="crm-stage-form-task-title" class="po-field-input" maxlength="255" placeholder="e.g. Confirm the site visit time with the customer">
+              <span class="crm-stg-act-inline">due in <input type="number" id="crm-stage-form-task-days" class="po-field-input" min="0" max="365" value="1"> day(s)</span>
+            </div>
+          </div>
+
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-bell"></i> Notify</div>
+            <div class="crm-stg-act-chips">
+              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-owner"> Lead owner</label>
+              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-head"> Department head</label>
+            </div>
+            <div class="crm-stg-act-chips" id="crm-stage-form-notify-users"></div>
+          </div>
+
+          <div class="crm-stg-act">
+            <div class="crm-stg-act-title"><i class="fa fa-user-plus"></i> Assign to</div>
+            <span class="crm-stg-act-hint">The people ticked are added to the lead. The current owner stays the owner — if the lead has none, the first one ticked becomes it.</span>
+            <div class="crm-stg-act-chips" id="crm-stage-form-assign-users"></div>
+          </div>
+
+          <div class="crm-stg-act-row">
+            <label class="crm-stg-act" style="flex:1"><span class="crm-stg-act-title"><i class="fa fa-stopwatch"></i> Flag leads stuck here longer than</span>
+              <span class="crm-stg-act-inline"><input type="number" id="crm-stage-form-max-days" class="po-field-input" min="0" max="365" placeholder="—"> day(s)</span>
+            </label>
+          </div>
+        </div>
       </div>
-      <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="crm-stage-add-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-        <button class="po-btn-primary" id="crm-stage-add-btn"><i class="fa fa-check"></i> Add Stage</button>
+
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-stage-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-stage-form-save"><i class="fa fa-check"></i> Add Stage</button>
       </div>
     </div>
   </div>
 
-  <!-- ── CRM: Edit Stage Modal ── -->
-  <div class="modal-overlay" id="crm-stage-edit-modal" style="display:none">
-    <div class="po-aim-shell" style="width:400px">
+  <!-- ── CRM: a lead's checklist for the stage it is in ── -->
+  <div class="modal-overlay" id="crm-checklist-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:min(440px,94vw);display:flex;flex-direction:column">
       <div class="po-aim-header">
-        <i class="fa fa-pen" style="color:#7c3aed"></i>
-        <span>Edit Stage</span>
-        <button class="psm-close" id="crm-stage-edit-close"><i class="fa fa-xmark"></i></button>
+        <i class="fa fa-list-check" style="color:#10b981"></i>
+        <span id="crm-checklist-title">Checklist</span>
+        <button class="psm-close" id="crm-checklist-close"><i class="fa fa-xmark"></i></button>
       </div>
-      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:12px">
-        <div id="crm-stage-edit-alert" class="svc-form-alert" style="display:none"></div>
-        <input type="hidden" id="crm-stage-edit-id">
-        <div style="display:flex;gap:8px;align-items:center">
-          <div class="po-field" style="flex:1">
-            <label class="po-field-label">Name <span class="po-required">*</span></label>
-            <input type="text" id="crm-stage-edit-name" class="po-field-input" maxlength="60">
-          </div>
-          <div class="po-field" style="flex-shrink:0">
-            <label class="po-field-label">Colour</label>
-            <input type="color" id="crm-stage-edit-color" style="width:48px;height:34px;padding:2px 3px;border:1px solid var(--border);border-radius:7px;cursor:pointer;background:none">
-          </div>
-        </div>
-        <div class="po-field">
-          <label class="po-field-label">Standard Status <span class="po-required">*</span></label>
-          <select id="crm-stage-edit-status" class="po-field-input" style="appearance:auto"></select>
-        </div>
-        <label style="display:flex;align-items:center;gap:6px;font-size:13px">
-          <input type="checkbox" id="crm-stage-edit-reason"> Ask for a reason when a lead moves here
-        </label>
+      <div class="po-aim-body" style="display:flex;flex-direction:column;gap:8px">
+        <div id="crm-checklist-alert" class="svc-form-alert" style="display:none"></div>
+        <div id="crm-checklist-items" style="display:flex;flex-direction:column;gap:6px"></div>
       </div>
       <div class="po-aim-footer">
-        <button class="po-btn-ghost" id="crm-stage-edit-cancel"><i class="fa fa-xmark"></i> Cancel</button>
-        <button class="po-btn-primary" id="crm-stage-edit-save"><i class="fa fa-check"></i> Save Stage</button>
+        <button class="po-btn-primary" id="crm-checklist-done"><i class="fa fa-check"></i> Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: a stage's behaviour settings (built-in behaviours on/off + rules any stage can add) ── -->
+  <div class="modal-overlay" id="crm-stage-behave-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:min(600px,94vw);max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-gear" style="color:#64748b"></i>
+        <span id="crm-stage-behave-title">Stage behaviour</span>
+        <button class="psm-close" id="crm-stage-behave-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body crm-stg-form" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+        <div id="crm-stage-behave-alert" class="svc-form-alert" style="display:none"></div>
+
+        <div class="crm-stg-acts">
+          <div class="crm-stg-acts-head"><i class="fa fa-cube" style="color:#64748b"></i> Built-in behaviour
+            <small id="crm-stage-behave-built-hint">What this stage does because of the standard status it counts as.</small></div>
+          <div id="crm-stage-behave-built" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
+        <div class="crm-stg-acts">
+          <div class="crm-stg-acts-head"><i class="fa fa-plus" style="color:#7c3aed"></i> Added behaviour
+            <small>Switch on extra rules for this stage.</small></div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-comment-dots"></i></span>
+            <span class="crm-stg-behave-text"><b>Ask for a reason</b><small>The person moving a lead here writes why.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-reason"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-shield-halved"></i></span>
+            <span class="crm-stg-behave-text"><b>Must be approved</b><small>When staff move a lead here, the department head approves first.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-approval"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-lock"></i></span>
+            <span class="crm-stg-behave-text"><b>Lock the lead</b><small>Only the head or an admin can edit or move it while it is here.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-lock"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-arrow-right-to-bracket"></i></span>
+            <span class="crm-stg-behave-text"><b>No skipping</b><small>Leads enter only from the stage right before it (going back is fine).</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-no-skip"><span class="psm-switch-track"></span></label>
+          </div>
+          <div class="crm-stg-behave">
+            <span class="crm-stg-behave-ico"><i class="fa fa-clipboard-list"></i></span>
+            <span class="crm-stg-behave-text"><b>Checklist before leaving</b><small>Every item must be ticked before the lead can move on.</small></span>
+            <label class="psm-switch"><input type="checkbox" id="crm-stage-behave-checklist-on"><span class="psm-switch-track"></span></label>
+          </div>
+          <textarea id="crm-stage-behave-checklist" class="po-field-input" rows="3" style="display:none" placeholder="One item per line, e.g.&#10;Site measurements taken&#10;Photos uploaded"></textarea>
+          <span class="crm-stg-act-hint">Follow-up tasks, notifications and auto-assign are under <b>Edit stage → When a lead moves here</b>.</span>
+        </div>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-stage-behave-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-stage-behave-save"><i class="fa fa-check"></i> Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: the business's own status (a reusable stage template) ── -->
+  <div class="modal-overlay" id="crm-cstatus-modal" style="display:none;z-index:2050">
+    <div class="po-aim-shell" style="width:min(560px,94vw);max-height:88vh;display:flex;flex-direction:column">
+      <div class="po-aim-header">
+        <i class="fa fa-wand-magic-sparkles" style="color:#7c3aed"></i>
+        <span id="crm-cstatus-title">New status</span>
+        <button class="psm-close" id="crm-cstatus-close"><i class="fa fa-xmark"></i></button>
+      </div>
+      <div class="po-aim-body crm-stg-form" style="flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px">
+        <div id="crm-cstatus-alert" class="svc-form-alert" style="display:none"></div>
+        <p class="crm-stg-act-hint" style="margin:0">Your own status shows up next to the standard ones in every pipeline, ready to use as a stage template.</p>
+        <div class="crm-stg-form-row">
+          <label class="mac-field" style="flex:1">Name *
+            <input type="text" id="crm-cstatus-name" class="po-field-input" maxlength="60" placeholder="e.g. Site Visit, Demo Booked, Sample Sent">
+          </label>
+          <label class="mac-field" style="flex-shrink:0">Colour
+            <input type="color" id="crm-cstatus-color" value="#6366f1" class="crm-stg-color">
+          </label>
+        </div>
+        <div class="crm-stg-swatches" id="crm-cstatus-swatches"></div>
+        <div class="mac-field">Icon
+          <div class="crm-stg-icons" id="crm-cstatus-icons"></div>
+        </div>
+        <label class="mac-field">What it means <span style="font-weight:400">(optional)</span>
+          <textarea id="crm-cstatus-desc" class="po-field-input" rows="2" maxlength="255" placeholder="e.g. A technician visited the site and took measurements."></textarea>
+        </label>
+        <label class="mac-field">Counts in reports as *
+          <select id="crm-cstatus-base" class="po-field-input" style="appearance:auto"></select>
+        </label>
+        <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-cstatus-reason"> Ask for a reason when a lead moves here</label>
+        <label class="crm-stg-chk" style="align-self:flex-start" id="crm-cstatus-rules-wrap"><input type="checkbox" id="crm-cstatus-rules"> <span id="crm-cstatus-rules-label">Use the "When a lead moves here" actions set in the stage form as its defaults</span></label>
+      </div>
+      <div class="po-aim-footer">
+        <button class="po-btn-ghost" id="crm-cstatus-delete" style="margin-right:auto;color:#dc2626"><i class="fa fa-trash-can"></i> Delete</button>
+        <button class="po-btn-ghost" id="crm-cstatus-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-primary" id="crm-cstatus-save"><i class="fa fa-check"></i> Save Status</button>
       </div>
     </div>
   </div>
