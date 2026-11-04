@@ -21846,6 +21846,8 @@ button.mp-row-del:hover { color: #dc2626; background: color-mix(in srgb, #dc2626
 .pm-ss-input:focus { border-color: var(--accent); outline: none; }
 .pm-ss-list { max-height: 220px; overflow-y: auto; }
 .pm-ss-list .cat-combo-item { padding: 6px 10px; font-size: 12px; border-radius: 4px; }
+.pm-ss-list .pm-ss-check { display: inline-block; width: 16px; font-size: 11px; color: var(--accent); visibility: hidden; }
+.pm-ss-list .cat-combo-item.selected .pm-ss-check { visibility: visible; }
 /* Task assignees (multiple project members per task) */
 .pm-assignees-btn { display: inline-flex; align-items: center; gap: 0; padding: 2px 6px 2px 2px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--text); cursor: pointer; max-width: 170px; }
 .pm-assignees-btn:hover { border-color: var(--accent); background: var(--surface2); }

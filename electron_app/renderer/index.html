@@ -242,7 +242,7 @@ body.dark .mac-callout{color:#ffb340}
 .mac-locked{display:flex;align-items:center;gap:8px;height:26px;padding:0 10px;border-radius:6px;font-size:13px;font-weight:500;background:var(--mac-fill);color:var(--mac-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mac-locked i{font-size:11px;color:var(--mac-muted)}
 /* pop-up buttons — native selects and the searchable combo share the look */
-.mac-window select.po-field-input,.mac-popup{-webkit-appearance:none;appearance:none;width:100%;height:26px;padding:0 30px 0 10px;border:0;border-radius:6px;
+.mac-window select.po-field-input,.mac-popup{-webkit-appearance:none!important;appearance:none!important;width:100%;height:26px;padding:0 30px 0 10px;border:0;border-radius:6px;
   font:inherit;font-size:13px;color:var(--mac-text);text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   background:var(--mac-ctl) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Crect width='18' height='18' rx='4.5' fill='%23007aff'/%3E%3Cpath d='M6 7.4 9 4.6l3 2.8M6 10.6l3 2.8 3-2.8' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 4px center/18px 18px;
   box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 1px 1.5px rgba(0,0,0,.08);transition:box-shadow .15s}
@@ -756,6 +756,7 @@ body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-body{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:16px;padding:18px 22px}
 /* Lead Details as a macOS window — grouped panels, segmented tabs, hairline borders */
 .crm-lead-view-shell .crm-tl-wrap{border-bottom-color:var(--mac-line);background:var(--mac-side)}
+.crm-lead-view-shell .crm-lead-view-body .crm-tl-wrap{border:1px solid var(--mac-line);border-radius:10px;padding:10px 14px 12px}
 .crm-lead-view-shell .crm-tl-head{text-transform:none;letter-spacing:0;font-size:13px;font-weight:600;color:var(--mac-text)}
 .crm-lead-view-shell .crm-tl-head i{color:var(--mac-accent)}
 .crm-lead-view-shell .crm-tl-count{color:var(--mac-muted)}
@@ -812,6 +813,13 @@ body.dark .crm-lead-view-shell{background:#222226}
 .crm-lead-view-shell .crm-ws-filter:not(.active):hover{filter:brightness(.95)}
 .crm-lead-view-shell .crm-ws-filter.active{background:var(--mac-accent);color:#fff}
 /* Lead window → Timeline tab: day headers + one grouped panel per day (Notification Center style) */
+.crm-tlf-bar-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.crm-tlf-tools{display:flex;align-items:center;gap:8px;margin-left:auto}
+.crm-tlf-tools .crm-fm-pop select{max-width:160px}
+.crm-tlf-summary{display:flex;align-items:center;gap:8px;padding:0 4px 8px;font-size:12px;color:var(--mac-muted,var(--text-muted))}
+.crm-tlf-clear{border:0;padding:0;background:none;font:inherit;font-size:12px;color:var(--mac-accent,#007aff);cursor:pointer}
+.crm-tlf-clear:hover{text-decoration:underline}
+mark.crm-tlf-hit{background:rgba(255,204,0,.45);color:inherit;border-radius:3px;padding:0 1px}
 .crm-tlf-layout{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;align-items:start}
 .crm-tlf{display:flex;flex-direction:column;min-width:0}
 /* inspector column — sticks while the feed scrolls */
@@ -1424,6 +1432,7 @@ body.dark .crm-qtl-next{color:color-mix(in srgb,var(--ic) 70%,#fff)}
 .crm-fut-new .po-field-input:focus{outline:0;background:var(--mac-ctl,#fff);box-shadow:0 0 0 .5px var(--mac-accent,#007aff),0 0 0 3px color-mix(in srgb,var(--mac-accent,#007aff) 22%,transparent)}
 body.dark .crm-fut-new .po-field-input{color-scheme:dark}
 .crm-fut-presets .po-field-input{width:auto}
+.crm-fu-who-hint{font-weight:400;opacity:.7}
 .crm-fut-chs{flex-wrap:wrap;justify-self:start}
 .crm-fut-chs button i{font-size:11px;color:var(--ic)}
 .crm-fut-chs button.active i{color:var(--ic)}
@@ -14532,6 +14541,107 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="po-aim-footer">
         <button class="po-btn-ghost" id="crm-task-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
         <button class="po-btn-primary" id="crm-task-modal-save"><i class="fa fa-check"></i> Create Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Lead window → Tasks tab → Add Task ── -->
+  <div class="modal-overlay mac-overlay" id="crm-ws-task-modal" style="display:none;z-index:2050">
+    <div class="mac-window" style="width:460px;max-width:96vw">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon" style="background:linear-gradient(#ffb340,#ff9500)"><i class="fa fa-list-check"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">New Task</div><div class="mac-title-sub">Plan the next step for this lead</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-ws-task-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-form-body">
+        <label class="mac-field">
+          <span>Title <span class="mac-required">*</span></span>
+          <input type="text" id="crm-ws-task-title" class="po-field-input" placeholder="e.g. Call back about the quote" maxlength="255" autocomplete="off">
+        </label>
+        <label class="mac-field">
+          <span>Due</span>
+          <input type="datetime-local" id="crm-ws-task-due" class="po-field-input">
+        </label>
+        <label class="mac-field">
+          <span>Assign to</span>
+          <select id="crm-ws-task-assignee" class="po-field-input" style="appearance:auto"></select>
+        </label>
+        <label class="mac-field">
+          <span>Notes</span>
+          <textarea id="crm-ws-task-notes" class="po-field-input" rows="3" maxlength="2000" placeholder="Optional details…" style="resize:vertical"></textarea>
+        </label>
+      </div>
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-ws-task-cancel">Cancel</button>
+        <button class="po-btn-primary" id="crm-ws-task-save">Add Task</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Lead window → Follow-ups tab → Plan follow-up ── -->
+  <div class="modal-overlay mac-overlay" id="crm-ws-fu-modal" style="display:none;z-index:2050">
+    <div class="mac-window" style="width:540px;max-width:96vw">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon" style="background:linear-gradient(#d68cff,#af52de)"><i class="fa fa-phone-volume"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">Plan a Follow-up</div><div class="mac-title-sub">When to contact the customer next</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-ws-fu-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-form-body">
+        <div class="mac-field">
+          <span>When <span class="mac-required">*</span></span>
+          <div class="crm-fut-presets" id="crm-ws-fu-presets"></div>
+          <input type="datetime-local" id="crm-ws-fu-due" class="po-field-input">
+        </div>
+        <div class="mac-field">
+          <span>How</span>
+          <div class="crm-fm-seg crm-fut-chs" id="crm-ws-fu-chs"></div>
+        </div>
+        <div class="mac-field">
+          <span>Who <small class="crm-fu-who-hint">— pick several to plan one for each</small></span>
+          <select id="crm-ws-fu-user" multiple hidden></select>
+          <button type="button" class="mac-popup" id="crm-ws-fu-user-btn" style="height:30px"></button>
+        </div>
+        <label class="mac-field">
+          <span>About</span>
+          <textarea id="crm-ws-fu-notes" class="po-field-input" rows="3" maxlength="2000" placeholder="What to follow up on — e.g. Check if they reviewed the quotation" style="resize:vertical"></textarea>
+        </label>
+        <div class="crm-tk-hint">Follow-ups are also planned automatically when a quotation is sent.</div>
+      </div>
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-ws-fu-cancel">Cancel</button>
+        <button class="po-btn-primary" id="crm-ws-fu-save">Plan Follow-up</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: Lead window → Quotations tab → New / Edit quotation ── -->
+  <div class="modal-overlay mac-overlay" id="crm-qt-edit-modal" style="display:none;z-index:2050">
+    <div class="mac-window" style="width:1080px;max-width:96vw;height:88vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon" style="background:linear-gradient(#5ac8fa,#30b0c7)"><i class="fa fa-file-invoice"></i></span>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-qt-edit-title">New Quotation</div><div class="mac-title-sub" id="crm-qt-edit-sub">Draft</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+          <button type="button" class="mac-close-btn" data-mac-close data-qt-back title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-scroll" id="crm-qt-edit-body"></div>
+      <div class="po-aim-footer mac-footer" style="justify-content:space-between">
+        <div class="crm-qtx-dock-total"><small>Total</small><b id="crm-qt-t-total-dock"></b></div>
+        <div style="display:flex;gap:8px">
+          <button class="po-btn-ghost" data-qt-back>Cancel</button>
+          <button class="po-btn-primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
+        </div>
       </div>
     </div>
   </div>

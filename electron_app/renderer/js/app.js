@@ -41697,6 +41697,97 @@ function escAttr(str) {
   return String(str ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Swap a <select>'s native dropdown for a searchable popup. The select stays the source of truth:
+// picking an option sets its value and fires 'change', so existing listeners keep working.
+// `trigger` is what the user clicks (the select itself by default). On a <select multiple> each
+// pick toggles that option and the list stays open.
+function makeSelectSearchable(sel, trigger = sel) {
+  const multi = sel.multiple;
+  const open = () => {
+    document.querySelector('.pm-ss-pop')?._close?.();
+    const r   = trigger.getBoundingClientRect();
+    const pop = document.createElement('div');
+    pop.className = 'pm-ss-pop';
+    pop.style.left     = `${r.left}px`;
+    pop.style.minWidth = `${Math.max(r.width, 200)}px`;
+    pop.innerHTML = `<input type="text" class="pm-ss-input" placeholder="Search…"><div class="pm-ss-list"></div>`;
+    document.body.appendChild(pop);
+
+    const input = pop.querySelector('.pm-ss-input');
+    const list  = pop.querySelector('.pm-ss-list');
+    let items = [], active = 0;
+    const render = (keep = null) => {
+      const q = input.value.trim().toLowerCase();
+      items = [...sel.options].filter(o => !o.disabled && o.text.toLowerCase().includes(q));
+      active = keep ?? Math.max(0, items.findIndex(o => multi ? o.selected : o.value === sel.value));
+      list.innerHTML = items.length
+        ? items.map((o, i) => `<div class="cat-combo-item${i === active ? ' active' : ''}${multi && o.selected ? ' selected' : ''}" data-i="${i}">${multi ? '<i class="fa fa-check pm-ss-check"></i>' : ''}${escHtml(o.text)}</div>`).join('')
+        : '<div class="cat-combo-empty">No matches</div>';
+    };
+    const highlight = i => {
+      active = (i + items.length) % items.length;
+      list.querySelectorAll('.cat-combo-item').forEach((el, j) => el.classList.toggle('active', j === active));
+      list.children[active]?.scrollIntoView({ block: 'nearest' });
+    };
+    const pick = o => {
+      if (multi) {
+        if (!o) return;
+        o.selected = !o.selected;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+        render(active);
+        return;
+      }
+      close();
+      if (!o || o.value === sel.value) return;
+      sel.value = o.value;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const onDocDown = e => { if (!pop.contains(e.target) && !trigger.contains(e.target)) close(); };
+    const onScroll  = e => { if (!pop.contains(e.target)) close(); };
+    function close() {
+      pop.remove();
+      document.removeEventListener('mousedown', onDocDown, true);
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', close);
+    }
+    pop._close = close;
+
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown')      { e.preventDefault(); if (items.length) highlight(active + 1); }
+      else if (e.key === 'ArrowUp')   { e.preventDefault(); if (items.length) highlight(active - 1); }
+      else if (e.key === 'Enter')     { e.preventDefault(); pick(items[active]); }
+      else if (e.key === 'Escape')    { e.preventDefault(); e.stopPropagation(); close(); trigger.focus(); }
+      else if (e.key === 'Tab')       { close(); }
+    });
+    list.addEventListener('mousedown', e => {
+      const el = e.target.closest('.cat-combo-item');
+      if (!el) return;
+      e.preventDefault();
+      pick(items[+el.dataset.i]);
+    });
+    document.addEventListener('mousedown', onDocDown, true);
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', close);
+    render();
+    // Open upward when there isn't room below.
+    const below = window.innerHeight - r.bottom;
+    if (below < pop.offsetHeight + 8 && r.top > below) pop.style.bottom = `${window.innerHeight - r.top + 2}px`;
+    else pop.style.top = `${r.bottom + 2}px`;
+    list.children[active]?.scrollIntoView({ block: 'nearest' });
+    input.focus();
+  };
+  trigger.addEventListener('mousedown', e => {
+    e.preventDefault();
+    if (document.querySelector('.pm-ss-pop')) { document.querySelector('.pm-ss-pop')._close(); return; }
+    open();
+  });
+  trigger.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); open(); }
+  });
+}
+
+
 // ── PM task completion status (separate from the stage / board column) ─────
 const PM_COMPLETION = { incomplete: 'Incomplete', complete: 'Complete', cancelled: 'Cancelled' };
 function pmCompletionOf(t) { return t?.completion_status || (t?.status === 'done' ? 'complete' : 'incomplete'); }
@@ -59862,7 +59953,7 @@ async function submitDsCreate() {
     </div>`;
   }
 
-  // ── Horizontal lead timeline, pinned above the Lead Details body ──
+  // ── Horizontal lead timeline, shown at the top of the Lead Details "Timeline" tab ──
   // Oldest → newest left to right, cards alternating above/below the line and joined to it
   // by flowing dashed connectors. Clicking a card shows that event's full record underneath.
   let _crmTimelineSelected = null;
@@ -59883,7 +59974,7 @@ async function submitDsCreate() {
   function _crmRenderLeadHistory() {
     const box = $('#crm-lead-view-timeline');
     if (!box) return;
-    box.style.display = _crmViewEditing || _crmLeadTab !== 'overview' ? 'none' : '';
+    box.style.display = _crmViewEditing || _crmLeadTab !== 'timeline' ? 'none' : '';
     const msg = text => { box.innerHTML = `<div class="crm-tl-msg">${text}</div>`; };
     if (_crmViewHistory === null)  return msg('<i class="fa fa-spinner fa-spin"></i> Loading timeline…');
     if (_crmViewHistory === false) return msg('Failed to load timeline.');
@@ -60097,6 +60188,10 @@ async function submitDsCreate() {
 
     // Editing always shows the record; viewing shows the tab bar and the chosen tab
     const overview = editing || _crmLeadTab === 'overview';
+    // The horizontal timeline lives in the Timeline tab. Park it outside the body first so
+    // rebuilding the body doesn't destroy it (it keeps its listeners and scroll position).
+    const tl = $('#crm-lead-view-timeline');
+    if (tl) $('#crm-lead-view-body').before(tl);
     $('#crm-lead-view-body').innerHTML = head
       + (editing ? '' : _crmLeadTabsHtml())
       + (overview
@@ -60105,10 +60200,18 @@ async function submitDsCreate() {
             ? `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
             : `<div class="crm-lv-cols"><div class="crm-lv-stack"><div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>${pipeline}</div>${rest}</div>`)
         : '<div id="crm-ws-panel" class="crm-ws-panel"></div>');
-    // Only show/hide the timeline here — rebuilding it on every body render (e.g. when the
-    // form fields finish loading) re-laid it out and re-scrolled it for nothing.
-    const tl = $('#crm-lead-view-timeline');
-    if (tl) tl.style.display = overview && !editing ? '' : 'none';
+    // Only move / show / hide the timeline here — rebuilding it on every body render (e.g. when
+    // the form fields finish loading) re-laid it out and re-scrolled it for nothing.
+    const showTl = !editing && _crmLeadTab === 'timeline';
+    if (tl) {
+      const wasHidden = tl.style.display === 'none';
+      tl.style.display = showTl ? '' : 'none';
+      if (showTl) {
+        $('#crm-ws-panel').before(tl);
+        const scroller = tl.querySelector('.crm-tl-scroll');
+        if (scroller && wasHidden) scroller.scrollLeft = scroller.scrollWidth; // latest event in view
+      }
+    }
     if (!overview) _crmRenderWsTab();
 
     $('#crm-lead-view-title').textContent = editing ? 'Edit Lead' : 'Lead Details';
@@ -60526,6 +60629,7 @@ async function submitDsCreate() {
     const panel = $('#crm-ws-panel');
     const lead  = _crmViewLead;
     const tab   = _crmLeadTab;
+    _crmQtSyncEditor();
     if (!panel || !lead) return;
     if (_crmWs[tab] === undefined) {
       panel.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
@@ -60561,9 +60665,28 @@ async function submitDsCreate() {
   function _crmWsTimelineHtml() {
     const { data = [], meta = {} } = _crmWs.timeline;
     const type = _crmWs.timelineType || '';
-    const rows = type ? data.filter(e => e.type === type) : data;
+    const who  = _crmWs.timelineWho || '';
+    const q    = (_crmWs.timelineQuery || '').trim().toLowerCase();
+    const label = k => (meta.types || []).find(t => t.key === k)?.label || k;
+    // Type, person and search all apply together; search looks at who, what, the note and the type
+    const rows = data.filter(e => (!type || e.type === type)
+      && (!who || (e.user?.name || 'System') === who)
+      && (!q || [e.user?.name || 'System', e.title, e.body, label(e.type)].some(s => s && String(s).toLowerCase().includes(q))));
     const filters = [['', 'All'], ...(meta.types || []).map(t => [t.key, t.label])]
       .map(([k, l]) => `<button type="button" class="crm-ws-filter${k === type ? ' active' : ''}" data-ws-tl-type="${k}">${escHtml(l)}</button>`).join('');
+    const people = [...new Set(data.map(e => e.user?.name || 'System'))].sort();
+    const tools = data.length ? `<div class="crm-tlf-tools">
+        ${people.length > 1 ? `<label class="crm-fm-pop" title="Done by"><i class="fa fa-user"></i><select id="crm-tl-who"><option value="">Everyone</option>${people.map(n => `<option value="${escHtml(n)}"${n === who ? ' selected' : ''}>${escHtml(n)}</option>`).join('')}</select></label>` : ''}
+        <label class="crm-fm-search"><i class="fa fa-magnifying-glass"></i><input id="crm-tl-q" type="search" placeholder="Search timeline" value="${escHtml(_crmWs.timelineQuery || '')}"></label>
+      </div>` : '';
+    // Wrap search hits in <mark> — done on the escaped text, so the query is escaped the same way
+    const hl = s => {
+      const t = escHtml(s);
+      if (!q) return t;
+      const re = new RegExp(escHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      return t.replace(re, m => `<mark class="crm-tlf-hit">${m}</mark>`);
+    };
+    const filtered = type || who || q;
     // Grouped by day (Today / Yesterday / date), one rounded panel per day
     let list = '', lastDay = null;
     rows.forEach(e => {
@@ -60577,20 +60700,25 @@ async function submitDsCreate() {
         <div class="crm-tlf-row">
           <span class="crm-tlf-icon" style="--ic:${escHtml(e.color)}"><i class="fa ${escHtml(e.icon)}"></i></span>
           <div class="crm-tlf-main">
-            <div class="crm-tlf-title"><strong>${escHtml(e.user?.name || 'System')}</strong> ${escHtml(e.title)}</div>
-            ${e.body ? `<div class="crm-tlf-body">${escHtml(e.body)}</div>` : ''}
+            <div class="crm-tlf-title"><strong>${hl(e.user?.name || 'System')}</strong> ${hl(e.title)}</div>
+            ${e.body ? `<div class="crm-tlf-body">${hl(e.body)}</div>` : ''}
           </div>
           ${e.at ? `<div class="crm-tlf-time" title="${escHtml(_crmFmtDateTime(e.at))}">${escHtml(new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}<small>${escHtml(_crmFmtAgo(e.at))}</small></div>` : ''}
         </div>`;
     });
     if (lastDay !== null) list += '</div>';
-    return `<div class="crm-ws-filters">${filters}</div>
-      <div class="crm-tlf-layout"><div class="crm-tlf">${list || _crmWsPanelHtml('Nothing here yet.')}</div>${_crmWsTimelineSideHtml(data, meta, type)}</div>`;
+    const empty = data.length && filtered
+      ? _crmWsPanelHtml('No events match these filters. <button type="button" class="po-btn-ghost" data-ws-tl-clear>Clear filters</button>')
+      : _crmWsPanelHtml('Nothing here yet.');
+    const summary = filtered && rows.length
+      ? `<div class="crm-tlf-summary">Showing ${rows.length} of ${data.length} events <button type="button" class="crm-tlf-clear" data-ws-tl-clear>Clear filters</button></div>` : '';
+    return `<div class="crm-tlf-bar-top"><div class="crm-ws-filters">${filters}</div>${tools}</div>
+      <div class="crm-tlf-layout"><div class="crm-tlf">${summary}${list || empty}</div>${_crmWsTimelineSideHtml(data, meta, type, who)}</div>`;
   }
 
   // Inspector beside the timeline: totals, events by type (click to filter), people, first / latest activity.
   // Always counts the whole timeline, not just the current filter.
-  function _crmWsTimelineSideHtml(data, meta, type) {
+  function _crmWsTimelineSideHtml(data, meta, type, whoActive) {
     if (!data.length) return '';
     const byType = {}, people = {};
     data.forEach(e => {
@@ -60611,11 +60739,11 @@ async function submitDsCreate() {
         <span class="crm-tlf-side-n">${t.n}</span>
       </button>`).join('');
     const who = Object.entries(people).sort((a, b) => b[1] - a[1]).map(([name, n]) => `
-      <div class="crm-tlf-side-row">
+      <button type="button" class="crm-tlf-side-row crm-tlf-type${name === whoActive ? ' active' : ''}" data-ws-tl-who="${name === whoActive ? '' : escHtml(name)}" title="${name === whoActive ? 'Show everyone' : `Show only ${escHtml(name)}`}">
         <span class="crm-assign-av${name === 'System' ? ' crm-tlf-av--sys' : ''}">${name === 'System' ? '<i class="fa fa-gear"></i>' : escHtml(initials(name))}</span>
         <span class="crm-tlf-side-main"><span class="crm-tlf-side-name">${escHtml(name)}</span></span>
         <span class="crm-tlf-side-n">${n}</span>
-      </div>`).join('');
+      </button>`).join('');
     const first = times[0], last = times[times.length - 1];
 
     return `<aside class="crm-tlf-side">
@@ -61007,21 +61135,8 @@ async function submitDsCreate() {
       <span class="crm-fm-spacer"></span>
       ${data.length ? `<div class="crm-fm-seg">${[['open', 'Open', open.length], ['done', 'Completed', done.length], ['all', 'All', data.length]]
         .map(([k, l, n]) => `<button type="button" class="${k === show ? 'active' : ''}" data-tk-show="${k}">${l}<small>${n}</small></button>`).join('')}</div>` : ''}
+      ${canWork ? '<button type="button" class="crm-fm-upload" data-ws-task-add><i class="fa fa-plus"></i> Add Task</button>' : ''}
     </div>`;
-
-    const form = canWork ? `<div class="crm-tk-new">
-      <div class="crm-tk-new-row"><span class="crm-tk-plus"><i class="fa fa-plus"></i></span>
-        <input id="crm-ws-task-title" class="crm-tk-new-input" maxlength="255" placeholder="New task — e.g. Call back about the quote" autocomplete="off"></div>
-      <div class="crm-tk-new-bar">
-        <label class="crm-tk-pill" title="Due date"><i class="fa fa-calendar"></i><input id="crm-ws-task-due" type="datetime-local"></label>
-        <label class="crm-tk-pill" title="Assign to"><i class="fa fa-user"></i><select id="crm-ws-task-assignee">
-          <option value="">Unassigned</option>${(info.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('')}</select></label>
-        <label class="crm-tk-pill crm-tk-pill--notes" title="Notes"><i class="fa fa-align-left"></i><input id="crm-ws-task-notes" maxlength="2000" placeholder="Add notes" autocomplete="off"></label>
-        <span class="crm-fm-spacer"></span>
-        <span class="crm-tk-hint"><kbd>Enter</kbd> to add</span>
-        <button type="button" class="crm-fm-upload" data-ws-task-add><i class="fa fa-plus"></i> Add Task</button>
-      </div>
-    </div>` : '';
 
     const rows = list => list.map(t => _crmTkRowHtml(t, canWork, !!meta.can_delete)).join('');
     const group = (title, list, cls = '') => list.length
@@ -61029,7 +61144,7 @@ async function submitDsCreate() {
     let body = '';
     if (!data.length) {
       body = `<div class="crm-tk-empty"><span class="crm-tk-empty-ic"><i class="fa fa-list-check"></i></span><strong>No tasks yet</strong>
-        <small>${canWork ? 'Add the next step for this lead above — a call back, a site visit, sending the quote.' : 'Tasks added to this lead will show up here.'}</small></div>`;
+        <small>${canWork ? 'Click Add Task to plan the next step for this lead — a call back, a site visit, sending the quote.' : 'Tasks added to this lead will show up here.'}</small></div>`;
     } else {
       if (show !== 'done') {
         const dueDay = t => (t.due_at ? _crmTkDue(t.due_at).day : null);
@@ -61042,7 +61157,7 @@ async function submitDsCreate() {
       }
       if (show !== 'open') body += group('Completed', [...done].sort((a, b) => (b.completed_at || '').localeCompare(a.completed_at || '')), ' crm-tk-group-title--done');
     }
-    return `<div class="crm-tk-wrap">${head}${form}<div class="crm-tk-list">${body}</div></div>`;
+    return `<div class="crm-tk-wrap">${head}<div class="crm-tk-list">${body}</div></div>`;
   }
 
   // ── Follow-ups tab: planned contacts (auto from sent quotations), overdue in red, log one ──
@@ -61201,28 +61316,8 @@ async function submitDsCreate() {
     const head = `<div class="crm-qtl-head">
       <div class="crm-qtl-head-txt"><strong>Follow-ups</strong>
         <small>${allPending.length ? `${allPending.length} planned` : 'Nothing planned'}${allOverdue ? ` · <b class="crm-fut-red">${allOverdue} overdue</b>` : ''}${next ? ` · next ${escHtml(_crmFuRel(next).toLowerCase())}` : ''}${logged ? ` · ${logged} logged` : ''}</small></div>
+      ${meta.can_add ? '<button type="button" class="crm-fm-upload" data-ws-fu-add><i class="fa fa-calendar-plus"></i> Plan Follow-up</button>' : ''}
     </div>`;
-
-    const ch = _crmWs.fuChannel || 'call';
-    const form = meta.can_add ? `<div class="crm-tk-new crm-fut-new">
-      <div class="crm-fut-new-h"><span class="crm-tk-plus" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 1px 2px rgba(175,82,222,.4)"><i class="fa fa-plus"></i></span> Plan a follow-up</div>
-      <div class="crm-fut-new-grid">
-        <div class="crm-fut-field"><span>When</span>
-          <div class="crm-fut-presets">
-            ${[['today', 'Later today'], ['tomorrow', 'Tomorrow 10 AM'], ['3d', 'In 3 days'], ['week', 'Next week']].map(([k, l]) => `<button type="button" class="crm-fut-preset" data-fu-preset="${k}">${l}</button>`).join('')}
-            <input id="crm-ws-fu-due" class="po-field-input" type="datetime-local" title="When to follow up">
-          </div></div>
-        <div class="crm-fut-field"><span>How</span>
-          <div class="crm-fm-seg crm-fut-chs">${(meta.channels || []).map(c => `<button type="button" class="${c.key === ch ? 'active' : ''}" data-fu-ch="${escHtml(c.key)}" style="--ic:${_CRM_FU_CHANNEL_TINTS[c.key] || '#8e8e93'}" title="${escHtml(c.label)}"><i class="fa ${_CRM_FU_CHANNEL_ICONS[c.key] || 'fa-comments'}"></i>${escHtml(c.label)}</button>`).join('')}</div>
-          <input type="hidden" id="crm-ws-fu-channel" value="${escHtml(ch)}"></div>
-        <div class="crm-fut-field"><span>Who</span>
-          <label class="crm-tk-pill"><i class="fa fa-user"></i><select id="crm-ws-fu-user">${_crmFuOptions(meta.assignees, meta.default_user_id, '')}</select></label></div>
-        <div class="crm-fut-field crm-fut-field--wide"><span>About</span>
-          <input id="crm-ws-fu-notes" class="po-field-input" maxlength="2000" placeholder="What to follow up on — e.g. Check if they reviewed the quotation" autocomplete="off"></div>
-      </div>
-      <div class="crm-fut-new-foot"><span class="crm-tk-hint">Follow-ups are also planned automatically when a quotation is sent.</span><span class="crm-fm-spacer"></span>
-        <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-ws-fu-add><i class="fa fa-calendar-plus"></i> Plan follow-up</button></div>
-    </div>` : '';
 
     const group = (title, list, cls = '') => list.length
       ? `<div class="crm-tk-group-title${cls}">${title}<small>${list.length}</small></div><div class="crm-fut-group">${list.map(f => _crmFuLeadRowHtml(f, meta)).join('')}</div>` : '';
@@ -61236,13 +61331,11 @@ async function submitDsCreate() {
         : `<div class="crm-tk-empty"><span class="crm-tk-empty-ic" style="background:linear-gradient(#d68cff,#af52de);box-shadow:0 2px 8px rgba(175,82,222,.3)"><i class="fa fa-phone-volume"></i></span>
           <strong>No follow-ups yet</strong><small>Plan when to contact the customer next. One is planned automatically when a quotation is sent.</small></div>`;
     const bar = all.length ? _crmFuFilterBarHtml(all, meta) : '';
-    return `<div class="crm-tk-wrap">${head}${form}${bar}<div class="crm-tk-list">${body}</div></div>`;
+    return `<div class="crm-tk-wrap">${head}${bar}<div class="crm-tk-list">${body}</div></div>`;
   }
 
-  // Follow-ups tab: filter bar, quick "when" presets and the channel picker
+  // Follow-ups tab: filter bar
   $('#crm-lead-view-body')?.addEventListener('click', e => {
-    const preset = e.target.closest('[data-fu-preset]');
-    const chBtn  = e.target.closest('[data-fu-ch]');
     const showBtn = e.target.closest('[data-fu-show]');
     if (showBtn) {
       _crmWs.fuShow = showBtn.dataset.fuShow;
@@ -61250,6 +61343,59 @@ async function submitDsCreate() {
     } else if (e.target.closest('[data-fu-reset]')) {
       Object.assign(_crmWs, { fuShow: '', fuCh: '', fuWho: '', fuQ: '' });
       _crmRenderWsTab();
+    }
+  });
+
+  // Follow-ups tab → Plan Follow-up: the form lives in its own window above the lead window
+  function _crmFuPlanOpen() {
+    const meta = _crmWs.followups?.meta || {};
+    const ch = _crmWs.fuChannel || 'call';
+    $('#crm-ws-fu-presets').innerHTML = [['today', 'Later today'], ['tomorrow', 'Tomorrow 10 AM'], ['3d', 'In 3 days'], ['week', 'Next week']]
+      .map(([k, l]) => `<button type="button" class="crm-fut-preset" data-fu-preset="${k}">${l}</button>`).join('');
+    $('#crm-ws-fu-chs').innerHTML = (meta.channels || []).map(c => `<button type="button" class="${c.key === ch ? 'active' : ''}" data-fu-ch="${escHtml(c.key)}" style="--ic:${_CRM_FU_CHANNEL_TINTS[c.key] || '#8e8e93'}" title="${escHtml(c.label)}"><i class="fa ${_CRM_FU_CHANNEL_ICONS[c.key] || 'fa-comments'}"></i>${escHtml(c.label)}</button>`).join('');
+    $('#crm-ws-fu-user').innerHTML = _crmFuOptions(meta.assignees, meta.default_user_id, '');
+    _crmFuWhoLabel();
+    $('#crm-ws-fu-due').value = '';
+    $('#crm-ws-fu-notes').value = '';
+    _macShow($('#crm-ws-fu-modal'));
+  }
+  const _crmFuPlanClose = () => _macHide($('#crm-ws-fu-modal'));
+
+  // Who: "Name", "Name +2", or the default when nobody is picked
+  function _crmFuWhoLabel() {
+    const names = [...$('#crm-ws-fu-user').selectedOptions].map(o => o.text);
+    $('#crm-ws-fu-user-btn').textContent = !names.length ? "Lead's assignee"
+      : names.length === 1 ? names[0] : `${names[0]} +${names.length - 1}`;
+    $('#crm-ws-fu-user-btn').title = names.join(', ');
+  }
+
+  async function _crmFuPlanSave() {
+    const lead = _crmViewLead;
+    if (!lead) return;
+    const due = $('#crm-ws-fu-due').value;
+    if (!due) { toast('Pick when to follow up.', 'error'); $('#crm-ws-fu-due').focus(); return; }
+    const btn = $('#crm-ws-fu-save');
+    btn.disabled = true;
+    const res = await API.crmCreateLeadFollowUp(lead.id, {
+      due_at: new Date(due).toISOString(),
+      channel: $('#crm-ws-fu-chs [data-fu-ch].active')?.dataset.fuCh || null,
+      user_ids: [...$('#crm-ws-fu-user').selectedOptions].map(o => +o.value),
+      notes: $('#crm-ws-fu-notes').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status !== 201) { toast(_crmWsError(res, 'Could not plan the follow-up.'), 'error'); return; }
+    _crmFuPlanClose();
+    toast(res.body.message, 'success');
+    _crmWsRefresh(lead, ['followups']);
+    loadCrmPipeline(_crmProjectId, { silent: true });
+  }
+
+  // Quick "when" presets and the channel picker
+  $('#crm-ws-fu-modal')?.addEventListener('click', e => {
+    const preset = e.target.closest('[data-fu-preset]');
+    const chBtn  = e.target.closest('[data-fu-ch]');
+    if (e.target.id === 'crm-ws-fu-modal') {
+      _crmFuPlanClose();
     } else if (preset) {
       const d = new Date();
       if (preset.dataset.fuPreset === 'today') d.setHours(Math.min(d.getHours() + 2, 23), 0, 0, 0);
@@ -61258,18 +61404,25 @@ async function submitDsCreate() {
         d.setHours(10, 0, 0, 0);
       }
       const pad = n => String(n).padStart(2, '0');
-      const input = $('#crm-ws-fu-due');
-      if (input) input.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-      $$('#crm-ws-panel [data-fu-preset]').forEach(b => b.classList.toggle('active', b === preset));
+      $('#crm-ws-fu-due').value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      $$('#crm-ws-fu-presets [data-fu-preset]').forEach(b => b.classList.toggle('active', b === preset));
     } else if (chBtn) {
       _crmWs.fuChannel = chBtn.dataset.fuCh;
-      $('#crm-ws-fu-channel').value = chBtn.dataset.fuCh;
-      $$('#crm-ws-panel [data-fu-ch]').forEach(b => b.classList.toggle('active', b === chBtn));
+      $$('#crm-ws-fu-chs [data-fu-ch]').forEach(b => b.classList.toggle('active', b === chBtn));
     }
   });
+  // Picking a date by hand clears the preset highlight
+  $('#crm-ws-fu-due')?.addEventListener('input', () => $$('#crm-ws-fu-presets [data-fu-preset]').forEach(b => b.classList.remove('active')));
+  $('#crm-ws-fu-save')?.addEventListener('click', _crmFuPlanSave);
+  $('#crm-ws-fu-cancel')?.addEventListener('click', _crmFuPlanClose);
+  $('#crm-ws-fu-close')?.addEventListener('click', _crmFuPlanClose);
+  // Who: type to search the people list; pick one or several
+  if ($('#crm-ws-fu-user')) {
+    makeSelectSearchable($('#crm-ws-fu-user'), $('#crm-ws-fu-user-btn'));
+    $('#crm-ws-fu-user').addEventListener('change', _crmFuWhoLabel);
+  }
+
   $('#crm-lead-view-body')?.addEventListener('input', e => {
-    // Picking a date by hand clears the preset highlight
-    if (e.target.id === 'crm-ws-fu-due') $$('#crm-ws-panel [data-fu-preset]').forEach(b => b.classList.remove('active'));
     if (e.target.id === 'crm-fu-f-q') {
       // Search re-draws the tab; keep focus and caret in the box
       _crmWs.fuQ = e.target.value;
@@ -61327,20 +61480,7 @@ async function submitDsCreate() {
       _crmWsRefresh(lead, ['followups']);
       loadCrmPipeline(_crmProjectId, { silent: true });
     } else if (t.matches('[data-ws-fu-add]')) {
-      const due = $('#crm-ws-fu-due').value;
-      if (!due) { toast('Pick when to follow up.', 'error'); return; }
-      t.disabled = true;
-      const res = await API.crmCreateLeadFollowUp(lead.id, {
-        due_at: new Date(due).toISOString(),
-        channel: $('#crm-ws-fu-channel').value || null,
-        user_id: $('#crm-ws-fu-user').value ? +$('#crm-ws-fu-user').value : null,
-        notes: $('#crm-ws-fu-notes').value.trim() || null,
-      });
-      t.disabled = false;
-      if (res.status !== 201) { toast(_crmWsError(res, 'Could not plan the follow-up.'), 'error'); return; }
-      toast(res.body.message, 'success');
-      _crmWsRefresh(lead, ['followups']);
-      loadCrmPipeline(_crmProjectId, { silent: true });
+      _crmFuPlanOpen();
     }
   });
 
@@ -61419,6 +61559,12 @@ async function submitDsCreate() {
       _crmOpenAssignModal(lead);
     } else if (t.dataset.wsTlType !== undefined) {
       _crmWs.timelineType = t.dataset.wsTlType;
+      _crmRenderWsTab();
+    } else if (t.dataset.wsTlWho !== undefined) {
+      _crmWs.timelineWho = t.dataset.wsTlWho;
+      _crmRenderWsTab();
+    } else if (t.matches('[data-ws-tl-clear]')) {
+      _crmWs.timelineType = _crmWs.timelineWho = _crmWs.timelineQuery = '';
       _crmRenderWsTab();
     } else if (t.matches('[data-ws-msg-reply]')) {
       _crmWsKeepDraft();
@@ -61511,19 +61657,7 @@ async function submitDsCreate() {
       toast('File deleted.', 'success');
       _crmWsRefresh(lead, ['files', 'timeline']);
     } else if (t.matches('[data-ws-task-add]')) {
-      const title = $('#crm-ws-task-title').value.trim();
-      if (!title) { toast('Give the task a title.', 'error'); $('#crm-ws-task-title').focus(); return; }
-      t.disabled = true;
-      const res = await API.crmCreateLeadTask(lead.id, {
-        title,
-        description: $('#crm-ws-task-notes')?.value.trim() || null,
-        due_at:      $('#crm-ws-task-due').value || null,
-        assigned_to: $('#crm-ws-task-assignee').value ? +$('#crm-ws-task-assignee').value : null,
-      });
-      t.disabled = false;
-      if (res.status !== 201) { toast(_crmWsError(res, 'Could not add the task.'), 'error'); return; }
-      toast('Task added.', 'success');
-      _crmWsRefresh(lead, ['tasks', 'timeline']);
+      _crmWsTaskModalOpen();
     } else if (t.matches('[data-ws-task-toggle]')) {
       const res = t.checked ? await API.crmCompleteTask(+t.dataset.wsTaskToggle) : await API.crmReopenTask(+t.dataset.wsTaskToggle);
       if (res.status !== 200) { t.checked = !t.checked; toast(_crmWsError(res, 'Could not update the task.'), 'error'); return; }
@@ -61556,11 +61690,63 @@ async function submitDsCreate() {
     box?.setSelectionRange(pos, pos);
   });
 
-  // Tasks tab: Enter in the title or notes field adds the task
-  $('#crm-lead-view-body')?.addEventListener('keydown', e => {
-    if (e.key !== 'Enter' || e.isComposing || !['crm-ws-task-title', 'crm-ws-task-notes'].includes(e.target.id)) return;
-    e.preventDefault();
-    $('#crm-ws-panel [data-ws-task-add]')?.click();
+  // Tasks tab → Add Task: the form lives in its own modal above the lead window
+  function _crmWsTaskModalOpen() {
+    $('#crm-ws-task-title').value = '';
+    $('#crm-ws-task-due').value = '';
+    $('#crm-ws-task-notes').value = '';
+    $('#crm-ws-task-assignee').innerHTML = '<option value="">Unassigned</option>'
+      + (_crmWs.info?.task_assignees || []).map(u => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('');
+    _macShow($('#crm-ws-task-modal'));
+    setTimeout(() => $('#crm-ws-task-title')?.focus(), 30);
+  }
+  const _crmWsTaskModalClose = () => _macHide($('#crm-ws-task-modal'));
+
+  async function _crmWsTaskSave() {
+    const lead = _crmViewLead;
+    if (!lead) return;
+    const title = $('#crm-ws-task-title').value.trim();
+    if (!title) { toast('Give the task a title.', 'error'); $('#crm-ws-task-title').focus(); return; }
+    const btn = $('#crm-ws-task-save');
+    btn.disabled = true;
+    const res = await API.crmCreateLeadTask(lead.id, {
+      title,
+      description: $('#crm-ws-task-notes').value.trim() || null,
+      due_at:      $('#crm-ws-task-due').value || null,
+      assigned_to: $('#crm-ws-task-assignee').value ? +$('#crm-ws-task-assignee').value : null,
+    });
+    btn.disabled = false;
+    if (res.status !== 201) { toast(_crmWsError(res, 'Could not add the task.'), 'error'); return; }
+    _crmWsTaskModalClose();
+    toast('Task added.', 'success');
+    _crmWsRefresh(lead, ['tasks', 'timeline']);
+  }
+
+  $('#crm-ws-task-save')?.addEventListener('click', _crmWsTaskSave);
+  $('#crm-ws-task-cancel')?.addEventListener('click', _crmWsTaskModalClose);
+  $('#crm-ws-task-close')?.addEventListener('click', _crmWsTaskModalClose);
+  $('#crm-ws-task-modal')?.addEventListener('click', e => { if (e.target.id === 'crm-ws-task-modal') _crmWsTaskModalClose(); });
+  // Enter in the title adds the task (Esc is handled by the shared mac-window handler)
+  $('#crm-ws-task-title')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); _crmWsTaskSave(); }
+  });
+  // Assign to: type to search the employee list
+  if ($('#crm-ws-task-assignee')) makeSelectSearchable($('#crm-ws-task-assignee'));
+
+  // Timeline tab: search as you type (the tab re-draws; keep focus and caret in the box), person pop-up
+  $('#crm-lead-view-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-tl-q') return;
+    _crmWs.timelineQuery = e.target.value;
+    const pos = e.target.selectionStart;
+    _crmRenderWsTab();
+    const box = $('#crm-tl-q');
+    box?.focus();
+    box?.setSelectionRange(pos, pos);
+  });
+  $('#crm-lead-view-body')?.addEventListener('change', e => {
+    if (e.target.id !== 'crm-tl-who') return;
+    _crmWs.timelineWho = e.target.value;
+    _crmRenderWsTab();
   });
 
   // Files tab: search as you type, sort pop-up, and drop files from Explorer / Finder to upload them
@@ -61658,7 +61844,8 @@ async function submitDsCreate() {
 
   function _crmQtHtml() {
     const s = _crmQtState();
-    if (s.view === 'edit' && s.form) return _crmQtFormHtml(s);
+    // While editing, the form is in its own window (_crmQtSyncEditor); show what it was opened from behind it
+    if (s.view === 'edit' && s.form) return s.form.id && s.detail?.id === s.form.id ? _crmQtDetailHtml(s) : _crmQtListHtml();
     if (s.view === 'detail' && s.detail) return _crmQtDetailHtml(s);
     return _crmQtListHtml();
   }
@@ -61859,11 +62046,6 @@ async function submitDsCreate() {
 
     const n = f.lines.length;
     return `<div class="crm-qtx">
-      <div class="crm-qtx-bar"><button type="button" class="crm-qtx-back" data-qt-back><i class="fa fa-chevron-left"></i> Quotations</button></div>
-      <div class="crm-qtx-title" style="--ic:#8e8e93">
-        <span class="crm-qtl-ic"><i class="fa fa-pen"></i></span>
-        <div><strong>${f.id ? `Edit ${escHtml(f.number)}` : 'New Quotation'}</strong><small>Draft · ${n} ${n === 1 ? 'line' : 'lines'}</small></div>
-      </div>
       ${returned}
       <div id="crm-qt-alert" class="svc-form-alert" style="display:none"></div>
 
@@ -61912,14 +62094,21 @@ async function submitDsCreate() {
           </div>
         </section>
       </div>
-
-      <div class="crm-qtx-dock">
-        <div class="crm-qtx-dock-total"><small>Total</small><b id="crm-qt-t-total-dock">${_crmQtMoney(t.total)}</b></div>
-        <span class="crm-fm-spacer"></span>
-        <button type="button" class="crm-qtx-btn" data-qt-back>Cancel</button>
-        <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-save><i class="fa fa-floppy-disk"></i> Save draft</button>
-      </div>
     </div>`;
+  }
+
+  /** The editor opens in its own window above the lead window; the list (or the quotation) stays behind it. */
+  function _crmQtSyncEditor() {
+    const modal = $('#crm-qt-edit-modal');
+    if (!modal) return;
+    const s = _crmWs.qt;
+    if (!_crmViewLead || _crmLeadTab !== 'quotations' || s?.view !== 'edit' || !s.form) { _macHide(modal); return; }
+    const n = s.form.lines.length;
+    $('#crm-qt-edit-title').textContent = s.form.id ? `Edit ${s.form.number}` : 'New Quotation';
+    $('#crm-qt-edit-sub').textContent = `Draft · ${n} ${n === 1 ? 'line' : 'lines'}`;
+    $('#crm-qt-edit-body').innerHTML = _crmQtFormHtml(s);
+    $('#crm-qt-t-total-dock').textContent = _crmQtMoney(_crmQtTotals(s.form).total);
+    if (modal.style.display === 'none' || modal.classList.contains('mac-out')) _macShow(modal);
   }
 
   /** Re-draw totals and line totals only — keeps focus in the field being typed in. */
@@ -61927,7 +62116,7 @@ async function submitDsCreate() {
     const s = _crmQtState();
     if (!s.form) return;
     const t = _crmQtTotals(s.form);
-    t.lines.forEach((l, i) => { const el = $(`#crm-ws-panel [data-qt-lt="${i}"]`); if (el) el.textContent = _crmQtMoney(l.net); });
+    t.lines.forEach((l, i) => { const el = $(`#crm-qt-edit-body [data-qt-lt="${i}"]`); if (el) el.textContent = _crmQtMoney(l.net); });
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     set('#crm-qt-t-sub', _crmQtMoney(t.subtotal));
     set('#crm-qt-t-disc', '−' + _crmQtMoney(t.discount));
@@ -61947,7 +62136,7 @@ async function submitDsCreate() {
       const res = await API.crmLeadQuotationStock(lead.id, { items }).catch(() => ({ status: 0 }));
       if (_crmViewLead?.id !== lead.id || s.view !== 'edit' || res.status !== 200) return;
       s.stock = res.body.data;
-      s.form.lines.forEach((_, i) => { const el = $(`#crm-ws-panel [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
+      s.form.lines.forEach((_, i) => { const el = $(`#crm-qt-edit-body [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
       const warn = $('#crm-qt-stock-warn');
       if (warn) warn.innerHTML = _crmQtStockWarnHtml(s.stock);
     }, 350);
@@ -61992,7 +62181,7 @@ async function submitDsCreate() {
       // Mark the lines the server refused (e.g. over the stock in hand under the "block" setting)
       Object.keys(res.body?.errors || {}).forEach(k => {
         const m = k.match(/^items\.(\d+)\./);
-        if (m) $(`#crm-ws-panel [data-qt-line="${m[1]}"]`)?.classList.add('crm-qt-line--error');
+        if (m) $(`#crm-qt-edit-body [data-qt-line="${m[1]}"]`)?.classList.add('crm-qt-line--error');
       });
       return fail(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Could not save the quotation.'));
     }
@@ -62281,7 +62470,7 @@ async function submitDsCreate() {
   }
 
   // Typing in the editor: keep the form state, re-draw the totals, re-check the stock
-  $('#crm-lead-view-body')?.addEventListener('input', e => {
+  ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('input', e => {
     const lead = _crmViewLead;
     const s = _crmWs.qt;
     if (!lead || !s?.form || s.view !== 'edit') return;
@@ -62314,9 +62503,9 @@ async function submitDsCreate() {
         results.style.display = '';
       }, 220);
     }
-  });
+  }));
 
-  $('#crm-lead-view-body')?.addEventListener('click', async e => {
+  ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('click', async e => {
     const lead = _crmViewLead;
     if (!lead || _crmLeadTab !== 'quotations') return;
     const s = _crmQtState();
@@ -62355,7 +62544,7 @@ async function submitDsCreate() {
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
       s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
       _crmRenderWsTab();
-      $$('#crm-ws-panel [data-qt-f="description"]').pop()?.focus();
+      $$('#crm-qt-edit-body [data-qt-f="description"]').pop()?.focus();
     } else if (t.dataset.qtLineDel !== undefined && s.form) {
       s.form.lines.splice(+t.dataset.qtLineDel, 1);
       s.stock = null;
@@ -62489,7 +62678,7 @@ async function submitDsCreate() {
       }
       _crmQtAfterChange(lead, res);
     }
-  });
+  }));
 
   // Send form CC: one chip per address, shown by the name of the team member / customer it belongs to
   function _crmQtCcChipsHtml(cc) {
@@ -62547,9 +62736,9 @@ async function submitDsCreate() {
   });
 
   // Close the product results when clicking elsewhere in the editor
-  $('#crm-lead-view-body')?.addEventListener('focusout', e => {
+  ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('focusout', e => {
     if (e.target.id === 'crm-qt-product-search') setTimeout(() => { const r = $('#crm-qt-product-results'); if (r) r.style.display = 'none'; }, 200);
-  });
+  }));
 
   /**
    * Open a lead's window from outside its pipeline (approvals inbox, Sales quotation) —
@@ -69549,86 +69738,6 @@ const TeamProfile = (() => {
       const ids = [...overlay.querySelectorAll('#pm-as-list input:checked')].map(i => +i.value);
       overlay.remove();
       _pmAssignTask(t.id, ids);
-    });
-  }
-
-  // Swap a <select>'s native dropdown for a searchable popup. The select stays the source of truth:
-  // picking an option sets its value and fires 'change', so existing listeners keep working.
-  function _pmMakeSelectSearchable(sel) {
-    const open = () => {
-      document.querySelector('.pm-ss-pop')?._close?.();
-      const r   = sel.getBoundingClientRect();
-      const pop = document.createElement('div');
-      pop.className = 'pm-ss-pop';
-      pop.style.left     = `${r.left}px`;
-      pop.style.minWidth = `${Math.max(r.width, 200)}px`;
-      pop.innerHTML = `<input type="text" class="pm-ss-input" placeholder="Search…"><div class="pm-ss-list"></div>`;
-      document.body.appendChild(pop);
-
-      const input = pop.querySelector('.pm-ss-input');
-      const list  = pop.querySelector('.pm-ss-list');
-      let items = [], active = 0;
-      const render = () => {
-        const q = input.value.trim().toLowerCase();
-        items = [...sel.options].filter(o => !o.disabled && o.text.toLowerCase().includes(q));
-        active = Math.max(0, items.findIndex(o => o.value === sel.value));
-        list.innerHTML = items.length
-          ? items.map((o, i) => `<div class="cat-combo-item${i === active ? ' active' : ''}" data-i="${i}">${esc(o.text)}</div>`).join('')
-          : '<div class="cat-combo-empty">No matches</div>';
-      };
-      const highlight = i => {
-        active = (i + items.length) % items.length;
-        list.querySelectorAll('.cat-combo-item').forEach((el, j) => el.classList.toggle('active', j === active));
-        list.children[active]?.scrollIntoView({ block: 'nearest' });
-      };
-      const pick = o => {
-        close();
-        if (!o || o.value === sel.value) return;
-        sel.value = o.value;
-        sel.dispatchEvent(new Event('change', { bubbles: true }));
-      };
-      const onDocDown = e => { if (!pop.contains(e.target) && e.target !== sel) close(); };
-      const onScroll  = e => { if (!pop.contains(e.target)) close(); };
-      function close() {
-        pop.remove();
-        document.removeEventListener('mousedown', onDocDown, true);
-        window.removeEventListener('scroll', onScroll, true);
-        window.removeEventListener('resize', close);
-      }
-      pop._close = close;
-
-      input.addEventListener('input', render);
-      input.addEventListener('keydown', e => {
-        if (e.key === 'ArrowDown')      { e.preventDefault(); if (items.length) highlight(active + 1); }
-        else if (e.key === 'ArrowUp')   { e.preventDefault(); if (items.length) highlight(active - 1); }
-        else if (e.key === 'Enter')     { e.preventDefault(); pick(items[active]); }
-        else if (e.key === 'Escape')    { e.preventDefault(); close(); sel.focus(); }
-        else if (e.key === 'Tab')       { close(); }
-      });
-      list.addEventListener('mousedown', e => {
-        const el = e.target.closest('.cat-combo-item');
-        if (!el) return;
-        e.preventDefault();
-        pick(items[+el.dataset.i]);
-      });
-      document.addEventListener('mousedown', onDocDown, true);
-      window.addEventListener('scroll', onScroll, true);
-      window.addEventListener('resize', close);
-      render();
-      // Open upward when there isn't room below.
-      const below = window.innerHeight - r.bottom;
-      if (below < pop.offsetHeight + 8 && r.top > below) pop.style.bottom = `${window.innerHeight - r.top + 2}px`;
-      else pop.style.top = `${r.bottom + 2}px`;
-      list.children[active]?.scrollIntoView({ block: 'nearest' });
-      input.focus();
-    };
-    sel.addEventListener('mousedown', e => {
-      e.preventDefault();
-      if (document.querySelector('.pm-ss-pop')) { document.querySelector('.pm-ss-pop')._close(); return; }
-      open();
-    });
-    sel.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') { e.preventDefault(); open(); }
     });
   }
 

@@ -87,7 +87,10 @@ class PosCrmFollowUpApiController extends Controller
         ]);
     }
 
-    /** POST crm/leads/{lead}/follow-ups — { due_at, user_id?, channel?, notes?, quotation_id? } */
+    /**
+     * POST crm/leads/{lead}/follow-ups — { due_at, user_id? | user_ids?[], channel?, notes?, quotation_id? }
+     * Several user_ids plan one follow-up per person; `data` is then a list.
+     */
     public function store(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
@@ -96,10 +99,26 @@ class PosCrmFollowUpApiController extends Controller
         $data = $request->validate([
             'due_at'       => ['required', 'date'],
             'user_id'      => ['nullable', 'integer'],
+            'user_ids'     => ['nullable', 'array', 'max:50'],
+            'user_ids.*'   => ['integer'],
             'channel'      => ['nullable', 'string', Rule::in(array_keys(FollowUp::CHANNELS))],
             'notes'        => ['nullable', 'string', 'max:2000'],
             'quotation_id' => ['nullable', 'integer'],
         ]);
+
+        $userIds = array_values(array_unique(array_map('intval', $data['user_ids'] ?? [])));
+        unset($data['user_ids']);
+        if (count($userIds) > 1) {
+            $created = $this->followUps->createForUsers($lead, $data, $userIds, $request->user()?->id);
+
+            return response()->json([
+                'message' => count($created) . ' follow-ups planned.',
+                'data'    => array_map(fn (FollowUp $f) => $this->followUps->present($f->load(['user:id,name', 'quotation']), true), $created),
+            ], 201);
+        }
+        if ($userIds) {
+            $data['user_id'] = $userIds[0];
+        }
 
         $followUp = $this->followUps->create($lead, $data, $request->user()?->id);
 
