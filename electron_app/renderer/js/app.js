@@ -62637,117 +62637,340 @@ async function submitDsCreate() {
       </div>`).join('')}</div>`;
   }
 
+  const _crmDashPct = n => n == null ? '—' : `${(+n).toFixed(1).replace(/\.0$/, '')}%`;
+  const _crmDashPl  = (n, word) => `${_crmDashNum(n)} ${word}${n === 1 ? '' : 's'}`;
+  const _crmDashDay = s => s ? new Date(`${s}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+
+  /** Grouped money; compact (245K / 1.2M) for headline figures from 100,000 up. html wraps the currency for smaller type. */
+  function _crmDashMoney(n, { compact = false, html = false } = {}) {
+    const v = Number(n) || 0;
+    const s = compact && Math.abs(v) >= 100000
+      ? new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(v)
+      : v.toLocaleString(undefined, { minimumFractionDigits: compact ? 0 : 2, maximumFractionDigits: compact ? 0 : 2 });
+    const cur = state.currency;
+    if (!cur) return s;
+    const c = html ? `<span class="crm-dash-cur">${escHtml(cur)}</span>` : cur;
+    return currencyPosition() === 'before' ? `${c} ${s}` : `${s} ${c}`;
+  }
+
+  /** Change against the previous period: % for amounts and counts, points for rates; invert where a fall is good. */
+  function _crmDashDelta(cur, prev, { pts = false, invert = false, vs = true } = {}) {
+    const tail = vs ? '<span class="crm-dash-delta-vs">vs previous period</span>' : '';
+    if (cur == null || prev == null) return `<span class="crm-dash-delta crm-dash-delta--flat">No prior data</span>`;
+    let diff, txt;
+    if (pts) {
+      diff = cur - prev;
+      txt = `${Math.abs(diff).toFixed(1).replace(/\.0$/, '')} pts`;
+    } else if (!prev) {
+      return cur ? `<span class="crm-dash-delta crm-dash-delta--up"><i class="fa fa-arrow-up"></i> New</span>${vs ? '<span class="crm-dash-delta-vs">none in previous period</span>' : ''}`
+        : `<span class="crm-dash-delta crm-dash-delta--flat"><i class="fa fa-minus"></i> Flat</span>${tail}`;
+    } else {
+      diff = (cur - prev) / Math.abs(prev) * 100;
+      txt = `${Math.abs(diff) < 10 ? Math.abs(diff).toFixed(1).replace(/\.0$/, '') : Math.round(Math.abs(diff))}%`;
+    }
+    if (Math.abs(diff) < 0.05) return `<span class="crm-dash-delta crm-dash-delta--flat"><i class="fa fa-minus"></i> Flat</span>${tail}`;
+    const good = invert ? diff < 0 : diff > 0;
+    return `<span class="crm-dash-delta crm-dash-delta--${good ? 'up' : 'down'}"><i class="fa fa-arrow-${diff > 0 ? 'up' : 'down'}"></i> ${txt}</span>${tail}`;
+  }
+
+  /** Plain-language takeaways for the top of the page: wins first, then risks. */
+  function _crmDashInsights(d) {
+    const k = d.kpis, p = d.previous || {}, out = [];
+    const add = (tone, html) => out.push({ tone, html });
+    const money = v => escHtml(_crmDashMoney(v, { compact: true }));
+
+    if (k.won_value_in_range && p.won_value_in_range) {
+      const ch = (k.won_value_in_range - p.won_value_in_range) / p.won_value_in_range * 100;
+      add(ch >= 0 ? 'good' : 'bad',
+        `Revenue won is <b>${ch >= 0 ? 'up' : 'down'} ${Math.round(Math.abs(ch))}%</b> on the previous period (${money(k.won_value_in_range)} vs ${money(p.won_value_in_range)}).`);
+    } else if (k.won_value_in_range) {
+      add('good', `<b>${money(k.won_value_in_range)}</b> won from ${_crmDashPl(k.won_in_range, 'deal')} — nothing was won in the previous period.`);
+    } else {
+      add('warn', 'No deals were closed won in this period.');
+    }
+    const top = d.staff.find(s => s.won_value > 0);
+    if (top) {
+      const share = k.won_value_in_range ? ` (${Math.round(top.won_value / k.won_value_in_range * 100)}% of revenue)` : '';
+      add('good', `<b>${escHtml(top.name)}</b> is the top performer — ${money(top.won_value)} from ${_crmDashPl(top.won, 'deal')}${share}.`);
+    }
+    const src = d.by_source.filter(s => s.won > 0).sort((a, b) => b.won / b.leads - a.won / a.leads || b.won - a.won)[0];
+    if (src) add('good', `<b>${escHtml(src.label)}</b> converts best: ${src.won} of ${_crmDashPl(src.leads, 'lead')} won (${_crmDashPct(src.won / src.leads * 100)}).`);
+    if (k.past_due_deals) add('bad', `<b>${_crmDashPl(k.past_due_deals, 'open deal')}</b> worth ${money(k.past_due_deals_value)} ${k.past_due_deals === 1 ? 'is' : 'are'} past the expected close date.`);
+    if (k.overdue_follow_ups) add('bad', `<b>${_crmDashPl(k.overdue_follow_ups, 'follow-up')}</b> ${k.overdue_follow_ups === 1 ? 'is' : 'are'} overdue — customers are waiting for a call back.`);
+    if (k.pending_approvals) add('warn', `<b>${_crmDashPl(k.pending_approvals, 'quotation')}</b> worth ${money(k.pending_approval_value)} ${k.pending_approvals === 1 ? 'is' : 'are'} waiting for approval.`);
+    const lr = d.lost_reasons[0];
+    if (lr) add('warn', `“${escHtml(lr.label)}” is the main reason deals are lost (${lr.leads} of ${k.lost_in_range}).`);
+    if (k.open_pipeline_count && !k.open_pipeline_value) add('warn', `None of the ${_crmDashPl(k.open_pipeline_count, 'open deal')} has an estimated value — the pipeline value cannot be measured.`);
+    if (!k.overdue_follow_ups && !k.past_due_deals) add('good', 'No overdue follow-ups or past-due deals — the pipeline is on schedule.');
+    return out.slice(0, 6);
+  }
+
   function _crmDashRender() {
     const d = _crmDash.data;
-    const k = d.kpis;
-    const tile = (icon, label, value, sub = '', cls = '') => `
-      <div class="crm-dash-tile${cls ? ' ' + cls : ''}">
-        <div class="crm-dash-tile-label"><i class="fa ${icon}"></i> ${label}</div>
-        <div class="crm-dash-tile-value">${value}</div>
-        ${sub ? `<div class="crm-dash-tile-sub">${sub}</div>` : ''}
-      </div>`;
+    const k = d.kpis, p = d.previous || {}, f = d.filters || {}, o = d.options || {};
     const hours = h => h == null ? '—' : h < 48 ? `${h} h` : `${(h / 24).toFixed(1)} d`;
+    const money = (v, compact = true) => _crmDashMoney(v, { compact, html: true });
+    const scope = [
+      f.department_id && (o.departments || []).find(x => x.id === f.department_id)?.name,
+      f.division_id && (o.divisions || []).find(x => x.id === f.division_id)?.name,
+      f.user_id && (o.staff || []).find(x => x.id === f.user_id)?.name,
+      f.source && (o.sources || []).find(x => x.key === f.source)?.label,
+    ].filter(Boolean);
+    const weekly = d.trend.length && d.trend[0].label.startsWith('Wk');
+
+    const hero = (label, value, sub, foot) => `
+      <div class="crm-dash-hero">
+        <div class="crm-dash-hero-label">${label}</div>
+        <div class="crm-dash-hero-value">${value}</div>
+        <div class="crm-dash-hero-sub">${sub}</div>
+        <div class="crm-dash-hero-foot">${foot}</div>
+      </div>`;
+    const metric = (label, value, sub, cls = '') => `
+      <div class="crm-dash-metric${cls ? ' ' + cls : ''}">
+        <div class="crm-dash-metric-label">${label}</div>
+        <div class="crm-dash-metric-value">${value}</div>
+        <div class="crm-dash-metric-sub">${sub}</div>
+      </div>`;
+    const card = (title, sub, body, cls = '') => `
+      <div class="crm-dash-card${cls ? ' ' + cls : ''}">
+        <div class="crm-dash-card-head"><span>${title}</span>${sub ? `<span class="crm-ws-muted crm-dash-card-sub">${sub}</span>` : ''}</div>
+        ${body.startsWith('<table') ? `<div class="crm-dash-scroll">${body}</div>` : body}
+      </div>`;
+    const share = (pct, color) => `<span class="crm-dash-share"><span style="width:${Math.max(pct ? 2 : 0, Math.min(100, pct))}%;background:${color}"></span></span>`;
+    const R = 'crm-qt-right';
+
+    // Funnel: statuses that hold leads, as a share of all leads created in the period
+    const funnelRows = d.funnel.filter(r => r.leads);
+    const funnelHtml = funnelRows.length
+      ? _crmDashBarsHtml(funnelRows, { extra: r => _crmDashPct(r.leads / Math.max(1, k.leads) * 100) })
+      : _crmWsPanelHtml('No leads in this period.');
+
+    const openHtml = d.top_open?.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Deal</th><th>Stage</th><th>Owner</th><th>Expected close</th><th class="${R}">Value</th></tr></thead>
+        <tbody>${d.top_open.map(l => `<tr class="crm-dash-link" data-dash-lead="${l.id}" data-project="${l.project_id}" title="Open this lead">
+          <td><strong>${escHtml(l.name)}</strong>${l.contact ? `<div class="crm-dash-cell-sub">${escHtml(l.contact)}</div>` : ''}<div class="crm-dash-cell-sub">${_crmDashPl(l.age_days, 'day')} old</div></td>
+          <td><span class="crm-dash-pill" style="--pill:${escHtml(l.stage_color)}">${escHtml(l.stage)}</span></td>
+          <td>${escHtml(l.owner || 'Unassigned')}</td>
+          <td class="${l.past_due ? 'crm-dash-bad' : ''}">${l.expected_close_date ? `${l.past_due ? '<i class="fa fa-triangle-exclamation"></i> ' : ''}${escHtml(_crmDashDay(l.expected_close_date))}` : '<span class="crm-ws-muted">Not set</span>'}</td>
+          <td class="${R}"><strong>${_crmDashMoney(l.value)}</strong></td></tr>`).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No open deals with an estimated value.');
+
+    const winsHtml = d.recent_wins?.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Customer</th><th>Won by</th><th>Closed</th><th class="${R}">Value</th></tr></thead>
+        <tbody>${d.recent_wins.map(l => `<tr class="crm-dash-link" data-dash-lead="${l.id}" data-project="${l.project_id}" title="Open this lead">
+          <td><strong>${escHtml(l.name)}</strong></td>
+          <td>${escHtml(l.owner || '—')}</td><td>${escHtml(_crmDashDay(l.closed_at))}</td>
+          <td class="${R}"><strong>${_crmDashMoney(l.value)}</strong></td></tr>`).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No deals won in this period.');
+
+    const srcTotal = Math.max(1, d.by_source.reduce((a, r) => a + r.leads, 0));
+    const sourceHtml = d.by_source.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Source</th><th class="${R}">Leads</th><th>Share</th><th class="${R}">Won</th><th class="${R}">Conversion</th></tr></thead>
+        <tbody>${d.by_source.map(s => `<tr>
+          <td><span class="crm-dash-swatch" style="background:${escHtml(s.color || '#94a3b8')}"></span>${escHtml(s.label)}</td>
+          <td class="${R}">${_crmDashNum(s.leads)}</td>
+          <td>${share(s.leads / srcTotal * 100, escHtml(s.color || '#94a3b8'))}<span class="crm-dash-cell-sub">${_crmDashPct(s.leads / srcTotal * 100)}</span></td>
+          <td class="${R}">${_crmDashNum(s.won)}</td><td class="${R}"><strong>${_crmDashPct(s.leads ? s.won / s.leads * 100 : 0)}</strong></td></tr>`).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No leads in this period.');
+
+    const divDept = Object.fromEntries((o.divisions || []).map(v => [v.id, v.department_id]));
+    const deptRow = (r, sub = false) => `<tr${sub ? ' class="crm-dash-subrow"' : ''}>
+        <td>${sub ? '<i class="fa fa-turn-up fa-rotate-90"></i> ' : ''}${escHtml(r.label)}</td>
+        <td class="${R}">${_crmDashNum(r.leads)}</td><td class="${R}">${_crmDashNum(r.won)}</td>
+        <td>${share(r.leads ? r.won / r.leads * 100 : 0, 'var(--crm-dash-c2)')}</td>
+        <td class="${R}"><strong>${_crmDashPct(r.leads ? r.won / r.leads * 100 : 0)}</strong></td></tr>`;
+    const placed = new Set();
+    const deptHtml = d.by_department.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th>Department</th><th class="${R}">Leads</th><th class="${R}">Won</th><th></th><th class="${R}">Conversion</th></tr></thead>
+        <tbody>${d.by_department.map(r => deptRow(r) + d.by_division.filter(v => divDept[v.id] === r.id).map(v => { placed.add(v.id); return deptRow(v, true); }).join('')).join('')}
+          ${d.by_division.filter(v => !placed.has(v.id)).map(v => deptRow(v, true)).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No leads in this period.');
+
+    const staffHtml = d.staff.length ? `<table class="crm-audit-table crm-dash-table">
+        <thead><tr><th style="width:44px">#</th><th>Staff</th><th class="${R}">Leads</th><th class="${R}">Won</th><th>Conversion</th><th class="${R}">Won value</th><th>Share of revenue</th></tr></thead>
+        <tbody>${d.staff.map((s, i) => {
+          const sh = k.won_value_in_range ? s.won_value / k.won_value_in_range * 100 : 0;
+          return `<tr>
+            <td><span class="crm-dash-rank">${i + 1}</span></td>
+            <td><span class="crm-dash-avatar">${escHtml(_crmInitials(s.name))}</span><strong>${escHtml(s.name)}</strong></td>
+            <td class="${R}">${_crmDashNum(s.leads)}</td><td class="${R}">${_crmDashNum(s.won)}</td>
+            <td>${share(s.conversion_rate, 'var(--crm-dash-c2)')}<span class="crm-dash-cell-sub">${_crmDashPct(s.conversion_rate)}</span></td>
+            <td class="${R}"><strong>${_crmDashMoney(s.won_value)}</strong></td>
+            <td>${share(sh, 'var(--crm-dash-c1)')}<span class="crm-dash-cell-sub">${_crmDashPct(sh)}</span></td></tr>`;
+        }).join('')}</tbody></table>`
+      : _crmWsPanelHtml('No assigned leads in this period.');
+
+    const mode = _crmDash.trendMode || 'revenue';
+    const insights = _crmDashInsights(d);
 
     $('#crm-dash-body').innerHTML = `
-      <div class="crm-dash-tiles">
-        ${tile('fa-user-plus', 'Leads', _crmDashNum(k.leads), `${_crmDashNum(k.open)} still open`)}
-        ${tile('fa-trophy', 'Conversion', `${k.conversion_rate}%`, `${_crmDashNum(k.won)} won · ${_crmDashNum(k.lost)} lost`)}
-        ${tile('fa-sack-dollar', 'Won value', formatMoney(k.won_value_in_range), `${_crmDashNum(k.won_in_range)} closed won in the period`)}
-        ${tile('fa-paper-plane', 'Quotations sent', formatMoney(k.quotation_value_sent), `${_crmDashNum(k.quotations_sent)} sent · ${_crmDashNum(k.quotations_won)} won (${formatMoney(k.quotation_value_won)}) · ${_crmDashNum(k.quotations_lost)} lost (${formatMoney(k.quotation_value_lost)})`)}
-        ${tile('fa-file-signature', 'Pending approvals', _crmDashNum(k.pending_approvals), formatMoney(k.pending_approval_value), k.pending_approvals ? 'crm-dash-tile--warn' : '')}
-        ${tile('fa-phone-slash', 'Overdue follow-ups', _crmDashNum(k.overdue_follow_ups), k.overdue_follow_ups ? '<i class="fa fa-triangle-exclamation"></i> Needs chasing' : 'All on time', k.overdue_follow_ups ? 'crm-dash-tile--overdue' : '')}
-        ${tile('fa-stopwatch', 'Avg response', hours(k.avg_response_hours), 'assignment → first contact')}
-        ${tile('fa-hourglass-end', 'Avg close time', k.avg_close_days == null ? '—' : `${k.avg_close_days} d`, 'created → won / lost')}
+      <div class="crm-dash-head">
+        <div>
+          <div class="crm-dash-title">Sales performance</div>
+          <div class="crm-dash-period">${escHtml(_crmDashDay(f.from))} – ${escHtml(_crmDashDay(f.to))}
+            ${p.from ? `<span class="crm-dash-sep">·</span> compared with ${escHtml(_crmDashDay(p.from))} – ${escHtml(_crmDashDay(p.to))}` : ''}</div>
+        </div>
+        <div class="crm-dash-scope">${escHtml((scope.length ? scope : [o.scope === 'headed' ? 'My departments' : 'Whole business']).join(' · '))}</div>
       </div>
 
-      <div class="crm-dash-card crm-dash-card--wide">
-        <div class="crm-dash-card-head"><span>Leads created per ${d.trend.length && d.trend[0].label.startsWith('Wk') ? 'week' : 'day'}</span>
-          <span class="crm-dash-legend"><span class="crm-dash-key crm-dash-key--c1"></span>Leads <span class="crm-dash-key crm-dash-key--c2"></span>Won (of those)</span></div>
+      <div class="crm-dash-heroes">
+        ${hero('Revenue won', money(k.won_value_in_range), `${_crmDashPl(k.won_in_range, 'deal')} closed won`,
+          _crmDashDelta(k.won_value_in_range, p.won_value_in_range))}
+        ${hero('Open pipeline', k.open_pipeline_value ? money(k.open_pipeline_value) : '—',
+          `${_crmDashPl(k.open_pipeline_count, 'open deal')}${k.open_pipeline_count && !k.open_pipeline_value ? ' · no values estimated' : ''}${k.past_due_deals ? ` · <span class="crm-dash-bad">${_crmDashNum(k.past_due_deals)} past due</span>` : ''}`,
+          '<span class="crm-dash-delta-vs">Live — all open deals in scope</span>')}
+        ${hero('Win rate', _crmDashPct(k.win_rate), `${_crmDashNum(k.won_in_range)} won · ${_crmDashNum(k.lost_in_range)} lost in the period`,
+          _crmDashDelta(k.win_rate, p.win_rate, { pts: true }))}
+        ${hero('New leads', _crmDashNum(k.leads), `${_crmDashNum(k.open)} still open · ${_crmDashPct(k.conversion_rate)} converted`,
+          _crmDashDelta(k.leads, p.leads))}
+      </div>
+
+      <div class="crm-dash-split">
+        ${card('Key insights', '', `<ul class="crm-dash-insights">${insights.map(i => `
+          <li class="crm-dash-insight crm-dash-insight--${i.tone}"><span class="crm-dash-mark"></span><span>${i.html}</span></li>`).join('')}</ul>`)}
+        ${card('Sales efficiency', '', `<div class="crm-dash-metrics">
+          ${metric('Avg deal size', k.avg_deal_value == null ? '—' : money(k.avg_deal_value), _crmDashDelta(k.avg_deal_value, p.avg_deal_value, { vs: false }))}
+          ${metric('Lead conversion', _crmDashPct(k.conversion_rate), _crmDashDelta(k.conversion_rate, p.conversion_rate, { pts: true, vs: false }))}
+          ${metric('Quotations sent', money(k.quotation_value_sent), `${_crmDashNum(k.quotations_sent)} sent · ${_crmDashNum(k.quotations_won)} accepted · ${_crmDashNum(k.quotations_lost)} rejected`)}
+          ${metric('Pending approval', _crmDashNum(k.pending_approvals), k.pending_approvals ? `${_crmDashMoney(k.pending_approval_value, { compact: true })} waiting` : 'Nothing waiting', k.pending_approvals ? 'crm-dash-metric--warn' : '')}
+          ${metric('Overdue follow-ups', _crmDashNum(k.overdue_follow_ups), k.overdue_follow_ups ? 'Needs chasing' : 'All on time', k.overdue_follow_ups ? 'crm-dash-metric--bad' : '')}
+          ${metric('First response', hours(k.avg_response_hours), 'assignment → first contact')}
+          ${metric('Sales cycle', k.avg_close_days == null ? '—' : `${k.avg_close_days} d`, 'created → won / lost')}
+          ${metric('Past-due deals', _crmDashNum(k.past_due_deals), k.past_due_deals ? `${_crmDashMoney(k.past_due_deals_value, { compact: true })} at risk` : 'None', k.past_due_deals ? 'crm-dash-metric--bad' : '')}
+        </div>`)}
+      </div>
+
+      <div class="crm-dash-card">
+        <div class="crm-dash-card-head">
+          <span>${mode === 'revenue' ? `Revenue won per ${weekly ? 'week' : 'day'}` : `Leads created per ${weekly ? 'week' : 'day'}`}</span>
+          <span class="crm-dash-card-tools">
+            ${mode === 'leads' ? '<span class="crm-dash-legend"><span class="crm-dash-key crm-dash-key--c1"></span>Leads <span class="crm-dash-key crm-dash-key--c2"></span>Won (of those)</span>' : ''}
+            <span class="crm-dash-seg">
+              <button type="button" data-dash-trend="revenue" class="${mode === 'revenue' ? 'active' : ''}">Revenue</button>
+              <button type="button" data-dash-trend="leads" class="${mode === 'leads' ? 'active' : ''}">Leads</button>
+            </span>
+          </span>
+        </div>
         <div id="crm-dash-trend" class="crm-dash-chart"></div>
       </div>
 
-      <div class="crm-dash-grid">
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Funnel — current status of the leads</span></div>
-          ${_crmDashBarsHtml(d.funnel)}</div>
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Leads by source</span></div>
-          ${_crmDashBarsHtml(d.by_source, { extra: r => `${r.won} won` })}</div>
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Leads by department</span></div>
-          ${_crmDashBarsHtml(d.by_department, { extra: r => `${r.won} won` })}
-          ${d.by_division.length ? `<div class="crm-dash-sub-head">By division</div>${_crmDashBarsHtml(d.by_division, { extra: r => `${r.won} won` })}` : ''}</div>
-        <div class="crm-dash-card"><div class="crm-dash-card-head"><span>Top lost reasons</span></div>
-          ${_crmDashBarsHtml(d.lost_reasons, { color: 'var(--crm-dash-c3)', empty: 'No leads lost in this period.' })}</div>
+      <div class="crm-dash-section">Pipeline</div>
+      <div class="crm-dash-grid2">
+        ${card('Largest open deals', 'live · click to open', openHtml)}
+        ${card('Where this period’s leads are now', `${_crmDashPl(k.leads, 'lead')}`, funnelHtml)}
+        ${card('Biggest wins in the period', '', winsHtml)}
+        ${card('Why deals are lost', `${_crmDashNum(k.lost_in_range)} lost`, _crmDashBarsHtml(d.lost_reasons, {
+          color: 'var(--crm-dash-c3)', empty: 'No leads lost in this period.', extra: r => _crmDashPct(r.leads / Math.max(1, k.lost_in_range) * 100) }))}
       </div>
 
-      <div class="crm-dash-card crm-dash-card--wide">
-        <div class="crm-dash-card-head"><span>Staff ranking</span><span class="crm-ws-muted">by won value, then won count</span></div>
-        ${d.staff.length ? `<table class="crm-audit-table crm-dash-table">
-          <thead><tr><th>#</th><th>Staff</th><th class="crm-qt-right">Leads</th><th class="crm-qt-right">Won</th><th class="crm-qt-right">Won value</th><th class="crm-qt-right">Conversion</th></tr></thead>
-          <tbody>${d.staff.map((s, i) => `<tr>
-            <td>${i + 1}</td><td><strong>${escHtml(s.name)}</strong></td>
-            <td class="crm-qt-right">${_crmDashNum(s.leads)}</td><td class="crm-qt-right">${_crmDashNum(s.won)}</td>
-            <td class="crm-qt-right">${formatMoney(s.won_value)}</td><td class="crm-qt-right">${s.conversion_rate}%</td></tr>`).join('')}</tbody>
-        </table>` : _crmWsPanelHtml('No assigned leads in this period.')}
-      </div>`;
-    requestAnimationFrame(() => _crmDashTrendChart($('#crm-dash-trend'), d.trend));
+      <div class="crm-dash-section">Channels &amp; teams</div>
+      <div class="crm-dash-grid2">
+        ${card('Lead sources', 'which channels bring and convert leads', sourceHtml)}
+        ${card('Departments', 'conversion of leads created in the period', deptHtml)}
+      </div>
+      ${card('Team leaderboard', 'ranked by won value, then deals won', staffHtml)}`;
+    requestAnimationFrame(() => _crmDashTrendChart($('#crm-dash-trend'), d.trend, mode));
   }
 
-  /** Leads and won per day: two lines on one axis, Won dashed (a second cue besides colour), hover tooltip. */
-  function _crmDashTrendChart(container, rows) {
+  /**
+   * Revenue mode: won value per day as bars. Leads mode: leads and won per day as two lines,
+   * Won dashed (a second cue besides colour). Both with a hover tooltip.
+   */
+  function _crmDashTrendChart(container, rows, mode = 'revenue') {
     if (!container || !window.d3) return;
     container.innerHTML = '';
-    if (!rows.length || rows.every(r => !r.leads)) { container.innerHTML = _crmWsPanelHtml('No leads in this period.'); return; }
-    const W = container.clientWidth || 600, H = container.clientHeight || 220;
-    const m = { top: 14, right: 56, bottom: 26, left: 36 };
+    const revenue = mode === 'revenue';
+    const val = r => revenue ? r.won_value || 0 : r.leads;
+    if (!rows.length || rows.every(r => !val(r))) {
+      container.innerHTML = _crmWsPanelHtml(revenue ? 'No deals won in this period.' : 'No leads in this period.');
+      return;
+    }
+    const W = container.clientWidth || 600, H = container.clientHeight || 240;
+    const m = { top: 14, right: revenue ? 16 : 64, bottom: 26, left: revenue ? 56 : 36 };
     const w = W - m.left - m.right, h = H - m.top - m.bottom;
     if (w <= 0 || h <= 0) return;
     const st = getComputedStyle(container);
     const c1 = st.getPropertyValue('--crm-dash-c1').trim() || '#4f46e5';
     const c2 = st.getPropertyValue('--crm-dash-c2').trim() || '#0d9488';
-    const muted = st.getPropertyValue('--text-muted').trim() || '#94a3b8';
-    const border = st.getPropertyValue('--border').trim() || '#e2e8f0';
+    const muted = st.getPropertyValue('--mac-muted').trim() || '#94a3b8';
+    const border = st.getPropertyValue('--mac-line').trim() || '#e2e8f0';
     const surface = st.getPropertyValue('--surface').trim() || '#fff';
+    const compact = v => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(v);
 
     const svg = d3.select(container).append('svg').attr('width', W).attr('height', H);
     const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
-    const x = d3.scalePoint().domain(rows.map(r => r.date)).range([0, w]);
-    const yMax = d3.max(rows, r => r.leads) || 1;
+    const dates = rows.map(r => r.date);
+    const x = revenue ? d3.scaleBand().domain(dates).range([0, w]).padding(0.28) : d3.scalePoint().domain(dates).range([0, w]);
+    const cx = dt => revenue ? x(dt) + x.bandwidth() / 2 : x(dt);
+    const yMax = d3.max(rows, val) || 1;
     const y = d3.scaleLinear().domain([0, yMax * 1.15]).nice().range([h, 0]);
+    const ticks = revenue ? y.ticks(4) : y.ticks(4).filter(Number.isInteger);
 
-    g.append('g').call(d3.axisLeft(y).ticks(4).tickSize(-w).tickFormat(''))
+    g.append('g').call(d3.axisLeft(y).tickValues(ticks).tickSize(-w).tickFormat(''))
       .call(a => { a.select('.domain').remove(); a.selectAll('line').attr('stroke', border).attr('stroke-dasharray', '3,3'); });
     const every = Math.max(1, Math.ceil(rows.length / 8));
     g.append('g').attr('transform', `translate(0,${h})`)
-      .call(d3.axisBottom(x).tickValues(rows.filter((_, i) => i % every === 0).map(r => r.date)).tickFormat(dt => rows.find(r => r.date === dt)?.label.replace('Wk ', '') || ''))
-      .call(a => { a.select('.domain').attr('stroke', border); a.selectAll('text').attr('fill', muted).style('font-size', '10px'); a.selectAll('line').attr('stroke', border); });
-    g.append('g').call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('d')))
-      .call(a => { a.select('.domain').remove(); a.selectAll('line').remove(); a.selectAll('text').attr('fill', muted).style('font-size', '10px'); });
+      .call(d3.axisBottom(x).tickValues(dates.filter((_, i) => i % every === 0)).tickFormat(dt => rows.find(r => r.date === dt)?.label.replace('Wk ', '') || ''))
+      .call(a => { a.select('.domain').attr('stroke', border); a.selectAll('text').attr('fill', muted).style('font-size', '10.5px'); a.selectAll('line').attr('stroke', border); });
+    g.append('g').call(d3.axisLeft(y).tickValues(ticks).tickFormat(revenue ? compact : d3.format('d')))
+      .call(a => { a.select('.domain').remove(); a.selectAll('line').remove(); a.selectAll('text').attr('fill', muted).style('font-size', '10.5px'); });
+
+    const tip = d3.select(container).append('div').attr('class', 'crm-dash-tip').style('display', 'none');
+    const step = rows.length > 1 ? cx(rows[1].date) - cx(rows[0].date) : w;
+    const place = r => tip.style('display', null).style('left', `${Math.min(m.left + cx(r.date) + 12, W - 160)}px`).style('top', `${m.top}px`);
+
+    if (revenue) {
+      const bars = g.selectAll('.crm-dash-col').data(rows).join('rect').attr('class', 'crm-dash-col')
+        .attr('x', r => x(r.date)).attr('width', x.bandwidth())
+        .attr('y', r => y(val(r))).attr('height', r => h - y(val(r)))
+        .attr('rx', Math.min(2, x.bandwidth() / 2)).attr('fill', c1);
+      g.selectAll('.crm-dash-hit').data(rows).join('rect').attr('class', 'crm-dash-hit')
+        .attr('x', r => cx(r.date) - step / 2).attr('y', 0).attr('width', Math.max(step, 6)).attr('height', h).attr('fill', 'transparent')
+        .on('mouseenter', (ev, r) => {
+          bars.attr('opacity', b => b === r ? 1 : 0.45);
+          place(r).html(`<strong>${escHtml(r.label)}</strong><div>Revenue won <b>${escHtml(_crmDashMoney(r.won_value))}</b></div>`);
+        })
+        .on('mouseleave', () => { bars.attr('opacity', 1); tip.style('display', 'none'); });
+      return;
+    }
+
+    const grad = svg.append('defs').append('linearGradient').attr('id', 'crm-dash-area').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', 1);
+    grad.append('stop').attr('offset', '0%').attr('stop-color', c1).attr('stop-opacity', 0.22);
+    grad.append('stop').attr('offset', '100%').attr('stop-color', c1).attr('stop-opacity', 0);
+    g.append('path').datum(rows).attr('fill', 'url(#crm-dash-area)')
+      .attr('d', d3.area().x(r => x(r.date)).y0(h).y1(r => y(r.leads)).curve(d3.curveMonotoneX));
 
     const series = [
       { key: 'leads', name: 'Leads', color: c1, dash: null },
       { key: 'won',   name: 'Won',   color: c2, dash: '5,4' },
     ];
     series.forEach(s => {
-      g.append('path').datum(rows).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2)
+      g.append('path').datum(rows).attr('fill', 'none').attr('stroke', s.color).attr('stroke-width', 2.2)
         .attr('stroke-dasharray', s.dash).attr('d', d3.line().x(r => x(r.date)).y(r => y(r[s.key])).curve(d3.curveMonotoneX));
+      const total = d3.sum(rows, r => r[s.key]);
       const last = rows[rows.length - 1];
-      g.append('text').attr('x', w + 6).attr('y', y(last[s.key]) + 4).attr('fill', muted).style('font-size', '10.5px').text(`${s.name} ${last[s.key]}`);
+      g.append('text').attr('x', w + 6).attr('y', y(last[s.key]) + 4).attr('fill', muted).style('font-size', '10.5px').text(`${s.name} ${total}`);
     });
 
     // Hover: a crosshair and a tooltip with both values, over a full-height hit area per day
     const cross = g.append('line').attr('y1', 0).attr('y2', h).attr('stroke', muted).attr('stroke-width', 1).style('display', 'none');
     const dots = series.map(s => g.append('circle').attr('r', 4).attr('fill', s.color).attr('stroke', surface).attr('stroke-width', 2).style('display', 'none'));
-    const tip = d3.select(container).append('div').attr('class', 'crm-dash-tip').style('display', 'none');
-    const step = rows.length > 1 ? x(rows[1].date) - x(rows[0].date) : w;
     g.selectAll('.crm-dash-hit').data(rows).join('rect').attr('class', 'crm-dash-hit')
       .attr('x', r => x(r.date) - step / 2).attr('y', 0).attr('width', Math.max(step, 6)).attr('height', h).attr('fill', 'transparent')
       .on('mouseenter', (ev, r) => {
         cross.attr('x1', x(r.date)).attr('x2', x(r.date)).style('display', null);
         series.forEach((s, i) => dots[i].attr('cx', x(r.date)).attr('cy', y(r[s.key])).style('display', null));
-        tip.style('display', null).style('left', `${Math.min(m.left + x(r.date) + 10, W - 130)}px`).style('top', `${m.top}px`)
-          .html(`<strong>${escHtml(r.label)}</strong><div>Leads <b>${r.leads}</b></div><div>Won <b>${r.won}</b></div>`);
+        place(r).html(`<strong>${escHtml(r.label)}</strong><div>Leads <b>${r.leads}</b></div><div>Won <b>${r.won}</b></div>`);
       })
       .on('mouseleave', () => { cross.style('display', 'none'); dots.forEach(dot => dot.style('display', 'none')); tip.style('display', 'none'); });
   }
+
+  $('#crm-dash-body')?.addEventListener('click', e => {
+    const seg = e.target.closest('[data-dash-trend]');
+    if (seg && _crmDash.data) { _crmDash.trendMode = seg.dataset.dashTrend; _crmDashRender(); return; }
+    const row = e.target.closest('[data-dash-lead]');
+    if (row) crmOpenLead(+row.dataset.project, +row.dataset.dashLead);
+  });
 
   $('#crm-dash-apply')?.addEventListener('click', () => { _crmDashReadFilters(); loadCrmDashboard(); });
   $('#crm-dash-range')?.addEventListener('change', e => {
@@ -62772,7 +62995,7 @@ async function submitDsCreate() {
     if (res?.status !== 200) { toast(res?.message || 'Export failed', 'error'); return; }
     toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
   }));
-  window.addEventListener('resize', () => { if (_crmView === 'dashboard' && _crmDash.data) _crmDashTrendChart($('#crm-dash-trend'), _crmDash.data.trend); });
+  window.addEventListener('resize', () => { if (_crmView === 'dashboard' && _crmDash.data) _crmDashTrendChart($('#crm-dash-trend'), _crmDash.data.trend, _crmDash.trendMode || 'revenue'); });
   $('#rb-crm-dashboard')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); switchCrmView('dashboard'); });
 
   // ── Assign modal: department members as checkboxes, a star for the primary, and the history ──
