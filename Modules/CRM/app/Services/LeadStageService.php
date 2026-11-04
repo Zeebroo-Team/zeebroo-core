@@ -31,6 +31,22 @@ class LeadStageService
     }
 
     /**
+     * Standardise a pipeline that has never been mapped (no stages, or stages without a status).
+     * A pipeline whose stages all carry a status was already set up, so stages the user deleted
+     * stay deleted.
+     */
+    public function seedIfUnmapped(Project $project): void
+    {
+        $stages = LeadStage::query()->where('project_id', $project->id);
+
+        if ($stages->exists() && ! (clone $stages)->whereNull('system_key')->exists()) {
+            return;
+        }
+
+        $this->seedStandard($project);
+    }
+
+    /**
      * Give the pipeline one stage for every standard status. Unmapped stages are mapped first
      * (by name, then by the legacy rules in mapExisting()), and only statuses still missing get
      * a new stage, slotted in after the stage of the status before it.
@@ -143,11 +159,51 @@ class LeadStageService
 
     public function delete(LeadStage $stage): void
     {
+        if ($this->isProtected($stage)) {
+            throw ValidationException::withMessages(['stage' => 'The "New" stage cannot be deleted — new leads land there.']);
+        }
+
         if ($stage->leads()->exists()) {
             throw ValidationException::withMessages(['stage' => 'Move or remove leads in this stage before deleting it.']);
         }
 
         $stage->delete();
+    }
+
+    /**
+     * Delete several stages of one pipeline. Stages that can't be deleted (protected or
+     * still holding leads) are skipped and reported back instead of failing the batch.
+     *
+     * @param  list<int>  $ids
+     * @return array{deleted:int, failed:list<array{id:int,name:string,message:string}>}
+     */
+    public function bulkDelete(Project $project, array $ids): array
+    {
+        $stages  = LeadStage::query()->where('project_id', $project->id)->whereIn('id', $ids)->get();
+        $deleted = 0;
+        $failed  = [];
+
+        foreach ($stages as $stage) {
+            try {
+                $this->delete($stage);
+                $deleted++;
+            } catch (ValidationException $e) {
+                $failed[] = ['id' => $stage->id, 'name' => $stage->name, 'message' => $e->errors()['stage'][0] ?? 'Cannot delete stage.'];
+            }
+        }
+
+        return ['deleted' => $deleted, 'failed' => $failed];
+    }
+
+    /** The "New" stage is where leads land, so the pipeline's only stage carrying that status is kept. */
+    public function isProtected(LeadStage $stage): bool
+    {
+        return $stage->system_key === LeadStage::STATUS_NEW
+            && ! LeadStage::query()
+                ->where('project_id', $stage->project_id)
+                ->where('system_key', LeadStage::STATUS_NEW)
+                ->where('id', '!=', $stage->id)
+                ->exists();
     }
 
     public function reorder(Project $project, array $ids): void

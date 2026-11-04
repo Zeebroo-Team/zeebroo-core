@@ -320,8 +320,9 @@ class CrmOrgService
 
             $project->update(['department_id' => $department->id]);
 
-            // A department pipeline always carries every standard status
-            $this->stages->seedStandard($project);
+            // New and legacy pipelines get every standard status; an already-mapped pipeline
+            // keeps the stages the user chose (deleted ones are not brought back)
+            $this->stages->seedIfUnmapped($project);
 
             // Its leads now belong to the department
             Lead::query()->where('project_id', $project->id)->update(['department_id' => $department->id]);

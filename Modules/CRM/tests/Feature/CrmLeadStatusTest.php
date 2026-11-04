@@ -233,6 +233,26 @@ test('linking a legacy pipeline to a department maps its stages by name and adds
         ->and($lead->fresh()->department_id)->toBe(10);
 });
 
+test('re-linking an already-mapped pipeline does not bring back stages the user deleted', function () {
+    $org     = app(CrmOrgService::class);
+    $project = $org->linkPipeline($this->business, Department::find(10), null);
+    $deleted = ['assigned', 'contacted', 'on_hold'];
+    LeadStage::where('project_id', $project->id)->whereIn('system_key', $deleted)->get()
+        ->each(fn (LeadStage $s) => $this->stages->delete($s));
+
+    $org->unlinkPipeline($this->business, Department::find(10), $project->id);
+    $org->linkPipeline($this->business, Department::find(10), $project->id);
+
+    expect(LeadStage::where('project_id', $project->id)->whereIn('system_key', $deleted)->count())->toBe(0)
+        ->and(LeadStage::where('project_id', $project->id)->count())->toBe(count(LeadStage::STATUSES) - count($deleted));
+});
+
+test('the "New" stage cannot be deleted while it is the only one', function () {
+    $new = $this->stages->stageForStatus($this->project, LeadStage::STATUS_NEW);
+
+    expect(fn () => $this->stages->delete($new))->toThrow(ValidationException::class);
+});
+
 test('the mapping helper maps won, lost, the first stage and the rest, and reports it', function () {
     $legacy = Project::create(['business_id' => 7, 'name' => 'Legacy', 'status' => 'active']);
     foreach (['Lead in', 'Demo', 'Proposal', 'Closed won', 'Closed lost'] as $i => $name) {

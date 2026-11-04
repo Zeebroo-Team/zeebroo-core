@@ -672,6 +672,7 @@ const API = (() => {
     crmCreateStage:  (projectId, body)    => request('POST',   `/crm/projects/${projectId}/stages`, body),
     crmUpdateStage:  (projectId, stageId, body) => request('PUT', `/crm/projects/${projectId}/stages/${stageId}`, body),
     crmDeleteStage:  (projectId, stageId) => request('DELETE', `/crm/projects/${projectId}/stages/${stageId}`),
+    crmBulkDeleteStages: (projectId, ids) => request('POST', `/crm/projects/${projectId}/stages/bulk-delete`, { ids }),
     crmReorderStages:    (projectId, ids)              => request('POST',   `/crm/projects/${projectId}/stages/reorder`, { ids }),
     crmStageMailTemplate:       (projectId, stageId)       => request('GET',    `/crm/projects/${projectId}/stages/${stageId}/mail-template`),
     crmSaveStageMailTemplate:   (projectId, stageId, body) => request('PUT',    `/crm/projects/${projectId}/stages/${stageId}/mail-template`, body),

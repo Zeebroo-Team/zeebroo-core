@@ -709,6 +709,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stages'])       ->name('crm.projects.stages.index');
     Route::post  ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createStage'])  ->name('crm.projects.stages.store');
     Route::post  ('crm/projects/{project}/stages/reorder', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reorderStages'])->name('crm.projects.stages.reorder');
+    Route::post  ('crm/projects/{project}/stages/bulk-delete', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'bulkDeleteStages'])->name('crm.projects.stages.bulk-delete');
     Route::put   ('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStage'])  ->name('crm.projects.stages.update');
     Route::delete('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStage'])  ->name('crm.projects.stages.destroy');
     Route::get   ('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stageMailTemplate'])      ->name('crm.projects.stages.mail-template.show');

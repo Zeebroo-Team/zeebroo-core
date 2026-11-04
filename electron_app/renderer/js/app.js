@@ -57573,6 +57573,14 @@ async function submitDsCreate() {
     renderCrmRelationsGrid();
   }
 
+  // The department that owns a pipeline decides who sees it: its members, plus admins / "All Departments".
+  // `full` spells out "… department pipeline" where there is room (the detail header).
+  function _crmRelationDeptChip(relation, full = false) {
+    return relation.department?.name
+      ? `<span class="crm-relation-dept" title="Visible to the ${escHtml(relation.department.name)} department"><i class="fa fa-sitemap"></i> ${escHtml(relation.department.name)} department${full ? ' pipeline' : ''}</span>`
+      : `<span class="crm-relation-dept crm-relation-dept--none" title="No department owns this pipeline — only admins and All Departments users see it"><i class="fa fa-sitemap"></i> No department${full ? ' pipeline' : ''}</span>`;
+  }
+
   function _crmRelationCardEl(relation, onClick) {
     const count = relation.leads_count || 0;
     const card = document.createElement('div');
@@ -57585,7 +57593,7 @@ async function submitDsCreate() {
         <div class="crm-relation-card-name" title="${escHtml(relation.name)}">${escHtml(relation.name)}</div>
         <div class="crm-relation-card-desc">${relation.description ? escHtml(relation.description) : 'No description'}</div>
       </div>
-      <div class="crm-relation-card-count"><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</div>
+      <div class="crm-relation-card-count"><span><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</span>${_crmRelationDeptChip(relation)}</div>
     `;
     card.addEventListener('click', onClick || (() => openRelationDetail(relation.id)));
     card.querySelector('[data-del-relation]')?.addEventListener('click', e => {
@@ -57679,7 +57687,7 @@ async function submitDsCreate() {
     if (metaEl) metaEl.innerHTML = relation.description ? `<span>${escHtml(relation.description)}</span>` : '';
     const count = relation.leads_count || 0;
     const badgesEl = $('#crm-relation-hero-badges');
-    const badgeHtml = `<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
+    const badgeHtml = `${_crmRelationDeptChip(relation, true)}<span class="inv-badge inv-badge-blue">${count} lead${count !== 1 ? 's' : ''}</span>`;
     if (badgesEl) badgesEl.innerHTML = badgeHtml;
     const headerBadgesEl = $('#crm-relation-header-badges'); if (headerBadgesEl) headerBadgesEl.innerHTML = badgeHtml;
   }
@@ -57798,6 +57806,8 @@ async function submitDsCreate() {
         <section class="crm-rd-card">
           <header class="crm-rd-card-head"><div><h4>Details</h4></div></header>
           <div class="crm-rd-desc">${relation.description ? escHtml(relation.description) : '<span class="crm-rd-muted">No description</span>'}</div>
+          <div class="crm-rd-desc crm-rd-visibility"><span class="crm-rd-muted">Visible to</span> ${_crmRelationDeptChip(relation)}
+            <span class="crm-rd-muted">${relation.department?.name ? 'members of this department, plus admins and All Departments users' : 'admins and All Departments users only — assign it a department in Org Structure'}</span></div>
         </section>
       </div>
     `;
@@ -64975,6 +64985,7 @@ async function submitDsCreate() {
   let _stageDragId   = null;
   let _stageDragIdx  = null;
   let _stageListData = [];
+  const _stageSelected = new Set(); // stage ids ticked for bulk delete
   const PIPELINE_AUTOMATION_TRIGGER = 'crm.lead.stage_changed';
   let _pipelineFlow = null; // automation flow linked to the currently-open relation, or null
 
@@ -64985,6 +64996,7 @@ async function submitDsCreate() {
     }
     $('#crm-stages-modal-title').textContent = `Manage Stages`;
     $('#crm-stages-alert').style.display = 'none';
+    _stageSelected.clear();
     _macShow($('#crm-stages-modal'));
     // Pipeline Automation is a shortcut into the Automation Editor feature —
     // hide it (and skip fetching/creating automation flows) when that
@@ -65085,13 +65097,56 @@ async function submitDsCreate() {
     const res = await API.crmStages(_crmProjectId);
     if (res.status !== 200) { list.innerHTML = '<span style="font-size:12px;color:var(--text-muted)">Failed to load.</span>'; return; }
     _stageListData = res.body?.data || [];
+    // Drop selections for stages that no longer exist or became undeletable
+    const deletable = new Set(_stageListData.filter(s => !s.is_protected).map(s => s.id));
+    [..._stageSelected].forEach(id => { if (!deletable.has(id)) _stageSelected.delete(id); });
     _renderStagesList();
   }
+
+  function _updateStageBulkBar() {
+    const deletableIds = _stageListData.filter(s => !s.is_protected).map(s => s.id);
+    const count = _stageSelected.size;
+    const allEl = $('#crm-stages-select-all');
+    allEl.disabled      = deletableIds.length === 0;
+    allEl.checked       = count > 0 && count === deletableIds.length;
+    allEl.indeterminate = count > 0 && count < deletableIds.length;
+    $('#crm-stages-selected-count').textContent = count;
+    $('#crm-stages-bulk-delete').style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+
+  $('#crm-stages-select-all')?.addEventListener('change', e => {
+    _stageSelected.clear();
+    if (e.target.checked) _stageListData.filter(s => !s.is_protected).forEach(s => _stageSelected.add(s.id));
+    _renderStagesList();
+  });
+
+  $('#crm-stages-bulk-delete')?.addEventListener('click', async () => {
+    const ids = [..._stageSelected];
+    if (!ids.length) return;
+    const names = _stageListData.filter(s => _stageSelected.has(s.id)).map(s => `"${s.name}"`).join(', ');
+    const ok = await appConfirm({ title: `Delete ${ids.length} stage${ids.length > 1 ? 's' : ''}?`, message: `${names} will be permanently deleted. Stages with leads will be skipped.`, danger: true, icon: 'fa-trash', confirmText: '<i class="fa fa-trash"></i> Delete' });
+    if (!ok) return;
+    const btn = $('#crm-stages-bulk-delete');
+    btn.disabled = true;
+    const res = await API.crmBulkDeleteStages(_crmProjectId, ids);
+    btn.disabled = false;
+    if (res.status === 200) {
+      const { deleted = 0, failed = [] } = res.body?.data || {};
+      _stageSelected.clear();
+      if (deleted) toast(`${deleted} stage${deleted > 1 ? 's' : ''} deleted.`, 'success');
+      if (failed.length) toast(`Skipped ${failed.map(f => `"${f.name}" (${f.message})`).join('; ')}`, 'error');
+      await _loadStagesList();
+      loadCrmPipeline();
+    } else {
+      toast(res.body?.message || 'Failed to delete stages.', 'error');
+    }
+  });
 
   function _renderStagesList() {
     const list = $('#crm-stages-list');
     if (_stageListData.length === 0) {
       list.innerHTML = '<p style="font-size:12px;color:var(--text-muted);text-align:center;padding:10px 0">No stages yet.</p>';
+      _updateStageBulkBar();
       return;
     }
     const pipelineAutoActive = !!(_pipelineFlow && _pipelineFlow.is_active);
@@ -65108,16 +65163,36 @@ async function submitDsCreate() {
       // Stage mail templates send through the Mail feature's mailer — hide the
       // shortcut entirely when Mail isn't installed.
       const mailBtn = (pipelineAutoActive || !hasFeature('mail')) ? '' : `<button class="crm-card-btn${s.has_mail_template ? ' crm-card-btn--mail-set' : ''}" data-mail-stage="${s.id}" title="${s.has_mail_template ? 'Send email to leads in this stage' : 'Set up a mail template for this stage'}" style="flex-shrink:0"><i class="fa fa-bolt"></i></button>`;
-      return `<div class="crm-stage-row" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
+      // The pipeline's "New" stage is where leads land — it can't be ticked or deleted.
+      const checked = _stageSelected.has(s.id);
+      const check = s.is_protected
+        ? `<input type="checkbox" class="crm-stage-check" disabled title="The New stage cannot be deleted">`
+        : `<input type="checkbox" class="crm-stage-check" data-check-stage="${s.id}"${checked ? ' checked' : ''} title="Select for bulk delete">`;
+      const delBtn = s.is_protected
+        ? `<button class="crm-card-btn" disabled title="The New stage cannot be deleted — new leads land here" style="flex-shrink:0"><i class="fa fa-lock"></i></button>`
+        : `<button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>`;
+      return `<div class="crm-stage-row${checked ? ' crm-stage-row--selected' : ''}" draggable="true" data-stage-idx="${idx}" data-stage-id="${s.id}">
         <span class="crm-stage-handle"><i class="fa fa-grip-vertical"></i></span>
+        ${check}
         <span class="crm-stage-swatch" style="background:${escHtml(s.color || '#64748b')}"></span>
         <span class="crm-stage-name">${escHtml(s.name)}</span>
         ${wonTag}${lostTag}${countBadge}
         ${mailBtn}
         <button class="crm-card-btn" data-edit-stage="${s.id}" title="Edit stage" style="flex-shrink:0"><i class="fa fa-pen"></i></button>
-        <button class="crm-card-btn" data-del-stage="${s.id}" title="Delete stage" style="flex-shrink:0;color:#ef4444"><i class="fa fa-trash"></i></button>
+        ${delBtn}
       </div>`;
     }).join('');
+    _updateStageBulkBar();
+
+    // Tick for bulk delete
+    list.querySelectorAll('[data-check-stage]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        const id = parseInt(cb.dataset.checkStage);
+        cb.checked ? _stageSelected.add(id) : _stageSelected.delete(id);
+        cb.closest('.crm-stage-row').classList.toggle('crm-stage-row--selected', cb.checked);
+        _updateStageBulkBar();
+      });
+    });
 
     // Drag to reorder
     list.querySelectorAll('.crm-stage-row').forEach(row => {

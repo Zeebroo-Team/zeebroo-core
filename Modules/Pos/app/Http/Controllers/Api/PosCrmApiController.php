@@ -80,6 +80,7 @@ class PosCrmApiController extends Controller
         $rows = $this->policy->visibleProjects($access, Project::query()
             ->where('business_id', $business->id)
             ->where('status', Project::STATUS_ACTIVE)
+            ->with('department:id,name')
             ->withCount('leads')
             ->orderBy('name')
             ->get(['id', 'name', 'description', 'status', 'department_id']));
@@ -831,6 +832,7 @@ class PosCrmApiController extends Controller
             'sort_order'         => $s->sort_order,
             'leads_count'        => (int) $s->leads_count,
             'has_mail_template'  => in_array($s->id, $stageIdsWithTemplate, true),
+            'is_protected'       => $this->stages->isProtected($s),
         ])->values()]);
     }
 
@@ -880,6 +882,26 @@ class PosCrmApiController extends Controller
         }
 
         return response()->json(['message' => 'Stage deleted.']);
+    }
+
+    public function bulkDeleteStages(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $this->abortUnlessCrm($request, $business, 'stages_manage');
+        $project  = $this->manageableProject($request, $business, $projectId);
+
+        $ids = $request->validate(['ids' => ['required', 'array', 'min:1'], 'ids.*' => ['integer']])['ids'];
+        foreach ($ids as $id) {
+            $this->abortUnlessStageVisible($request, $business, $project->id, $id);
+        }
+
+        $result = $this->stages->bulkDelete($project, $ids);
+
+        return response()->json([
+            'message' => "{$result['deleted']} stage(s) deleted.",
+            'data'    => $result,
+        ]);
     }
 
     public function reorderStages(Request $request, int $projectId): JsonResponse

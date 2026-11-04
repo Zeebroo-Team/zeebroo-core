@@ -393,8 +393,12 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .crm-relation-card-icon{width:42px;height:42px;border-radius:11px;font-size:17px;color:#fff;background:linear-gradient(#5ac8fa,#007aff);box-shadow:0 3px 8px rgba(0,122,255,.25)}
 #panel-crm .crm-relation-card-name{font-size:14.5px;font-weight:600;color:var(--mac-text)}
 #panel-crm .crm-relation-card-desc{font-size:12.5px;color:var(--mac-muted)}
-#panel-crm .crm-relation-card-count{font-size:12px;color:var(--mac-muted);border-top-color:var(--mac-line);padding-top:9px}
-#panel-crm .crm-relation-card-delete{background:var(--mac-fill);border-radius:50%}
+#panel-crm .crm-relation-card-count{font-size:12px;color:var(--mac-muted);border-top-color:var(--mac-line);padding-top:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+#panel-crm .crm-relation-dept{display:inline-flex;align-items:center;gap:5px;max-width:60%;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;background:rgba(124,58,237,.1);color:#7c3aed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#panel-crm .crm-relation-dept--none{background:var(--mac-fill);color:var(--mac-muted)}
+#panel-crm #crm-relation-hero-badges .crm-relation-dept,#panel-crm #crm-relation-header-badges .crm-relation-dept{margin-right:6px;max-width:none}
+#panel-crm .crm-rd-visibility{display:flex;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--mac-line)}
+#panel-crm .crm-rd-visibility .crm-relation-dept{max-width:none}#panel-crm .crm-relation-card-delete{background:var(--mac-fill);border-radius:50%}
 #crm-relation-list > .finance-toolbar{padding:12px 20px;background:var(--surface);border-bottom-color:var(--mac-line)}
 #crm-relation-list .finance-search-wrap{border:0;border-radius:8px;padding:6px 12px;background:var(--mac-fill)}
 #crm-relation-list .finance-search-wrap:focus-within{box-shadow:0 0 0 3px rgba(0,122,255,.35)}
@@ -1888,6 +1892,10 @@ body.dark .crm-hf-popup option{background:#2c2c30;color:#f5f5f7}
 #crm-stages-modal .crm-card-btn{width:28px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;border-radius:50%;font-size:12px;color:var(--mac-muted);transition:background .12s,color .12s}
 #crm-stages-modal .crm-card-btn:hover{background:rgba(0,122,255,.12);color:var(--mac-accent)}
 #crm-stages-modal .crm-card-btn[data-del-stage]:hover{background:rgba(255,59,48,.12);color:#ff3b30!important}
+#crm-stages-modal .crm-card-btn:disabled{opacity:.35;cursor:not-allowed;background:none!important;color:var(--mac-muted)!important}
+#crm-stages-modal .crm-stage-check{width:15px;height:15px;flex-shrink:0;cursor:pointer;accent-color:#ef4444}
+#crm-stages-modal .crm-stage-check:disabled{cursor:not-allowed;opacity:.35}
+#crm-stages-modal .crm-stage-row--selected{background:rgba(255,59,48,.06)}
 #crm-stages-modal .crm-card-btn--mail-set{color:#7c3aed}
 #crm-stages-modal .crm-card-btn--mail-set:hover{background:rgba(124,58,237,.12);color:#7c3aed}
 .crm-stage-swatch{width:14px;height:14px;border-radius:50%;flex-shrink:0;border:1px solid rgba(0,0,0,.12)}
@@ -11535,8 +11543,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <div id="crm-relation-detail" style="display:none;flex-direction:column;flex:1;overflow:hidden">
           <div class="inv-detail-header">
             <button class="inv-back-btn" id="crm-relation-back-btn"><i class="fa fa-arrow-left"></i> Relations</button>
-            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>
-            <span class="inv-badges-inline" id="crm-relation-header-badges" style="display:none"></span>
+            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>            <span class="inv-badges-inline" id="crm-relation-header-badges" style="display:none"></span>
             <button class="svc-form-btn" id="crm-relation-hero-toggle" title="Hide relation details" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-chevron-up"></i> <span>Hide details</span></button>
             <button class="svc-form-btn" id="crm-relation-delete-btn" style="margin-left:8px;padding:5px 12px;font-size:12px;flex-shrink:0;color:#ef4444;border-color:#ef4444"><i class="fa fa-trash"></i> Delete Relation</button>
           </div>
@@ -14414,8 +14421,14 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
         <!-- Existing stages list -->
         <div>
-          <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
-            Current Stages — drag to reorder
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;min-height:28px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em">
+              <input type="checkbox" id="crm-stages-select-all" title="Select all deletable stages">
+              Current Stages — drag to reorder
+            </label>
+            <button class="po-btn-ghost" id="crm-stages-bulk-delete" style="display:none;margin-left:auto;padding:4px 10px;font-size:12px;color:#ef4444;border-color:#fecaca">
+              <i class="fa fa-trash"></i> Delete selected (<span id="crm-stages-selected-count">0</span>)
+            </button>
           </div>
           <div id="crm-stages-list" style="border:1px solid var(--border);border-radius:8px;padding:4px 8px;min-height:40px">
             <span style="font-size:12px;color:var(--text-muted)">Loading…</span>
