@@ -60067,9 +60067,40 @@ async function submitDsCreate() {
     if (_crmLeadTab === 'overview' && !_crmViewEditing) _crmRenderLeadModal(false);
   }
 
+  // Row icons for the lead overview — matched on the label, since the Lead Information
+  // labels come from the (editable) lead form. First match wins.
+  const _CRM_LV_ICONS = [
+    [/e-?mail/i,                  'fa-envelope',          '#0a84ff'],
+    [/phone|mobile|tel|whatsapp/i, 'fa-phone',            '#34c759'],
+    [/company|organi[sz]ation|business/i, 'fa-building',  '#5e5ce6'],
+    [/address|city|location/i,    'fa-location-dot',      '#ff3b30'],
+    [/website|url/i,              'fa-globe',             '#30b0c7'],
+    [/products? of interest/i,    'fa-box-open',          '#ff9f0a'],
+    [/product notes/i,            'fa-clipboard',         '#ff9f0a'],
+    [/note|message|comment/i,     'fa-note-sticky',       '#ffcc00'],
+    [/^stage$/i,                  'fa-layer-group',       '#0a84ff'],
+    [/status/i,                   'fa-circle-half-stroke','#34c759'],
+    [/in this stage/i,            'fa-hourglass-half',    '#ff9f0a'],
+    [/score/i,                    'fa-star',              '#ffcc00'],
+    [/division/i,                 'fa-sitemap',           '#5e5ce6'],
+    [/source/i,                   'fa-bullhorn',          '#ff2d55'],
+    [/lost reason/i,              'fa-circle-xmark',      '#ff3b30'],
+    [/on hold/i,                  'fa-circle-pause',      '#8e8e93'],
+    [/estimated value|value|budget/i, 'fa-sack-dollar',   '#34c759'],
+    [/expected close/i,           'fa-calendar-check',    '#af52de'],
+    [/entered by/i,               'fa-user-pen',          '#5e5ce6'],
+    [/created/i,                  'fa-calendar-plus',     '#0a84ff'],
+    [/updated/i,                  'fa-clock-rotate-left', '#30b0c7'],
+    [/closed/i,                   'fa-flag-checkered',    '#34c759'],
+    [/age/i,                      'fa-hourglass',         '#8e8e93'],
+    [/name/i,                     'fa-user',              '#0a84ff'],
+  ];
+
   function _crmLeadViewItem(label, value) {
     const empty = value == null || String(value).trim() === '';
-    return `<div class="crm-lead-view-item"><div class="crm-lead-view-label">${escHtml(label)}</div>`
+    const ic = _CRM_LV_ICONS.find(([re]) => re.test(label));
+    const icon = ic ? `<span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${ic[2]}"><i class="fa ${ic[1]}"></i></span>` : '';
+    return `<div class="crm-lead-view-item${ic ? ' crm-lead-view-item--ic' : ''}"><div class="crm-lead-view-label">${icon}${escHtml(label)}</div>`
       + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}</div></div>`;
   }
 
@@ -60147,10 +60178,11 @@ async function submitDsCreate() {
 
     const wide = html => html.replace('crm-lead-view-item', 'crm-lead-view-item crm-lead-view-item--wide');
     const section = (title, body) => `<div><div class="crm-lead-view-section">${title}</div><div class="crm-lead-view-grid">${body}</div></div>`;
-    // Time in the current stage — from the audit trail (re-rendered once it has loaded)
-    const stageSince = Array.isArray(_crmViewHistory)
-      ? _crmViewHistory.find(e => e.to_stage?.id === lead.stage_id && ['created', 'stage_changed', 'reopened', 'converted', 'lost'].includes(e.event))?.created_at
+    // Time in the current stage (and who moved it there) — from the audit trail (re-rendered once it has loaded)
+    const stageEntry = Array.isArray(_crmViewHistory)
+      ? _crmViewHistory.find(e => e.to_stage?.id === lead.stage_id && ['created', 'stage_changed', 'reopened', 'converted', 'lost'].includes(e.event))
       : null;
+    const stageSince = stageEntry?.created_at;
     const ago = iso => iso ? _crmFmtDuration(Math.max(60, (Date.now() - new Date(iso).getTime()) / 1000)) : null;
 
     const pipeline = editing ? '' : section('Pipeline', `
@@ -60205,7 +60237,8 @@ async function submitDsCreate() {
         ? (editing ? '' : _crmAssigneesSectionHtml(lead))
           + (editing
             ? `<div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>`
-            : `<div class="crm-lv-cols"><div class="crm-lv-stack"><div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>${pipeline}</div>${rest}</div>`)
+            : `<div class="crm-lv-cols"><div class="crm-lv-stack"><div><div class="crm-lead-view-section">Lead Information</div>${fields}</div>${pipeline}</div>${rest}</div>`
+              + _crmResponsibilityHtml(stageEntry))
         : '<div id="crm-ws-panel" class="crm-ws-panel"></div>');
     // Only move / show / hide the timeline here — rebuilding it on every body render (e.g. when
     // the form fields finish loading) re-laid it out and re-scrolled it for nothing.
@@ -60243,7 +60276,7 @@ async function submitDsCreate() {
     // Won: links the lead to its customer (existing match by phone / email, or a new one) and can
     // create an invoice, sales order or project from the accepted quotation. A won lead can still
     // get its document afterwards.
-    if (!stage.is_lost && lead.can?.convert === true && lead.can?.close !== false) {
+    if (!stage.is_lost && lead.can?.close === true) {
       btns.push(stage.is_won
         ? '<button class="po-btn-ghost" data-crm-lead-action="won" style="color:#10b981"><i class="fa fa-file-invoice"></i> Invoice / Order / Project…</button>'
         : '<button class="po-btn-ghost" data-crm-lead-action="won" style="color:#10b981"><i class="fa fa-trophy"></i> Mark Won…</button>');
@@ -60262,7 +60295,7 @@ async function submitDsCreate() {
       }
     }
     // Lost: "Win / lose leads" (lead.can.close), separate from moving
-    if (!closed && lead.can?.edit !== false && lead.can?.close !== false) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
+    if (!closed && lead.can?.close !== false) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
     return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
   }
 
@@ -60616,11 +60649,75 @@ async function submitDsCreate() {
     </div>`;
   }
 
+  // "Who's responsible" on the Overview tab — department, its head / co-head, the division head,
+  // and everyone working the lead with their HR contact details (GET crm/leads/{id}/summary).
+  function _crmResponsibilityHtml(stageEntry) {
+    const s = _crmWs.summary;
+    const wrap = body => `<div><div class="crm-lead-view-section">Who's responsible</div><div class="crm-lv-resp">${body}</div></div>`;
+    if (s === undefined) return wrap('<div class="crm-lv-resp-note"><i class="fa fa-spinner fa-spin"></i> Loading the team…</div>');
+    if (!s) return wrap('<div class="crm-lv-resp-note">Could not load the department and team details.</div>');
+
+    // One person per line: avatar · name + role · job title (and who assigned them) · phone / email
+    const row = (p, role, sub = '') => {
+      const e = p.employee || {};
+      const initials = escHtml(e.initials || _crmInitials(p.name || '?'));
+      const avatar = e.photo_url
+        ? `<img class="crm-lv-av" src="${escHtml(e.photo_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crm-lv-av',textContent:this.dataset.i}))" data-i="${initials}">`
+        : `<span class="crm-lv-av">${initials}</span>`;
+      const info = [e.job_title && escHtml(e.job_title), sub].filter(Boolean).join(' · ');
+      const contact = [
+        e.phone && `<span><i class="fa fa-phone"></i>${escHtml(e.phone)}</span>`,
+        p.email && `<span><i class="fa fa-envelope"></i>${escHtml(p.email)}</span>`,
+      ].filter(Boolean).join('');
+      return `<div class="crm-lv-pr">${avatar}
+        <div class="crm-lv-pr-main">
+          <div class="crm-lv-pr-name">${escHtml(p.name || '—')}<span class="crm-lv-role">${role}</span></div>
+          ${info ? `<div class="crm-lv-pr-sub">${info}</div>` : ''}
+        </div>
+        <div class="crm-lv-pr-contact">${contact || '<span class="crm-ws-muted">No contact on file</span>'}</div>
+      </div>`;
+    };
+
+    const d = s.department, v = s.division, L = s.lead || {};
+    // [icon, label, value, when]
+    const facts = [
+      ['fa-building',       'Department',    d ? d.name : 'Not linked'],
+      ['fa-sitemap',        'Division',      v?.name],
+      ['fa-diagram-project', 'Pipeline',     L.pipeline],
+      ['fa-user-pen',       'Entered by',    L.created_by || 'Web form / unknown', L.created_at],
+      ['fa-circle-check',   'Verified by',   L.verified_by, L.verified_at],
+      ['fa-share',          'Forwarded by',  L.forwarded_by, L.forwarded_at],
+      ['fa-arrow-right-arrow-left', 'Moved to this stage by', stageEntry && (stageEntry.user?.name || 'System'), stageEntry?.created_at],
+    ].filter(([, , val]) => val).map(([icon, k, val, at]) => `<div class="crm-lv-fact">
+        <i class="fa ${icon}"></i>
+        <div><span>${k}</span><b>${escHtml(val)}</b>${at ? `<small>${escHtml(_crmFmtDateTime(at))}</small>` : ''}</div>
+      </div>`).join('');
+
+    const leaders = [
+      d?.head && row(d.head, 'Department head'),
+      d?.co_head && row(d.co_head, 'Co-head'),
+      v?.head && row(v.head, 'Division head'),
+    ].filter(Boolean).join('');
+
+    const team = (s.assignees || []).map(a => row(a, a.is_primary ? 'Primary' : 'Assigned',
+      a.assigned_at ? `Assigned ${escHtml(_crmFmtDateTime(a.assigned_at))} by <b>${escHtml(a.assigned_by || 'System')}</b>` : '')).join('');
+
+    return wrap(`<div class="crm-lv-facts">${facts}</div>
+      <div class="crm-lv-resp-sub">Leadership</div>
+      ${leaders || `<div class="crm-lv-resp-note">${d ? 'No department head or co-head is set in HR.' : 'This lead is not linked to a department.'}</div>`}
+      <div class="crm-lv-resp-sub">Assigned team · ${(s.assignees || []).length}</div>
+      ${team || '<div class="crm-lv-resp-note">Nobody is assigned yet.</div>'}`);
+  }
+
   async function _crmLoadWorkspace(lead) {
     if (_crmWs.leadId !== lead.id) _crmWs = { leadId: lead.id };
-    const res = await API.crmLeadWorkspace(lead.id).catch(() => ({ status: 0 }));
+    const [res, sum] = await Promise.all([
+      API.crmLeadWorkspace(lead.id).catch(() => ({ status: 0 })),
+      API.crmLeadSummary(lead.id).catch(() => ({ status: 0 })),
+    ]);
     if (_crmViewLead?.id !== lead.id) return;
     _crmWs.info = res.status === 200 ? res.body.data : null;
+    _crmWs.summary = sum.status === 200 ? sum.body.data : null;
     if (_crmLeadTab === 'overview' && !_crmViewEditing) _crmRenderLeadModal(false);
     else _crmRefreshWsTabs();
   }
@@ -61198,13 +61295,13 @@ async function submitDsCreate() {
 
   const _crmTkInitials = name => name.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 
-  function _crmTkRowHtml(t, canWork, canDelete) {
+  function _crmTkRowHtml(t, canComplete, canDelete) {
     const done = t.status === 'completed';
     const due  = t.due_at ? _crmTkDue(t.due_at) : null;
     const dueState = done ? '' : t.is_overdue ? ' crm-tk-chip--overdue' : due?.day === 0 ? ' crm-tk-chip--today' : '';
     return `<div class="crm-tk${done ? ' crm-tk--done' : ''}">
       <label class="crm-tk-check" title="${done ? 'Mark as not done' : 'Mark as done'}">
-        <input type="checkbox" data-ws-task-toggle="${t.id}"${done ? ' checked' : ''}${canWork ? '' : ' disabled'}><span><i class="fa fa-check"></i></span>
+        <input type="checkbox" data-ws-task-toggle="${t.id}"${done ? ' checked' : ''}${canComplete ? '' : ' disabled'}><span><i class="fa fa-check"></i></span>
       </label>
       <div class="crm-tk-main">
         <div class="crm-tk-title">${escHtml(t.title)}</div>
@@ -61235,7 +61332,7 @@ async function submitDsCreate() {
       ${canWork ? '<button type="button" class="crm-fm-upload" data-ws-task-add><i class="fa fa-plus"></i> Add Task</button>' : ''}
     </div>`;
 
-    const rows = list => list.map(t => _crmTkRowHtml(t, canWork, !!meta.can_delete)).join('');
+    const rows = list => list.map(t => _crmTkRowHtml(t, !!meta.can_complete, !!meta.can_delete)).join('');
     const group = (title, list, cls = '') => list.length
       ? `<div class="crm-tk-group-title${cls}">${title}<small>${list.length}</small></div><div class="crm-tk-group">${rows(list)}</div>` : '';
     let body = '';
@@ -63259,9 +63356,9 @@ async function submitDsCreate() {
     const weekly = d.trend.length && d.trend[0].label.startsWith('Wk');
 
     const help = tip => tip ? `<i class="fa fa-circle-question crm-dash-help" title="${escHtml(tip)}"></i>` : '';
-    const hero = (label, value, sub, foot, { tip = '', jump = '' } = {}) => `
-      <div class="crm-dash-hero${jump ? ' crm-dash-hero--link' : ''}"${jump ? ` data-dash-jump="${jump}"` : ''}>
-        <div class="crm-dash-hero-label">${label}${help(tip)}</div>
+    const hero = (label, value, sub, foot, { tip = '', jump = '', icon = 'fa-chart-line', primary = false } = {}) => `
+      <div class="crm-dash-hero${jump ? ' crm-dash-hero--link' : ''}${primary ? ' crm-dash-hero--primary' : ''}"${jump ? ` data-dash-jump="${jump}"` : ''}>
+        <div class="crm-dash-hero-label"><span class="crm-dash-ico"><i class="fa ${icon}"></i></span>${label}${help(tip)}</div>
         <div class="crm-dash-hero-value">${value}</div>
         <div class="crm-dash-hero-sub">${sub}</div>
         <div class="crm-dash-hero-foot">${foot}</div>
@@ -63272,9 +63369,15 @@ async function submitDsCreate() {
         <div class="crm-dash-metric-value">${value}</div>
         <div class="crm-dash-metric-sub">${sub}</div>
       </div>`;
+    const cardIcons = {
+      'Key insights': 'fa-lightbulb', 'Needs attention': 'fa-bell', 'Sales efficiency': 'fa-gauge-high',
+      'Open deals by status': 'fa-layer-group', 'Expected to close': 'fa-calendar-check', 'Largest open deals': 'fa-sack-dollar',
+      'Where this period’s leads are now': 'fa-filter', 'Biggest wins in the period': 'fa-trophy', 'Why deals are lost': 'fa-circle-xmark',
+      'Lead sources': 'fa-bullseye', 'Departments': 'fa-sitemap', 'Team leaderboard': 'fa-ranking-star',
+    };
     const card = (title, sub, body, cls = '', id = '') => `
       <div class="crm-dash-card${cls ? ' ' + cls : ''}"${id ? ` id="${id}"` : ''}>
-        <div class="crm-dash-card-head"><span>${title}</span>${sub ? `<span class="crm-ws-muted crm-dash-card-sub">${sub}</span>` : ''}</div>
+        <div class="crm-dash-card-head"><span><span class="crm-dash-ico"><i class="fa ${cardIcons[title] || 'fa-chart-simple'}"></i></span>${title}</span>${sub ? `<span class="crm-ws-muted crm-dash-card-sub">${sub}</span>` : ''}</div>
         ${body.startsWith('<table') ? `<div class="crm-dash-scroll">${body}</div>` : body}
       </div>`;
     const share = (pct, color) => `<span class="crm-dash-share"><span style="width:${Math.max(pct ? 2 : 0, Math.min(100, pct))}%;background:${color}"></span></span>`;
@@ -63351,17 +63454,17 @@ async function submitDsCreate() {
 
     // Needs attention (live): counts, then the oldest overdue follow-ups and leads nobody has contacted
     const att = d.attention || { follow_ups: [], uncontacted: [] };
-    const attCount = (n, label, tone, tip) => `<div class="crm-dash-att-count${n ? ' crm-dash-att-count--' + tone : ''}" title="${escHtml(tip)}"><b>${_crmDashNum(n)}</b><span>${label}</span></div>`;
+    const attCount = (n, label, tone, tip, icon) => `<div class="crm-dash-att-count${n ? ' crm-dash-att-count--' + tone : ''}" title="${escHtml(tip)}"><i class="fa ${icon}"></i><b>${_crmDashNum(n)}</b><span>${label}</span></div>`;
     const attRow = (a, tag, tone) => `<li class="crm-dash-att-row crm-dash-link" data-dash-lead="${a.lead_id}" data-project="${a.project_id}" title="Open this lead">
         <span class="crm-dash-avatar">${escHtml(_crmInitials(a.name || '?'))}</span>
         <span class="crm-dash-att-main"><strong>${escHtml(a.name || '—')}</strong><span class="crm-dash-cell-sub">${escHtml(a.owner || 'Unassigned')}${a.phone ? ` · ${escHtml(a.phone)}` : ''}</span></span>
         <span class="crm-dash-att-tag crm-dash-att-tag--${tone}">${tag}</span><i class="fa fa-chevron-right crm-dash-chev"></i></li>`;
     const urgent = (k.overdue_follow_ups || 0) + (k.past_due_deals || 0);
     const attentionHtml = `<div class="crm-dash-att-counts">
-        ${attCount(k.overdue_follow_ups, 'Overdue follow-ups', 'bad', 'Pending follow-ups whose due date has passed')}
-        ${attCount(k.uncontacted_leads, 'Not contacted yet', 'warn', 'Open leads with an owner who has not contacted the customer yet')}
-        ${attCount(k.unassigned_leads, 'Unassigned', 'warn', 'Open leads that nobody owns')}
-        ${attCount(k.past_due_deals, 'Past-due deals', 'bad', 'Open deals past their expected close date')}
+        ${attCount(k.overdue_follow_ups, 'Overdue follow-ups', 'bad', 'Pending follow-ups whose due date has passed', 'fa-phone-volume')}
+        ${attCount(k.uncontacted_leads, 'Not contacted yet', 'warn', 'Open leads with an owner who has not contacted the customer yet', 'fa-user-clock')}
+        ${attCount(k.unassigned_leads, 'Unassigned', 'warn', 'Open leads that nobody owns', 'fa-user-slash')}
+        ${attCount(k.past_due_deals, 'Past-due deals', 'bad', 'Open deals past their expected close date', 'fa-hourglass-end')}
       </div>
       ${att.follow_ups.length ? `<div class="crm-dash-att-head"><span>Oldest overdue follow-ups</span><button type="button" data-dash-followups>View all <i class="fa fa-arrow-right"></i></button></div>
         <ul class="crm-dash-att-list">${att.follow_ups.slice(0, 5).map(a => attRow(a, `${_crmDashPl(a.days_overdue, 'day')} late`, 'bad')).join('')}</ul>` : ''}
@@ -63387,7 +63490,7 @@ async function submitDsCreate() {
 
     const mode = _crmDash.trendMode || 'revenue';
     const insights = _crmDashInsights(d);
-    const jump = (id, label, badge = 0) => `<button type="button" data-dash-jump="${id}">${label}${badge ? `<b>${badge}</b>` : ''}</button>`;
+    const jump = (id, label, badge = 0) => `<button type="button" data-dash-jump="${id}"${id === 'crm-dash-s-attention' ? ' class="active"' : ''}>${label}${badge ? `<b>${badge}</b>` : ''}</button>`;
 
     $('#crm-dash-body').innerHTML = `
       <div class="crm-dash-head">
@@ -63408,22 +63511,22 @@ async function submitDsCreate() {
       <div class="crm-dash-heroes">
         ${hero('Revenue won', money(k.won_value_in_range), `${_crmDashPl(k.won_in_range, 'deal')} closed won`,
           _crmDashDelta(k.won_value_in_range, p.won_value_in_range),
-          { tip: 'Deals closed as won in the period. Uses the accepted quotation total, otherwise the estimated value.', jump: 'crm-dash-s-team' })}
+          { tip: 'Deals closed as won in the period. Uses the accepted quotation total, otherwise the estimated value.', jump: 'crm-dash-s-team', icon: 'fa-sack-dollar', primary: true })}
         ${hero('Open pipeline', k.open_pipeline_value ? money(k.open_pipeline_value) : '—',
           `${_crmDashPl(k.open_pipeline_count, 'open deal')}${k.open_pipeline_count && !k.open_pipeline_value ? ' · no values estimated' : ''}${k.past_due_deals ? ` · <span class="crm-dash-bad">${_crmDashNum(k.past_due_deals)} past due</span>` : ''}`,
           '<span class="crm-dash-delta-vs">Live — all open deals in scope</span>',
-          { tip: 'Sum of estimated values of every open deal right now, whatever its creation date.', jump: 'crm-dash-s-pipeline' })}
+          { tip: 'Sum of estimated values of every open deal right now, whatever its creation date.', jump: 'crm-dash-s-pipeline', icon: 'fa-layer-group' })}
         ${hero('Win rate', _crmDashPct(k.win_rate), `${_crmDashNum(k.won_in_range)} won · ${_crmDashNum(k.lost_in_range)} lost in the period`,
           _crmDashDelta(k.win_rate, p.win_rate, { pts: true }),
-          { tip: 'Won ÷ (won + lost) among deals closed in the period.', jump: 'crm-dash-s-pipeline' })}
+          { tip: 'Won ÷ (won + lost) among deals closed in the period.', jump: 'crm-dash-s-pipeline', icon: 'fa-trophy' })}
         ${hero('New leads', _crmDashNum(k.leads), `${_crmDashNum(k.open)} still open · ${_crmDashPct(k.conversion_rate)} converted`,
           _crmDashDelta(k.leads, p.leads),
-          { tip: 'Leads created in the period, and how many of them are now won.', jump: 'crm-dash-s-channels' })}
+          { tip: 'Leads created in the period, and how many of them are now won.', jump: 'crm-dash-s-channels', icon: 'fa-user-plus' })}
       </div>
 
       <div class="crm-dash-split" id="crm-dash-s-attention">
         ${card('Key insights', '', `<ul class="crm-dash-insights">${insights.map(i => `
-          <li class="crm-dash-insight crm-dash-insight--${i.tone}"><span class="crm-dash-mark"></span><span>${i.html}</span></li>`).join('')}</ul>`)}
+          <li class="crm-dash-insight crm-dash-insight--${i.tone}"><span class="crm-dash-mark"><i class="fa ${{ good: 'fa-arrow-trend-up', bad: 'fa-circle-exclamation', warn: 'fa-triangle-exclamation' }[i.tone] || 'fa-circle-info'}"></i></span><span>${i.html}</span></li>`).join('')}</ul>`)}
         ${card('Needs attention', 'live · click a customer to open', attentionHtml)}
       </div>
 
@@ -63440,7 +63543,7 @@ async function submitDsCreate() {
 
       <div class="crm-dash-card" id="crm-dash-s-trend">
         <div class="crm-dash-card-head">
-          <span>${mode === 'revenue' ? `Revenue won per ${weekly ? 'week' : 'day'}` : `Leads created per ${weekly ? 'week' : 'day'}`}</span>
+          <span><span class="crm-dash-ico"><i class="fa fa-chart-column"></i></span>${mode === 'revenue' ? `Revenue won per ${weekly ? 'week' : 'day'}` : `Leads created per ${weekly ? 'week' : 'day'}`}</span>
           <span class="crm-dash-card-tools">
             ${mode === 'leads' ? '<span class="crm-dash-legend"><span class="crm-dash-key crm-dash-key--c1"></span>Leads <span class="crm-dash-key crm-dash-key--c2"></span>Won (of those)</span>' : ''}
             <span class="crm-dash-seg">
@@ -63569,7 +63672,11 @@ async function submitDsCreate() {
     const seg = e.target.closest('[data-dash-trend]');
     if (seg && _crmDash.data) { _crmDash.trendMode = seg.dataset.dashTrend; _crmDashRender(); return; }
     const jumpTo = e.target.closest('[data-dash-jump]');
-    if (jumpTo) { document.getElementById(jumpTo.dataset.dashJump)?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
+    if (jumpTo) {
+      $$('.crm-dash-jump button').forEach(b => b.classList.toggle('active', b.dataset.dashJump === jumpTo.dataset.dashJump));
+      document.getElementById(jumpTo.dataset.dashJump)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     if (e.target.closest('[data-dash-followups]')) { openCrmFollowUpsModal('team', 'overdue'); return; }
     const clear = e.target.closest('[data-dash-clear]');
     if (clear) { _crmDashSetFilter(clear.dataset.dashClear, ''); return; }
@@ -64494,6 +64601,24 @@ async function submitDsCreate() {
   });
   $('#crm-perms-user-search')?.addEventListener('input', e => { _crmPermsUserQ = e.target.value; _crmRenderPermsUsers(); });
 
+  // Success toasts are muted app-wide, so confirm with a HUD inside the modal;
+  // errors stay in the inline alert
+  let _crmPermsHudTimer = null;
+  function _crmPermsAlert(msg, type = 'error') {
+    if (type === 'success') {
+      const hud = $('#crm-perms-hud');
+      hud.querySelector('span').textContent = msg;
+      hud.classList.add('show');
+      clearTimeout(_crmPermsHudTimer);
+      _crmPermsHudTimer = setTimeout(() => hud.classList.remove('show'), 2600);
+      return;
+    }
+    const alertEl = $('#crm-perms-alert');
+    alertEl.textContent = msg;
+    alertEl.style.display = '';
+    alertEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+
   $('#crm-perms-save-btn')?.addEventListener('click', async () => {
     const user = _crmPermsUser();
     if (!user || user.is_admin || !_crmPermsDraft) return;
@@ -64504,12 +64629,10 @@ async function submitDsCreate() {
     if (res.status === 200) {
       Object.assign(user, res.body.data);
       _crmPermsDirty = false;
-      toast(`CRM permissions saved for ${user.name}.`, 'success');
-      _crmSelectPermsUser(user.user_id);
+      await _crmSelectPermsUser(user.user_id);
+      _crmPermsAlert(`CRM permissions saved for ${user.name}.`, 'success');
     } else {
-      const alertEl = $('#crm-perms-alert');
-      alertEl.textContent = res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save permissions.');
-      alertEl.style.display = '';
+      _crmPermsAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save permissions.'));
     }
   });
 
@@ -64527,8 +64650,8 @@ async function submitDsCreate() {
     if (res.status === 200) {
       Object.assign(user, { customized: false, permissions: {}, stage_access: {} });
       _crmPermsDirty = false;
-      toast(`${user.name} now has full CRM access.`, 'success');
-      _crmSelectPermsUser(user.user_id);
+      await _crmSelectPermsUser(user.user_id);
+      _crmPermsAlert(`${user.name} now has full CRM access.`, 'success');
     } else {
       toast(res.body?.message || 'Failed to reset permissions.', 'error');
     }

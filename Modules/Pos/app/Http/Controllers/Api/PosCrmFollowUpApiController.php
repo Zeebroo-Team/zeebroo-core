@@ -76,7 +76,7 @@ class PosCrmFollowUpApiController extends Controller
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
         $this->abortUnlessAllowed($access->can('followups_view'));
-        $canEdit = $access->can('followups_manage') && $this->policy->canEdit($access, $lead);
+        $canEdit = $access->can('followups_manage') && $this->policy->canWork($access, $lead);
 
         return response()->json([
             'data' => $this->followUps->forLead($lead)->map(fn (FollowUp $f) => $this->followUps->present($f, $this->canWork($access, $f)))->values(),
@@ -96,7 +96,7 @@ class PosCrmFollowUpApiController extends Controller
     public function store(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->leadContext($request, $leadId);
-        $this->abortUnlessAllowed($access->can('followups_manage') && $this->policy->canEdit($access, $lead));
+        $this->abortUnlessAllowed($access->can('followups_manage') && $this->policy->canWork($access, $lead));
 
         $data = $request->validate([
             'due_at'       => ['required', 'date'],
@@ -198,7 +198,7 @@ class PosCrmFollowUpApiController extends Controller
     private function canWork(CrmAccess $access, FollowUp $f): bool
     {
         return $access->can('followups_manage')
-            && ($this->isAssignee($access, $f) || ($f->lead !== null && $this->policy->canEdit($access, $f->lead)));
+            && ($this->isAssignee($access, $f) || ($f->lead !== null && $this->policy->canWork($access, $f->lead)));
     }
 
     private function isAssignee(CrmAccess $access, FollowUp $f): bool

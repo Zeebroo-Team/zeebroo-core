@@ -32,6 +32,7 @@ class LeadSummaryService
         ]);
 
         $assignees  = $lead->assignees()->with(['user:id,name,email', 'assignedBy:id,name'])->get();
+        $addedBy    = $this->addedBy($lead, $assignees);
         $department = $this->department($lead);
         $employees  = $this->employees($lead->business_id, [
             ...$assignees->pluck('user_id')->all(),
@@ -62,7 +63,7 @@ class LeadSummaryService
                     default                                      => null,
                 },
                 'assigned_at' => $a->assigned_at?->toIso8601String(),
-                'assigned_by' => $a->assignedBy?->name,
+                'assigned_by' => $a->assignedBy?->name ?? $addedBy[(int) $a->user_id] ?? null,
             ])->values()->all(),
             'assignment_history' => $this->assignments->presentHistory($lead->assignmentLogs()->limit(10)->get()),
             'counts'      => [
@@ -109,6 +110,28 @@ class LeadSummaryService
             'converted_at'          => $at($lead->converted_at),
             'closed_at'             => $at($lead->closed_at),
         ];
+    }
+
+    /**
+     * Who added each assignee, from the assignment log — for rows saved without assigned_by.
+     *
+     * @return array<int, string> user id => name of whoever last added them
+     */
+    private function addedBy(Lead $lead, Collection $assignees): array
+    {
+        if ($assignees->every(fn (LeadAssignee $a) => $a->assignedBy !== null)) {
+            return [];
+        }
+
+        $names = [];
+        foreach ($lead->assignmentLogs()->with('byUser:id,name')->get()->reverse() as $log) {
+            $added = array_diff(array_map('intval', $log->user_ids ?? []), array_map('intval', $log->from_user_ids ?? []));
+            foreach ($added as $userId) {
+                $names[$userId] = $log->byUser?->name;
+            }
+        }
+
+        return array_filter($names);
     }
 
     /** The lead's own department, else the department owning its pipeline. */

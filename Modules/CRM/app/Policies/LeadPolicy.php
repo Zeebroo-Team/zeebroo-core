@@ -101,8 +101,7 @@ class LeadPolicy
     /** Picking who works the pipeline's leads: admin, "All Departments", or the department head. */
     public function canAssignIn(CrmAccess $access, Project $project): bool
     {
-        return $access->can('leads_edit')
-            && $access->can('leads_assign')
+        return $access->can('leads_assign')
             && ! $access->isReadOnly()
             && $this->canViewProject($access, $project)
             && ($access->worksAllLeads() || $access->headsDepartment($access->departmentOfProject($project->id)));
@@ -139,15 +138,25 @@ class LeadPolicy
             || ($access->isMarketing() && $this->forwardedBy($lead, $access->userId));
     }
 
+    /**
+     * Works this lead — its assignees, the head, "All Departments", marketing in intake and
+     * admins — before any function toggle. Each action ANDs its own toggle onto this, so
+     * blocking "Edit leads" does not also take away moving, closing, quoting or follow-ups.
+     */
+    public function canWork(CrmAccess $access, Lead $lead): bool
+    {
+        return $this->mayWork($access, $lead)
+            && ($this->worksLead($access, $lead) || $this->isAssigned($lead, $access->userId));
+    }
+
     public function canEdit(CrmAccess $access, Lead $lead): bool
     {
-        return $this->mayEdit($access, $lead)
-            && ($this->worksLead($access, $lead) || $this->isAssigned($lead, $access->userId));
+        return $access->can('leads_edit') && $this->canWork($access, $lead);
     }
 
     public function canMove(CrmAccess $access, Lead $lead): bool
     {
-        return $access->can('leads_move') && $this->canEdit($access, $lead);
+        return $access->can('leads_move') && $this->canWork($access, $lead);
     }
 
     public function canDelete(CrmAccess $access, Lead $lead): bool
@@ -159,25 +168,24 @@ class LeadPolicy
 
     public function canAssign(CrmAccess $access, Lead $lead): bool
     {
-        return $access->can('leads_edit')
-            && $access->can('leads_assign')
+        return $access->can('leads_assign')
             && $this->mayAct($access, $lead)
             && ($access->worksAllLeads() || $this->headsLead($access, $lead));
     }
 
-    /** Marking the lead won or lost: whoever may edit it, unless "Win / lose leads" is blocked. */
+    /** Marking the lead won or lost: whoever works it, unless "Win / lose leads" is blocked. */
     public function canClose(CrmAccess $access, Lead $lead): bool
     {
-        return $access->can('leads_close') && $this->canEdit($access, $lead);
+        return $access->can('leads_close') && $this->canWork($access, $lead);
     }
 
     /**
-     * Building, editing, submitting and sending the lead's quotations: whoever may edit the lead
+     * Building, editing, submitting and sending the lead's quotations: whoever works the lead
      * — its assignees, the department head, "All Departments" and admins.
      */
     public function canQuote(CrmAccess $access, Lead $lead): bool
     {
-        return $access->can('quotations_manage') && $this->canEdit($access, $lead);
+        return $access->can('quotations_manage') && $this->canWork($access, $lead);
     }
 
     /** Approving, returning or rejecting a quotation: canApprove, unless "Approve quotations" is blocked. */
@@ -230,7 +238,7 @@ class LeadPolicy
     {
         return $access->can('lead_collaborate')
             && $this->mayAct($access, $lead)
-            && ($this->canEdit($access, $lead) || $access->inDepartment($access->departmentOfProject($lead->project_id)));
+            && ($this->canWork($access, $lead) || $access->inDepartment($access->departmentOfProject($lead->project_id)));
     }
 
     /** Editing a message: its author, while they may still post on the lead. */
@@ -263,6 +271,7 @@ class LeadPolicy
     public function abilities(CrmAccess $access, Lead $lead): array
     {
         return [
+            'can_work'       => $this->canWork($access, $lead),
             'can_edit'       => $this->canEdit($access, $lead),
             'can_move'       => $this->canMove($access, $lead),
             'can_delete'     => $this->canDelete($access, $lead),
@@ -304,13 +313,13 @@ class LeadPolicy
     }
 
     /**
-     * Ids of the given leads the user may edit. One query for the leads they work only by
-     * being assigned; the rest is decided per pipeline.
+     * Ids of the given leads the user works (canWork). One query for the leads they work only
+     * by being assigned; the rest is decided per pipeline.
      *
      * @param  Collection<int, Lead>  $leads
      * @return array<int, true>
      */
-    public function editableLeadIds(CrmAccess $access, Collection $leads): array
+    public function workableLeadIds(CrmAccess $access, Collection $leads): array
     {
         $assigned = $access->userId === null || $leads->isEmpty() ? [] : $this->whereAssigned(
             Lead::query()->whereIn('id', $leads->pluck('id')),
@@ -318,10 +327,16 @@ class LeadPolicy
         )->pluck('id')->flip()->all();
 
         return $leads
-            ->filter(fn (Lead $lead) => $this->mayEdit($access, $lead)
+            ->filter(fn (Lead $lead) => $this->mayWork($access, $lead)
                 && ($this->worksLead($access, $lead) || isset($assigned[$lead->id])))
             ->mapWithKeys(fn (Lead $lead) => [$lead->id => true])
             ->all();
+    }
+
+    /** Ids of the given leads the user may edit (canEdit). @return array<int, true> */
+    public function editableLeadIds(CrmAccess $access, Collection $leads): array
+    {
+        return $access->can('leads_edit') ? $this->workableLeadIds($access, $leads) : [];
     }
 
     // ── Assignment & org hooks ───────────────────────────────────────────
@@ -365,10 +380,16 @@ class LeadPolicy
         return ! $access->isReadOnly() && $this->canView($access, $lead);
     }
 
+    /** Sees the lead, may change things, and the lead's stage does not lock it for them. */
+    private function mayWork(CrmAccess $access, Lead $lead): bool
+    {
+        return $this->mayAct($access, $lead) && ! $this->lockedFor($access, $lead);
+    }
+
     /** Edit rights before looking at who works the lead. */
     private function mayEdit(CrmAccess $access, Lead $lead): bool
     {
-        return $access->can('leads_edit') && $this->mayAct($access, $lead) && ! $this->lockedFor($access, $lead);
+        return $access->can('leads_edit') && $this->mayWork($access, $lead);
     }
 
     /** A stage that locks its leads (LeadStage::locks_lead) leaves editing and moving to the head and admins. */

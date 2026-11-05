@@ -162,7 +162,7 @@ class PosCrmApiController extends Controller
                 'on_hold_from_stage_id', 'closed_at', 'assigned_to', 'created_by', 'created_at', 'updated_at',
                 'needs_review', 'review_reason', 'verified_at', 'forwarded_at', 'customer_id', 'converted_at', 'checklist_done']);
 
-        $editable = $this->policy->editableLeadIds($access, $leads);
+        $workable = $this->policy->workableLeadIds($access, $leads);
 
         // Mark leads that already exist as customers (matched by email or phone)
         $emails = $leads->pluck('email')->filter()->unique()->values()->all();
@@ -185,7 +185,7 @@ class PosCrmApiController extends Controller
         // Moves waiting for the head's approval
         $pendingMoves = $this->moveRequests->pendingByLead($leads->pluck('id')->map(fn ($id) => (int) $id)->all());
 
-        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $editable, $sellPrices, $followUps, $suggested, $enteredAt, $pendingMoves) {
+        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $workable, $sellPrices, $followUps, $suggested, $enteredAt, $pendingMoves) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
             $lead->is_customer    = $lead->customer_id !== null || $byEmail || $byPhone;
@@ -200,15 +200,15 @@ class PosCrmApiController extends Controller
             $lead->stage_entered_at = $enteredAt[$lead->id] ?? null;
             $lead->pending_move     = $pendingMoves[$lead->id] ?? null;
             $lead->can = [
-                'edit'       => isset($editable[$lead->id]),
-                'move'       => isset($editable[$lead->id]) && $access->can('leads_move'),
+                'edit'       => isset($workable[$lead->id]) && $access->can('leads_edit'),
+                'move'       => isset($workable[$lead->id]) && $access->can('leads_move'),
                 'delete'     => $this->policy->canDelete($access, $lead),
                 'assign'     => $this->policy->canAssign($access, $lead),
                 'approve'    => $this->policy->canApprove($access, $lead),
                 'forward'    => $this->policy->canForward($access, $lead),
                 'contribute' => $this->policy->canContribute($access, $lead),
-                'convert'    => isset($editable[$lead->id]) && $access->can('leads_edit'),
-                'close'      => isset($editable[$lead->id]) && $access->can('leads_close'),
+                'convert'    => isset($workable[$lead->id]) && $access->can('leads_edit'),
+                'close'      => isset($workable[$lead->id]) && $access->can('leads_close'),
                 'reopen'     => $this->policy->canReopen($access, $lead),
             ];
             unset($lead->customFieldValues);
@@ -1700,13 +1700,13 @@ class PosCrmApiController extends Controller
         return $lead;
     }
 
-    /** A task on a lead is worked by whoever may edit that lead; other tasks by any CRM user who can change things. */
+    /** A task on a lead is worked by whoever works that lead; other tasks by any CRM user who can change things. */
     private function abortUnlessTaskWorkable(Request $request, Business $business, Task $task): void
     {
         $access = $this->crmAccess($request, $business);
         $lead   = $task->subject_type === (new Lead)->getMorphClass() ? $task->subject : null;
 
-        $this->abortUnlessAllowed($lead instanceof Lead ? $this->policy->canEdit($access, $lead) : ! $access->isReadOnly());
+        $this->abortUnlessAllowed($lead instanceof Lead ? $this->policy->canWork($access, $lead) : ! $access->isReadOnly());
     }
 
     private function abortUnlessAllowed(bool $allowed): void

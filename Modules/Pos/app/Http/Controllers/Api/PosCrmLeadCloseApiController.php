@@ -66,7 +66,7 @@ class PosCrmLeadCloseApiController extends Controller
     public function won(Request $request, int $leadId): JsonResponse
     {
         [, $access, $lead] = $this->context($request, $leadId);
-        $this->abortUnlessAllowed($access->can('leads_edit') && $this->policy->canClose($access, $lead));
+        $this->abortUnlessAllowed($this->policy->canClose($access, $lead));
 
         $data = $request->validate([
             'quotation_id' => ['nullable', 'integer'],
