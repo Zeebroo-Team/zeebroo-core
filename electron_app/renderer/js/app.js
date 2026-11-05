@@ -65205,11 +65205,15 @@ async function submitDsCreate() {
     const n = d.employees_count || 0;
     const t = d.employment_types || {};
     const range = _deptRangeText(d);
-    const lead = (label, name) => `<div class="mac-row">
-        <div class="mac-row-label">${label}</div>
-        <div>${name ? `<strong>${escHtml(name)}</strong>` : '<span class="crm-perms-muted">Not assigned</span>'}</div>
-      </div>`;
     const employees = d.employees || [];
+    // Head / co-head pickers: any member of the department, never the same person twice
+    const lead = (role, label, current) => `<div class="mac-row">
+        <div class="mac-row-label">${label}</div>
+        <select class="po-field-input" id="crm-dept-${role}" style="width:280px"${employees.length ? '' : ' disabled'}>
+          <option value="">— Not assigned —</option>
+          ${employees.map(e => `<option value="${e.id}"${e.id === current ? ' selected' : ''}>${escHtml(e.name || '—')}${e.job_title ? ' · ' + escHtml(e.job_title) : ''}</option>`).join('')}
+        </select>
+      </div>`;
 
     $('#crm-dept-body').innerHTML = `
       <div class="mac-hero">
@@ -65231,9 +65235,14 @@ async function submitDsCreate() {
       <div class="mac-section">
         <div class="mac-section-title">Leadership</div>
         <div class="mac-group">
-          ${lead('Head', d.head)}
-          ${lead('Co-head', d.co_head)}
+          ${lead('head', 'Head', d.head_employee_id)}
+          ${lead('co_head', 'Co-head', d.co_head_employee_id)}
           ${range ? `<div class="mac-row"><div class="mac-row-label">Salary range</div><div>${escHtml(range)}</div></div>` : ''}
+          <div class="mac-group-foot">
+            ${employees.length
+              ? '<button type="button" class="po-btn-primary" data-dept-lead-save><i class="fa fa-floppy-disk"></i> Save leadership</button>'
+              : '<span class="crm-perms-muted">Add employees to this department to choose a head.</span>'}
+          </div>
         </div>
       </div>
 
@@ -65277,6 +65286,29 @@ async function submitDsCreate() {
     }
   }
 
+  async function _crmSaveDeptLeadership(btn) {
+    const d = _crmDeptDetail;
+    if (!d) return;
+    const pick = id => { const v = $(`#crm-dept-${id}`).value; return v === '' ? null : Number(v); };
+    const body = { head_employee_id: pick('head'), co_head_employee_id: pick('co_head') };
+    if (body.head_employee_id !== null && body.head_employee_id === body.co_head_employee_id) {
+      _crmDeptAlert('Head and co-head must be different people.');
+      return;
+    }
+    btn.disabled = true;
+    _crmDeptAlert('');
+    const res = await API.updateDepartmentLeadership(d.id, body);
+    if (res.status === 200) {
+      toast('Department leadership updated.', 'success');
+      document.dispatchEvent(new CustomEvent('departments:changed'));
+      _crmDeptDetail = res.body.data || d;
+      _crmRenderDeptDetail();
+    } else {
+      btn.disabled = false;
+      _crmDeptAlert(res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to update the leadership.'));
+    }
+  }
+
   $('#crm-dept-list')?.addEventListener('click', e => {
     const b = e.target.closest('[data-dept]');
     if (!b) return;
@@ -65299,6 +65331,8 @@ async function submitDsCreate() {
 
     if (t.matches('[data-dept-create]')) { _crmCreateDept(t); return; }
     if (t.matches('[data-dept-cancel]')) { _crmDeptAlert(''); _crmSelectDept(_crmDepts[0]?.id ?? null); return; }
+
+    if (t.matches('[data-dept-lead-save]')) { _crmSaveDeptLeadership(t); return; }
 
     if (t.matches('[data-dept-org]')) {
       _crmOrgDeptId = _crmDeptDetail?.id ?? null;
