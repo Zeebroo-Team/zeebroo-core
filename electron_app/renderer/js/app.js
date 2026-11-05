@@ -56582,11 +56582,24 @@ async function submitDsCreate() {
       </div>
 
       <div class="um-detail-section">
+        <div class="um-detail-section-title">CRM Permissions</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="um-perm-subrow-desc" style="flex:1">${fullAccess || role.slug === 'admin'
+            ? 'Admins always have full access to every CRM function and stage.'
+            : role.crm_customized
+              ? 'Members follow this role\'s CRM defaults, unless a user has custom settings.'
+              : 'No CRM limits set — members get full CRM access unless a user has custom settings.'}</div>
+          ${fullAccess || role.slug === 'admin' ? '' : `<button class="um-role-edit-btn" id="um-rd-crm"><i class="fa fa-user-shield"></i> CRM permissions</button>`}
+        </div>
+      </div>
+
+      <div class="um-detail-section">
         <div class="um-detail-section-title">Members with this role (${members.length})</div>
         <div class="um-role-members-list">${membersHtml}</div>
       </div>`;
 
     detail.querySelector('#um-rd-edit')?.addEventListener('click', () => openEditRoleModal(role));
+    detail.querySelector('#um-rd-crm')?.addEventListener('click', () => window.openCrmPermissionsModal?.({ roleId: role.id }));
   }
 
   // ── Role Modals ─────────────────────────────────────────────────────────
@@ -64633,22 +64646,26 @@ async function submitDsCreate() {
   });
 
   // ── Permissions modal ─────────────────────────────────────────────────────
-  // Owner/admins pick a user, then toggle CRM functions and choose which stages
-  // that user sees in each relation (all / selected / hidden).
-  let _crmPerms       = null;   // { functions, users, relations } from /crm/permissions
-  let _crmPermsUserId = null;   // user currently being edited
+  // Owner/admins edit either a role's CRM template (what every member of the
+  // role gets) or one user's own settings, which then replace the role's. Both
+  // toggle CRM functions and choose which stages show in each relation.
+  let _crmPerms       = null;   // { functions, users, roles, relations } from /crm/permissions
+  let _crmPermsMode   = 'users'; // 'users' | 'roles' — what the sidebar lists
+  let _crmPermsUserId = null;   // user (or role, in roles mode) currently being edited
   let _crmPermsDraft  = null;   // { permissions: { key: bool }, stage_access: { projectId: [stageIds] } }
   let _crmPermsDirty  = false;
   let _crmPermsUserQ  = '';
   let _crmPermsRelQ   = '';
 
-  async function openCrmPermissionsModal() {
+  /** opts.mode 'roles' | 'users'; opts.roleId opens straight on that role. */
+  async function openCrmPermissionsModal(opts = {}) {
     _crmPerms = null; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false; _crmPermsRelQ = '';
+    _crmPermsMode = opts.mode || (opts.roleId ? 'roles' : 'users');
     _macShow($('#crm-perms-modal'));
     $('#crm-perms-alert').style.display = 'none';
-    $('#crm-perms-user-search').value = _crmPermsUserQ = '';
+    _crmPermsSyncMode();
     $('#crm-perms-user-list').innerHTML = '<span class="crm-perms-muted">Loading…</span>';
-    $('#crm-perms-editor-body').innerHTML = '<span class="crm-perms-muted">Select a user to edit their CRM access.</span>';
+    $('#crm-perms-editor-body').innerHTML = `<span class="crm-perms-muted">Select a ${_crmPermsMode === 'roles' ? 'role' : 'user'} to edit their CRM access.</span>`;
     _crmPermsSyncFooter();
 
     const res = await API.crmPermissions();
@@ -64657,17 +64674,61 @@ async function submitDsCreate() {
       return;
     }
     _crmPerms = res.body.data;
+    _crmPerms.roles = _crmPerms.roles || [];
     _crmRenderPermsUsers();
-    const first = _crmPerms.users.find(u => !u.is_admin) || _crmPerms.users[0];
-    if (first) _crmSelectPermsUser(first.user_id);
+    const items = _crmPermsItems();
+    const first = (opts.roleId && items.find(r => _crmPermsId(r) === opts.roleId))
+      || items.find(u => !u.is_admin) || items[0];
+    if (first) _crmSelectPermsUser(_crmPermsId(first));
   }
+  window.openCrmPermissionsModal = openCrmPermissionsModal;
+
+  function _crmPermsItems() {
+    return (_crmPermsMode === 'roles' ? _crmPerms?.roles : _crmPerms?.users) || [];
+  }
+
+  function _crmPermsId(item) {
+    return _crmPermsMode === 'roles' ? item.id : item.user_id;
+  }
+
+  /** The role whose CRM template a user follows while they have no settings of their own. */
+  function _crmPermsRoleOf(user) {
+    return _crmPerms?.roles.find(r => r.slug === user.role) || null;
+  }
+
+  function _crmPermsSyncMode() {
+    const roles = _crmPermsMode === 'roles';
+    $('#crm-perms-mode')?.querySelectorAll('[data-perms-mode]').forEach(b => b.classList.toggle('active', b.dataset.permsMode === _crmPermsMode));
+    const search = $('#crm-perms-user-search');
+    search.value = _crmPermsUserQ = '';
+    search.placeholder = roles ? 'Search roles' : 'Search users';
+    $('#crm-perms-reset-btn').innerHTML = roles
+      ? '<i class="fa fa-rotate-left"></i> Reset to full access'
+      : '<i class="fa fa-rotate-left"></i> Reset to role defaults';
+  }
+
+  async function _crmSetPermsMode(mode) {
+    if (mode === _crmPermsMode || !_crmPerms) return;
+    if (!await _crmPermsConfirmDiscard()) return;
+    _crmPermsMode = mode; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false;
+    _crmPermsSyncMode();
+    _crmRenderPermsUsers();
+    const items = _crmPermsItems();
+    const first = items.find(u => !u.is_admin) || items[0];
+    if (first) _crmSelectPermsUser(_crmPermsId(first));
+  }
+
+  $('#crm-perms-mode')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-perms-mode]');
+    if (btn) _crmSetPermsMode(btn.dataset.permsMode);
+  });
 
   /** Resolves true when there is nothing unsaved, or the user agrees to drop it. */
   function _crmPermsConfirmDiscard() {
     if (!_crmPermsDirty) return true;
     return appConfirm({
       title: 'Discard changes?',
-      message: 'You have unsaved permission changes for this user. They will be lost.',
+      message: `You have unsaved permission changes for this ${_crmPermsMode === 'roles' ? 'role' : 'user'}. They will be lost.`,
       confirmText: '<i class="fa fa-trash-can"></i> Discard',
       cancelText: 'Keep editing',
       icon: 'fa-triangle-exclamation',
@@ -64681,19 +64742,40 @@ async function submitDsCreate() {
   }
 
   function _crmPermsUser(id = _crmPermsUserId) {
-    return _crmPerms?.users.find(u => u.user_id === id) || null;
+    return _crmPermsItems().find(u => _crmPermsId(u) === id) || null;
   }
 
   function _crmRenderPermsUsers() {
     const list = $('#crm-perms-user-list');
     if (!list || !_crmPerms) return;
     const q = _crmPermsUserQ.trim().toLowerCase();
+
+    if (_crmPermsMode === 'roles') {
+      const roles = _crmPerms.roles.filter(r => !q || `${r.name} ${r.slug}`.toLowerCase().includes(q));
+      if (!roles.length) { list.innerHTML = '<span class="crm-perms-muted">No roles found.</span>'; return; }
+      list.innerHTML = roles.map(r => {
+        const tag = r.is_admin ? '<span class="crm-perms-tag crm-perms-tag--admin">Admin</span>'
+                  : r.customized ? '<span class="crm-perms-tag crm-perms-tag--custom">Custom</span>'
+                  : '<span class="crm-perms-tag">Full</span>';
+        return `<button type="button" class="crm-perms-user${r.id === _crmPermsUserId ? ' active' : ''}" data-perms-user="${r.id}">
+          <span class="crm-perms-avatar" style="color:${escHtml(r.color || '#64748b')}"><i class="fa fa-shield-halved"></i></span>
+          <span class="crm-perms-user-info">
+            <span class="crm-perms-user-name" style="display:block">${escHtml(r.name)}</span>
+            <span class="crm-perms-user-sub" style="display:block">${r.member_count} ${r.member_count === 1 ? 'member' : 'members'}</span>
+          </span>
+          ${tag}
+        </button>`;
+      }).join('');
+      return;
+    }
+
     const users = _crmPerms.users.filter(u => !q || `${u.name} ${u.email} ${u.role}`.toLowerCase().includes(q));
     if (!users.length) { list.innerHTML = '<span class="crm-perms-muted">No users found.</span>'; return; }
     list.innerHTML = users.map(u => {
       const initials = (u.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
       const tag = u.is_admin ? '<span class="crm-perms-tag crm-perms-tag--admin">Admin</span>'
                 : u.customized ? '<span class="crm-perms-tag crm-perms-tag--custom">Custom</span>'
+                : _crmPermsRoleOf(u)?.customized ? '<span class="crm-perms-tag crm-perms-tag--role">Role</span>'
                 : '<span class="crm-perms-tag">Full</span>';
       return `<button type="button" class="crm-perms-user${u.user_id === _crmPermsUserId ? ' active' : ''}" data-perms-user="${u.user_id}">
         <span class="crm-perms-avatar">${escHtml(initials)}</span>
@@ -64714,11 +64796,14 @@ async function submitDsCreate() {
     _crmPermsDirty  = false;
     $('#crm-perms-alert').style.display = 'none';
 
-    const saved = user.permissions || {};
+    // A user without settings of their own starts from their role's template (same merge as the API)
+    const role  = _crmPermsMode === 'users' ? _crmPermsRoleOf(user) : null;
+    const saved = { ...(role?.permissions || {}), ...(user.permissions || {}) };
+    const stageSource = _crmPermsMode === 'users' && !user.customized ? (role?.stage_access || {}) : (user.stage_access || {});
     const permissions = {};
     _crmPerms.functions.forEach(g => g.items.forEach(i => { permissions[i.key] = saved[i.key] !== false; }));
     const stage_access = {};
-    Object.entries(user.stage_access || {}).forEach(([pid, ids]) => { stage_access[pid] = (ids || []).map(Number); });
+    Object.entries(stageSource).forEach(([pid, ids]) => { stage_access[pid] = (ids || []).map(Number); });
     _crmPermsDraft = { permissions, stage_access };
 
     _crmRenderPermsUsers();
@@ -64737,19 +64822,36 @@ async function submitDsCreate() {
     const user = _crmPermsUser();
     if (!body || !user) return;
 
+    const isRole = _crmPermsMode === 'roles';
     const header = `<div style="display:flex;align-items:center;gap:10px">
       <div style="min-width:0">
         <div style="font-size:15px;font-weight:700">${escHtml(user.name)}</div>
-        <div class="crm-perms-muted">${escHtml(user.role)}${user.email ? ' · ' + escHtml(user.email) : ''}</div>
+        <div class="crm-perms-muted">${isRole
+          ? `Role · ${user.member_count} ${user.member_count === 1 ? 'member' : 'members'}`
+          : `${escHtml(user.role)}${user.email ? ' · ' + escHtml(user.email) : ''}`}</div>
       </div>
     </div>`;
 
     if (user.is_admin) {
       body.innerHTML = `${header}
         <div class="crm-perms-admin-note"><i class="fa fa-crown" style="color:#f59e0b"></i>
-          ${user.role === 'owner' ? 'The business owner' : 'Admins'} always have full access to every CRM function and stage.</div>`;
+          ${isRole ? 'Members of this role' : user.role === 'owner' ? 'The business owner' : 'Admins'} always have full access to every CRM function and stage.</div>`;
       return;
     }
+
+    let note;
+    if (isRole) {
+      const custom = _crmPerms.users.filter(u => u.role === user.slug && u.customized).length;
+      note = `<i class="fa fa-users"></i><span>Every member of this role gets these settings.${custom
+        ? ` <strong>${custom} ${custom === 1 ? 'member has' : 'members have'} custom settings</strong> and won't change.` : ''}</span>`;
+    } else {
+      const role = _crmPermsRoleOf(user);
+      const roleName = escHtml(role?.name || user.role);
+      note = user.customized
+        ? `<i class="fa fa-user-pen"></i><span>Custom settings for this user — changes to the <strong>${roleName}</strong> role don't apply. Reset to follow the role again.</span>`
+        : `<i class="fa fa-shield-halved"></i><span>Following the <strong>${roleName}</strong> role defaults. Saving here gives this user their own settings.</span>`;
+    }
+    const inherit = `<div class="crm-perms-inherit-note">${note}</div>`;
 
     const groups = _crmPerms.functions.map(g => {
       const allOn = g.items.every(i => _crmPermsDraft.permissions[i.key]);
@@ -64788,7 +64890,7 @@ async function submitDsCreate() {
       </div>`;
     }).join('') : '<span class="crm-perms-muted">No relations yet.</span>';
 
-    body.innerHTML = `${header}
+    body.innerHTML = `${header}${inherit}
       <div>
         <div class="crm-perms-section-title">Functions
           <button type="button" data-perms-all="1">Allow all</button><button type="button" data-perms-all="0">Block all</button>
@@ -64799,7 +64901,7 @@ async function submitDsCreate() {
         <div class="crm-perms-section-title">Stage visibility
           ${_crmPerms.relations.length ? `<div class="mac-search" style="margin-left:auto;width:220px"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-perms-rel-search" placeholder="Search relations" autocomplete="off" value="${escHtml(_crmPermsRelQ)}"></div>` : ''}
         </div>
-        <div class="crm-perms-muted" style="margin-bottom:8px">Choose which pipeline stages this user sees in each relation. Leads in other stages stay out of their pipeline, contacts and custom data; hidden relations don't appear at all.</div>
+        <div class="crm-perms-muted" style="margin-bottom:8px">Choose which pipeline stages ${isRole ? 'members of this role see' : 'this user sees'} in each relation. Leads in other stages stay out of their pipeline, contacts and custom data; hidden relations don't appear at all.</div>
         <div style="display:flex;flex-direction:column;gap:8px">${relations}
           <span class="crm-perms-muted" id="crm-perms-rel-empty" style="display:none">No relations match your search.</span>
         </div>
@@ -64907,15 +65009,18 @@ async function submitDsCreate() {
   $('#crm-perms-save-btn')?.addEventListener('click', async () => {
     const user = _crmPermsUser();
     if (!user || user.is_admin || !_crmPermsDraft) return;
+    const isRole = _crmPermsMode === 'roles';
     const btn = $('#crm-perms-save-btn');
     btn.disabled = true;
-    const res = await API.crmSaveUserPermissions(user.user_id, _crmPermsDraft);
+    const res = isRole
+      ? await API.crmSaveRolePermissions(user.id, _crmPermsDraft)
+      : await API.crmSaveUserPermissions(user.user_id, _crmPermsDraft);
     btn.disabled = false;
     if (res.status === 200) {
       Object.assign(user, res.body.data);
       _crmPermsDirty = false;
-      await _crmSelectPermsUser(user.user_id);
-      _crmPermsAlert(`CRM permissions saved for ${user.name}.`, 'success');
+      await _crmSelectPermsUser(_crmPermsId(user));
+      _crmPermsAlert(isRole ? `CRM defaults saved for the ${user.name} role.` : `CRM permissions saved for ${user.name}.`, 'success');
     } else {
       _crmPermsAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save permissions.'));
     }
@@ -64924,19 +65029,25 @@ async function submitDsCreate() {
   $('#crm-perms-reset-btn')?.addEventListener('click', async () => {
     const user = _crmPermsUser();
     if (!user || user.is_admin) return;
+    const isRole   = _crmPermsMode === 'roles';
+    const roleName = isRole ? '' : (_crmPermsRoleOf(user)?.name || user.role);
     const ok = await appConfirm({
       title: 'Reset CRM permissions?',
-      message: `${user.name} will get full access to every CRM function and stage again.`,
+      message: isRole
+        ? `Members of the ${user.name} role without custom settings will get full access to every CRM function and stage again.`
+        : `${user.name} will drop their custom settings and follow the ${roleName} role again.`,
       confirmText: '<i class="fa fa-rotate-left"></i> Reset',
       icon: 'fa-user-shield',
     });
     if (!ok) return;
-    const res = await API.crmResetUserPermissions(user.user_id);
+    const res = isRole
+      ? await API.crmResetRolePermissions(user.id)
+      : await API.crmResetUserPermissions(user.user_id);
     if (res.status === 200) {
       Object.assign(user, { customized: false, permissions: {}, stage_access: {} });
       _crmPermsDirty = false;
-      await _crmSelectPermsUser(user.user_id);
-      _crmPermsAlert(`${user.name} now has full CRM access.`, 'success');
+      await _crmSelectPermsUser(_crmPermsId(user));
+      _crmPermsAlert(isRole ? `The ${user.name} role now has full CRM access.` : `${user.name} now follows the ${roleName} role.`, 'success');
     } else {
       toast(res.body?.message || 'Failed to reset permissions.', 'error');
     }

@@ -16,6 +16,8 @@ class BusinessRole extends Model
         'color',
         'description',
         'permissions',
+        'crm_permissions',
+        'crm_stage_access',
         'is_system',
         'sort_order',
     ];
@@ -23,7 +25,9 @@ class BusinessRole extends Model
     protected function casts(): array
     {
         return [
-            'permissions' => 'array',
+            'permissions'      => 'array',
+            'crm_permissions'  => 'array',
+            'crm_stage_access' => 'array',
             'is_system'   => 'boolean',
             'sort_order'  => 'integer',
         ];

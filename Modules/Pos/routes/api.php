@@ -606,6 +606,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/permissions/me',                [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'me'])    ->name('crm.permissions.me');
     Route::put   ('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'update'])->whereNumber('user')->name('crm.permissions.update');
     Route::delete('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'reset']) ->whereNumber('user')->name('crm.permissions.reset');
+    Route::put   ('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'updateRole'])->whereNumber('role')->name('crm.permissions.roles.update');
+    Route::delete('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'resetRole']) ->whereNumber('role')->name('crm.permissions.roles.reset');
 
     // CRM org structure (departments → divisions, department pipelines, department settings)
     Route::get   ('crm/org',                                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'index'])          ->name('crm.org.index');

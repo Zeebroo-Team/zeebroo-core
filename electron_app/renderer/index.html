@@ -492,6 +492,12 @@ body.dark #crm-relation-pane-history select.crm-history-filter option{background
 .mac-window .crm-perms-item small{color:var(--mac-muted)}
 .mac-window .crm-perms-stage{border:0;background:var(--mac-fill);padding:4px 11px}
 .mac-window .crm-perms-admin-note{border:0;background:var(--mac-fill);color:var(--mac-muted)}
+.crm-perms-mode{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--mac-fill,rgba(0,0,0,.05))}
+.crm-perms-mode button{flex:1;border:0;background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:500;padding:5px 0;border-radius:6px;cursor:pointer}
+.crm-perms-mode button.active{background:var(--mac-panel,#fff);font-weight:600;box-shadow:0 0 0 .5px var(--mac-line,rgba(0,0,0,.1)),0 1px 2px rgba(0,0,0,.06)}
+.crm-perms-tag--role{background:rgba(22,163,74,.12);color:#15803d}
+.mac-window .crm-perms-user.active .crm-perms-tag--role{background:rgba(255,255,255,.25);color:#fff}
+.crm-perms-inherit-note{display:flex;gap:8px;align-items:center;padding:9px 12px;border-radius:9px;font-size:12.5px;background:var(--mac-fill,rgba(0,0,0,.04));color:var(--mac-muted,#6b7280)}
 .mac-window .crm-org-warn{background:rgba(255,149,0,.1);color:#b25000;border-radius:10px;padding:9px 14px;font-size:12.5px}
 body.dark .mac-window .crm-org-warn{color:#ffb340}
 .mac-window .crm-inbox-grid label{color:var(--mac-muted);font-size:12px;gap:5px}
@@ -14957,7 +14963,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-user-shield"></i></span>
-          <div style="min-width:0"><div class="mac-title-main">CRM Permissions</div><div class="mac-title-sub">Choose what each user can see and do in the CRM</div></div>
+          <div style="min-width:0"><div class="mac-title-main">CRM Permissions</div><div class="mac-title-sub">Set defaults per role, then fine-tune individual users</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
@@ -14967,6 +14973,10 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
       <div class="mac-split">
         <aside class="mac-sidebar">
+          <div class="crm-perms-mode" id="crm-perms-mode">
+            <button type="button" data-perms-mode="roles"><i class="fa fa-shield-halved"></i> Roles</button>
+            <button type="button" data-perms-mode="users" class="active"><i class="fa fa-user"></i> Users</button>
+          </div>
           <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-perms-user-search" placeholder="Search users" autocomplete="off"></div>
           <div id="crm-perms-user-list" class="mac-side-list">
             <span class="mac-side-empty">Loading…</span>

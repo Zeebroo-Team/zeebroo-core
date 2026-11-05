@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessMember;
+use Modules\Business\Models\BusinessRole;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
@@ -37,6 +38,7 @@ class PosCrmPermissionApiController extends Controller
             'data' => [
                 'functions' => CrmPermissionService::functions(),
                 'users'     => $this->permissions->usersForBusiness($business),
+                'roles'     => $this->permissions->rolesForBusiness($business),
                 'relations' => $this->permissions->relationsWithStages($business),
             ],
         ]);
@@ -85,6 +87,70 @@ class PosCrmPermissionApiController extends Controller
         $this->permissions->resetForUser($business, $userId);
 
         return response()->json(['message' => 'CRM permissions reset to the role defaults.']);
+    }
+
+    /** PUT /api/pos/crm/permissions/roles/{roleId} — the CRM template every member of the role follows. */
+    public function updateRole(Request $request, int $roleId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrmAdmin($request, $business);
+        $role = $this->editableRoleOrAbort($business, $roleId);
+
+        $validated = $request->validate([
+            'permissions'      => ['nullable', 'array'],
+            'permissions.*'    => ['boolean'],
+            'stage_access'     => ['nullable', 'array'],
+            'stage_access.*'   => ['array'],
+            'stage_access.*.*' => ['integer'],
+        ]);
+
+        $role = $this->permissions->saveForRole(
+            $business,
+            $role,
+            $validated['permissions'] ?? [],
+            $validated['stage_access'] ?? [],
+        );
+
+        return response()->json([
+            'message' => 'Role CRM permissions saved.',
+            'data'    => [
+                'id'           => (int) $role->id,
+                'customized'   => ! empty($role->crm_permissions) || ! empty($role->crm_stage_access),
+                'permissions'  => (object) ($role->crm_permissions ?? []),
+                'stage_access' => (object) ($role->crm_stage_access ?? []),
+            ],
+        ]);
+    }
+
+    /** DELETE /api/pos/crm/permissions/roles/{roleId} — the role grants full CRM access again. */
+    public function resetRole(Request $request, int $roleId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessCrmAdmin($request, $business);
+
+        $this->permissions->resetForRole($this->editableRoleOrAbort($business, $roleId));
+
+        return response()->json(['message' => 'Role CRM permissions reset to full access.']);
+    }
+
+    private function editableRoleOrAbort(Business $business, int $roleId): BusinessRole
+    {
+        $role = BusinessRole::query()
+            ->where('business_id', $business->id)
+            ->where('id', $roleId)
+            ->first();
+
+        if ($role === null) {
+            throw new HttpResponseException(response()->json(['message' => 'Role not found.'], 404));
+        }
+
+        if (CrmPermissionService::roleIsAdmin($role)) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'Admin roles always have full CRM access.'], 422)
+            );
+        }
+
+        return $role;
     }
 
     private function abortUnlessCrmAdmin(Request $request, Business $business): void

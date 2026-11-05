@@ -111,6 +111,7 @@ beforeEach(function () {
         '2026_10_31_100200_create_crm_department_settings_table.php',
         '2026_11_02_100200_create_crm_lead_assignment_logs_table.php',
         '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
+        '2026_11_10_100000_add_crm_permissions_to_business_roles_table.php',
     ] as $file) {
         (require $dir . $file)->up();
     }
@@ -332,6 +333,65 @@ test('each lead toggle blocks only its own action', function (string $key, strin
     ['quotations_manage', 'canQuote'],
     ['lead_collaborate', 'canContribute'],
 ]);
+
+// ── Role CRM templates ───────────────────────────────────────────────────
+
+test('a role\'s CRM template applies to every member without their own settings', function () {
+    $service = app(CrmPermissionService::class);
+    $staff   = BusinessRole::where('business_id', 7)->where('slug', 'crm_staff')->first();
+    $service->saveForRole($this->business, $staff, ['leads_delete' => false, 'bogus_key' => false], [3 => []]);
+
+    // Users 3 and 6 are both crm_staff
+    foreach ([3, 6] as $userId) {
+        $access = ($this->access)($userId);
+        expect($access->can('leads_delete'))->toBeFalse()
+            ->and($access->can('leads_edit'))->toBeTrue()
+            ->and($access->canSeeRelation(3))->toBeFalse();
+    }
+    expect($staff->fresh()->crm_permissions)->toBe(['leads_delete' => false])
+        ->and(($this->access)(2)->can('leads_delete'))->toBeTrue();   // other roles untouched
+});
+
+test('a user\'s own settings replace the role template until reset', function () {
+    $service = app(CrmPermissionService::class);
+    $staff   = BusinessRole::where('business_id', 7)->where('slug', 'crm_staff')->first();
+    $service->saveForRole($this->business, $staff, ['leads_delete' => false, 'leads_import' => false], [3 => []]);
+
+    // User 6 gets delete back and every stage visible; keys they did not send still follow the role
+    $service->saveForUser($this->business, 6, ['leads_delete' => true], []);
+    $access = ($this->access)(6);
+    expect($access->can('leads_delete'))->toBeTrue()
+        ->and($access->can('leads_import'))->toBeFalse()
+        ->and($access->canSeeRelation(3))->toBeTrue()
+        ->and(($this->access)(3)->can('leads_delete'))->toBeFalse();
+
+    $service->resetForUser($this->business, 6);
+    expect(($this->access)(6)->can('leads_delete'))->toBeFalse();
+
+    $service->resetForRole($staff);
+    expect(($this->access)(6)->can('leads_delete'))->toBeTrue()
+        ->and(($this->access)(6)->canSeeRelation(3))->toBeTrue();
+});
+
+test('the role template endpoints are admin-only and refuse admin roles', function () {
+    $staff = BusinessRole::where('business_id', 7)->where('slug', 'crm_staff')->first();
+    $admin = BusinessRole::where('business_id', 7)->where('slug', 'admin')->first();
+
+    $api  = app(CrmLeadAccessTestPermissionApi::class);
+    $body = ['permissions' => ['leads_delete' => false]];
+
+    $roles = collect($api->index(crmLeadRequest(1))->getData(true)['data']['roles']);
+    expect($roles->firstWhere('slug', 'admin')['is_admin'])->toBeTrue()
+        ->and($roles->firstWhere('slug', 'crm_staff')['member_count'])->toBe(2);
+
+    expect(crmLeadStatus(fn () => $api->updateRole(crmLeadRequest(1, 'PUT', $body), $staff->id)))->toBe(200)
+        ->and(crmLeadStatus(fn () => $api->updateRole(crmLeadRequest(1, 'PUT', $body), $admin->id)))->toBe(422)
+        ->and(crmLeadStatus(fn () => $api->updateRole(crmLeadRequest(3, 'PUT', []), $staff->id)))->toBe(403)
+        ->and($staff->fresh()->crm_permissions)->toBe(['leads_delete' => false]);
+
+    expect(crmLeadStatus(fn () => $api->resetRole(crmLeadRequest(1, 'DELETE'), $staff->id)))->toBe(200)
+        ->and($staff->fresh()->crm_permissions)->toBeNull();
+});
 
 test('editableLeadIds matches canEdit lead by lead', function (int $userId) {
     $access = ($this->access)($userId);

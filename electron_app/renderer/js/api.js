@@ -633,6 +633,8 @@ const API = (() => {
     crmMyPermissions:        ()                => request('GET',    '/crm/permissions/me'),
     crmSaveUserPermissions:  (userId, body)    => request('PUT',    `/crm/permissions/users/${userId}`, body),
     crmResetUserPermissions: (userId)          => request('DELETE', `/crm/permissions/users/${userId}`),
+    crmSaveRolePermissions:  (roleId, body)    => request('PUT',    `/crm/permissions/roles/${roleId}`, body),
+    crmResetRolePermissions: (roleId)          => request('DELETE', `/crm/permissions/roles/${roleId}`),
     // CRM org structure (admin only)
     crmOrg:                      ()                    => request('GET',    '/crm/org'),
     crmCreateDivision:           (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/divisions`, body),

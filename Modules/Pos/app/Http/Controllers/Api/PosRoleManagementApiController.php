@@ -157,6 +157,8 @@ class PosRoleManagementApiController extends Controller
             'color'        => $role->color,
             'description'  => $role->description,
             'permissions'  => $role->permissions, // null = all
+            // Whether the role carries a CRM template (edited in CRM Permissions → Roles)
+            'crm_customized' => ! empty($role->crm_permissions) || ! empty($role->crm_stage_access),
             'is_system'    => $role->is_system,
             'sort_order'   => $role->sort_order,
             'member_count' => $memberCount,

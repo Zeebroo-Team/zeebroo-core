@@ -8508,7 +8508,7 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   animation: fadeIn .15s ease;
 }
 /* Opened from inside the Settings modal — must paint above it regardless of DOM order */
-#branch-add-modal, #branch-edit-modal { z-index: 850; }
+#branch-add-modal, #branch-edit-modal, #crm-perms-modal { z-index: 850; }
 
 /* Generic modal shell */
 .modal-box {
