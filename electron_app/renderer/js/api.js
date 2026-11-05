@@ -633,6 +633,8 @@ const API = (() => {
     crmMyPermissions:        ()                => request('GET',    '/crm/permissions/me'),
     crmSaveUserPermissions:  (userId, body)    => request('PUT',    `/crm/permissions/users/${userId}`, body),
     crmResetUserPermissions: (userId)          => request('DELETE', `/crm/permissions/users/${userId}`),
+    crmSaveRolePermissions:  (roleId, body)    => request('PUT',    `/crm/permissions/roles/${roleId}`, body),
+    crmResetRolePermissions: (roleId)          => request('DELETE', `/crm/permissions/roles/${roleId}`),
     // CRM org structure (admin only)
     crmOrg:                      ()                    => request('GET',    '/crm/org'),
     crmCreateDivision:           (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/divisions`, body),
@@ -705,6 +707,7 @@ const API = (() => {
     crmLeadWorkspace:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/workspace`),
     crmLeadAssignees:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/assignees`),
     crmLeadSummary:           (leadId)                 => request('GET',    `/crm/leads/${leadId}/summary`),
+    crmLeadNotificationsRead: (leadId, types = null)   => request('POST',   `/crm/leads/${leadId}/notifications/read`, { types }),
     crmSyncLeadAssignees:     (leadId, body)           => request('PUT',    `/crm/leads/${leadId}/assignees`, body),
     crmAddLeadAssignees:      (leadId, body)           => request('POST',   `/crm/leads/${leadId}/assignees`, body),
     crmRemoveLeadAssignee:    (leadId, userId)         => request('DELETE', `/crm/leads/${leadId}/assignees/${userId}`),
@@ -753,6 +756,9 @@ const API = (() => {
     // Management dashboard (admin, CEO, heads) — params: from, to, department_id, division_id, user_id, source
     crmDashboard:             (params = {})            => request('GET',    `/crm/reports/dashboard?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmDashboardExportPath:   (format, params = {})    => `/crm/reports/dashboard/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
+    // Sales analysis report (ribbon → Report) — dashboard params plus group_by, status, search; format: pdf | csv
+    crmSalesAnalysis:         (params = {})            => request('GET',    `/crm/reports/sales-analysis?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmSalesAnalysisExportPath: (format, params = {})  => `/crm/reports/sales-analysis/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
     // Row-level CRM audit log — admins only
     crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),

@@ -30,6 +30,7 @@ class PosHrDepartmentListApiController extends Controller
         }
 
         $departments = Department::withCount('employees')
+            ->with(['headEmployee:id,full_name', 'coHeadEmployee:id,full_name'])
             ->where('business_id', $business->id)
             ->orderBy('name')
             ->get();
@@ -157,6 +158,8 @@ class PosHrDepartmentListApiController extends Controller
             'id'               => $d->id,
             'name'             => $d->name,
             'employees_count'  => (int) ($d->employees_count ?? 0),
+            'head'             => $d->relationLoaded('headEmployee') ? $d->headEmployee?->full_name : null,
+            'co_head'          => $d->relationLoaded('coHeadEmployee') ? $d->coHeadEmployee?->full_name : null,
             'salary_range_min' => $d->salary_range_min !== null ? number_format((float) $d->salary_range_min, 2, '.', ',') : null,
             'salary_range_max' => $d->salary_range_max !== null ? number_format((float) $d->salary_range_max, 2, '.', ',') : null,
         ];

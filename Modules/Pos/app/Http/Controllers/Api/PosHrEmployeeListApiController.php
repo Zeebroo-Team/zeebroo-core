@@ -305,6 +305,7 @@ class PosHrEmployeeListApiController extends Controller
                 : null,
             'date_of_joining'  => $employee->date_of_joining?->format('Y-m-d'),
             'phone_number'     => $employee->phone_number,
+            'profile_complete' => (bool) ($employee->profile_complete ?? true),
         ];
 
         if ($this->accessLookup !== null) {

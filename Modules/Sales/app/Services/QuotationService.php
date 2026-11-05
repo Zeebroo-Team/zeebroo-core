@@ -63,6 +63,7 @@ class QuotationService
                 'lead_id'             => $this->nullableInt($data['lead_id'] ?? null),
                 'version'             => max(1, (int) ($data['version'] ?? 1)),
                 'parent_quotation_id' => $this->nullableInt($data['parent_quotation_id'] ?? null),
+                'customer_address'    => filled($data['customer_address'] ?? '') ? $data['customer_address'] : null,
                 'reference'       => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'quote_date'      => $data['quote_date'],
                 'expiry_date'     => filled($data['expiry_date'] ?? '') ? $data['expiry_date'] : null,
@@ -94,6 +95,10 @@ class QuotationService
                     ? $this->nullableInt($data['branch_id'])
                     : $quotation->branch_id,
                 'customer_id' => $this->nullableInt($data['customer_id'] ?? null),
+                // Editors that don't send an address (the Sales web form) keep the one on file
+                'customer_address' => array_key_exists('customer_address', $data)
+                    ? (filled($data['customer_address']) ? $data['customer_address'] : null)
+                    : $quotation->customer_address,
                 'reference'   => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'quote_date'  => $data['quote_date'],
                 'expiry_date' => filled($data['expiry_date'] ?? '') ? $data['expiry_date'] : null,
@@ -220,6 +225,7 @@ class QuotationService
             'branch_id'           => $quotation->branch_id,
             'customer_id'         => $quotation->customer_id,
             'lead_id'             => $quotation->lead_id,
+            'customer_address'    => $quotation->customer_address,
             'version'             => $version,
             'parent_quotation_id' => $quotation->id,
             'quote_number'        => $base . '-v' . $version,

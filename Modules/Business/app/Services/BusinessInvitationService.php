@@ -154,11 +154,14 @@ class BusinessInvitationService
 
             // HR → "Give system access" invites go to the employee's email: link that profile to the account.
             if (Schema::hasTable('hr_employees')) {
-                Employee::query()
+                $profiles = Employee::query()
                     ->where('business_id', $invitation->business_id)
                     ->whereNull('user_id')
-                    ->whereRaw('LOWER(personal_email) = ?', [$invitation->email])
-                    ->update(['user_id' => $user->id]);
+                    ->whereRaw('LOWER(personal_email) = ?', [$invitation->email]);
+
+                // Settings → Users profiles were named after the email: take the account's name
+                (clone $profiles)->where('profile_complete', false)->update(['full_name' => $user->name]);
+                $profiles->update(['user_id' => $user->id]);
             }
 
             $invitation->update([

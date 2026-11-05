@@ -31513,6 +31513,9 @@ async function openPosSettings() {
   const hrOn = hasFeature('human_resources');
   const hrNavItem = $('.psm-nav-item--hr-only');
   if (hrNavItem) hrNavItem.style.display = hrOn ? '' : 'none';
+  // Organisation tab (departments, positions) — whenever CRM or HR needs them
+  const orgNavItem = $('.psm-nav-item--org-only');
+  if (orgNavItem) orgNavItem.style.display = (hrOn || hasFeature('crm')) ? '' : 'none';
   psmShowTab('business');
 
   _psmHrLoaded = false;
@@ -31666,7 +31669,97 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   if (btn.dataset.tab === 'counters') loadPsmCounters();
   if (btn.dataset.tab === 'cashiers') { _psmCashierResetForm(); loadPsmCashiers(); }
   if (btn.dataset.tab === 'printer')  _psmLoadPrinterSettings();
+  if (btn.dataset.tab === 'org')      _psmLoadOrg();
 }));
+
+// ── Organisation tab: departments and positions ──────────────────────────────
+// The same HR tables HR Management uses, so a business without the HR feature can
+// still set up the departments and positions the CRM and Settings → Users need.
+
+function _psmOrgError(kind, msg) {
+  const el = $(`#psm-org-${kind}-error`);
+  el.textContent = msg || '';
+  el.style.display = msg ? '' : 'none';
+}
+
+async function _psmLoadOrg() {
+  _psmOrgError('dept', '');
+  _psmOrgError('pos', '');
+  const [dRes, pRes] = await Promise.all([API.departments(), API.positions()]);
+
+  const dList = $('#psm-org-dept-list');
+  const depts = dRes.status === 200 ? (dRes.body.data || []) : [];
+  dList.innerHTML = dRes.status !== 200
+    ? `<div class="psm-hint" style="color:#ef4444">${escHtml(dRes.body?.message || 'Failed to load departments.')}</div>`
+    : depts.map(d => {
+      const n = d.employees_count || 0;
+      const lead = [d.head ? 'Head: ' + escHtml(d.head) : 'No head', d.co_head ? 'Co-head: ' + escHtml(d.co_head) : ''].filter(Boolean).join(' · ');
+      return `<div class="psm-counter-item">
+        <span class="psm-counter-item-name">${escHtml(d.name)}</span>
+        <span class="psm-counter-item-branch"><i class="fa fa-users"></i> ${n} ${n === 1 ? 'person' : 'people'} · ${lead}</span>
+        <button class="psm-counter-item-del" data-org-dept-del="${d.id}" data-name="${escHtml(d.name)}"${n ? ' disabled title="Move its people to another department first" style="opacity:.4"' : ' title="Delete department"'}><i class="fa fa-trash"></i></button>
+      </div>`;
+    }).join('') || '<div class="psm-hint">No departments yet.</div>';
+
+  const pList = $('#psm-org-pos-list');
+  const positions = pRes.status === 200 ? (pRes.body.data || []) : [];
+  pList.innerHTML = pRes.status !== 200
+    ? `<div class="psm-hint" style="color:#ef4444">${escHtml(pRes.body?.message || 'Failed to load positions.')}</div>`
+    : positions.map(p => `<div class="psm-counter-item">
+        <span class="psm-counter-item-name">${escHtml(p.name)}</span>
+        <button class="psm-counter-item-del" data-org-pos-del="${p.id}" data-name="${escHtml(p.name)}" title="Delete position"><i class="fa fa-trash"></i></button>
+      </div>`).join('') || '<div class="psm-hint">No positions yet.</div>';
+}
+
+async function _psmOrgAdd(kind) {
+  const input = $(`#psm-org-${kind}-name`);
+  const name  = input.value.trim();
+  if (!name) { input.focus(); return; }
+  const btn = $(`#psm-org-${kind}-add`);
+  btn.disabled = true;
+  _psmOrgError(kind, '');
+  const res = kind === 'dept' ? await API.createDepartment({ name }) : await API.createPosition({ name });
+  btn.disabled = false;
+  if (res.status !== 201 && res.status !== 200) {
+    _psmOrgError(kind, res.body?.errors?.name?.[0] || res.body?.message || 'Failed to save.');
+    return;
+  }
+  input.value = '';
+  toast(`${kind === 'dept' ? 'Department' : 'Position'} “${name}” added.`, 'success');
+  if (kind === 'dept') document.dispatchEvent(new CustomEvent('departments:changed'));
+  await _psmLoadOrg();
+}
+
+async function _psmOrgDelete(kind, id, name) {
+  const label = kind === 'dept' ? 'department' : 'position';
+  const ok = await appConfirm({
+    title: `Delete ${label}?`,
+    message: `“${name}” will be removed from HR and CRM.`,
+    confirmText: '<i class="fa fa-trash-can"></i> Delete',
+    icon: 'fa-trash-can',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = kind === 'dept' ? await API.deleteDepartment(id) : await API.deletePosition(id);
+  if (res.status !== 200 && res.status !== 204) {
+    _psmOrgError(kind, res.body?.message || `Failed to delete the ${label}.`);
+    return;
+  }
+  toast(`${kind === 'dept' ? 'Department' : 'Position'} deleted.`, 'info');
+  if (kind === 'dept') document.dispatchEvent(new CustomEvent('departments:changed'));
+  await _psmLoadOrg();
+}
+
+['dept', 'pos'].forEach(kind => {
+  $(`#psm-org-${kind}-add`)?.addEventListener('click', () => _psmOrgAdd(kind));
+  $(`#psm-org-${kind}-name`)?.addEventListener('keydown', e => { if (e.key === 'Enter') _psmOrgAdd(kind); });
+});
+$('#psm-tab-org')?.addEventListener('click', e => {
+  const b = e.target.closest('[data-org-dept-del],[data-org-pos-del]');
+  if (!b || b.disabled) return;
+  if (b.dataset.orgDeptDel) _psmOrgDelete('dept', Number(b.dataset.orgDeptDel), b.dataset.name);
+  else _psmOrgDelete('pos', Number(b.dataset.orgPosDel), b.dataset.name);
+});
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
   $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
@@ -46959,7 +47052,9 @@ function buildEmployeeCard(e) {
         <div class="lm-card-title-wrap">
           <span class="lm-card-name">${escHtml(e.name || '—')}</span>
           <div class="lm-card-pills">
-            <span class="lm-pill" style="background:${color}18;color:${color}">${escHtml(e.type_label || e.employment_type || '—')}</span>
+            ${e.profile_complete === false
+              ? '<span class="lm-pill" style="background:#dc262618;color:#dc2626" title="Added from Settings → Users. Open it to add NIC, bank and salary details."><i class="fa fa-circle-exclamation"></i> Incomplete profile</span>'
+              : `<span class="lm-pill" style="background:${color}18;color:${color}">${escHtml(e.type_label || e.employment_type || '—')}</span>`}
             ${meta ? `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)">${meta}</span>` : ''}
             ${_empLeadershipBadgesHtml(e.leadership)}
             ${_empAccessBadgeHtml(e.system_access)}
@@ -55875,6 +55970,95 @@ async function submitDsCreate() {
     return inSettings ? { listId: 'psm-users-list', detailId: 'psm-users-detail' } : { listId: 'um-list', detailId: 'um-detail' };
   }
 
+  // ── Department / position of a user ─────────────────────────────────────
+  // Saved on the user's employee profile — an incomplete one when HR is off — which is
+  // where the CRM reads a person's department from. Owners, admins, the CRM CEO and
+  // Marketing work without one; these roles see no leads until they have a department.
+  const UM_NEEDS_DEPARTMENT = { crm_staff: 'CRM Staff', crm_department_head: 'CRM Department Head' };
+  const UM_NEW_POSITION = '__new';
+
+  async function _umFillPlacement(prefix, departmentId, positionId) {
+    const [dRes, pRes] = await Promise.all([API.departments(), API.positions()]);
+    const depts     = dRes.status === 200 ? (dRes.body.data || []) : [];
+    const positions = pRes.status === 200 ? (pRes.body.data || []) : [];
+
+    const dept = $(`#um-${prefix}-department`);
+    dept.innerHTML = '<option value="">— No department —</option>'
+      + depts.map(d => `<option value="${d.id}">${_esc(d.name)}</option>`).join('');
+    dept.value = departmentId ? String(departmentId) : '';
+
+    const pos = $(`#um-${prefix}-position`);
+    pos.innerHTML = '<option value="">— No position —</option>'
+      + positions.map(p => `<option value="${p.id}">${_esc(p.name)}</option>`).join('')
+      + `<option value="${UM_NEW_POSITION}">+ New position…</option>`;
+    pos.value = positionId ? String(positionId) : '';
+    pos.dataset.prev = pos.value;
+
+    $(`#um-${prefix}-new-position`).style.display = 'none';
+    _umCheckPlacement(prefix);
+  }
+
+  function _umCheckPlacement(prefix) {
+    const label   = UM_NEEDS_DEPARTMENT[$(`#um-${prefix}-role`)?.value];
+    const missing = !!label && !$(`#um-${prefix}-department`).value;
+    const warn    = $(`#um-${prefix}-placement-warn`);
+    warn.textContent = missing ? `A ${label} without a department will not see any CRM leads. Choose a department now, or add one later.` : '';
+    warn.style.display = missing ? '' : 'none';
+  }
+
+  function _umPlacementBody(prefix) {
+    const num = id => { const v = $(`#um-${prefix}-${id}`).value; return v === '' || v === UM_NEW_POSITION ? null : Number(v); };
+    return { department_id: num('department'), job_title_id: num('position') };
+  }
+
+  function _umPositionChanged(prefix) {
+    const pos = $(`#um-${prefix}-position`);
+    const box = $(`#um-${prefix}-new-position`);
+    if (pos.value !== UM_NEW_POSITION) { pos.dataset.prev = pos.value; box.style.display = 'none'; return; }
+    box.style.display = '';
+    $(`#um-${prefix}-new-position-name`).value = '';
+    setTimeout(() => $(`#um-${prefix}-new-position-name`)?.focus(), 30);
+  }
+
+  async function _umCreatePosition(prefix) {
+    const input = $(`#um-${prefix}-new-position-name`);
+    const name  = input.value.trim();
+    const errEl = $(`#um-${prefix}-error`);
+    if (!name) { input.focus(); return; }
+    const btn = $(`#um-${prefix}-new-position-save`);
+    btn.disabled = true;
+    const res = await API.createPosition({ name });
+    btn.disabled = false;
+    if (res.status !== 201 && res.status !== 200) {
+      _showModalErr(errEl, res.body?.errors?.name?.[0] || res.body?.message || 'Failed to add the position.');
+      return;
+    }
+    const created = res.body.data;
+    const pos = $(`#um-${prefix}-position`);
+    pos.querySelector(`option[value="${UM_NEW_POSITION}"]`)
+      .insertAdjacentHTML('beforebegin', `<option value="${created.id}">${_esc(created.name)}</option>`);
+    pos.value = String(created.id);
+    pos.dataset.prev = pos.value;
+    $(`#um-${prefix}-new-position`).style.display = 'none';
+    errEl.style.display = 'none';
+    toast(`Position “${created.name}” added.`, 'success');
+  }
+
+  ['add', 'edit'].forEach(prefix => {
+    $(`#um-${prefix}-department`)?.addEventListener('change', () => _umCheckPlacement(prefix));
+    $(`#um-${prefix}-position`)?.addEventListener('change', () => _umPositionChanged(prefix));
+    $(`#um-${prefix}-new-position-save`)?.addEventListener('click', () => _umCreatePosition(prefix));
+    $(`#um-${prefix}-new-position-name`)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); _umCreatePosition(prefix); }
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        const pos = $(`#um-${prefix}-position`);
+        pos.value = pos.dataset.prev || '';
+        $(`#um-${prefix}-new-position`).style.display = 'none';
+      }
+    });
+  });
+
   // ── Add User Modal ──────────────────────────────────────────────────────
 
   async function openAddModal() {
@@ -55885,6 +56069,7 @@ async function submitDsCreate() {
       _bwzGoBehind();
     }
     $('#um-add-email').value = '';
+    $('#um-add-name').value = '';
     $('#um-add-error').style.display = 'none';
 
     // Populate role select from business roles (load if not yet fetched)
@@ -55909,7 +56094,10 @@ async function submitDsCreate() {
     roleSelect.onchange = () => {
       const r = _umRoles.find(x => x.slug === roleSelect.value);
       _renderPermGrid('um-add-perm-grid', r?.permissions || [], roleSelect.value, r);
+      _umCheckPlacement('add');
     };
+
+    await _umFillPlacement('add', null, null);
 
     modal.style.display = 'flex';
     setTimeout(() => $('#um-add-email')?.focus(), 80);
@@ -55928,7 +56116,8 @@ async function submitDsCreate() {
     const btn = $('#um-add-save');
     btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
 
-    const res = await API.usersAdd({ email, role, permissions: perms });
+    const name = $('#um-add-name')?.value?.trim() || null;
+    const res = await API.usersAdd({ email, name, role, permissions: perms, ..._umPlacementBody('add') });
     btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Send Invitation';
 
     if (res.status === 201) {
@@ -55943,7 +56132,7 @@ async function submitDsCreate() {
 
   // ── Edit User Modal ─────────────────────────────────────────────────────
 
-  function openEditModal(user) {
+  async function openEditModal(user) {
     _umEditTarget = user;
     const modal = $('#um-edit-modal');
     if (!modal) return;
@@ -55973,7 +56162,10 @@ async function submitDsCreate() {
     roleSelect.onchange = () => {
       const r = _umRoles.find(x => x.slug === roleSelect.value);
       _renderPermGrid('um-edit-perm-grid', r?.permissions || [], roleSelect.value, r);
+      _umCheckPlacement('edit');
     };
+
+    await _umFillPlacement('edit', user.employee?.department_id, user.employee?.job_title_id);
 
     modal.style.display = 'flex';
   }
@@ -55990,7 +56182,7 @@ async function submitDsCreate() {
     const btn = $('#um-edit-save');
     btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
-    const res = await API.usersUpdate(_umEditTarget.id, { role, permissions: perms });
+    const res = await API.usersUpdate(_umEditTarget.id, { role, permissions: perms, ..._umPlacementBody('edit') });
     btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
 
     if (res.status === 200) {
@@ -56390,11 +56582,24 @@ async function submitDsCreate() {
       </div>
 
       <div class="um-detail-section">
+        <div class="um-detail-section-title">CRM Permissions</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="um-perm-subrow-desc" style="flex:1">${fullAccess || role.slug === 'admin'
+            ? 'Admins always have full access to every CRM function and stage.'
+            : role.crm_customized
+              ? 'Members follow this role\'s CRM defaults, unless a user has custom settings.'
+              : 'No CRM limits set — members get full CRM access unless a user has custom settings.'}</div>
+          ${fullAccess || role.slug === 'admin' ? '' : `<button class="um-role-edit-btn" id="um-rd-crm"><i class="fa fa-user-shield"></i> CRM permissions</button>`}
+        </div>
+      </div>
+
+      <div class="um-detail-section">
         <div class="um-detail-section-title">Members with this role (${members.length})</div>
         <div class="um-role-members-list">${membersHtml}</div>
       </div>`;
 
     detail.querySelector('#um-rd-edit')?.addEventListener('click', () => openEditRoleModal(role));
+    detail.querySelector('#um-rd-crm')?.addEventListener('click', () => window.openCrmPermissionsModal?.({ roleId: role.id }));
   }
 
   // ── Role Modals ─────────────────────────────────────────────────────────
@@ -57655,7 +57860,21 @@ async function submitDsCreate() {
     const res = await API.crmProjects();
     if (res.status !== 200) return [];
     _crmProjects = res.body?.data || [];
+    _crmSyncRelationTabDot();
     return _crmProjects;
+  }
+
+  // Pulsing dot on the Relation tab while any pipeline has unread notifications or follow-ups due
+  function _crmSyncRelationTabDot() {
+    const dot = $('#crm-relation-tab-dot');
+    if (!dot) return;
+    const unread = _crmProjects.reduce((s, p) => s + (p.attention?.unread || 0), 0);
+    const due    = _crmProjects.reduce((s, p) => s + (p.attention?.follow_ups_due || 0), 0);
+    dot.hidden = !unread && !due;
+    dot.title = [
+      unread && `${unread} unread notification${unread !== 1 ? 's' : ''}`,
+      due && `${due} follow-up${due !== 1 ? 's' : ''} due`,
+    ].filter(Boolean).join(' · ');
   }
 
   // ── Overview tab ─────────────────────────────────────────────────────────
@@ -57746,12 +57965,75 @@ async function submitDsCreate() {
       : `<span class="crm-relation-dept crm-relation-dept--none" title="No department owns this pipeline — only admins and All Departments users see it"><i class="fa fa-sitemap"></i> No department${full ? ' pipeline' : ''}</span>`;
   }
 
+  // Corner badges for what waits on this user in the pipeline: unread CRM notifications
+  // (new / assigned / forwarded leads, approvals, …) and follow-ups due today or overdue
+  function _crmRelationAttentionHtml(relation) {
+    const a = relation.attention || {};
+    const unread = a.unread || 0, due = a.follow_ups_due || 0, overdue = a.overdue || 0;
+    if (!unread && !due) return '';
+    const bell = unread
+      ? `<span class="crm-relation-attn-bell"><i class="fa fa-bell"></i><b>${unread > 99 ? '99+' : unread}</b></span>`
+      : '';
+    const fu = due
+      ? `<span class="crm-relation-attn-fu${overdue ? ' is-overdue' : ''}"><i class="fa fa-phone-volume"></i>${due} follow-up${due !== 1 ? 's' : ''}</span>`
+      : '';
+    return `<div class="crm-relation-attn">${fu}${bell}${_crmRelationAttnPopHtml(a)}</div>`;
+  }
+
+  // Hover preview: the newest unread notifications and the follow-ups due, each opening its lead
+  function _crmRelationAttnPopHtml(a) {
+    const more = (shown, total) => total > shown ? `<div class="crm-attn-pop-more">+${total - shown} more</div>` : '';
+    const notifs = (a.notifications || []).map(n => `
+      <button class="crm-attn-pop-item" data-attn-notif="${n.id}" data-attn-lead="${n.lead_id || ''}">
+        <i class="fa fa-bell crm-attn-pop-ic crm-attn-pop-ic--notif"></i>
+        <span class="crm-attn-pop-text">
+          <span class="crm-attn-pop-title">${escHtml(n.title || '')}</span>
+          ${n.message ? `<span class="crm-attn-pop-msg">${escHtml(n.message)}</span>` : ''}
+        </span>
+        <span class="crm-attn-pop-time">${_notifTimeAgo(n.created_at)}</span>
+      </button>`).join('');
+    const fus = (a.follow_ups || []).map(f => `
+      <button class="crm-attn-pop-item" data-attn-fu-lead="${f.lead_id}">
+        <i class="fa fa-phone-volume crm-attn-pop-ic${f.is_overdue ? ' crm-attn-pop-ic--overdue' : ' crm-attn-pop-ic--fu'}"></i>
+        <span class="crm-attn-pop-text">
+          <span class="crm-attn-pop-title">Follow up with ${escHtml(f.lead_name || 'lead')}</span>
+          <span class="crm-attn-pop-msg">${[f.channel, f.notes].filter(Boolean).map(escHtml).join(' · ') || 'No notes'}</span>
+        </span>
+        <span class="crm-attn-pop-time${f.is_overdue ? ' is-overdue' : ''}">${f.is_overdue ? 'Overdue' : 'Today'}</span>
+      </button>`).join('');
+    return `<div class="crm-attn-pop" role="tooltip">
+      ${notifs ? `<div class="crm-attn-pop-head"><i class="fa fa-bell"></i> Unread notifications <b>${a.unread}</b></div>${notifs}${more(a.notifications.length, a.unread)}` : ''}
+      ${fus ? `<div class="crm-attn-pop-head"><i class="fa fa-phone-volume"></i> Your follow-ups <b>${a.follow_ups_due}</b></div>${fus}${more(a.follow_ups.length, a.follow_ups_due)}` : ''}
+    </div>`;
+  }
+
+  // Opening a preview item opens its lead; a notification is marked read like the bell does
+  function _crmRelationAttnClick(e, relation) {
+    const notif = e.target.closest('[data-attn-notif]');
+    const fu = e.target.closest('[data-attn-fu-lead]');
+    if (!notif && !fu) return false;
+    e.stopPropagation();
+    if (notif) {
+      API.notificationMarkRead(Number(notif.dataset.attnNotif)).then(() => _notifLoadDropdown?.()).catch(() => {});
+      const a = relation.attention;
+      a.notifications = a.notifications.filter(n => String(n.id) !== notif.dataset.attnNotif);
+      a.unread = Math.max(0, a.unread - 1);
+      _crmSyncRelationTabDot();
+      if (notif.dataset.attnLead) window.crmOpenLead?.(relation.id, Number(notif.dataset.attnLead));
+    } else {
+      window.crmOpenLead?.(relation.id, Number(fu.dataset.attnFuLead), { tab: 'followups' });
+    }
+    return true;
+  }
+
   function _crmRelationCardEl(relation, onClick) {
     const count = relation.leads_count || 0;
+    const attn = _crmRelationAttentionHtml(relation);
     const card = document.createElement('div');
-    card.className = 'crm-relation-card';
+    card.className = 'crm-relation-card' + (attn ? ' crm-relation-card--attn' : '');
     card.dataset.pid = relation.id;
     card.innerHTML = `
+      ${attn}
       <button class="crm-relation-card-delete" data-del-relation="${relation.id}" title="Delete relation"><i class="fa fa-trash"></i></button>
       <div class="crm-relation-card-icon"><i class="fa fa-handshake"></i></div>
       <div class="crm-relation-card-body">
@@ -57760,7 +58042,10 @@ async function submitDsCreate() {
       </div>
       <div class="crm-relation-card-count"><span><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</span>${_crmRelationDeptChip(relation)}</div>
     `;
-    card.addEventListener('click', onClick || (() => openRelationDetail(relation.id)));
+    card.addEventListener('click', e => {
+      if (_crmRelationAttnClick(e, relation)) return;
+      (onClick || (() => openRelationDetail(relation.id)))();
+    });
     card.querySelector('[data-del-relation]')?.addEventListener('click', e => {
       e.stopPropagation();
       _deleteCrmRelation(relation);
@@ -57995,8 +58280,7 @@ async function submitDsCreate() {
     $(`#crm-relation-pane-${tab}`)?.classList.add('active');
     const body = $('#crm-relation-tab-body');
     if (body) { body.scrollTop = 0; body.classList.toggle('crm-tab-body--fill', tab === 'pipeline'); }
-    _crmSetHeroHidden(false);
-    if (tab === 'forms' && !_crmDetailLoaded.forms) {
+    _crmSetHeroHidden(false);    if (tab === 'forms' && !_crmDetailLoaded.forms) {
       _crmDetailLoaded.forms = true;
       loadCrmForms();
     }
@@ -58737,7 +59021,7 @@ async function submitDsCreate() {
           d?.head && _crmHfPersonHtml(d.head, { tags: [tag('crm-hf-tag--head', 'Head')] }),
           d?.co_head && _crmHfPersonHtml(d.co_head, { tags: [tag('', 'Co-head')] }),
           v?.head && _crmHfPersonHtml(v.head, { tags: [tag('', 'Division head')] }),
-          d && !d.head && !d.co_head ? '<p class="crm-hf-hint">No department head is set in HR.</p>' : '',
+          d && !d.head && !d.co_head ? '<p class="crm-hf-hint">No department head is set. Choose one in CRM → Departments.</p>' : '',
         ].filter(Boolean).join('')
       : '<p class="crm-hf-hint">This lead is not linked to a department.</p>';
 
@@ -58851,8 +59135,7 @@ async function submitDsCreate() {
   }, { passive: true, capture: true });
 
   $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
-  $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());
-  $('#crm-relation-delete-btn')?.addEventListener('click',  () => {
+  $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());  $('#crm-relation-delete-btn')?.addEventListener('click',  () => {
     const relation = _crmProjects.find(p => p.id === _crmProjectId);
     if (relation) _deleteCrmRelation(relation);
   });
@@ -58984,12 +59267,18 @@ async function submitDsCreate() {
     return s in _CRM_SCORE_RANK ? 3 + _CRM_SCORE_RANK[s] : 9;
   }
 
+  // The deal's worth on the board: its accepted quotation total, otherwise its estimated value
+  // (deal_value from the pipeline endpoint — the same figure the stage totals add up)
+  function _crmDealValue(lead) {
+    return Number(lead.deal_value ?? lead.estimated_value) || 0;
+  }
+
   function _crmSortLeads(leads) {
     if (_crmBoardSort === 'newest') return leads;
     const key = {
       score:     l => [_crmScoreRank(l), -(l.suggested_score?.points || 0)],
       follow_up: l => [l.follow_up?.overdue ? 0 : 1, l.follow_up?.next_due_at ? Date.parse(l.follow_up.next_due_at) : Infinity],
-      value:     l => [-(Number(l.estimated_value) || 0), 0],
+      value:     l => [-_crmDealValue(l), 0],
     }[_crmBoardSort];
     if (!key) return leads;
     return [...leads].sort((a, b) => {
@@ -59007,6 +59296,14 @@ async function submitDsCreate() {
     const label = f.overdue ? `${f.overdue} overdue` : today ? 'Today' : next ? next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
     const title = `${f.pending} follow-up${f.pending !== 1 ? 's' : ''} planned${next ? ` · next ${next.toLocaleString()}` : ''}${f.overdue ? ` · ${f.overdue} overdue` : ''}`;
     return `<span class="crm-fu-badge${f.overdue ? ' crm-fu-badge--overdue' : today ? ' crm-fu-badge--today' : ''}" title="${escHtml(title)}"><i class="fa fa-phone-volume"></i>${escHtml(label)}</span>`;
+  }
+
+  /** Red bell with the count of this user's unread notifications on the lead; hover lists them. */
+  function _crmUnreadBell(lead) {
+    const u = lead.unread;
+    if (!u || !u.count) return '';
+    const title = `${u.count} unread notification${u.count !== 1 ? 's' : ''}:\n• ${u.titles.join('\n• ')}${u.count > u.titles.length ? `\n+${u.count - u.titles.length} more` : ''}`;
+    return `<span class="crm-card-bell" title="${escHtml(title)}"><i class="fa fa-bell"></i><b>${u.count > 9 ? '9+' : u.count}</b></span>`;
   }
 
   /** A move into a stage that must be approved, waiting for the head — who gets approve / reject buttons. */
@@ -59243,7 +59540,7 @@ async function submitDsCreate() {
 
   function _crmLeadMatches(lead) {
     if (_crmPipeFilter.customers && !lead.is_customer) return false;
-    if (_crmPipeFilter.hasValue && !(Number(lead.estimated_value) > 0)) return false;
+    if (_crmPipeFilter.hasValue && !(_crmDealValue(lead) > 0)) return false;
     if (_crmPipeFilter.source && (lead.source || '') !== _crmPipeFilter.source) return false;
     if (_crmPipeFilter.score === 'none' ? !!lead.score : _crmPipeFilter.score && lead.score !== _crmPipeFilter.score) return false;
     if (!_crmPipeFilter.q) return true;
@@ -59341,7 +59638,7 @@ async function submitDsCreate() {
                    : key === 'company' ? (r.company || '').toLowerCase()
                    : key === 'stage'   ? stageOrder.get(r.stage_id)
                    : key === 'source'  ? (_crmSource(r.source)?.label || '').toLowerCase()
-                   : key === 'value'   ? Number(r.estimated_value) || 0
+                   : key === 'value'   ? _crmDealValue(r)
                    : key === 'score'   ? _crmScoreRank(r)
                    : key === 'follow_up' ? (r.follow_up?.overdue ? -1 : 0) * 1e15 + (r.follow_up?.next_due_at ? Date.parse(r.follow_up.next_due_at) : 9e15)
                    : r.id; // created: ids are sequential, and always present
@@ -59370,14 +59667,14 @@ async function submitDsCreate() {
         </tr></thead>
         <tbody>${rows.map(r => `
           <tr data-lead-id="${r.id}">
-            <td><div class="crm-list-name">${escHtml(r.name)}</div>${r.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}</td>
+            <td><div class="crm-list-name">${escHtml(r.name)}${_crmUnreadBell(r)}</div>${r.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}</td>
             <td>${r.company ? escHtml(r.company) : '<span class="crm-list-sub">—</span>'}</td>
             <td>${r.email ? `<div>${escHtml(r.email)}</div>` : ''}${r.phone ? `<div class="crm-list-sub">${escHtml(r.phone)}</div>` : ''}${!r.email && !r.phone ? '<span class="crm-list-sub">—</span>' : ''}</td>
             <td>${_crmSourceBadge(r.source) || '<span class="crm-list-sub">—</span>'}</td>
             <td>${stageCell(r)}</td>
             <td>${_crmScoreBadge(r.score)}${_crmSuggestedHint(r) || (r.score ? '' : '<span class="crm-list-sub">—</span>')}</td>
             <td>${_crmFollowUpBadge(r) || '<span class="crm-list-sub">—</span>'}</td>
-            <td>${r.estimated_value ? formatMoney(r.estimated_value) : '<span class="crm-list-sub">—</span>'}</td>
+            <td>${_crmDealValue(r) ? formatMoney(_crmDealValue(r)) : '<span class="crm-list-sub">—</span>'}</td>
             <td class="crm-list-sub">${r.created_at ? escHtml(new Date(r.created_at).toLocaleDateString()) : '—'}</td>
             <td>${_crmCardActionsHtml(r)}</td>
           </tr>`).join('')}
@@ -59519,7 +59816,8 @@ async function submitDsCreate() {
               <div class="crm-card-name">${escHtml(lead.name)}${lead.is_customer ? '<i class="fa fa-circle-check crm-card-cust-ico" title="Already a Customer"></i>' : ''}</div>
               ${lead.company ? `<div class="crm-card-company">${escHtml(lead.company)}</div>` : ''}
             </div>
-            ${lead.estimated_value ? `<span class="crm-card-value">${formatMoney(lead.estimated_value)}</span>` : ''}
+            ${_crmDealValue(lead) ? `<span class="crm-card-value">${formatMoney(_crmDealValue(lead))}</span>` : ''}
+            ${_crmUnreadBell(lead)}
           </div>
           ${tags ? `<div class="crm-card-tags">${tags}</div>` : ''}
           <div class="crm-card-footer">
@@ -59749,9 +60047,27 @@ async function submitDsCreate() {
     $('#crm-lead-form-fields').innerHTML = (blocks.length
       ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i)).join('')
       : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>')
-      + _crmSourceFieldHtml('crm-lead-new-source', _crmPrefGet('crm.lead.lastSource', 'manual'));
+      + _crmSourceFieldHtml('crm-lead-new-source', _crmPrefGet('crm.lead.lastSource', 'manual'))
+      + _crmValueFieldHtml('crm-lead-new-value');
     $('#crm-lead-modal-save').disabled = false;
     $('#crm-lead-form-fields').querySelector('.crm-lead-field-input')?.focus();
+  }
+
+  // "Estimated value" — sits outside the form's blocks like Source. It feeds the stage totals
+  // on the board until the lead has an accepted quotation.
+  function _crmValueFieldHtml(id, value = null) {
+    return `<div class="po-field">
+      <label class="po-field-label" for="${id}">Estimated value${state.currency ? ` (${escHtml(state.currency)})` : ''}</label>
+      <input type="number" id="${id}" class="po-field-input" min="0" step="0.01" inputmode="decimal" value="${value != null ? escHtml(String(value)) : ''}" placeholder="Expected deal amount">
+    </div>`;
+  }
+
+  // Reads a value input: a number ≥ 0, null when blank, false when invalid
+  function _crmReadValueInput(id) {
+    const raw = ($(`#${id}`)?.value || '').trim();
+    if (raw === '') return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n >= 0 ? n : false;
   }
 
   // Shared by the New Lead and Edit Lead modals: loads a form's blocks + custom field defs
@@ -59896,6 +60212,14 @@ async function submitDsCreate() {
     const input  = _crmCollectLeadFieldValues($('#crm-lead-form-fields'));
     const source = $('#crm-lead-new-source')?.value || '';
     if (source) input.source = source;
+    const value = _crmReadValueInput('crm-lead-new-value');
+    if (value === false) {
+      btn.disabled = false;
+      $('#crm-lead-alert').textContent = 'Estimated value must be a number of 0 or more.';
+      $('#crm-lead-alert').style.display = '';
+      return;
+    }
+    if (value !== null) input.estimated_value = value;
 
     const res = await API.crmSubmitFormLead(_crmProjectId, _crmLeadFormId, input);
     btn.disabled = false;
@@ -60166,12 +60490,15 @@ async function submitDsCreate() {
     [/name/i,                     'fa-user',              '#0a84ff'],
   ];
 
-  function _crmLeadViewItem(label, value) {
+  // `path` (a form block index) makes the row editable in place on double-click
+  function _crmLeadViewItem(label, value, path = null) {
     const empty = value == null || String(value).trim() === '';
     const ic = _CRM_LV_ICONS.find(([re]) => re.test(label));
     const icon = ic ? `<span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${ic[2]}"><i class="fa ${ic[1]}"></i></span>` : '';
-    return `<div class="crm-lead-view-item${ic ? ' crm-lead-view-item--ic' : ''}"><div class="crm-lead-view-label">${icon}${escHtml(label)}</div>`
-      + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}</div></div>`;
+    const inline = path != null ? ` crm-lv-inline" data-lv-path="${path}" title="Double-click to edit` : '';
+    return `<div class="crm-lead-view-item${ic ? ' crm-lead-view-item--ic' : ''}${inline}"><div class="crm-lead-view-label">${icon}${escHtml(label)}</div>`
+      + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}`
+      + `${path != null ? '<button type="button" class="crm-lv-edit-btn" title="Edit"><i class="fa fa-pen"></i></button>' : ''}</div></div>`;
   }
 
   function _crmRenderLeadModal(editing) {
@@ -60225,6 +60552,7 @@ async function submitDsCreate() {
             ${(_crmPipeline?.scores || []).map(s => `<option value="${s.key}"${s.key === lead.score ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
           </select>
         </div>
+        ${_crmValueFieldHtml('crm-lead-view-value', lead.estimated_value)}
         ${_crmDivisionFieldHtml(lead)}
         <div class="po-field" style="grid-column:1/-1">
           <label class="po-field-label">Products of Interest</label>
@@ -60241,8 +60569,10 @@ async function submitDsCreate() {
         </div>
       </div>`;
     } else {
-      const items = _crmLeadFormBlocks.filter(b => b.type === 'field')
-        .map(b => item(b.label || b.field || 'Field', _crmLeadFieldValue(b, lead))).join('');
+      const canEdit = _crmLeadCan(lead, 'edit');
+      const items = _crmLeadFormBlocks
+        .map((b, i) => b.type === 'field' ? item(b.label || b.field || 'Field', _crmLeadFieldValue(b, lead), canEdit ? i : null) : '')
+        .join('');
       fields = `<div class="crm-lead-view-grid">${items || item('Name', lead.name)}</div>`;
     }
 
@@ -60368,6 +60698,95 @@ async function submitDsCreate() {
     // Lost: "Win / lose leads" (lead.can.close), separate from moving
     if (!closed && lead.can?.close !== false) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
     return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
+  }
+
+  // Double-click a Lead Information row (or its pencil) to edit just that field in place:
+  // Enter or clicking away saves, Esc cancels.
+  $('#crm-lead-view-body')?.addEventListener('dblclick', e => _crmStartInlineEdit(e.target.closest('.crm-lv-inline')));
+  $('#crm-lead-view-body')?.addEventListener('click', e => {
+    const btn = e.target.closest('.crm-lv-edit-btn');
+    if (btn) _crmStartInlineEdit(btn.closest('.crm-lv-inline'));
+  });
+
+  function _crmStartInlineEdit(row) {
+    const lead = _crmViewLead;
+    if (!row || !lead || _crmViewEditing || row.classList.contains('crm-lv-inline--editing')) return;
+    const idx   = +row.dataset.lvPath;
+    const block = _crmLeadFormBlocks[idx];
+    if (block?.type !== 'field') return;
+
+    const cell = row.querySelector('.crm-lead-view-value');
+    row.classList.add('crm-lv-inline--editing');
+    cell.classList.remove('crm-lead-view-value--empty');
+    cell.innerHTML = _crmLeadFormBlockHtml(block, idx, _crmLeadFieldValue(block, lead));
+    cell.querySelector('.po-field-label')?.remove();
+    const input = cell.querySelector('input, select, textarea');
+    input?.focus();
+    if (input?.select) input.select();
+
+    let busy = false;
+    const finish = async save => {
+      if (busy) return;
+      busy = true;
+      if (save && !(await _crmSaveLeadField(lead, idx, cell))) {
+        busy = false; // keep the typed value so it can be fixed
+        input?.focus();
+        return;
+      }
+      if (_crmViewLead?.id === lead.id && !_crmViewEditing) _crmRenderLeadModal(false);
+    };
+    cell.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+      else if (ev.key === 'Enter' && (ev.target.tagName !== 'TEXTAREA' || ev.ctrlKey)) { ev.preventDefault(); finish(true); }
+    });
+    cell.addEventListener('focusout', ev => { if (!cell.contains(ev.relatedTarget)) finish(true); });
+    cell.addEventListener('change', ev => { if (ev.target.tagName === 'SELECT') finish(true); });
+  }
+
+  // Saves one form field of the lead. The update endpoint overwrites name / company /
+  // email / phone / notes, so those go along unchanged; everything else it keeps when omitted.
+  async function _crmSaveLeadField(lead, idx, cell) {
+    const block = _crmLeadFormBlocks[idx];
+    const field = String(block.field || '');
+    const value = _crmCollectLeadFieldValues(cell)[String(idx)] || '';
+    if (value === _crmLeadFieldValue(block, lead)) return true;
+
+    const payload = {
+      name:    lead.name || '',
+      company: lead.company || null,
+      email:   lead.email || null,
+      phone:   lead.phone || null,
+      notes:   lead.notes || null,
+      custom_fields: {},
+    };
+    if (['name', 'company', 'email', 'phone'].includes(field)) payload[field] = value || (field === 'name' ? '' : null);
+    else if (field.startsWith('custom:')) payload.custom_fields[field.slice(7)] = value;
+    else return true;
+    if (!payload.name) { toast('Name is required.', 'error'); return false; }
+
+    const res = await API.crmUpdateLead(lead.id, payload).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      toast(firstError || res.body?.message || 'Failed to update lead.', 'error');
+      return false;
+    }
+    if (_crmViewLead?.id !== lead.id) return true;
+
+    const saved = res.body?.data || {};
+    _crmViewLead = {
+      ..._crmViewLead,
+      name:    payload.name,
+      company: payload.company,
+      email:   payload.email,
+      phone:   payload.phone,
+      updated_at:    saved.updated_at || lead.updated_at,
+      custom_fields: { ...(lead.custom_fields || {}), ...payload.custom_fields },
+    };
+    toast('Lead updated.', 'success');
+    _crmLoadLeadHistory(_crmViewLead);
+    _crmWsRefresh(_crmViewLead, ['timeline']);
+    loadCrmPipeline(_crmProjectId, { silent: true });
+    return true;
   }
 
   $('#crm-lead-view-body')?.addEventListener('click', async e => {
@@ -60661,14 +61080,55 @@ async function submitDsCreate() {
     return (res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null) || res.body?.message || fallback;
   }
 
+  // Which tab each CRM notification type is about — the tab gets a red dot while it is unread
+  const _CRM_TAB_NOTIF_TYPES = {
+    overview:   ['crm_lead_new', 'crm_lead_forwarded', 'crm_lead_assigned', 'crm_stage_approval'],
+    timeline:   ['crm_lead_stage', 'crm_stage_approval_decided', 'crm_lead_closed'],
+    quotations: ['crm_quotation_submitted', 'crm_quotation_decided'],
+    followups:  ['crm_follow_up_due', 'crm_follow_up_overdue'],
+  };
+  function _crmTabUnread(key) {
+    const types = _crmWs.info?.unread_types || {};
+    return (_CRM_TAB_NOTIF_TYPES[key] || []).reduce((s, t) => s + (types[t] || 0), 0);
+  }
+
   function _crmLeadTabsHtml() {
     const counts = _crmWs.info?.counts || {};
     return `<div class="crm-ws-tabs">${_CRM_LEAD_TABS.filter(([key]) => !_CRM_LEAD_TAB_KEYS[key] || _crmCan(_CRM_LEAD_TAB_KEYS[key])).map(([key, icon, label]) => {
       const n = key === 'followups' ? counts.follow_ups : counts[key];
       // Follow-ups: red when any is overdue
       const overdue = key === 'followups' && _crmWs.info?.follow_ups_overdue > 0;
-      return `<button type="button" class="crm-ws-tab${_crmLeadTab === key ? ' active' : ''}" data-ws-tab="${key}"${overdue ? ` title="${_crmWs.info.follow_ups_overdue} overdue"` : ''}><i class="fa ${icon}"></i>${label}${n ? `<span class="crm-ws-tab-count${overdue ? ' crm-ws-tab-count--overdue' : ''}">${n}</span>` : ''}</button>`;
+      const unread = _crmTabUnread(key);
+      const dot = unread ? `<span class="crm-attn-dot crm-ws-tab-dot" title="${unread} new notification${unread !== 1 ? 's' : ''} here"></span>` : '';
+      return `<button type="button" class="crm-ws-tab${_crmLeadTab === key ? ' active' : ''}" data-ws-tab="${key}"${overdue ? ` title="${_crmWs.info.follow_ups_overdue} overdue"` : ''}><i class="fa ${icon}"></i>${label}${n ? `<span class="crm-ws-tab-count${overdue ? ' crm-ws-tab-count--overdue' : ''}">${n}</span>` : ''}${dot}</button>`;
     }).join('')}</div>`;
+  }
+
+  // Opening a tab means its notifications were seen: mark them read, then drop the dot here,
+  // on the board card's bell and in the main bell.
+  async function _crmClearTabNotifs(lead) {
+    const key = _crmLeadTab;
+    let types = (_CRM_TAB_NOTIF_TYPES[key] || []).filter(t => _crmWs.info?.unread_types?.[t]);
+    if (!types.length) return;
+    // Let the dot be seen on the tab for a moment; give up if the user moved on
+    await new Promise(r => setTimeout(r, 1500));
+    if (_crmLeadTab !== key || _crmWs.leadId !== lead.id) return;
+    types = types.filter(t => _crmWs.info?.unread_types?.[t]);
+    if (!types.length) return;
+    const res = await API.crmLeadNotificationsRead(lead.id, types).catch(() => ({ status: 0 }));
+    if (res.status !== 200 || _crmWs.leadId !== lead.id) return;
+    const cleared = types.reduce((s, t) => s + (_crmWs.info.unread_types[t] || 0), 0);
+    types.forEach(t => { delete _crmWs.info.unread_types[t]; });
+    _crmRefreshWsTabs();
+
+    const boardLead = _findLead(lead.id);
+    if (boardLead?.unread) {
+      types.forEach(t => { delete boardLead.unread.types?.[t]; });
+      boardLead.unread.count = Math.max(0, boardLead.unread.count - cleared);
+      if (!boardLead.unread.count) boardLead.unread = null;
+      _crmRenderPipelineView();
+    }
+    _notifLoadDropdown();
   }
 
   // Tab switch: the white highlight glides from the old tab to the new one, and the content
@@ -60775,7 +61235,7 @@ async function submitDsCreate() {
 
     return wrap(`<div class="crm-lv-facts">${facts}</div>
       <div class="crm-lv-resp-sub">Leadership</div>
-      ${leaders || `<div class="crm-lv-resp-note">${d ? 'No department head or co-head is set in HR.' : 'This lead is not linked to a department.'}</div>`}
+      ${leaders || `<div class="crm-lv-resp-note">${d ? 'No department head or co-head is set.' : 'This lead is not linked to a department.'}</div>`}
       <div class="crm-lv-resp-sub">Assigned team · ${(s.assignees || []).length}</div>
       ${team || '<div class="crm-lv-resp-note">Nobody is assigned yet.</div>'}`);
   }
@@ -60791,6 +61251,7 @@ async function submitDsCreate() {
     _crmWs.summary = sum.status === 200 ? sum.body.data : null;
     if (_crmLeadTab === 'overview' && !_crmViewEditing) _crmRenderLeadModal(false);
     else _crmRefreshWsTabs();
+    _crmClearTabNotifs(lead);
   }
 
   /** Drop cached tabs (re-loaded when shown) and refresh the counts. */
@@ -61820,6 +62281,7 @@ async function submitDsCreate() {
       _crmLeadTab = t.dataset.wsTab;
       _crmRenderLeadModal(false);
       _crmAnimateTabSwitch(fromRect, dir);
+      _crmClearTabNotifs(lead);
     } else if (t.matches('[data-ws-assign]')) {
       _crmOpenAssignModal(lead);
     } else if (t.dataset.wsTlType !== undefined) {
@@ -62285,15 +62747,20 @@ async function submitDsCreate() {
     return {
       id: null, number: null,
       quote_date: new Date().toISOString().slice(0, 10), expiry_date: '', reference: '', notes: '',
+      // Billed to the linked customer's address on file (meta.lead from GET …/quotations)
+      customer_address: _crmQtCustomerAddress(),
       discount_amount: 0, tax_amount: 0,
       lines: fromInterest,
     };
   }
 
+  function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
+
   function _crmQtFormFromDetail(q) {
     return {
       id: q.id, number: q.quote_number,
       quote_date: q.quote_date || new Date().toISOString().slice(0, 10), expiry_date: q.expiry_date || '', reference: q.reference || '', notes: q.notes || '',
+      customer_address: q.customer_address || '',
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
@@ -62373,6 +62840,9 @@ async function submitDsCreate() {
           <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
           <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
           <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
+          <div class="crm-qt-field" style="grid-column:1/-1"><span style="display:flex;align-items:center;gap:8px"><label for="crm-qt-addr">Customer address</label>
+            ${_crmQtCustomerAddress() ? `<button type="button" class="crm-ws-link" data-qt-addr-fill style="margin-left:auto;font-size:12px" title="${escHtml(_crmQtCustomerAddress())}"><i class="fa fa-rotate"></i> Use customer's address</button>` : ''}</span>
+            <textarea id="crm-qt-addr" class="po-field-input" rows="2" maxlength="1000" data-qt-h="customer_address" style="resize:vertical" placeholder="${_crmWs.quotations?.meta?.lead?.customer_id ? 'No address on file for this customer — type one' : 'Street, city — printed on the quotation'}">${escHtml(f.customer_address || '')}</textarea></div>
         </div>
       </section>
 
@@ -62488,6 +62958,7 @@ async function submitDsCreate() {
 
     const body = {
       quote_date: f.quote_date, expiry_date: f.expiry_date || null, reference: f.reference.trim() || null, notes: f.notes.trim() || null,
+      customer_address: (f.customer_address || '').trim() || null,
       discount_amount: _crmQtNum(f.discount_amount), tax_amount: _crmQtNum(f.tax_amount), items,
     };
     btn.disabled = true;
@@ -62859,6 +63330,10 @@ async function submitDsCreate() {
       _crmRenderWsTab();
     } else if (t.matches('[data-qt-edit]') && s.detail) {
       _crmQtEdit(lead, _crmQtFormFromDetail(s.detail));
+    } else if (t.matches('[data-qt-addr-fill]') && s.form) {
+      s.form.customer_address = _crmQtCustomerAddress();
+      const box = $('#crm-qt-edit-body [data-qt-h="customer_address"]');
+      if (box) box.value = s.form.customer_address;
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
       s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
       _crmRenderWsTab();
@@ -63928,6 +64403,129 @@ async function submitDsCreate() {
   $('#crm-audit-next')?.addEventListener('click', () => { _crmAuditPage++; _crmLoadAudit(); });
   $('#crm-audit-close')?.addEventListener('click', () => { $('#crm-audit-modal').style.display = 'none'; });
 
+  // ── CRM sales analysis report (ribbon → Report): leads grouped by department, customer,
+  //    product…, previewed here and saved as PDF or CSV for sales analysis ──
+  const _crmRep = { group: 'department', data: null, optionsReady: false };
+
+  // Sidebar entry per report type: icon, one-line hint
+  const _crmRepGroupMeta = {
+    department:       ['fa-building-user',   'Leads & revenue per department'],
+    division:         ['fa-sitemap',         'Leads & revenue per division'],
+    customer:         ['fa-user-tie',        'Each company’s deals'],
+    staff:            ['fa-id-badge',        'Performance per salesperson'],
+    source:           ['fa-bullhorn',        'Where leads come from'],
+    product:          ['fa-box-open',        'What gets quoted & won'],
+    customer_product: ['fa-heart',           'What each company prefers'],
+  };
+
+  function openCrmReportModal() {
+    _macShow($('#crm-report-modal'));
+    _crmLoadReport();
+  }
+
+  function _crmReportParams() {
+    const val = id => $(id)?.value || '';
+    return {
+      group_by: _crmRep.group, from: val('#crm-report-from'), to: val('#crm-report-to'),
+      department_id: val('#crm-report-department'), division_id: val('#crm-report-division'),
+      user_id: val('#crm-report-user'), source: val('#crm-report-source'),
+      status: val('#crm-report-status'), search: val('#crm-report-search').trim(),
+    };
+  }
+
+  function _crmReportCell(type, v) {
+    if (v == null || v === '') return type === 'text' ? '' : '—';
+    if (type === 'money') return escHtml(_crmDashMoney(v));
+    if (type === 'pct')   return `${v}%`;
+    if (type === 'qty')   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 3 });
+    if (type === 'int')   return Number(v).toLocaleString();
+    return escHtml(String(v));
+  }
+
+  function _crmReportOptions(o) {
+    const fill = (id, list, all, keyOf, labelOf) => {
+      const el = $(id), cur = el.value;
+      el.innerHTML = `<option value="">${all}</option>` + list.map(x => `<option value="${escHtml(String(keyOf(x)))}">${escHtml(labelOf(x))}</option>`).join('');
+      el.value = cur;
+    };
+    fill('#crm-report-department', o.departments, 'All departments', x => x.id, x => x.name);
+    fill('#crm-report-division',   o.divisions,   'All divisions',   x => x.id, x => x.name);
+    fill('#crm-report-user',       o.staff,       'All staff',       x => x.id, x => x.name);
+    fill('#crm-report-source',     o.sources,     'All sources',     x => x.key, x => x.label);
+    fill('#crm-report-status',     o.statuses,    'Any status',      x => x.key, x => x.label);
+    $('#crm-report-groups').innerHTML = o.groups.map(g => {
+      const [icon, hint] = _crmRepGroupMeta[g.key] || ['fa-table', ''];
+      return `<button type="button" class="crm-rep-group-btn${g.key === _crmRep.group ? ' active' : ''}" data-rep-group="${g.key}">
+        <i class="fa ${icon}"></i><span>${escHtml(g.label)}<small>${escHtml(hint)}</small></span></button>`;
+    }).join('');
+  }
+
+  async function _crmLoadReport() {
+    const cols = _crmRep.data?.columns.length || 6;
+    $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
+    $('#crm-report-foot').innerHTML = '';
+    const res = await API.crmSalesAnalysis(_crmReportParams()).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the report.')))}</td></tr>`;
+      return;
+    }
+    const d = _crmRep.data = res.body.data;
+    if (!_crmRep.optionsReady) {
+      _crmReportOptions(d.options);
+      _crmRep.optionsReady = true;
+    } else {
+      $('#crm-report-groups').querySelectorAll('[data-rep-group]').forEach(b => b.classList.toggle('active', b.dataset.repGroup === d.group_by));
+    }
+    // Show the range actually used (the server fills in the last 30 days when left empty)
+    $('#crm-report-from').value = d.filters.from;
+    $('#crm-report-to').value   = d.filters.to;
+
+    const r = c => c.type === 'text' ? '' : ' class="r"';
+    $('#crm-report-head').innerHTML = `<tr>${d.columns.map(c => `<th${r(c)}>${escHtml(c.label)}</th>`).join('')}</tr>`;
+    let prevCustomer = null;
+    $('#crm-report-rows').innerHTML = d.rows.length ? d.rows.map(row => {
+      // Customer preferences: name each customer once, at the top of their block
+      const first = 'customer' in row && row.customer !== prevCustomer;
+      prevCustomer = row.customer ?? null;
+      return `<tr${first ? ' class="crm-rep-group"' : ''}>${d.columns.map(c =>
+        `<td${r(c)}>${c.key === 'customer' && !first ? '' : (c.key === 'customer' ? `<strong>${_crmReportCell(c.type, row[c.key])}</strong>` : _crmReportCell(c.type, row[c.key]))}</td>`).join('')}</tr>`;
+    }).join('') : `<tr><td colspan="${d.columns.length}">${_crmWsPanelHtml('Nothing matches these filters.')}</td></tr>`;
+    $('#crm-report-foot').innerHTML = d.rows.length
+      ? `<tr>${d.columns.map((c, i) => `<td${r(c)}>${i === 0 ? 'Total' : (c.key in d.totals ? _crmReportCell(c.type, d.totals[c.key]) : '')}</td>`).join('')}</tr>`
+      : '';
+    $('#crm-report-summary').textContent = `${d.rows.length} ${d.rows.length === 1 ? 'row' : 'rows'} · by ${d.group_label.toLowerCase()} · leads created ${d.filters.from} → ${d.filters.to}`;
+  }
+
+  async function _crmReportDownload(format, btn) {
+    const p = _crmReportParams();
+    const name = `crm-sales-by-${p.group_by.replace('_', '-')}-${p.from || 'last-30-days'}${p.to ? `-to-${p.to}` : ''}.${format}`;
+    btn.disabled = true;
+    const res = await window.electronAPI.downloadFile(API.crmSalesAnalysisExportPath(format, p), name);
+    btn.disabled = false;
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Export failed', 'error'); return; }
+    toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  $('#crm-report-groups')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep-group]');
+    if (!b || b.dataset.repGroup === _crmRep.group) return;
+    _crmRep.group = b.dataset.repGroup;
+    _crmLoadReport();
+  });
+  $('#crm-report-run')?.addEventListener('click', () => _crmLoadReport());
+  // Dropdowns and dates apply straight away; the search waits for Enter / Generate
+  $('#crm-report-modal .crm-rep-filters')?.addEventListener('change', () => _crmLoadReport());
+  $('#crm-report-reset')?.addEventListener('click', () => {
+    $('#crm-report-modal').querySelectorAll('.crm-rep-filters .po-field-input, #crm-report-search').forEach(el => { el.value = ''; });
+    _crmLoadReport();
+  });
+  $('#crm-report-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') _crmLoadReport(); });
+  $('#crm-report-pdf')?.addEventListener('click', e => _crmReportDownload('pdf', e.currentTarget));
+  $('#crm-report-csv')?.addEventListener('click', e => _crmReportDownload('csv', e.currentTarget));
+  $('#crm-report-refresh')?.addEventListener('click', () => _crmLoadReport());
+  ['#crm-report-close', '#crm-report-close-btn'].forEach(id => $(id)?.addEventListener('click', () => _macHide($('#crm-report-modal'))));
+
   // macOS-style open/close: the window zooms out of the point that opened it (the clicked
   // lead card) with a soft spring, and shrinks back into it on close.
   let _crmLeadModalOrigin = null;
@@ -64030,6 +64628,8 @@ async function submitDsCreate() {
     if (!hasNameField) core.name = lead.name || '';
 
     if (!core.name) { alertEl.textContent = 'Name is required.'; alertEl.style.display = ''; return; }
+    const estimatedValue = _crmReadValueInput('crm-lead-view-value');
+    if (estimatedValue === false) { alertEl.textContent = 'Estimated value must be a number of 0 or more.'; alertEl.style.display = ''; return; }
 
     const payload = {
       name:          core.name,
@@ -64041,6 +64641,7 @@ async function submitDsCreate() {
       notes:         $('#crm-lead-view-notes').value.trim() || null,
       custom_fields: customFields,
       score:         $('#crm-lead-view-score').value || null,
+      estimated_value: estimatedValue,
       product_interest_note: $('#crm-lead-view-product-note').value.trim() || null,
       products:      _crmEditProducts.map(p => ({ product_id: p.id, quantity: p.quantity })),
     };
@@ -64075,6 +64676,7 @@ async function submitDsCreate() {
         source:        payload.source,
         notes:         payload.notes,
         score:         payload.score,
+        estimated_value: saved.estimated_value ?? payload.estimated_value,
         product_interest_note: payload.product_interest_note,
         product_items: _crmEditProducts.map(p => ({ ...p })),
         division_id:   saved.division_id ?? null,
@@ -64428,6 +65030,8 @@ async function submitDsCreate() {
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
   $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
   $('#rb-crm-add-dept')?.addEventListener('click',    () => { activateTab('crm'); openCrmDeptModal(); });
+  $('#rb-crm-customers')?.addEventListener('click',   () => openCustomersModal());
+  $('#rb-crm-report')?.addEventListener('click',      () => openCrmReportModal());
   // A department added from CRM (or HR) shows up in Org Structure straight away.
   document.addEventListener('departments:changed', () => {
     if ($('#crm-org-modal')?.style.display === 'flex') _crmLoadOrg();
@@ -64441,22 +65045,26 @@ async function submitDsCreate() {
   });
 
   // ── Permissions modal ─────────────────────────────────────────────────────
-  // Owner/admins pick a user, then toggle CRM functions and choose which stages
-  // that user sees in each relation (all / selected / hidden).
-  let _crmPerms       = null;   // { functions, users, relations } from /crm/permissions
-  let _crmPermsUserId = null;   // user currently being edited
+  // Owner/admins edit either a role's CRM template (what every member of the
+  // role gets) or one user's own settings, which then replace the role's. Both
+  // toggle CRM functions and choose which stages show in each relation.
+  let _crmPerms       = null;   // { functions, users, roles, relations } from /crm/permissions
+  let _crmPermsMode   = 'users'; // 'users' | 'roles' — what the sidebar lists
+  let _crmPermsUserId = null;   // user (or role, in roles mode) currently being edited
   let _crmPermsDraft  = null;   // { permissions: { key: bool }, stage_access: { projectId: [stageIds] } }
   let _crmPermsDirty  = false;
   let _crmPermsUserQ  = '';
   let _crmPermsRelQ   = '';
 
-  async function openCrmPermissionsModal() {
+  /** opts.mode 'roles' | 'users'; opts.roleId opens straight on that role. */
+  async function openCrmPermissionsModal(opts = {}) {
     _crmPerms = null; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false; _crmPermsRelQ = '';
+    _crmPermsMode = opts.mode || (opts.roleId ? 'roles' : 'users');
     _macShow($('#crm-perms-modal'));
     $('#crm-perms-alert').style.display = 'none';
-    $('#crm-perms-user-search').value = _crmPermsUserQ = '';
+    _crmPermsSyncMode();
     $('#crm-perms-user-list').innerHTML = '<span class="crm-perms-muted">Loading…</span>';
-    $('#crm-perms-editor-body').innerHTML = '<span class="crm-perms-muted">Select a user to edit their CRM access.</span>';
+    $('#crm-perms-editor-body').innerHTML = `<span class="crm-perms-muted">Select a ${_crmPermsMode === 'roles' ? 'role' : 'user'} to edit their CRM access.</span>`;
     _crmPermsSyncFooter();
 
     const res = await API.crmPermissions();
@@ -64465,17 +65073,61 @@ async function submitDsCreate() {
       return;
     }
     _crmPerms = res.body.data;
+    _crmPerms.roles = _crmPerms.roles || [];
     _crmRenderPermsUsers();
-    const first = _crmPerms.users.find(u => !u.is_admin) || _crmPerms.users[0];
-    if (first) _crmSelectPermsUser(first.user_id);
+    const items = _crmPermsItems();
+    const first = (opts.roleId && items.find(r => _crmPermsId(r) === opts.roleId))
+      || items.find(u => !u.is_admin) || items[0];
+    if (first) _crmSelectPermsUser(_crmPermsId(first));
   }
+  window.openCrmPermissionsModal = openCrmPermissionsModal;
+
+  function _crmPermsItems() {
+    return (_crmPermsMode === 'roles' ? _crmPerms?.roles : _crmPerms?.users) || [];
+  }
+
+  function _crmPermsId(item) {
+    return _crmPermsMode === 'roles' ? item.id : item.user_id;
+  }
+
+  /** The role whose CRM template a user follows while they have no settings of their own. */
+  function _crmPermsRoleOf(user) {
+    return _crmPerms?.roles.find(r => r.slug === user.role) || null;
+  }
+
+  function _crmPermsSyncMode() {
+    const roles = _crmPermsMode === 'roles';
+    $('#crm-perms-mode')?.querySelectorAll('[data-perms-mode]').forEach(b => b.classList.toggle('active', b.dataset.permsMode === _crmPermsMode));
+    const search = $('#crm-perms-user-search');
+    search.value = _crmPermsUserQ = '';
+    search.placeholder = roles ? 'Search roles' : 'Search users';
+    $('#crm-perms-reset-btn').innerHTML = roles
+      ? '<i class="fa fa-rotate-left"></i> Reset to full access'
+      : '<i class="fa fa-rotate-left"></i> Reset to role defaults';
+  }
+
+  async function _crmSetPermsMode(mode) {
+    if (mode === _crmPermsMode || !_crmPerms) return;
+    if (!await _crmPermsConfirmDiscard()) return;
+    _crmPermsMode = mode; _crmPermsUserId = null; _crmPermsDraft = null; _crmPermsDirty = false;
+    _crmPermsSyncMode();
+    _crmRenderPermsUsers();
+    const items = _crmPermsItems();
+    const first = items.find(u => !u.is_admin) || items[0];
+    if (first) _crmSelectPermsUser(_crmPermsId(first));
+  }
+
+  $('#crm-perms-mode')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-perms-mode]');
+    if (btn) _crmSetPermsMode(btn.dataset.permsMode);
+  });
 
   /** Resolves true when there is nothing unsaved, or the user agrees to drop it. */
   function _crmPermsConfirmDiscard() {
     if (!_crmPermsDirty) return true;
     return appConfirm({
       title: 'Discard changes?',
-      message: 'You have unsaved permission changes for this user. They will be lost.',
+      message: `You have unsaved permission changes for this ${_crmPermsMode === 'roles' ? 'role' : 'user'}. They will be lost.`,
       confirmText: '<i class="fa fa-trash-can"></i> Discard',
       cancelText: 'Keep editing',
       icon: 'fa-triangle-exclamation',
@@ -64489,19 +65141,40 @@ async function submitDsCreate() {
   }
 
   function _crmPermsUser(id = _crmPermsUserId) {
-    return _crmPerms?.users.find(u => u.user_id === id) || null;
+    return _crmPermsItems().find(u => _crmPermsId(u) === id) || null;
   }
 
   function _crmRenderPermsUsers() {
     const list = $('#crm-perms-user-list');
     if (!list || !_crmPerms) return;
     const q = _crmPermsUserQ.trim().toLowerCase();
+
+    if (_crmPermsMode === 'roles') {
+      const roles = _crmPerms.roles.filter(r => !q || `${r.name} ${r.slug}`.toLowerCase().includes(q));
+      if (!roles.length) { list.innerHTML = '<span class="crm-perms-muted">No roles found.</span>'; return; }
+      list.innerHTML = roles.map(r => {
+        const tag = r.is_admin ? '<span class="crm-perms-tag crm-perms-tag--admin">Admin</span>'
+                  : r.customized ? '<span class="crm-perms-tag crm-perms-tag--custom">Custom</span>'
+                  : '<span class="crm-perms-tag">Full</span>';
+        return `<button type="button" class="crm-perms-user${r.id === _crmPermsUserId ? ' active' : ''}" data-perms-user="${r.id}">
+          <span class="crm-perms-avatar" style="color:${escHtml(r.color || '#64748b')}"><i class="fa fa-shield-halved"></i></span>
+          <span class="crm-perms-user-info">
+            <span class="crm-perms-user-name" style="display:block">${escHtml(r.name)}</span>
+            <span class="crm-perms-user-sub" style="display:block">${r.member_count} ${r.member_count === 1 ? 'member' : 'members'}</span>
+          </span>
+          ${tag}
+        </button>`;
+      }).join('');
+      return;
+    }
+
     const users = _crmPerms.users.filter(u => !q || `${u.name} ${u.email} ${u.role}`.toLowerCase().includes(q));
     if (!users.length) { list.innerHTML = '<span class="crm-perms-muted">No users found.</span>'; return; }
     list.innerHTML = users.map(u => {
       const initials = (u.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
       const tag = u.is_admin ? '<span class="crm-perms-tag crm-perms-tag--admin">Admin</span>'
                 : u.customized ? '<span class="crm-perms-tag crm-perms-tag--custom">Custom</span>'
+                : _crmPermsRoleOf(u)?.customized ? '<span class="crm-perms-tag crm-perms-tag--role">Role</span>'
                 : '<span class="crm-perms-tag">Full</span>';
       return `<button type="button" class="crm-perms-user${u.user_id === _crmPermsUserId ? ' active' : ''}" data-perms-user="${u.user_id}">
         <span class="crm-perms-avatar">${escHtml(initials)}</span>
@@ -64522,11 +65195,14 @@ async function submitDsCreate() {
     _crmPermsDirty  = false;
     $('#crm-perms-alert').style.display = 'none';
 
-    const saved = user.permissions || {};
+    // A user without settings of their own starts from their role's template (same merge as the API)
+    const role  = _crmPermsMode === 'users' ? _crmPermsRoleOf(user) : null;
+    const saved = { ...(role?.permissions || {}), ...(user.permissions || {}) };
+    const stageSource = _crmPermsMode === 'users' && !user.customized ? (role?.stage_access || {}) : (user.stage_access || {});
     const permissions = {};
     _crmPerms.functions.forEach(g => g.items.forEach(i => { permissions[i.key] = saved[i.key] !== false; }));
     const stage_access = {};
-    Object.entries(user.stage_access || {}).forEach(([pid, ids]) => { stage_access[pid] = (ids || []).map(Number); });
+    Object.entries(stageSource).forEach(([pid, ids]) => { stage_access[pid] = (ids || []).map(Number); });
     _crmPermsDraft = { permissions, stage_access };
 
     _crmRenderPermsUsers();
@@ -64545,19 +65221,36 @@ async function submitDsCreate() {
     const user = _crmPermsUser();
     if (!body || !user) return;
 
+    const isRole = _crmPermsMode === 'roles';
     const header = `<div style="display:flex;align-items:center;gap:10px">
       <div style="min-width:0">
         <div style="font-size:15px;font-weight:700">${escHtml(user.name)}</div>
-        <div class="crm-perms-muted">${escHtml(user.role)}${user.email ? ' · ' + escHtml(user.email) : ''}</div>
+        <div class="crm-perms-muted">${isRole
+          ? `Role · ${user.member_count} ${user.member_count === 1 ? 'member' : 'members'}`
+          : `${escHtml(user.role)}${user.email ? ' · ' + escHtml(user.email) : ''}`}</div>
       </div>
     </div>`;
 
     if (user.is_admin) {
       body.innerHTML = `${header}
         <div class="crm-perms-admin-note"><i class="fa fa-crown" style="color:#f59e0b"></i>
-          ${user.role === 'owner' ? 'The business owner' : 'Admins'} always have full access to every CRM function and stage.</div>`;
+          ${isRole ? 'Members of this role' : user.role === 'owner' ? 'The business owner' : 'Admins'} always have full access to every CRM function and stage.</div>`;
       return;
     }
+
+    let note;
+    if (isRole) {
+      const custom = _crmPerms.users.filter(u => u.role === user.slug && u.customized).length;
+      note = `<i class="fa fa-users"></i><span>Every member of this role gets these settings.${custom
+        ? ` <strong>${custom} ${custom === 1 ? 'member has' : 'members have'} custom settings</strong> and won't change.` : ''}</span>`;
+    } else {
+      const role = _crmPermsRoleOf(user);
+      const roleName = escHtml(role?.name || user.role);
+      note = user.customized
+        ? `<i class="fa fa-user-pen"></i><span>Custom settings for this user — changes to the <strong>${roleName}</strong> role don't apply. Reset to follow the role again.</span>`
+        : `<i class="fa fa-shield-halved"></i><span>Following the <strong>${roleName}</strong> role defaults. Saving here gives this user their own settings.</span>`;
+    }
+    const inherit = `<div class="crm-perms-inherit-note">${note}</div>`;
 
     const groups = _crmPerms.functions.map(g => {
       const allOn = g.items.every(i => _crmPermsDraft.permissions[i.key]);
@@ -64596,7 +65289,7 @@ async function submitDsCreate() {
       </div>`;
     }).join('') : '<span class="crm-perms-muted">No relations yet.</span>';
 
-    body.innerHTML = `${header}
+    body.innerHTML = `${header}${inherit}
       <div>
         <div class="crm-perms-section-title">Functions
           <button type="button" data-perms-all="1">Allow all</button><button type="button" data-perms-all="0">Block all</button>
@@ -64607,7 +65300,7 @@ async function submitDsCreate() {
         <div class="crm-perms-section-title">Stage visibility
           ${_crmPerms.relations.length ? `<div class="mac-search" style="margin-left:auto;width:220px"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-perms-rel-search" placeholder="Search relations" autocomplete="off" value="${escHtml(_crmPermsRelQ)}"></div>` : ''}
         </div>
-        <div class="crm-perms-muted" style="margin-bottom:8px">Choose which pipeline stages this user sees in each relation. Leads in other stages stay out of their pipeline, contacts and custom data; hidden relations don't appear at all.</div>
+        <div class="crm-perms-muted" style="margin-bottom:8px">Choose which pipeline stages ${isRole ? 'members of this role see' : 'this user sees'} in each relation. Leads in other stages stay out of their pipeline, contacts and custom data; hidden relations don't appear at all.</div>
         <div style="display:flex;flex-direction:column;gap:8px">${relations}
           <span class="crm-perms-muted" id="crm-perms-rel-empty" style="display:none">No relations match your search.</span>
         </div>
@@ -64715,15 +65408,18 @@ async function submitDsCreate() {
   $('#crm-perms-save-btn')?.addEventListener('click', async () => {
     const user = _crmPermsUser();
     if (!user || user.is_admin || !_crmPermsDraft) return;
+    const isRole = _crmPermsMode === 'roles';
     const btn = $('#crm-perms-save-btn');
     btn.disabled = true;
-    const res = await API.crmSaveUserPermissions(user.user_id, _crmPermsDraft);
+    const res = isRole
+      ? await API.crmSaveRolePermissions(user.id, _crmPermsDraft)
+      : await API.crmSaveUserPermissions(user.user_id, _crmPermsDraft);
     btn.disabled = false;
     if (res.status === 200) {
       Object.assign(user, res.body.data);
       _crmPermsDirty = false;
-      await _crmSelectPermsUser(user.user_id);
-      _crmPermsAlert(`CRM permissions saved for ${user.name}.`, 'success');
+      await _crmSelectPermsUser(_crmPermsId(user));
+      _crmPermsAlert(isRole ? `CRM defaults saved for the ${user.name} role.` : `CRM permissions saved for ${user.name}.`, 'success');
     } else {
       _crmPermsAlert(res.body?.errors ? Object.values(res.body.errors).flat().join(' ') : (res.body?.message || 'Failed to save permissions.'));
     }
@@ -64732,19 +65428,25 @@ async function submitDsCreate() {
   $('#crm-perms-reset-btn')?.addEventListener('click', async () => {
     const user = _crmPermsUser();
     if (!user || user.is_admin) return;
+    const isRole   = _crmPermsMode === 'roles';
+    const roleName = isRole ? '' : (_crmPermsRoleOf(user)?.name || user.role);
     const ok = await appConfirm({
       title: 'Reset CRM permissions?',
-      message: `${user.name} will get full access to every CRM function and stage again.`,
+      message: isRole
+        ? `Members of the ${user.name} role without custom settings will get full access to every CRM function and stage again.`
+        : `${user.name} will drop their custom settings and follow the ${roleName} role again.`,
       confirmText: '<i class="fa fa-rotate-left"></i> Reset',
       icon: 'fa-user-shield',
     });
     if (!ok) return;
-    const res = await API.crmResetUserPermissions(user.user_id);
+    const res = isRole
+      ? await API.crmResetRolePermissions(user.id)
+      : await API.crmResetUserPermissions(user.user_id);
     if (res.status === 200) {
       Object.assign(user, { customized: false, permissions: {}, stage_access: {} });
       _crmPermsDirty = false;
-      await _crmSelectPermsUser(user.user_id);
-      _crmPermsAlert(`${user.name} now has full CRM access.`, 'success');
+      await _crmSelectPermsUser(_crmPermsId(user));
+      _crmPermsAlert(isRole ? `The ${user.name} role now has full CRM access.` : `${user.name} now follows the ${roleName} role.`, 'success');
     } else {
       toast(res.body?.message || 'Failed to reset permissions.', 'error');
     }
@@ -64862,7 +65564,7 @@ async function submitDsCreate() {
   function _crmRenderOrgDepts() {
     const list = $('#crm-org-dept-list');
     if (!_crmOrg.departments.length) {
-      list.innerHTML = '<span class="mac-side-empty">No departments yet. Create them in HR Management first.</span>';
+      list.innerHTML = '<span class="mac-side-empty">No departments yet. Add them in CRM → Departments or Settings → Organisation.</span>';
       return;
     }
     const q = $('#crm-org-dept-search').value.trim().toLowerCase();
@@ -65193,7 +65895,7 @@ async function submitDsCreate() {
       <div class="mac-section">
         <div class="mac-section-title">Next steps</div>
         <div class="mac-group">
-          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-user-tie"></i></span>Assign employees and a head in HR Management</div></div>
+          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-user-tie"></i></span>Put people in it from Settings → Users, then choose its head here</div></div>
           <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-sitemap"></i></span>Link a pipeline to it in CRM → Org Structure</div></div>
         </div>
       </div>`;
@@ -65204,12 +65906,21 @@ async function submitDsCreate() {
     const d = _crmDeptDetail;
     const n = d.employees_count || 0;
     const t = d.employment_types || {};
-    const range = _deptRangeText(d);
-    const lead = (label, name) => `<div class="mac-row">
-        <div class="mac-row-label">${label}</div>
-        <div>${name ? `<strong>${escHtml(name)}</strong>` : '<span class="crm-perms-muted">Not assigned</span>'}</div>
-      </div>`;
     const employees = d.employees || [];
+    // Head / co-head pickers: any member of the department, searchable by name or email
+    const lead = (role, label, current) => {
+      const cur = employees.find(e => e.id === current);
+      return `<div class="mac-row">
+        <div class="mac-row-label">${label}</div>
+        <div class="cat-combo" style="width:280px">
+          <input type="hidden" id="crm-dept-${role}" value="${cur ? cur.id : ''}">
+          <input type="text" class="po-field-input" id="crm-dept-${role}-input" style="width:100%" autocomplete="off"
+            placeholder="${employees.length ? 'Search name or email…' : 'No one in this department'}"
+            value="${cur ? escHtml(cur.name || '') : ''}"${employees.length ? '' : ' disabled'}>
+          <div class="cat-combo-list" id="crm-dept-${role}-list" style="display:none"></div>
+        </div>
+      </div>`;
+    };
 
     $('#crm-dept-body').innerHTML = `
       <div class="mac-hero">
@@ -65231,9 +65942,12 @@ async function submitDsCreate() {
       <div class="mac-section">
         <div class="mac-section-title">Leadership</div>
         <div class="mac-group">
-          ${lead('Head', d.head)}
-          ${lead('Co-head', d.co_head)}
-          ${range ? `<div class="mac-row"><div class="mac-row-label">Salary range</div><div>${escHtml(range)}</div></div>` : ''}
+          ${lead('head', 'Head', d.head_employee_id)}
+          ${lead('co_head', 'Co-head', d.co_head_employee_id)}
+          <div class="mac-group-foot">
+            <span class="crm-perms-muted" style="margin-right:auto">Only people in this department can lead it. Someone missing? Put them in it from Settings → Users.</span>
+            ${employees.length ? '<button type="button" class="po-btn-primary" data-dept-lead-save><i class="fa fa-floppy-disk"></i> Save leadership</button>' : ''}
+          </div>
         </div>
       </div>
 
@@ -65247,7 +65961,7 @@ async function submitDsCreate() {
                 <small>${[e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</small></span>
             </div>
             <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
-          </div>`).join('') || '<div class="mac-row mac-muted-row">No employees in this department yet. Add them in HR Management.</div>'}
+          </div>`).join('') || '<div class="mac-row mac-muted-row">No one is in this department yet. Put people in it from Settings → Users (or HR Management).</div>'}
         </div>
       </div>
 
@@ -65259,6 +65973,41 @@ async function submitDsCreate() {
           </div>
         </div>
       </div>`;
+    ['head', 'co_head'].forEach(role => _crmWireLeadCombo(role, employees));
+  }
+
+  // Leader combobox: filters department members by name, email, employee ID or job title
+  function _crmWireLeadCombo(role, employees) {
+    const input = $(`#crm-dept-${role}-input`), hidden = $(`#crm-dept-${role}`), list = $(`#crm-dept-${role}-list`);
+    if (!input || !hidden || !list) return;
+    const render = filter => {
+      const q = (filter || '').trim().toLowerCase();
+      const items = employees.filter(e => !q || [e.name, e.email, e.employee_id, e.job_title]
+        .some(v => v && String(v).toLowerCase().includes(q)));
+      list.innerHTML = `<div class="cat-combo-item" data-id="" data-name="">— Not assigned —</div>`
+        + items.map(e => `<div class="cat-combo-item${String(e.id) === hidden.value ? ' active' : ''}" data-id="${e.id}" data-name="${escHtml(e.name || '')}">
+            ${escHtml(e.name || '—')}${e.job_title ? ' · ' + escHtml(e.job_title) : ''}
+            ${e.email ? `<div style="font-size:11px;opacity:.7">${escHtml(e.email)}</div>` : ''}
+          </div>`).join('')
+        + (!items.length && q ? '<div class="cat-combo-empty">No matching people</div>' : '');
+      list.style.display = '';
+    };
+    list.addEventListener('mousedown', ev => {
+      const item = ev.target.closest('.cat-combo-item');
+      if (!item) return;
+      ev.preventDefault();
+      hidden.value = item.dataset.id;
+      input.value = item.dataset.name || '';
+      list.style.display = 'none';
+    });
+    input.addEventListener('focus', () => { input.select(); render(''); });
+    input.addEventListener('input', () => render(input.value));
+    // Leaving the field without picking restores the current choice
+    input.addEventListener('blur', () => setTimeout(() => {
+      list.style.display = 'none';
+      input.value = employees.find(e => String(e.id) === hidden.value)?.name || '';
+    }, 150));
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
   }
 
   async function _crmCreateDept(btn) {
@@ -65274,6 +66023,29 @@ async function submitDsCreate() {
     } else {
       btn.disabled = false;
       _crmDeptAlert(res.body?.errors?.name?.[0] || res.body?.message || 'Failed to create the department.');
+    }
+  }
+
+  async function _crmSaveDeptLeadership(btn) {
+    const d = _crmDeptDetail;
+    if (!d) return;
+    const pick = id => { const v = $(`#crm-dept-${id}`).value; return v === '' ? null : Number(v); };
+    const body = { head_employee_id: pick('head'), co_head_employee_id: pick('co_head') };
+    if (body.head_employee_id !== null && body.head_employee_id === body.co_head_employee_id) {
+      _crmDeptAlert('Head and co-head must be different people.');
+      return;
+    }
+    btn.disabled = true;
+    _crmDeptAlert('');
+    const res = await API.updateDepartmentLeadership(d.id, body);
+    if (res.status === 200) {
+      toast('Department leadership updated.', 'success');
+      document.dispatchEvent(new CustomEvent('departments:changed'));
+      _crmDeptDetail = res.body.data || d;
+      _crmRenderDeptDetail();
+    } else {
+      btn.disabled = false;
+      _crmDeptAlert(res.body?.errors ? Object.values(res.body.errors)[0][0] : (res.body?.message || 'Failed to update the leadership.'));
     }
   }
 
@@ -65299,6 +66071,8 @@ async function submitDsCreate() {
 
     if (t.matches('[data-dept-create]')) { _crmCreateDept(t); return; }
     if (t.matches('[data-dept-cancel]')) { _crmDeptAlert(''); _crmSelectDept(_crmDepts[0]?.id ?? null); return; }
+
+    if (t.matches('[data-dept-lead-save]')) { _crmSaveDeptLeadership(t); return; }
 
     if (t.matches('[data-dept-org]')) {
       _crmOrgDeptId = _crmDeptDetail?.id ?? null;
@@ -66816,7 +67590,90 @@ async function submitDsCreate() {
     _renderStageFormStatuses();
     _setStageFormStatus(st.key);
     _macShow($('#crm-stage-form-modal'));
-    setTimeout(() => { const n = $('#crm-stage-form-name'); n.focus(); n.select(); }, 60);
+    // "Add Stage" / "Custom Stage" start by picking the template; a template card, edit or copy already has one
+    _setStageFormStep(preset.custom && !editing ? 1 : 2, false);
+  }
+
+  // Wizard: 1 = pick the template (status), 2 = name & look, 3 = automatic actions (optional, so saving works from 2 too)
+  function _setStageFormStep(step, animate = true) {
+    const body = $('#crm-stage-form-body');
+    const win = body.closest('.mac-window');
+    const fromStep = _stageForm.step, fromH = win.offsetHeight;
+    _stageForm.step = step;
+    body.dataset.step = step;
+    body.scrollTop = 0;
+    $$('#crm-stage-form-steps [data-stage-step]').forEach(b => {
+      b.classList.toggle('is-on', Number(b.dataset.stageStep) === step);
+      b.classList.toggle('is-done', Number(b.dataset.stageStep) < step);
+    });
+    const next = $('#crm-stage-form-next');
+    next.style.display = step < 3 ? '' : 'none';
+    next.innerHTML = step === 1 ? 'Next <i class="fa fa-arrow-right"></i>' : 'Next: automatic actions <i class="fa fa-arrow-right"></i>';
+    next.className = step === 1 ? 'po-btn-primary' : 'po-btn-ghost';
+    $('#crm-stage-form-back').style.display = step > 1 ? '' : 'none';
+    $('#crm-stage-form-save').style.display = step > 1 ? '' : 'none';
+    $('#crm-stage-form-alert').style.display = 'none';
+    if (animate && step !== fromStep) _animateStageFormStep(win, body, fromH, step > fromStep ? 1 : -1);
+    if (step === 2) setTimeout(() => { const n = $('#crm-stage-form-name'); n.focus(); n.select(); }, 60);
+  }
+
+  // macOS-style step change: the window eases to its new height while the new step slides in
+  const _STAGE_FORM_EASE = 'cubic-bezier(.22,1,.36,1)';
+  const _stageFormMotionOk = el => !!el.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function _morphStageFormHeight(win, fromH) {
+    const toH = win.offsetHeight;
+    if (!_stageFormMotionOk(win) || !fromH || Math.abs(toH - fromH) <= 1) return;
+    win.getAnimations().forEach(a => a.cancel());
+    win.style.overflow = 'hidden';
+    win.animate([{ height: `${fromH}px` }, { height: `${toH}px` }], { duration: 460, easing: _STAGE_FORM_EASE })
+      .finished.finally(() => { win.style.overflow = ''; });
+  }
+  function _animateStageFormStep(win, body, fromH, dir) {
+    if (!_stageFormMotionOk(win)) return;
+    _morphStageFormHeight(win, fromH);
+    const pane = body.querySelector(`.crm-stg-step${body.dataset.step}`);
+    pane?.animate([
+      { opacity: 0, transform: `translateX(${dir * 24}px)`, filter: 'blur(2px)' },
+      { opacity: 1, transform: 'none', filter: 'none' },
+    ], { duration: 420, easing: _STAGE_FORM_EASE });
+  }
+
+  // Expand / collapse a section in place; the window's auto height follows it frame by frame
+  function _stageSlide(el, show, animate = true) {
+    const shown = el.style.display !== 'none';
+    el.getAnimations().forEach(a => a.cancel());
+    el.style.overflow = '';
+    if (!animate || show === shown || !_stageFormMotionOk(el)) { el.style.display = show ? '' : 'none'; return; }
+    el.style.display = '';
+    const cs = getComputedStyle(el);
+    const open = { height: `${el.offsetHeight}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, opacity: 1, transform: 'none' };
+    const shut = { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0, transform: 'translateY(-6px)' };
+    el.style.overflow = 'hidden';
+    const a = el.animate(show ? [shut, open] : [open, shut], { duration: 380, easing: _STAGE_FORM_EASE });
+    a.onfinish = () => { el.style.overflow = ''; if (!show) el.style.display = 'none'; };
+  }
+  $('#crm-stage-form-steps')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-stage-step]');
+    if (b) _setStageFormStep(Number(b.dataset.stageStep));
+  });
+  $('#crm-stage-form-next')?.addEventListener('click', () => _setStageFormStep(_stageForm.step + 1));
+  $('#crm-stage-form-back')?.addEventListener('click', () => _setStageFormStep(_stageForm.step - 1));
+
+  // Step 1's side panel: what the picked template does, in plain words
+  function _renderStageTplInfo(st) {
+    const fx = st.effects || (st.base_key && _CRM_STATUS_EFFECTS[st.base_key]) || [];
+    const counts = st.custom ? `Counts as <b>${escHtml(st.base_label)}</b> in reports`
+      : st.key === 'custom' ? 'You choose below how it behaves' : `Counts as <b>${escHtml(st.label)}</b> in reports`;
+    $('#crm-stage-form-tpl-info').style.setProperty('--stg', st.color);
+    $('#crm-stage-form-tpl-info').innerHTML = `
+      <div class="crm-stg-pick-info-head">
+        <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+        <div><b>${escHtml(st.label)}</b><small>${counts}</small></div>
+      </div>
+      <p>${escHtml(st.description || st.note || '')}</p>
+      ${fx.length ? `<div class="crm-stg-pick-info-label">What happens</div>
+        <ul>${fx.map(t => `<li><i class="fa fa-circle-check"></i><span>${escHtml(t)}</span></li>`).join('')}</ul>` : ''}
+      <div class="crm-stg-act-hint">You can rename it, pick a colour and icon in the next step.</div>`;
   }
 
   // Small icons in the stage list for what a stage does when a lead enters it
@@ -66842,11 +67699,16 @@ async function submitDsCreate() {
     const require = rules.require || [];
     $$('#crm-stage-form-modal [data-stage-require]').forEach(c => { c.checked = require.includes(c.dataset.stageRequire); });
     $('#crm-stage-form-notify-users').style.display = users.length ? '' : 'none';
+    $('#crm-stage-form-notify-users-label').style.display = users.length ? '' : 'none';
 
     $('#crm-stage-form-task-on').checked = !!rules.task;
     $('#crm-stage-form-task-title').value = rules.task?.title || '';
     $('#crm-stage-form-task-days').value = rules.task?.due_days ?? 1;
-    _syncStageTaskBody();
+    // Notify / assign / stuck have no "on" flag of their own: a switch is on when it has something set
+    $('#crm-stage-form-notify-on').checked = !!(rules.notify?.owner || rules.notify?.head || rules.notify?.user_ids?.length);
+    $('#crm-stage-form-assign-on').checked = !!rules.assign_user_ids?.length;
+    $('#crm-stage-form-maxdays-on').checked = !!rules.max_days;
+    _syncStageAutoBodies();
 
     $('#crm-stage-form-notify-owner').checked = !!rules.notify?.owner;
     $('#crm-stage-form-notify-head').checked = !!rules.notify?.head;
@@ -66865,12 +67727,24 @@ async function submitDsCreate() {
     $('#crm-stage-form-max-days').value = rules.max_days || '';
   }
 
-  function _syncStageTaskBody() {
-    $('#crm-stage-form-task-body').style.display = $('#crm-stage-form-task-on').checked ? '' : 'none';
+  // Step 3: an action's settings show only while its switch is on
+  const _STAGE_AUTO_BODY = { task: 'crm-stage-form-task-body', notify: 'crm-stage-form-notify-body', assign: 'crm-stage-form-assign-body', maxdays: 'crm-stage-form-maxdays-body' };
+  function _syncStageAutoBodies(animate = false) {
+    $$('#crm-stage-form-modal [data-stage-auto]').forEach(sw => {
+      _stageSlide($(`#${_STAGE_AUTO_BODY[sw.dataset.stageAuto]}`), sw.checked, animate);
+    });
   }
-  $('#crm-stage-form-task-on')?.addEventListener('change', () => {
-    _syncStageTaskBody();
-    if ($('#crm-stage-form-task-on').checked) $('#crm-stage-form-task-title').focus();
+  $('#crm-stage-form-modal')?.addEventListener('change', e => {
+    const sw = e.target.closest('[data-stage-auto]');
+    if (!sw) return;
+    _syncStageAutoBodies(true);
+    if (!sw.checked) return;
+    // Focus after the row has opened, so the field doesn't jump-scroll mid-animation
+    setTimeout(() => {
+      if (sw.dataset.stageAuto === 'task') $('#crm-stage-form-task-title').focus({ preventScroll: true });
+      if (sw.dataset.stageAuto === 'maxdays') { const d = $('#crm-stage-form-max-days'); if (!d.value) d.value = 7; d.focus({ preventScroll: true }); }
+      $(`#${_STAGE_AUTO_BODY[sw.dataset.stageAuto]}`).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 380);
   });
   $('#crm-stage-form-assign-users')?.addEventListener('change', e => {
     const c = e.target.closest('[data-stage-assign-user]');
@@ -66879,17 +67753,19 @@ async function submitDsCreate() {
 
   function _stageFormActions() {
     const taskOn = $('#crm-stage-form-task-on').checked;
+    // A switched-off action keeps its ticks in the form but saves nothing
+    const notifyOn = $('#crm-stage-form-notify-on').checked;
     return {
       require:   [...$$('#crm-stage-form-modal [data-stage-require]')].filter(c => c.checked).map(c => c.dataset.stageRequire),
       task:      taskOn ? { enabled: true, title: $('#crm-stage-form-task-title').value.trim(), due_days: parseInt($('#crm-stage-form-task-days').value) || 0 } : null,
       notify:    {
-        owner:    $('#crm-stage-form-notify-owner').checked,
-        head:     $('#crm-stage-form-notify-head').checked,
-        user_ids: [...$$('#crm-stage-form-notify-users [data-stage-notify-user]')].filter(c => c.checked).map(c => parseInt(c.dataset.stageNotifyUser)),
+        owner:    notifyOn && $('#crm-stage-form-notify-owner').checked,
+        head:     notifyOn && $('#crm-stage-form-notify-head').checked,
+        user_ids: notifyOn ? [...$$('#crm-stage-form-notify-users [data-stage-notify-user]')].filter(c => c.checked).map(c => parseInt(c.dataset.stageNotifyUser)) : [],
       },
-      assign_user_ids: [...$$('#crm-stage-form-assign-users [data-stage-assign-user]')].filter(c => c.checked)
+      assign_user_ids: !$('#crm-stage-form-assign-on').checked ? [] : [...$$('#crm-stage-form-assign-users [data-stage-assign-user]')].filter(c => c.checked)
         .sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order)).map(c => parseInt(c.dataset.stageAssignUser)),
-      max_days:  parseInt($('#crm-stage-form-max-days').value) || null,
+      max_days:  $('#crm-stage-form-maxdays-on').checked ? parseInt($('#crm-stage-form-max-days').value) || null : null,
     };
   }
 
@@ -66923,9 +67799,10 @@ async function submitDsCreate() {
     else if (_stageForm.nameAuto && nameEl.value === _stageForm.nameAuto) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
     else if (!nameEl.value.trim() && prev && !_stageForm.id) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
     $$('#crm-stage-form-statuses [data-stage-status]').forEach(b => b.classList.toggle('is-on', b.dataset.stageStatus === key));
-    $('#crm-stage-form-behaviour').style.display = custom ? '' : 'none';
-    if (custom && prev && prev.key !== 'custom') setTimeout(() => $('#crm-stage-form-behaviour').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 30);
+    _stageSlide($('#crm-stage-form-behaviour'), custom, !!prev);
+    if (custom && prev && prev.key !== 'custom') setTimeout(() => $('#crm-stage-form-behaviour').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 400);
     _syncStageReasonHint();
+    _renderStageTplInfo(st);
     _refreshStageFormLook();
   }
 
@@ -66964,6 +67841,11 @@ async function submitDsCreate() {
     _setStageFormStatus(b.dataset.stageStatus);
     const st = _crmStatus(b.dataset.stageStatus);
     if (st?.custom) _applyCustomStatusPreset(st);
+  });
+  // Double-clicking a template picks it and moves on (Custom stays, so its behaviour ticks can be set)
+  $('#crm-stage-form-statuses')?.addEventListener('dblclick', e => {
+    const b = e.target.closest('[data-stage-status]');
+    if (b && b.dataset.stageStatus !== 'custom') _setStageFormStep(2);
   });
 
   // Picking one of the business's own statuses fills in its note, reason flag and actions;
@@ -67107,11 +67989,15 @@ async function submitDsCreate() {
   $('#crm-stage-form-save')?.addEventListener('click', async () => {
     const alertEl = $('#crm-stage-form-alert');
     const name = $('#crm-stage-form-name').value.trim();
-    if (!name) { alertEl.textContent = 'Stage name is required.'; alertEl.style.display = ''; $('#crm-stage-form-name').focus(); return; }
+    if (!name) {
+      _setStageFormStep(2);
+      alertEl.textContent = 'Stage name is required.'; alertEl.style.display = ''; $('#crm-stage-form-name').focus(); return;
+    }
     const key = _stageForm.status;
     const actions = _stageFormActions();
     if (actions.task && !actions.task.title) {
-      alertEl.textContent = 'Give the task a title, or untick "Create a task".'; alertEl.style.display = '';
+      _setStageFormStep(3);
+      alertEl.textContent = 'Give the task a title, or switch off "Create a follow-up task".'; alertEl.style.display = '';
       $('#crm-stage-form-task-title').focus();
       return;
     }

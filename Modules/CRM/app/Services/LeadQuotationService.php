@@ -39,6 +39,28 @@ class LeadQuotationService
             ->get();
     }
 
+    /**
+     * Each lead's accepted quotation total (the latest accepted one wins over older revisions),
+     * keyed by lead id. Leads with no accepted quotation are left out.
+     *
+     * @param  list<int>  $leadIds
+     * @return array<int, float>
+     */
+    public function acceptedTotals(array $leadIds): array
+    {
+        if ($leadIds === []) {
+            return [];
+        }
+
+        return Quotation::query()
+            ->whereIn('lead_id', $leadIds)
+            ->where('status', Quotation::STATUS_ACCEPTED)
+            ->orderBy('id')
+            ->get(['lead_id', 'total'])
+            ->mapWithKeys(fn (Quotation $q) => [(int) $q->lead_id => (float) $q->total])
+            ->all();
+    }
+
     public function quotationForLead(Lead $lead, int $quotationId): Quotation
     {
         return Quotation::query()
@@ -73,6 +95,8 @@ class LeadQuotationService
             ...$data,
             'lead_id'     => $lead->id,
             'customer_id' => $data['customer_id'] ?? $lead->customer_id,
+            // Not sent at all → the linked customer's address; sent empty → left blank on purpose
+            'customer_address' => array_key_exists('customer_address', $data) ? $data['customer_address'] : $this->customerAddress($lead),
             'reference'   => filled($data['reference'] ?? null) ? $data['reference'] : $this->defaultReference($lead),
             'version'     => 1,
         ], $items);
@@ -118,6 +142,12 @@ class LeadQuotationService
         }
 
         return $this->leads->moveToStatus($lead, $statusKey, $userId, array_filter(['reason' => $reason]) + $context, system: true);
+    }
+
+    /** The address on file for the lead's customer — what a new quotation is billed to by default. */
+    public function customerAddress(Lead $lead): ?string
+    {
+        return $lead->customer_id ? ($lead->customer()->value('address') ?: null) : null;
     }
 
     /** "Kasun Perera (Lead #12)" — the quotation's reference when none is given. */

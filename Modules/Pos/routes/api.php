@@ -606,6 +606,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/permissions/me',                [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'me'])    ->name('crm.permissions.me');
     Route::put   ('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'update'])->whereNumber('user')->name('crm.permissions.update');
     Route::delete('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'reset']) ->whereNumber('user')->name('crm.permissions.reset');
+    Route::put   ('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'updateRole'])->whereNumber('role')->name('crm.permissions.roles.update');
+    Route::delete('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'resetRole']) ->whereNumber('role')->name('crm.permissions.roles.reset');
 
     // CRM org structure (departments → divisions, department pipelines, department settings)
     Route::get   ('crm/org',                                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'index'])          ->name('crm.org.index');
@@ -642,6 +644,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     // CRM lead workspace (assignees + history, unified timeline, internal messages, files, tasks) and the admin audit log
     Route::get   ('crm/leads/{lead}/workspace',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'show'])              ->whereNumber('lead')->name('crm.leads.workspace');
     Route::get   ('crm/leads/{lead}/summary',                           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'summary'])           ->whereNumber('lead')->name('crm.leads.summary');
+    Route::post  ('crm/leads/{lead}/notifications/read',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'markNotificationsRead'])->whereNumber('lead')->name('crm.leads.notifications.read');
     Route::get   ('crm/leads/{lead}/assignees',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'assignees'])         ->whereNumber('lead')->name('crm.leads.assignees.index');
     Route::put   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'syncAssignees'])     ->whereNumber('lead')->name('crm.leads.assignees.sync');
     Route::post  ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'addAssignees'])      ->whereNumber('lead')->name('crm.leads.assignees.store');
@@ -698,6 +701,10 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/reports/dashboard',       [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'dashboard'])->name('crm.reports.dashboard');
     Route::get   ('crm/reports/dashboard/pdf',   [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'pdf'])      ->name('crm.reports.dashboard.pdf');
     Route::get   ('crm/reports/dashboard/excel', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'excel'])    ->name('crm.reports.dashboard.excel');
+    // CRM sales analysis report (ribbon → Report): grouped by department, customer, product… as JSON / PDF / CSV
+    Route::get   ('crm/reports/sales-analysis',     [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysis'])   ->name('crm.reports.sales-analysis');
+    Route::get   ('crm/reports/sales-analysis/pdf', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisPdf'])->name('crm.reports.sales-analysis.pdf');
+    Route::get   ('crm/reports/sales-analysis/csv', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisCsv'])->name('crm.reports.sales-analysis.csv');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');

@@ -29,7 +29,7 @@ class DepartmentDetailService
         $min = $department->salary_range_min !== null ? (float) $department->salary_range_min : null;
         $max = $department->salary_range_max !== null ? (float) $department->salary_range_max : null;
 
-        $employees = Employee::with('jobTitle')
+        $employees = Employee::with(['jobTitle', 'user'])
             ->where('business_id', $business->id)
             ->where('department_id', $department->id)
             ->orderBy('full_name')
@@ -42,6 +42,7 @@ class DepartmentDetailService
                 'id'               => $e->id,
                 'name'             => $e->full_name,
                 'employee_id'      => $e->employee_id,
+                'email'            => $e->user?->email ?: $e->personal_email,
                 'employment_type'  => $e->employment_type,
                 'job_title'        => $e->jobTitle?->name,
                 'date_of_joining'  => $e->date_of_joining?->format('Y-m-d'),

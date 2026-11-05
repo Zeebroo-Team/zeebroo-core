@@ -126,13 +126,24 @@ class CrmOrgService
         return $this->headUserIdFromLoaded($department);
     }
 
-    /** Users of the department's HR staff who have a Zeebroo login. @return int[] */
+    /**
+     * Users of the department's HR staff who have a Zeebroo login and are still on the team
+     * (the owner or an active member) — a removed user keeps their HR record but gets no leads.
+     *
+     * @return int[]
+     */
     public function memberUserIds(Department $department): array
     {
+        $teamIds = BusinessMember::query()
+            ->where('business_id', $department->business_id)
+            ->where('status', 'active')
+            ->pluck('user_id')
+            ->push(Business::query()->whereKey($department->business_id)->value('user_id'));
+
         return Employee::query()
             ->where('business_id', $department->business_id)
             ->where('department_id', $department->id)
-            ->whereNotNull('user_id')
+            ->whereIn('user_id', $teamIds->filter())
             ->pluck('user_id')
             ->map(fn ($id) => (int) $id)
             ->unique()
@@ -391,7 +402,7 @@ class CrmOrgService
         $warnings = [];
 
         if ($department->headEmployee === null) {
-            $warnings[] = 'No department head is set in HR.';
+            $warnings[] = 'No department head is set.';
         } elseif ($department->headEmployee->user_id === null) {
             $warnings[] = 'Head ' . $department->headEmployee->full_name . ' has no linked Zeebroo user.';
         }

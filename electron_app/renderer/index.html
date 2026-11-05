@@ -411,6 +411,12 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .pm-projects-grid{gap:14px}
 #panel-crm .crm-relation-card{border:0;border-radius:14px;padding:16px;gap:10px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
 #panel-crm .crm-relation-card:hover{transform:translateY(-2px);box-shadow:0 0 0 .5px var(--mac-line),0 10px 26px rgba(0,0,0,.1)}
+#panel-crm .crm-relation-card--attn{box-shadow:0 0 0 1px rgba(239,68,68,.35),0 1px 3px rgba(0,0,0,.05)}
+#panel-crm .crm-relation-card--attn:hover{box-shadow:0 0 0 1px rgba(239,68,68,.45),0 10px 26px rgba(0,0,0,.1)}
+#panel-crm .crm-relation-attn-bell b{box-shadow:0 0 0 2px var(--mac-panel)}
+#panel-crm .crm-attn-pop{background:var(--mac-panel);border-color:var(--mac-line)}
+#panel-crm .crm-attn-pop-title{color:var(--mac-text)}
+#panel-crm .crm-attn-pop-msg,#panel-crm .crm-attn-pop-head,#panel-crm .crm-attn-pop-time:not(.is-overdue){color:var(--mac-muted)}
 #panel-crm .crm-relation-card-icon{width:42px;height:42px;border-radius:11px;font-size:18px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);box-shadow:none}
 #panel-crm .crm-relation-card-name{font-size:14.5px;font-weight:600;color:var(--mac-text)}
 #panel-crm .crm-relation-card-desc{font-size:12.5px;color:var(--mac-muted)}
@@ -418,6 +424,13 @@ body.dark #panel-crm{--mac-accent:#0a84ff;--mac-panel:rgba(255,255,255,.05);--ma
 #panel-crm .crm-relation-dept{display:inline-flex;align-items:center;gap:5px;max-width:60%;padding:2px 8px;border-radius:999px;font-size:11.5px;font-weight:500;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #panel-crm .crm-relation-dept--none{background:var(--mac-fill);color:var(--mac-muted)}
 #panel-crm #crm-relation-hero-badges .crm-relation-dept,#panel-crm #crm-relation-header-badges .crm-relation-dept{margin-right:6px;max-width:none}
+/* Relation detail: header + tabs merged into one bar. The tabs stretch to the bar's
+   full height so the active underline sits at the bar's bottom edge. */
+#panel-crm .crm-relation-bar{padding:0 16px;min-height:48px;gap:10px;background:#fff}
+#panel-crm .crm-relation-bar .inv-detail-breadcrumb{flex:0 1 auto;max-width:220px;min-width:40px}
+#panel-crm .crm-relation-bar .inv-tabs{flex:1;min-width:0;align-self:stretch;padding:0 0 0 6px;border-bottom:none;background:transparent;scrollbar-width:none}
+#panel-crm .crm-relation-bar .inv-tab{display:inline-flex;align-items:center;padding:0 14px}
+#panel-crm .crm-relation-bar .inv-badges-inline{flex-shrink:0;margin-left:0}
 #panel-crm .crm-rd-visibility{display:flex;align-items:center;flex-wrap:wrap;gap:8px;border-top:1px solid var(--mac-line)}
 #panel-crm .crm-rd-visibility .crm-relation-dept{max-width:none}#panel-crm .crm-relation-card-delete{background:var(--mac-fill);border-radius:50%}
 #crm-relation-list > .finance-toolbar{padding:12px 20px;background:var(--surface);border-bottom-color:var(--mac-line)}
@@ -492,6 +505,12 @@ body.dark #crm-relation-pane-history select.crm-history-filter option{background
 .mac-window .crm-perms-item small{color:var(--mac-muted)}
 .mac-window .crm-perms-stage{border:0;background:var(--mac-fill);padding:4px 11px}
 .mac-window .crm-perms-admin-note{border:0;background:var(--mac-fill);color:var(--mac-muted)}
+.crm-perms-mode{display:flex;gap:2px;padding:2px;border-radius:8px;background:var(--mac-fill,rgba(0,0,0,.05))}
+.crm-perms-mode button{flex:1;border:0;background:none;color:inherit;font:inherit;font-size:12.5px;font-weight:500;padding:5px 0;border-radius:6px;cursor:pointer}
+.crm-perms-mode button.active{background:var(--mac-panel,#fff);font-weight:600;box-shadow:0 0 0 .5px var(--mac-line,rgba(0,0,0,.1)),0 1px 2px rgba(0,0,0,.06)}
+.crm-perms-tag--role{background:rgba(22,163,74,.12);color:#15803d}
+.mac-window .crm-perms-user.active .crm-perms-tag--role{background:rgba(255,255,255,.25);color:#fff}
+.crm-perms-inherit-note{display:flex;gap:8px;align-items:center;padding:9px 12px;border-radius:9px;font-size:12.5px;background:var(--mac-fill,rgba(0,0,0,.04));color:var(--mac-muted,#6b7280)}
 .mac-window .crm-org-warn{background:rgba(255,149,0,.1);color:#b25000;border-radius:10px;padding:9px 14px;font-size:12.5px}
 body.dark .mac-window .crm-org-warn{color:#ffb340}
 .mac-window .crm-inbox-grid label{color:var(--mac-muted);font-size:12px;gap:5px}
@@ -548,7 +567,7 @@ body.dark .mac-window .crm-org-warn{color:#ffb340}
 .mac-window .crm-fu-list:empty::before,.mac-window .crm-appr-list:empty::before{content:"Nothing here";display:block;padding:40px;text-align:center;color:var(--mac-muted)}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
 body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
-body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"],
+body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"], body:not(.crm-can-report) #rb-crm-report,
 body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-is-admin) #rb-crm-add-dept, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
@@ -629,8 +648,7 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 #crm-relation-pane-pipeline .crm-board--compact .crm-card-footer{margin:0}
 /* Toolbar: capsule controls, no borders */
 .crm-pipe-toolbar{gap:8px}
-#crm-relation-pane-pipeline>.crm-pipe-toolbar{padding:14px 0 10px;border-bottom:none;background:transparent}
-.crm-pipe-divider{width:1px;height:18px;background:var(--border,#e5e7eb);margin:0 4px}
+#crm-relation-pane-pipeline>.crm-pipe-toolbar{padding:6px 0;border-bottom:none;background:transparent}.crm-pipe-divider{width:1px;height:18px;background:var(--border,#e5e7eb);margin:0 4px}
 #crm-relation-pane-pipeline .crm-pipe-search input{height:32px;border:none;border-radius:10px;background:var(--ap-fill-2);font-size:13px;padding-left:30px}
 #crm-relation-pane-pipeline .crm-pipe-search input:focus{background:var(--card,#fff);box-shadow:0 0 0 3.5px color-mix(in srgb,var(--ap-blue) 30%,transparent)}
 #crm-relation-pane-pipeline .crm-chip{height:32px;border:none;border-radius:999px;padding:0 14px;background:var(--ap-fill-2);color:var(--text,#1d1d1f);font-size:12.5px;font-weight:500}
@@ -708,9 +726,11 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 .crm-board--compact .crm-card-cust-ico{display:inline}
 .crm-board--compact .crm-card-tags,.crm-board--compact .crm-card-company,.crm-board--compact .crm-card-meta{display:none}
 .crm-board--compact .crm-card-footer{margin:0;padding:0;border:0;min-height:0;flex-shrink:0}
-.crm-board--compact .crm-card-actions{display:none}
-.crm-board--compact .crm-card:hover .crm-card-actions{display:flex;opacity:1}
-.crm-board--compact .crm-card:hover .crm-card-value{display:none}
+/* Actions slide in / value slides out on hover; max-width animates where display:none would snap */
+.crm-board--compact .crm-card-actions{max-width:0;overflow:hidden;transform:translateX(6px);transition:max-width .22s ease,opacity .18s ease,transform .22s ease}
+.crm-board--compact .crm-card:hover .crm-card-actions{max-width:64px;opacity:1;transform:none}
+.crm-board--compact .crm-card-value{max-width:120px;overflow:hidden;white-space:nowrap;transition:max-width .22s ease,opacity .15s ease}
+.crm-board--compact .crm-card:hover .crm-card-value{max-width:0;opacity:0}
 /* List view: one sortable table of every lead, sticky header */
 .crm-list{flex:1;min-height:0;overflow:auto;margin-top:8px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--card,#fff)}
 .crm-list .crm-table th{position:sticky;top:0;z-index:1;background:var(--card,#fff);user-select:none}
@@ -1064,6 +1084,15 @@ body.dark :is(.crm-lead-view-shell,.crm-assign-win) :hover::-webkit-scrollbar-th
 .crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lead-view-label{flex-shrink:0;margin:0;font-size:13px;color:var(--mac-text)}
 .crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lead-view-value{min-width:0;text-align:right;font-weight:400;color:var(--mac-muted)}
 .crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lead-view-value:not(.crm-lead-view-value--empty){color:var(--mac-text);font-weight:500}
+/* Lead Information rows: double-click to edit in place */
+.crm-lv-inline{cursor:text;transition:background .15s}
+.crm-lv-inline:not(.crm-lv-inline--editing):hover{background:var(--mac-fill)}
+.crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lv-inline--editing .crm-lead-view-value{flex:1;min-width:0;max-width:60%;text-align:left}
+.crm-lv-edit-btn{border:0;background:none;padding:2px 4px;margin-left:8px;font-size:11px;color:var(--mac-muted,var(--text-muted));opacity:.45;cursor:pointer;border-radius:4px;vertical-align:baseline;transition:opacity .15s,color .15s,background .15s}
+.crm-lv-inline:hover .crm-lv-edit-btn{opacity:1;color:#0a84ff}
+.crm-lv-edit-btn:hover{background:rgba(10,132,255,.12)}
+.crm-lv-inline--editing .po-field{margin:0;gap:2px}
+.crm-lv-inline--editing .po-field-input{width:100%;padding:5px 8px;font-size:13px}
 .crm-lv-stack{display:flex;flex-direction:column;gap:22px;min-width:0}
 /* Workspace rows open their tab */
 .crm-lead-view-shell .crm-lead-view-grid .crm-lv-link{width:100%;align-items:center;border:0;font:inherit;text-align:left;cursor:pointer;transition:background .12s}
@@ -1587,8 +1616,11 @@ body.dark .crm-qtx .po-field-input{color-scheme:dark}
 .crm-qtx .crm-qt-table--view td{padding:10px}
 .crm-qtx .crm-qt-table--view td:first-child{color:var(--mac-muted,var(--text-muted));font-variant-numeric:tabular-nums}
 .crm-qtx .crm-qt-table .po-field-input{height:28px;padding:0 8px;font-size:12.5px}
+/* Editor rows: line every cell up with the 28px item input, not the row centre (the SKU line makes the item cell taller) */
+.crm-qtx .crm-qt-table:not(.crm-qt-table--view) td{vertical-align:top;line-height:28px}
+.crm-qtx .crm-qt-table:not(.crm-qt-table--view) .crm-qt-stock,.crm-qtx .crm-qt-table:not(.crm-qt-table--view) .crm-qtx-del{vertical-align:middle;line-height:normal}
 .crm-qtx .crm-qt-numin{font-variant-numeric:tabular-nums}
-.crm-qtx .crm-qt-sub{margin-top:4px;font-size:11px;color:var(--mac-muted,var(--text-muted))}
+.crm-qtx .crm-qt-sub{margin-top:4px;font-size:11px;line-height:1.3;color:var(--mac-muted,var(--text-muted))}
 .crm-qtx .crm-qt-right{font-variant-numeric:tabular-nums}
 .crm-qtx .crm-qt-stock{display:inline-flex;align-items:center;gap:4px;height:20px;padding:0 8px;border-radius:999px;font-size:11px;font-weight:600;color:#248a3d;background:rgba(52,199,89,.12)}
 .crm-qtx .crm-qt-stock--short{color:#d70015;background:rgba(255,59,48,.1)}
@@ -1598,7 +1630,7 @@ body.dark .crm-qtx .crm-qt-stock--short{color:#ff6961}
   color:#fff;background:#ff3b30;opacity:.35;transition:opacity .12s,transform .1s}
 .crm-qtx .crm-qt-table tr:hover .crm-qtx-del,.crm-qtx-del:focus-visible{opacity:1}
 .crm-qtx-del:active{transform:scale(.9)}
-.crm-qtx-noitems{display:flex;align-items:center;justify-content:center;gap:8px;padding:22px;font-size:12.5px;color:var(--mac-muted,var(--text-muted))}
+.crm-qtx-noitems{line-height:normal;display:flex;align-items:center;justify-content:center;gap:8px;padding:22px;font-size:12.5px;color:var(--mac-muted,var(--text-muted))}
 .crm-qtx-pad:not(:empty){padding:10px 16px 0}
 .crm-qtx-add{align-items:center;padding:12px 16px 14px}
 .crm-qtx-search{position:relative;flex:1;min-width:220px;display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border-radius:8px;cursor:text;
@@ -1723,6 +1755,36 @@ body.dark .crm-assign-win .crm-assign-primary:has(input:checked){color:#ffb340}
 .crm-audit-table th,.crm-audit-table td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border,#e5e7eb);vertical-align:top}
 .crm-audit-table th{position:sticky;top:0;background:var(--surface);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
 .crm-audit-table td div{word-break:break-all}
+/* CRM sales analysis report (ribbon → Report) */
+.crm-rep-table td.r,.crm-rep-table th.r{text-align:right;white-space:nowrap}
+.crm-rep-side{overflow-y:auto;gap:8px;padding-bottom:0!important}
+.crm-rep-side-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--mac-muted);padding:6px 6px 0}
+.crm-rep-filters{display:grid;grid-template-columns:1fr 1fr;gap:10px 8px}
+.crm-rep-filters .mac-field{min-width:0;gap:4px;font-size:11.5px}
+.crm-rep-filters .po-field-input{width:100%;min-width:0;height:28px!important;font-size:12.5px;box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 .5px 1px rgba(0,0,0,.06)}
+.crm-rep-filters input[type=date].po-field-input{padding:0 6px}
+.crm-rep-run{position:sticky;bottom:0;margin:auto -10px 0;padding:10px;display:flex;gap:8px;background:var(--mac-bg);border-top:1px solid var(--mac-line)}
+.crm-rep-run .po-btn-primary{flex:1;justify-content:center}
+.crm-rep-groups{display:flex;flex-direction:column;gap:2px}
+.crm-rep-group-btn{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:var(--mac-text);border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;text-align:left;cursor:pointer;transition:background .12s}
+.crm-rep-group-btn:hover{background:var(--mac-hover)}
+.crm-rep-group-btn i{width:28px;height:28px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.crm-rep-group-btn small{display:block;font-size:11px;color:var(--mac-muted)}
+.crm-rep-group-btn.active{background:var(--mac-accent);color:#fff}
+.crm-rep-group-btn.active i{color:#fff;background:rgba(255,255,255,.25)}
+.crm-rep-group-btn.active small{color:rgba(255,255,255,.82)}
+.crm-rep-card{background:var(--mac-panel);border-radius:12px;box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
+.crm-rep-card thead th:first-child{border-top-left-radius:12px}
+.crm-rep-card thead th:last-child{border-top-right-radius:12px}
+.crm-rep-card tfoot td:first-child{border-bottom-left-radius:12px}
+.crm-rep-card tfoot td:last-child{border-bottom-right-radius:12px}
+.crm-rep-card .crm-rep-table th{background:var(--mac-head);color:var(--mac-muted);border-bottom-color:var(--mac-line)}
+.crm-rep-card .crm-rep-table td{border-bottom-color:var(--mac-line);color:var(--mac-text);font-size:12.5px;padding:9px 10px}
+.crm-rep-card .crm-rep-table th{padding:9px 10px}
+.crm-rep-card .crm-rep-table tbody tr:nth-child(even){background:var(--mac-stripe)}
+.crm-rep-card .crm-rep-table tbody tr:hover{background:var(--mac-hover)}
+.crm-rep-table tfoot td{position:sticky;bottom:0;background:var(--mac-head,var(--surface));font-weight:700;border-top:1px solid var(--mac-line,var(--border))}
+.crm-rep-table tr.crm-rep-group td{border-top:1px solid var(--mac-line,var(--border))}
 .crm-appr-list{display:flex;flex-direction:column;gap:12px;padding:16px 18px}
 .crm-appr-card{border:1px solid var(--border,#e5e7eb);border-radius:12px;background:var(--surface);overflow:hidden;transition:box-shadow .15s,border-color .15s}
 .crm-appr-card:hover{border-color:#c4b5fd;box-shadow:0 4px 14px rgba(124,58,237,.08)}
@@ -2096,6 +2158,70 @@ body.dark .crm-hf-popup option{background:#2c2c30;color:#f5f5f7}
 .crm-lead-pending .is-yes{background:#10b981;color:#fff}
 .crm-lead-pending .is-no{background:#ef4444;color:#fff}
 .crm-lead-stuck{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:999px;padding:1px 7px;background:#fef3c7;color:#92400e}
+/* Add / edit stage wizard: 1 template, 2 name & look, 3 automatic actions */
+.crm-stg-steps{display:flex;align-items:center;gap:10px;padding:10px 18px;border-bottom:1px solid var(--mac-line);flex-wrap:wrap}
+.crm-stg-steps > .fa{color:var(--mac-muted);font-size:11px}
+.crm-stg-step{display:flex;align-items:center;gap:8px;padding:5px 14px 5px 5px;border:0;border-radius:999px;background:transparent;color:var(--mac-muted);font-size:13px;font-weight:600;cursor:pointer}
+.crm-stg-step > span{width:22px;height:22px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;background:var(--mac-fill);font-size:11.5px}
+.crm-stg-step small{font-weight:400;color:var(--mac-muted)}
+.crm-stg-step.is-on{color:var(--mac-text);background:var(--mac-fill)}
+.crm-stg-step.is-on > span{background:var(--accent,#4e8ef7);color:#fff}
+.crm-stg-step.is-done > span{background:#10b981;color:#fff}
+.crm-stg-form:not([data-step="1"]) .crm-stg-step1,.crm-stg-form:not([data-step="2"]) .crm-stg-step2,.crm-stg-form:not([data-step="3"]) .crm-stg-step3{display:none !important}
+.crm-stg-step1,.crm-stg-step2,.crm-stg-step3,.crm-stg-step2-col,.crm-stg-pick-main{display:flex;flex-direction:column;gap:14px}
+.crm-stg-step3{gap:10px}
+.crm-stg-step-intro{display:flex;flex-direction:column;gap:3px}
+.crm-stg-step-intro b{font-size:14px;color:var(--mac-text)}
+.crm-stg-step-intro span{font-size:12px;color:var(--mac-muted)}
+/* Step 1: compact template cards + what the picked one does */
+.crm-stg-pick{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}
+.crm-stg-pick-main{min-width:0}
+#crm-stage-form-statuses{grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+#crm-stage-form-statuses .crm-stg-tpl{align-items:center;padding:9px 10px;min-height:60px}
+#crm-stage-form-statuses .crm-stg-tpl-fx{display:none}
+#crm-stage-form-statuses .crm-stg-tpl-text small{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#crm-stage-form-statuses .crm-stg-ico{width:34px;height:34px;border-radius:9px;font-size:15px;margin:0;color:var(--stg);background:color-mix(in srgb,var(--stg) 14%,transparent)}
+#crm-stage-form-statuses .crm-stg-tpl--new{min-height:60px}
+.crm-stg-pick-info{position:sticky;top:0;display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:12px;border:1px solid var(--mac-line);background:var(--mac-fill)}
+.crm-stg-pick-info-head{display:flex;align-items:center;gap:10px}
+.crm-stg-pick-info-head .crm-stg-ico{width:40px;height:40px;border-radius:10px;font-size:18px;color:var(--stg);background:color-mix(in srgb,var(--stg) 16%,transparent)}
+.crm-stg-pick-info-head b{font-size:15px;color:var(--mac-text)}
+.crm-stg-pick-info-head small{display:block;font-size:11px;color:var(--mac-muted)}
+.crm-stg-pick-info p{margin:0;font-size:12.5px;line-height:1.5;color:var(--mac-text)}
+.crm-stg-pick-info-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mac-muted)}
+.crm-stg-pick-info ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+.crm-stg-pick-info li{display:flex;gap:8px;font-size:12.5px;line-height:1.45;color:var(--mac-text)}
+.crm-stg-pick-info li i{color:var(--stg);margin-top:3px;font-size:11px}
+/* Step 2: name & look */
+.crm-stg-step2-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+.crm-stg-color-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crm-stg-color-row .crm-stg-swatches{margin:0}
+/* Step 3: one row per automatic action, switched on/off */
+.crm-stg-auto{display:flex;flex-direction:column;border:1px solid var(--mac-line);border-radius:10px;background:var(--mac-panel)}
+.crm-stg-auto-head{display:flex;align-items:center;gap:12px;padding:12px 14px}
+.crm-stg-auto-head .crm-stg-behave-ico{width:34px;height:34px;font-size:14px}
+.crm-stg-auto-head .crm-stg-behave-text b{font-size:13px}
+.crm-stg-auto-body{display:flex;flex-direction:column;gap:8px;padding:12px 14px 14px 60px;border-top:1px dashed var(--mac-line)}
+.crm-stg-auto-body.crm-stg-act-body{flex-direction:row}
+.crm-stg-auto:has(.psm-switch input:checked){border-color:color-mix(in srgb,var(--accent,#4e8ef7) 45%,var(--mac-line))}
+.crm-stg-people-label{font-size:11.5px;font-weight:600;color:var(--mac-muted);margin-top:2px}
+.crm-stg-people{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:6px;max-height:190px;overflow-y:auto;padding:2px}
+.crm-stg-people .crm-stg-chk{border-radius:8px;padding:6px 10px;min-width:0}
+/* Smooth state changes across the wizard */
+.crm-stg-step,.crm-stg-step > span{transition:background-color .3s cubic-bezier(.22,1,.36,1),color .3s cubic-bezier(.22,1,.36,1)}
+#crm-stage-form-statuses .crm-stg-tpl{transition:border-color .25s ease,background-color .25s ease,box-shadow .25s ease,transform .25s cubic-bezier(.22,1,.36,1)}
+#crm-stage-form-statuses .crm-stg-tpl:hover{transform:translateY(-1px)}
+#crm-stage-form-statuses .crm-stg-tpl:active{transform:scale(.985)}
+.crm-stg-auto{transition:border-color .3s ease,box-shadow .3s ease}
+.crm-stg-auto:has(.psm-switch input:checked){box-shadow:0 2px 10px color-mix(in srgb,var(--accent,#4e8ef7) 10%,transparent)}
+.crm-stg-icon-btn{transition:background-color .2s ease,border-color .2s ease,color .2s ease,transform .2s cubic-bezier(.22,1,.36,1)}
+.crm-stg-icon-btn:active,.crm-stg-swatch-btn:active{transform:scale(.92)}
+.crm-stg-swatch-btn{transition:transform .2s cubic-bezier(.22,1,.36,1),box-shadow .2s ease}
+.crm-stg-chk{transition:border-color .2s ease,background-color .2s ease}
+.crm-stg-pick-info > *{animation:crmStgInfoIn .35s cubic-bezier(.22,1,.36,1)}
+@keyframes crmStgInfoIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.crm-stg-pick-info > *{animation:none}}
+@media (max-width:900px){.crm-stg-step2-grid,.crm-stg-pick{grid-template-columns:1fr}.crm-stg-pick-info{position:static}.crm-stg-auto-body{padding-left:14px}}
 .crm-stg-preview{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;background:var(--mac-fill)}
 .crm-stg-preview-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--mac-muted)}
 .crm-stg-preview-chip{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--mac-text)}
@@ -4079,6 +4205,12 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             </button>
             <button class="ribbon-btn-lg" id="rb-crm-add-dept">
               <i class="fa fa-building-user"></i>Add<br>Department
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-customers">
+              <i class="fa fa-users"></i>Customers
+            </button>
+            <button class="ribbon-btn-lg" id="rb-crm-report">
+              <i class="fa fa-file-invoice"></i>Report
             </button>
           </div>
           <div class="ribbon-group-label">Access</div>
@@ -11727,7 +11859,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <div class="crm-subnav-track" id="crm-subnav-track">
           <span class="crm-subnav-pill" id="crm-subnav-pill"></span>
           <button class="fin-subnav-btn active" data-crmsub="overview"><i class="fa fa-house"></i> Overview</button>
-          <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation</button>
+          <button class="fin-subnav-btn"         data-crmsub="relation"><i class="fa fa-handshake"></i> Relation<span class="crm-attn-dot" id="crm-relation-tab-dot" hidden></span></button>
           <button class="fin-subnav-btn" style="display:none" data-crmsub="contacts"><i class="fa fa-address-book"></i> Contact</button>
           <button class="fin-subnav-btn" style="display:none" data-crmsub="tasks"><i class="fa fa-list-check"></i> Task</button>
           <button class="fin-subnav-btn"         data-crmsub="dashboard"><i class="fa fa-chart-line"></i> Dashboard</button>
@@ -11764,7 +11896,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                 <div class="crm-guide-step-head"><span class="crm-guide-num">1</span><span class="crm-guide-step-icon"><i class="fa fa-sitemap"></i></span></div>
                 <div class="crm-guide-step-title">Set up</div>
                 <div class="crm-guide-step-who"><i class="fa fa-user-tie"></i> Admin · once</div>
-                <div class="crm-guide-step-desc">Departments come from <strong>HR</strong>. In Org Structure, link each department to a pipeline, pick the one <em>marketing intake</em> department, and set discount limits and follow-up days. Add the Stages leads move through, then give staff Permissions.</div>
+                <div class="crm-guide-step-desc">Add departments in <strong>CRM → Departments</strong> (they are shared with HR when you have it), and put people in them from <strong>Settings → Users</strong>. In Org Structure, link each department to a pipeline, pick the one <em>marketing intake</em> department, and set discount limits and follow-up days. Add the Stages leads move through, then give staff Permissions.</div>
                 <div class="crm-guide-links">
                   <button class="crm-guide-link" data-crm-guide-rb="rb-crm-org"><i class="fa fa-sitemap"></i> Org Structure</button>
                   <button class="crm-guide-link" data-crm-guide-rb="rb-crm-stages"><i class="fa fa-stairs"></i> Stages</button>
@@ -11906,11 +12038,21 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
         <!-- Detail (mirrors #pm-detail-view) -->
         <div id="crm-relation-detail" style="display:none;flex-direction:column;flex:1;overflow:hidden">
-          <div class="inv-detail-header">
+          <!-- One bar: back + name, the detail tabs, then badges/actions (saves a header row) -->
+          <div class="inv-detail-header crm-relation-bar">
             <button class="inv-back-btn" id="crm-relation-back-btn"><i class="fa fa-arrow-left"></i> Relations</button>
-            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>            <span class="inv-badges-inline" id="crm-relation-header-badges" style="display:none"></span>
-            <button class="svc-form-btn" id="crm-relation-hero-toggle" title="Hide relation details" style="margin-left:auto;padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-chevron-up"></i> <span>Hide details</span></button>
-            <button class="svc-form-btn" id="crm-relation-delete-btn" style="margin-left:8px;padding:5px 12px;font-size:12px;flex-shrink:0;color:#ef4444;border-color:#ef4444"><i class="fa fa-trash"></i> Delete Relation</button>
+            <span class="inv-detail-breadcrumb" id="crm-relation-breadcrumb">Relation</span>
+            <div class="inv-tabs" id="crm-relation-tabs">
+              <button class="inv-tab active" data-crmdtab="dashboard">Dashboard</button>
+              <button class="inv-tab" data-crmdtab="pipeline">Pipeline</button>
+              <button class="inv-tab" data-crmdtab="forms">Forms</button>
+              <button class="inv-tab" data-crmdtab="customdata" id="crm-tab-customdata" style="display:none">Custom Data</button>
+              <button class="inv-tab" data-crmdtab="contacts" id="crm-tab-relation-contacts" style="display:none">Contacts</button>
+              <button class="inv-tab" data-crmdtab="history"><i class="fa fa-clock-rotate-left" style="margin-right:5px"></i>History</button>
+            </div>
+            <span class="inv-badges-inline" id="crm-relation-header-badges" style="display:none"></span>
+            <button class="svc-form-btn" id="crm-relation-hero-toggle" title="Hide relation details" style="padding:5px 12px;font-size:12px;flex-shrink:0"><i class="fa fa-chevron-up"></i> <span>Hide details</span></button>
+            <button class="svc-form-btn" id="crm-relation-delete-btn" style="padding:5px 12px;font-size:12px;flex-shrink:0;color:#ef4444;border-color:#ef4444"><i class="fa fa-trash"></i> Delete Relation</button>
           </div>
 
           <div class="inv-hero inv-hero--collapsible" id="crm-relation-hero">
@@ -11920,15 +12062,6 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
               <div class="inv-hero-meta" id="crm-relation-hero-meta"></div>
               <div class="inv-hero-badges" id="crm-relation-hero-badges"></div>
             </div>
-          </div>
-
-          <div class="inv-tabs" id="crm-relation-tabs">
-            <button class="inv-tab active" data-crmdtab="dashboard">Dashboard</button>
-            <button class="inv-tab" data-crmdtab="pipeline">Pipeline</button>
-            <button class="inv-tab" data-crmdtab="forms">Forms</button>
-            <button class="inv-tab" data-crmdtab="customdata" id="crm-tab-customdata" style="display:none">Custom Data</button>
-            <button class="inv-tab" data-crmdtab="contacts" id="crm-tab-relation-contacts" style="display:none">Contacts</button>
-            <button class="inv-tab" data-crmdtab="history"><i class="fa fa-clock-rotate-left" style="margin-right:5px"></i>History</button>
           </div>
 
           <div class="inv-tab-body" id="crm-relation-tab-body">
@@ -11958,8 +12091,8 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                     <button class="crm-seg-btn" data-crm-view="list" title="List view"><i class="fa fa-list"></i> List</button>
                   </div>
                   <span class="crm-pipe-divider"></span>
-                  <button class="crm-btn" id="crm-relation-stages-btn"><i class="fa fa-sliders"></i> Manage Stages</button>
-                  <button class="crm-btn" id="crm-relation-import-btn" title="Import leads from a CSV or Excel file into this relation"><i class="fa fa-file-csv" style="color:#16a34a"></i> Import CSV</button>
+                  <button class="crm-chip crm-chip--icon" id="crm-relation-stages-btn" title="Manage Stages"><i class="fa fa-sliders"></i></button>
+                  <button class="crm-chip crm-chip--icon" id="crm-relation-import-btn" title="Import CSV — import leads from a CSV or Excel file into this relation"><i class="fa fa-file-csv" style="color:#16a34a"></i></button>
                   <button class="crm-btn crm-btn--primary" id="crm-relation-new-lead-btn"><i class="fa fa-plus"></i> New Lead</button>
                 </div>
               </div>
@@ -14644,6 +14777,61 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     </div>
   </div>
 
+  <!-- ── CRM: sales analysis report (ribbon → Report) — group the leads, preview, save as PDF / CSV ── -->
+  <div class="modal-overlay mac-overlay" id="crm-report-modal" style="display:none">
+    <div class="mac-window" style="width:1200px;max-width:96vw;height:86vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-file-invoice"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">Sales Analysis Report</div><div class="mac-title-sub" id="crm-report-summary"></div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-report-refresh" title="Refresh"><i class="fa fa-rotate"></i></button>
+          <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+          <button type="button" class="mac-close-btn" id="crm-report-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+
+      <div class="mac-split">
+        <aside class="mac-sidebar crm-rep-side" style="width:280px">
+          <div class="crm-rep-side-title">Report by</div>
+          <div class="crm-rep-groups" id="crm-report-groups"></div>
+          <div class="crm-rep-side-title">Filters</div>
+          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="crm-report-search" placeholder="Customer, email or phone…" autocomplete="off"></div>
+          <div class="crm-rep-filters">
+            <label class="mac-field">From<input id="crm-report-from" class="po-field-input" type="date"></label>
+            <label class="mac-field">To<input id="crm-report-to" class="po-field-input" type="date"></label>
+            <label class="mac-field">Department<select id="crm-report-department" class="po-field-input"><option value="">All departments</option></select></label>
+            <label class="mac-field">Division<select id="crm-report-division" class="po-field-input"><option value="">All divisions</option></select></label>
+            <label class="mac-field">Staff<select id="crm-report-user" class="po-field-input"><option value="">All staff</option></select></label>
+            <label class="mac-field">Source<select id="crm-report-source" class="po-field-input"><option value="">All sources</option></select></label>
+            <label class="mac-field">Status<select id="crm-report-status" class="po-field-input"><option value="">Any status</option></select></label>
+          </div>
+          <div class="crm-rep-run">
+            <button class="po-btn-ghost" id="crm-report-reset" title="Clear the filters"><i class="fa fa-eraser"></i> Reset</button>
+            <button class="po-btn-primary" id="crm-report-run"><i class="fa fa-play"></i> Generate</button>
+          </div>
+        </aside>
+
+        <section class="mac-detail">
+          <div class="crm-rep-card">
+            <table class="crm-audit-table crm-rep-table">
+              <thead id="crm-report-head"></thead>
+              <tbody id="crm-report-rows"></tbody>
+              <tfoot id="crm-report-foot"></tfoot>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div class="po-aim-footer mac-footer">
+        <button class="po-btn-ghost" id="crm-report-csv"><i class="fa fa-file-csv"></i> Download CSV</button>
+        <button class="po-btn-primary" id="crm-report-pdf"><i class="fa fa-file-pdf"></i> Download PDF</button>
+        <button class="po-btn-ghost" id="crm-report-close-btn" style="margin-left:auto">Close</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ── CRM: reason asked when a lead moves to a lost stage / a stage that needs a reason / on hold ── -->
   <div class="modal-overlay" id="crm-move-reason-modal" style="display:none;z-index:2050">
     <div class="po-aim-shell" style="width:420px;display:flex;flex-direction:column">
@@ -14957,7 +15145,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-user-shield"></i></span>
-          <div style="min-width:0"><div class="mac-title-main">CRM Permissions</div><div class="mac-title-sub">Choose what each user can see and do in the CRM</div></div>
+          <div style="min-width:0"><div class="mac-title-main">CRM Permissions</div><div class="mac-title-sub">Set defaults per role, then fine-tune individual users</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
@@ -14967,6 +15155,10 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
       <div class="mac-split">
         <aside class="mac-sidebar">
+          <div class="crm-perms-mode" id="crm-perms-mode">
+            <button type="button" data-perms-mode="roles"><i class="fa fa-shield-halved"></i> Roles</button>
+            <button type="button" data-perms-mode="users" class="active"><i class="fa fa-user"></i> Users</button>
+          </div>
           <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-perms-user-search" placeholder="Search users" autocomplete="off"></div>
           <div id="crm-perms-user-list" class="mac-side-list">
             <span class="mac-side-empty">Loading…</span>
@@ -14993,7 +15185,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-sitemap"></i></span>
-          <div style="min-width:0"><div class="mac-title-main">CRM Org Structure</div><div class="mac-title-sub">Departments come from HR Management</div></div>
+          <div style="min-width:0"><div class="mac-title-main">CRM Org Structure</div><div class="mac-title-sub">Departments are shared with HR Management</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
@@ -15120,125 +15312,180 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
   <!-- ── CRM: Add / Edit Stage (one form for both) ── -->
   <div class="modal-overlay mac-overlay" id="crm-stage-form-modal" style="display:none">
-    <div class="mac-window" style="width:min(860px,94vw);max-height:90vh">
+    <div class="mac-window" style="width:min(1180px,96vw);max-height:92vh">
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-plus" id="crm-stage-form-title-icon"></i></span>
-          <div style="min-width:0"><div class="mac-title-main" id="crm-stage-form-title">Add Stage</div><div class="mac-title-sub">Name it your way, choose what happens when a lead moves here</div></div>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-stage-form-title">Add Stage</div><div class="mac-title-sub">Pick a template, then name it your way and choose what happens when a lead moves here</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn" id="crm-stage-form-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
         </div>
       </div>
 
-      <div class="mac-scroll crm-stg-form">
+      <div class="crm-stg-steps" id="crm-stage-form-steps">
+        <button type="button" class="crm-stg-step" data-stage-step="1"><span>1</span> Template</button>
+        <i class="fa fa-chevron-right"></i>
+        <button type="button" class="crm-stg-step" data-stage-step="2"><span>2</span> Name &amp; look</button>
+        <i class="fa fa-chevron-right"></i>
+        <button type="button" class="crm-stg-step" data-stage-step="3"><span>3</span> Automatic actions <small>(optional)</small></button>
+      </div>
+
+      <div class="mac-scroll crm-stg-form" id="crm-stage-form-body" data-step="1">
         <div id="crm-stage-form-alert" class="svc-form-alert" style="display:none"></div>
         <input type="hidden" id="crm-stage-form-id">
         <input type="hidden" id="crm-stage-form-status">
 
-        <!-- Live preview of the board column header -->
-        <div class="crm-stg-preview">
-          <span class="crm-stg-preview-label">Preview</span>
-          <span class="crm-stg-preview-chip" id="crm-stage-form-preview"></span>
-          <span class="crm-stg-preview-counts" id="crm-stage-form-preview-counts"></span>
+        <!-- Step 1: the template — the standard status the stage counts as -->
+        <div class="crm-stg-step1">
+          <div class="crm-stg-step-intro">
+            <b>What kind of stage is this?</b>
+            <span>The template decides how the stage counts in reports and what the system does by itself. You give it your own name in the next step.</span>
+          </div>
+          <div class="crm-stg-pick">
+            <div class="crm-stg-pick-main">
+              <div class="crm-stg-status-grid" id="crm-stage-form-statuses"></div>
+
+              <!-- "Custom": none of the statuses fit, so the stage's behaviour is ticked here -->
+              <div class="crm-stg-acts" id="crm-stage-form-behaviour" style="display:none">
+                <div class="crm-stg-acts-head"><i class="fa fa-sliders" style="color:#7c3aed"></i> How this custom stage behaves
+                  <small>Tick what fits. Reports count an open custom stage as "In Process".</small></div>
+                <div class="crm-stg-act">
+                  <div class="crm-stg-act-title"><i class="fa fa-flag-checkered"></i> When a lead is here, the deal is</div>
+                  <div class="crm-stg-act-chips" id="crm-stage-form-outcome">
+                    <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="in_process" checked> Still open</label>
+                    <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="on_hold"> Paused — can resume to the stage it came from</label>
+                    <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="won"> Won — closes the lead as a win</label>
+                    <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="lost"> Lost — closes it and asks for a lost reason</label>
+                  </div>
+                </div>
+                <div class="crm-stg-act">
+                  <div class="crm-stg-act-title"><i class="fa fa-shield-halved"></i> Rules</div>
+                  <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-needs-approval"> Must be approved — when staff move a lead here, the department head approves first</label>
+                  <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-locks-lead"> Lock the lead — only the head or an admin can edit or move it while it is here</label>
+                  <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-no-skip"> No skipping — leads can enter only from the stage right before it (going back is fine)</label>
+                </div>
+                <div class="crm-stg-act">
+                  <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Checklist before leaving <span class="crm-stg-act-hint" style="font-weight:400">— every item must be ticked before the lead can move on</span></div>
+                  <textarea id="crm-stage-form-checklist" class="po-field-input" rows="3" placeholder="One item per line, e.g.&#10;Site measurements taken&#10;Photos uploaded&#10;Customer signed the visit form"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- What the picked template does -->
+            <aside class="crm-stg-pick-info" id="crm-stage-form-tpl-info"></aside>
+          </div>
         </div>
 
-        <div class="crm-stg-form-row">
-          <label class="mac-field" style="flex:1">Name *
-            <input type="text" id="crm-stage-form-name" class="po-field-input" placeholder="e.g. Site Visit, Demo Booked, Follow-up 2" maxlength="60">
-          </label>
-          <label class="mac-field" style="flex-shrink:0">Colour
-            <input type="color" id="crm-stage-form-color" value="#64748b" title="Stage colour" class="crm-stg-color">
-          </label>
-        </div>
-        <div class="crm-stg-swatches" id="crm-stage-form-swatches"></div>
+        <!-- Step 2: name, colour, icon and note -->
+        <div class="crm-stg-step2">
+          <!-- Live preview of the board column header -->
+          <div class="crm-stg-preview">
+            <span class="crm-stg-preview-label">Preview</span>
+            <span class="crm-stg-preview-chip" id="crm-stage-form-preview"></span>
+            <span class="crm-stg-preview-counts" id="crm-stage-form-preview-counts"></span>
+          </div>
 
-        <div class="mac-field">Icon
-          <div class="crm-stg-icons" id="crm-stage-form-icons"></div>
-        </div>
-
-        <label>Note for the team <span style="font-weight:400">(optional — shown under the stage name)</span>
-          <textarea id="crm-stage-form-desc" class="po-field-input" rows="2" maxlength="255" placeholder="When should a lead be moved here? e.g. &quot;Customer agreed to a site visit date&quot;"></textarea>
-        </label>
-
-        <div class="mac-field">Counts in reports as (standard status) *
-          <div class="crm-stg-status-grid" id="crm-stage-form-statuses"></div>
-        </div>
-
-        <!-- "Custom": none of the statuses fit, so the stage's behaviour is ticked here -->
-        <div class="crm-stg-acts" id="crm-stage-form-behaviour" style="display:none">
-          <div class="crm-stg-acts-head"><i class="fa fa-sliders" style="color:#7c3aed"></i> How this stage behaves
-            <small>Tick what fits. Reports count an open custom stage as "In Process".</small></div>
-          <div class="crm-stg-act">
-            <div class="crm-stg-act-title"><i class="fa fa-flag-checkered"></i> When a lead is here, the deal is</div>
-            <div class="crm-stg-act-chips" id="crm-stage-form-outcome">
-              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="in_process" checked> Still open</label>
-              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="on_hold"> Paused — can resume to the stage it came from</label>
-              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="won"> Won — closes the lead as a win</label>
-              <label class="crm-stg-chk"><input type="radio" name="crm-stage-outcome" value="lost"> Lost — closes it and asks for a lost reason</label>
+          <div class="crm-stg-step2-grid">
+            <div class="crm-stg-step2-col">
+              <label class="mac-field">Name *
+                <input type="text" id="crm-stage-form-name" class="po-field-input" placeholder="e.g. Site Visit, Demo Booked, Follow-up 2" maxlength="60">
+              </label>
+              <div class="mac-field">Colour
+                <div class="crm-stg-color-row">
+                  <div class="crm-stg-swatches" id="crm-stage-form-swatches"></div>
+                  <input type="color" id="crm-stage-form-color" value="#64748b" title="Pick any colour" class="crm-stg-color">
+                </div>
+              </div>
+              <label class="mac-field">Note for the team <span class="crm-stg-act-hint" style="font-weight:400">— optional, shown under the stage name</span>
+                <textarea id="crm-stage-form-desc" class="po-field-input" rows="4" maxlength="255" placeholder="When should a lead be moved here? e.g. &quot;Customer agreed to a site visit date&quot;"></textarea>
+              </label>
+            </div>
+            <div class="mac-field">Icon
+              <div class="crm-stg-icons" id="crm-stage-form-icons"></div>
             </div>
           </div>
-          <div class="crm-stg-act">
-            <div class="crm-stg-act-title"><i class="fa fa-shield-halved"></i> Rules</div>
-            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-needs-approval"> Must be approved — when staff move a lead here, the department head approves first</label>
-            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-locks-lead"> Lock the lead — only the head or an admin can edit or move it while it is here</label>
-            <label class="crm-stg-chk" style="align-self:flex-start"><input type="checkbox" id="crm-stage-form-no-skip"> No skipping — leads can enter only from the stage right before it (going back is fine)</label>
-          </div>
-          <div class="crm-stg-act">
-            <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Checklist before leaving <span class="crm-stg-act-hint" style="font-weight:400">— every item must be ticked before the lead can move on</span></div>
-            <textarea id="crm-stage-form-checklist" class="po-field-input" rows="3" placeholder="One item per line, e.g.&#10;Site measurements taken&#10;Photos uploaded&#10;Customer signed the visit form"></textarea>
-          </div>
         </div>
 
-        <!-- What this stage does when a lead enters it (LeadStage::entryRules) -->
-        <div class="crm-stg-acts">
-          <div class="crm-stg-acts-head"><i class="fa fa-bolt"></i> When a lead moves here
-            <small>Choose what this stage does. Leave everything off for a plain stage.</small></div>
-
-          <div class="crm-stg-act">
-            <div class="crm-stg-act-title"><i class="fa fa-list-check"></i> Ask the person moving it for</div>
-            <div class="crm-stg-act-chips">
-              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-reason"> Reason</label>
-              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="follow_up_at"> Follow-up date</label>
-              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="expected_close_date"> Expected close date</label>
-              <label class="crm-stg-chk"><input type="checkbox" data-stage-require="estimated_value"> Deal value</label>
-            </div>
-            <span id="crm-stage-form-reason-hint" class="crm-stg-act-hint"></span>
+        <!-- Step 3: what this stage does when a lead enters it (LeadStage::entryRules) -->
+        <div class="crm-stg-step3">
+          <div class="crm-stg-step-intro">
+            <b>What should happen automatically when a lead is moved into this stage?</b>
+            <span>All optional — switch on only what you need. Leave everything off for a plain stage.</span>
           </div>
 
-          <div class="crm-stg-act">
-            <label class="crm-stg-act-title"><input type="checkbox" id="crm-stage-form-task-on"> <i class="fa fa-calendar-plus"></i> Create a task for the lead owner</label>
-            <div class="crm-stg-act-body" id="crm-stage-form-task-body">
-              <input type="text" id="crm-stage-form-task-title" class="po-field-input" maxlength="255" placeholder="e.g. Confirm the site visit time with the customer">
+          <div class="crm-stg-auto">
+            <div class="crm-stg-auto-head">
+              <span class="crm-stg-behave-ico"><i class="fa fa-list-check"></i></span>
+              <span class="crm-stg-behave-text"><b>Ask for details</b><small>The person moving the lead must fill these in before the move is saved.</small></span>
+            </div>
+            <div class="crm-stg-auto-body">
+              <div class="crm-stg-act-chips">
+                <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-reason"> Reason</label>
+                <label class="crm-stg-chk"><input type="checkbox" data-stage-require="follow_up_at"> Follow-up date</label>
+                <label class="crm-stg-chk"><input type="checkbox" data-stage-require="expected_close_date"> Expected close date</label>
+                <label class="crm-stg-chk"><input type="checkbox" data-stage-require="estimated_value"> Deal value</label>
+              </div>
+              <span id="crm-stage-form-reason-hint" class="crm-stg-act-hint"></span>
+            </div>
+          </div>
+
+          <div class="crm-stg-auto">
+            <div class="crm-stg-auto-head">
+              <span class="crm-stg-behave-ico"><i class="fa fa-calendar-plus"></i></span>
+              <span class="crm-stg-behave-text"><b>Create a follow-up task</b><small>A task is added for the lead owner, due a set number of days later.</small></span>
+              <label class="psm-switch"><input type="checkbox" id="crm-stage-form-task-on" data-stage-auto="task"><span class="psm-switch-track"></span></label>
+            </div>
+            <div class="crm-stg-auto-body crm-stg-act-body" id="crm-stage-form-task-body">
+              <input type="text" id="crm-stage-form-task-title" class="po-field-input" maxlength="255" placeholder="Task title, e.g. Confirm the site visit time with the customer">
               <span class="crm-stg-act-inline">due in <input type="number" id="crm-stage-form-task-days" class="po-field-input" min="0" max="365" value="1"> day(s)</span>
             </div>
           </div>
 
-          <div class="crm-stg-act">
-            <div class="crm-stg-act-title"><i class="fa fa-bell"></i> Notify</div>
-            <div class="crm-stg-act-chips">
-              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-owner"> Lead owner</label>
-              <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-head"> Department head</label>
+          <div class="crm-stg-auto">
+            <div class="crm-stg-auto-head">
+              <span class="crm-stg-behave-ico"><i class="fa fa-bell"></i></span>
+              <span class="crm-stg-behave-text"><b>Send a notification</b><small>The people picked get a notification that the lead moved here.</small></span>
+              <label class="psm-switch"><input type="checkbox" id="crm-stage-form-notify-on" data-stage-auto="notify"><span class="psm-switch-track"></span></label>
             </div>
-            <div class="crm-stg-act-chips" id="crm-stage-form-notify-users"></div>
+            <div class="crm-stg-auto-body" id="crm-stage-form-notify-body">
+              <div class="crm-stg-act-chips">
+                <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-owner"> Lead owner</label>
+                <label class="crm-stg-chk"><input type="checkbox" id="crm-stage-form-notify-head"> Department head</label>
+              </div>
+              <div class="crm-stg-people-label" id="crm-stage-form-notify-users-label">Also notify these people</div>
+              <div class="crm-stg-people" id="crm-stage-form-notify-users"></div>
+            </div>
           </div>
 
-          <div class="crm-stg-act">
-            <div class="crm-stg-act-title"><i class="fa fa-user-plus"></i> Assign to</div>
-            <span class="crm-stg-act-hint">The people ticked are added to the lead. The current owner stays the owner — if the lead has none, the first one ticked becomes it.</span>
-            <div class="crm-stg-act-chips" id="crm-stage-form-assign-users"></div>
+          <div class="crm-stg-auto">
+            <div class="crm-stg-auto-head">
+              <span class="crm-stg-behave-ico"><i class="fa fa-user-plus"></i></span>
+              <span class="crm-stg-behave-text"><b>Add people to the lead</b><small>The people picked join the lead. The owner stays — if there is none, the first one picked becomes the owner.</small></span>
+              <label class="psm-switch"><input type="checkbox" id="crm-stage-form-assign-on" data-stage-auto="assign"><span class="psm-switch-track"></span></label>
+            </div>
+            <div class="crm-stg-auto-body" id="crm-stage-form-assign-body">
+              <div class="crm-stg-people" id="crm-stage-form-assign-users"></div>
+            </div>
           </div>
 
-          <div class="crm-stg-act-row">
-            <label class="crm-stg-act" style="flex:1"><span class="crm-stg-act-title"><i class="fa fa-stopwatch"></i> Flag leads stuck here longer than</span>
-              <span class="crm-stg-act-inline"><input type="number" id="crm-stage-form-max-days" class="po-field-input" min="0" max="365" placeholder="—"> day(s)</span>
-            </label>
+          <div class="crm-stg-auto">
+            <div class="crm-stg-auto-head">
+              <span class="crm-stg-behave-ico"><i class="fa fa-stopwatch"></i></span>
+              <span class="crm-stg-behave-text"><b>Flag leads that get stuck</b><small>A lead shows a "stuck" tag when it stays here too long.</small></span>
+              <label class="psm-switch"><input type="checkbox" id="crm-stage-form-maxdays-on" data-stage-auto="maxdays"><span class="psm-switch-track"></span></label>
+            </div>
+            <div class="crm-stg-auto-body" id="crm-stage-form-maxdays-body">
+              <span class="crm-stg-act-inline">Flag after <input type="number" id="crm-stage-form-max-days" class="po-field-input" min="1" max="365" placeholder="7"> day(s) in this stage</span>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="po-aim-footer mac-footer">
         <button class="po-btn-ghost" id="crm-stage-form-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+        <button class="po-btn-ghost" id="crm-stage-form-back"><i class="fa fa-arrow-left"></i> Back</button>
+        <button class="po-btn-primary" id="crm-stage-form-next">Next <i class="fa fa-arrow-right"></i></button>
         <button class="po-btn-primary" id="crm-stage-form-save"><i class="fa fa-check"></i> Add Stage</button>
       </div>
     </div>
@@ -15533,12 +15780,31 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <div style="font-size:11px;color:var(--text-muted);margin-top:3px">We'll email an invitation link. Existing Zeebroo users just accept it; new people set a password and get an account. They join once they accept.</div>
         </div>
         <div class="po-field">
+          <label class="po-field-label">Full Name</label>
+          <input type="text" id="um-add-name" class="po-field-input" placeholder="e.g. Hasitha Mendis" maxlength="255" autocomplete="off">
+        </div>
+        <div class="po-field">
           <label class="po-field-label">Role <span class="po-required">*</span></label>
           <select id="um-add-role" class="po-field-input">
             <option value="staff">Staff — limited access</option>
             <option value="manager">Manager — custom permissions</option>
             <option value="admin">Admin — full access</option>
           </select>
+        </div>
+        <div class="um-placement" id="um-add-placement">
+          <div class="po-field">
+            <label class="po-field-label">Department</label>
+            <select id="um-add-department" class="po-field-input"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Position</label>
+            <select id="um-add-position" class="po-field-input"></select>
+            <div class="um-new-position" id="um-add-new-position" style="display:none">
+              <input type="text" class="po-field-input" id="um-add-new-position-name" maxlength="255" placeholder="New position name">
+              <button type="button" class="po-btn-primary" id="um-add-new-position-save"><i class="fa fa-plus"></i> Add</button>
+            </div>
+          </div>
+          <div class="um-placement-warn" id="um-add-placement-warn" style="display:none"></div>
         </div>
         <div class="po-field" id="um-add-perms-wrap">
           <label class="po-field-label">Module Permissions</label>
@@ -15570,6 +15836,21 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <option value="manager">Manager — custom permissions</option>
             <option value="admin">Admin — full access</option>
           </select>
+        </div>
+        <div class="um-placement" id="um-edit-placement">
+          <div class="po-field">
+            <label class="po-field-label">Department</label>
+            <select id="um-edit-department" class="po-field-input"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Position</label>
+            <select id="um-edit-position" class="po-field-input"></select>
+            <div class="um-new-position" id="um-edit-new-position" style="display:none">
+              <input type="text" class="po-field-input" id="um-edit-new-position-name" maxlength="255" placeholder="New position name">
+              <button type="button" class="po-btn-primary" id="um-edit-new-position-save"><i class="fa fa-plus"></i> Add</button>
+            </div>
+          </div>
+          <div class="um-placement-warn" id="um-edit-placement-warn" style="display:none"></div>
         </div>
         <div class="po-field" id="um-edit-perms-wrap">
           <label class="po-field-label">Module Permissions</label>
@@ -19542,6 +19823,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <button class="psm-nav-item" data-tab="roles">
           <i class="fa fa-shield-halved"></i><span>Roles</span>
         </button>
+        <button class="psm-nav-item psm-nav-item--org-only" data-tab="org" style="display:none">
+          <i class="fa fa-sitemap"></i><span>Organisation</span>
+        </button>
         <button class="psm-nav-item psm-nav-item--hr-only" data-tab="hr" style="display:none">
           <i class="fa fa-people-group"></i><span>HR</span>
         </button>
@@ -20155,6 +20439,31 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <div id="psm-hr-brk-error" class="psm-hint" style="display:none;color:#ef4444"></div>
           </div>
         </div><!-- /psm-tab-hr -->
+
+        <!-- Organisation panel (CRM or HR): departments and positions, shared with HR Management -->
+        <div class="psm-panel" id="psm-tab-org" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-building-user"></i> Departments</div>
+            <p class="psm-hint" style="margin:0 0 12px">Departments your team works in. The CRM routes leads by department. Put people in a department from <strong>Users</strong>; choose its head and co-head in <strong>CRM → Departments</strong>.</p>
+            <div class="psm-org-add">
+              <input type="text" id="psm-org-dept-name" class="psm-input" maxlength="255" placeholder="e.g. Sales, Marketing">
+              <button class="psm-btn-save" id="psm-org-dept-add" style="width:auto;padding:6px 16px"><i class="fa fa-plus"></i> Add Department</button>
+            </div>
+            <div id="psm-org-dept-error" class="psm-hint" style="display:none;color:#ef4444"></div>
+            <div id="psm-org-dept-list"><div class="psm-hint">Loading…</div></div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-briefcase"></i> Positions</div>
+            <p class="psm-hint" style="margin:0 0 12px">Job titles such as Accountant or Sales Executive. A position is a person's job in the company — what they can do in the system comes from their <strong>Role</strong>.</p>
+            <div class="psm-org-add">
+              <input type="text" id="psm-org-pos-name" class="psm-input" maxlength="255" placeholder="e.g. Sales Executive">
+              <button class="psm-btn-save" id="psm-org-pos-add" style="width:auto;padding:6px 16px"><i class="fa fa-plus"></i> Add Position</button>
+            </div>
+            <div id="psm-org-pos-error" class="psm-hint" style="display:none;color:#ef4444"></div>
+            <div id="psm-org-pos-list"><div class="psm-hint">Loading…</div></div>
+          </div>
+        </div><!-- /psm-tab-org -->
 
         <!-- Counters panel -->
         <div class="psm-panel" id="psm-tab-counters" style="display:none">

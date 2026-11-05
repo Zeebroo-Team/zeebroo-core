@@ -22,6 +22,7 @@ use Modules\CRM\Models\Project;
 use Modules\CRM\Models\Task;
 use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
+use Modules\CRM\Services\CrmNotifier;
 use Modules\CRM\Services\CrmOrgService;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\CustomerProfileService;
@@ -34,6 +35,7 @@ use Modules\CRM\Services\LeadAuditService;
 use Modules\CRM\Services\LeadIntakeService;
 use Modules\CRM\Services\LeadCustomFieldService;
 use Modules\CRM\Services\LeadFormService;
+use Modules\CRM\Services\LeadQuotationService;
 use Modules\CRM\Services\LeadService;
 use Modules\CRM\Services\LeadSourceService;
 use Modules\CRM\Services\LeadStageMailTemplateService;
@@ -71,6 +73,7 @@ class PosCrmApiController extends Controller
         private readonly LeadScoreService            $scores,
         private readonly CustomStatusService         $customStatuses,
         private readonly StageMoveRequestService     $moveRequests,
+        private readonly CrmNotifier                 $notifier,
     ) {}
 
     private ?CrmAccess $crmAccess = null;
@@ -90,7 +93,18 @@ class PosCrmApiController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'description', 'status', 'department_id']));
 
+        // What waits on this user in each pipeline — the card's corner badge
+        $unread = $access->userId ? $this->notifier->unreadByProject($business, $access->userId) : [];
+        $due    = $this->followUps->dueForUserByProject($business, $access);
+
         foreach ($rows as $project) {
+            $project->attention = [
+                'unread'         => $unread[$project->id]['count'] ?? 0,
+                'follow_ups_due' => $due[$project->id]['due'] ?? 0,
+                'overdue'        => $due[$project->id]['overdue'] ?? 0,
+                'notifications'  => $unread[$project->id]['items'] ?? [],
+                'follow_ups'     => $due[$project->id]['items'] ?? [],
+            ];
             // Restricted users only count the leads in stages they can see
             $stageIds = $access->visibleStageIds($project->id);
             if ($stageIds !== null) {
@@ -182,10 +196,16 @@ class PosCrmApiController extends Controller
         $suggested = $this->scores->suggestFor($leads);
         // When each lead entered its stage, for the stage's "too long here" flag
         $enteredAt = app(StageEntryActionService::class)->enteredAt($leads);
+        // A deal's value: the accepted quotation total, otherwise the estimated value — same as the CRM dashboard
+        $acceptedTotals = app(LeadQuotationService::class)->acceptedTotals($leads->pluck('id')->map(fn ($id) => (int) $id)->all());
         // Moves waiting for the head's approval
         $pendingMoves = $this->moveRequests->pendingByLead($leads->pluck('id')->map(fn ($id) => (int) $id)->all());
+        // This user's unread notifications on each lead — the card's bell
+        $unread = $access->userId
+            ? $this->notifier->unreadByLead($business, $access->userId, $leads->pluck('id')->map(fn ($id) => (int) $id)->all())
+            : [];
 
-        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $workable, $sellPrices, $followUps, $suggested, $enteredAt, $pendingMoves) {
+        $leads = $leads->map(function ($lead) use ($customerEmails, $customerPhones, $access, $workable, $sellPrices, $followUps, $suggested, $enteredAt, $acceptedTotals, $pendingMoves, $unread) {
             $byEmail = $lead->email && $customerEmails->has(strtolower($lead->email));
             $byPhone = $lead->phone && $customerPhones->has($lead->phone);
             $lead->is_customer    = $lead->customer_id !== null || $byEmail || $byPhone;
@@ -198,7 +218,9 @@ class PosCrmApiController extends Controller
             $lead->follow_up       = $followUps[$lead->id] ?? null;
             $lead->suggested_score = $suggested[$lead->id] ?? null;
             $lead->stage_entered_at = $enteredAt[$lead->id] ?? null;
+            $lead->deal_value       = $acceptedTotals[$lead->id] ?? ($lead->estimated_value !== null ? (float) $lead->estimated_value : null);
             $lead->pending_move     = $pendingMoves[$lead->id] ?? null;
+            $lead->unread           = $unread[$lead->id] ?? null;
             $lead->can = [
                 'edit'       => isset($workable[$lead->id]) && $access->can('leads_edit'),
                 'move'       => isset($workable[$lead->id]) && $access->can('leads_move'),
@@ -226,7 +248,7 @@ class PosCrmApiController extends Controller
             $stageLeads = $groupedLeads->get($stage->id, collect());
             return $this->presentStage($stage) + [
                 'leads_count'  => $stageLeads->count(),
-                'value_total'  => (float) $stageLeads->sum('estimated_value'),
+                'value_total'  => (float) $stageLeads->sum('deal_value'),
                 'leads'        => $stageLeads->values(),
             ];
         });
@@ -1341,12 +1363,14 @@ class PosCrmApiController extends Controller
 
         // Block paths are numeric ("0", "1.2", …), so a 'source' key can't collide with one.
         $rules['source'] = ['nullable', Rule::in(array_keys(Lead::SOURCES))];
+        $rules['estimated_value'] = ['nullable', 'numeric', 'min:0', 'max:9999999999'];
 
         $data   = $request->validate($rules);
         $source = ($data['source'] ?? null) ?: Lead::SOURCE_MANUAL;
-        unset($data['source']);
+        $extra  = array_filter(['estimated_value' => $data['estimated_value'] ?? null], fn ($v) => $v !== null);
+        unset($data['source'], $data['estimated_value']);
 
-        $result = $this->forms->submit($form, $data, $source, $request->user()?->id);
+        $result = $this->forms->submit($form, $data, $source, $request->user()?->id, $extra);
 
         return $this->intakeResponse($request, $business, $result);
     }

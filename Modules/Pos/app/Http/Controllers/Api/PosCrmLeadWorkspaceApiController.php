@@ -16,6 +16,7 @@ use Modules\CRM\Models\Task;
 use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmAuditService;
+use Modules\CRM\Services\CrmNotifier;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadAttachmentService;
@@ -46,6 +47,7 @@ class PosCrmLeadWorkspaceApiController extends Controller
         private readonly TaskService $tasks,
         private readonly CrmAuditService $audit,
         private readonly LeadSummaryService $summaries,
+        private readonly CrmNotifier $notifier,
     ) {}
 
     /** GET crm/leads/{lead}/summary — the lead with its department heads and assignees' HR details. */
@@ -81,8 +83,28 @@ class PosCrmLeadWorkspaceApiController extends Controller
                     'follow_ups' => $lead->followUps()->pending()->count(),
                 ],
                 'follow_ups_overdue' => $lead->followUps()->overdue((int) $lead->business_id)->count(),
+                // This user's unread notifications on the lead by type — the red dots on the tabs
+                'unread_types'       => $access->userId
+                    ? ($this->notifier->unreadByLead($business, $access->userId, [(int) $lead->id])[$lead->id]['types'] ?? [])
+                    : [],
             ],
         ]);
+    }
+
+    /** POST crm/leads/{lead}/notifications/read — clears the user's notifications on the lead (optionally only `types`). */
+    public function markNotificationsRead(Request $request, int $leadId): JsonResponse
+    {
+        [$business, $access, $lead] = $this->context($request, $leadId);
+        $validated = $request->validate([
+            'types'   => ['nullable', 'array'],
+            'types.*' => ['string', 'max:64'],
+        ]);
+
+        $marked = $access->userId
+            ? $this->notifier->markLeadRead($business, $access->userId, (int) $lead->id, $validated['types'] ?? null)
+            : 0;
+
+        return response()->json(['data' => ['marked' => $marked]]);
     }
 
     // ── Assignees ────────────────────────────────────────────────────────

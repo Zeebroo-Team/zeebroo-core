@@ -66,6 +66,71 @@ class CrmReportExportService
         }, $this->fileName($report, 'xlsx'), ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
     }
 
+    /** The sales analysis report (CrmSalesAnalysisService::report) as a PDF table; landscape when it is wide. */
+    public function salesAnalysisPdf(Business $business, array $report): Response
+    {
+        $binary = Pdf::loadView('crm::reports.sales-analysis-pdf', [
+            'business' => $business,
+            'report'   => $report,
+            'filters'  => $this->salesFilterLine($report),
+            'cell'     => fn (array $column, $value) => $this->formatCell($column['type'], $value),
+        ])->setPaper('a4', count($report['columns']) > 7 ? 'landscape' : 'portrait')->output();
+
+        return response($binary, 200, [
+            'Content-Type'        => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="' . $this->salesFileName($report, 'pdf') . '"',
+        ]);
+    }
+
+    /** The same table as CSV: raw numbers, so it opens straight into a spreadsheet for further analysis. */
+    public function salesAnalysisCsv(array $report): StreamedResponse
+    {
+        return response()->streamDownload(function () use ($report) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel shows non-ASCII names correctly
+            fputcsv($out, ['CRM sales analysis — by ' . strtolower($report['group_label'])]);
+            fputcsv($out, [$this->salesFilterLine($report)]);
+            fputcsv($out, []);
+            fputcsv($out, array_column($report['columns'], 'label'));
+            foreach ($report['rows'] as $row) {
+                fputcsv($out, array_map(fn ($c) => $row[$c['key']] ?? '', $report['columns']));
+            }
+            fputcsv($out, array_map(fn ($c, $i) => $i === 0 ? 'Total' : ($report['totals'][$c['key']] ?? ''), $report['columns'], array_keys($report['columns'])));
+            fclose($out);
+        }, $this->salesFileName($report, 'csv'), ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    public function salesFilterLine(array $report): string
+    {
+        $f = $report['filters'];
+
+        return implode(' · ', array_filter([
+            $this->filterLine($report),
+            $f['status'] ? 'Status: ' . (collect($report['options']['statuses'])->firstWhere('key', $f['status'])['label'] ?? $f['status']) : null,
+            $f['search'] ? 'Search: "' . $f['search'] . '"' : null,
+        ]));
+    }
+
+    public function formatCell(string $type, $value): string
+    {
+        if ($value === null || $value === '') {
+            return $type === 'text' ? '' : '—';
+        }
+
+        return match ($type) {
+            'money' => number_format((float) $value, 2),
+            'qty'   => rtrim(rtrim(number_format((float) $value, 3), '0'), '.'),
+            'pct'   => $value . '%',
+            'int'   => number_format((int) $value),
+            default => (string) $value,
+        };
+    }
+
+    private function salesFileName(array $report, string $ext): string
+    {
+        return 'crm-sales-by-' . str_replace('_', '-', $report['group_by']) . '-' . $report['filters']['from'] . '-to-' . $report['filters']['to'] . '.' . $ext;
+    }
+
     /** @return list<array{0: string, 1: string|int|float}> label, value */
     public function kpiRows(array $report): array
     {
