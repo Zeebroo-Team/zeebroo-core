@@ -177,6 +177,11 @@ class ApiEndpoints {
       '/v1/pos/customers/$id/credit-sales';
   static String customerCreditPayments(int id) =>
       '/v1/pos/customers/$id/credit-payments';
+
+  // Customer cheques taken at checkout: claim deposits, bounce records a return
+  static const String saleCheques = '/v1/pos/sale-cheques';
+  static String saleChequeClaim(int id) => '/v1/pos/sale-cheques/$id/claim';
+  static String saleChequeBounce(int id) => '/v1/pos/sale-cheques/$id/bounce';
   static const String customerCategories = '/v1/pos/customer-categories';
   static const String couponLookup = '/v1/pos/coupons/lookup';
   static const String coupons = '/v1/pos/coupons';

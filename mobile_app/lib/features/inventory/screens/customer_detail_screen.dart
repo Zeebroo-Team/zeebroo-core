@@ -20,7 +20,7 @@ class CustomerDetailScreen extends StatefulWidget {
   State<CustomerDetailScreen> createState() => _CustomerDetailScreenState();
 }
 
-enum _Section { sales, credit }
+enum _Section { sales, credit, cheques }
 
 class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   final _amountController = TextEditingController();
@@ -30,6 +30,9 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
   Map<String, dynamic>? _customer;
   List<Map<String, dynamic>> _creditSales = [];
   List<Map<String, dynamic>> _payments = [];
+  List<Map<String, dynamic>> _cheques = [];
+  Map<String, dynamic> _chequeSummary = {};
+  String? _chequesError;
   _Section _section = _Section.sales;
   String _paymentMethod = 'cash';
   bool _paying = false;
@@ -69,10 +72,31 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
       final credit = results[1].data;
       _creditSales = _rows(credit is Map ? credit['data'] : null);
       _payments = _rows(credit is Map ? credit['payments'] : null);
+      await _loadCheques();
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Cheques are a separate permission area: a failure here only affects
+  /// the Cheques section, not the whole screen.
+  Future<void> _loadCheques() async {
+    try {
+      final res = await ApiClient.instance.get(
+        ApiEndpoints.saleCheques,
+        params: {'customer_id': widget.customerId, 'per_page': 100},
+        bypassCache: true,
+      );
+      final body = res.data;
+      _cheques = _rows(body is Map ? body['data'] : null);
+      _chequeSummary = body is Map && body['summary'] is Map
+          ? Map<String, dynamic>.from(body['summary'] as Map)
+          : {};
+      _chequesError = null;
+    } catch (e) {
+      _chequesError = apiErrorMessage(e);
     }
   }
 
@@ -216,26 +240,21 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
           _buildInfoCard(),
           const SizedBox(height: 18),
           SegmentedButton<_Section>(
+            showSelectedIcon: false,
             segments: const [
-              ButtonSegment(
-                value: _Section.sales,
-                label: Text('Recent sales'),
-                icon: Icon(Icons.history_rounded),
-              ),
-              ButtonSegment(
-                value: _Section.credit,
-                label: Text('Credit / Due'),
-                icon: Icon(Icons.payments_outlined),
-              ),
+              ButtonSegment(value: _Section.sales, label: Text('Sales')),
+              ButtonSegment(value: _Section.credit, label: Text('Credit')),
+              ButtonSegment(value: _Section.cheques, label: Text('Cheques')),
             ],
             selected: {_section},
             onSelectionChanged: (s) => setState(() => _section = s.first),
           ),
           const SizedBox(height: 16),
-          if (_section == _Section.sales)
-            ..._buildRecentSales()
-          else
-            ..._buildCredit(),
+          ...switch (_section) {
+            _Section.sales => _buildRecentSales(),
+            _Section.credit => _buildCredit(),
+            _Section.cheques => _buildCheques(),
+          },
         ],
       ),
     );
@@ -472,6 +491,497 @@ class _CustomerDetailScreenState extends State<CustomerDetailScreen> {
           ),
       ],
     ];
+  }
+
+  List<Widget> _buildCheques() {
+    if (_chequesError != null && _cheques.isEmpty) {
+      return [_empty(_chequesError!)];
+    }
+    final s = _chequeSummary;
+    int count(String key) => (s[key] as num?)?.toInt() ?? 0;
+    return [
+      Row(
+        children: [
+          _stat(
+            'Pending (${count('pending_count')})',
+            formatMoney(_num(s['pending_total'])),
+            const Color(0xFFC2410C),
+            const Color(0xFFFFF7ED),
+          ),
+          const SizedBox(width: 8),
+          _stat(
+            'Claimed (${count('cleared_count')})',
+            formatMoney(_num(s['cleared_total'])),
+            AppColors.success,
+            const Color(0xFFF0FDF4),
+          ),
+          const SizedBox(width: 8),
+          _stat(
+            'Bounced (${count('bounced_count')})',
+            formatMoney(_num(s['bounced_total'])),
+            AppColors.textDark,
+            const Color(0xFFF3F4F6),
+          ),
+        ],
+      ),
+      const SizedBox(height: 14),
+      if (_cheques.isEmpty) _empty('No cheques from this customer.'),
+      for (final c in _cheques) _chequeRow(c),
+    ];
+  }
+
+  Widget _chequePill(Map<String, dynamic> c) => switch (c['status']) {
+    'cleared' => _pill('Claimed', AppColors.success, const Color(0xFFF0FDF4)),
+    'bounced' => _pill('Bounced', AppColors.error, const Color(0xFFFEF2F2)),
+    'cancelled' => _pill(
+      'Cancelled',
+      AppColors.textMuted,
+      const Color(0xFFF3F4F6),
+    ),
+    _ when c['is_due'] == true => _pill(
+      'Due to claim',
+      AppColors.primaryDk,
+      AppColors.primaryLt,
+    ),
+    _ => _pill('Pending', const Color(0xFFC2410C), const Color(0xFFFFF7ED)),
+  };
+
+  Widget _chequeRow(Map<String, dynamic> c) {
+    final bank = c['bank_name']?.toString().trim() ?? '';
+    final claimable = c['is_claimable'] == true;
+    final pending = c['status'] == 'pending';
+    final detail = c['status'] == 'cleared'
+        ? [
+            if (c['deposit_account'] is Map)
+              'Into ${(c['deposit_account'] as Map)['label']}',
+            if (c['claimed_at'] != null)
+              'on ${formatDate(c['claimed_at']?.toString())}',
+          ].join(' ')
+        : c['status'] == 'bounced'
+        ? (c['bounce_reason']?.toString() ?? '')
+        : '';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _card(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '#${c['cheque_number'] ?? ''}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ),
+                _chequePill(c),
+                const SizedBox(width: 8),
+                Text(
+                  formatMoney(_num(c['amount'])),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            Text(
+              [
+                c['sale_number']?.toString() ?? '',
+                'Dated ${formatDate(c['cheque_date']?.toString())}',
+                if (bank.isNotEmpty) bank,
+              ].where((t) => t.isNotEmpty).join(' · '),
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            if (detail.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(
+                detail,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: c['status'] == 'bounced'
+                      ? AppColors.error
+                      : AppColors.textMuted,
+                ),
+              ),
+            ],
+            if (claimable) ...[
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _claimCheque(c),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.success,
+                        foregroundColor: Colors.white,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                      icon: const Icon(Icons.account_balance_rounded, size: 16),
+                      label: const Text('Claim'),
+                    ),
+                  ),
+                  if (pending) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => _bounceCheque(c),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: const BorderSide(color: AppColors.error),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        icon: const Icon(Icons.block_rounded, size: 16),
+                        label: const Text('Bounced'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Customer, bill, bank, date and amount — the top of both cheque dialogs.
+  Widget _chequeSummaryBox(Map<String, dynamic> c) {
+    Widget line(String label, String value, {bool strong = false}) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              color: strong ? AppColors.textDark : AppColors.textMuted,
+              fontWeight: strong ? FontWeight.w700 : FontWeight.w400,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: strong ? 15 : 13,
+              fontWeight: FontWeight.w700,
+              color: strong ? AppColors.primary : AppColors.textDark,
+            ),
+          ),
+        ],
+      ),
+    );
+    final bank = c['bank_name']?.toString().trim() ?? '';
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          line('Customer', _customer?['name']?.toString() ?? '—'),
+          line('Bill', c['sale_number']?.toString() ?? '—'),
+          line('Bank', bank.isEmpty ? '—' : bank),
+          line('Cheque date', formatDate(c['cheque_date']?.toString())),
+          const Divider(height: 14),
+          line(
+            'Amount',
+            'LKR ${formatMoney(_num(c['amount']))}',
+            strong: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _claimCheque(Map<String, dynamic> cheque) async {
+    List<Map<String, dynamic>>? accounts;
+    String? loadError;
+    int? accountId;
+    final noteCtrl = TextEditingController();
+    var busy = false;
+    var loadStarted = false;
+    String? error;
+
+    final claimed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          if (!loadStarted) {
+            loadStarted = true;
+            ApiClient.instance
+                .get(ApiEndpoints.accounts, bypassCache: true)
+                .then((res) {
+                  final body = res.data;
+                  accounts = _rows(body is Map ? body['data'] : body);
+                  accountId = accounts!.isEmpty
+                      ? null
+                      : (accounts!.first['id'] as num).toInt();
+                })
+                .catchError((Object e) {
+                  loadError = apiErrorMessage(e);
+                })
+                .whenComplete(() {
+                  if (ctx.mounted) setDialog(() {});
+                });
+          }
+
+          Future<void> submit() async {
+            if (accountId == null) {
+              setDialog(() => error = 'Choose the account to deposit into.');
+              return;
+            }
+            setDialog(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              final res = await ApiClient.instance.post(
+                ApiEndpoints.saleChequeClaim((cheque['id'] as num).toInt()),
+                data: {
+                  'deposit_account_id': accountId,
+                  if (noteCtrl.text.trim().isNotEmpty)
+                    'notes': noteCtrl.text.trim(),
+                },
+              );
+              final body = res.data;
+              _snack(
+                body is Map && body['message'] is String
+                    ? body['message'] as String
+                    : 'Cheque claimed.',
+              );
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            } catch (e) {
+              setDialog(() {
+                busy = false;
+                error = apiErrorMessage(e);
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: Text('Claim cheque #${cheque['cheque_number']}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _chequeSummaryBox(cheque),
+                  const SizedBox(height: 14),
+                  if (loadError != null)
+                    Text(
+                      loadError!,
+                      style: const TextStyle(color: AppColors.error),
+                    )
+                  else if (accounts == null)
+                    const Center(child: CircularProgressIndicator())
+                  else if (accounts!.isEmpty)
+                    const Text(
+                      'Add an account first (Home → Accounts) to deposit into.',
+                      style: TextStyle(color: AppColors.error),
+                    )
+                  else
+                    DropdownButtonFormField<int>(
+                      initialValue: accountId,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Deposit into account *',
+                      ),
+                      items: [
+                        for (final a in accounts!)
+                          DropdownMenuItem(
+                            value: (a['id'] as num).toInt(),
+                            child: Text(
+                              [
+                                a['account_name'],
+                                if ((a['bank_name']?.toString() ?? '')
+                                    .isNotEmpty)
+                                  a['bank_name'],
+                              ].join(' · '),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                      ],
+                      onChanged: busy
+                          ? null
+                          : (v) => setDialog(() => accountId = v),
+                    ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: noteCtrl,
+                    enabled: !busy,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Note (optional)',
+                      hintText: 'e.g. Deposited at BOC Kandy branch',
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      error!,
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                onPressed: busy || accounts == null || accounts!.isEmpty
+                    ? null
+                    : submit,
+                icon: const Icon(Icons.account_balance_rounded, size: 16),
+                label: const Text('Claim cheque'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    noteCtrl.dispose();
+    if (claimed == true) {
+      _changed = true;
+      await _load();
+    }
+  }
+
+  Future<void> _bounceCheque(Map<String, dynamic> cheque) async {
+    final reasonCtrl = TextEditingController();
+    var busy = false;
+    String? error;
+
+    final bounced = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          Future<void> submit() async {
+            if (reasonCtrl.text.trim().isEmpty) {
+              setDialog(() => error = 'Say why the cheque bounced.');
+              return;
+            }
+            setDialog(() {
+              busy = true;
+              error = null;
+            });
+            try {
+              final res = await ApiClient.instance.post(
+                ApiEndpoints.saleChequeBounce((cheque['id'] as num).toInt()),
+                data: {'reason': reasonCtrl.text.trim()},
+              );
+              final body = res.data;
+              _snack(
+                body is Map && body['message'] is String
+                    ? body['message'] as String
+                    : 'Cheque marked as bounced.',
+              );
+              if (ctx.mounted) Navigator.pop(ctx, true);
+            } catch (e) {
+              setDialog(() {
+                busy = false;
+                error = apiErrorMessage(e);
+              });
+            }
+          }
+
+          return AlertDialog(
+            title: Text('Bounced cheque #${cheque['cheque_number']}'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _chequeSummaryBox(cheque),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF7ED),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFFED7AA)),
+                    ),
+                    child: const Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.warning_amber_rounded,
+                          size: 18,
+                          color: Color(0xFFC2410C),
+                        ),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Mark this cheque as returned unpaid by the bank. '
+                            'You can still claim it later if the customer\'s '
+                            'bank pays it on re-presentation.',
+                            style: TextStyle(fontSize: 12.5),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: reasonCtrl,
+                    enabled: !busy,
+                    autofocus: true,
+                    maxLength: 255,
+                    decoration: const InputDecoration(
+                      labelText: 'Why did it bounce? *',
+                      hintText: 'e.g. Insufficient funds',
+                      counterText: '',
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      error!,
+                      style: const TextStyle(
+                        color: AppColors.error,
+                        fontSize: 12.5,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(ctx, false),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton.icon(
+                onPressed: busy ? null : submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                  foregroundColor: Colors.white,
+                ),
+                icon: const Icon(Icons.block_rounded, size: 16),
+                label: const Text('Mark bounced'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    reasonCtrl.dispose();
+    if (bounced == true) {
+      _changed = true;
+      await _load();
+    }
   }
 
   Widget _buildPaymentCard() => _card(
