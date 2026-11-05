@@ -65397,14 +65397,20 @@ async function submitDsCreate() {
     const n = d.employees_count || 0;
     const t = d.employment_types || {};
     const employees = d.employees || [];
-    // Head / co-head pickers: any member of the department, never the same person twice
-    const lead = (role, label, current) => `<div class="mac-row">
+    // Head / co-head pickers: any member of the department, searchable by name or email
+    const lead = (role, label, current) => {
+      const cur = employees.find(e => e.id === current);
+      return `<div class="mac-row">
         <div class="mac-row-label">${label}</div>
-        <select class="po-field-input" id="crm-dept-${role}" style="width:280px"${employees.length ? '' : ' disabled'}>
-          <option value="">— Not assigned —</option>
-          ${employees.map(e => `<option value="${e.id}"${e.id === current ? ' selected' : ''}>${escHtml(e.name || '—')}${e.job_title ? ' · ' + escHtml(e.job_title) : ''}</option>`).join('')}
-        </select>
+        <div class="cat-combo" style="width:280px">
+          <input type="hidden" id="crm-dept-${role}" value="${cur ? cur.id : ''}">
+          <input type="text" class="po-field-input" id="crm-dept-${role}-input" style="width:100%" autocomplete="off"
+            placeholder="${employees.length ? 'Search name or email…' : 'No one in this department'}"
+            value="${cur ? escHtml(cur.name || '') : ''}"${employees.length ? '' : ' disabled'}>
+          <div class="cat-combo-list" id="crm-dept-${role}-list" style="display:none"></div>
+        </div>
       </div>`;
+    };
 
     $('#crm-dept-body').innerHTML = `
       <div class="mac-hero">
@@ -65457,6 +65463,41 @@ async function submitDsCreate() {
           </div>
         </div>
       </div>`;
+    ['head', 'co_head'].forEach(role => _crmWireLeadCombo(role, employees));
+  }
+
+  // Leader combobox: filters department members by name, email, employee ID or job title
+  function _crmWireLeadCombo(role, employees) {
+    const input = $(`#crm-dept-${role}-input`), hidden = $(`#crm-dept-${role}`), list = $(`#crm-dept-${role}-list`);
+    if (!input || !hidden || !list) return;
+    const render = filter => {
+      const q = (filter || '').trim().toLowerCase();
+      const items = employees.filter(e => !q || [e.name, e.email, e.employee_id, e.job_title]
+        .some(v => v && String(v).toLowerCase().includes(q)));
+      list.innerHTML = `<div class="cat-combo-item" data-id="" data-name="">— Not assigned —</div>`
+        + items.map(e => `<div class="cat-combo-item${String(e.id) === hidden.value ? ' active' : ''}" data-id="${e.id}" data-name="${escHtml(e.name || '')}">
+            ${escHtml(e.name || '—')}${e.job_title ? ' · ' + escHtml(e.job_title) : ''}
+            ${e.email ? `<div style="font-size:11px;opacity:.7">${escHtml(e.email)}</div>` : ''}
+          </div>`).join('')
+        + (!items.length && q ? '<div class="cat-combo-empty">No matching people</div>' : '');
+      list.style.display = '';
+    };
+    list.addEventListener('mousedown', ev => {
+      const item = ev.target.closest('.cat-combo-item');
+      if (!item) return;
+      ev.preventDefault();
+      hidden.value = item.dataset.id;
+      input.value = item.dataset.name || '';
+      list.style.display = 'none';
+    });
+    input.addEventListener('focus', () => { input.select(); render(''); });
+    input.addEventListener('input', () => render(input.value));
+    // Leaving the field without picking restores the current choice
+    input.addEventListener('blur', () => setTimeout(() => {
+      list.style.display = 'none';
+      input.value = employees.find(e => String(e.id) === hidden.value)?.name || '';
+    }, 150));
+    input.addEventListener('keydown', e => { if (e.key === 'Escape') { list.style.display = 'none'; input.blur(); } });
   }
 
   async function _crmCreateDept(btn) {
