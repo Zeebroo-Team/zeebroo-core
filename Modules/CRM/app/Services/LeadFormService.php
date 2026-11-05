@@ -298,12 +298,15 @@ class LeadFormService
      *
      * @param  array<string, string>  $input  keyed by block path (see LeadForm::fieldBlocksWithPaths())
      */
-    public function submit(LeadForm $form, array $input, string $source = 'web_form', ?int $userId = null): IntakeResult
+    /**
+     * @param  array<string, mixed>  $extra  lead fields staff enter beside the form's own blocks (e.g. estimated_value)
+     */
+    public function submit(LeadForm $form, array $input, string $source = 'web_form', ?int $userId = null, array $extra = []): IntakeResult
     {
         $mapped = $form->mapPathedInputsToLeadData($input);
         $name   = $mapped['core']['name'] ?: ($mapped['first_text'] ?: 'Website inquiry');
 
-        return $this->intake->capture([
+        return $this->intake->capture($extra + [
             'form_id'       => $form->id,
             'name'          => $name,
             'company'       => $mapped['core']['company'],

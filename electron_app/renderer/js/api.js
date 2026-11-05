@@ -707,6 +707,7 @@ const API = (() => {
     crmLeadWorkspace:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/workspace`),
     crmLeadAssignees:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/assignees`),
     crmLeadSummary:           (leadId)                 => request('GET',    `/crm/leads/${leadId}/summary`),
+    crmLeadNotificationsRead: (leadId, types = null)   => request('POST',   `/crm/leads/${leadId}/notifications/read`, { types }),
     crmSyncLeadAssignees:     (leadId, body)           => request('PUT',    `/crm/leads/${leadId}/assignees`, body),
     crmAddLeadAssignees:      (leadId, body)           => request('POST',   `/crm/leads/${leadId}/assignees`, body),
     crmRemoveLeadAssignee:    (leadId, userId)         => request('DELETE', `/crm/leads/${leadId}/assignees/${userId}`),

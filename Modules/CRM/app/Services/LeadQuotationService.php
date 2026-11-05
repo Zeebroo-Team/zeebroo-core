@@ -39,6 +39,28 @@ class LeadQuotationService
             ->get();
     }
 
+    /**
+     * Each lead's accepted quotation total (the latest accepted one wins over older revisions),
+     * keyed by lead id. Leads with no accepted quotation are left out.
+     *
+     * @param  list<int>  $leadIds
+     * @return array<int, float>
+     */
+    public function acceptedTotals(array $leadIds): array
+    {
+        if ($leadIds === []) {
+            return [];
+        }
+
+        return Quotation::query()
+            ->whereIn('lead_id', $leadIds)
+            ->where('status', Quotation::STATUS_ACCEPTED)
+            ->orderBy('id')
+            ->get(['lead_id', 'total'])
+            ->mapWithKeys(fn (Quotation $q) => [(int) $q->lead_id => (float) $q->total])
+            ->all();
+    }
+
     public function quotationForLead(Lead $lead, int $quotationId): Quotation
     {
         return Quotation::query()

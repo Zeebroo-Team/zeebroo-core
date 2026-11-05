@@ -92,6 +92,96 @@ class CrmNotifier
         return $recipients;
     }
 
+    /**
+     * The user's unread, not dismissed CRM notifications per pipeline, for the relation cards:
+     * the count and the newest few to preview. Grouped in PHP because the project id lives in
+     * the JSON payload.
+     *
+     * @return array<int, array{count: int, items: array<int, array<string, mixed>>}> project id => unread
+     */
+    public function unreadByProject(Business $business, int $userId, int $preview = 5): array
+    {
+        return PosNotification::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->where('type', 'like', 'crm_%')
+            ->unread()
+            ->notDismissed()
+            ->latest()
+            ->get(['id', 'type', 'title', 'message', 'payload', 'created_at'])
+            ->toBase()
+            ->groupBy(fn (PosNotification $n) => (int) ($n->payload['project_id'] ?? 0))
+            ->except([0])
+            ->map(fn ($rows) => [
+                'count' => $rows->count(),
+                'items' => $rows->take($preview)->map(fn (PosNotification $n) => [
+                    'id'         => $n->id,
+                    'type'       => $n->type,
+                    'title'      => $n->title,
+                    'message'    => $n->message,
+                    'lead_id'    => (int) ($n->payload['lead_id'] ?? 0) ?: null,
+                    'created_at' => $n->created_at?->toIso8601String(),
+                ])->values()->all(),
+            ])
+            ->all();
+    }
+
+    /**
+     * The user's unread, not dismissed CRM notifications per lead, for the board cards.
+     *
+     * @param  int[]  $leadIds
+     * @return array<int, array{count: int, titles: string[], types: array<string, int>}> lead id => unread
+     */
+    public function unreadByLead(Business $business, int $userId, array $leadIds, int $preview = 5): array
+    {
+        if ($leadIds === []) {
+            return [];
+        }
+        $wanted = array_flip($leadIds);
+
+        return $this->unreadForLeads($business, $userId)
+            ->filter(fn ($rows, $leadId) => isset($wanted[$leadId]))
+            ->map(fn ($rows) => [
+                'count'  => $rows->count(),
+                'titles' => $rows->take($preview)->pluck('title')->values()->all(),
+                // Which part of the lead each is about — the lead window dots its tabs from this
+                'types'  => $rows->countBy('type')->all(),
+            ])
+            ->all();
+    }
+
+    /**
+     * Mark the user's unread notifications on one lead as read — all of them, or only the given
+     * types (the lead window clears a tab's notifications when that tab is opened).
+     *
+     * @param  string[]|null  $types
+     * @return int how many were marked
+     */
+    public function markLeadRead(Business $business, int $userId, int $leadId, ?array $types = null): int
+    {
+        $ids = $this->unreadForLeads($business, $userId)
+            ->get($leadId, collect())
+            ->when($types !== null, fn ($rows) => $rows->whereIn('type', $types))
+            ->pluck('id');
+
+        return $ids->isEmpty() ? 0 : PosNotification::query()->whereIn('id', $ids)->update(['read_at' => now()]);
+    }
+
+    /** The user's unread CRM notifications grouped by lead id (it lives in the JSON payload), newest first. */
+    private function unreadForLeads(Business $business, int $userId): \Illuminate\Support\Collection
+    {
+        return PosNotification::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->where('type', 'like', 'crm_%')
+            ->unread()
+            ->notDismissed()
+            ->latest()
+            ->get(['id', 'type', 'title', 'payload'])
+            ->toBase()
+            ->groupBy(fn (PosNotification $n) => (int) ($n->payload['lead_id'] ?? 0));
+    }
+
     // ── Recipients ───────────────────────────────────────────────────────
 
     /** Marketing: the crm_marketing role plus the staff of the marketing intake department. @return int[] */

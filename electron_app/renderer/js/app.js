@@ -57860,7 +57860,21 @@ async function submitDsCreate() {
     const res = await API.crmProjects();
     if (res.status !== 200) return [];
     _crmProjects = res.body?.data || [];
+    _crmSyncRelationTabDot();
     return _crmProjects;
+  }
+
+  // Pulsing dot on the Relation tab while any pipeline has unread notifications or follow-ups due
+  function _crmSyncRelationTabDot() {
+    const dot = $('#crm-relation-tab-dot');
+    if (!dot) return;
+    const unread = _crmProjects.reduce((s, p) => s + (p.attention?.unread || 0), 0);
+    const due    = _crmProjects.reduce((s, p) => s + (p.attention?.follow_ups_due || 0), 0);
+    dot.hidden = !unread && !due;
+    dot.title = [
+      unread && `${unread} unread notification${unread !== 1 ? 's' : ''}`,
+      due && `${due} follow-up${due !== 1 ? 's' : ''} due`,
+    ].filter(Boolean).join(' · ');
   }
 
   // ── Overview tab ─────────────────────────────────────────────────────────
@@ -57951,12 +57965,75 @@ async function submitDsCreate() {
       : `<span class="crm-relation-dept crm-relation-dept--none" title="No department owns this pipeline — only admins and All Departments users see it"><i class="fa fa-sitemap"></i> No department${full ? ' pipeline' : ''}</span>`;
   }
 
+  // Corner badges for what waits on this user in the pipeline: unread CRM notifications
+  // (new / assigned / forwarded leads, approvals, …) and follow-ups due today or overdue
+  function _crmRelationAttentionHtml(relation) {
+    const a = relation.attention || {};
+    const unread = a.unread || 0, due = a.follow_ups_due || 0, overdue = a.overdue || 0;
+    if (!unread && !due) return '';
+    const bell = unread
+      ? `<span class="crm-relation-attn-bell"><i class="fa fa-bell"></i><b>${unread > 99 ? '99+' : unread}</b></span>`
+      : '';
+    const fu = due
+      ? `<span class="crm-relation-attn-fu${overdue ? ' is-overdue' : ''}"><i class="fa fa-phone-volume"></i>${due} follow-up${due !== 1 ? 's' : ''}</span>`
+      : '';
+    return `<div class="crm-relation-attn">${fu}${bell}${_crmRelationAttnPopHtml(a)}</div>`;
+  }
+
+  // Hover preview: the newest unread notifications and the follow-ups due, each opening its lead
+  function _crmRelationAttnPopHtml(a) {
+    const more = (shown, total) => total > shown ? `<div class="crm-attn-pop-more">+${total - shown} more</div>` : '';
+    const notifs = (a.notifications || []).map(n => `
+      <button class="crm-attn-pop-item" data-attn-notif="${n.id}" data-attn-lead="${n.lead_id || ''}">
+        <i class="fa fa-bell crm-attn-pop-ic crm-attn-pop-ic--notif"></i>
+        <span class="crm-attn-pop-text">
+          <span class="crm-attn-pop-title">${escHtml(n.title || '')}</span>
+          ${n.message ? `<span class="crm-attn-pop-msg">${escHtml(n.message)}</span>` : ''}
+        </span>
+        <span class="crm-attn-pop-time">${_notifTimeAgo(n.created_at)}</span>
+      </button>`).join('');
+    const fus = (a.follow_ups || []).map(f => `
+      <button class="crm-attn-pop-item" data-attn-fu-lead="${f.lead_id}">
+        <i class="fa fa-phone-volume crm-attn-pop-ic${f.is_overdue ? ' crm-attn-pop-ic--overdue' : ' crm-attn-pop-ic--fu'}"></i>
+        <span class="crm-attn-pop-text">
+          <span class="crm-attn-pop-title">Follow up with ${escHtml(f.lead_name || 'lead')}</span>
+          <span class="crm-attn-pop-msg">${[f.channel, f.notes].filter(Boolean).map(escHtml).join(' · ') || 'No notes'}</span>
+        </span>
+        <span class="crm-attn-pop-time${f.is_overdue ? ' is-overdue' : ''}">${f.is_overdue ? 'Overdue' : 'Today'}</span>
+      </button>`).join('');
+    return `<div class="crm-attn-pop" role="tooltip">
+      ${notifs ? `<div class="crm-attn-pop-head"><i class="fa fa-bell"></i> Unread notifications <b>${a.unread}</b></div>${notifs}${more(a.notifications.length, a.unread)}` : ''}
+      ${fus ? `<div class="crm-attn-pop-head"><i class="fa fa-phone-volume"></i> Your follow-ups <b>${a.follow_ups_due}</b></div>${fus}${more(a.follow_ups.length, a.follow_ups_due)}` : ''}
+    </div>`;
+  }
+
+  // Opening a preview item opens its lead; a notification is marked read like the bell does
+  function _crmRelationAttnClick(e, relation) {
+    const notif = e.target.closest('[data-attn-notif]');
+    const fu = e.target.closest('[data-attn-fu-lead]');
+    if (!notif && !fu) return false;
+    e.stopPropagation();
+    if (notif) {
+      API.notificationMarkRead(Number(notif.dataset.attnNotif)).then(() => _notifLoadDropdown?.()).catch(() => {});
+      const a = relation.attention;
+      a.notifications = a.notifications.filter(n => String(n.id) !== notif.dataset.attnNotif);
+      a.unread = Math.max(0, a.unread - 1);
+      _crmSyncRelationTabDot();
+      if (notif.dataset.attnLead) window.crmOpenLead?.(relation.id, Number(notif.dataset.attnLead));
+    } else {
+      window.crmOpenLead?.(relation.id, Number(fu.dataset.attnFuLead), { tab: 'followups' });
+    }
+    return true;
+  }
+
   function _crmRelationCardEl(relation, onClick) {
     const count = relation.leads_count || 0;
+    const attn = _crmRelationAttentionHtml(relation);
     const card = document.createElement('div');
-    card.className = 'crm-relation-card';
+    card.className = 'crm-relation-card' + (attn ? ' crm-relation-card--attn' : '');
     card.dataset.pid = relation.id;
     card.innerHTML = `
+      ${attn}
       <button class="crm-relation-card-delete" data-del-relation="${relation.id}" title="Delete relation"><i class="fa fa-trash"></i></button>
       <div class="crm-relation-card-icon"><i class="fa fa-handshake"></i></div>
       <div class="crm-relation-card-body">
@@ -57965,7 +58042,10 @@ async function submitDsCreate() {
       </div>
       <div class="crm-relation-card-count"><span><i class="fa fa-user-group" style="margin-right:4px"></i>${count} lead${count !== 1 ? 's' : ''}</span>${_crmRelationDeptChip(relation)}</div>
     `;
-    card.addEventListener('click', onClick || (() => openRelationDetail(relation.id)));
+    card.addEventListener('click', e => {
+      if (_crmRelationAttnClick(e, relation)) return;
+      (onClick || (() => openRelationDetail(relation.id)))();
+    });
     card.querySelector('[data-del-relation]')?.addEventListener('click', e => {
       e.stopPropagation();
       _deleteCrmRelation(relation);
@@ -59189,12 +59269,18 @@ async function submitDsCreate() {
     return s in _CRM_SCORE_RANK ? 3 + _CRM_SCORE_RANK[s] : 9;
   }
 
+  // The deal's worth on the board: its accepted quotation total, otherwise its estimated value
+  // (deal_value from the pipeline endpoint — the same figure the stage totals add up)
+  function _crmDealValue(lead) {
+    return Number(lead.deal_value ?? lead.estimated_value) || 0;
+  }
+
   function _crmSortLeads(leads) {
     if (_crmBoardSort === 'newest') return leads;
     const key = {
       score:     l => [_crmScoreRank(l), -(l.suggested_score?.points || 0)],
       follow_up: l => [l.follow_up?.overdue ? 0 : 1, l.follow_up?.next_due_at ? Date.parse(l.follow_up.next_due_at) : Infinity],
-      value:     l => [-(Number(l.estimated_value) || 0), 0],
+      value:     l => [-_crmDealValue(l), 0],
     }[_crmBoardSort];
     if (!key) return leads;
     return [...leads].sort((a, b) => {
@@ -59212,6 +59298,14 @@ async function submitDsCreate() {
     const label = f.overdue ? `${f.overdue} overdue` : today ? 'Today' : next ? next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
     const title = `${f.pending} follow-up${f.pending !== 1 ? 's' : ''} planned${next ? ` · next ${next.toLocaleString()}` : ''}${f.overdue ? ` · ${f.overdue} overdue` : ''}`;
     return `<span class="crm-fu-badge${f.overdue ? ' crm-fu-badge--overdue' : today ? ' crm-fu-badge--today' : ''}" title="${escHtml(title)}"><i class="fa fa-phone-volume"></i>${escHtml(label)}</span>`;
+  }
+
+  /** Red bell with the count of this user's unread notifications on the lead; hover lists them. */
+  function _crmUnreadBell(lead) {
+    const u = lead.unread;
+    if (!u || !u.count) return '';
+    const title = `${u.count} unread notification${u.count !== 1 ? 's' : ''}:\n• ${u.titles.join('\n• ')}${u.count > u.titles.length ? `\n+${u.count - u.titles.length} more` : ''}`;
+    return `<span class="crm-card-bell" title="${escHtml(title)}"><i class="fa fa-bell"></i><b>${u.count > 9 ? '9+' : u.count}</b></span>`;
   }
 
   /** A move into a stage that must be approved, waiting for the head — who gets approve / reject buttons. */
@@ -59448,7 +59542,7 @@ async function submitDsCreate() {
 
   function _crmLeadMatches(lead) {
     if (_crmPipeFilter.customers && !lead.is_customer) return false;
-    if (_crmPipeFilter.hasValue && !(Number(lead.estimated_value) > 0)) return false;
+    if (_crmPipeFilter.hasValue && !(_crmDealValue(lead) > 0)) return false;
     if (_crmPipeFilter.source && (lead.source || '') !== _crmPipeFilter.source) return false;
     if (_crmPipeFilter.score === 'none' ? !!lead.score : _crmPipeFilter.score && lead.score !== _crmPipeFilter.score) return false;
     if (!_crmPipeFilter.q) return true;
@@ -59546,7 +59640,7 @@ async function submitDsCreate() {
                    : key === 'company' ? (r.company || '').toLowerCase()
                    : key === 'stage'   ? stageOrder.get(r.stage_id)
                    : key === 'source'  ? (_crmSource(r.source)?.label || '').toLowerCase()
-                   : key === 'value'   ? Number(r.estimated_value) || 0
+                   : key === 'value'   ? _crmDealValue(r)
                    : key === 'score'   ? _crmScoreRank(r)
                    : key === 'follow_up' ? (r.follow_up?.overdue ? -1 : 0) * 1e15 + (r.follow_up?.next_due_at ? Date.parse(r.follow_up.next_due_at) : 9e15)
                    : r.id; // created: ids are sequential, and always present
@@ -59575,14 +59669,14 @@ async function submitDsCreate() {
         </tr></thead>
         <tbody>${rows.map(r => `
           <tr data-lead-id="${r.id}">
-            <td><div class="crm-list-name">${escHtml(r.name)}</div>${r.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}</td>
+            <td><div class="crm-list-name">${escHtml(r.name)}${_crmUnreadBell(r)}</div>${r.is_customer ? `<div class="crm-card-customer-badge"><i class="fa fa-circle-check"></i> Already a Customer</div>` : ''}</td>
             <td>${r.company ? escHtml(r.company) : '<span class="crm-list-sub">—</span>'}</td>
             <td>${r.email ? `<div>${escHtml(r.email)}</div>` : ''}${r.phone ? `<div class="crm-list-sub">${escHtml(r.phone)}</div>` : ''}${!r.email && !r.phone ? '<span class="crm-list-sub">—</span>' : ''}</td>
             <td>${_crmSourceBadge(r.source) || '<span class="crm-list-sub">—</span>'}</td>
             <td>${stageCell(r)}</td>
             <td>${_crmScoreBadge(r.score)}${_crmSuggestedHint(r) || (r.score ? '' : '<span class="crm-list-sub">—</span>')}</td>
             <td>${_crmFollowUpBadge(r) || '<span class="crm-list-sub">—</span>'}</td>
-            <td>${r.estimated_value ? formatMoney(r.estimated_value) : '<span class="crm-list-sub">—</span>'}</td>
+            <td>${_crmDealValue(r) ? formatMoney(_crmDealValue(r)) : '<span class="crm-list-sub">—</span>'}</td>
             <td class="crm-list-sub">${r.created_at ? escHtml(new Date(r.created_at).toLocaleDateString()) : '—'}</td>
             <td>${_crmCardActionsHtml(r)}</td>
           </tr>`).join('')}
@@ -59724,7 +59818,8 @@ async function submitDsCreate() {
               <div class="crm-card-name">${escHtml(lead.name)}${lead.is_customer ? '<i class="fa fa-circle-check crm-card-cust-ico" title="Already a Customer"></i>' : ''}</div>
               ${lead.company ? `<div class="crm-card-company">${escHtml(lead.company)}</div>` : ''}
             </div>
-            ${lead.estimated_value ? `<span class="crm-card-value">${formatMoney(lead.estimated_value)}</span>` : ''}
+            ${_crmDealValue(lead) ? `<span class="crm-card-value">${formatMoney(_crmDealValue(lead))}</span>` : ''}
+            ${_crmUnreadBell(lead)}
           </div>
           ${tags ? `<div class="crm-card-tags">${tags}</div>` : ''}
           <div class="crm-card-footer">
@@ -59954,9 +60049,27 @@ async function submitDsCreate() {
     $('#crm-lead-form-fields').innerHTML = (blocks.length
       ? blocks.map((b, i) => _crmLeadFormBlockHtml(b, i)).join('')
       : '<span style="color:var(--text-muted);font-size:12px">This form has no fields yet. Add fields to it in the Forms tab.</span>')
-      + _crmSourceFieldHtml('crm-lead-new-source', _crmPrefGet('crm.lead.lastSource', 'manual'));
+      + _crmSourceFieldHtml('crm-lead-new-source', _crmPrefGet('crm.lead.lastSource', 'manual'))
+      + _crmValueFieldHtml('crm-lead-new-value');
     $('#crm-lead-modal-save').disabled = false;
     $('#crm-lead-form-fields').querySelector('.crm-lead-field-input')?.focus();
+  }
+
+  // "Estimated value" — sits outside the form's blocks like Source. It feeds the stage totals
+  // on the board until the lead has an accepted quotation.
+  function _crmValueFieldHtml(id, value = null) {
+    return `<div class="po-field">
+      <label class="po-field-label" for="${id}">Estimated value${state.currency ? ` (${escHtml(state.currency)})` : ''}</label>
+      <input type="number" id="${id}" class="po-field-input" min="0" step="0.01" inputmode="decimal" value="${value != null ? escHtml(String(value)) : ''}" placeholder="Expected deal amount">
+    </div>`;
+  }
+
+  // Reads a value input: a number ≥ 0, null when blank, false when invalid
+  function _crmReadValueInput(id) {
+    const raw = ($(`#${id}`)?.value || '').trim();
+    if (raw === '') return null;
+    const n = parseFloat(raw);
+    return Number.isFinite(n) && n >= 0 ? n : false;
   }
 
   // Shared by the New Lead and Edit Lead modals: loads a form's blocks + custom field defs
@@ -60101,6 +60214,14 @@ async function submitDsCreate() {
     const input  = _crmCollectLeadFieldValues($('#crm-lead-form-fields'));
     const source = $('#crm-lead-new-source')?.value || '';
     if (source) input.source = source;
+    const value = _crmReadValueInput('crm-lead-new-value');
+    if (value === false) {
+      btn.disabled = false;
+      $('#crm-lead-alert').textContent = 'Estimated value must be a number of 0 or more.';
+      $('#crm-lead-alert').style.display = '';
+      return;
+    }
+    if (value !== null) input.estimated_value = value;
 
     const res = await API.crmSubmitFormLead(_crmProjectId, _crmLeadFormId, input);
     btn.disabled = false;
@@ -60371,12 +60492,15 @@ async function submitDsCreate() {
     [/name/i,                     'fa-user',              '#0a84ff'],
   ];
 
-  function _crmLeadViewItem(label, value) {
+  // `path` (a form block index) makes the row editable in place on double-click
+  function _crmLeadViewItem(label, value, path = null) {
     const empty = value == null || String(value).trim() === '';
     const ic = _CRM_LV_ICONS.find(([re]) => re.test(label));
     const icon = ic ? `<span class="crm-tlf-icon crm-tlf-icon--sm" style="--ic:${ic[2]}"><i class="fa ${ic[1]}"></i></span>` : '';
-    return `<div class="crm-lead-view-item${ic ? ' crm-lead-view-item--ic' : ''}"><div class="crm-lead-view-label">${icon}${escHtml(label)}</div>`
-      + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}</div></div>`;
+    const inline = path != null ? ` crm-lv-inline" data-lv-path="${path}" title="Double-click to edit` : '';
+    return `<div class="crm-lead-view-item${ic ? ' crm-lead-view-item--ic' : ''}${inline}"><div class="crm-lead-view-label">${icon}${escHtml(label)}</div>`
+      + `<div class="crm-lead-view-value${empty ? ' crm-lead-view-value--empty' : ''}">${empty ? '—' : escHtml(String(value))}`
+      + `${path != null ? '<button type="button" class="crm-lv-edit-btn" title="Edit"><i class="fa fa-pen"></i></button>' : ''}</div></div>`;
   }
 
   function _crmRenderLeadModal(editing) {
@@ -60430,6 +60554,7 @@ async function submitDsCreate() {
             ${(_crmPipeline?.scores || []).map(s => `<option value="${s.key}"${s.key === lead.score ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
           </select>
         </div>
+        ${_crmValueFieldHtml('crm-lead-view-value', lead.estimated_value)}
         ${_crmDivisionFieldHtml(lead)}
         <div class="po-field" style="grid-column:1/-1">
           <label class="po-field-label">Products of Interest</label>
@@ -60446,8 +60571,10 @@ async function submitDsCreate() {
         </div>
       </div>`;
     } else {
-      const items = _crmLeadFormBlocks.filter(b => b.type === 'field')
-        .map(b => item(b.label || b.field || 'Field', _crmLeadFieldValue(b, lead))).join('');
+      const canEdit = _crmLeadCan(lead, 'edit');
+      const items = _crmLeadFormBlocks
+        .map((b, i) => b.type === 'field' ? item(b.label || b.field || 'Field', _crmLeadFieldValue(b, lead), canEdit ? i : null) : '')
+        .join('');
       fields = `<div class="crm-lead-view-grid">${items || item('Name', lead.name)}</div>`;
     }
 
@@ -60573,6 +60700,95 @@ async function submitDsCreate() {
     // Lost: "Win / lose leads" (lead.can.close), separate from moving
     if (!closed && lead.can?.close !== false) btns.push('<button class="po-btn-ghost" data-crm-lead-action="lost" style="color:#ef4444"><i class="fa fa-xmark"></i> Mark Lost</button>');
     return btns.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>` : '';
+  }
+
+  // Double-click a Lead Information row (or its pencil) to edit just that field in place:
+  // Enter or clicking away saves, Esc cancels.
+  $('#crm-lead-view-body')?.addEventListener('dblclick', e => _crmStartInlineEdit(e.target.closest('.crm-lv-inline')));
+  $('#crm-lead-view-body')?.addEventListener('click', e => {
+    const btn = e.target.closest('.crm-lv-edit-btn');
+    if (btn) _crmStartInlineEdit(btn.closest('.crm-lv-inline'));
+  });
+
+  function _crmStartInlineEdit(row) {
+    const lead = _crmViewLead;
+    if (!row || !lead || _crmViewEditing || row.classList.contains('crm-lv-inline--editing')) return;
+    const idx   = +row.dataset.lvPath;
+    const block = _crmLeadFormBlocks[idx];
+    if (block?.type !== 'field') return;
+
+    const cell = row.querySelector('.crm-lead-view-value');
+    row.classList.add('crm-lv-inline--editing');
+    cell.classList.remove('crm-lead-view-value--empty');
+    cell.innerHTML = _crmLeadFormBlockHtml(block, idx, _crmLeadFieldValue(block, lead));
+    cell.querySelector('.po-field-label')?.remove();
+    const input = cell.querySelector('input, select, textarea');
+    input?.focus();
+    if (input?.select) input.select();
+
+    let busy = false;
+    const finish = async save => {
+      if (busy) return;
+      busy = true;
+      if (save && !(await _crmSaveLeadField(lead, idx, cell))) {
+        busy = false; // keep the typed value so it can be fixed
+        input?.focus();
+        return;
+      }
+      if (_crmViewLead?.id === lead.id && !_crmViewEditing) _crmRenderLeadModal(false);
+    };
+    cell.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape') { ev.preventDefault(); ev.stopPropagation(); finish(false); }
+      else if (ev.key === 'Enter' && (ev.target.tagName !== 'TEXTAREA' || ev.ctrlKey)) { ev.preventDefault(); finish(true); }
+    });
+    cell.addEventListener('focusout', ev => { if (!cell.contains(ev.relatedTarget)) finish(true); });
+    cell.addEventListener('change', ev => { if (ev.target.tagName === 'SELECT') finish(true); });
+  }
+
+  // Saves one form field of the lead. The update endpoint overwrites name / company /
+  // email / phone / notes, so those go along unchanged; everything else it keeps when omitted.
+  async function _crmSaveLeadField(lead, idx, cell) {
+    const block = _crmLeadFormBlocks[idx];
+    const field = String(block.field || '');
+    const value = _crmCollectLeadFieldValues(cell)[String(idx)] || '';
+    if (value === _crmLeadFieldValue(block, lead)) return true;
+
+    const payload = {
+      name:    lead.name || '',
+      company: lead.company || null,
+      email:   lead.email || null,
+      phone:   lead.phone || null,
+      notes:   lead.notes || null,
+      custom_fields: {},
+    };
+    if (['name', 'company', 'email', 'phone'].includes(field)) payload[field] = value || (field === 'name' ? '' : null);
+    else if (field.startsWith('custom:')) payload.custom_fields[field.slice(7)] = value;
+    else return true;
+    if (!payload.name) { toast('Name is required.', 'error'); return false; }
+
+    const res = await API.crmUpdateLead(lead.id, payload).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      const firstError = res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null;
+      toast(firstError || res.body?.message || 'Failed to update lead.', 'error');
+      return false;
+    }
+    if (_crmViewLead?.id !== lead.id) return true;
+
+    const saved = res.body?.data || {};
+    _crmViewLead = {
+      ..._crmViewLead,
+      name:    payload.name,
+      company: payload.company,
+      email:   payload.email,
+      phone:   payload.phone,
+      updated_at:    saved.updated_at || lead.updated_at,
+      custom_fields: { ...(lead.custom_fields || {}), ...payload.custom_fields },
+    };
+    toast('Lead updated.', 'success');
+    _crmLoadLeadHistory(_crmViewLead);
+    _crmWsRefresh(_crmViewLead, ['timeline']);
+    loadCrmPipeline(_crmProjectId, { silent: true });
+    return true;
   }
 
   $('#crm-lead-view-body')?.addEventListener('click', async e => {
@@ -60866,14 +61082,55 @@ async function submitDsCreate() {
     return (res.body?.errors ? Object.values(res.body.errors)[0]?.[0] : null) || res.body?.message || fallback;
   }
 
+  // Which tab each CRM notification type is about — the tab gets a red dot while it is unread
+  const _CRM_TAB_NOTIF_TYPES = {
+    overview:   ['crm_lead_new', 'crm_lead_forwarded', 'crm_lead_assigned', 'crm_stage_approval'],
+    timeline:   ['crm_lead_stage', 'crm_stage_approval_decided', 'crm_lead_closed'],
+    quotations: ['crm_quotation_submitted', 'crm_quotation_decided'],
+    followups:  ['crm_follow_up_due', 'crm_follow_up_overdue'],
+  };
+  function _crmTabUnread(key) {
+    const types = _crmWs.info?.unread_types || {};
+    return (_CRM_TAB_NOTIF_TYPES[key] || []).reduce((s, t) => s + (types[t] || 0), 0);
+  }
+
   function _crmLeadTabsHtml() {
     const counts = _crmWs.info?.counts || {};
     return `<div class="crm-ws-tabs">${_CRM_LEAD_TABS.filter(([key]) => !_CRM_LEAD_TAB_KEYS[key] || _crmCan(_CRM_LEAD_TAB_KEYS[key])).map(([key, icon, label]) => {
       const n = key === 'followups' ? counts.follow_ups : counts[key];
       // Follow-ups: red when any is overdue
       const overdue = key === 'followups' && _crmWs.info?.follow_ups_overdue > 0;
-      return `<button type="button" class="crm-ws-tab${_crmLeadTab === key ? ' active' : ''}" data-ws-tab="${key}"${overdue ? ` title="${_crmWs.info.follow_ups_overdue} overdue"` : ''}><i class="fa ${icon}"></i>${label}${n ? `<span class="crm-ws-tab-count${overdue ? ' crm-ws-tab-count--overdue' : ''}">${n}</span>` : ''}</button>`;
+      const unread = _crmTabUnread(key);
+      const dot = unread ? `<span class="crm-attn-dot crm-ws-tab-dot" title="${unread} new notification${unread !== 1 ? 's' : ''} here"></span>` : '';
+      return `<button type="button" class="crm-ws-tab${_crmLeadTab === key ? ' active' : ''}" data-ws-tab="${key}"${overdue ? ` title="${_crmWs.info.follow_ups_overdue} overdue"` : ''}><i class="fa ${icon}"></i>${label}${n ? `<span class="crm-ws-tab-count${overdue ? ' crm-ws-tab-count--overdue' : ''}">${n}</span>` : ''}${dot}</button>`;
     }).join('')}</div>`;
+  }
+
+  // Opening a tab means its notifications were seen: mark them read, then drop the dot here,
+  // on the board card's bell and in the main bell.
+  async function _crmClearTabNotifs(lead) {
+    const key = _crmLeadTab;
+    let types = (_CRM_TAB_NOTIF_TYPES[key] || []).filter(t => _crmWs.info?.unread_types?.[t]);
+    if (!types.length) return;
+    // Let the dot be seen on the tab for a moment; give up if the user moved on
+    await new Promise(r => setTimeout(r, 1500));
+    if (_crmLeadTab !== key || _crmWs.leadId !== lead.id) return;
+    types = types.filter(t => _crmWs.info?.unread_types?.[t]);
+    if (!types.length) return;
+    const res = await API.crmLeadNotificationsRead(lead.id, types).catch(() => ({ status: 0 }));
+    if (res.status !== 200 || _crmWs.leadId !== lead.id) return;
+    const cleared = types.reduce((s, t) => s + (_crmWs.info.unread_types[t] || 0), 0);
+    types.forEach(t => { delete _crmWs.info.unread_types[t]; });
+    _crmRefreshWsTabs();
+
+    const boardLead = _findLead(lead.id);
+    if (boardLead?.unread) {
+      types.forEach(t => { delete boardLead.unread.types?.[t]; });
+      boardLead.unread.count = Math.max(0, boardLead.unread.count - cleared);
+      if (!boardLead.unread.count) boardLead.unread = null;
+      _crmRenderPipelineView();
+    }
+    _notifLoadDropdown();
   }
 
   // Tab switch: the white highlight glides from the old tab to the new one, and the content
@@ -60996,6 +61253,7 @@ async function submitDsCreate() {
     _crmWs.summary = sum.status === 200 ? sum.body.data : null;
     if (_crmLeadTab === 'overview' && !_crmViewEditing) _crmRenderLeadModal(false);
     else _crmRefreshWsTabs();
+    _crmClearTabNotifs(lead);
   }
 
   /** Drop cached tabs (re-loaded when shown) and refresh the counts. */
@@ -62025,6 +62283,7 @@ async function submitDsCreate() {
       _crmLeadTab = t.dataset.wsTab;
       _crmRenderLeadModal(false);
       _crmAnimateTabSwitch(fromRect, dir);
+      _crmClearTabNotifs(lead);
     } else if (t.matches('[data-ws-assign]')) {
       _crmOpenAssignModal(lead);
     } else if (t.dataset.wsTlType !== undefined) {
@@ -64235,6 +64494,8 @@ async function submitDsCreate() {
     if (!hasNameField) core.name = lead.name || '';
 
     if (!core.name) { alertEl.textContent = 'Name is required.'; alertEl.style.display = ''; return; }
+    const estimatedValue = _crmReadValueInput('crm-lead-view-value');
+    if (estimatedValue === false) { alertEl.textContent = 'Estimated value must be a number of 0 or more.'; alertEl.style.display = ''; return; }
 
     const payload = {
       name:          core.name,
@@ -64246,6 +64507,7 @@ async function submitDsCreate() {
       notes:         $('#crm-lead-view-notes').value.trim() || null,
       custom_fields: customFields,
       score:         $('#crm-lead-view-score').value || null,
+      estimated_value: estimatedValue,
       product_interest_note: $('#crm-lead-view-product-note').value.trim() || null,
       products:      _crmEditProducts.map(p => ({ product_id: p.id, quantity: p.quantity })),
     };
@@ -64280,6 +64542,7 @@ async function submitDsCreate() {
         source:        payload.source,
         notes:         payload.notes,
         score:         payload.score,
+        estimated_value: saved.estimated_value ?? payload.estimated_value,
         product_interest_note: payload.product_interest_note,
         product_items: _crmEditProducts.map(p => ({ ...p })),
         division_id:   saved.division_id ?? null,

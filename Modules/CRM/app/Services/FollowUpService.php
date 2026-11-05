@@ -279,6 +279,42 @@ class FollowUpService
     }
 
     /**
+     * The user's own pending follow-ups that need doing now — due today or overdue — per
+     * pipeline, for the relation cards: the counts and the oldest few to preview.
+     *
+     * @return array<int, array{due: int, overdue: int, items: array<int, array<string, mixed>>}> project id => counts (due includes overdue)
+     */
+    public function dueForUserByProject(Business $business, CrmAccess $access, int $preview = 5): array
+    {
+        $startOfToday = $this->settings->startOfToday($business);
+
+        return FollowUp::query()
+            ->join('crm_leads', 'crm_leads.id', '=', 'crm_follow_ups.lead_id')
+            ->where('crm_follow_ups.business_id', $business->id)
+            ->where('crm_follow_ups.user_id', $access->userId ?? 0)
+            ->pending()
+            ->where('crm_follow_ups.due_at', '<', $startOfToday->copy()->addDay())
+            ->orderBy('crm_follow_ups.due_at')
+            ->get(['crm_follow_ups.id', 'crm_follow_ups.lead_id', 'crm_follow_ups.due_at', 'crm_follow_ups.channel', 'crm_follow_ups.notes', 'crm_leads.project_id', 'crm_leads.name as lead_name'])
+            ->toBase()
+            ->groupBy(fn (FollowUp $f) => (int) $f->project_id)
+            ->map(fn ($rows) => [
+                'due'     => $rows->count(),
+                'overdue' => $rows->filter(fn (FollowUp $f) => $f->due_at->lt($startOfToday))->count(),
+                'items'   => $rows->take($preview)->map(fn (FollowUp $f) => [
+                    'id'         => $f->id,
+                    'lead_id'    => (int) $f->lead_id,
+                    'lead_name'  => $f->lead_name,
+                    'due_at'     => $f->due_at->toIso8601String(),
+                    'is_overdue' => $f->due_at->lt($startOfToday),
+                    'channel'    => FollowUp::channelLabel($f->channel),
+                    'notes'      => $f->notes,
+                ])->values()->all(),
+            ])
+            ->all();
+    }
+
+    /**
      * The scheduler's pass: overdue first (so a follow-up found already overdue does not also get
      * a "due" reminder), then due. Each follow-up fires each event at most once.
      *

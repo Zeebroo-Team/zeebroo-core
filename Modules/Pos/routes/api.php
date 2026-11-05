@@ -644,6 +644,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     // CRM lead workspace (assignees + history, unified timeline, internal messages, files, tasks) and the admin audit log
     Route::get   ('crm/leads/{lead}/workspace',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'show'])              ->whereNumber('lead')->name('crm.leads.workspace');
     Route::get   ('crm/leads/{lead}/summary',                           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'summary'])           ->whereNumber('lead')->name('crm.leads.summary');
+    Route::post  ('crm/leads/{lead}/notifications/read',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'markNotificationsRead'])->whereNumber('lead')->name('crm.leads.notifications.read');
     Route::get   ('crm/leads/{lead}/assignees',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'assignees'])         ->whereNumber('lead')->name('crm.leads.assignees.index');
     Route::put   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'syncAssignees'])     ->whereNumber('lead')->name('crm.leads.assignees.sync');
     Route::post  ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'addAssignees'])      ->whereNumber('lead')->name('crm.leads.assignees.store');
