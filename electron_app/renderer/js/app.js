@@ -60258,6 +60258,7 @@ async function submitDsCreate() {
     $('#crm-lead-view-cancel').innerHTML  = editing ? '<i class="fa fa-arrow-left"></i> Back to Details' : '<i class="fa fa-xmark"></i> Close';
     $('#crm-lead-view-edit').style.display = !editing && _crmLeadCan(lead, 'edit') ? '' : 'none';
     $('#crm-lead-view-save').style.display = editing ? '' : 'none';
+    $('#crm-lead-view-refresh').style.display = editing ? 'none' : '';
     $('#crm-lead-view-save').disabled      = !_crmViewBlocksReady;
 
     if (editing) {
@@ -63906,6 +63907,28 @@ async function submitDsCreate() {
   }
 
   $('#crm-lead-view-close')?.addEventListener('click', _closeViewLeadModal);
+  // Re-fetch the lead, its history and every workspace tab, staying on the current tab.
+  // Skipped while editing so unsaved changes aren't thrown away.
+  $('#crm-lead-view-refresh')?.addEventListener('click', async () => {
+    const lead = _crmViewLead;
+    const btn  = $('#crm-lead-view-refresh');
+    if (!lead || _crmViewEditing || btn.disabled) return;
+    btn.disabled = true;
+    btn.querySelector('i').classList.add('fa-spin');
+    try {
+      await loadCrmPipeline(_crmProjectId, { silent: true });
+      if (_crmViewLead?.id !== lead.id) return;
+      const fresh = _findLead(lead.id) || lead; // a lead forwarded elsewhere may not be on this board
+      _crmViewLead = fresh;
+      _crmWs = { leadId: fresh.id };
+      _crmRenderLeadModal(false);
+      _crmLoadLeadHistory(fresh);
+      await _crmLoadWorkspace(fresh);
+    } finally {
+      btn.disabled = false;
+      btn.querySelector('i').classList.remove('fa-spin');
+    }
+  });
   $('#crm-lead-view-cancel')?.addEventListener('click', () => {
     if (_crmViewEditing) _crmRenderLeadModal(false);
     else _closeViewLeadModal();
