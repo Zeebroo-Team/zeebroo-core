@@ -65396,7 +65396,6 @@ async function submitDsCreate() {
     const d = _crmDeptDetail;
     const n = d.employees_count || 0;
     const t = d.employment_types || {};
-    const range = _deptRangeText(d);
     const employees = d.employees || [];
     // Head / co-head pickers: any member of the department, never the same person twice
     const lead = (role, label, current) => `<div class="mac-row">
@@ -65429,7 +65428,6 @@ async function submitDsCreate() {
         <div class="mac-group">
           ${lead('head', 'Head', d.head_employee_id)}
           ${lead('co_head', 'Co-head', d.co_head_employee_id)}
-          ${range ? `<div class="mac-row"><div class="mac-row-label">Salary range</div><div>${escHtml(range)}</div></div>` : ''}
           <div class="mac-group-foot">
             <span class="crm-perms-muted" style="margin-right:auto">Only people in this department can lead it. Someone missing? Put them in it from Settings → Users.</span>
             ${employees.length ? '<button type="button" class="po-btn-primary" data-dept-lead-save><i class="fa fa-floppy-disk"></i> Save leadership</button>' : ''}
