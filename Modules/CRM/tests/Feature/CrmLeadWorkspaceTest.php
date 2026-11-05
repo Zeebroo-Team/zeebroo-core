@@ -148,6 +148,13 @@ beforeEach(function () {
     foreach (glob(dirname(__DIR__, 2) . '/database/migrations/*.php') as $file) {
         (require $file)->up();
     }
+    // The pipeline cards show the won value from the accepted quotation and the unread notifications
+    foreach ([
+        ...glob(dirname(__DIR__, 3) . '/Sales/database/migrations/*quotation*.php'),
+        ...glob(dirname(__DIR__, 3) . '/Pos/database/migrations/*pos_notifications*.php'),
+    ] as $file) {
+        (require $file)->up();
+    }
 
     DB::table('users')->insert(collect([1 => 'Owner', 2 => 'Nimal', 3 => 'Sunil', 4 => 'Kamala', 5 => 'Chen', 6 => 'Priya', 8 => 'Dinesh', 9 => 'Other owner'])
         ->map(fn ($name, $id) => ['id' => $id, 'name' => $name, 'email' => strtolower($name) . '@example.com'])->values()->all());

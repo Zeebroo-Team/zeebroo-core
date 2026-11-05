@@ -110,10 +110,19 @@ beforeEach(function () {
         '2026_10_31_100100_add_department_id_to_crm_projects_table.php',
         '2026_10_31_100200_create_crm_department_settings_table.php',
         '2026_11_02_100200_create_crm_lead_assignment_logs_table.php',
+        '2026_11_07_100000_create_crm_follow_ups_table.php',
         '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
         '2026_11_10_100000_add_crm_permissions_to_business_roles_table.php',
     ] as $file) {
         (require $dir . $file)->up();
+    }
+    // The pipeline cards read the user's unread CRM notifications and due follow-ups (business timezone)
+    $modules = dirname(__DIR__, 3);
+    foreach ([
+        $modules . '/Settings/database/migrations/2026_04_30_181900_create_settings_table.php',
+        ...glob($modules . '/Pos/database/migrations/*pos_notifications*.php'),
+    ] as $file) {
+        (require $file)->up();
     }
 
     DB::table('users')->insert(collect([
