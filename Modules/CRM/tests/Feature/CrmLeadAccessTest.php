@@ -299,6 +299,40 @@ test('the per-user CRM toggles still narrow a role (AND, not OR)', function () {
         ->and(Lead::query()->visibleWith($access)->count())->toBe(0);
 });
 
+test('blocking "Edit leads" leaves the other lead toggles working', function () {
+    // Head of department 10 (lead 2): edit blocked; move, close, assign, quote stay on
+    app(CrmPermissionService::class)->saveForUser($this->business, 2, ['leads_edit' => false], []);
+
+    $access = ($this->access)(2);
+    $lead   = Lead::find(2);
+
+    expect($this->policy->canEdit($access, $lead))->toBeFalse()
+        ->and($this->policy->canWork($access, $lead))->toBeTrue()
+        ->and($this->policy->canMove($access, $lead))->toBeTrue()
+        ->and($this->policy->canClose($access, $lead))->toBeTrue()
+        ->and($this->policy->canAssign($access, $lead))->toBeTrue()
+        ->and($this->policy->canQuote($access, $lead))->toBeTrue()
+        ->and($this->policy->editableLeadIds($access, collect([$lead])))->toBe([])
+        ->and($this->policy->workableLeadIds($access, collect([$lead])))->toBe([2 => true]);
+});
+
+test('each lead toggle blocks only its own action', function (string $key, string $method) {
+    app(CrmPermissionService::class)->saveForUser($this->business, 2, [$key => false], []);
+
+    $access = ($this->access)(2);
+    $lead   = Lead::find(2);
+
+    expect($this->policy->{$method}($access, $lead))->toBeFalse()
+        ->and($this->policy->canWork($access, $lead))->toBeTrue();
+})->with([
+    ['leads_move', 'canMove'],
+    ['leads_close', 'canClose'],
+    ['leads_assign', 'canAssign'],
+    ['leads_delete', 'canDelete'],
+    ['quotations_manage', 'canQuote'],
+    ['lead_collaborate', 'canContribute'],
+]);
+
 test('editableLeadIds matches canEdit lead by lead', function (int $userId) {
     $access = ($this->access)($userId);
     $leads  = Lead::where('business_id', 7)->get();

@@ -132,6 +132,14 @@
 body.dark .mac-window{--mac-accent:#0a84ff;--mac-bg:rgba(34,34,38,.95);--mac-panel:rgba(255,255,255,.045);--mac-head:#2b2b30;--mac-line:rgba(255,255,255,.09);--mac-stripe:rgba(255,255,255,.025);--mac-hover:rgba(255,255,255,.06);
   --mac-text:#f5f5f7;--mac-muted:#98989d;--mac-ctl:#4a4a50;--mac-fill:rgba(118,118,128,.24);--mac-menu:rgba(44,44,48,.94);--mac-field:rgba(255,255,255,.07);--mac-side:rgba(0,0,0,.16);
   box-shadow:0 0 0 .5px rgba(0,0,0,.7),inset 0 0 0 1px rgba(255,255,255,.08),0 24px 70px rgba(0,0,0,.55)}
+/* Floating macOS-style confirmation over the window's footer */
+.mac-hud{position:absolute;left:50%;bottom:74px;z-index:5;display:flex;align-items:center;gap:9px;max-width:80%;padding:9px 16px 9px 12px;border-radius:12px;
+  font-size:13px;font-weight:500;color:var(--mac-text);background:var(--mac-menu);backdrop-filter:blur(30px) saturate(180%);
+  box-shadow:0 0 0 .5px var(--mac-line),0 10px 30px rgba(0,0,0,.16),0 2px 6px rgba(0,0,0,.08);
+  opacity:0;transform:translate(-50%,8px) scale(.96);pointer-events:none;transition:opacity .2s ease,transform .28s cubic-bezier(.2,.9,.25,1.04)}
+.mac-hud.show{opacity:1;transform:translate(-50%,0) scale(1)}
+.mac-hud i{width:20px;height:20px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;color:#fff;background:#34c759}
+.mac-hud span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mac-window.mac-zoomed{width:calc(100vw - 24px)!important;height:calc(100vh - 24px)!important;max-width:none!important}
 .mac-titlebar{display:flex;align-items:center;gap:16px;height:54px;padding:0 18px;flex-shrink:0;border-bottom:1px solid var(--mac-line);user-select:none}
 .mac-win-btns{display:flex;gap:6px;flex-shrink:0}
@@ -1060,10 +1068,35 @@ body.dark :is(.crm-lead-view-shell,.crm-assign-win) :hover::-webkit-scrollbar-th
 /* Workspace rows open their tab */
 .crm-lead-view-shell .crm-lead-view-grid .crm-lv-link{width:100%;align-items:center;border:0;font:inherit;text-align:left;cursor:pointer;transition:background .12s}
 .crm-lead-view-shell .crm-lead-view-grid .crm-lv-link:hover{background:var(--mac-hover)}
-.crm-lv-link .crm-lead-view-label{display:inline-flex;align-items:center;gap:10px}
+.crm-lv-link .crm-lead-view-label,.crm-lead-view-item--ic .crm-lead-view-label{display:inline-flex;align-items:center;gap:10px}
+.crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lead-view-item--ic:not(.crm-lead-view-item--wide){align-items:center}
 .crm-lv-link .crm-lead-view-value{display:inline-flex;align-items:center;gap:8px;font-variant-numeric:tabular-nums}
 .crm-lv-chev{font-size:10px;color:var(--mac-muted);opacity:.6}
 .crm-lv-badge{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:rgba(255,59,48,.12);color:#ff3b30}
+/* Who's responsible: one-line facts, then leadership and the assigned team as plain rows */
+.crm-lv-resp{border-radius:10px;overflow:hidden;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 2px rgba(0,0,0,.04)}
+.crm-lv-facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+.crm-lv-fact{display:flex;align-items:flex-start;gap:10px;min-width:0;padding:12px 16px;border-left:1px solid var(--mac-line)}
+.crm-lv-fact:first-child{border-left:none}
+.crm-lv-fact>i{width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:12px;color:var(--mac-accent);background:color-mix(in srgb,var(--mac-accent) 10%,transparent)}
+.crm-lv-fact>div{display:flex;flex-direction:column;min-width:0}
+.crm-lv-fact span{font-size:11px;color:var(--mac-muted)}
+.crm-lv-fact b{font-size:13px;font-weight:600;color:var(--mac-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-lv-fact small{font-size:11px;color:var(--mac-muted)}
+.crm-lv-resp-sub{padding:6px 16px;border-top:1px solid var(--mac-line);background:var(--mac-stripe);font-size:11px;font-weight:600;color:var(--mac-muted);text-transform:uppercase;letter-spacing:.05em}
+.crm-lv-resp-note{padding:11px 16px;font-size:12.5px;color:var(--mac-muted)}
+.crm-lv-pr{display:flex;align-items:center;gap:12px;padding:9px 16px;border-top:1px solid var(--mac-line)}
+.crm-lv-resp-sub+.crm-lv-pr{border-top:none}
+.crm-lv-av{width:28px;height:28px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--mac-accent);background:color-mix(in srgb,var(--mac-accent) 12%,transparent);object-fit:cover}
+.crm-lv-pr-main{flex:1;min-width:0}
+.crm-lv-pr-name{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;color:var(--mac-text)}
+.crm-lv-role{font-size:11px;font-weight:400;color:var(--mac-muted)}
+.crm-lv-role::before{content:'·';margin-right:8px}
+.crm-lv-pr-sub{margin-top:1px;font-size:11.5px;color:var(--mac-muted)}
+.crm-lv-pr-sub b{font-weight:500;color:var(--mac-text)}
+.crm-lv-pr-contact{display:flex;flex-direction:column;align-items:flex-end;gap:1px;font-size:11.5px;color:var(--mac-muted);text-align:right;user-select:text;min-width:0}
+.crm-lv-pr-contact span{overflow-wrap:anywhere}
+.crm-lv-pr-contact i{width:14px;margin-right:4px;text-align:center;opacity:.7}
 /* long values (products, notes) stack under their label */
 .crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lead-view-item--wide{flex-direction:column;align-items:stretch;gap:4px}
 .crm-lead-view-shell .crm-lead-view-grid:not(.crm-lead-view-grid--edit) .crm-lead-view-item--wide .crm-lead-view-value{text-align:left;line-height:1.5}
@@ -2390,6 +2423,121 @@ body.dark #crm-dashboard-view .crm-dash-table th{background:#2c2c2e}
 #crm-dashboard-view .crm-dash-filterable:hover td{background:var(--mac-fill)!important}
 #crm-dashboard-view .crm-dash-tip-hint{font-size:11.5px;color:var(--mac-muted);margin-top:10px}
 @media (max-width:1300px){#crm-dashboard-view .crm-dash-att-counts,#crm-dashboard-view .crm-dash-forecast{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* CRM dashboard — flat blue theme: solid blue banner and primary KPI, blue-tinted icon tiles, soft cards */
+#crm-dashboard-view{--cd-blue:var(--accent,#2563eb);--cd-blue-soft:color-mix(in srgb,var(--cd-blue) 10%,transparent);--cd-blue-line:color-mix(in srgb,var(--cd-blue) 22%,transparent);
+  --mac-bg:#f3f6fb;--mac-line:#e3e8f0;--mac-fill:#eef2f8;--mac-muted:#64748b;--mac-text:#0f172a;--crm-dash-c2:#93c5fd}
+body.dark #crm-dashboard-view{--mac-bg:#0f141c;--mac-panel:#171e29;--mac-line:#253041;--mac-fill:#1e2734;--mac-muted:#94a3b8;--mac-text:#e2e8f0;--crm-dash-c2:#60a5fa}
+#crm-dashboard-view .crm-dash-filters{background:var(--mac-panel);backdrop-filter:none;padding:10px 28px;gap:8px;box-shadow:0 1px 0 var(--mac-line)}
+#crm-dashboard-view .crm-dash-filters .po-field-input{height:30px;font-size:12.5px;border-radius:8px;background-color:var(--mac-bg);box-shadow:inset 0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-filters input[type=date].po-field-input{width:128px;padding:0 8px}
+#crm-dashboard-view .crm-dash-filters select.po-field-input{max-width:150px}
+#crm-dashboard-view .crm-dash-filters .po-btn-ghost{height:30px;padding:0 10px;font-size:12.5px}
+#crm-dashboard-view .crm-dash-filters .crm-dash-updated{font-size:11.5px}
+#crm-dashboard-view .crm-dash-filters .po-field-input:hover{box-shadow:inset 0 0 0 1px var(--cd-blue-line)}
+#crm-dashboard-view .crm-dash-filters .po-field-input:focus{box-shadow:inset 0 0 0 1px var(--cd-blue),0 0 0 3px var(--cd-blue-soft)}
+#crm-dashboard-view .crm-dash-filters select.po-field-input{background-color:var(--mac-bg)}
+#crm-dashboard-view .po-btn-ghost{height:32px;border-radius:8px;background:var(--mac-bg);box-shadow:inset 0 0 0 1px var(--mac-line);transition:background .12s,color .12s,box-shadow .12s}
+#crm-dashboard-view .po-btn-ghost:hover{filter:none;color:var(--cd-blue);background:var(--cd-blue-soft);box-shadow:inset 0 0 0 1px var(--cd-blue-line)}
+#crm-dashboard-view #crm-dash-apply{background:var(--cd-blue);color:#fff;box-shadow:none}
+#crm-dashboard-view #crm-dash-apply:hover{filter:brightness(1.08);color:#fff}
+#crm-dashboard-view .crm-dash-ranges{padding:2px;border-radius:9px;background:var(--mac-bg);box-shadow:inset 0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-ranges button{padding:4px 9px;border-radius:7px;font-size:12px;font-weight:500}
+#crm-dashboard-view .crm-dash-ranges button:hover{color:var(--cd-blue)}
+#crm-dashboard-view .crm-dash-ranges button.active{background:var(--cd-blue);color:#fff;box-shadow:none}
+#crm-dashboard-view .crm-dash-body{gap:22px;padding:24px 28px 40px}
+#crm-dashboard-view .crm-dash-body>*{flex-shrink:0}
+/* Banner */
+#crm-dashboard-view .crm-dash-head{align-items:center;padding:0;background:none}
+#crm-dashboard-view .crm-dash-title{font-size:26px;font-weight:700;line-height:1.2;letter-spacing:-.025em;color:var(--mac-text)}
+#crm-dashboard-view .crm-dash-period{margin-top:3px;font-size:13px;color:var(--mac-muted)}
+#crm-dashboard-view .crm-dash-sep{opacity:.5}
+/* Scope / filter chips — macOS token pills */
+#crm-dashboard-view .crm-dash-scope{display:inline-flex;align-items:center;gap:7px;height:26px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:500;color:var(--mac-text);background:var(--mac-panel);box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.06)}
+#crm-dashboard-view .crm-dash-scope::before{content:"";width:6px;height:6px;border-radius:50%;background:#34c759}
+#crm-dashboard-view .crm-dash-chip{height:26px;color:var(--mac-text);background:var(--mac-panel);box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 1px 2px rgba(0,0,0,.06)}
+#crm-dashboard-view .crm-dash-chip i{color:var(--mac-muted)}
+/* Section nav — macOS segmented control */
+#crm-dashboard-view .crm-dash-jump{align-self:flex-start;display:inline-flex;gap:0;margin:-6px 0 0;padding:2px;border-radius:9px;background:rgba(118,118,128,.12)}
+#crm-dashboard-view .crm-dash-jump button{position:relative;display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 16px;border:0;border-radius:7px;font-size:13px;font-weight:500;color:var(--mac-text);background:none;box-shadow:none;transition:background .15s,box-shadow .15s}
+#crm-dashboard-view .crm-dash-jump button+button::before{content:"";position:absolute;left:0;top:7px;bottom:7px;width:1px;background:rgba(0,0,0,.12)}
+#crm-dashboard-view .crm-dash-jump button.active::before,#crm-dashboard-view .crm-dash-jump button.active+button::before{opacity:0}
+#crm-dashboard-view .crm-dash-jump button:hover{background:rgba(255,255,255,.55)}
+#crm-dashboard-view .crm-dash-jump button.active{background:#fff;font-weight:600;box-shadow:0 0 0 .5px rgba(0,0,0,.06),0 3px 8px rgba(0,0,0,.12),0 3px 1px rgba(0,0,0,.04)}
+#crm-dashboard-view .crm-dash-jump b{min-width:18px;margin:0;padding:0 5px;font-size:11px;line-height:18px;background:#ff3b30}
+body.dark #crm-dashboard-view .crm-dash-jump{background:rgba(118,118,128,.24)}
+body.dark #crm-dashboard-view .crm-dash-jump button+button::before{background:rgba(255,255,255,.14)}
+body.dark #crm-dashboard-view .crm-dash-jump button:hover{background:rgba(255,255,255,.06)}
+body.dark #crm-dashboard-view .crm-dash-jump button.active{background:#636366;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+body.dark #crm-dashboard-view .crm-dash-scope,body.dark #crm-dashboard-view .crm-dash-chip{background:rgba(255,255,255,.08);box-shadow:none}
+/* KPI cards */
+#crm-dashboard-view .crm-dash-heroes{gap:16px;background:transparent;box-shadow:none;border-radius:0;overflow:visible}
+#crm-dashboard-view .crm-dash-hero{border-left:0;border-radius:14px;padding:20px 22px;background:var(--mac-panel);box-shadow:inset 0 0 0 1px var(--mac-line);transition:transform .15s,box-shadow .15s}
+#crm-dashboard-view .crm-dash-hero--link:hover{background:var(--mac-panel);transform:translateY(-2px);box-shadow:inset 0 0 0 1px var(--cd-blue-line),0 8px 20px rgba(15,23,42,.06)}
+#crm-dashboard-view .crm-dash-hero-label{display:flex;align-items:center;gap:10px;font-weight:600}
+#crm-dashboard-view .crm-dash-hero-value{font-size:28px;font-weight:700}
+#crm-dashboard-view .crm-dash-hero-foot{padding-top:12px;border-top:1px dashed var(--mac-line)}
+#crm-dashboard-view .crm-dash-hero--primary,#crm-dashboard-view .crm-dash-hero--primary.crm-dash-hero--link:hover{background:var(--cd-blue);box-shadow:none}
+#crm-dashboard-view .crm-dash-hero--primary *{color:#fff!important}
+#crm-dashboard-view .crm-dash-hero--primary .crm-dash-hero-label,#crm-dashboard-view .crm-dash-hero--primary .crm-dash-hero-sub,#crm-dashboard-view .crm-dash-hero--primary .crm-dash-delta-vs,#crm-dashboard-view .crm-dash-hero--primary .crm-dash-cur{color:rgba(255,255,255,.8)!important}
+#crm-dashboard-view .crm-dash-hero--primary .crm-dash-ico{background:rgba(255,255,255,.18)}
+#crm-dashboard-view .crm-dash-hero--primary .crm-dash-hero-foot{border-top-color:rgba(255,255,255,.25)}
+#crm-dashboard-view .crm-dash-hero--primary .crm-dash-delta{padding:1px 8px;border-radius:999px;background:rgba(255,255,255,.18)}
+#crm-dashboard-view .crm-dash-ico{flex:none;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:9px;font-size:13px;color:var(--cd-blue);background:var(--cd-blue-soft)}
+#crm-dashboard-view .crm-dash-delta--up,#crm-dashboard-view .crm-dash-delta--down{padding:1px 8px;border-radius:999px}
+#crm-dashboard-view .crm-dash-delta--up{background:color-mix(in srgb,var(--crm-dash-good) 12%,transparent)}
+#crm-dashboard-view .crm-dash-delta--down{background:color-mix(in srgb,var(--crm-dash-bad) 12%,transparent)}
+/* Cards */
+#crm-dashboard-view .crm-dash-card{border-radius:14px;padding:20px 22px;box-shadow:inset 0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-card:hover{box-shadow:inset 0 0 0 1px var(--mac-line),0 8px 20px rgba(15,23,42,.05)}
+#crm-dashboard-view .crm-dash-card-head{font-size:14.5px;font-weight:700;padding-bottom:14px;margin-bottom:16px;border-bottom:1px solid var(--mac-line)}
+#crm-dashboard-view .crm-dash-card-head>span:first-child{display:inline-flex;align-items:center;gap:10px}
+#crm-dashboard-view .crm-dash-card-head .crm-dash-ico{width:28px;height:28px;font-size:12px;border-radius:8px}
+#crm-dashboard-view .crm-dash-section{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;letter-spacing:0;color:var(--mac-text);margin:12px 0 -6px}
+#crm-dashboard-view .crm-dash-section::before{content:"";width:4px;height:18px;border-radius:2px;background:var(--cd-blue)}
+/* Insights */
+#crm-dashboard-view .crm-dash-insights{display:flex;flex-direction:column;gap:8px}
+#crm-dashboard-view .crm-dash-insight,#crm-dashboard-view .crm-dash-insight:first-child{align-items:center;padding:10px 12px;border:0;border-radius:10px;background:color-mix(in srgb,var(--tone) 7%,transparent)}
+#crm-dashboard-view .crm-dash-insight--good{--tone:var(--cd-blue)}
+#crm-dashboard-view .crm-dash-mark{width:28px;height:28px;border-radius:8px;transform:none;display:inline-flex;align-items:center;justify-content:center;font-size:12px;color:var(--tone);background:color-mix(in srgb,var(--tone) 14%,transparent)}
+/* Needs attention */
+#crm-dashboard-view .crm-dash-att-count{position:relative;padding:14px 14px 12px;border-radius:12px;background:var(--mac-bg);box-shadow:inset 0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-att-count>i{position:absolute;top:12px;right:12px;font-size:13px;color:var(--mac-muted);opacity:.7}
+#crm-dashboard-view .crm-dash-att-count b{font-size:24px;font-weight:700}
+#crm-dashboard-view .crm-dash-att-count--bad{background:color-mix(in srgb,var(--crm-dash-bad) 8%,var(--mac-panel));box-shadow:inset 3px 0 0 var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-att-count--warn{background:color-mix(in srgb,var(--crm-dash-warn) 8%,var(--mac-panel));box-shadow:inset 3px 0 0 var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-att-count--bad>i{color:var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-att-count--warn>i{color:var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-att-head{font-size:12.5px;color:var(--mac-text);margin:16px 0 6px}
+#crm-dashboard-view .crm-dash-att-head button{color:var(--cd-blue);font-weight:600;padding:3px 10px;border-radius:999px;background:var(--cd-blue-soft)}
+#crm-dashboard-view .crm-dash-att-list{display:flex;flex-direction:column;gap:6px}
+#crm-dashboard-view .crm-dash-att-row{padding:9px 12px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--mac-line);cursor:pointer;transition:background .12s,box-shadow .12s}
+#crm-dashboard-view .crm-dash-att-row:hover{background:var(--cd-blue-soft);box-shadow:inset 0 0 0 1px var(--cd-blue-line)}
+#crm-dashboard-view .crm-dash-att-tag{padding:2px 10px;border-radius:999px;font-size:11.5px}
+#crm-dashboard-view .crm-dash-att-tag--bad{background:color-mix(in srgb,var(--crm-dash-bad) 12%,transparent)}
+#crm-dashboard-view .crm-dash-att-tag--warn{background:color-mix(in srgb,var(--crm-dash-warn) 12%,transparent)}
+#crm-dashboard-view .crm-dash-chev{opacity:.5;color:var(--cd-blue)}
+#crm-dashboard-view .crm-dash-avatar{width:32px;height:32px;font-size:11px;font-weight:700;color:var(--cd-blue);background:var(--cd-blue-soft)}
+/* Metrics, bars, tables */
+#crm-dashboard-view .crm-dash-metrics{gap:12px}
+#crm-dashboard-view .crm-dash-metric{padding:14px 16px;border-radius:12px;background:var(--mac-bg)}
+#crm-dashboard-view .crm-dash-metric-value{font-size:20px;font-weight:700}
+#crm-dashboard-view .crm-dash-metric--warn{box-shadow:inset 3px 0 0 var(--crm-dash-warn)}
+#crm-dashboard-view .crm-dash-metric--bad{box-shadow:inset 3px 0 0 var(--crm-dash-bad)}
+#crm-dashboard-view .crm-dash-forecast .crm-dash-metric{padding:12px 14px}
+#crm-dashboard-view .crm-dash-seg{padding:3px;border-radius:9px;background:var(--mac-bg);box-shadow:inset 0 0 0 1px var(--mac-line)}
+#crm-dashboard-view .crm-dash-seg button.active{background:var(--cd-blue);color:#fff}
+#crm-dashboard-view .crm-dash-bar-track{height:10px;background:var(--mac-fill)}
+#crm-dashboard-view .crm-dash-bar-row{padding:4px 0}
+#crm-dashboard-view .crm-dash-share{height:6px;border-radius:999px}
+#crm-dashboard-view .crm-dash-table th{background:var(--mac-bg);color:var(--mac-muted);font-weight:600;padding-top:10px;padding-bottom:10px}
+#crm-dashboard-view .crm-dash-table th:first-child{border-radius:8px 0 0 8px}
+#crm-dashboard-view .crm-dash-table th:last-child{border-radius:0 8px 8px 0}
+body.dark #crm-dashboard-view .crm-dash-table th{background:var(--mac-bg)}
+#crm-dashboard-view .crm-dash-link:hover td,#crm-dashboard-view .crm-dash-filterable:hover td{background:var(--cd-blue-soft)!important}
+#crm-dashboard-view .crm-dash-rank{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;font-weight:700;background:var(--mac-fill)}
+#crm-dashboard-view tbody tr:first-child .crm-dash-rank{color:#fff;background:var(--cd-blue)}
+#crm-dashboard-view .crm-dash-pill{display:inline-flex;align-items:center;padding:3px 10px;border-radius:999px;background:color-mix(in srgb,var(--pill,#94a3b8) 12%,transparent)}
+#crm-dashboard-view .crm-dash-tip{border-radius:10px}
 /* CRM relation detail → Dashboard tab body — macOS look (header, hero and tabs keep the shared inv-* style) */
 #crm-relation-pane-dashboard,#crm-relation-pane-forms{--mac-accent:#007aff;--mac-bg:#f5f5f7;--mac-panel:#fff;--mac-line:rgba(0,0,0,.09);--mac-text:#1d1d1f;--mac-muted:#6e6e73;--mac-fill:rgba(118,118,128,.12);--mac-hover:rgba(0,0,0,.045);
   font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;color:var(--mac-text);background:var(--mac-bg);padding:20px 24px 24px}
@@ -14803,7 +14951,8 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
   <!-- ── CRM: Permissions Modal ── -->
   <div class="modal-overlay mac-overlay" id="crm-perms-modal" style="display:none">
-    <div class="mac-window" style="width:1100px;max-width:96vw;height:82vh">
+    <div class="mac-window" style="width:1100px;max-width:96vw;height:82vh;position:relative">
+      <div class="mac-hud" id="crm-perms-hud" role="status" aria-live="polite"><i class="fa fa-check"></i><span></span></div>
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-user-shield"></i></span>

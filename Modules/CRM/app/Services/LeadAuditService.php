@@ -32,6 +32,7 @@ class LeadAuditService
         'score'                 => 'Score',
         'division_id'           => 'Division',
         'product_interest_note' => 'Product Interest',
+        'products'              => 'Products of Interest',
     ];
 
     /**
@@ -44,8 +45,20 @@ class LeadAuditService
     {
         $values = [];
         foreach (array_keys(self::TRACKED_FIELDS) as $field) {
-            $values[$field] = $this->normalise($lead->getAttribute($field));
+            if ($field !== 'products') {
+                $values[$field] = $this->normalise($lead->getAttribute($field));
+            }
         }
+
+        // The crm_lead_products list, as "Name × qty, …" in a stable order so only real
+        // additions, removals and quantity changes show up as a diff.
+        $values['products'] = $this->normalise($lead->products()
+            ->orderBy('products.name')
+            ->get()
+            ->map(fn ($p) => $p->name . ($p->pivot->quantity !== null
+                ? ' × ' . rtrim(rtrim(number_format((float) $p->pivot->quantity, 3, '.', ''), '0'), '.')
+                : ''))
+            ->implode(', '));
 
         $custom = $lead->customFieldValues()->pluck('value', 'custom_field_id');
         foreach ($custom as $fieldId => $value) {

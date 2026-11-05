@@ -70,8 +70,8 @@ class PosCrmLeadWorkspaceApiController extends Controller
                 'assignable_users'  => $can['can_assign'] ? $this->users($this->assignments->assignableUsers($lead)) : [],
                 'mentionable_users' => $can['can_contribute'] ? $this->users($this->messages->mentionableUsers($lead)) : [],
                 // Tasks on the lead go to someone of its department (see storeTask)
-                'task_assignees'    => $can['can_edit'] ? $this->users($this->assignments->assignableUsers($lead)) : [],
-                'can_add_tasks'     => $can['can_edit'] && $access->can('tasks_create'),
+                'task_assignees'    => $can['can_work'] ? $this->users($this->assignments->assignableUsers($lead)) : [],
+                'can_add_tasks'     => $can['can_work'] && $access->can('tasks_create'),
                 'timeline_types'    => $this->timeline->types(),
                 'attachment_rules'  => ['mimes' => LeadAttachmentService::ALLOWED_MIMES, 'max_kb' => LeadAttachmentService::maxKb()],
                 'counts'            => [
@@ -315,12 +315,14 @@ class PosCrmLeadWorkspaceApiController extends Controller
                 'completed_at'     => $t->completed_at?->toIso8601String(),
             ]);
 
-        $canEdit = $this->policy->canEdit($access, $lead);
+        $canWork = $this->policy->canWork($access, $lead);
 
         return response()->json(['data' => $rows, 'meta' => [
-            'can_work'   => $canEdit && $access->can('tasks_create'),
+            'can_work'     => $canWork && $access->can('tasks_create'),
+            // POST crm/tasks/{task}/complete|reopen — the desktop enables the tick box only when this is true
+            'can_complete' => $canWork && $access->can('tasks_complete'),
             // DELETE crm/tasks/{task} — the desktop shows the delete action only when this is true
-            'can_delete' => $canEdit && $access->can('tasks_delete'),
+            'can_delete'   => $canWork && $access->can('tasks_delete'),
         ]]);
     }
 
@@ -329,7 +331,7 @@ class PosCrmLeadWorkspaceApiController extends Controller
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
         $this->abortUnlessPerm($request, $business, 'crm_tasks');
-        $this->abortUnlessAllowed($access->can('tasks_create') && $this->policy->canEdit($access, $lead));
+        $this->abortUnlessAllowed($access->can('tasks_create') && $this->policy->canWork($access, $lead));
 
         $data = $request->validate([
             'title'       => ['required', 'string', 'max:255'],
