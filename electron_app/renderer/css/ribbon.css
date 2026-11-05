@@ -5757,7 +5757,7 @@ body.dark .schq-badge--bounced { color: #f87171; }
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 500;
   background: var(--surface); border: 1px solid var(--border);
   border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.18);
-  max-height: 320px; overflow-y: auto;
+  max-height: max(320px, 60vh); overflow-y: auto;
   animation: ssIn .12s ease;
 }
 @keyframes ssIn {
@@ -5801,6 +5801,7 @@ body.dark .schq-badge--bounced { color: #f87171; }
   padding: 7px 12px; font-size: 11px; color: var(--text-muted);
   border-top: 1px solid var(--border-light); text-align: center;
   background: var(--surface2);
+  position: sticky; bottom: 0;
 }
 .ss-empty {
   padding: 20px 12px; text-align: center; color: var(--text-muted); font-size: 12px;

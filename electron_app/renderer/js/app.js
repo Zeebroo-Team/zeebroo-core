@@ -7495,8 +7495,9 @@ async function _syncTick() {
       const r2 = await API.bootstrap(state.searchQuery || '', state.activeCategory || 0, state.activePage || 1, {});
       if (r2.status === 200 && state.posMode === 'products') {
         const { products = [], categories = [], currency = '' } = r2.body?.data || r2.body || {};
-        state.products   = products;
-        state.categories = categories;
+        state.products      = products;
+        state.productsQuery = null;
+        state.categories    = categories;
         if (currency) state.currency = currency;
         buildCategoryBar(categories, state.activeCategory || 0);
         buildProductGrid(products);
@@ -25458,10 +25459,19 @@ async function loadProducts(search = '', catId = 0, page = 1) {
   _applyPurchaseOrderMode(_resolvePurchasingMode(settings));
   _applyRentalMode(settings.rental_enabled !== false);
 
+  state.productsQuery   = state.activePage === 1 ? search.trim() : null;
+  state.productsTotal   = products_meta.total ?? products.length;
+
   buildCategoryBar(categories, catId);
   buildProductGrid(products);
   buildPosPagination(products_meta);
   setStatus(`Zeebroo POS · ${products_meta.total || products.length} products`);
+
+  // Refresh the suggestions with the results for what's actually typed now
+  const input = $('#product-search');
+  if (search.trim() && document.activeElement === input && input.value.trim() === search.trim()) {
+    _ssRender(search.trim());
+  }
 }
 
 // Products divided into sections by active sale campaign (with campaign name headers).
@@ -25634,6 +25644,7 @@ function buildCampaignSections(campaigns) {
   }).join('');
 
   state.products = allProducts;
+  state.productsQuery = null;
   bindProductCardClicks(grid);
 }
 
@@ -25703,7 +25714,6 @@ function buildPosPagination(meta) {
 // ── Search with auto-suggest ───────────────────────────────────────────────
 let searchTimer;
 let _ssSelIdx  = -1;
-const MAX_SUGGEST = 8;
 
 function _ssItems() { return [...$$('#search-suggest .ss-item')]; }
 
@@ -25818,51 +25828,114 @@ function _ssRender(q) {
   const box = $('#search-suggest');
   if (!q) { _ssClose(); return; }
 
-  const lower = q.toLowerCase();
-  const matches = state.products.filter(p =>
-    p.name.toLowerCase().includes(lower) ||
-    (p.sku && p.sku.toLowerCase().includes(lower)) ||
-    _hasBatchSku(p, lower)
-  );
+  // state.products already holds the search results for q once loadProducts() returns;
+  // until then, narrow the previous results locally (every word, any order — like the server).
+  const fresh = state.productsQuery === q;
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const matches = fresh ? state.products : state.products.filter(p => {
+    const hay = [p.name, p.sku, ...(p.layers || []).map(l => l.batch_sku)]
+      .filter(Boolean).join(' ').toLowerCase();
+    return words.every(w => hay.includes(w));
+  });
 
   if (!matches.length) {
-    box.innerHTML = `<div class="ss-empty"><i class="fa fa-box-open"></i>No products found for "<strong>${escHtml(q)}</strong>"</div>`;
+    box.innerHTML = fresh
+      ? `<div class="ss-empty"><i class="fa fa-box-open"></i>No products found for "<strong>${escHtml(q)}</strong>"</div>`
+      : `<div class="ss-empty"><i class="fa fa-spinner fa-spin"></i>Searching…</div>`;
     _ssOpen(); return;
   }
 
-  const shown  = matches.slice(0, MAX_SUGGEST);
-  const more   = matches.length - shown.length;
-  const cur    = state.currency || '';
+  _ss.seq++;
+  _ss.q       = q;
+  _ss.list    = matches.slice();
+  _ss.total   = fresh ? Math.max(state.productsTotal || 0, matches.length) : matches.length;
+  _ss.page    = fresh ? 1 : 0;
+  _ss.loading = false;
 
-  box.innerHTML = shown.map((p, idx) => {
-    const price      = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? 0);
-    const outOfStock = (parseFloat(p.stock_quantity) || 0) <= 0;
-    const imgHtml    = p.image_url
-      ? `<img class="ss-thumb" src="${p.image_url}" alt="">`
-      : `<div class="ss-icon"><i class="fa fa-box"></i></div>`;
-    const metaParts  = [];
-    if (p.sku) metaParts.push(p.sku);
-    if (p.category_name) metaParts.push(p.category_name);
+  box.innerHTML = _ss.list.map(_ssItemHtml).join('') + _ssFooterHtml();
+  box.scrollTop = 0;
+  _ssBindItems(box.querySelectorAll('.ss-item'));
 
-    return `<div class="ss-item${outOfStock ? ' ss-out' : ''}" data-id="${p.id}" data-idx="${idx}">
-      ${imgHtml}
-      <div class="ss-body">
-        <div class="ss-name">${escHtml(p.name)}</div>
-        ${metaParts.length ? `<div class="ss-meta">${escHtml(metaParts.join(' · '))}</div>` : ''}
-      </div>
-      <div class="ss-right">
-        <span class="ss-price">${formatMoney(price, {currency: cur})}</span>
-        ${outOfStock
-          ? '<span class="ss-out-badge">Out of stock</span>'
-          : (p.stock_quantity != null ? `<span class="ss-stock">${p.stock_quantity} in stock</span>` : '')}
-      </div>
-    </div>`;
-  }).join('') + (more > 0 ? `<div class="ss-footer"><i class="fa fa-ellipsis"></i> ${more} more — keep typing to narrow down</div>` : '');
+  _ssOpen();
+  _ssSelIdx = -1;
+}
 
-  box.querySelectorAll('.ss-item').forEach(el => {
+// Suggestion list: page 1 comes from loadProducts(); later pages load as the list is scrolled
+const _ss = { seq: 0, q: '', list: [], total: 0, page: 0, loading: false };
+
+function _ssItemHtml(p, idx) {
+  const price      = parseFloat(p.discounted_sell_price ?? p.unit_sell_price ?? 0);
+  const outOfStock = (parseFloat(p.stock_quantity) || 0) <= 0;
+  const imgHtml    = p.image_url
+    ? `<img class="ss-thumb" src="${p.image_url}" alt="">`
+    : `<div class="ss-icon"><i class="fa fa-box"></i></div>`;
+  const metaParts  = [];
+  if (p.sku) metaParts.push(p.sku);
+  if (p.category_name) metaParts.push(p.category_name);
+
+  return `<div class="ss-item${outOfStock ? ' ss-out' : ''}" data-id="${p.id}" data-idx="${idx}">
+    ${imgHtml}
+    <div class="ss-body">
+      <div class="ss-name">${escHtml(p.name)}</div>
+      ${metaParts.length ? `<div class="ss-meta">${escHtml(metaParts.join(' · '))}</div>` : ''}
+    </div>
+    <div class="ss-right">
+      <span class="ss-price">${formatMoney(price, {currency: state.currency || ''})}</span>
+      ${outOfStock
+        ? '<span class="ss-out-badge">Out of stock</span>'
+        : (p.stock_quantity != null ? `<span class="ss-stock">${p.stock_quantity} in stock</span>` : '')}
+    </div>
+  </div>`;
+}
+
+function _ssFooterHtml() {
+  if (_ss.list.length >= _ss.total) return '';
+  return `<div class="ss-footer">${_ss.loading
+    ? '<i class="fa fa-spinner fa-spin"></i> Loading more…'
+    : `<i class="fa fa-ellipsis"></i> Showing ${_ss.list.length} of ${_ss.total} — scroll for more`}</div>`;
+}
+
+function _ssSetFooter() {
+  const box = $('#search-suggest');
+  box.querySelector('.ss-footer')?.remove();
+  box.insertAdjacentHTML('beforeend', _ssFooterHtml());
+}
+
+async function _ssLoadMore() {
+  if (_ss.loading || !_ss.page || _ss.list.length >= _ss.total) return;
+  const seq  = _ss.seq;
+  const page = _ss.page + 1;
+  _ss.loading = true;
+  _ssSetFooter();
+
+  const res = await API.bootstrap(_ss.q, 0, page, {});
+  if (seq !== _ss.seq) return; // the search changed meanwhile
+  _ss.loading = false;
+  if (res.status !== 200) { _ssSetFooter(); return; }
+
+  const { products = [] } = res.body?.data || res.body || {};
+  const seen  = new Set(_ss.list.map(p => p.id));
+  const added = products.filter(p => !seen.has(p.id));
+  const start = _ss.list.length;
+  _ss.page = page;
+  _ss.list.push(...added);
+  if (!products.length) _ss.total = _ss.list.length;
+
+  const box = $('#search-suggest');
+  box.querySelector('.ss-footer')?.remove();
+  box.insertAdjacentHTML('beforeend', added.map((p, i) => _ssItemHtml(p, start + i)).join('') + _ssFooterHtml());
+  _ssBindItems(_ssItems().slice(start));
+}
+
+$('#search-suggest').addEventListener('scroll', function () {
+  if (this.scrollTop + this.clientHeight >= this.scrollHeight - 80) _ssLoadMore();
+});
+
+function _ssBindItems(els) {
+  els.forEach(el => {
     el.addEventListener('mousedown', ev => {
       ev.preventDefault(); // prevent blur before click fires
-      const p = state.products.find(pr => pr.id === Number(el.dataset.id));
+      const p = _ss.list.find(pr => pr.id === Number(el.dataset.id));
       if (!p) return;
       if ((parseFloat(p.stock_quantity) || 0) <= 0 && (p.layers || []).every(l => parseFloat(l.quantity_remaining) <= 0)) {
         toast(`${p.name} is out of stock`, 'info'); return;
@@ -25879,9 +25952,6 @@ function _ssRender(q) {
       _ssItems().forEach((x, i) => x.classList.toggle('active', i === _ssSelIdx));
     });
   });
-
-  _ssOpen();
-  _ssSelIdx = -1;
 }
 
 $('#product-search').addEventListener('focus', () => {
