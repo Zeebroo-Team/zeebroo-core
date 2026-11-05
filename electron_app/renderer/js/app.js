@@ -58929,7 +58929,7 @@ async function submitDsCreate() {
           d?.head && _crmHfPersonHtml(d.head, { tags: [tag('crm-hf-tag--head', 'Head')] }),
           d?.co_head && _crmHfPersonHtml(d.co_head, { tags: [tag('', 'Co-head')] }),
           v?.head && _crmHfPersonHtml(v.head, { tags: [tag('', 'Division head')] }),
-          d && !d.head && !d.co_head ? '<p class="crm-hf-hint">No department head is set in HR.</p>' : '',
+          d && !d.head && !d.co_head ? '<p class="crm-hf-hint">No department head is set. Choose one in CRM → Departments.</p>' : '',
         ].filter(Boolean).join('')
       : '<p class="crm-hf-hint">This lead is not linked to a department.</p>';
 
@@ -60967,7 +60967,7 @@ async function submitDsCreate() {
 
     return wrap(`<div class="crm-lv-facts">${facts}</div>
       <div class="crm-lv-resp-sub">Leadership</div>
-      ${leaders || `<div class="crm-lv-resp-note">${d ? 'No department head or co-head is set in HR.' : 'This lead is not linked to a department.'}</div>`}
+      ${leaders || `<div class="crm-lv-resp-note">${d ? 'No department head or co-head is set.' : 'This lead is not linked to a department.'}</div>`}
       <div class="crm-lv-resp-sub">Assigned team · ${(s.assignees || []).length}</div>
       ${team || '<div class="crm-lv-resp-note">Nobody is assigned yet.</div>'}`);
   }
@@ -65054,7 +65054,7 @@ async function submitDsCreate() {
   function _crmRenderOrgDepts() {
     const list = $('#crm-org-dept-list');
     if (!_crmOrg.departments.length) {
-      list.innerHTML = '<span class="mac-side-empty">No departments yet. Create them in HR Management first.</span>';
+      list.innerHTML = '<span class="mac-side-empty">No departments yet. Add them in CRM → Departments or Settings → Organisation.</span>';
       return;
     }
     const q = $('#crm-org-dept-search').value.trim().toLowerCase();
@@ -65385,7 +65385,7 @@ async function submitDsCreate() {
       <div class="mac-section">
         <div class="mac-section-title">Next steps</div>
         <div class="mac-group">
-          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-user-tie"></i></span>Assign employees and a head in HR Management</div></div>
+          <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-user-tie"></i></span>Put people in it from Settings → Users, then choose its head here</div></div>
           <div class="mac-row"><div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-sitemap"></i></span>Link a pipeline to it in CRM → Org Structure</div></div>
         </div>
       </div>`;
@@ -65431,9 +65431,8 @@ async function submitDsCreate() {
           ${lead('co_head', 'Co-head', d.co_head_employee_id)}
           ${range ? `<div class="mac-row"><div class="mac-row-label">Salary range</div><div>${escHtml(range)}</div></div>` : ''}
           <div class="mac-group-foot">
-            ${employees.length
-              ? '<button type="button" class="po-btn-primary" data-dept-lead-save><i class="fa fa-floppy-disk"></i> Save leadership</button>'
-              : '<span class="crm-perms-muted">Add employees to this department to choose a head.</span>'}
+            <span class="crm-perms-muted" style="margin-right:auto">Only people in this department can lead it. Someone missing? Put them in it from Settings → Users.</span>
+            ${employees.length ? '<button type="button" class="po-btn-primary" data-dept-lead-save><i class="fa fa-floppy-disk"></i> Save leadership</button>' : ''}
           </div>
         </div>
       </div>
@@ -65448,7 +65447,7 @@ async function submitDsCreate() {
                 <small>${[e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</small></span>
             </div>
             <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
-          </div>`).join('') || '<div class="mac-row mac-muted-row">No employees in this department yet. Add them in HR Management.</div>'}
+          </div>`).join('') || '<div class="mac-row mac-muted-row">No one is in this department yet. Put people in it from Settings → Users (or HR Management).</div>'}
         </div>
       </div>
 

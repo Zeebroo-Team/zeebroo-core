@@ -220,9 +220,11 @@ class PosUserManagementApiController extends Controller
         ]);
     }
 
-    public function cancelInvitation(Request $request, int $invitationId, BusinessInvitationService $invitations): JsonResponse
+    public function cancelInvitation(Request $request, int $invitationId, BusinessInvitationService $invitations, UserEmployeeLinkService $employees): JsonResponse
     {
-        $invitations->cancel($this->pendingInvitationOrFail($request, $invitationId));
+        $invitation = $this->pendingInvitationOrFail($request, $invitationId);
+        $invitations->cancel($invitation);
+        $employees->removeIncompleteInvite($this->businessOrAbort($request), $invitation->email);
 
         return response()->json(['message' => 'Invitation cancelled.']);
     }
@@ -312,7 +314,7 @@ class PosUserManagementApiController extends Controller
         return $value === null || $value === '' ? null : (int) $value;
     }
 
-    public function destroy(Request $request, int $memberId): JsonResponse
+    public function destroy(Request $request, int $memberId, UserEmployeeLinkService $employees): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
@@ -322,6 +324,7 @@ class PosUserManagementApiController extends Controller
             ->firstOrFail();
 
         $member->delete();
+        $employees->removeIncomplete($business, (int) $member->user_id);
 
         return response()->json(['message' => 'User removed from this business.']);
     }

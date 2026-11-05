@@ -161,3 +161,23 @@ test('accepting the invitation links the incomplete profile and names it after t
         ->and($employee->full_name)->toBe('Hasitha Mendis')
         ->and(Employee::find(50)->full_name)->toBe('Arjun Silva');
 });
+
+test('removing a member deletes their incomplete profile but keeps an HR-completed one', function () {
+    $this->service->assign($this->business, 'hasitha@example.com', 2, 'Hasitha', 5, null);
+    DB::table('hr_employees')->where('id', 50)->update(['user_id' => 3]);
+
+    $this->service->removeIncomplete($this->business, 2);
+    $this->service->removeIncomplete($this->business, 3);
+
+    expect(Employee::where('user_id', 2)->exists())->toBeFalse()
+        ->and(Employee::find(50))->not->toBeNull();
+});
+
+test('cancelling an invitation deletes only the incomplete profile waiting for that email', function () {
+    $this->service->assign($this->business, 'hasitha@example.com', null, 'hasitha', 5, null);
+
+    $this->service->removeIncompleteInvite($this->business, 'Hasitha@Example.com');
+    $this->service->removeIncompleteInvite($this->business, 'arjun@example.com');
+
+    expect(Employee::pluck('id')->all())->toBe([50]);
+});

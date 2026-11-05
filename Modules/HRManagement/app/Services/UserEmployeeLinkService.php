@@ -63,6 +63,30 @@ class UserEmployeeLinkService
         return $employee;
     }
 
+    /**
+     * A member removed from the team loses the incomplete profile Settings → Users gave them,
+     * so they drop out of their department. A profile HR completed stays: it is an HR record.
+     */
+    public function removeIncomplete(Business $business, int $userId): void
+    {
+        Employee::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->where('profile_complete', false)
+            ->delete();
+    }
+
+    /** A cancelled invitation drops the incomplete profile still waiting for that email. */
+    public function removeIncompleteInvite(Business $business, string $email): void
+    {
+        Employee::query()
+            ->where('business_id', $business->id)
+            ->whereNull('user_id')
+            ->where('profile_complete', false)
+            ->whereRaw('LOWER(personal_email) = ?', [Str::lower(trim($email))])
+            ->delete();
+    }
+
     /** The member's employee profile: the one linked to the login, else the one with their email. */
     public function find(Business $business, string $email, ?int $userId): ?Employee
     {
