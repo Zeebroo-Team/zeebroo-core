@@ -58280,8 +58280,7 @@ async function submitDsCreate() {
     $(`#crm-relation-pane-${tab}`)?.classList.add('active');
     const body = $('#crm-relation-tab-body');
     if (body) { body.scrollTop = 0; body.classList.toggle('crm-tab-body--fill', tab === 'pipeline'); }
-    _crmSetHeroHidden(false);
-    if (tab === 'forms' && !_crmDetailLoaded.forms) {
+    _crmSetHeroHidden(false);    if (tab === 'forms' && !_crmDetailLoaded.forms) {
       _crmDetailLoaded.forms = true;
       loadCrmForms();
     }
@@ -59136,8 +59135,7 @@ async function submitDsCreate() {
   }, { passive: true, capture: true });
 
   $('#crm-relation-new-lead-btn')?.addEventListener('click', () => _openNewLeadModal());
-  $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());
-  $('#crm-relation-delete-btn')?.addEventListener('click',  () => {
+  $('#crm-relation-stages-btn')?.addEventListener('click',   () => openStagesModal());  $('#crm-relation-delete-btn')?.addEventListener('click',  () => {
     const relation = _crmProjects.find(p => p.id === _crmProjectId);
     if (relation) _deleteCrmRelation(relation);
   });
@@ -62749,15 +62747,20 @@ async function submitDsCreate() {
     return {
       id: null, number: null,
       quote_date: new Date().toISOString().slice(0, 10), expiry_date: '', reference: '', notes: '',
+      // Billed to the linked customer's address on file (meta.lead from GET …/quotations)
+      customer_address: _crmQtCustomerAddress(),
       discount_amount: 0, tax_amount: 0,
       lines: fromInterest,
     };
   }
 
+  function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
+
   function _crmQtFormFromDetail(q) {
     return {
       id: q.id, number: q.quote_number,
       quote_date: q.quote_date || new Date().toISOString().slice(0, 10), expiry_date: q.expiry_date || '', reference: q.reference || '', notes: q.notes || '',
+      customer_address: q.customer_address || '',
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
@@ -62837,6 +62840,9 @@ async function submitDsCreate() {
           <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
           <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
           <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
+          <div class="crm-qt-field" style="grid-column:1/-1"><span style="display:flex;align-items:center;gap:8px"><label for="crm-qt-addr">Customer address</label>
+            ${_crmQtCustomerAddress() ? `<button type="button" class="crm-ws-link" data-qt-addr-fill style="margin-left:auto;font-size:12px" title="${escHtml(_crmQtCustomerAddress())}"><i class="fa fa-rotate"></i> Use customer's address</button>` : ''}</span>
+            <textarea id="crm-qt-addr" class="po-field-input" rows="2" maxlength="1000" data-qt-h="customer_address" style="resize:vertical" placeholder="${_crmWs.quotations?.meta?.lead?.customer_id ? 'No address on file for this customer — type one' : 'Street, city — printed on the quotation'}">${escHtml(f.customer_address || '')}</textarea></div>
         </div>
       </section>
 
@@ -62952,6 +62958,7 @@ async function submitDsCreate() {
 
     const body = {
       quote_date: f.quote_date, expiry_date: f.expiry_date || null, reference: f.reference.trim() || null, notes: f.notes.trim() || null,
+      customer_address: (f.customer_address || '').trim() || null,
       discount_amount: _crmQtNum(f.discount_amount), tax_amount: _crmQtNum(f.tax_amount), items,
     };
     btn.disabled = true;
@@ -63323,6 +63330,10 @@ async function submitDsCreate() {
       _crmRenderWsTab();
     } else if (t.matches('[data-qt-edit]') && s.detail) {
       _crmQtEdit(lead, _crmQtFormFromDetail(s.detail));
+    } else if (t.matches('[data-qt-addr-fill]') && s.form) {
+      s.form.customer_address = _crmQtCustomerAddress();
+      const box = $('#crm-qt-edit-body [data-qt-h="customer_address"]');
+      if (box) box.value = s.form.customer_address;
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
       s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
       _crmRenderWsTab();
@@ -64392,6 +64403,129 @@ async function submitDsCreate() {
   $('#crm-audit-next')?.addEventListener('click', () => { _crmAuditPage++; _crmLoadAudit(); });
   $('#crm-audit-close')?.addEventListener('click', () => { $('#crm-audit-modal').style.display = 'none'; });
 
+  // ── CRM sales analysis report (ribbon → Report): leads grouped by department, customer,
+  //    product…, previewed here and saved as PDF or CSV for sales analysis ──
+  const _crmRep = { group: 'department', data: null, optionsReady: false };
+
+  // Sidebar entry per report type: icon, one-line hint
+  const _crmRepGroupMeta = {
+    department:       ['fa-building-user',   'Leads & revenue per department'],
+    division:         ['fa-sitemap',         'Leads & revenue per division'],
+    customer:         ['fa-user-tie',        'Each company’s deals'],
+    staff:            ['fa-id-badge',        'Performance per salesperson'],
+    source:           ['fa-bullhorn',        'Where leads come from'],
+    product:          ['fa-box-open',        'What gets quoted & won'],
+    customer_product: ['fa-heart',           'What each company prefers'],
+  };
+
+  function openCrmReportModal() {
+    _macShow($('#crm-report-modal'));
+    _crmLoadReport();
+  }
+
+  function _crmReportParams() {
+    const val = id => $(id)?.value || '';
+    return {
+      group_by: _crmRep.group, from: val('#crm-report-from'), to: val('#crm-report-to'),
+      department_id: val('#crm-report-department'), division_id: val('#crm-report-division'),
+      user_id: val('#crm-report-user'), source: val('#crm-report-source'),
+      status: val('#crm-report-status'), search: val('#crm-report-search').trim(),
+    };
+  }
+
+  function _crmReportCell(type, v) {
+    if (v == null || v === '') return type === 'text' ? '' : '—';
+    if (type === 'money') return escHtml(_crmDashMoney(v));
+    if (type === 'pct')   return `${v}%`;
+    if (type === 'qty')   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 3 });
+    if (type === 'int')   return Number(v).toLocaleString();
+    return escHtml(String(v));
+  }
+
+  function _crmReportOptions(o) {
+    const fill = (id, list, all, keyOf, labelOf) => {
+      const el = $(id), cur = el.value;
+      el.innerHTML = `<option value="">${all}</option>` + list.map(x => `<option value="${escHtml(String(keyOf(x)))}">${escHtml(labelOf(x))}</option>`).join('');
+      el.value = cur;
+    };
+    fill('#crm-report-department', o.departments, 'All departments', x => x.id, x => x.name);
+    fill('#crm-report-division',   o.divisions,   'All divisions',   x => x.id, x => x.name);
+    fill('#crm-report-user',       o.staff,       'All staff',       x => x.id, x => x.name);
+    fill('#crm-report-source',     o.sources,     'All sources',     x => x.key, x => x.label);
+    fill('#crm-report-status',     o.statuses,    'Any status',      x => x.key, x => x.label);
+    $('#crm-report-groups').innerHTML = o.groups.map(g => {
+      const [icon, hint] = _crmRepGroupMeta[g.key] || ['fa-table', ''];
+      return `<button type="button" class="crm-rep-group-btn${g.key === _crmRep.group ? ' active' : ''}" data-rep-group="${g.key}">
+        <i class="fa ${icon}"></i><span>${escHtml(g.label)}<small>${escHtml(hint)}</small></span></button>`;
+    }).join('');
+  }
+
+  async function _crmLoadReport() {
+    const cols = _crmRep.data?.columns.length || 6;
+    $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
+    $('#crm-report-foot').innerHTML = '';
+    const res = await API.crmSalesAnalysis(_crmReportParams()).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the report.')))}</td></tr>`;
+      return;
+    }
+    const d = _crmRep.data = res.body.data;
+    if (!_crmRep.optionsReady) {
+      _crmReportOptions(d.options);
+      _crmRep.optionsReady = true;
+    } else {
+      $('#crm-report-groups').querySelectorAll('[data-rep-group]').forEach(b => b.classList.toggle('active', b.dataset.repGroup === d.group_by));
+    }
+    // Show the range actually used (the server fills in the last 30 days when left empty)
+    $('#crm-report-from').value = d.filters.from;
+    $('#crm-report-to').value   = d.filters.to;
+
+    const r = c => c.type === 'text' ? '' : ' class="r"';
+    $('#crm-report-head').innerHTML = `<tr>${d.columns.map(c => `<th${r(c)}>${escHtml(c.label)}</th>`).join('')}</tr>`;
+    let prevCustomer = null;
+    $('#crm-report-rows').innerHTML = d.rows.length ? d.rows.map(row => {
+      // Customer preferences: name each customer once, at the top of their block
+      const first = 'customer' in row && row.customer !== prevCustomer;
+      prevCustomer = row.customer ?? null;
+      return `<tr${first ? ' class="crm-rep-group"' : ''}>${d.columns.map(c =>
+        `<td${r(c)}>${c.key === 'customer' && !first ? '' : (c.key === 'customer' ? `<strong>${_crmReportCell(c.type, row[c.key])}</strong>` : _crmReportCell(c.type, row[c.key]))}</td>`).join('')}</tr>`;
+    }).join('') : `<tr><td colspan="${d.columns.length}">${_crmWsPanelHtml('Nothing matches these filters.')}</td></tr>`;
+    $('#crm-report-foot').innerHTML = d.rows.length
+      ? `<tr>${d.columns.map((c, i) => `<td${r(c)}>${i === 0 ? 'Total' : (c.key in d.totals ? _crmReportCell(c.type, d.totals[c.key]) : '')}</td>`).join('')}</tr>`
+      : '';
+    $('#crm-report-summary').textContent = `${d.rows.length} ${d.rows.length === 1 ? 'row' : 'rows'} · by ${d.group_label.toLowerCase()} · leads created ${d.filters.from} → ${d.filters.to}`;
+  }
+
+  async function _crmReportDownload(format, btn) {
+    const p = _crmReportParams();
+    const name = `crm-sales-by-${p.group_by.replace('_', '-')}-${p.from || 'last-30-days'}${p.to ? `-to-${p.to}` : ''}.${format}`;
+    btn.disabled = true;
+    const res = await window.electronAPI.downloadFile(API.crmSalesAnalysisExportPath(format, p), name);
+    btn.disabled = false;
+    if (res?.canceled) return;
+    if (res?.status !== 200) { toast(res?.message || 'Export failed', 'error'); return; }
+    toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
+  }
+
+  $('#crm-report-groups')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep-group]');
+    if (!b || b.dataset.repGroup === _crmRep.group) return;
+    _crmRep.group = b.dataset.repGroup;
+    _crmLoadReport();
+  });
+  $('#crm-report-run')?.addEventListener('click', () => _crmLoadReport());
+  // Dropdowns and dates apply straight away; the search waits for Enter / Generate
+  $('#crm-report-modal .crm-rep-filters')?.addEventListener('change', () => _crmLoadReport());
+  $('#crm-report-reset')?.addEventListener('click', () => {
+    $('#crm-report-modal').querySelectorAll('.crm-rep-filters .po-field-input, #crm-report-search').forEach(el => { el.value = ''; });
+    _crmLoadReport();
+  });
+  $('#crm-report-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') _crmLoadReport(); });
+  $('#crm-report-pdf')?.addEventListener('click', e => _crmReportDownload('pdf', e.currentTarget));
+  $('#crm-report-csv')?.addEventListener('click', e => _crmReportDownload('csv', e.currentTarget));
+  $('#crm-report-refresh')?.addEventListener('click', () => _crmLoadReport());
+  ['#crm-report-close', '#crm-report-close-btn'].forEach(id => $(id)?.addEventListener('click', () => _macHide($('#crm-report-modal'))));
+
   // macOS-style open/close: the window zooms out of the point that opened it (the clicked
   // lead card) with a soft spring, and shrinks back into it on close.
   let _crmLeadModalOrigin = null;
@@ -64896,6 +65030,8 @@ async function submitDsCreate() {
   $('#rb-crm-permissions')?.addEventListener('click', () => openCrmPermissionsModal());
   $('#rb-crm-org')?.addEventListener('click',         () => openCrmOrgModal());
   $('#rb-crm-add-dept')?.addEventListener('click',    () => { activateTab('crm'); openCrmDeptModal(); });
+  $('#rb-crm-customers')?.addEventListener('click',   () => openCustomersModal());
+  $('#rb-crm-report')?.addEventListener('click',      () => openCrmReportModal());
   // A department added from CRM (or HR) shows up in Org Structure straight away.
   document.addEventListener('departments:changed', () => {
     if ($('#crm-org-modal')?.style.display === 'flex') _crmLoadOrg();
@@ -67454,7 +67590,90 @@ async function submitDsCreate() {
     _renderStageFormStatuses();
     _setStageFormStatus(st.key);
     _macShow($('#crm-stage-form-modal'));
-    setTimeout(() => { const n = $('#crm-stage-form-name'); n.focus(); n.select(); }, 60);
+    // "Add Stage" / "Custom Stage" start by picking the template; a template card, edit or copy already has one
+    _setStageFormStep(preset.custom && !editing ? 1 : 2, false);
+  }
+
+  // Wizard: 1 = pick the template (status), 2 = name & look, 3 = automatic actions (optional, so saving works from 2 too)
+  function _setStageFormStep(step, animate = true) {
+    const body = $('#crm-stage-form-body');
+    const win = body.closest('.mac-window');
+    const fromStep = _stageForm.step, fromH = win.offsetHeight;
+    _stageForm.step = step;
+    body.dataset.step = step;
+    body.scrollTop = 0;
+    $$('#crm-stage-form-steps [data-stage-step]').forEach(b => {
+      b.classList.toggle('is-on', Number(b.dataset.stageStep) === step);
+      b.classList.toggle('is-done', Number(b.dataset.stageStep) < step);
+    });
+    const next = $('#crm-stage-form-next');
+    next.style.display = step < 3 ? '' : 'none';
+    next.innerHTML = step === 1 ? 'Next <i class="fa fa-arrow-right"></i>' : 'Next: automatic actions <i class="fa fa-arrow-right"></i>';
+    next.className = step === 1 ? 'po-btn-primary' : 'po-btn-ghost';
+    $('#crm-stage-form-back').style.display = step > 1 ? '' : 'none';
+    $('#crm-stage-form-save').style.display = step > 1 ? '' : 'none';
+    $('#crm-stage-form-alert').style.display = 'none';
+    if (animate && step !== fromStep) _animateStageFormStep(win, body, fromH, step > fromStep ? 1 : -1);
+    if (step === 2) setTimeout(() => { const n = $('#crm-stage-form-name'); n.focus(); n.select(); }, 60);
+  }
+
+  // macOS-style step change: the window eases to its new height while the new step slides in
+  const _STAGE_FORM_EASE = 'cubic-bezier(.22,1,.36,1)';
+  const _stageFormMotionOk = el => !!el.animate && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  function _morphStageFormHeight(win, fromH) {
+    const toH = win.offsetHeight;
+    if (!_stageFormMotionOk(win) || !fromH || Math.abs(toH - fromH) <= 1) return;
+    win.getAnimations().forEach(a => a.cancel());
+    win.style.overflow = 'hidden';
+    win.animate([{ height: `${fromH}px` }, { height: `${toH}px` }], { duration: 460, easing: _STAGE_FORM_EASE })
+      .finished.finally(() => { win.style.overflow = ''; });
+  }
+  function _animateStageFormStep(win, body, fromH, dir) {
+    if (!_stageFormMotionOk(win)) return;
+    _morphStageFormHeight(win, fromH);
+    const pane = body.querySelector(`.crm-stg-step${body.dataset.step}`);
+    pane?.animate([
+      { opacity: 0, transform: `translateX(${dir * 24}px)`, filter: 'blur(2px)' },
+      { opacity: 1, transform: 'none', filter: 'none' },
+    ], { duration: 420, easing: _STAGE_FORM_EASE });
+  }
+
+  // Expand / collapse a section in place; the window's auto height follows it frame by frame
+  function _stageSlide(el, show, animate = true) {
+    const shown = el.style.display !== 'none';
+    el.getAnimations().forEach(a => a.cancel());
+    el.style.overflow = '';
+    if (!animate || show === shown || !_stageFormMotionOk(el)) { el.style.display = show ? '' : 'none'; return; }
+    el.style.display = '';
+    const cs = getComputedStyle(el);
+    const open = { height: `${el.offsetHeight}px`, paddingTop: cs.paddingTop, paddingBottom: cs.paddingBottom, opacity: 1, transform: 'none' };
+    const shut = { height: '0px', paddingTop: '0px', paddingBottom: '0px', opacity: 0, transform: 'translateY(-6px)' };
+    el.style.overflow = 'hidden';
+    const a = el.animate(show ? [shut, open] : [open, shut], { duration: 380, easing: _STAGE_FORM_EASE });
+    a.onfinish = () => { el.style.overflow = ''; if (!show) el.style.display = 'none'; };
+  }
+  $('#crm-stage-form-steps')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-stage-step]');
+    if (b) _setStageFormStep(Number(b.dataset.stageStep));
+  });
+  $('#crm-stage-form-next')?.addEventListener('click', () => _setStageFormStep(_stageForm.step + 1));
+  $('#crm-stage-form-back')?.addEventListener('click', () => _setStageFormStep(_stageForm.step - 1));
+
+  // Step 1's side panel: what the picked template does, in plain words
+  function _renderStageTplInfo(st) {
+    const fx = st.effects || (st.base_key && _CRM_STATUS_EFFECTS[st.base_key]) || [];
+    const counts = st.custom ? `Counts as <b>${escHtml(st.base_label)}</b> in reports`
+      : st.key === 'custom' ? 'You choose below how it behaves' : `Counts as <b>${escHtml(st.label)}</b> in reports`;
+    $('#crm-stage-form-tpl-info').style.setProperty('--stg', st.color);
+    $('#crm-stage-form-tpl-info').innerHTML = `
+      <div class="crm-stg-pick-info-head">
+        <span class="crm-stg-ico"><i class="fa ${st.icon}"></i></span>
+        <div><b>${escHtml(st.label)}</b><small>${counts}</small></div>
+      </div>
+      <p>${escHtml(st.description || st.note || '')}</p>
+      ${fx.length ? `<div class="crm-stg-pick-info-label">What happens</div>
+        <ul>${fx.map(t => `<li><i class="fa fa-circle-check"></i><span>${escHtml(t)}</span></li>`).join('')}</ul>` : ''}
+      <div class="crm-stg-act-hint">You can rename it, pick a colour and icon in the next step.</div>`;
   }
 
   // Small icons in the stage list for what a stage does when a lead enters it
@@ -67480,11 +67699,16 @@ async function submitDsCreate() {
     const require = rules.require || [];
     $$('#crm-stage-form-modal [data-stage-require]').forEach(c => { c.checked = require.includes(c.dataset.stageRequire); });
     $('#crm-stage-form-notify-users').style.display = users.length ? '' : 'none';
+    $('#crm-stage-form-notify-users-label').style.display = users.length ? '' : 'none';
 
     $('#crm-stage-form-task-on').checked = !!rules.task;
     $('#crm-stage-form-task-title').value = rules.task?.title || '';
     $('#crm-stage-form-task-days').value = rules.task?.due_days ?? 1;
-    _syncStageTaskBody();
+    // Notify / assign / stuck have no "on" flag of their own: a switch is on when it has something set
+    $('#crm-stage-form-notify-on').checked = !!(rules.notify?.owner || rules.notify?.head || rules.notify?.user_ids?.length);
+    $('#crm-stage-form-assign-on').checked = !!rules.assign_user_ids?.length;
+    $('#crm-stage-form-maxdays-on').checked = !!rules.max_days;
+    _syncStageAutoBodies();
 
     $('#crm-stage-form-notify-owner').checked = !!rules.notify?.owner;
     $('#crm-stage-form-notify-head').checked = !!rules.notify?.head;
@@ -67503,12 +67727,24 @@ async function submitDsCreate() {
     $('#crm-stage-form-max-days').value = rules.max_days || '';
   }
 
-  function _syncStageTaskBody() {
-    $('#crm-stage-form-task-body').style.display = $('#crm-stage-form-task-on').checked ? '' : 'none';
+  // Step 3: an action's settings show only while its switch is on
+  const _STAGE_AUTO_BODY = { task: 'crm-stage-form-task-body', notify: 'crm-stage-form-notify-body', assign: 'crm-stage-form-assign-body', maxdays: 'crm-stage-form-maxdays-body' };
+  function _syncStageAutoBodies(animate = false) {
+    $$('#crm-stage-form-modal [data-stage-auto]').forEach(sw => {
+      _stageSlide($(`#${_STAGE_AUTO_BODY[sw.dataset.stageAuto]}`), sw.checked, animate);
+    });
   }
-  $('#crm-stage-form-task-on')?.addEventListener('change', () => {
-    _syncStageTaskBody();
-    if ($('#crm-stage-form-task-on').checked) $('#crm-stage-form-task-title').focus();
+  $('#crm-stage-form-modal')?.addEventListener('change', e => {
+    const sw = e.target.closest('[data-stage-auto]');
+    if (!sw) return;
+    _syncStageAutoBodies(true);
+    if (!sw.checked) return;
+    // Focus after the row has opened, so the field doesn't jump-scroll mid-animation
+    setTimeout(() => {
+      if (sw.dataset.stageAuto === 'task') $('#crm-stage-form-task-title').focus({ preventScroll: true });
+      if (sw.dataset.stageAuto === 'maxdays') { const d = $('#crm-stage-form-max-days'); if (!d.value) d.value = 7; d.focus({ preventScroll: true }); }
+      $(`#${_STAGE_AUTO_BODY[sw.dataset.stageAuto]}`).scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 380);
   });
   $('#crm-stage-form-assign-users')?.addEventListener('change', e => {
     const c = e.target.closest('[data-stage-assign-user]');
@@ -67517,17 +67753,19 @@ async function submitDsCreate() {
 
   function _stageFormActions() {
     const taskOn = $('#crm-stage-form-task-on').checked;
+    // A switched-off action keeps its ticks in the form but saves nothing
+    const notifyOn = $('#crm-stage-form-notify-on').checked;
     return {
       require:   [...$$('#crm-stage-form-modal [data-stage-require]')].filter(c => c.checked).map(c => c.dataset.stageRequire),
       task:      taskOn ? { enabled: true, title: $('#crm-stage-form-task-title').value.trim(), due_days: parseInt($('#crm-stage-form-task-days').value) || 0 } : null,
       notify:    {
-        owner:    $('#crm-stage-form-notify-owner').checked,
-        head:     $('#crm-stage-form-notify-head').checked,
-        user_ids: [...$$('#crm-stage-form-notify-users [data-stage-notify-user]')].filter(c => c.checked).map(c => parseInt(c.dataset.stageNotifyUser)),
+        owner:    notifyOn && $('#crm-stage-form-notify-owner').checked,
+        head:     notifyOn && $('#crm-stage-form-notify-head').checked,
+        user_ids: notifyOn ? [...$$('#crm-stage-form-notify-users [data-stage-notify-user]')].filter(c => c.checked).map(c => parseInt(c.dataset.stageNotifyUser)) : [],
       },
-      assign_user_ids: [...$$('#crm-stage-form-assign-users [data-stage-assign-user]')].filter(c => c.checked)
+      assign_user_ids: !$('#crm-stage-form-assign-on').checked ? [] : [...$$('#crm-stage-form-assign-users [data-stage-assign-user]')].filter(c => c.checked)
         .sort((a, b) => Number(a.dataset.order) - Number(b.dataset.order)).map(c => parseInt(c.dataset.stageAssignUser)),
-      max_days:  parseInt($('#crm-stage-form-max-days').value) || null,
+      max_days:  $('#crm-stage-form-maxdays-on').checked ? parseInt($('#crm-stage-form-max-days').value) || null : null,
     };
   }
 
@@ -67561,9 +67799,10 @@ async function submitDsCreate() {
     else if (_stageForm.nameAuto && nameEl.value === _stageForm.nameAuto) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
     else if (!nameEl.value.trim() && prev && !_stageForm.id) { nameEl.value = st.label; _stageForm.nameAuto = st.label; }
     $$('#crm-stage-form-statuses [data-stage-status]').forEach(b => b.classList.toggle('is-on', b.dataset.stageStatus === key));
-    $('#crm-stage-form-behaviour').style.display = custom ? '' : 'none';
-    if (custom && prev && prev.key !== 'custom') setTimeout(() => $('#crm-stage-form-behaviour').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 30);
+    _stageSlide($('#crm-stage-form-behaviour'), custom, !!prev);
+    if (custom && prev && prev.key !== 'custom') setTimeout(() => $('#crm-stage-form-behaviour').scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 400);
     _syncStageReasonHint();
+    _renderStageTplInfo(st);
     _refreshStageFormLook();
   }
 
@@ -67602,6 +67841,11 @@ async function submitDsCreate() {
     _setStageFormStatus(b.dataset.stageStatus);
     const st = _crmStatus(b.dataset.stageStatus);
     if (st?.custom) _applyCustomStatusPreset(st);
+  });
+  // Double-clicking a template picks it and moves on (Custom stays, so its behaviour ticks can be set)
+  $('#crm-stage-form-statuses')?.addEventListener('dblclick', e => {
+    const b = e.target.closest('[data-stage-status]');
+    if (b && b.dataset.stageStatus !== 'custom') _setStageFormStep(2);
   });
 
   // Picking one of the business's own statuses fills in its note, reason flag and actions;
@@ -67745,11 +67989,15 @@ async function submitDsCreate() {
   $('#crm-stage-form-save')?.addEventListener('click', async () => {
     const alertEl = $('#crm-stage-form-alert');
     const name = $('#crm-stage-form-name').value.trim();
-    if (!name) { alertEl.textContent = 'Stage name is required.'; alertEl.style.display = ''; $('#crm-stage-form-name').focus(); return; }
+    if (!name) {
+      _setStageFormStep(2);
+      alertEl.textContent = 'Stage name is required.'; alertEl.style.display = ''; $('#crm-stage-form-name').focus(); return;
+    }
     const key = _stageForm.status;
     const actions = _stageFormActions();
     if (actions.task && !actions.task.title) {
-      alertEl.textContent = 'Give the task a title, or untick "Create a task".'; alertEl.style.display = '';
+      _setStageFormStep(3);
+      alertEl.textContent = 'Give the task a title, or switch off "Create a follow-up task".'; alertEl.style.display = '';
       $('#crm-stage-form-task-title').focus();
       return;
     }

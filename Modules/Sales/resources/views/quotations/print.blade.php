@@ -135,7 +135,8 @@ body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
                         @if($quotation->customer->contact_name){{ $quotation->customer->contact_name }}<br>@endif
                         @if($quotation->customer->email){{ $quotation->customer->email }}<br>@endif
                         @if($quotation->customer->phone){{ $quotation->customer->phone }}<br>@endif
-                        @if($quotation->customer->address)<span style="white-space:pre-line;">{{ $quotation->customer->address }}</span>@endif
+                        {{-- The quotation's own address wins over the one on the customer --}}
+                        @if($quotation->customer_address ?: $quotation->customer->address)<span style="white-space:pre-line;">{{ $quotation->customer_address ?: $quotation->customer->address }}</span>@endif
                     </div>
                 @elseif($quotation->lead_id && $quotation->lead)
                     {{-- A lead not converted to a customer yet --}}
@@ -143,7 +144,8 @@ body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
                     <div class="qt-bill-info">
                         @if($quotation->lead->company){{ $quotation->lead->name }}<br>@endif
                         @if($quotation->lead->email){{ $quotation->lead->email }}<br>@endif
-                        @if($quotation->lead->phone){{ $quotation->lead->phone }}@endif
+                        @if($quotation->lead->phone){{ $quotation->lead->phone }}<br>@endif
+                        @if($quotation->customer_address)<span style="white-space:pre-line;">{{ $quotation->customer_address }}</span>@endif
                     </div>
                 @else
                     <div class="qt-bill-name">Walk-in Customer</div>

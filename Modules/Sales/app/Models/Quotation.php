@@ -34,6 +34,7 @@ class Quotation extends Model
         'parent_quotation_id',
         'customer_id',
         'lead_id',
+        'customer_address',
         'reference',
         'quote_date',
         'expiry_date',

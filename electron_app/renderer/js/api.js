@@ -756,6 +756,9 @@ const API = (() => {
     // Management dashboard (admin, CEO, heads) — params: from, to, department_id, division_id, user_id, source
     crmDashboard:             (params = {})            => request('GET',    `/crm/reports/dashboard?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmDashboardExportPath:   (format, params = {})    => `/crm/reports/dashboard/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
+    // Sales analysis report (ribbon → Report) — dashboard params plus group_by, status, search; format: pdf | csv
+    crmSalesAnalysis:         (params = {})            => request('GET',    `/crm/reports/sales-analysis?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmSalesAnalysisExportPath: (format, params = {})  => `/crm/reports/sales-analysis/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
     // Row-level CRM audit log — admins only
     crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),

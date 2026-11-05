@@ -701,6 +701,10 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/reports/dashboard',       [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'dashboard'])->name('crm.reports.dashboard');
     Route::get   ('crm/reports/dashboard/pdf',   [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'pdf'])      ->name('crm.reports.dashboard.pdf');
     Route::get   ('crm/reports/dashboard/excel', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'excel'])    ->name('crm.reports.dashboard.excel');
+    // CRM sales analysis report (ribbon → Report): grouped by department, customer, product… as JSON / PDF / CSV
+    Route::get   ('crm/reports/sales-analysis',     [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysis'])   ->name('crm.reports.sales-analysis');
+    Route::get   ('crm/reports/sales-analysis/pdf', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisPdf'])->name('crm.reports.sales-analysis.pdf');
+    Route::get   ('crm/reports/sales-analysis/csv', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisCsv'])->name('crm.reports.sales-analysis.csv');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');

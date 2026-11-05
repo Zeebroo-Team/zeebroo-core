@@ -149,7 +149,7 @@ class CrmReportService
     }
 
     /** The business's leads this user may report on, with the non-date filters applied. */
-    private function leads(Business $business, CrmAccess $access, array $filters): Builder
+    public function leads(Business $business, CrmAccess $access, array $filters): Builder
     {
         $query = Lead::query()->where('crm_leads.business_id', $business->id);
 
@@ -658,7 +658,7 @@ class CrmReportService
     }
 
     /** What the filter bar offers this user. */
-    private function options(Business $business, CrmAccess $access): array
+    public function options(Business $business, CrmAccess $access): array
     {
         $departmentIds = $access->viewsAllLeads() ? null : $this->scopeDepartmentIds($business, $access);
 

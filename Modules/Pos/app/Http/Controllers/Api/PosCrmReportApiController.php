@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Modules\Business\Models\Business;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
 use Modules\CRM\Services\CrmReportExportService;
 use Modules\CRM\Services\CrmReportService;
+use Modules\CRM\Services\CrmSalesAnalysisService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -27,6 +29,7 @@ class PosCrmReportApiController extends Controller
         private readonly CrmPermissionService $crmPermissions,
         private readonly CrmReportService $reports,
         private readonly CrmReportExportService $exports,
+        private readonly CrmSalesAnalysisService $salesAnalysis,
     ) {}
 
     /** GET crm/reports/dashboard */
@@ -53,6 +56,30 @@ class PosCrmReportApiController extends Controller
         return $this->exports->excel($this->reports->dashboard($business, $access, $this->filters($request)));
     }
 
+    /** GET crm/reports/sales-analysis — the ribbon "Report" table, grouped by department, customer, product… */
+    public function salesAnalysis(Request $request): JsonResponse
+    {
+        [$business, $access] = $this->context($request);
+
+        return response()->json(['data' => $this->salesAnalysis->report($business, $access, $this->salesFilters($request))]);
+    }
+
+    /** GET crm/reports/sales-analysis/pdf */
+    public function salesAnalysisPdf(Request $request): Response
+    {
+        [$business, $access] = $this->context($request);
+
+        return $this->exports->salesAnalysisPdf($business, $this->salesAnalysis->report($business, $access, $this->salesFilters($request)));
+    }
+
+    /** GET crm/reports/sales-analysis/csv */
+    public function salesAnalysisCsv(Request $request): Response
+    {
+        [$business, $access] = $this->context($request);
+
+        return $this->exports->salesAnalysisCsv($this->salesAnalysis->report($business, $access, $this->salesFilters($request)));
+    }
+
     private function filters(Request $request): array
     {
         return $request->validate([
@@ -63,6 +90,18 @@ class PosCrmReportApiController extends Controller
             'user_id'       => ['nullable', 'integer'],
             'source'        => ['nullable', 'string', 'max:40'],
         ]);
+    }
+
+    private function salesFilters(Request $request): array
+    {
+        return [
+            ...$this->filters($request),
+            ...$request->validate([
+                'group_by' => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::GROUPS))],
+                'status'   => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::STATUSES))],
+                'search'   => ['nullable', 'string', 'max:100'],
+            ]),
+        ];
     }
 
     /** @return array{0: Business, 1: CrmAccess} */

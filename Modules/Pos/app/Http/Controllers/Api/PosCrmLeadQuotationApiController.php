@@ -338,6 +338,7 @@ class PosCrmLeadQuotationApiController extends Controller
         return $request->validate([
             'branch_id'               => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'customer_id'             => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'customer_address'        => ['nullable', 'string', 'max:1000'],
             'reference'               => ['nullable', 'string', 'max:120'],
             'quote_date'              => ['required', 'date'],
             'expiry_date'             => ['nullable', 'date', 'after_or_equal:quote_date'],
@@ -418,6 +419,7 @@ class PosCrmLeadQuotationApiController extends Controller
             'reference'     => $q->reference,
             'notes'         => $q->notes,
             'customer_id'   => $q->customer_id,
+            'customer_address' => $q->customer_address,
             'branch_id'     => $q->branch_id,
             'subtotal'      => round((float) $q->subtotal, 2),
             'discount_amount' => round((float) $q->discount_amount, 2),
@@ -538,6 +540,9 @@ class PosCrmLeadQuotationApiController extends Controller
             'name'         => $lead->name,
             'company'      => $lead->company,
             'email'        => $lead->email,
+            'customer_id'  => $lead->customer_id,
+            // What a new quotation's address is filled with
+            'customer_address' => $this->leadQuotations->customerAddress($lead),
             'project_id'   => (int) $lead->project_id,
             'project_name' => $lead->project?->name,
             'status_key'   => $lead->statusKey(),

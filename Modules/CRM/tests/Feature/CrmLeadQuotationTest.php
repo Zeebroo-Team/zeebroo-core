@@ -115,6 +115,7 @@ beforeEach(function () {
         $t->string('phone')->nullable();
         $t->string('normalized_phone', 32)->nullable();
         $t->string('email')->nullable();
+        $t->text('address')->nullable();
         $t->text('notes')->nullable();
         $t->timestamps();
     });
@@ -410,6 +411,26 @@ test('creating a quotation from the lead links it and moves the lead to Quotatio
     expect($detail['lead'])->toBe(['id' => $this->lead->id, 'name' => 'Kasun', 'project_id' => $this->sales->id])
         ->and($detail['is_editable'])->toBeFalse()
         ->and($pos->update(Request::create('/', 'PATCH', crmQuoteBody())->setUserResolver(fn () => User::find(1)), $q)->getStatusCode())->toBe(422);
+});
+
+test('the customer address is filled from the lead\'s customer, can be changed, and carries to a new version', function () {
+    $customerId = DB::table('pos_customers')->insertGetId(['business_id' => 7, 'name' => 'Kasun', 'address' => "12 Galle Rd\nColombo 03"]);
+    $this->lead->update(['customer_id' => $customerId]);
+
+    // The editor is offered the address on file
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['lead']['customer_address'])->toBe("12 Galle Rd\nColombo 03");
+
+    // Not sent → the customer's address; sent → what was typed
+    expect(crmQuoteCreate()->customer_address)->toBe("12 Galle Rd\nColombo 03")
+        ->and(crmQuoteCreate(null, ['customer_address' => 'Site: 4 Lake Rd, Kandy'])->customer_address)->toBe('Site: 4 Lake Rd, Kandy');
+
+    $q = Quotation::where('customer_address', 'Site: 4 Lake Rd, Kandy')->sole();
+    $detail = crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody(null, ['customer_address' => '5 Hill St, Kandy']))->getData(true)['data'];
+    expect($detail['customer_address'])->toBe('5 Hill St, Kandy');
+
+    // A new version keeps it
+    $q->refresh()->update(['status' => Quotation::STATUS_REJECTED]);
+    expect(app(QuotationService::class)->revise($q)->customer_address)->toBe('5 Hill St, Kandy');
 });
 
 test('who may create a quotation on the lead', function (int $userId, int $status) {
