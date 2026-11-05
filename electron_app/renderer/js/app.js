@@ -55875,6 +55875,95 @@ async function submitDsCreate() {
     return inSettings ? { listId: 'psm-users-list', detailId: 'psm-users-detail' } : { listId: 'um-list', detailId: 'um-detail' };
   }
 
+  // ── Department / position of a user ─────────────────────────────────────
+  // Saved on the user's employee profile — an incomplete one when HR is off — which is
+  // where the CRM reads a person's department from. Owners, admins, the CRM CEO and
+  // Marketing work without one; these roles see no leads until they have a department.
+  const UM_NEEDS_DEPARTMENT = { crm_staff: 'CRM Staff', crm_department_head: 'CRM Department Head' };
+  const UM_NEW_POSITION = '__new';
+
+  async function _umFillPlacement(prefix, departmentId, positionId) {
+    const [dRes, pRes] = await Promise.all([API.departments(), API.positions()]);
+    const depts     = dRes.status === 200 ? (dRes.body.data || []) : [];
+    const positions = pRes.status === 200 ? (pRes.body.data || []) : [];
+
+    const dept = $(`#um-${prefix}-department`);
+    dept.innerHTML = '<option value="">— No department —</option>'
+      + depts.map(d => `<option value="${d.id}">${_esc(d.name)}</option>`).join('');
+    dept.value = departmentId ? String(departmentId) : '';
+
+    const pos = $(`#um-${prefix}-position`);
+    pos.innerHTML = '<option value="">— No position —</option>'
+      + positions.map(p => `<option value="${p.id}">${_esc(p.name)}</option>`).join('')
+      + `<option value="${UM_NEW_POSITION}">+ New position…</option>`;
+    pos.value = positionId ? String(positionId) : '';
+    pos.dataset.prev = pos.value;
+
+    $(`#um-${prefix}-new-position`).style.display = 'none';
+    _umCheckPlacement(prefix);
+  }
+
+  function _umCheckPlacement(prefix) {
+    const label   = UM_NEEDS_DEPARTMENT[$(`#um-${prefix}-role`)?.value];
+    const missing = !!label && !$(`#um-${prefix}-department`).value;
+    const warn    = $(`#um-${prefix}-placement-warn`);
+    warn.textContent = missing ? `A ${label} without a department will not see any CRM leads. Choose a department now, or add one later.` : '';
+    warn.style.display = missing ? '' : 'none';
+  }
+
+  function _umPlacementBody(prefix) {
+    const num = id => { const v = $(`#um-${prefix}-${id}`).value; return v === '' || v === UM_NEW_POSITION ? null : Number(v); };
+    return { department_id: num('department'), job_title_id: num('position') };
+  }
+
+  function _umPositionChanged(prefix) {
+    const pos = $(`#um-${prefix}-position`);
+    const box = $(`#um-${prefix}-new-position`);
+    if (pos.value !== UM_NEW_POSITION) { pos.dataset.prev = pos.value; box.style.display = 'none'; return; }
+    box.style.display = '';
+    $(`#um-${prefix}-new-position-name`).value = '';
+    setTimeout(() => $(`#um-${prefix}-new-position-name`)?.focus(), 30);
+  }
+
+  async function _umCreatePosition(prefix) {
+    const input = $(`#um-${prefix}-new-position-name`);
+    const name  = input.value.trim();
+    const errEl = $(`#um-${prefix}-error`);
+    if (!name) { input.focus(); return; }
+    const btn = $(`#um-${prefix}-new-position-save`);
+    btn.disabled = true;
+    const res = await API.createPosition({ name });
+    btn.disabled = false;
+    if (res.status !== 201 && res.status !== 200) {
+      _showModalErr(errEl, res.body?.errors?.name?.[0] || res.body?.message || 'Failed to add the position.');
+      return;
+    }
+    const created = res.body.data;
+    const pos = $(`#um-${prefix}-position`);
+    pos.querySelector(`option[value="${UM_NEW_POSITION}"]`)
+      .insertAdjacentHTML('beforebegin', `<option value="${created.id}">${_esc(created.name)}</option>`);
+    pos.value = String(created.id);
+    pos.dataset.prev = pos.value;
+    $(`#um-${prefix}-new-position`).style.display = 'none';
+    errEl.style.display = 'none';
+    toast(`Position “${created.name}” added.`, 'success');
+  }
+
+  ['add', 'edit'].forEach(prefix => {
+    $(`#um-${prefix}-department`)?.addEventListener('change', () => _umCheckPlacement(prefix));
+    $(`#um-${prefix}-position`)?.addEventListener('change', () => _umPositionChanged(prefix));
+    $(`#um-${prefix}-new-position-save`)?.addEventListener('click', () => _umCreatePosition(prefix));
+    $(`#um-${prefix}-new-position-name`)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); _umCreatePosition(prefix); }
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        const pos = $(`#um-${prefix}-position`);
+        pos.value = pos.dataset.prev || '';
+        $(`#um-${prefix}-new-position`).style.display = 'none';
+      }
+    });
+  });
+
   // ── Add User Modal ──────────────────────────────────────────────────────
 
   async function openAddModal() {
@@ -55885,6 +55974,7 @@ async function submitDsCreate() {
       _bwzGoBehind();
     }
     $('#um-add-email').value = '';
+    $('#um-add-name').value = '';
     $('#um-add-error').style.display = 'none';
 
     // Populate role select from business roles (load if not yet fetched)
@@ -55909,7 +55999,10 @@ async function submitDsCreate() {
     roleSelect.onchange = () => {
       const r = _umRoles.find(x => x.slug === roleSelect.value);
       _renderPermGrid('um-add-perm-grid', r?.permissions || [], roleSelect.value, r);
+      _umCheckPlacement('add');
     };
+
+    await _umFillPlacement('add', null, null);
 
     modal.style.display = 'flex';
     setTimeout(() => $('#um-add-email')?.focus(), 80);
@@ -55928,7 +56021,8 @@ async function submitDsCreate() {
     const btn = $('#um-add-save');
     btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Sending…';
 
-    const res = await API.usersAdd({ email, role, permissions: perms });
+    const name = $('#um-add-name')?.value?.trim() || null;
+    const res = await API.usersAdd({ email, name, role, permissions: perms, ..._umPlacementBody('add') });
     btn.disabled = false; btn.innerHTML = '<i class="fa fa-paper-plane"></i> Send Invitation';
 
     if (res.status === 201) {
@@ -55943,7 +56037,7 @@ async function submitDsCreate() {
 
   // ── Edit User Modal ─────────────────────────────────────────────────────
 
-  function openEditModal(user) {
+  async function openEditModal(user) {
     _umEditTarget = user;
     const modal = $('#um-edit-modal');
     if (!modal) return;
@@ -55973,7 +56067,10 @@ async function submitDsCreate() {
     roleSelect.onchange = () => {
       const r = _umRoles.find(x => x.slug === roleSelect.value);
       _renderPermGrid('um-edit-perm-grid', r?.permissions || [], roleSelect.value, r);
+      _umCheckPlacement('edit');
     };
+
+    await _umFillPlacement('edit', user.employee?.department_id, user.employee?.job_title_id);
 
     modal.style.display = 'flex';
   }
@@ -55990,7 +56087,7 @@ async function submitDsCreate() {
     const btn = $('#um-edit-save');
     btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
-    const res = await API.usersUpdate(_umEditTarget.id, { role, permissions: perms });
+    const res = await API.usersUpdate(_umEditTarget.id, { role, permissions: perms, ..._umPlacementBody('edit') });
     btn.disabled = false; btn.innerHTML = '<i class="fa fa-check"></i> Save Changes';
 
     if (res.status === 200) {

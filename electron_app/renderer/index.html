@@ -15533,12 +15533,31 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <div style="font-size:11px;color:var(--text-muted);margin-top:3px">We'll email an invitation link. Existing Zeebroo users just accept it; new people set a password and get an account. They join once they accept.</div>
         </div>
         <div class="po-field">
+          <label class="po-field-label">Full Name</label>
+          <input type="text" id="um-add-name" class="po-field-input" placeholder="e.g. Hasitha Mendis" maxlength="255" autocomplete="off">
+        </div>
+        <div class="po-field">
           <label class="po-field-label">Role <span class="po-required">*</span></label>
           <select id="um-add-role" class="po-field-input">
             <option value="staff">Staff — limited access</option>
             <option value="manager">Manager — custom permissions</option>
             <option value="admin">Admin — full access</option>
           </select>
+        </div>
+        <div class="um-placement" id="um-add-placement">
+          <div class="po-field">
+            <label class="po-field-label">Department</label>
+            <select id="um-add-department" class="po-field-input"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Position</label>
+            <select id="um-add-position" class="po-field-input"></select>
+            <div class="um-new-position" id="um-add-new-position" style="display:none">
+              <input type="text" class="po-field-input" id="um-add-new-position-name" maxlength="255" placeholder="New position name">
+              <button type="button" class="po-btn-primary" id="um-add-new-position-save"><i class="fa fa-plus"></i> Add</button>
+            </div>
+          </div>
+          <div class="um-placement-warn" id="um-add-placement-warn" style="display:none"></div>
         </div>
         <div class="po-field" id="um-add-perms-wrap">
           <label class="po-field-label">Module Permissions</label>
@@ -15570,6 +15589,21 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <option value="manager">Manager — custom permissions</option>
             <option value="admin">Admin — full access</option>
           </select>
+        </div>
+        <div class="um-placement" id="um-edit-placement">
+          <div class="po-field">
+            <label class="po-field-label">Department</label>
+            <select id="um-edit-department" class="po-field-input"></select>
+          </div>
+          <div class="po-field">
+            <label class="po-field-label">Position</label>
+            <select id="um-edit-position" class="po-field-input"></select>
+            <div class="um-new-position" id="um-edit-new-position" style="display:none">
+              <input type="text" class="po-field-input" id="um-edit-new-position-name" maxlength="255" placeholder="New position name">
+              <button type="button" class="po-btn-primary" id="um-edit-new-position-save"><i class="fa fa-plus"></i> Add</button>
+            </div>
+          </div>
+          <div class="um-placement-warn" id="um-edit-placement-warn" style="display:none"></div>
         </div>
         <div class="po-field" id="um-edit-perms-wrap">
           <label class="po-field-label">Module Permissions</label>

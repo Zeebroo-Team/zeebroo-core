@@ -6,11 +6,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Modules\Business\Models\BusinessInvitation;
 use Modules\Business\Models\BusinessMember;
 use Modules\Business\Models\BusinessRole;
 use Modules\Business\Services\BusinessInvitationService;
 use Modules\HRManagement\Services\EmployeeSystemAccessService;
+use Modules\HRManagement\Services\UserEmployeeLinkService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\PosCashier;
 
@@ -150,7 +153,7 @@ class PosUserManagementApiController extends Controller
         ]);
     }
 
-    public function store(Request $request, BusinessInvitationService $invitations): JsonResponse
+    public function store(Request $request, BusinessInvitationService $invitations, UserEmployeeLinkService $employees): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
@@ -164,10 +167,11 @@ class PosUserManagementApiController extends Controller
 
         $validated = $request->validate([
             'email'         => ['required', 'email'],
+            'name'          => ['nullable', 'string', 'max:255'],
             'role'          => ['required', 'string', 'in:' . implode(',', $validSlugs)],
             'permissions'   => ['nullable', 'array'],
             'permissions.*' => ['string', 'in:' . implode(',', BusinessMember::permissionKeys())],
-        ]);
+        ] + $this->placementRules($business->id));
 
         // Registered or not, the person gets an invitation email; membership is created on accept.
         [$invitation, $sent] = $invitations->invite(
@@ -177,6 +181,21 @@ class PosUserManagementApiController extends Controller
             $validated['permissions'] ?? null,
             $request->user(),
         );
+
+        // Department / position: an incomplete employee profile, linked to the login on accept.
+        // Without a placement an existing HR profile with this email is left as it is.
+        $departmentId = $this->intOrNull($validated['department_id'] ?? null);
+        $jobTitleId   = $this->intOrNull($validated['job_title_id'] ?? null);
+        if ($departmentId !== null || $jobTitleId !== null) {
+            $employees->assign(
+                $business,
+                $invitation->email,
+                null,
+                trim((string) ($validated['name'] ?? '')) ?: Str::before($invitation->email, '@'),
+                $departmentId,
+                $jobTitleId,
+            );
+        }
 
         return response()->json([
             'data'       => $invitations->payload($invitation),
@@ -219,7 +238,7 @@ class PosUserManagementApiController extends Controller
             ->firstOrFail();
     }
 
-    public function update(Request $request, int $memberId): JsonResponse
+    public function update(Request $request, int $memberId, UserEmployeeLinkService $employees, EmployeeSystemAccessService $employeeAccess): JsonResponse
     {
         $business = $this->businessOrAbort($request);
 
@@ -240,12 +259,26 @@ class PosUserManagementApiController extends Controller
             'role'          => ['required', 'string', 'in:' . implode(',', $validSlugs)],
             'permissions'   => ['nullable', 'array'],
             'permissions.*' => ['string', 'in:' . implode(',', BusinessMember::permissionKeys())],
-        ]);
+        ] + $this->placementRules($business->id));
 
         $member->update([
             'role'        => $validated['role'],
             'permissions' => $validated['permissions'] ?? [],
         ]);
+
+        // Only when the client sent a placement — older clients leave the employee profile alone
+        $employee = null;
+        if ($request->has('department_id') || $request->has('job_title_id')) {
+            $employee = $employees->assign(
+                $business,
+                (string) $member->user->email,
+                (int) $member->user_id,
+                (string) $member->user->name,
+                $this->intOrNull($validated['department_id'] ?? null),
+                $this->intOrNull($validated['job_title_id'] ?? null),
+            );
+            $employee?->load(['department:id,name', 'jobTitle:id,name']);
+        }
 
         return response()->json([
             'data' => [
@@ -258,8 +291,25 @@ class PosUserManagementApiController extends Controller
                 'status'      => $member->status,
                 'is_owner'    => false,
                 'joined_at'   => $member->created_at?->toIso8601String(),
+                'employee'    => $employeeAccess->employeeTag($employee),
             ],
         ]);
+    }
+
+    /** Optional department / position of a member, both of this business. */
+    private function placementRules(int $businessId): array
+    {
+        $ofBusiness = fn (string $table) => Rule::exists($table, 'id')->where(fn ($q) => $q->where('business_id', $businessId));
+
+        return [
+            'department_id' => ['nullable', 'integer', $ofBusiness('hr_departments')],
+            'job_title_id'  => ['nullable', 'integer', $ofBusiness('hr_job_titles')],
+        ];
+    }
+
+    private function intOrNull(mixed $value): ?int
+    {
+        return $value === null || $value === '' ? null : (int) $value;
     }
 
     public function destroy(Request $request, int $memberId): JsonResponse

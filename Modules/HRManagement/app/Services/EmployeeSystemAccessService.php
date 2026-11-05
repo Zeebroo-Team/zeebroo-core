@@ -208,7 +208,7 @@ class EmployeeSystemAccessService
             ->where('business_id', $business->id)
             ->whereNotNull('user_id')
             ->with(['department:id,name', 'jobTitle:id,name'])
-            ->get(['id', 'user_id', 'employee_id', 'full_name', 'department_id', 'job_title_id'])
+            ->get(['id', 'user_id', 'profile_complete', 'employee_id', 'full_name', 'department_id', 'job_title_id'])
             ->keyBy('user_id');
     }
 
@@ -222,7 +222,7 @@ class EmployeeSystemAccessService
         return Employee::query()
             ->where('business_id', $business->id)
             ->with(['department:id,name', 'jobTitle:id,name'])
-            ->get(['id', 'user_id', 'employee_id', 'full_name', 'personal_email', 'department_id', 'job_title_id'])
+            ->get(['id', 'user_id', 'profile_complete', 'employee_id', 'full_name', 'personal_email', 'department_id', 'job_title_id'])
             ->keyBy(fn (Employee $e) => Str::lower(trim((string) $e->personal_email)));
     }
 
@@ -266,11 +266,14 @@ class EmployeeSystemAccessService
         }
 
         return [
-            'id'          => (int) $employee->id,
-            'employee_id' => $employee->employee_id,
-            'name'        => $employee->full_name,
-            'department'  => $employee->department?->name,
-            'job_title'   => $employee->jobTitle?->name,
+            'id'               => (int) $employee->id,
+            'employee_id'      => $employee->employee_id,
+            'name'             => $employee->full_name,
+            'department_id'    => $employee->department_id !== null ? (int) $employee->department_id : null,
+            'department'       => $employee->department?->name,
+            'job_title_id'     => $employee->job_title_id !== null ? (int) $employee->job_title_id : null,
+            'job_title'        => $employee->jobTitle?->name,
+            'profile_complete' => (bool) ($employee->profile_complete ?? true),
         ];
     }
 
