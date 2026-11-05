@@ -19576,6 +19576,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <button class="psm-nav-item" data-tab="roles">
           <i class="fa fa-shield-halved"></i><span>Roles</span>
         </button>
+        <button class="psm-nav-item psm-nav-item--org-only" data-tab="org" style="display:none">
+          <i class="fa fa-sitemap"></i><span>Organisation</span>
+        </button>
         <button class="psm-nav-item psm-nav-item--hr-only" data-tab="hr" style="display:none">
           <i class="fa fa-people-group"></i><span>HR</span>
         </button>
@@ -20189,6 +20192,31 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <div id="psm-hr-brk-error" class="psm-hint" style="display:none;color:#ef4444"></div>
           </div>
         </div><!-- /psm-tab-hr -->
+
+        <!-- Organisation panel (CRM or HR): departments and positions, shared with HR Management -->
+        <div class="psm-panel" id="psm-tab-org" style="display:none">
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-building-user"></i> Departments</div>
+            <p class="psm-hint" style="margin:0 0 12px">Departments your team works in. The CRM routes leads by department. Put people in a department from <strong>Users</strong>; choose its head and co-head in <strong>CRM → Departments</strong>.</p>
+            <div class="psm-org-add">
+              <input type="text" id="psm-org-dept-name" class="psm-input" maxlength="255" placeholder="e.g. Sales, Marketing">
+              <button class="psm-btn-save" id="psm-org-dept-add" style="width:auto;padding:6px 16px"><i class="fa fa-plus"></i> Add Department</button>
+            </div>
+            <div id="psm-org-dept-error" class="psm-hint" style="display:none;color:#ef4444"></div>
+            <div id="psm-org-dept-list"><div class="psm-hint">Loading…</div></div>
+          </div>
+
+          <div class="psm-section">
+            <div class="psm-section-label"><i class="fa fa-briefcase"></i> Positions</div>
+            <p class="psm-hint" style="margin:0 0 12px">Job titles such as Accountant or Sales Executive. A position is a person's job in the company — what they can do in the system comes from their <strong>Role</strong>.</p>
+            <div class="psm-org-add">
+              <input type="text" id="psm-org-pos-name" class="psm-input" maxlength="255" placeholder="e.g. Sales Executive">
+              <button class="psm-btn-save" id="psm-org-pos-add" style="width:auto;padding:6px 16px"><i class="fa fa-plus"></i> Add Position</button>
+            </div>
+            <div id="psm-org-pos-error" class="psm-hint" style="display:none;color:#ef4444"></div>
+            <div id="psm-org-pos-list"><div class="psm-hint">Loading…</div></div>
+          </div>
+        </div><!-- /psm-tab-org -->
 
         <!-- Counters panel -->
         <div class="psm-panel" id="psm-tab-counters" style="display:none">

@@ -205,5 +205,43 @@ class EmployeeService
         if ($field === 'basic_salary') {
             $this->recalculateMonthlyGross($employee->fresh());
         }
+
+        $this->markCompleteWhenFilled($employee);
+    }
+
+    /** Fields HR needs before an incomplete profile (added from Settings → Users) counts as complete. */
+    public const PROFILE_REQUIRED_FIELDS = [
+        'date_of_birth',
+        'nic_passport_number',
+        'permanent_address',
+        'current_address',
+        'phone_number',
+        'job_title_id',
+        'department_id',
+        'employment_type',
+        'emergency_contact_name',
+        'emergency_contact_relationship',
+        'emergency_contact_phone',
+        'bank_account_holder_name',
+        'bank_id',
+        'bank_branch',
+        'bank_account_number',
+        'basic_salary',
+    ];
+
+    /** An incomplete profile becomes complete — and joins payroll — once HR has filled every required field. */
+    public function markCompleteWhenFilled(Employee $employee): void
+    {
+        if ($employee->profile_complete !== false) {
+            return;
+        }
+
+        foreach (self::PROFILE_REQUIRED_FIELDS as $field) {
+            if (blank($employee->{$field})) {
+                return;
+            }
+        }
+
+        $employee->forceFill(['profile_complete' => true])->save();
     }
 }

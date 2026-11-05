@@ -31513,6 +31513,9 @@ async function openPosSettings() {
   const hrOn = hasFeature('human_resources');
   const hrNavItem = $('.psm-nav-item--hr-only');
   if (hrNavItem) hrNavItem.style.display = hrOn ? '' : 'none';
+  // Organisation tab (departments, positions) — whenever CRM or HR needs them
+  const orgNavItem = $('.psm-nav-item--org-only');
+  if (orgNavItem) orgNavItem.style.display = (hrOn || hasFeature('crm')) ? '' : 'none';
   psmShowTab('business');
 
   _psmHrLoaded = false;
@@ -31666,7 +31669,97 @@ $$('.psm-nav-item').forEach(btn => btn.addEventListener('click', () => {
   if (btn.dataset.tab === 'counters') loadPsmCounters();
   if (btn.dataset.tab === 'cashiers') { _psmCashierResetForm(); loadPsmCashiers(); }
   if (btn.dataset.tab === 'printer')  _psmLoadPrinterSettings();
+  if (btn.dataset.tab === 'org')      _psmLoadOrg();
 }));
+
+// ── Organisation tab: departments and positions ──────────────────────────────
+// The same HR tables HR Management uses, so a business without the HR feature can
+// still set up the departments and positions the CRM and Settings → Users need.
+
+function _psmOrgError(kind, msg) {
+  const el = $(`#psm-org-${kind}-error`);
+  el.textContent = msg || '';
+  el.style.display = msg ? '' : 'none';
+}
+
+async function _psmLoadOrg() {
+  _psmOrgError('dept', '');
+  _psmOrgError('pos', '');
+  const [dRes, pRes] = await Promise.all([API.departments(), API.positions()]);
+
+  const dList = $('#psm-org-dept-list');
+  const depts = dRes.status === 200 ? (dRes.body.data || []) : [];
+  dList.innerHTML = dRes.status !== 200
+    ? `<div class="psm-hint" style="color:#ef4444">${escHtml(dRes.body?.message || 'Failed to load departments.')}</div>`
+    : depts.map(d => {
+      const n = d.employees_count || 0;
+      const lead = [d.head ? 'Head: ' + escHtml(d.head) : 'No head', d.co_head ? 'Co-head: ' + escHtml(d.co_head) : ''].filter(Boolean).join(' · ');
+      return `<div class="psm-counter-item">
+        <span class="psm-counter-item-name">${escHtml(d.name)}</span>
+        <span class="psm-counter-item-branch"><i class="fa fa-users"></i> ${n} ${n === 1 ? 'person' : 'people'} · ${lead}</span>
+        <button class="psm-counter-item-del" data-org-dept-del="${d.id}" data-name="${escHtml(d.name)}"${n ? ' disabled title="Move its people to another department first" style="opacity:.4"' : ' title="Delete department"'}><i class="fa fa-trash"></i></button>
+      </div>`;
+    }).join('') || '<div class="psm-hint">No departments yet.</div>';
+
+  const pList = $('#psm-org-pos-list');
+  const positions = pRes.status === 200 ? (pRes.body.data || []) : [];
+  pList.innerHTML = pRes.status !== 200
+    ? `<div class="psm-hint" style="color:#ef4444">${escHtml(pRes.body?.message || 'Failed to load positions.')}</div>`
+    : positions.map(p => `<div class="psm-counter-item">
+        <span class="psm-counter-item-name">${escHtml(p.name)}</span>
+        <button class="psm-counter-item-del" data-org-pos-del="${p.id}" data-name="${escHtml(p.name)}" title="Delete position"><i class="fa fa-trash"></i></button>
+      </div>`).join('') || '<div class="psm-hint">No positions yet.</div>';
+}
+
+async function _psmOrgAdd(kind) {
+  const input = $(`#psm-org-${kind}-name`);
+  const name  = input.value.trim();
+  if (!name) { input.focus(); return; }
+  const btn = $(`#psm-org-${kind}-add`);
+  btn.disabled = true;
+  _psmOrgError(kind, '');
+  const res = kind === 'dept' ? await API.createDepartment({ name }) : await API.createPosition({ name });
+  btn.disabled = false;
+  if (res.status !== 201 && res.status !== 200) {
+    _psmOrgError(kind, res.body?.errors?.name?.[0] || res.body?.message || 'Failed to save.');
+    return;
+  }
+  input.value = '';
+  toast(`${kind === 'dept' ? 'Department' : 'Position'} “${name}” added.`, 'success');
+  if (kind === 'dept') document.dispatchEvent(new CustomEvent('departments:changed'));
+  await _psmLoadOrg();
+}
+
+async function _psmOrgDelete(kind, id, name) {
+  const label = kind === 'dept' ? 'department' : 'position';
+  const ok = await appConfirm({
+    title: `Delete ${label}?`,
+    message: `“${name}” will be removed from HR and CRM.`,
+    confirmText: '<i class="fa fa-trash-can"></i> Delete',
+    icon: 'fa-trash-can',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = kind === 'dept' ? await API.deleteDepartment(id) : await API.deletePosition(id);
+  if (res.status !== 200 && res.status !== 204) {
+    _psmOrgError(kind, res.body?.message || `Failed to delete the ${label}.`);
+    return;
+  }
+  toast(`${kind === 'dept' ? 'Department' : 'Position'} deleted.`, 'info');
+  if (kind === 'dept') document.dispatchEvent(new CustomEvent('departments:changed'));
+  await _psmLoadOrg();
+}
+
+['dept', 'pos'].forEach(kind => {
+  $(`#psm-org-${kind}-add`)?.addEventListener('click', () => _psmOrgAdd(kind));
+  $(`#psm-org-${kind}-name`)?.addEventListener('keydown', e => { if (e.key === 'Enter') _psmOrgAdd(kind); });
+});
+$('#psm-tab-org')?.addEventListener('click', e => {
+  const b = e.target.closest('[data-org-dept-del],[data-org-pos-del]');
+  if (!b || b.disabled) return;
+  if (b.dataset.orgDeptDel) _psmOrgDelete('dept', Number(b.dataset.orgDeptDel), b.dataset.name);
+  else _psmOrgDelete('pos', Number(b.dataset.orgPosDel), b.dataset.name);
+});
 
 $('#psm-multi-warehouse').addEventListener('change', (e) => {
   $('#psm-branch-rows').style.display = e.target.checked ? 'flex' : 'none';
@@ -46959,7 +47052,9 @@ function buildEmployeeCard(e) {
         <div class="lm-card-title-wrap">
           <span class="lm-card-name">${escHtml(e.name || '—')}</span>
           <div class="lm-card-pills">
-            <span class="lm-pill" style="background:${color}18;color:${color}">${escHtml(e.type_label || e.employment_type || '—')}</span>
+            ${e.profile_complete === false
+              ? '<span class="lm-pill" style="background:#dc262618;color:#dc2626" title="Added from Settings → Users. Open it to add NIC, bank and salary details."><i class="fa fa-circle-exclamation"></i> Incomplete profile</span>'
+              : `<span class="lm-pill" style="background:${color}18;color:${color}">${escHtml(e.type_label || e.employment_type || '—')}</span>`}
             ${meta ? `<span class="lm-pill" style="background:var(--sidebar-bg);color:var(--text-muted)">${meta}</span>` : ''}
             ${_empLeadershipBadgesHtml(e.leadership)}
             ${_empAccessBadgeHtml(e.system_access)}
