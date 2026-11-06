@@ -404,7 +404,7 @@ function _sbFitToolbar() {
 // showing. Extras come last, so a view like Leave Rules wins over the tab it sits on.
 function _sbSelectedRow() {
   const item = $('.sb-nav-item.active');
-  const sub = item && $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"].open`);
+  const sub = item && !_sbCollapsed() && $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"].open`);
   const rows = sub ? [...sub.querySelectorAll('.sb-sub-item.active')].filter(el => el.style.display !== 'none') : [];
   return rows.pop() || item;
 }
@@ -462,6 +462,65 @@ function _sbWatch() {
   });
 }
 
+// ── Icon-only sidebar ──────────────────────────────────────────────────────
+// Sub-menus have no room in the narrow rail, so each icon shows its label and sub-menu in
+// a flyout beside it. The flyout's rows are copies that click the real sub-item.
+let _sbFlyoutTimer = 0;
+
+function _sbCollapsed() {
+  return $('#app-shell').classList.contains('sb-collapsed');
+}
+
+function _sbApplyCollapsed(collapsed) {
+  $('#app-shell').classList.toggle('sb-collapsed', collapsed);
+  const btn = $('#sidebar-collapse-btn');
+  btn.title = collapsed ? 'Show labels' : 'Show icons only';
+  btn.setAttribute('aria-expanded', !collapsed);
+  _sbFlyoutClose();
+  _sbGlide();
+}
+
+function _sbFlyoutOpen(item) {
+  clearTimeout(_sbFlyoutTimer);
+  const fly = $('#sb-flyout');
+  const title = document.createElement('div');
+  title.className = 'sb-flyout-title';
+  title.textContent = item.querySelector('span').textContent;
+  const rows = [...$$(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"] .sb-sub-item`)]
+    .filter(row => row.style.display !== 'none')
+    .map(row => {
+      const copy = row.cloneNode(true);
+      copy.addEventListener('click', () => { row.click(); _sbFlyoutClose(); });
+      return copy;
+    });
+  fly.replaceChildren(title, ...rows);
+  const top = item.getBoundingClientRect().top;
+  fly.style.top = `${Math.max(8, Math.min(top, window.innerHeight - fly.offsetHeight - 8))}px`;
+  fly.classList.add('open');
+}
+
+function _sbFlyoutClose(delay = 0) {
+  clearTimeout(_sbFlyoutTimer);
+  _sbFlyoutTimer = setTimeout(() => $('#sb-flyout').classList.remove('open'), delay);
+}
+
+function _sbInitCollapse() {
+  $$('.sb-nav-item[data-tab]').forEach(item => {
+    item.addEventListener('mouseenter', () => { if (_sbCollapsed()) _sbFlyoutOpen(item); });
+    item.addEventListener('mouseleave', () => _sbFlyoutClose(160));
+  });
+  const fly = $('#sb-flyout');
+  fly.addEventListener('mouseenter', () => clearTimeout(_sbFlyoutTimer));
+  fly.addEventListener('mouseleave', () => _sbFlyoutClose(160));
+
+  $('#sidebar-collapse-btn').addEventListener('click', async () => {
+    const collapsed = !_sbCollapsed();
+    _sbApplyCollapsed(collapsed);
+    if (state.config) state.config.sidebar_collapsed = collapsed;
+    await window.electronAPI.setConfig({ sidebar_collapsed: collapsed });
+  });
+}
+
 function _sbNavExpand(tabName) {
   $$('.sb-nav-item[data-tab]').forEach(item => {
     const isTarget = item.dataset.tab === tabName;
@@ -477,6 +536,7 @@ function _sbNavExpand(tabName) {
 
 _buildSidebarSubNavs();
 _sbWatch();
+_sbInitCollapse();
 
 // ── Sidebar / Ribbon layout mode ───────────────────────────────────────────
 function _syncSidebarActive(tabName) {
@@ -489,6 +549,7 @@ function _applyLayoutMode(mode) {
   const isSidebar = mode === 'sidebar';
   $('#app-shell').classList.toggle('sidebar-mode', isSidebar);
   $('#ribbon').classList.toggle('sb-tools-open', !!state.config?.sidebar_tools_open);
+  _sbApplyCollapsed(!!state.config?.sidebar_collapsed);
   const activeTab = $$('.ribbon-tab.active')[0]?.dataset.tab;
   if (activeTab) { _syncSidebarActive(activeTab); _sbNavExpand(activeTab); }
 }
@@ -662,8 +723,12 @@ $$('.sb-nav-item[data-tab]').forEach(item => {
   item.addEventListener('click', (e) => {
     const tab = item.dataset.tab;
     const sub = $(`.sb-sub-nav[data-sub-of="${tab}"]`);
+    // A touchscreen has no hover, so a tap has to bring up the flyout too
+    const collapsed = _sbCollapsed();
+    if (collapsed) _sbFlyoutOpen(item);
     // The chevron only folds a section, so its pages can be reached without loading the tab first
     if (sub && (item.classList.contains('active') || e.target.closest('.sb-nav-chevron'))) {
+      if (collapsed) return;
       sub.classList.toggle('open', item.classList.toggle('expanded'));
       _sbGlide();
       return;

@@ -196,15 +196,17 @@ body.macos .ctb-wc { display: none; }
   --sb-blue: var(--accent-dark);
   --sb-hover: color-mix(in srgb, var(--text) 7%, transparent);
   --sb-line: color-mix(in srgb, var(--text) 9%, transparent);
+  --sb-rail: 60px;
   display: none;
   flex-direction: column;
   width: 248px;
   min-width: 248px;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--surface2) 70%, var(--border-light));
+  background: var(--surface);
   border-right: 1px solid var(--sb-line);
-  z-index: 100;
+  z-index: 101;  /* one above #ribbon, which the flyout opens over */
   overflow: hidden;
+  transition: width .3s var(--sb-ease), min-width .3s var(--sb-ease);
 }
 body.dark #sidebar { --sb-blue: var(--accent); background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
 #app-shell.sidebar-mode #sidebar        { display: flex; animation: sb-slide-in .32s var(--sb-ease); }
@@ -404,8 +406,8 @@ body.dark #sidebar { --sb-blue: var(--accent); background: color-mix(in srgb, va
 .sb-selected { --sb-tone-wait: .1s; }
 .sb-nav-item.sb-selected,
 .sb-nav-item.sb-selected i { background: none; color: #fff; }
-#sidebar-bottom { flex-shrink: 0; border-top: 1px solid var(--sb-line); padding: 8px 10px; }
-#sidebar-file-btn {
+#sidebar-bottom { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; border-top: 1px solid var(--sb-line); padding: 8px 10px; }
+#sidebar-bottom button {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -421,9 +423,9 @@ body.dark #sidebar { --sb-blue: var(--accent); background: color-mix(in srgb, va
   cursor: pointer;
   transition: background .18s ease, transform .22s var(--sb-ease);
 }
-#sidebar-file-btn:hover { background: var(--sb-hover); }
-#sidebar-file-btn:active { transform: scale(.98); }
-#sidebar-file-btn i { font-size: 14px; width: 18px; text-align: center; color: var(--sb-blue); }
+#sidebar-bottom button:hover { background: var(--sb-hover); }
+#sidebar-bottom button:active { transform: scale(.98); }
+#sidebar-bottom button i { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; color: var(--sb-blue); transition: transform .3s var(--sb-ease); }
 
 /* sidebar chevron & sub-nav */
 .sb-nav-item.has-sub { justify-content: flex-start; }
@@ -522,6 +524,42 @@ body.dark #sidebar { --sb-blue: var(--accent); background: color-mix(in srgb, va
 .sb-sub-item.sb-selected .sb-sub-badge { background: rgba(255,255,255,.25); }
 .sb-sub-badge[hidden] { display: none; }
 .sb-sub-badge.dot { min-width: 8px; width: 8px; height: 8px; padding: 0; }
+
+/* ── Icon-only sidebar: rows keep their padding, so icons stay put as the rail narrows ── */
+.sb-nav-item > span,
+#sidebar-bottom span { min-width: 0; overflow: hidden; white-space: nowrap; transition: opacity .18s ease; }
+#app-shell.sb-collapsed #sidebar { width: var(--sb-rail); min-width: var(--sb-rail); }
+#app-shell.sb-collapsed .sb-nav-item > span,
+#app-shell.sb-collapsed #sidebar-bottom span { opacity: 0; }
+#app-shell.sb-collapsed .sb-nav-chevron { display: none; }
+#app-shell.sb-collapsed .sb-sub-nav { grid-template-rows: 0fr; }
+#app-shell.sb-collapsed #sidebar-collapse-btn i { transform: rotate(180deg); }
+
+/* Label and sub-menu of the icon under the pointer. It sits outside #sidebar-nav, whose mask would clip it */
+#sb-flyout {
+  position: fixed;
+  left: calc(var(--sb-rail) + 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: 260px;
+  max-height: calc(100vh - 16px);
+  padding: 6px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--sb-line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  transition: opacity .14s ease, transform .18s var(--sb-ease), visibility .14s;
+}
+#sb-flyout.open { opacity: 1; visibility: visible; transform: none; }
+.sb-flyout-title { padding: 4px 10px; font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
+#sb-flyout .sb-sub-item { opacity: 1; transform: none; }
+#sb-flyout .sb-sub-item.active { color: var(--sb-blue); font-weight: 600; }
 
 @media (prefers-reduced-motion: reduce) {
   #sidebar, #sidebar *, #app-shell.sidebar-mode .content-panel.active,
@@ -6362,8 +6400,12 @@ body.dark .schq-badge--bounced { color: #f87171; }
 .psm-nav {
   width: 168px; flex-shrink: 0;
   background: var(--surface2); border-right: 1px solid var(--border);
-  padding: 16px 10px; display: flex; flex-direction: column; gap: 2px;
+  padding: 16px 4px 16px 10px; display: flex; flex-direction: column; gap: 2px;
+  overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable;
 }
+.psm-nav::-webkit-scrollbar { width: 6px; }
+.psm-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.psm-nav:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); }
 .psm-nav-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .08em; color: var(--text-light);
