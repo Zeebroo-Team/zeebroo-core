@@ -57791,6 +57791,7 @@ async function submitDsCreate() {
     document.body.classList.toggle('crm-uses-inbox', !!_crmAccess?.uses_inbox);
     document.body.classList.toggle('crm-can-approve', !!_crmAccess?.can_approve); // quotation approvals inbox
     document.body.classList.toggle('crm-can-report', !!_crmAccess?.can_view_reports); // management dashboard
+    document.body.classList.toggle('crm-can-sales-report', !!_crmAccess?.can_view_sales_report); // ribbon → Report
     document.body.classList.toggle('crm-can-team', !!_crmAccess?.can_see_team);       // team follow-ups
     // A ribbon group whose buttons are all hidden would otherwise show as an empty box
     $$('.ribbon-page[data-page="crm"] .ribbon-group').forEach(grp => {
@@ -64405,22 +64406,25 @@ async function submitDsCreate() {
 
   // ── CRM sales analysis report (ribbon → Report): leads grouped by department, customer,
   //    product…, previewed here and saved as PDF or CSV for sales analysis ──
-  const _crmRep = { group: 'department', data: null, optionsReady: false };
+  const _crmRep = { group: 'department', data: null, optionsReady: false, seq: 0 };
 
-  // Sidebar entry per report type: icon, one-line hint
+  // Sidebar entry per report type: icon, one-line hint, label until the server's list arrives
   const _crmRepGroupMeta = {
-    department:       ['fa-building-user',   'Leads & revenue per department'],
-    division:         ['fa-sitemap',         'Leads & revenue per division'],
-    customer:         ['fa-user-tie',        'Each company’s deals'],
-    staff:            ['fa-id-badge',        'Performance per salesperson'],
-    source:           ['fa-bullhorn',        'Where leads come from'],
-    product:          ['fa-box-open',        'What gets quoted & won'],
-    customer_product: ['fa-heart',           'What each company prefers'],
+    department:       ['fa-building-user',   'Leads & revenue per department', 'Department'],
+    division:         ['fa-sitemap',         'Leads & revenue per division',   'Division'],
+    customer:         ['fa-user-tie',        'Each company’s deals',           'Customer'],
+    staff:            ['fa-id-badge',        'Performance per salesperson',    'Staff'],
+    source:           ['fa-bullhorn',        'Where leads come from',          'Source'],
+    product:          ['fa-box-open',        'What gets quoted & won',         'Product / service'],
+    customer_product: ['fa-heart',           'What each company prefers',      'Customer preferences'],
   };
 
   function openCrmReportModal() {
+    if (!_crmRep.optionsReady) _crmReportGroups(Object.entries(_crmRepGroupMeta).map(([key, m]) => ({ key, label: m[2] })));
     _macShow($('#crm-report-modal'));
-    _crmLoadReport();
+    // Fetch now, but hold the result until the window has zoomed in (macWinIn, .38s):
+    // redrawing the table mid-animation is what made the open stutter
+    _crmLoadReport(new Promise(r => setTimeout(r, 380)));
   }
 
   function _crmReportParams() {
@@ -64453,20 +64457,31 @@ async function submitDsCreate() {
     fill('#crm-report-user',       o.staff,       'All staff',       x => x.id, x => x.name);
     fill('#crm-report-source',     o.sources,     'All sources',     x => x.key, x => x.label);
     fill('#crm-report-status',     o.statuses,    'Any status',      x => x.key, x => x.label);
-    $('#crm-report-groups').innerHTML = o.groups.map(g => {
+    _crmReportGroups(o.groups);
+  }
+
+  function _crmReportGroups(groups) {
+    $('#crm-report-groups').innerHTML = groups.map(g => {
       const [icon, hint] = _crmRepGroupMeta[g.key] || ['fa-table', ''];
       return `<button type="button" class="crm-rep-group-btn${g.key === _crmRep.group ? ' active' : ''}" data-rep-group="${g.key}">
         <i class="fa ${icon}"></i><span>${escHtml(g.label)}<small>${escHtml(hint)}</small></span></button>`;
     }).join('');
   }
 
-  async function _crmLoadReport() {
+  // settled: hold the redraw until this resolves (the window's open animation)
+  async function _crmLoadReport(settled) {
+    const seq  = ++_crmRep.seq;
+    const card = $('#crm-report-modal .crm-rep-card');
     const cols = _crmRep.data?.columns.length || 6;
-    $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
-    $('#crm-report-foot').innerHTML = '';
-    const res = await API.crmSalesAnalysis(_crmReportParams()).catch(() => ({ status: 0 }));
+    // Keep the last report up, dimmed, so the table doesn't collapse to a spinner and jump back
+    if (_crmRep.data) card.classList.add('loading');
+    else $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
+    const [res] = await Promise.all([API.crmSalesAnalysis(_crmReportParams()).catch(() => ({ status: 0 })), settled]);
+    if (seq !== _crmRep.seq) return; // a newer filter change took over
+    card.classList.remove('loading');
     if (res.status !== 200) {
       $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the report.')))}</td></tr>`;
+      $('#crm-report-foot').innerHTML = '';
       return;
     }
     const d = _crmRep.data = res.body.data;

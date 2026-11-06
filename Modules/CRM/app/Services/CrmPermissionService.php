@@ -77,6 +77,7 @@ class CrmPermissionService
                 'items' => [
                     ['key' => 'inbox_view',   'label' => 'Marketing inbox',      'desc' => 'Verify, review, merge and forward new leads (marketing)'],
                     ['key' => 'reports_view', 'label' => 'Management dashboard', 'desc' => 'See the CRM dashboard and export it (heads and admins)'],
+                    ['key' => 'reports_sales', 'label' => 'Sales analysis report', 'desc' => 'Open the Report window and save it as PDF or CSV (heads and admins)'],
                 ],
             ],
             [

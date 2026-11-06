@@ -39,9 +39,10 @@ use Modules\Sales\Models\Quotation;
  */
 class CrmReportService
 {
-    public function canView(CrmAccess $access): bool
+    /** @param  string  $permission  reports_view for the dashboard, reports_sales for the sales analysis report */
+    public function canView(CrmAccess $access, string $permission = 'reports_view'): bool
     {
-        return $access->hasCrm() && ($access->viewsAllLeads() || $access->isHead()) && $access->can('reports_view');
+        return $access->hasCrm() && ($access->viewsAllLeads() || $access->isHead()) && $access->can($permission);
     }
 
     /**

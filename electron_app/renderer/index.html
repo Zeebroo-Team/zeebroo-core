@@ -567,7 +567,7 @@ body.dark .mac-window .crm-org-warn{color:#ffb340}
 .mac-window .crm-fu-list:empty::before,.mac-window .crm-appr-list:empty::before{content:"Nothing here";display:block;padding:40px;text-align:center;color:var(--mac-muted)}
 /* Per-user CRM access: app.js puts crm-deny-<key> on <body> for each blocked function */
 body:not(.crm-uses-inbox) #rb-crm-inbox, body:not(.crm-can-approve) #rb-crm-approvals,
-body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"], body:not(.crm-can-report) #rb-crm-report,
+body:not(.crm-can-report) #rb-crm-dashboard, body:not(.crm-can-report) [data-crmsub="dashboard"], body:not(.crm-can-sales-report) #rb-crm-report,
 body:not(.crm-is-admin) #rb-crm-permissions, body:not(.crm-is-admin) #rb-crm-org, body:not(.crm-is-admin) #rb-crm-add-dept, body:not(.crm-unrestricted) #rb-crm-audit,
 body.crm-deny-relations_view #rb-crm-pipeline, body.crm-deny-relations_view [data-crmsub="relation"],
 body.crm-deny-relations_view #crm-ov-viewall-btn, body.crm-deny-relations_view #crm-ov-viewall-relations-btn,
@@ -1063,15 +1063,15 @@ body.dark .crm-ql-win{background:#2a2a2e}
 .crm-ql-stage img{display:block;max-width:100%;max-height:calc(100vh - 140px);object-fit:contain}
 /* macOS overlay-style scrollbars: slim rounded thumb, no arrow buttons, darker on hover.
    scrollbar-width/color must stay auto — setting them makes Chromium ignore ::-webkit-scrollbar. */
-:is(.crm-lead-view-shell,.crm-assign-win),:is(.crm-lead-view-shell,.crm-assign-win) *{scrollbar-width:auto;scrollbar-color:auto}
-:is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar{width:11px;height:11px;background:transparent}
-:is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar-button{display:none;width:0;height:0}
-:is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar-track,:is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar-corner{background:transparent}
-:is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar-thumb{border:3px solid transparent;border-radius:999px;background:rgba(0,0,0,.16) padding-box}
-:is(.crm-lead-view-shell,.crm-assign-win) :hover::-webkit-scrollbar-thumb{background-color:rgba(0,0,0,.3)}
-:is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar-thumb:hover{background-color:rgba(0,0,0,.45)}
-body.dark :is(.crm-lead-view-shell,.crm-assign-win) ::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.18)}
-body.dark :is(.crm-lead-view-shell,.crm-assign-win) :hover::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.32)}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win),:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) *{scrollbar-width:auto;scrollbar-color:auto}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar{width:11px;height:11px;background:transparent}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar-button{display:none;width:0;height:0}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar-track,:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar-corner{background:transparent}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar-thumb{border:3px solid transparent;border-radius:999px;background:rgba(0,0,0,.16) padding-box}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) :hover::-webkit-scrollbar-thumb{background-color:rgba(0,0,0,.3)}
+:is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar-thumb:hover{background-color:rgba(0,0,0,.45)}
+body.dark :is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) ::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.18)}
+body.dark :is(.crm-lead-view-shell,.crm-assign-win,.crm-rep-win) :hover::-webkit-scrollbar-thumb{background-color:rgba(255,255,255,.32)}
 /* Soft fade at the timeline's edges instead of cards being cut off */
 .crm-lead-view-shell .crm-tl-scroll{padding-bottom:6px;-webkit-mask-image:linear-gradient(to right,transparent,#000 16px,#000 calc(100% - 16px),transparent);mask-image:linear-gradient(to right,transparent,#000 16px,#000 calc(100% - 16px),transparent)}
 .crm-lead-view-shell select.po-field-input{-webkit-appearance:none!important;appearance:none!important}
@@ -1756,14 +1756,19 @@ body.dark .crm-assign-win .crm-assign-primary:has(input:checked){color:#ffb340}
 .crm-audit-table th{position:sticky;top:0;background:var(--surface);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted)}
 .crm-audit-table td div{word-break:break-all}
 /* CRM sales analysis report (ribbon → Report) */
-.crm-rep-table td.r,.crm-rep-table th.r{text-align:right;white-space:nowrap}
-.crm-rep-side{overflow-y:auto;gap:8px;padding-bottom:0!important}
+.crm-rep-win{container-type:inline-size}
+.crm-rep-table{border-collapse:separate;border-spacing:0}
+.crm-rep-table td.r{text-align:right;white-space:nowrap}
+.crm-rep-table th.r{text-align:right}
+.crm-rep-side{width:312px;padding:0;gap:0}
+.crm-rep-side-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:8px;padding:8px 10px 12px}
 .crm-rep-side-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--mac-muted);padding:6px 6px 0}
 .crm-rep-filters{display:grid;grid-template-columns:1fr 1fr;gap:10px 8px}
 .crm-rep-filters .mac-field{min-width:0;gap:4px;font-size:11.5px}
 .crm-rep-filters .po-field-input{width:100%;min-width:0;height:28px!important;font-size:12.5px;box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 .5px 1px rgba(0,0,0,.06)}
 .crm-rep-filters input[type=date].po-field-input{padding:0 6px}
-.crm-rep-run{position:sticky;bottom:0;margin:auto -10px 0;padding:10px;display:flex;gap:8px;background:var(--mac-bg);border-top:1px solid var(--mac-line)}
+.crm-rep-filters select.po-field-input{padding:0 26px 0 8px}
+.crm-rep-run{flex-shrink:0;padding:10px;display:flex;gap:8px;border-top:1px solid var(--mac-line)}
 .crm-rep-run .po-btn-primary{flex:1;justify-content:center}
 .crm-rep-groups{display:flex;flex-direction:column;gap:2px}
 .crm-rep-group-btn{display:flex;align-items:center;gap:10px;border:0;background:transparent;color:var(--mac-text);border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;text-align:left;cursor:pointer;transition:background .12s}
@@ -1773,18 +1778,36 @@ body.dark .crm-assign-win .crm-assign-primary:has(input:checked){color:#ffb340}
 .crm-rep-group-btn.active{background:var(--mac-accent);color:#fff}
 .crm-rep-group-btn.active i{color:#fff;background:rgba(255,255,255,.25)}
 .crm-rep-group-btn.active small{color:rgba(255,255,255,.82)}
-.crm-rep-card{background:var(--mac-panel);border-radius:12px;box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05)}
-.crm-rep-card thead th:first-child{border-top-left-radius:12px}
-.crm-rep-card thead th:last-child{border-top-right-radius:12px}
-.crm-rep-card tfoot td:first-child{border-bottom-left-radius:12px}
-.crm-rep-card tfoot td:last-child{border-bottom-right-radius:12px}
-.crm-rep-card .crm-rep-table th{background:var(--mac-head);color:var(--mac-muted);border-bottom-color:var(--mac-line)}
-.crm-rep-card .crm-rep-table td{border-bottom-color:var(--mac-line);color:var(--mac-text);font-size:12.5px;padding:9px 10px}
-.crm-rep-card .crm-rep-table th{padding:9px 10px}
-.crm-rep-card .crm-rep-table tbody tr:nth-child(even){background:var(--mac-stripe)}
-.crm-rep-card .crm-rep-table tbody tr:hover{background:var(--mac-hover)}
-.crm-rep-table tfoot td{position:sticky;bottom:0;background:var(--mac-head,var(--surface));font-weight:700;border-top:1px solid var(--mac-line,var(--border))}
+.crm-rep-detail{overflow:hidden;padding:16px 18px}
+/* The card is the table's scroller, so wide or long reports stay inside it with the header, total and first column pinned */
+.crm-rep-card{--crm-rep-solid:#fff;flex:0 1 auto;min-height:0;overflow:auto;background:var(--mac-panel);border-radius:12px;box-shadow:0 0 0 .5px var(--mac-line),0 1px 3px rgba(0,0,0,.05);transition:opacity .18s}
+body.dark .crm-rep-card{--crm-rep-solid:#2d2d31}
+.crm-rep-card.loading{opacity:.55}
+.crm-rep-card .crm-rep-table th{z-index:2;vertical-align:bottom;background:var(--mac-head);color:var(--mac-muted);border-bottom-color:var(--mac-line)}
+.crm-rep-card .crm-rep-table td{border-bottom-color:var(--mac-line);color:var(--mac-text);font-size:12.5px;padding:9px 8px}
+.crm-rep-card .crm-rep-table th{padding:9px 8px}
+.crm-rep-card .crm-rep-table tbody tr:nth-child(even){--crm-rep-tint:var(--mac-stripe);background:var(--crm-rep-tint)}
+.crm-rep-card .crm-rep-table tbody tr:hover{--crm-rep-tint:var(--mac-hover);background:var(--crm-rep-tint)}
+.crm-rep-card .crm-rep-table tbody tr:last-child td{border-bottom:0}
+.crm-rep-table tfoot td{position:sticky;bottom:0;z-index:2;background:var(--mac-head,var(--surface));font-weight:700;border-top:1px solid var(--mac-line,var(--border))}
 .crm-rep-table tr.crm-rep-group td{border-top:1px solid var(--mac-line,var(--border))}
+.crm-rep-card .crm-rep-table :is(th,td):first-child{position:sticky;left:0;min-width:130px;box-shadow:1px 0 0 var(--mac-line)}
+.crm-rep-card .crm-rep-table tbody td:first-child{z-index:1;background:linear-gradient(var(--crm-rep-tint,transparent),var(--crm-rep-tint,transparent)),var(--crm-rep-solid)}
+.crm-rep-card .crm-rep-table :is(thead,tfoot) :first-child{z-index:3}
+/* Follows the window's own width, so it also responds to the full-screen button */
+@container (max-width:980px){
+  .crm-rep-side{width:250px}
+  .crm-rep-filters{grid-template-columns:1fr}
+  .crm-rep-group-btn small{display:none}
+  .crm-rep-detail{padding:12px}
+}
+@container (max-width:720px){
+  .crm-rep-win .mac-split{flex-direction:column}
+  .crm-rep-side{width:auto;max-height:46%;border-right:0;border-bottom:1px solid var(--mac-line)}
+  .crm-rep-groups{flex-direction:row;flex-wrap:wrap;gap:4px}
+  .crm-rep-group-btn{padding:3px 10px 3px 3px}
+  .crm-rep-filters{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))}
+}
 .crm-appr-list{display:flex;flex-direction:column;gap:12px;padding:16px 18px}
 .crm-appr-card{border:1px solid var(--border,#e5e7eb);border-radius:12px;background:var(--surface);overflow:hidden;transition:box-shadow .15s,border-color .15s}
 .crm-appr-card:hover{border-color:#c4b5fd;box-shadow:0 4px 14px rgba(124,58,237,.08)}
@@ -14779,7 +14802,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
   <!-- ── CRM: sales analysis report (ribbon → Report) — group the leads, preview, save as PDF / CSV ── -->
   <div class="modal-overlay mac-overlay" id="crm-report-modal" style="display:none">
-    <div class="mac-window" style="width:1200px;max-width:96vw;height:86vh">
+    <div class="mac-window crm-rep-win" style="width:1240px;max-width:96vw;height:86vh">
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-file-invoice"></i></span>
@@ -14793,19 +14816,21 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       </div>
 
       <div class="mac-split">
-        <aside class="mac-sidebar crm-rep-side" style="width:280px">
-          <div class="crm-rep-side-title">Report by</div>
-          <div class="crm-rep-groups" id="crm-report-groups"></div>
-          <div class="crm-rep-side-title">Filters</div>
-          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="crm-report-search" placeholder="Customer, email or phone…" autocomplete="off"></div>
-          <div class="crm-rep-filters">
-            <label class="mac-field">From<input id="crm-report-from" class="po-field-input" type="date"></label>
-            <label class="mac-field">To<input id="crm-report-to" class="po-field-input" type="date"></label>
-            <label class="mac-field">Department<select id="crm-report-department" class="po-field-input"><option value="">All departments</option></select></label>
-            <label class="mac-field">Division<select id="crm-report-division" class="po-field-input"><option value="">All divisions</option></select></label>
-            <label class="mac-field">Staff<select id="crm-report-user" class="po-field-input"><option value="">All staff</option></select></label>
-            <label class="mac-field">Source<select id="crm-report-source" class="po-field-input"><option value="">All sources</option></select></label>
-            <label class="mac-field">Status<select id="crm-report-status" class="po-field-input"><option value="">Any status</option></select></label>
+        <aside class="mac-sidebar crm-rep-side">
+          <div class="crm-rep-side-scroll">
+            <div class="crm-rep-side-title">Report by</div>
+            <div class="crm-rep-groups" id="crm-report-groups"></div>
+            <div class="crm-rep-side-title">Filters</div>
+            <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="search" id="crm-report-search" placeholder="Customer, email or phone…" autocomplete="off"></div>
+            <div class="crm-rep-filters">
+              <label class="mac-field">From<input id="crm-report-from" class="po-field-input" type="date"></label>
+              <label class="mac-field">To<input id="crm-report-to" class="po-field-input" type="date"></label>
+              <label class="mac-field">Department<select id="crm-report-department" class="po-field-input"><option value="">All departments</option></select></label>
+              <label class="mac-field">Division<select id="crm-report-division" class="po-field-input"><option value="">All divisions</option></select></label>
+              <label class="mac-field">Staff<select id="crm-report-user" class="po-field-input"><option value="">All staff</option></select></label>
+              <label class="mac-field">Source<select id="crm-report-source" class="po-field-input"><option value="">All sources</option></select></label>
+              <label class="mac-field">Status<select id="crm-report-status" class="po-field-input"><option value="">Any status</option></select></label>
+            </div>
           </div>
           <div class="crm-rep-run">
             <button class="po-btn-ghost" id="crm-report-reset" title="Clear the filters"><i class="fa fa-eraser"></i> Reset</button>
@@ -14813,7 +14838,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           </div>
         </aside>
 
-        <section class="mac-detail">
+        <section class="mac-detail crm-rep-detail">
           <div class="crm-rep-card">
             <table class="crm-audit-table crm-rep-table">
               <thead id="crm-report-head"></thead>
