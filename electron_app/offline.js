@@ -87,6 +87,22 @@ const DETAIL_WARM_LISTS = [
 ];
 const DETAIL_WARM_MAX = 25;
 const DETAIL_WARM_MS  = 6 * 3600 * 1000;
+// CRM: fetched only for businesses that can read /crm/projects. Paths must match api.js exactly.
+const CRM_WARM_PATHS = [
+  '/crm/permissions/me', '/crm/contacts?q=', '/crm/tasks?filter=open', '/crm/tasks?filter=overdue', '/crm/tasks?filter=completed',
+  ...['mine', 'team'].flatMap(scope => ['pending', 'overdue', 'today', 'done', 'all'].map(status => `/crm/follow-ups?scope=${scope}&status=${status}`)),
+  '/crm/inbox?filter=all&q=', '/crm/quotation-approvals', '/crm/statuses', '/crm/lost-reasons', '/crm/lead-sources',
+  '/crm/custom-statuses', '/crm/form-templates', '/crm/settings', '/crm/notification-preferences', '/crm/org', '/crm/permissions',
+];
+// Each relation's own screens, and the screens of its most recently worked leads.
+const CRM_BOARD_SCREENS = ['pipeline', 'stages', 'forms', 'custom-fields', 'custom-data-leads', 'contacts?q=&stage_id=&source='];
+const CRM_LEAD_SCREENS  = ['workspace', 'summary', 'timeline', 'messages', 'attachments', 'tasks', 'quotations', 'follow-ups', 'history', 'assignees', 'close-options'];
+const CRM_PROJECT_MAX   = 30;
+const CRM_LEAD_WARM_MAX = 40;
+const CRM_QUOTATION_WARM_MAX = 5;
+// The collection of every CRM change queued offline: one write can touch a
+// board, a lead's tabs and the task lists, so they are refreshed together.
+const CRM_SCOPE = '/crm';
 // Screens the user opened (with their own dates and filters) are refreshed too.
 const LEARNED_WARM_MAX  = 200;
 const LEARNED_WARM_MS   = 60 * 60 * 1000;
@@ -199,7 +215,7 @@ const TEMP_ID_IN_PATH = /\/-\d{12,}(?=\/|$|\?)/;
 // Writes that only make sense with the server there (AI, e-mail, sign-in,
 // backups, imports that report per-row results, …): answered "needs internet".
 const ONLINE_ONLY_WRITES = new RegExp([
-  '^/(auth|backup|guide|businesses|developers|crm/lead-imports|online/barcodes)(/|$)',
+  '^/(auth|backup|guide|businesses|developers|online/barcodes)(/|$)',
   '^/mail/(send|sync|test|verify-credentials)$',
   '/(generate-ai|ai-chat|ai-content|ai-fill|scan|preview|stock-check|generate-skus|enable-share|notify|import|install|force-delete)$',
 ].join('|'));
@@ -1925,6 +1941,8 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     const create = writes.find(w => w.temp_id === missing) || outbox.find(e => e.local_id === missing);
     if (!create) return { error: 'It uses a record added offline that was then discarded.' };
     if (create.status === 'failed') return { error: 'It uses a record added offline that could not upload.' };
+    // Uploaded, but the server gave no id back (a lead sent to the Marketing inbox): nothing to wait for.
+    if (create.status === 'synced') return { error: 'It uses a record added offline that this user can no longer open.' };
     return { waitFor: create.id || create.client_uuid };
   }
 
@@ -2106,6 +2124,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     if (!box.isCurrent) { writeJsonAtomic(path.join(box.dir, 'meta.json'), meta); return; }
     save('meta');
     const s = st.store;
+    if (item.collection === CRM_SCOPE) return mapCrm(s, item.temp_id, realId);
     const touched = eachCachedList(s, item.collection, rows => {
       const r = rows.find(x => x.id === item.temp_id);
       if (!r) return false;
@@ -2121,6 +2140,709 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       touched.push(oldKey, `${item.collection}/${realId}`);
     }
     saveCacheKeys(touched);
+  }
+
+  // ── CRM ────────────────────────────────────────────────────────────────
+  // Working leads carries on offline: adding and editing them, moving them
+  // through the stages, follow-ups, tasks and messages. Each change below is
+  // shown at once on the downloaded screens, with the answer the screen expects
+  // from the server. Setup (stages, forms, permissions) and anything the server
+  // must work out or send (quotations, the Marketing inbox, e-mail) stays online.
+  const crmCopy = v => JSON.parse(JSON.stringify(v));
+  const crmNow  = () => new Date().toISOString();
+  const CRM_PIPELINE_KEY = /^\/crm\/projects\/-?\d+\/pipeline$/;
+  const CRM_LEAD_FIELDS  = ['name', 'company', 'email', 'phone', 'source', 'source_id', 'score', 'division_id', 'notes', 'expected_close_date', 'product_interest_note'];
+
+  function crmMe(s) {
+    const user = s.cache['/auth/me']?.body?.data || globalGet('/auth/me')?.body?.data || {};
+    return { id: user.id ?? null, name: user.name || 'You' };
+  }
+
+  const crmBoard = (s, projectId) => s.cache[`/crm/projects/${projectId}/pipeline`]?.body?.data || null;
+
+  // A lead on a downloaded board: its card, column and board.
+  function crmFindLead(s, leadId) {
+    for (const [key, hit] of Object.entries(s.cache)) {
+      if (!CRM_PIPELINE_KEY.test(key)) continue;
+      for (const column of hit.body?.data?.columns || []) {
+        const lead = (column.leads || []).find(l => String(l.id) === String(leadId));
+        if (lead) return { key, board: hit.body.data, column, lead };
+      }
+    }
+    return null;
+  }
+
+  function crmRecount(column) {
+    column.leads_count = column.leads.length;
+    column.value_total = column.leads.reduce((a, l) => a + Number(l.deal_value || 0), 0);
+  }
+
+  function crmAdjustWorkspace(s, leadId, name, delta) {
+    const key = `/crm/leads/${leadId}/workspace`;
+    const counts = s.cache[key]?.body?.data?.counts;
+    if (!counts) return;
+    counts[name] = Math.max(0, Number(counts[name] || 0) + delta);
+    saveCacheKeys([key]);
+  }
+
+  function crmAdjustOpenTasks(s, delta) {
+    const data = s.cache['/crm/overview']?.body?.data;
+    if (!data || data.open_tasks == null) return;
+    data.open_tasks = Math.max(0, Number(data.open_tasks) + delta);
+    saveCacheKeys(['/crm/overview']);
+  }
+
+  function crmAdjustProjectLeads(s, projectId, delta) {
+    const row = (s.cache['/crm/projects']?.body?.data || []).find(p => String(p.id) === String(projectId));
+    if (!row) return;
+    row.leads_count = Math.max(0, Number(row.leads_count || 0) + delta);
+    saveCacheKeys(['/crm/projects']);
+  }
+
+  function crmMoveCard(s, hit, stageId, changes = {}) {
+    const to = hit.board.columns.find(c => Number(c.id) === Number(stageId));
+    if (to && to !== hit.column) {
+      const now = crmNow();
+      hit.column.leads = hit.column.leads.filter(l => l !== hit.lead);
+      to.leads = [hit.lead, ...(to.leads || [])];
+      Object.assign(hit.lead, { stage_id: to.id, stage_entered_at: now, updated_at: now, pending_move: null, closed_at: to.is_won || to.is_lost ? now : null });
+      crmRecount(hit.column);
+      hit.column = to;
+    }
+    Object.assign(hit.lead, changes);
+    crmRecount(hit.column);
+    saveCacheKeys([hit.key]);
+  }
+
+  // Goes to the stage, or asks for it when only the head may move leads there.
+  function crmGoToStage(s, hit, stageId, changes = {}) {
+    const to = hit.board.columns.find(c => Number(c.id) === Number(stageId));
+    if (!to?.needs_approval || hit.lead.can?.approve) {
+      crmMoveCard(s, hit, stageId, changes);
+      return { to, pending: null };
+    }
+    const me = crmMe(s);
+    const pending = { id: null, to_stage_id: to.id, to_stage_name: to.name, requested_by_name: me.name, requested_at: crmNow() };
+    hit.lead.pending_move = pending;
+    saveCacheKeys([hit.key]);
+    return { to, pending };
+  }
+
+  function crmPatchLead(s, hit, body) {
+    const lead = hit.lead;
+    const estimate = lead.estimated_value;
+    Object.assign(lead, pick(body, CRM_LEAD_FIELDS), { updated_at: crmNow() });
+    if (body.custom_fields) lead.custom_fields = { ...(lead.custom_fields || {}), ...body.custom_fields };
+    if (body.estimated_value !== undefined) {
+      lead.estimated_value = body.estimated_value;
+      // The card shows the estimate until a quotation is accepted.
+      if (Number(lead.deal_value || 0) === Number(estimate || 0)) lead.deal_value = body.estimated_value === null ? null : Number(body.estimated_value);
+    }
+    if (Array.isArray(body.products)) {
+      lead.product_items = body.products.map(p => {
+        const card = s.catalog.products[p.product_id];
+        const old = (lead.product_items || []).find(i => i.id === p.product_id);
+        return { id: p.product_id, name: card?.name ?? old?.name ?? '', quantity: p.quantity ?? null, sku: card?.sku ?? old?.sku ?? null, unit_price: card?.unit_sell_price ?? old?.unit_price ?? null };
+      });
+    }
+    if (body.assigned_to !== undefined) {
+      lead.assigned_to = body.assigned_to;
+      lead.assigned_to_name = (hit.board.assignable_users || []).find(u => u.id === body.assigned_to)?.name ?? null;
+    }
+    crmRecount(hit.column);
+    saveCacheKeys([hit.key]);
+  }
+
+  function crmSetCloseStatus(s, leadId, status) {
+    const key = `/crm/leads/${leadId}/close-options`;
+    const data = s.cache[key]?.body?.data;
+    if (!data) return;
+    data.status = status;
+    data.can = { ...data.can, win: status !== 'lost', lose: status === 'open', reopen: status !== 'open' };
+    saveCacheKeys([key]);
+  }
+
+  // A sibling lead's copy of a screen: what a screen for a brand new lead looks like.
+  function crmSample(s, screen) {
+    const re = new RegExp(`^/crm/leads/\\d+/${screen}$`);
+    const key = Object.keys(s.cache).find(k => re.test(k));
+    return key ? crmCopy(s.cache[key].body) : null;
+  }
+
+  // The lead window of a lead added offline opens on empty tabs, ready to use.
+  function crmSeedLead(s, leadId) {
+    const keys = [];
+    const put = (screen, body) => {
+      const key = `/crm/leads/${leadId}/${screen}`;
+      s.cache[key] = { at: Date.now(), body };
+      keys.push(key);
+    };
+    for (const tab of ['timeline', 'messages', 'attachments', 'tasks', 'quotations', 'follow-ups', 'history']) {
+      const meta = crmSample(s, tab)?.meta || {};
+      put(tab, { data: [], meta: { ...meta, can_post: true, can_add: true, can_work: true, can_complete: true, can_delete: true } });
+    }
+    const workspace = crmSample(s, 'workspace')?.data;
+    if (workspace) {
+      put('workspace', { data: {
+        ...workspace, lead_id: leadId, assignees: [], unread_types: {}, can_add_tasks: true, follow_ups_overdue: 0,
+        can: { ...workspace.can, can_work: true, can_edit: true, can_move: true, can_close: true, can_contribute: true },
+        counts: { messages: 0, files: 0, tasks: 0, follow_ups: 0 },
+      } });
+    }
+    const close = crmSample(s, 'close-options')?.data;
+    if (close) put('close-options', { data: { ...close, status: 'open', quotations: [], documents: [], can: { win: true, lose: true, reopen: false } } });
+    saveCacheKeys(keys);
+  }
+
+  function crmNewLead(s, [projectId, formId], body, tempId) {
+    const form = s.cache[`/crm/projects/${projectId}/forms/${formId}`]?.body?.data;
+    const core = {}, customFields = {}, errors = {};
+    let firstText = '';
+    (form?.blocks || []).forEach((block, idx) => {
+      if (block.type !== 'field') return;
+      const field = String(block.field || '');
+      const value = String(body[idx] ?? '').trim();
+      if (block.required && !value) errors[idx] = [`${block.label || field} is required.`];
+      if (field.startsWith('custom:')) { if (value) customFields[field.slice(7)] = value; }
+      else core[field] = value || null;
+      firstText = firstText || value;
+    });
+    if (Object.keys(errors).length) return { status: 422, message: Object.values(errors)[0][0], extra: { errors } };
+
+    // Same fallbacks as LeadFormService::submit().
+    const name = core.name || firstText || 'Website inquiry';
+    const label = `New lead: ${name}`;
+    const board = crmBoard(s, projectId);
+    crmSeedLead(s, tempId);
+    if (!board) return { label, data: { id: tempId, name, project_id: projectId }, extra: { intake: null } };
+
+    const stageId = form?.default_stage_id ?? board.default_form?.default_stage_id;
+    const column = board.columns.find(c => Number(c.id) === Number(stageId))
+      || board.columns.find(c => !c.is_won && !c.is_lost && !c.is_on_hold) || board.columns[0];
+    const me = crmMe(s);
+    const now = crmNow();
+    const estimate = body.estimated_value ?? null;
+    const lead = {
+      id: tempId, project_id: projectId, department_id: board.project?.department_id ?? null, division_id: null, stage_id: column.id, form_id: formId,
+      name, company: core.company ?? null, email: core.email ?? null, phone: core.phone ?? null, source: body.source || 'manual', source_id: null,
+      estimated_value: estimate, score: null, expected_close_date: null, notes: null, product_interest_note: null, lost_reason_id: null, lost_reason: null,
+      on_hold_from_stage_id: null, closed_at: null, assigned_to: null, created_by: me.id, created_at: now, updated_at: now, needs_review: false,
+      review_reason: null, verified_at: null, forwarded_at: null, customer_id: null, converted_at: null, checklist_done: [], is_customer: false,
+      custom_fields: customFields, created_by_name: me.name, assigned_to_name: null, assignee_list: [], product_items: [], follow_up: null,
+      suggested_score: null, stage_entered_at: now, deal_value: estimate === null ? null : Number(estimate), pending_move: null, unread: null,
+      // The server checks these again when the lead uploads.
+      can: {
+        edit: true, move: true, delete: true, assign: !!(board.assignable_users || []).length, approve: false,
+        forward: false, contribute: true, convert: true, close: true, reopen: false,
+      },
+    };
+    column.leads = [lead, ...(column.leads || [])];
+    crmRecount(column);
+    saveCacheKeys([`/crm/projects/${projectId}/pipeline`]);
+    crmAdjustProjectLeads(s, projectId, 1);
+    return { label, data: lead, extra: { intake: null } };
+  }
+
+  function crmEditLead(s, [leadId], body) {
+    const hit = crmFindLead(s, leadId);
+    const label = `Edit lead: ${body.name || hit?.lead.name || `#${leadId}`}`;
+    if (!hit) return { label, data: { id: leadId, ...primitiveFields(body) } };
+    crmPatchLead(s, hit, body);
+    const stageId = Number(body.stage_id);
+    if (!stageId || stageId === Number(hit.column.id)) return { label, data: hit.lead };
+    const { to, pending } = crmGoToStage(s, hit, stageId);
+    if (!pending) return { label, data: hit.lead };
+    return { label, data: hit.lead, message: `Saved on this PC. Moving to "${to.name}" needs approval — the head is asked once this uploads.`, extra: { pending_move: pending } };
+  }
+
+  // A lead still waiting to upload is simply taken back, with what was done to it.
+  // Uploading then deleting could delete a real lead the new one turned out to match.
+  function crmDropNewLead(s, leadId) {
+    const create = s.writes.find(w => w.temp_id === leadId && w.status !== 'synced');
+    if (!create) return false;
+    s.writes = s.writes.filter(w => w !== create && !w.path.includes(`/${leadId}`) && !JSON.stringify(w.body ?? null).includes(String(leadId)));
+    save('writes');
+    emit();
+    return true;
+  }
+
+  function crmDeleteLead(s, [leadId]) {
+    const hit = crmFindLead(s, leadId);
+    if (hit) {
+      hit.column.leads = hit.column.leads.filter(l => l !== hit.lead);
+      crmRecount(hit.column);
+      saveCacheKeys([hit.key]);
+      crmAdjustProjectLeads(s, hit.lead.project_id, -1);
+    }
+    const screens = Object.keys(s.cache).filter(k => k.startsWith(`/crm/leads/${leadId}/`));
+    screens.forEach(k => delete s.cache[k]);
+    saveCacheKeys(screens);
+    const queue = !(isTempId(leadId) && crmDropNewLead(s, leadId));
+    return { label: `Delete lead: ${hit?.lead.name || `#${leadId}`}`, queue };
+  }
+
+  function crmMoveLead(s, [leadId], body) {
+    const hit = crmFindLead(s, leadId);
+    if (!hit) return { label: `Move lead #${leadId}`, data: { id: leadId, stage_id: body.stage_id } };
+    const changes = pick(body, ['lost_reason_id', 'lost_reason', 'expected_close_date']);
+    if (body.estimated_value !== undefined) crmPatchLead(s, hit, { estimated_value: body.estimated_value });
+    const { to, pending } = crmGoToStage(s, hit, body.stage_id, changes);
+    const label = `Move lead: ${hit.lead.name} → ${to?.name || `stage #${body.stage_id}`}`;
+    if (pending) return { label, status: 202, message: `Moving to "${to.name}" needs approval — the head is asked once this uploads.`, extra: { pending_move: pending } };
+    return { label, data: hit.lead };
+  }
+
+  function crmHoldLead(s, [leadId]) {
+    const hit = crmFindLead(s, leadId);
+    const to = hit?.board.columns.find(c => c.is_on_hold);
+    if (to) crmMoveCard(s, hit, to.id, { on_hold_from_stage_id: hit.column.id });
+    return { label: `Put on hold: ${hit?.lead.name || `#${leadId}`}`, data: hit?.lead || { id: leadId } };
+  }
+
+  function crmResumeLead(s, [leadId]) {
+    const hit = crmFindLead(s, leadId);
+    if (hit?.lead.on_hold_from_stage_id) crmMoveCard(s, hit, hit.lead.on_hold_from_stage_id, { on_hold_from_stage_id: null });
+    return { label: `Resume lead: ${hit?.lead.name || `#${leadId}`}`, data: hit?.lead || { id: leadId } };
+  }
+
+  function crmWonLead(s, [leadId]) {
+    const hit = crmFindLead(s, leadId);
+    const to = hit?.board.columns.find(c => c.is_won);
+    if (to) crmMoveCard(s, hit, to.id, { is_customer: true });
+    crmSetCloseStatus(s, leadId, 'won');
+    const lead = hit?.lead || { id: leadId };
+    return { label: `Lead won: ${lead.name || `#${leadId}`}`, data: { lead, customer: null, document: null, document_created: false, documents: [] } };
+  }
+
+  function crmLostLead(s, [leadId], body) {
+    const hit = crmFindLead(s, leadId);
+    const to = hit?.board.columns.find(c => c.is_lost);
+    const reason = (hit?.board.lost_reasons || []).find(r => r.id === body.lost_reason_id);
+    if (to) crmMoveCard(s, hit, to.id, { lost_reason_id: body.lost_reason_id, lost_reason: body.note || reason?.name || null, follow_up: null });
+    crmSetCloseStatus(s, leadId, 'lost');
+    const lead = hit?.lead || { id: leadId };
+    return { label: `Lead lost: ${lead.name || `#${leadId}`}`, data: { lead } };
+  }
+
+  function crmReopenLead(s, [leadId]) {
+    const hit = crmFindLead(s, leadId);
+    const to = hit?.board.columns.find(c => !c.is_won && !c.is_lost && !c.is_on_hold);
+    if (to) crmMoveCard(s, hit, to.id, { lost_reason_id: null, lost_reason: null });
+    crmSetCloseStatus(s, leadId, 'open');
+    const lead = hit?.lead || { id: leadId };
+    return { label: `Reopen lead: ${lead.name || `#${leadId}`}`, data: { lead } };
+  }
+
+  function crmChecklist(s, [leadId], body) {
+    const hit = crmFindLead(s, leadId);
+    const done = new Set(hit?.lead.checklist_done || []);
+    if (body.done) done.add(body.item); else done.delete(body.item);
+    if (hit) { hit.lead.checklist_done = [...done]; saveCacheKeys([hit.key]); }
+    return { label: `Checklist: ${body.item}`, data: { checklist_done: [...done] } };
+  }
+
+  function crmAssignees(s, [leadId], body) {
+    const hit = crmFindLead(s, leadId);
+    const workspaceKey = `/crm/leads/${leadId}/workspace`;
+    const assigneesKey = `/crm/leads/${leadId}/assignees`;
+    const workspace = s.cache[workspaceKey]?.body?.data;
+    const cached = s.cache[assigneesKey]?.body?.data;
+    const people = [...(cached?.assignable_users || []), ...(workspace?.assignable_users || []), ...(hit?.board.assignable_users || []), ...(hit?.lead.assignee_list || [])];
+    const ids = (body.user_ids || []).map(Number);
+    const primary = ids.includes(Number(body.primary_user_id)) ? Number(body.primary_user_id) : ids[0] ?? null;
+    const now = crmNow();
+    const assignees = ids.map(id => ({ id, name: people.find(u => Number(u.id) === id)?.name || `User #${id}`, is_primary: id === primary, assigned_at: now }));
+    const touched = [];
+    if (hit) {
+      Object.assign(hit.lead, { assignee_list: assignees, assigned_to: primary, assigned_to_name: assignees.find(a => a.is_primary)?.name ?? null });
+      touched.push(hit.key);
+    }
+    if (workspace) { workspace.assignees = assignees; touched.push(workspaceKey); }
+    if (cached) { Object.assign(cached, { assignees, assigned_to: primary }); touched.push(assigneesKey); }
+    saveCacheKeys(touched);
+    return {
+      label: `Assignees: ${hit?.lead.name || `#${leadId}`}`,
+      data: { assignees, assigned_to: primary, status_key: null, stage_id: hit?.column.id ?? null, can_assign: true, assignable_users: people, history: cached?.history || [] },
+    };
+  }
+
+  // ── CRM follow-ups ──
+  // Every downloaded list: the lead tabs (no status: they hold all of them) and My / Team Follow-ups.
+  function crmFollowUpLists(s) {
+    const lists = [];
+    for (const [key, hit] of Object.entries(s.cache)) {
+      const tab = key.match(/^\/crm\/leads\/(-?\d+)\/follow-ups$/);
+      if (tab) lists.push({ key, hit, leadId: Number(tab[1]) });
+      else if (key.startsWith('/crm/follow-ups?')) {
+        const params = splitPath(key)[1];
+        lists.push({ key, hit, scope: params.get('scope'), status: params.get('status') });
+      }
+    }
+    return lists.filter(l => Array.isArray(l.hit.body?.data));
+  }
+
+  function crmFindFollowUp(s, id) {
+    for (const list of crmFollowUpLists(s)) {
+      const row = list.hit.body.data.find(f => String(f.id) === String(id));
+      if (row) return row;
+    }
+    return null;
+  }
+
+  const crmChoice = (s, kind, key) => crmFollowUpLists(s).map(l => l.hit.body.meta?.[kind] || []).flat().find(c => c.key === key)?.label ?? null;
+
+  function crmFollowUpFits(list, row, me) {
+    if (list.scope === 'mine' && row.user?.id !== me.id) return false;
+    if (list.status === 'pending') return row.status === 'pending';
+    if (list.status === 'overdue') return row.status === 'pending' && row.is_overdue;
+    if (list.status === 'today')   return row.status === 'pending' && row.is_due_today;
+    if (list.status === 'done')    return row.status === 'done';
+    return true;
+  }
+
+  // Puts a new or changed follow-up on each list it now belongs to, and off the others.
+  function crmPlaceFollowUp(s, row) {
+    const me = crmMe(s);
+    const lists = crmFollowUpLists(s);
+    for (const list of lists) {
+      const rows = list.hit.body.data;
+      if (list.leadId !== undefined) {
+        if (String(list.leadId) !== String(row.lead_id)) continue;
+        const i = rows.findIndex(f => f.id === row.id);
+        if (i >= 0) rows[i] = row; else rows.unshift(row);
+      } else {
+        const kept = rows.filter(f => f.id !== row.id);
+        list.hit.body.data = crmFollowUpFits(list, row, me) ? [row, ...kept] : kept;
+      }
+    }
+    const count = status => lists.find(l => l.scope === 'mine' && l.status === status)?.hit.body.data.length;
+    for (const list of lists) {
+      const counts = list.hit.body.meta?.counts;
+      if (counts) Object.assign(counts, { mine_pending: count('pending') ?? counts.mine_pending, mine_overdue: count('overdue') ?? counts.mine_overdue });
+    }
+    saveCacheKeys(lists.map(l => l.key));
+    crmSyncFollowUpBadge(s, row.lead_id);
+  }
+
+  // The card's follow-up badge and the lead window's count, from the lead's own list.
+  function crmSyncFollowUpBadge(s, leadId) {
+    const rows = s.cache[`/crm/leads/${leadId}/follow-ups`]?.body?.data;
+    if (!rows) return;
+    const pending = rows.filter(f => f.status === 'pending');
+    const overdue = pending.filter(f => f.is_overdue).length;
+    const hit = crmFindLead(s, leadId);
+    if (hit) {
+      hit.lead.follow_up = pending.length
+        ? { next_due_at: pending.map(f => f.due_at).sort()[0], pending: pending.length, overdue }
+        : null;
+      saveCacheKeys([hit.key]);
+    }
+    const key = `/crm/leads/${leadId}/workspace`;
+    const workspace = s.cache[key]?.body?.data;
+    if (workspace?.counts) {
+      workspace.counts.follow_ups = pending.length;
+      workspace.follow_ups_overdue = overdue;
+      saveCacheKeys([key]);
+    }
+  }
+
+  function crmFollowUpRow(s, id, leadId, hit, user, fields) {
+    const due = new Date(fields.due_at);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return {
+      id, lead_id: leadId, status: 'pending', done_at: null, cancelled_at: null,
+      is_overdue: due < today, is_due_today: due.toDateString() === new Date().toDateString(),
+      channel_label: crmChoice(s, 'channels', fields.channel), outcome: null, outcome_label: null, next_follow_up_at: null, user, quotation: null,
+      lead: hit ? {
+        id: leadId, name: hit.lead.name, company: hit.lead.company, phone: hit.lead.phone, project_id: hit.lead.project_id,
+        project_name: hit.board.project?.name ?? null, stage_name: hit.column.name, stage_color: hit.column.color,
+      } : null,
+      can_log: true, ...fields,
+    };
+  }
+
+  function crmNewFollowUp(s, [leadId], body, tempId) {
+    const hit = crmFindLead(s, leadId);
+    const meta = s.cache[`/crm/leads/${leadId}/follow-ups`]?.body?.meta;
+    const me = crmMe(s);
+    const userIds = [...new Set((body.user_ids || []).map(Number))];
+    if (!userIds.length) userIds.push(body.user_id ?? meta?.default_user_id ?? me.id);
+    const rows = userIds.map((userId, i) => {
+      const person = [...(meta?.assignees || []), me].find(u => u.id === userId);
+      // Only the first has an id the upload gives back, so the others wait for the refresh.
+      return crmFollowUpRow(s, i === 0 ? tempId : newTempId(), leadId, hit, { id: userId, name: person?.name || `User #${userId}` }, {
+        due_at: body.due_at, channel: body.channel ?? null, notes: body.notes ?? null, ...(i > 0 ? { can_log: false } : {}),
+      });
+    });
+    rows.forEach(row => crmPlaceFollowUp(s, row));
+    return { label: `Follow-up: ${hit?.lead.name || `#${leadId}`}`, data: rows.length > 1 ? rows : rows[0], message: SAVED_OFFLINE_MSG };
+  }
+
+  function crmLogFollowUp(s, [id], body) {
+    const row = crmFindFollowUp(s, id);
+    const label = `Follow-up logged${row?.lead?.name ? `: ${row.lead.name}` : ''}`;
+    if (!row) return { label, data: { follow_up: { id }, next: null } };
+    Object.assign(row, {
+      status: 'done', done_at: crmNow(), outcome: body.outcome, outcome_label: crmChoice(s, 'outcomes', body.outcome),
+      channel: body.channel ?? row.channel, channel_label: crmChoice(s, 'channels', body.channel ?? row.channel),
+      notes: body.notes ?? row.notes, next_follow_up_at: body.next_follow_up_at ?? null, is_overdue: false, can_log: false,
+    });
+    crmPlaceFollowUp(s, row);
+    let next = null;
+    if (body.next_follow_up_at) {
+      // The server plans this one itself on upload: shown, but nothing can be done to it until then.
+      next = crmFollowUpRow(s, newTempId(), row.lead_id, crmFindLead(s, row.lead_id), row.user, {
+        due_at: body.next_follow_up_at, channel: row.channel, notes: null, can_log: false,
+      });
+      if (!next.lead) next.lead = row.lead;
+      crmPlaceFollowUp(s, next);
+    }
+    return { label, data: { follow_up: row, next } };
+  }
+
+  function crmCancelFollowUp(s, [id]) {
+    const row = crmFindFollowUp(s, id);
+    if (row) {
+      Object.assign(row, { status: 'cancelled', cancelled_at: crmNow(), is_overdue: false, can_log: false });
+      crmPlaceFollowUp(s, row);
+    }
+    return { label: `Follow-up cancelled${row?.lead?.name ? `: ${row.lead.name}` : ''}` };
+  }
+
+  // ── CRM tasks ──
+  // Every downloaded list: the lead tabs (all of a lead's tasks) and the Tasks screen's filters.
+  function crmTaskLists(s) {
+    const lists = [];
+    for (const [key, hit] of Object.entries(s.cache)) {
+      const tab = key.match(/^\/crm\/leads\/(-?\d+)\/tasks$/);
+      if (tab) lists.push({ key, hit, leadId: Number(tab[1]) });
+      else if (key.startsWith('/crm/tasks?')) lists.push({ key, hit, filter: splitPath(key)[1].get('filter') });
+    }
+    return lists.filter(l => Array.isArray(l.hit.body?.data));
+  }
+
+  const crmTaskFits = (filter, row) => (row.status === 'completed' ? filter === 'completed' : filter === 'open' || (filter === 'overdue' && row.is_overdue));
+
+  function crmNewTask(s, leadId, body, tempId) {
+    const hit = leadId === null ? null : crmFindLead(s, leadId);
+    const people = s.cache[`/crm/leads/${leadId}/workspace`]?.body?.data?.task_assignees || [];
+    const row = {
+      id: tempId, title: body.title, description: body.description ?? null, due_at: body.due_at ?? null, status: 'pending',
+      is_overdue: !!body.due_at && new Date(body.due_at) < new Date(), assigned_to: body.assigned_to ?? null,
+      assigned_to_name: people.find(u => u.id === body.assigned_to)?.name ?? null, completed_at: null,
+      subject_type: null, subject_id: leadId, subject_label: hit?.lead.name ?? null,
+    };
+    const lists = crmTaskLists(s).filter(l => (l.leadId === undefined ? crmTaskFits(l.filter, row) : l.leadId === leadId));
+    lists.forEach(l => l.hit.body.data.unshift({ ...row }));
+    saveCacheKeys(lists.map(l => l.key));
+    if (leadId !== null) crmAdjustWorkspace(s, leadId, 'tasks', 1);
+    crmAdjustOpenTasks(s, 1);
+    return { label: `New task: ${body.title}`, data: row, message: SAVED_OFFLINE_MSG };
+  }
+
+  function crmSetTask(s, id, status) {
+    const lists = crmTaskLists(s);
+    const found = lists.flatMap(l => l.hit.body.data).find(t => String(t.id) === String(id));
+    if (!found) return null;
+    const changed = found.status !== status;
+    const done = status === 'completed';
+    const row = {
+      ...found, status, completed_at: done ? crmNow() : null,
+      is_overdue: !done && !!found.due_at && new Date(found.due_at) < new Date(),
+    };
+    for (const list of lists) {
+      const rows = list.hit.body.data;
+      const i = rows.findIndex(t => String(t.id) === String(id));
+      if (list.leadId !== undefined) {
+        if (i < 0) continue;
+        rows[i] = { ...rows[i], status: row.status, completed_at: row.completed_at, is_overdue: row.is_overdue };
+        if (changed) crmAdjustWorkspace(s, list.leadId, 'tasks', done ? -1 : 1);
+      } else {
+        const kept = rows.filter(t => String(t.id) !== String(id));
+        list.hit.body.data = crmTaskFits(list.filter, row) ? [row, ...kept] : kept;
+      }
+    }
+    saveCacheKeys(lists.map(l => l.key));
+    if (changed) crmAdjustOpenTasks(s, done ? -1 : 1);
+    return row;
+  }
+
+  function crmDeleteTask(s, [id]) {
+    const lists = crmTaskLists(s);
+    const found = lists.flatMap(l => l.hit.body.data).find(t => String(t.id) === String(id));
+    for (const list of lists) {
+      const rows = list.hit.body.data;
+      list.hit.body.data = rows.filter(t => String(t.id) !== String(id));
+      if (found?.status === 'pending' && list.leadId !== undefined && list.hit.body.data.length !== rows.length) crmAdjustWorkspace(s, list.leadId, 'tasks', -1);
+    }
+    saveCacheKeys(lists.map(l => l.key));
+    if (found?.status === 'pending') crmAdjustOpenTasks(s, -1);
+    return { label: `Delete task: ${found?.title || `#${id}`}` };
+  }
+
+  // ── CRM messages ──
+  function crmNewMessage(s, [leadId], body, tempId) {
+    if ((body.attachment_ids || []).length) return { status: 422, message: 'Sharing files in a message needs internet. Send the text on its own, or try again when you are back online.' };
+    const key = `/crm/leads/${leadId}/messages`;
+    const row = {
+      id: tempId, parent_id: body.parent_id ?? null, body: body.body ?? null, mentions: body.mentions || [], attachments: [],
+      user: crmMe(s), created_at: crmNow(), edited_at: null, can_edit: true, can_delete: true,
+    };
+    const rows = s.cache[key]?.body?.data;
+    if (Array.isArray(rows)) { rows.push(row); saveCacheKeys([key]); }
+    crmAdjustWorkspace(s, leadId, 'messages', 1);
+    return { label: `Lead message: ${String(body.body || '').slice(0, 40)}`, data: row, message: SAVED_OFFLINE_MSG };
+  }
+
+  function crmEditMessage(s, [leadId, id], body) {
+    const key = `/crm/leads/${leadId}/messages`;
+    const row = (s.cache[key]?.body?.data || []).find(x => String(x.id) === String(id));
+    if (row) {
+      Object.assign(row, { body: body.body, mentions: body.mentions || [], edited_at: crmNow() });
+      saveCacheKeys([key]);
+    }
+    return { label: 'Edit lead message', data: row || { id, body: body.body } };
+  }
+
+  function crmDeleteMessage(s, [leadId, id]) {
+    const key = `/crm/leads/${leadId}/messages`;
+    const hit = s.cache[key];
+    if (Array.isArray(hit?.body?.data)) {
+      const before = hit.body.data.length;
+      // Replies go with the message, as on the server.
+      hit.body.data = hit.body.data.filter(x => String(x.id) !== String(id) && String(x.parent_id) !== String(id));
+      crmAdjustWorkspace(s, leadId, 'messages', hit.body.data.length - before);
+      saveCacheKeys([key]);
+    }
+    return { label: 'Delete lead message' };
+  }
+
+  // What can be done offline; every other /crm write needs the server.
+  const CRM_LEAD_PATH = '^/crm/leads/(-?\\d+)';
+  const crmLeadRoute = rest => new RegExp(`${CRM_LEAD_PATH}${rest}$`);
+  const CRM_ACTIONS = [
+    { method: 'POST',   re: /^\/crm\/projects\/(-?\d+)\/forms\/(-?\d+)\/submit-lead$/, create: true, apply: crmNewLead },
+    { method: 'PUT',    re: crmLeadRoute(''), apply: crmEditLead },
+    { method: 'DELETE', re: crmLeadRoute(''), apply: crmDeleteLead },
+    { method: 'POST',   re: crmLeadRoute('/move-stage'), apply: crmMoveLead },
+    { method: 'POST',   re: crmLeadRoute('/hold'),       apply: crmHoldLead },
+    { method: 'POST',   re: crmLeadRoute('/resume'),     apply: crmResumeLead },
+    { method: 'POST',   re: crmLeadRoute('/won'),        apply: crmWonLead },
+    { method: 'POST',   re: crmLeadRoute('/lost'),       apply: crmLostLead },
+    { method: 'POST',   re: crmLeadRoute('/reopen'),     apply: crmReopenLead },
+    { method: 'POST',   re: crmLeadRoute('/checklist'),  apply: crmChecklist },
+    { method: 'PUT',    re: crmLeadRoute('/assignees'),  apply: crmAssignees },
+    // Read marks are not worth a place in the upload queue: the dot simply comes back until the next time online.
+    { method: 'POST',   re: crmLeadRoute('/notifications/read'), apply: () => ({ queue: false, quiet: true }) },
+    { method: 'POST',   re: crmLeadRoute('/follow-ups'), create: true, apply: crmNewFollowUp },
+    { method: 'POST',   re: /^\/crm\/follow-ups\/(-?\d+)\/log$/,    apply: crmLogFollowUp },
+    { method: 'POST',   re: /^\/crm\/follow-ups\/(-?\d+)\/cancel$/, apply: crmCancelFollowUp },
+    { method: 'POST',   re: crmLeadRoute('/messages'), create: true, apply: crmNewMessage },
+    { method: 'PUT',    re: crmLeadRoute('/messages/(-?\\d+)'), apply: crmEditMessage },
+    { method: 'DELETE', re: crmLeadRoute('/messages/(-?\\d+)'), apply: crmDeleteMessage },
+    { method: 'POST',   re: crmLeadRoute('/tasks'), create: true, apply: (s, [leadId], body, tempId) => crmNewTask(s, leadId, body, tempId) },
+    { method: 'POST',   re: /^\/crm\/tasks$/,       create: true, apply: (s, ids, body, tempId) => crmNewTask(s, null, body, tempId) },
+    { method: 'POST',   re: /^\/crm\/tasks\/(-?\d+)\/complete$/, apply: (s, [id]) => { const t = crmSetTask(s, id, 'completed'); return { label: `Task done: ${t?.title || `#${id}`}` }; } },
+    { method: 'POST',   re: /^\/crm\/tasks\/(-?\d+)\/reopen$/,   apply: (s, [id]) => { const t = crmSetTask(s, id, 'pending');   return { label: `Task reopened: ${t?.title || `#${id}`}` }; } },
+    { method: 'DELETE', re: /^\/crm\/tasks\/(-?\d+)$/, apply: crmDeleteTask },
+  ];
+
+  function crmAction(m, p) {
+    const pathname = splitPath(p)[0];
+    for (const action of CRM_ACTIONS) {
+      const match = action.method === m && pathname.match(action.re);
+      if (match) return { action, ids: match.slice(1).map(Number) };
+    }
+    return null;
+  }
+
+  function queueCrm({ action, ids }, m, p, body, s, key) {
+    const tempId = action.create ? newTempId() : null;
+    const out = action.apply(s, ids, body, tempId);
+    const res = {
+      status: out.status || (action.create ? 201 : 200),
+      offline: !out.quiet,
+      body: { message: out.message || SAVED_OFFLINE_MSG, data: out.data ?? null, ...out.extra },
+    };
+    if (res.status >= 300 || out.queue === false) return res;
+    addWrite(s, { id: key, kind: 'generic', method: m, path: p, body, temp_id: tempId, collection: CRM_SCOPE, label: out.label });
+    return res;
+  }
+
+  async function crmWrite(m, p, body, s) {
+    const key = crypto.randomUUID();
+    const r = resolveGeneric(p, body, tempIdMap(s.outbox, s.customers.id_map, s.meta), s.outbox, s.writes);
+    if (r.error) return { status: 422, offline: true, body: { message: r.error } };
+    const target = r.path || p;
+    const known = crmAction(m, target);
+    if (!r.waitFor && st.online) {
+      // Same key as a later upload, so a timed-out request can't run twice.
+      const res = await net(m, target, r.body, known ? { timeout: 30000, idempotencyKey: key } : { idempotencyKey: key });
+      if (!isUnreachable(res.status)) {
+        setOnline(true);
+        return res;
+      }
+      setOnline(false);
+    }
+    if (known) return queueCrm(known, m, target, r.body || body, s, key);
+    if (r.waitFor) return { status: 422, offline: true, body: { message: 'This lead has not uploaded yet. Try again once it has.' } };
+    return offlineResponse();
+  }
+
+  // A record added offline got its real id: swap it everywhere on this PC, so
+  // the lead keeps working until the refresh brings the server's copy.
+  function mapCrm(s, tempId, realId) {
+    const touched = [];
+    for (const key of Object.keys(s.cache)) {
+      if (!key.startsWith(`${CRM_SCOPE}/`)) continue;
+      const hit = s.cache[key];
+      hit.body = deepMap(hit.body, v => (v === tempId ? realId : v));
+      touched.push(key);
+      const newKey = key.split('/').map(seg => (seg === String(tempId) ? String(realId) : seg)).join('/');
+      if (newKey === key) continue;
+      delete s.cache[key];
+      if (!s.cache[newKey]) s.cache[newKey] = hit;
+      touched.push(newKey);
+    }
+    saveCacheKeys(touched);
+  }
+
+  // Screens downloaded for the CRM, in the order their lists become available.
+  function crmBoardPaths(s) {
+    return (s.cache['/crm/projects']?.body?.data || [])
+      .filter(p => Number(p.id) > 0).slice(0, CRM_PROJECT_MAX)
+      .flatMap(p => CRM_BOARD_SCREENS.map(screen => `/crm/projects/${p.id}/${screen}`));
+  }
+
+  // Open leads first, then by the latest change.
+  function crmRecentLeads(s) {
+    const leads = [];
+    for (const [key, hit] of Object.entries(s.cache)) {
+      if (!CRM_PIPELINE_KEY.test(key)) continue;
+      for (const column of hit.body?.data?.columns || []) leads.push(...(column.leads || []).filter(l => l.id > 0));
+    }
+    return leads
+      .sort((a, b) => !!a.closed_at - !!b.closed_at || String(b.updated_at).localeCompare(String(a.updated_at)))
+      .slice(0, CRM_LEAD_WARM_MAX);
+  }
+
+  function crmRecordPaths(s, leads) {
+    const paths = [];
+    for (const [key, hit] of Object.entries(s.cache)) {
+      const forms = key.match(/^\/crm\/projects\/(\d+)\/forms$/);
+      if (forms) (hit.body?.data || []).forEach(f => paths.push(`/crm/projects/${forms[1]}/forms/${f.id}`));
+    }
+    const contacts = s.cache['/crm/contacts?q=']?.body?.data;
+    (Array.isArray(contacts) ? contacts : []).slice(0, DETAIL_WARM_MAX).forEach(c => paths.push(`/crm/customers/${c.id}`));
+    leads.forEach(l => CRM_LEAD_SCREENS.forEach(screen => paths.push(`/crm/leads/${l.id}/${screen}`)));
+    return paths;
+  }
+
+  function crmQuotationPaths(s, leads) {
+    return leads.flatMap(l => (s.cache[`/crm/leads/${l.id}/quotations`]?.body?.data || [])
+      .slice(0, CRM_QUOTATION_WARM_MAX)
+      .map(q => `/crm/leads/${l.id}/quotations/${q.id}`));
   }
 
   // ── Outbox upload ──────────────────────────────────────────────────────
@@ -2249,9 +2971,13 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
               if (r.res && item.kind === 'customer_create') mapCustomer(box, item.temp_id, r.res.body?.data?.id);
               if (r.res && item.kind === 'product_create') mapProduct(box, item.temp_id, r.res.body?.data?.id);
               if (r.res && item.kind === 'generic') {
-                mapGeneric(box, item, r.res.body?.data?.id ?? r.res.body?.id ?? null);
+                // Follow-ups planned for several people come back as a list; the first is the one kept on this PC.
+                mapGeneric(box, item, r.res.body?.data?.id ?? r.res.body?.data?.[0]?.id ?? r.res.body?.id ?? null);
                 // Its screens come back from the server on the next refresh.
                 if (box.isCurrent) st.refreshCollections.add(item.collection);
+                // A lead that joined an existing one, or went to Marketing, leaves the board on that refresh.
+                const intake = r.res.body?.intake;
+                if (intake?.duplicate || intake?.routed_to_intake) logEvent('uploaded', r.res.body.message, { ref: item.id });
               }
             }
           }
@@ -2455,7 +3181,10 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         '/coupons?q=&status=':     () => salesWaiting(e => e.body?.coupon_code),
       };
       // …nor the screens of a collection with offline changes waiting.
-      const pendingCollections = s.writes.filter(w => w.kind === 'generic' && w.status !== 'synced').map(w => w.collection);
+      // (A failed CRM change doesn't hold back every CRM screen: it stays in History to retry or discard.)
+      const pendingCollections = s.writes
+        .filter(w => w.kind === 'generic' && w.status !== 'synced' && !(w.collection === CRM_SCOPE && w.status === 'failed'))
+        .map(w => w.collection);
       const under = (p, cols) => { const pn = splitPath(p)[0]; return cols.some(c => pn === c || pn.startsWith(`${c}/`)); };
       const refreshed = [...st.refreshCollections];
       // Fetches one screen; false once the connection is gone.
@@ -2482,7 +3211,8 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       }
 
       // Every other tab: its lists, the screens this PC opened, recent records in full.
-      const warmed = new Set([...WARM_PATHS, ...MODULE_WARM_PATHS]);
+      const hasCrm = !!s.cache['/crm/projects'];
+      const warmed = new Set([...WARM_PATHS, ...MODULE_WARM_PATHS, ...(hasCrm ? CRM_WARM_PATHS : [])]);
       const learned = Object.entries(s.cache)
         .filter(([k, v]) => v.used && Date.now() - v.used < LEARNED_KEEP_MS && !warmed.has(k) && learnable(k))
         .sort((a, b) => b[1].used - a[1].used)
@@ -2497,6 +3227,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
         }
       };
       await runSteps('screens', MODULE_WARM_PATHS, MODULE_WARM_MS);
+      if (hasCrm) await runSteps('screens', [...CRM_WARM_PATHS, ...crmBoardPaths(s)], MODULE_WARM_MS);
       await runSteps('screens', learned, LEARNED_WARM_MS);
       // Records in full, now that their lists are in.
       const details = [];
@@ -2508,6 +3239,11 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
           .forEach(r => details.push(`${base}/${r.id}`));
       }
       await runSteps('records', details, DETAIL_WARM_MS);
+      if (hasCrm) {
+        const leads = crmRecentLeads(s);
+        await runSteps('records', crmRecordPaths(s, leads), DETAIL_WARM_MS);
+        await runSteps('records', crmQuotationPaths(s, leads), DETAIL_WARM_MS);
+      }
       if (reachable) refreshed.forEach(c => st.refreshCollections.delete(c));
       flushCache();
       logEvent('downloaded', `Offline data refreshed — ${st.productChanges || 0} product${st.productChanges === 1 ? '' : 's'} updated, ${customers.length} customers, ${Object.keys(s.cache).length} screens`, { complete: reachable });
@@ -2647,6 +3383,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
       return s && res.status === 200 ? withOfflineSales(s, p, res) : res;
     }
 
+    if (s && pathname.startsWith(`${CRM_SCOPE}/`)) return crmWrite(m, p, body || {}, s);
     if (s && !ONLINE_ONLY_WRITES.test(pathname)) return genericWrite(m, p, body || {}, s);
 
     const res = await net(m, p, body);

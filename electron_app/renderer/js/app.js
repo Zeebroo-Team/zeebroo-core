@@ -35926,6 +35926,7 @@ const _osmModules = [
   { key: 'finance',   name: 'Finance',   icon: 'fa-sack-dollar',       color: '#16a34a' },
   { key: 'hr',        name: 'HR',        icon: 'fa-user-tie',          color: '#db2777' },
   { key: 'services',  name: 'Services',  icon: 'fa-screwdriver-wrench', color: '#0d9488' },
+  { key: 'crm',       name: 'CRM',       icon: 'fa-handshake',         color: '#0a84ff' },
   { key: 'settings',  name: 'Settings',  icon: 'fa-sliders',           color: '#475569' },
   { key: 'other',     name: 'Other',     icon: 'fa-shapes',            color: '#64748b' },
 ];
@@ -35947,6 +35948,7 @@ function _osmModuleOf(r) {
     ['finance',   /^\/(expenses|loans|rentals|properties|budgets)(\/|$)/],
     ['hr',        /^\/hr(\/|$)/],
     ['services',  /^\/service(\/|$)/],
+    ['crm',       /^\/crm(\/|$)/],
   ];
   return (rules.find(([, re]) => re.test(p)) || ['other'])[0];
 }
@@ -36242,6 +36244,8 @@ const _osmSupport = [
   { m: 'hr', yes: ['Employees — add, edit, view details', 'Departments, positions, allowance types', 'Leave requests and leave rules', 'Payroll rule sets and cycles', 'HR settings'],
     no: ['Attendance import', 'Leave preview calculation', 'Attendance for dates never opened online'] },
   { m: 'services', yes: ['Service requests — create, start, complete, cancel', 'Service catalog and categories', 'Search and status filters'], no: [] },
+  { m: 'crm', yes: ['Relations, pipelines, contacts, tasks, follow-ups and the Marketing inbox list', 'New leads, editing leads, assignees and stage checklists', 'Moving leads between stages, hold, resume, won, lost and reopen', 'Follow-ups, tasks and lead messages', 'Full lead details for your 40 most recently updated leads, and any lead you opened'],
+    no: ['Creating, sending or approving quotations', 'Forwarding, verifying and merging in the Marketing inbox', 'Importing leads, and attaching files', 'Setup: relations, stages, forms, permissions and org structure', 'CRM reports for dates never opened online'] },
   { m: 'settings', yes: ['Business, general, receipt, tax and invoice settings', 'Users, roles, branches, counters, cashiers', 'Mail and HR settings', 'Notifications'],
     no: ['Sending e-mail and testing mail settings', 'Backup & import, billing, developer keys', 'Uploading images and attachments'] },
 ];
