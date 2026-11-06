@@ -191,20 +191,25 @@ body.macos .ctb-wc { display: none; }
   min-height: 0;
   overflow: hidden;
 }
+#app-shell { --sb-ease: cubic-bezier(.32, .72, 0, 1); }
 #sidebar {
+  --sb-blue: var(--accent-dark);
+  --sb-hover: color-mix(in srgb, var(--text) 7%, transparent);
+  --sb-line: color-mix(in srgb, var(--text) 9%, transparent);
+  --sb-rail: 60px;
   display: none;
   flex-direction: column;
-  width: 250px;
-  min-width: 250px;
+  width: 248px;
+  min-width: 248px;
   flex-shrink: 0;
-  background: var(--accent-dark);
-  border-right: none;
-  z-index: 100;
-  overflow-y: auto;
-  overflow-x: hidden;
+  background: var(--surface);
+  border-right: 1px solid var(--sb-line);
+  z-index: 101;  /* one above #ribbon, which the flyout opens over */
+  overflow: hidden;
+  transition: width .3s var(--sb-ease), min-width .3s var(--sb-ease);
 }
-#app-shell.sidebar-mode #sidebar        { display: flex; animation: sb-slide-in .25s cubic-bezier(0.4,0,0.2,1); }
-#app-shell.sidebar-mode #ribbon         { display: none !important; }
+body.dark #sidebar { --sb-blue: var(--accent); background: color-mix(in srgb, var(--surface) 55%, var(--bg)); }
+#app-shell.sidebar-mode #sidebar        { display: flex; animation: sb-slide-in .32s var(--sb-ease); }
 #app-shell.cashier-mode #sidebar        { display: none !important; }
 
 /* Sidebar mode: hide the horizontal sub-tab bars — the sidebar handles that navigation */
@@ -212,116 +217,353 @@ body.macos .ctb-wc { display: none; }
 #app-shell.sidebar-mode .fin-subnav,
 #app-shell.sidebar-mode .inv-subnav   { display: none !important; }
 
+/* Sidebar mode: the sidebar replaces the tab row, and the ribbon's commands stay
+   available as a one-row toolbar. Commands that wrap past that row are clipped until
+   "More" (see _sbFitToolbar) opens the toolbar to full height; "Less" folds it again */
+#app-shell.sidebar-mode #ribbon           { display: flex; align-items: flex-start; border-bottom-color: var(--border-light); }
+#app-shell.sidebar-mode #ribbon.collapsed { height: var(--tabroW-h); }
+#app-shell.sidebar-mode #ribbon-file-btn,
+#app-shell.sidebar-mode #ribbon-tabs,
+#app-shell.sidebar-mode .ribbon-group-label,
+#app-shell.sidebar-mode .ribbon-btn-lg kbd,
+#app-shell.sidebar-mode .ribbon-btn-sm kbd { display: none; }
+#app-shell.sidebar-mode #ribbon-tabrow {
+  order: 2;
+  height: 44px;
+  flex-shrink: 0;
+  border-bottom: none;
+}
+#app-shell.sidebar-mode #ribbon.collapsed #ribbon-tabrow { height: var(--tabroW-h); }
+#app-shell.sidebar-mode #ribbon-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  max-height: 44px;
+  padding: 7px 6px;
+  overflow: hidden;
+  transition: max-height .34s var(--sb-ease);
+}
+#app-shell.sidebar-mode #ribbon.sb-tools-open:not(.collapsed) #ribbon-body { max-height: var(--sb-tools-h, 320px); }
+#sb-tools-more { display: none; }
+#app-shell.sidebar-mode #ribbon.sb-tools-overflow:not(.collapsed) #sb-tools-more {
+  display: flex;
+  align-items: center;
+  align-self: center;
+  gap: 6px;
+  height: 28px;
+  margin: 0 8px;
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  border: none;
+  border-radius: 14px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease;
+}
+#app-shell.sidebar-mode #ribbon.sb-tools-overflow:not(.collapsed) #sb-tools-more:hover { background: var(--accent-dark); color: #fff; }
+#sb-tools-more i { font-size: 10px; transition: transform .34s var(--sb-ease); }
+#ribbon.sb-tools-open #sb-tools-more i { transform: rotate(180deg); }
+#app-shell.sidebar-mode .rb-notif-btn > span:last-child { display: none; }
+#app-shell.sidebar-mode .rb-notif-wrap { display: flex; align-items: center; }
+#app-shell.sidebar-mode .rb-notif-btn,
+#app-shell.sidebar-mode #guide-toggle-btn {
+  align-self: center;
+  justify-content: center;
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  gap: 0;
+  border-radius: 8px;
+}
+#app-shell.sidebar-mode #guide-toggle-btn { font-size: 0; }
+#app-shell.sidebar-mode .rb-notif-btn i,
+#app-shell.sidebar-mode #guide-toggle-btn i { font-size: 15px; }
+#app-shell.sidebar-mode .ribbon-page.active { flex-wrap: wrap; align-items: center; gap: 8px 0; }
+#app-shell.sidebar-mode .ribbon-group { flex-direction: row; flex-shrink: 1; min-width: 0; padding: 0 7px; }
+#app-shell.sidebar-mode .ribbon-group + .ribbon-group::before { display: none; }
+#app-shell.sidebar-mode .ribbon-group-content { flex-wrap: wrap; align-items: center; gap: 8px 4px; padding: 0; }
+#app-shell.sidebar-mode .ribbon-small-stack { flex-direction: row; min-width: 0; gap: 4px; align-self: center; }
+#app-shell.sidebar-mode .ribbon-btn-lg,
+#app-shell.sidebar-mode .ribbon-btn-sm {
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 6px;
+  height: 30px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 10px;
+  background: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease, transform .22s var(--sb-ease);
+}
+#app-shell.sidebar-mode .ribbon-btn-lg:hover,
+#app-shell.sidebar-mode .ribbon-btn-sm:hover {
+  background: color-mix(in srgb, var(--text) 7%, transparent);
+  border-color: transparent;
+}
+#app-shell.sidebar-mode .ribbon-btn-lg:active,
+#app-shell.sidebar-mode .ribbon-btn-sm:active { transform: scale(.97); }
+#app-shell.sidebar-mode .ribbon-btn-lg:focus-visible,
+#app-shell.sidebar-mode .ribbon-btn-sm:focus-visible,
+#sb-tools-more:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#app-shell.sidebar-mode .ribbon-btn-lg br { display: none; }
+#app-shell.sidebar-mode .ribbon-btn-lg i,
+#app-shell.sidebar-mode .ribbon-btn-sm i { font-size: 13px; width: 14px; text-align: center; }
+#app-shell.sidebar-mode .ribbon-btn-lg.primary i { color: var(--accent); }
+#app-shell.sidebar-mode .ribbon-btn-lg.sb-tool-active,
+#app-shell.sidebar-mode .ribbon-btn-sm.sb-tool-active {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+#app-shell.sidebar-mode .ribbon-btn-lg.sb-tool-active i,
+#app-shell.sidebar-mode .ribbon-btn-sm.sb-tool-active i { color: var(--accent); }
+#app-shell.sidebar-mode .ribbon-counter-col { flex-direction: row; align-items: center; }
+#app-shell.sidebar-mode .ribbon-counter-wrap { flex-direction: row; align-items: center; gap: 6px; }
+#app-shell.sidebar-mode .ribbon-counter-select { height: 28px; padding: 0 8px; }
+#app-shell.sidebar-mode .ribbon-quote-toggle { height: 28px; }
+/* Stats read as one line of commands: after the last button when there's room, else
+   on their own row starting under the button icons (group + button padding = 17px) */
+#app-shell.sidebar-mode .pos-ribbon-stats { flex: 1 1 auto; min-width: 0; min-height: 30px; margin-left: 0; padding: 0 17px; border-left: none; }
+#app-shell.sidebar-mode .prs-spin { text-align: left; }
+#app-shell.sidebar-mode .prs-grid { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 24px; }
+#app-shell.sidebar-mode .prs-stat { flex-direction: row; align-items: baseline; gap: 6px; }
+
 @keyframes sb-slide-in {
-  from { transform: translateX(-100%); opacity: 0; }
+  from { transform: translateX(-14px); opacity: 0; }
   to   { transform: translateX(0);     opacity: 1; }
 }
+@keyframes sb-panel-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* Opacity only: a transform here would re-anchor the fixed modals inside each panel */
+#app-shell.sidebar-mode .content-panel.active { animation: sb-panel-in .2s ease-out; }
 
 #sidebar-nav {
+  position: relative;
+  isolation: isolate;
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 8px 0;
-  gap: 1px;
+  padding: 10px 4px 12px 10px;
+  gap: 2px;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-gutter: stable;
+  -webkit-mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(to bottom, transparent, #000 10px, #000 calc(100% - 12px), transparent);
 }
+/* Overlay-style scrollbar: only there while the pointer is over the list */
+#sidebar-nav::-webkit-scrollbar { width: 6px; }
+#sidebar-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+#sidebar-nav:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); }
+
+/* The one selection highlight — _sbPillStep() glides it onto the selected row */
+#sb-pill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 0;
+  border-radius: 8px;
+  background: var(--accent-dark);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--accent-dark) 35%, transparent);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, width, height;
+  transition: opacity .18s ease;
+}
+#sb-pill.on { opacity: 1; }
+
 .sb-nav-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255,255,255,.65);
-  transition: background .12s, color .12s;
+  color: var(--text);
+  transition: background .18s ease, color .18s ease var(--sb-tone-wait, 0s), transform .22s var(--sb-ease);
   user-select: none;
-  border-left: 3px solid transparent;
   flex-shrink: 0;
 }
-.sb-nav-item i { font-size: 14px; width: 16px; text-align: center; flex-shrink: 0; }
-.sb-nav-item:hover { background: rgba(255,255,255,.1); color: #fff; }
-.sb-nav-item.active {
-  background: rgba(255,255,255,.15);
-  color: #fff;
-  border-left-color: #fff;
-  font-weight: 600;
-}
-#sidebar-bottom { flex-shrink: 0; border-top: 1px solid rgba(255,255,255,.15); padding: 8px; }
-#sidebar-file-btn {
+.sb-nav-item i { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; color: var(--sb-blue); transition: color .18s ease var(--sb-tone-wait, 0s); }
+.sb-nav-item:hover { background: var(--sb-hover); }
+.sb-nav-item.active { color: var(--sb-blue); font-weight: 600; }
+/* The selected row's text turns white as the highlight arrives, not before it */
+.sb-selected { --sb-tone-wait: .1s; }
+.sb-nav-item.sb-selected,
+.sb-nav-item.sb-selected i { background: none; color: #fff; }
+#sidebar-bottom { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; border-top: 1px solid var(--sb-line); padding: 8px 10px; }
+#sidebar-bottom button {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
-  padding: 9px 12px;
-  background: rgba(255,255,255,.15);
-  color: #fff;
+  min-height: 32px;
+  padding: 0 10px;
+  background: none;
+  color: var(--text);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: background .12s;
+  transition: background .18s ease, transform .22s var(--sb-ease);
 }
-#sidebar-file-btn:hover { background: rgba(255,255,255,.25); }
-#sidebar-file-btn i { font-size: 14px; }
+#sidebar-bottom button:hover { background: var(--sb-hover); }
+#sidebar-bottom button:active { transform: scale(.98); }
+#sidebar-bottom button i { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; color: var(--sb-blue); transition: transform .3s var(--sb-ease); }
 
 /* sidebar chevron & sub-nav */
 .sb-nav-item.has-sub { justify-content: flex-start; }
 .sb-nav-item.has-sub > span { flex: 1; }
-.sb-nav-chevron {
-  font-size: 10px !important;
-  width: auto !important;
-  color: rgba(255,255,255,.4);
-  margin-left: auto;
+.sb-nav-item .sb-nav-chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin: 0 -6px 0 auto;
+  border-radius: 6px;
+  font-size: 9px;
+  color: var(--text-light);
   flex-shrink: 0;
-  transition: transform .28s cubic-bezier(0.4, 0, 0.2, 1), color .2s;
+  transition: transform .34s var(--sb-ease), color .18s ease, background .18s ease;
 }
-.sb-nav-item.expanded .sb-nav-chevron { transform: rotate(90deg); color: rgba(255,255,255,.9); }
-.sb-nav-item:active { transform: scale(0.98); }
+.sb-nav-item .sb-nav-chevron:hover { background: var(--sb-hover); color: var(--text); }
+.sb-nav-item.sb-selected .sb-nav-chevron { color: rgba(255,255,255,.85); }
+.sb-nav-item.sb-selected .sb-nav-chevron:hover { background: rgba(255,255,255,.18); color: #fff; }
+.sb-nav-item.expanded .sb-nav-chevron { transform: rotate(90deg); }
+.sb-nav-item:active { transform: scale(.985); }
 
 /* ── Sub-nav: grid-based smooth expand/collapse ── */
 .sb-sub-nav {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows .32s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: grid-template-rows .34s var(--sb-ease);
   background: transparent;
-  margin-left: 16px;
+  margin: -2px 0 0 18px;  /* a closed sub-nav gives back the list gap, keeping row spacing even */
+  flex-shrink: 0;
   overflow: hidden;
 }
 .sb-sub-nav.open { grid-template-rows: 1fr; }
 
-.sb-sub-nav-inner { min-height: 0; overflow: hidden; padding: 3px 0; }
+.sb-sub-nav-inner {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
 .sb-sub-item {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  font-size: 12px;
+  gap: 9px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
   font-weight: 500;
-  color: rgba(255,255,255,.55);
+  color: var(--text-muted);
   cursor: pointer;
   user-select: none;
+  flex-shrink: 0;
   opacity: 0;
-  transform: translateX(-10px);
+  transform: translateY(-4px);
   transition:
-    opacity   .22s ease,
-    transform .22s ease,
-    background .12s,
-    color      .12s;
+    opacity    .14s ease,
+    transform  .14s ease,
+    background .18s ease,
+    color      .18s ease var(--sb-tone-wait, 0s);
 }
+.sb-sub-item:first-child { margin-top: 2px; }
+.sb-sub-item:last-child  { margin-bottom: 4px; }
+/* Rows ripple in on open and leave together on close. The delay sits on opacity and
+   transform alone so hover and selection colours still answer at once on every row */
 .sb-sub-nav.open .sb-sub-item {
   opacity: 1;
-  transform: translateX(0);
+  transform: translateY(0);
+  transition:
+    opacity    .24s ease             calc(30ms + var(--sb-i, 0) * 16ms),
+    transform  .34s var(--sb-ease)   calc(30ms + var(--sb-i, 0) * 16ms),
+    background .18s ease,
+    color      .18s ease var(--sb-tone-wait, 0s);
 }
-.sb-sub-item i { font-size: 11px; width: 13px; text-align: center; flex-shrink: 0; }
-.sb-sub-item:hover { background: rgba(255,255,255,.09); color: #fff; }
-.sb-sub-item.active {
+.sb-sub-item > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-sub-item i { font-size: 12px; width: 14px; text-align: center; flex-shrink: 0; }
+.sb-sub-item:hover { background: var(--sb-hover); color: var(--text); }
+.sb-sub-item.sb-selected { background: none; color: #fff; font-weight: 600; }
+.sb-sub-badge {
+  flex-shrink: 0;
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 9px;
+  background: var(--accent-dark);
   color: #fff;
-  font-weight: 600;
-  background: rgba(255,255,255,.12);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+.sb-sub-item.sb-selected .sb-sub-badge { background: rgba(255,255,255,.25); }
+.sb-sub-badge[hidden] { display: none; }
+.sb-sub-badge.dot { min-width: 8px; width: 8px; height: 8px; padding: 0; }
+
+/* ── Icon-only sidebar: rows keep their padding, so icons stay put as the rail narrows ── */
+.sb-nav-item > span,
+#sidebar-bottom span { min-width: 0; overflow: hidden; white-space: nowrap; transition: opacity .18s ease; }
+#app-shell.sb-collapsed #sidebar { width: var(--sb-rail); min-width: var(--sb-rail); }
+#app-shell.sb-collapsed .sb-nav-item > span,
+#app-shell.sb-collapsed #sidebar-bottom span { opacity: 0; }
+#app-shell.sb-collapsed .sb-nav-chevron { display: none; }
+#app-shell.sb-collapsed .sb-sub-nav { grid-template-rows: 0fr; }
+#app-shell.sb-collapsed #sidebar-collapse-btn i { transform: rotate(180deg); }
+
+/* Label and sub-menu of the icon under the pointer. It sits outside #sidebar-nav, whose mask would clip it */
+#sb-flyout {
+  position: fixed;
+  left: calc(var(--sb-rail) + 6px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: max-content;
+  max-width: 260px;
+  max-height: calc(100vh - 16px);
+  padding: 6px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--sb-line);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  transition: opacity .14s ease, transform .18s var(--sb-ease), visibility .14s;
+}
+#sb-flyout.open { opacity: 1; visibility: visible; transform: none; }
+.sb-flyout-title { padding: 4px 10px; font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; }
+#sb-flyout .sb-sub-item { opacity: 1; transform: none; }
+#sb-flyout .sb-sub-item.active { color: var(--sb-blue); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  #sidebar, #sidebar *, #app-shell.sidebar-mode .content-panel.active,
+  #app-shell.sidebar-mode #ribbon-body, #app-shell.sidebar-mode #ribbon-body * { animation: none; transition: none; }
 }
 
 /* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -6158,8 +6400,12 @@ body.dark .schq-badge--bounced { color: #f87171; }
 .psm-nav {
   width: 168px; flex-shrink: 0;
   background: var(--surface2); border-right: 1px solid var(--border);
-  padding: 16px 10px; display: flex; flex-direction: column; gap: 2px;
+  padding: 16px 4px 16px 10px; display: flex; flex-direction: column; gap: 2px;
+  overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable;
 }
+.psm-nav::-webkit-scrollbar { width: 6px; }
+.psm-nav::-webkit-scrollbar-thumb { background: transparent; border-radius: 3px; }
+.psm-nav:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text) 22%, transparent); }
 .psm-nav-label {
   font-size: 10px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .08em; color: var(--text-light);

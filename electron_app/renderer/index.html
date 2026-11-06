@@ -3349,6 +3349,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <!-- Sidebar (shown when layout_mode = sidebar, hidden in ribbon mode) -->
     <div id="sidebar">
       <nav id="sidebar-nav">
+        <div id="sb-pill"></div>
         <div class="sb-nav-item has-sub" data-tab="home"><i class="fa fa-house"></i><span>Home</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="pos"><i class="fa fa-cart-shopping"></i><span>POS</span></div>
         <div class="sb-nav-item has-sub" data-tab="sales"><i class="fa fa-receipt"></i><span>Sales</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
@@ -3356,20 +3357,22 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <div class="sb-nav-item has-sub" data-tab="finance"><i class="fa fa-file-invoice-dollar"></i><span>Finance</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="hr"><i class="fa fa-users"></i><span>HR</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="services"><i class="fa fa-screwdriver-wrench"></i><span>Services</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
-        <div class="sb-nav-item" data-tab="design"><i class="fa fa-palette"></i><span>Design</span></div>
+        <div class="sb-nav-item has-sub" data-tab="design"><i class="fa fa-palette"></i><span>Design</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="restaurant"><i class="fa fa-utensils"></i><span>Restaurant</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
-        <div class="sb-nav-item" data-tab="rst-pos"><i class="fa fa-cash-register"></i><span>RST POS</span></div>
+        <div class="sb-nav-item" data-tab="rst-pos"><i class="fa fa-cash-register"></i><span>Restaurant POS</span></div>
         <div class="sb-nav-item has-sub" data-tab="mail"><i class="fa fa-envelope"></i><span>Mail</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="crm"><i class="fa fa-handshake"></i><span>CRM</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item" data-tab="automations" style="display:none"><i class="fa fa-bolt"></i><span>Automations</span></div>
         <div class="sb-nav-item has-sub" data-tab="projects"><i class="fa fa-diagram-project"></i><span>Project Management</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
         <div class="sb-nav-item has-sub" data-tab="my-projects"><i class="fa fa-user-check"></i><span>My Projects</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
-        <div class="sb-nav-item" data-tab="event-mgmt" title="Event"><i class="fa fa-tag"></i><span>Event</span></div>
-        <div class="sb-nav-item has-sub" data-tab="ecommerce" title="E-Commerce"><i class="fa fa-store"></i><span>E-Commerce</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="event-mgmt"><i class="fa fa-tag"></i><span>Event</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
+        <div class="sb-nav-item has-sub" data-tab="ecommerce"><i class="fa fa-store"></i><span>E-Commerce</span><i class="fa fa-chevron-right sb-nav-chevron"></i></div>
       </nav>
       <div id="sidebar-bottom">
-        <button id="sidebar-file-btn"><i class="fa fa-bars"></i><span>Menu</span></button>
+        <button id="sidebar-file-btn" title="Menu"><i class="fa fa-bars"></i><span>Menu</span></button>
+        <button id="sidebar-collapse-btn" title="Show icons only" aria-expanded="true"><i class="fa fa-angles-left"></i><span>Collapse</span></button>
       </div>
+      <div id="sb-flyout"></div>
     </div>
 
     <div id="app-right">
@@ -3409,6 +3412,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
         <div class="ribbon-tab" data-tab="ecommerce">E-Commerce</div>
       </div>
+      <button id="sb-tools-more" title="More actions"><span>More</span><i class="fa fa-chevron-down"></i></button>
       <div class="rb-notif-wrap" id="rb-notif-wrap">
         <button class="rb-notif-btn" id="rb-notif-btn" title="Notifications">
           <span class="rb-notif-icon-wrap">
