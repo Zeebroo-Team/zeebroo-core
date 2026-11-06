@@ -3,6 +3,8 @@
 require_once __DIR__ . '/Support/CrmWorkflowFixture.php';
 
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Modules\CRM\Models\CrmUserPermission;
 use Modules\CRM\Models\FollowUp;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LostReason;
@@ -184,6 +186,63 @@ test('who may open the dashboard', function (int $userId, int $status) {
     'staff'         => [3, 403],
     'marketing'     => [4, 403],
 ]);
+
+test('who may open the sales analysis report and its exports', function (int $userId, int $status) {
+    foreach (['salesAnalysis', 'salesAnalysisPdf', 'salesAnalysisCsv'] as $method) {
+        expect(crmwfStatus(fn () => crmwf(CrmwfReportApi::class, $method, $userId)))->toBe($status);
+    }
+})->with([
+    'owner (admin)' => [1, 200],
+    'the CEO'       => [5, 200],
+    'a head'        => [2, 200],
+    'staff'         => [3, 403],
+    'marketing'     => [4, 403],
+]);
+
+test('the dashboard and the sales analysis report are ticked separately', function () {
+    $block = fn (array $permissions) => CrmUserPermission::updateOrCreate(['business_id' => 7, 'user_id' => 2], ['permissions' => $permissions]);
+    $opens = fn (string $method) => crmwfStatus(fn () => crmwf(CrmwfReportApi::class, $method, 2));
+
+    $block(['reports_sales' => false]);
+    expect($opens('salesAnalysis'))->toBe(403)->and($opens('salesAnalysisPdf'))->toBe(403)->and($opens('salesAnalysisCsv'))->toBe(403)
+        ->and($opens('dashboard'))->toBe(200);
+
+    $block(['reports_view' => false]);
+    expect($opens('salesAnalysis'))->toBe(200)->and($opens('dashboard'))->toBe(403);
+});
+
+test('the desktop is told about the sales analysis report separately', function () {
+    CrmUserPermission::create(['business_id' => 7, 'user_id' => 2, 'permissions' => ['reports_sales' => false]]);
+    $access = fn (int $userId) => app(\Modules\CRM\Services\CrmPermissionService::class)
+        ->accessFor(\Modules\Business\Models\Business::find(7), \App\Models\User::find($userId))->toArray();
+
+    expect($access(2))->toMatchArray(['can_view_reports' => true, 'can_view_sales_report' => false])
+        ->and($access(5))->toMatchArray(['can_view_sales_report' => true])
+        ->and($access(3))->toMatchArray(['can_view_sales_report' => false]);
+});
+
+test('splitting the permission keeps blocked users blocked', function () {
+    CrmUserPermission::create(['business_id' => 7, 'user_id' => 2, 'permissions' => ['reports_view' => false, 'leads_edit' => false]]);
+    CrmUserPermission::create(['business_id' => 7, 'user_id' => 8, 'permissions' => ['reports_view' => true]]);
+    CrmUserPermission::create(['business_id' => 7, 'user_id' => 3, 'permissions' => ['reports_view' => false, 'reports_sales' => true]]);
+    CrmUserPermission::create(['business_id' => 7, 'user_id' => 6, 'permissions' => ['leads_edit' => false]]);
+    DB::table('business_roles')->insert([
+        ['business_id' => 7, 'name' => 'Blocked', 'slug' => 'blocked', 'crm_permissions' => json_encode(['reports_view' => false])],
+        ['business_id' => 7, 'name' => 'Default', 'slug' => 'default', 'crm_permissions' => null],
+    ]);
+
+    (require dirname(__DIR__, 2) . '/database/migrations/2026_11_10_100100_split_crm_sales_report_permission.php')->up();
+
+    $saved = fn (int $userId) => CrmUserPermission::where('user_id', $userId)->first()->permissions;
+    $role  = fn (string $slug) => DB::table('business_roles')->where('slug', $slug)->value('crm_permissions');
+    expect($saved(2))->toBe(['reports_view' => false, 'leads_edit' => false, 'reports_sales' => false])
+        ->and($saved(8))->toMatchArray(['reports_sales' => true])
+        ->and($saved(3))->toMatchArray(['reports_sales' => true])    // an explicit choice is left alone
+        ->and($saved(6))->toBe(['leads_edit' => false])              // never blocked: stays allowed by default
+        ->and(json_decode($role('blocked'), true))->toMatchArray(['reports_sales' => false])
+        ->and($role('default'))->toBeNull()
+        ->and(crmwfStatus(fn () => crmwf(CrmwfReportApi::class, 'salesAnalysis', 2)))->toBe(403);
+});
 
 test('the CEO sees the whole business', function () {
     expect(crmReport(5)['kpis']['leads'])->toBe(5);

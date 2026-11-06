@@ -59,7 +59,7 @@ class PosCrmReportApiController extends Controller
     /** GET crm/reports/sales-analysis — the ribbon "Report" table, grouped by department, customer, product… */
     public function salesAnalysis(Request $request): JsonResponse
     {
-        [$business, $access] = $this->context($request);
+        [$business, $access] = $this->context($request, 'reports_sales');
 
         return response()->json(['data' => $this->salesAnalysis->report($business, $access, $this->salesFilters($request))]);
     }
@@ -67,7 +67,7 @@ class PosCrmReportApiController extends Controller
     /** GET crm/reports/sales-analysis/pdf */
     public function salesAnalysisPdf(Request $request): Response
     {
-        [$business, $access] = $this->context($request);
+        [$business, $access] = $this->context($request, 'reports_sales');
 
         return $this->exports->salesAnalysisPdf($business, $this->salesAnalysis->report($business, $access, $this->salesFilters($request)));
     }
@@ -75,7 +75,7 @@ class PosCrmReportApiController extends Controller
     /** GET crm/reports/sales-analysis/csv */
     public function salesAnalysisCsv(Request $request): Response
     {
-        [$business, $access] = $this->context($request);
+        [$business, $access] = $this->context($request, 'reports_sales');
 
         return $this->exports->salesAnalysisCsv($this->salesAnalysis->report($business, $access, $this->salesFilters($request)));
     }
@@ -105,13 +105,14 @@ class PosCrmReportApiController extends Controller
     }
 
     /** @return array{0: Business, 1: CrmAccess} */
-    private function context(Request $request): array
+    private function context(Request $request, string $permission = 'reports_view'): array
     {
         $business = $this->businessOrAbort($request);
         $access   = $this->crmPermissions->accessFor($business, $request->user());
-        if (! $this->reports->canView($access)) {
+        if (! $this->reports->canView($access, $permission)) {
+            $name = $permission === 'reports_sales' ? 'The sales analysis report' : 'The CRM dashboard';
             throw new HttpResponseException(
-                response()->json(['message' => 'The CRM dashboard is for admins, the CEO and department heads.'], 403)
+                response()->json(['message' => "{$name} is for admins, the CEO and department heads."], 403)
             );
         }
 

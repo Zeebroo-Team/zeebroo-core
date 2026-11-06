@@ -26,7 +26,7 @@ final class CrmAccess
     /** The functions a view-only role (the CEO) keeps. */
     private const VIEW_KEYS = [
         'relations_view', 'leads_view', 'contacts_view', 'tasks_view', 'forms_view', 'custom_data_view',
-        'followups_view', 'quotations_view', 'reports_view', 'inbox_view',
+        'followups_view', 'quotations_view', 'reports_view', 'reports_sales', 'inbox_view',
     ];
 
     /** Functions that act on the whole business rather than one department. */
@@ -237,6 +237,7 @@ final class CrmAccess
             'can_approve'          => ($this->unrestricted || $this->isHead()) && $this->can('quotations_approve'),
             // The management dashboard (CrmReportService::canView) and the team follow-up list
             'can_view_reports'     => $this->hasCrm() && ($this->viewsAllLeads() || $this->isHead()) && $this->can('reports_view'),
+            'can_view_sales_report' => $this->hasCrm() && ($this->viewsAllLeads() || $this->isHead()) && $this->can('reports_sales'),
             'can_see_team'         => ($this->worksAllLeads() || $this->isHead()) && $this->can('followups_view'),
             'permissions'          => $permissions,
             'stage_access'         => $this->unrestricted ? (object) [] : (object) $this->stageAccess,
