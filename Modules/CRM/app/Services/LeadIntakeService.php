@@ -19,7 +19,9 @@ use Modules\Product\Models\Product;
  * later, Google Forms / Facebook / WhatsApp. It cleans the contact details, checks for a
  * duplicate and puts the lead in the marketing intake pipeline at status "new".
  *
- * Duplicates (same normalised phone or same email in the business):
+ * Duplicates (same normalised phone or same email in the pipeline the lead was entered in or
+ * the one it lands in; a lead entered for no pipeline is checked against the whole business,
+ * and the same contact can be a lead in other pipelines):
  * - an open lead exists → no new lead; the enquiry is logged on that lead as an activity and
  *   the lead is flagged "needs review" for Marketing;
  * - only closed (won / lost) leads exist → a new lead is created, flagged as a possible
@@ -58,7 +60,8 @@ class LeadIntakeService
         }
 
         return DB::transaction(function () use ($data, $business, $target, $userId) {
-            $matches = $this->duplicates->matchingLeads($business->id, $data['phone'], $data['email']);
+            $pipelines = $target === null ? null : $this->duplicatePipelines($target);
+            $matches   = $this->duplicates->matchingLeads($business->id, $data['phone'], $data['email'], null, $pipelines);
 
             $open = $matches->first(fn (Lead $lead) => $lead->isOpen());
             if ($open !== null) {
@@ -90,6 +93,17 @@ class LeadIntakeService
 
             return new IntakeResult($this->leads->create($project, $data, $userId), created: true, routedToIntake: $routed && $target !== null);
         });
+    }
+
+    /**
+     * Where a lead entered for a pipeline counts as a duplicate: that pipeline, which holds the
+     * leads Marketing forwarded to it, and the pipeline the new lead would land in.
+     *
+     * @return list<int>
+     */
+    public function duplicatePipelines(Project $target): array
+    {
+        return array_values(array_unique([$target->id, $this->pipelineFor($target->business, $target, [])->id]));
     }
 
     /** The marketing intake department's main pipeline, if the business has one. */

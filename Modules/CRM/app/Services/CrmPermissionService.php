@@ -32,7 +32,7 @@ class CrmPermissionService
                 'items' => [
                     ['key' => 'relations_view',   'label' => 'View relations',   'desc' => 'Open the relations list and relation details'],
                     ['key' => 'relations_create', 'label' => 'Create relations', 'desc' => 'Add new relations (pipeline projects)'],
-                    ['key' => 'relations_delete', 'label' => 'Delete relations', 'desc' => 'Permanently delete empty relations'],
+                    ['key' => 'relations_delete', 'label' => 'Delete relations', 'desc' => 'Permanently delete relations. Deleting one that has leads also needs Delete leads'],
                 ],
             ],
             [

@@ -294,6 +294,27 @@ test('uploading the same file again skips the rows imported before', function ()
         ->and($second->fresh()->created_count)->toBe(1);
 });
 
+test('the same people can be imported into another relation, but only once into each', function () {
+    $projects = app(\Modules\CRM\Services\ProjectService::class);
+    $facebook = $projects->create($this->business, ['name' => 'Facebook Marketing']);
+    $sale     = $projects->create($this->business, ['name' => 'Sale Marketing']);
+    $csv      = "name,phone\nNimal,0771234567";
+
+    $run = function ($project) use ($csv) {
+        $import  = crmImportUpload($csv)['import'];
+        $preview = $this->imports->preview($import, $import->mapping, 'csv', $project, 'log');
+        $this->imports->start($import->fresh());
+
+        return $preview['totals'];
+    };
+
+    expect($run($facebook))->toMatchArray(['ok' => 1])
+        ->and($run($sale))->toMatchArray(['ok' => 1, 'duplicate' => 0, 'skipped' => 0])
+        ->and($run($sale))->toMatchArray(['ok' => 0, 'skipped' => 1])
+        ->and(Lead::where('project_id', $facebook->id)->count())->toBe(1)
+        ->and(Lead::where('project_id', $sale->id)->count())->toBe(1);
+});
+
 test('an import can only be started once', function () {
     $import = crmImportUpload(crmImportFixture())['import'];
     crmImportPreview($import);

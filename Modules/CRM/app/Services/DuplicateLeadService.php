@@ -16,8 +16,11 @@ class DuplicateLeadService
 {
     public function __construct(private readonly CrmSettingsService $settings) {}
 
-    /** @return Collection<int, Lead> newest first, open leads before closed ones */
-    public function matchingLeads(int $businessId, ?string $phone, ?string $email, ?int $ignoreLeadId = null): Collection
+    /**
+     * @param  list<int>|null  $projectIds  only look in these pipelines; null looks in the whole business
+     * @return Collection<int, Lead> newest first, open leads before closed ones
+     */
+    public function matchingLeads(int $businessId, ?string $phone, ?string $email, ?int $ignoreLeadId = null, ?array $projectIds = null): Collection
     {
         $normalized = $this->settings->normalizePhone($businessId, $phone);
         $email      = $this->cleanEmail($email);
@@ -28,6 +31,7 @@ class DuplicateLeadService
         return Lead::query()
             ->where('business_id', $businessId)
             ->when($ignoreLeadId !== null, fn ($q) => $q->whereKeyNot($ignoreLeadId))
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
             // Supplier / employee submissions are not sales leads
             ->whereDoesntHave('form', fn ($q) => $q->whereIn('type', LeadForm::NON_SALES_TYPES))
             ->where(function ($q) use ($normalized, $email) {
