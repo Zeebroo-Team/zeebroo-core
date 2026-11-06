@@ -87,7 +87,7 @@
                     </select>
                 </div>
                 <div>
-                    <label>When the contact already has an open lead</label>
+                    <label>When the contact already has an open lead in this pipeline</label>
                     <select name="duplicates">
                         @foreach($options['duplicate_modes'] as $m)
                             <option value="{{ $m['key'] }}" @selected(old('duplicates', $row['duplicates']) === $m['key'])>{{ $m['label'] }}</option>

@@ -515,12 +515,30 @@ test('the relations list shows only visible pipelines with their flags', functio
 
     $staff = $projects(3);
     expect($staff->pluck('id')->all())->toBe([1])
-        ->and($staff->first()['can'])->toBe(['manage' => false, 'create_leads' => false, 'work_all' => false]);
+        ->and($staff->first()['can'])->toBe(['manage' => false, 'create_leads' => false, 'work_all' => false, 'delete_with_leads' => false]);
 
+    // A head has no business-wide relations_delete, so runs the pipeline but can't remove it
     $head = $projects(2);
-    expect($head->first()['can'])->toBe(['manage' => true, 'create_leads' => true, 'work_all' => true]);
+    expect($head->first()['can'])->toBe(['manage' => true, 'create_leads' => true, 'work_all' => true, 'delete_with_leads' => false]);
 
     expect($projects(5)->pluck('id')->sort()->values()->all())->toBe([1, 2, 3, 4]);
+});
+
+test('deleting a pipeline with its leads takes the right to delete all of them', function () {
+    $allowed = fn (int $userId, int $projectId) => $this->policy->canDeleteProjectWithLeads(($this->access)($userId), Project::find($projectId));
+
+    expect($allowed(1, 1))->toBeTrue()    // owner
+        ->and($allowed(7, 4))->toBeTrue() // admin member
+        ->and($allowed(8, 1))->toBeTrue() // all departments
+        ->and($allowed(5, 1))->toBeFalse() // CEO, read only
+        ->and($allowed(3, 1))->toBeFalse() // staff
+        ->and($allowed(4, 2))->toBeFalse() // marketing
+        ->and($allowed(2, 1))->toBeFalse(); // head: no relations_delete
+
+    // Limited to chosen stages, Ravi could delete leads that were never visible
+    app(CrmPermissionService::class)->saveForUser($this->business, 8, [], [1 => [1]]);
+    expect($allowed(8, 1))->toBeFalse()
+        ->and($allowed(8, 2))->toBeTrue();
 });
 
 test('a department pipeline is assigned only to its staff and head', function () {

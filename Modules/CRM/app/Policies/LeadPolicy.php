@@ -93,6 +93,23 @@ class LeadPolicy
             || $access->worksIntake($departmentId);
     }
 
+    /**
+     * Deleting a pipeline along with its leads takes the right to delete all of those leads, so
+     * anyone with a stage hidden from them is out: they would be removing leads they can't see.
+     */
+    public function canDeleteProjectWithLeads(CrmAccess $access, Project $project): bool
+    {
+        if (! $access->can('relations_delete') || ! $access->can('leads_delete')) {
+            return false;
+        }
+
+        if (! $this->canViewProject($access, $project) || $access->isReadOnly() || $access->visibleStageIds($project->id) !== null) {
+            return false;
+        }
+
+        return $access->worksAllLeads() || $access->headsDepartment($access->departmentOfProject($project->id));
+    }
+
     public function canCreateLeadIn(CrmAccess $access, Project $project): bool
     {
         return $access->can('leads_create') && $this->canManageProject($access, $project);

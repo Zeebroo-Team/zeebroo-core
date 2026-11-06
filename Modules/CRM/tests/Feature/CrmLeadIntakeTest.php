@@ -325,6 +325,33 @@ test('a phone match counts even when the email differs, and the other way round'
         ->and(($this->capture)(['phone' => '0712222222', 'email' => 'c@example.com'])->created)->toBeTrue();
 });
 
+test('the same contact can be a lead in different relations, once in each', function () {
+    $projects = app(ProjectService::class);
+    $facebook = $projects->create($this->business, ['name' => 'Facebook Marketing']);
+    $sale     = $projects->create($this->business, ['name' => 'Sale Marketing']);
+
+    $first  = ($this->capture)(['phone' => '0771234567'], $facebook);
+    $second = ($this->capture)(['phone' => '0771234567'], $sale);
+    $repeat = ($this->capture)(['phone' => '0771234567'], $sale);
+
+    expect($second->created)->toBeTrue()
+        ->and($second->lead->project_id)->toBe($sale->id)
+        ->and($second->lead->needs_review)->toBeFalse()
+        ->and($repeat->created)->toBeFalse()
+        ->and($repeat->lead->id)->toBe($second->lead->id)
+        ->and($first->lead->fresh()->needs_review)->toBeFalse();
+});
+
+test('a lead forwarded to a department still takes the repeat enquiries entered there', function () {
+    $lead = ($this->capture)(['phone' => '0771234567'])->lead;
+    $lead->forceFill(['project_id' => $this->sales->id])->saveQuietly();
+
+    $repeat = ($this->capture)(['phone' => '0771234567']);
+
+    expect($repeat->created)->toBeFalse()
+        ->and($repeat->lead->id)->toBe($lead->id);
+});
+
 test('a lead matching only a closed lead is created and flagged as a possible duplicate', function () {
     $old = ($this->capture)(['phone' => '0771234567'])->lead;
     $this->leads->markLost($old, app(\Modules\CRM\Services\LostReasonService::class)->listForBusiness($this->business)->first()->id, null, 1);

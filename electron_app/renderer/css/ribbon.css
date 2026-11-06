@@ -14321,6 +14321,16 @@ body.dark .bc-pick-nocode { color: #fbbf24; }
 }
 .app-confirm-box.danger .app-confirm-submit { background: #dc2626; }
 .app-confirm-submit:hover { opacity: .88; }
+.app-confirm-submit:disabled { opacity: .45; cursor: not-allowed; }
+.app-confirm-type { padding: 12px 22px 0; }
+.app-confirm-type label { display: block; font-size: 13px; color: var(--text-muted); margin-bottom: 6px; overflow-wrap: anywhere; }
+.app-confirm-type strong { color: var(--text); user-select: text; }
+.app-confirm-type input {
+  width: 100%; box-sizing: border-box; padding: 9px 12px; border-radius: 9px;
+  border: 1.5px solid var(--border); background: var(--surface2); color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none;
+}
+.app-confirm-type input:focus { border-color: #dc2626; }
 /* ── End Generic Confirm Dialog ────────────────────────── */
 
 /* ── Stock Transfer detail: route card + history timeline ─ */

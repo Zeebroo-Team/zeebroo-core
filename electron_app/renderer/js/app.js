@@ -115,6 +115,7 @@ function toast(msg, type = 'info', onClick = null) {
 
 // ── Custom confirm dialog (replaces native confirm()) ────────────────────
 let _appConfirmResolve = null;
+let _appConfirmTypeText = '';
 function appConfirm(opts) {
   if (typeof opts === 'string') opts = { message: opts };
   const {
@@ -124,9 +125,15 @@ function appConfirm(opts) {
     cancelText = 'Cancel',
     icon = 'fa-circle-question',
     danger = false,
+    typeToConfirm = '', // the submit button stays off until the user has typed this exactly
   } = opts;
   return new Promise(resolve => {
     _appConfirmResolve = resolve;
+    _appConfirmTypeText = typeToConfirm;
+    $('#app-confirm-type').style.display = typeToConfirm ? '' : 'none';
+    $('#app-confirm-type-text').textContent = typeToConfirm;
+    $('#app-confirm-type-input').value = '';
+    $('#app-confirm-submit-btn').disabled = !!typeToConfirm;
     $('#app-confirm-cancel-btn').style.display = '';
     $('#app-confirm-box').classList.toggle('danger', !!danger);
     $('#app-confirm-icon').innerHTML = `<i class="fa ${icon}"></i>`;
@@ -135,7 +142,7 @@ function appConfirm(opts) {
     $('#app-confirm-cancel-btn').textContent = cancelText;
     $('#app-confirm-submit-btn').innerHTML = confirmText;
     $('#app-confirm-modal').style.display = 'flex';
-    setTimeout(() => $('#app-confirm-submit-btn')?.focus(), 30);
+    setTimeout(() => $(typeToConfirm ? '#app-confirm-type-input' : '#app-confirm-submit-btn')?.focus(), 30);
   });
 }
 // Centred message box with a single OK button (same dialog as appConfirm). Resolves when closed.
@@ -152,6 +159,12 @@ function _appConfirmClose(result) {
 }
 $('#app-confirm-cancel-btn')?.addEventListener('click', () => _appConfirmClose(false));
 $('#app-confirm-submit-btn')?.addEventListener('click', () => _appConfirmClose(true));
+$('#app-confirm-type-input')?.addEventListener('input', e => {
+  $('#app-confirm-submit-btn').disabled = e.target.value.trim() !== _appConfirmTypeText;
+});
+$('#app-confirm-type-input')?.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !$('#app-confirm-submit-btn').disabled) _appConfirmClose(true);
+});
 $('#app-confirm-modal')?.addEventListener('click', e => { if (e.target.id === 'app-confirm-modal') _appConfirmClose(false); });
 document.addEventListener('keydown', e => {
   // preventDefault stops the window behind (mac-overlay Esc handler) from also closing
@@ -58056,18 +58069,31 @@ async function submitDsCreate() {
 
   async function _deleteCrmRelation(relation) {
     const count = relation.leads_count || 0;
+    const leadsText = `${count} lead${count !== 1 ? 's' : ''}`;
+    if (count && !relation.can?.delete_with_leads) {
+      await appAlert({
+        title: 'This relation has leads',
+        message: `"${relation.name}" has ${leadsText} attached. Move or remove them first, or ask someone who can delete all of its leads.`,
+        icon: 'fa-triangle-exclamation',
+      });
+      return;
+    }
+
+    const name = relation.name.trim();
     const ok = await appConfirm({
-      title: 'Delete this relation?',
+      title: count ? `Delete this relation and ${leadsText}?` : 'Delete this relation?',
       message: count
-        ? `"${relation.name}" has ${count} lead${count !== 1 ? 's' : ''} attached. Move or remove those leads before this relation can be deleted.`
+        ? `This permanently deletes "${relation.name}" and its ${leadsText}, with their tasks, follow-ups, messages and files. Invoices, quotations and sales orders are kept but lose their link to the lead. This cannot be undone.`
         : `This permanently deletes "${relation.name}". This cannot be undone.`,
-      confirmText: '<i class="fa fa-trash"></i> Delete Relation',
+      confirmText: count ? '<i class="fa fa-trash"></i> Delete Relation and Leads' : '<i class="fa fa-trash"></i> Delete Relation',
       icon: 'fa-triangle-exclamation',
       danger: true,
+      typeToConfirm: count ? name : '',
     });
     if (!ok) return;
 
-    const res = await API.crmDeleteProject(relation.id);
+    if (count) toast(`Deleting "${relation.name}" and ${leadsText}…`, 'info');
+    const res = count ? await API.crmForceDeleteProject(relation.id, name) : await API.crmDeleteProject(relation.id);
     if (res.status === 200) {
       toast('Relation deleted.', 'success');
       // Forget it too, or the ribbon's New Lead / Stages / Forms would reopen the deleted relation
@@ -66561,7 +66587,7 @@ async function submitDsCreate() {
             </select></div></div>
           <div class="mac-row"><div class="mac-row-label">Import into<small>${_crmImpLocked ? 'The relation you opened the import from' : 'Search the relations, or type a new name to create one'}</small></div>
             ${relCtl}</div>
-          <div class="mac-row"><div class="mac-row-label">Contact already has an open lead<small>What to do with repeat enquiries</small></div>
+          <div class="mac-row"><div class="mac-row-label">Contact already has an open lead in this relation<small>What to do with repeat enquiries</small></div>
             <div class="mac-row-ctl"><select class="po-field-input" id="crm-imp-dups">
               ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === imp.duplicates ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
             </select></div></div>
@@ -66710,7 +66736,7 @@ async function submitDsCreate() {
     $('#crm-import-body').innerHTML = `
       <div class="crm-perms-muted">
         Into <strong>${escHtml(_crmImp.project?.name || '')}</strong> as <strong>${escHtml(_crmImp.source_label || '')}</strong>.
-        <em>Duplicate</em> rows are imported following the duplicate rules (repeat enquiry on the open lead, or a new lead flagged for review);
+        <em>Duplicate</em> rows are imported following the duplicate rules (repeat enquiry on the open lead in this relation, or a new lead flagged for review);
         <em>Error</em> and <em>Skipped</em> rows are left out.
       </div>
       <div class="crm-inbox-tabs">${tabs.map(([k, label, n]) =>

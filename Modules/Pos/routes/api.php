@@ -710,6 +710,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');
     Route::delete('crm/projects/{project}',            [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteProject'])->name('crm.projects.destroy');
+    Route::post  ('crm/projects/{project}/force-delete', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'forceDeleteProject'])->name('crm.projects.force-delete');
     Route::get   ('crm/projects/{project}/pipeline',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'pipeline'])    ->name('crm.projects.pipeline');
     Route::get   ('crm/projects/{project}/custom-data-leads', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customDataLeads'])->name('crm.projects.custom-data-leads');
     Route::get   ('crm/projects/{project}/contacts',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectContacts'])->name('crm.projects.contacts');

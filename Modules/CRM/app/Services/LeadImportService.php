@@ -25,8 +25,9 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  * which the user can change. Columns that are not a lead field are kept as "Question: answer"
  * lines in the lead's notes. Every row goes through LeadIntakeService, so duplicates follow the
  * intake rule (an open lead gets the enquiry logged on it, a closed lead or a customer flags the
- * new lead for review). Each imported row is remembered by a key, so uploading a newer export
- * of the same form only brings in the new responses.
+ * new lead for review). Each imported row is remembered by a key per pipeline, so uploading a
+ * newer export of the same form only brings in the new responses, while the same people can
+ * still be imported into another pipeline.
  */
 class LeadImportService
 {
@@ -218,15 +219,16 @@ class LeadImportService
             'total_rows' => count($table['rows']),
         ]);
 
-        $context  = $this->context($import, $table['headers']);
-        $imported = $this->importedKeys($import->business_id, array_map(fn ($cells) => $this->evaluate($cells, $context)['key'], $table['rows']));
+        $context   = $this->context($import, $table['headers']);
+        $imported  = $this->importedKeys($import->business_id, $project->id, array_map(fn ($cells) => $this->evaluate($cells, $context)['key'], $table['rows']));
+        $pipelines = $this->intake->duplicatePipelines($project);
 
         $rows     = [];
         $seenKeys = [];
         $contacts = [];
         foreach ($table['rows'] as $line => $cells) {
             $row = $this->evaluate($cells, $context);
-            [$status, $reason] = $this->previewStatus($import, $row, $line, $imported, $seenKeys, $contacts, $duplicateMode);
+            [$status, $reason] = $this->previewStatus($import, $row, $line, $imported, $seenKeys, $contacts, $duplicateMode, $pipelines);
 
             $rows[] = [
                 'row'      => $line,
@@ -248,7 +250,7 @@ class LeadImportService
     }
 
     /** @return array{0: string, 1: ?string} status (ok|duplicate|error|skipped) and why */
-    private function previewStatus(LeadImport $import, array $row, int $line, array $imported, array &$seenKeys, array &$contacts, string $mode): array
+    private function previewStatus(LeadImport $import, array $row, int $line, array $imported, array &$seenKeys, array &$contacts, string $mode, array $pipelines): array
     {
         if ($row['errors'] !== []) {
             return ['error', implode(' ', $row['errors'])];
@@ -279,7 +281,7 @@ class LeadImportService
                 : ['duplicate', "Same contact as row {$earlier} — added to that lead as a repeat enquiry."];
         }
 
-        $matches = $this->duplicates->matchingLeads($import->business_id, $row['data']['phone'], $row['data']['email']);
+        $matches = $this->duplicates->matchingLeads($import->business_id, $row['data']['phone'], $row['data']['email'], null, $pipelines);
         if ($open = $matches->first(fn (Lead $lead) => $lead->isOpen())) {
             return $mode === 'skip'
                 ? ['skipped', "Already a lead: \"{$open->name}\" (#{$open->id})."]
@@ -333,13 +335,14 @@ class LeadImportService
             $table   = $this->readImport($import);
             $context = $this->context($import, $table['headers']);
             $skipDuplicates = ($import->options['duplicates'] ?? 'log') === 'skip';
+            $pipelines = $this->intake->duplicatePipelines($project);
 
-            $counts    = ['created_count' => 0, 'duplicate_count' => 0, 'skipped_count' => 0, 'failed_count' => 0];
+            $counts   = ['created_count' => 0, 'duplicate_count' => 0, 'skipped_count' => 0, 'failed_count' => 0];
             $errorRows = [];
             $processed = 0;
 
             foreach ($table['rows'] as $line => $cells) {
-                $outcome = $this->importRow($import, $project, $cells, $context, $skipDuplicates);
+                $outcome = $this->importRow($import, $project, $cells, $context, $skipDuplicates, $pipelines);
 
                 $counts[$outcome[0] . '_count']++;
                 if ($outcome[0] === 'failed') {
@@ -364,7 +367,7 @@ class LeadImportService
     }
 
     /** @return array{0: string, 1?: string} created|duplicate|skipped|failed, and why it failed */
-    private function importRow(LeadImport $import, Project $project, array $cells, array $context, bool $skipDuplicates): array
+    private function importRow(LeadImport $import, Project $project, array $cells, array $context, bool $skipDuplicates, array $pipelines): array
     {
         $row = $this->evaluate($cells, $context);
         if ($row['errors'] !== []) {
@@ -373,13 +376,14 @@ class LeadImportService
 
         $alreadyIn = DB::table('crm_lead_import_keys')
             ->where('business_id', $import->business_id)
+            ->where('project_id', $project->id)
             ->where('row_key', $row['key'])
             ->exists();
         if ($alreadyIn) {
             return ['skipped'];
         }
 
-        if ($skipDuplicates && $this->duplicates->matchingLeads($import->business_id, $row['data']['phone'], $row['data']['email'])->contains(fn (Lead $l) => $l->isOpen())) {
+        if ($skipDuplicates && $this->duplicates->matchingLeads($import->business_id, $row['data']['phone'], $row['data']['email'], null, $pipelines)->contains(fn (Lead $l) => $l->isOpen())) {
             return ['skipped'];
         }
 
@@ -400,6 +404,7 @@ class LeadImportService
 
         DB::table('crm_lead_import_keys')->insertOrIgnore([
             'business_id' => $import->business_id,
+            'project_id'  => $project->id,
             'row_key'     => $row['key'],
             'lead_id'     => $result->lead->id,
             'import_id'   => $import->id,
@@ -607,12 +612,12 @@ class LeadImportService
         return $context['headers'][$i] ?? ('Column ' . ($i + 1));
     }
 
-    /** @param list<string> $keys @return array<string, true> the keys already imported */
-    private function importedKeys(int $businessId, array $keys): array
+    /** @param list<string> $keys @return array<string, true> the keys already imported into the pipeline */
+    private function importedKeys(int $businessId, int $projectId, array $keys): array
     {
         $found = [];
         foreach (array_chunk(array_values(array_unique($keys)), 500) as $chunk) {
-            foreach (DB::table('crm_lead_import_keys')->where('business_id', $businessId)->whereIn('row_key', $chunk)->pluck('row_key') as $key) {
+            foreach (DB::table('crm_lead_import_keys')->where('business_id', $businessId)->where('project_id', $projectId)->whereIn('row_key', $chunk)->pluck('row_key') as $key) {
                 $found[$key] = true;
             }
         }

@@ -683,6 +683,63 @@ test('the audit log is admin-only, filterable and scoped to the business', funct
         ->and(collect($res['data'])->pluck('subject_id'))->not->toContain($this->otherLead->id);
 });
 
+// ── Deleting a relation with its leads ───────────────────────────────────
+
+test('force delete removes the relation, its leads and what hangs off them, and keeps the audit trail', function () {
+    $second = $this->leads->create($this->sales, ['name' => 'Nadeesha'], 1);
+    $kept   = $this->leads->create($this->support, ['name' => 'Stays'], 1);
+    $file   = app(LeadAttachmentService::class)->upload($this->lead, UploadedFile::fake()->create('quote.pdf', 10, 'application/pdf'), 1)->file;
+    Storage::disk($file->diskName())->assertExists($file->stored_path);
+
+    foreach ([$this->lead, $kept] as $lead) {
+        DB::table('crm_tasks')->insert(['business_id' => 7, 'subject_type' => $lead->getMorphClass(), 'subject_id' => $lead->id, 'title' => 'Call']);
+        DB::table('crm_activities')->insert(['business_id' => 7, 'subject_type' => $lead->getMorphClass(), 'subject_id' => $lead->id, 'occurred_at' => now()]);
+        DB::table('crm_stage_move_requests')->insert(['business_id' => 7, 'lead_id' => $lead->id, 'to_stage_id' => $lead->stage_id]);
+    }
+
+    $res = app(CrmWorkspaceTestCrmApi::class)
+        ->forceDeleteProject(crmWsRequest(1, 'POST', ['confirm_name' => $this->sales->name]), $this->sales->id);
+
+    expect($res->getStatusCode())->toBe(200)
+        ->and($res->getData(true)['leads_deleted'])->toBe(2)
+        ->and(DB::table('crm_projects')->where('id', $this->sales->id)->exists())->toBeFalse()
+        ->and(Lead::whereIn('id', [$this->lead->id, $second->id])->exists())->toBeFalse()
+        ->and(Lead::whereKey($kept->id)->exists())->toBeTrue()
+        ->and(DB::table('crm_lead_attachments')->count())->toBe(0)
+        ->and(DB::table('crm_tasks')->pluck('subject_id')->all())->toBe([$kept->id])
+        ->and(DB::table('crm_activities')->pluck('subject_id')->all())->toBe([$kept->id])
+        ->and(DB::table('crm_stage_move_requests')->pluck('lead_id')->all())->toBe([$kept->id]);
+    Storage::disk($file->diskName())->assertMissing($file->stored_path);
+
+    $deleted = CrmAuditLog::where('event', 'deleted');
+    $relation = (clone $deleted)->where('subject_type', \Modules\CRM\Models\Project::class)->first();
+    expect((clone $deleted)->where('subject_type', Lead::class)->pluck('subject_id')->sort()->values()->all())
+        ->toBe([$this->lead->id, $second->id])
+        ->and($relation->subject_id)->toBe($this->sales->id)
+        ->and($relation->old['leads_deleted'])->toBe(2);
+});
+
+test('force delete needs the exact relation name and the right to delete its leads', function () {
+    $force = fn (int $userId, array $body, ?int $projectId = null) => crmWsStatus(fn () => app(CrmWorkspaceTestCrmApi::class)
+        ->forceDeleteProject(crmWsRequest($userId, 'POST', $body), $projectId ?? $this->sales->id));
+
+    expect($force(1, ['confirm_name' => 'wrong name']))->toBe(422)
+        ->and($force(1, ['confirm_name' => strtoupper($this->sales->name)]))->toBe(422)
+        ->and($force(1, []))->toBe(422)
+        ->and($force(2, ['confirm_name' => $this->sales->name]))->toBe(403) // head
+        ->and($force(3, ['confirm_name' => $this->sales->name]))->toBe(403) // staff
+        ->and($force(1, ['confirm_name' => $this->otherSales->name], $this->otherSales->id))->toBe(404) // other business
+        ->and(Lead::whereKey($this->lead->id)->exists())->toBeTrue()
+        ->and(Lead::whereKey($this->otherLead->id)->exists())->toBeTrue();
+});
+
+test('the plain delete still refuses a relation that has leads', function () {
+    $res = app(CrmWorkspaceTestCrmApi::class)->deleteProject(crmWsRequest(1, 'DELETE'), $this->sales->id);
+
+    expect($res->getStatusCode())->toBe(422)
+        ->and(Lead::whereKey($this->lead->id)->exists())->toBeTrue();
+});
+
 // ── Web pages ────────────────────────────────────────────────────────────
 
 class CrmWorkspaceTestLeadController extends \Modules\CRM\Http\Controllers\LeadController

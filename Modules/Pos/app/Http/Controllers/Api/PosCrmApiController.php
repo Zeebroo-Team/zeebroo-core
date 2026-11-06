@@ -114,6 +114,7 @@ class PosCrmApiController extends Controller
                 'manage'       => $this->policy->canManageProject($access, $project),
                 'create_leads' => $this->policy->canCreateLeadIn($access, $project),
                 'work_all'     => $this->policy->worksWholeProject($access, $project),
+                'delete_with_leads' => $this->policy->canDeleteProjectWithLeads($access, $project),
             ];
         }
 
@@ -150,6 +151,25 @@ class PosCrmApiController extends Controller
         }
 
         return response()->json(['message' => 'Relation deleted.']);
+    }
+
+    /** Delete a relation with the leads still in it. The caller retypes its name to confirm. */
+    public function forceDeleteProject(Request $request, int $projectId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'crm_pipeline');
+        $access   = $this->abortUnlessCrm($request, $business, 'relations_delete');
+        $project  = $this->visibleProject($request, $business, $projectId);
+        $this->abortUnlessAllowed($this->policy->canDeleteProjectWithLeads($access, $project));
+
+        $validated = $request->validate(['confirm_name' => ['required', 'string']]);
+        if (trim($validated['confirm_name']) !== trim($project->name)) {
+            return response()->json(['message' => 'The name you typed does not match this relation.'], 422);
+        }
+
+        $deleted = $this->projects->deleteWithLeads($project, $request->user()?->id);
+
+        return response()->json(['message' => 'Relation deleted.', 'leads_deleted' => $deleted]);
     }
 
     // ── Pipeline ─────────────────────────────────────────────────────────

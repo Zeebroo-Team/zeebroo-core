@@ -201,7 +201,7 @@ const TEMP_ID_IN_PATH = /\/-\d{12,}(?=\/|$|\?)/;
 const ONLINE_ONLY_WRITES = new RegExp([
   '^/(auth|backup|guide|businesses|developers|crm/lead-imports|online/barcodes)(/|$)',
   '^/mail/(send|sync|test|verify-credentials)$',
-  '/(generate-ai|ai-chat|ai-content|ai-fill|scan|preview|stock-check|generate-skus|enable-share|notify|import|install)$',
+  '/(generate-ai|ai-chat|ai-content|ai-fill|scan|preview|stock-check|generate-skus|enable-share|notify|import|install|force-delete)$',
 ].join('|'));
 
 // POSTs to a collection that are actions, not "add a record".

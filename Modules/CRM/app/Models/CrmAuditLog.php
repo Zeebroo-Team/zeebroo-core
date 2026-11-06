@@ -23,6 +23,7 @@ class CrmAuditLog extends Model
     const SUBJECTS = [
         'lead'          => [Lead::class, 'Lead'],
         'lead_assignee' => [LeadAssignee::class, 'Lead assignee'],
+        'relation'      => [Project::class, 'Relation'],
     ];
 
     protected $fillable = [
