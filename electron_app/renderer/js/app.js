@@ -236,175 +236,247 @@ async function applyDisplayTheme(theme) {
   await window.electronAPI.setConfig({ dark_mode: dark });
 }
 
-// ── Sidebar sub-item definitions ──────────────────────────────────────────
-const _sbSubItems = {
-  home: [
-    { view:'today',          icon:'fa-gauge-high',           label:'Today' },
-    { view:'analytics',      icon:'fa-chart-line',           label:'Analytics' },
-    { view:'activity',       icon:'fa-clock-rotate-left',    label:'Activity' },
-    { view:'expenses',       icon:'fa-file-invoice-dollar',  label:'Expenses' },
-    { view:'profit',         icon:'fa-chart-pie',            label:'Profit' },
-    { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
-    { view:'orders',         icon:'fa-box',                  label:'Orders' },
-  ],
-  sales: [
-    { view:'transactions',   icon:'fa-cash-register',        label:'Transactions' },
-    { view:'history',        icon:'fa-clock-rotate-left',    label:'History' },
-    { view:'credits',        icon:'fa-hand-holding-dollar',  label:'Credits' },
-    { view:'quotes',         icon:'fa-file-lines',           label:'Quotations' },
-    { view:'invoices',       icon:'fa-file-invoice',         label:'Invoices' },
-    { view:'orders',         icon:'fa-box',                  label:'Orders' },
-  ],
-  inventory: [
-    { view:'products',       icon:'fa-box',                  label:'Products' },
-    { view:'categories',     icon:'fa-tags',                 label:'Categories' },
-    { view:'brands',         icon:'fa-award',                label:'Brands' },
-    { view:'units',          icon:'fa-ruler',                label:'Units' },
-    { view:'discounts',      icon:'fa-tag',                  label:'Discounts' },
-    { view:'suppliers',      icon:'fa-building-user',        label:'Suppliers' },
-    { view:'audit',          icon:'fa-clipboard-list',       label:'Stock Audit' },
-    { view:'transfer',       icon:'fa-right-left',           label:'Stock Transfer' },
-    { view:'po',             icon:'fa-file-invoice',         label:'Purchase Orders' },
-    { view:'grn',            icon:'fa-truck-ramp-box',       label:'Goods Receive' },
-    { view:'cheques',        icon:'fa-money-check',          label:'Cheques' },
-    { view:'barcodes',       icon:'fa-barcode',              label:'Barcodes' },
-  ],
-  finance: [
-    { view:'overview',       icon:'fa-house',                label:'Overview' },
-    { view:'flow',           icon:'fa-diagram-project',      label:'Flow' },
-    { view:'bills',          icon:'fa-file-invoice-dollar',  label:'Bills' },
-    { view:'loans',          icon:'fa-money-bill-trend-up',  label:'Loans' },
-    { view:'rentals',        icon:'fa-house',                label:'Rentals' },
-    { view:'properties',     icon:'fa-building',             label:'Properties' },
-    { view:'modifications',  icon:'fa-screwdriver-wrench',   label:'Modifications' },
-    { view:'budget',         icon:'fa-table-cells',          label:'Budget' },
-    { view:'sales',          icon:'fa-chart-column',         label:'Sales Reports' },
-  ],
-  hr: [
-    { view:'employees',      icon:'fa-users',                label:'Employees' },
-    { view:'departments',    icon:'fa-sitemap',              label:'Departments' },
-    { view:'payroll',        icon:'fa-money-check-dollar',   label:'Payroll' },
-    { view:'rule-sets',      icon:'fa-list-check',           label:'Rule Sets' },
-    { view:'allowance-types',icon:'fa-coins',                label:'Allowances' },
-    { view:'leave-rules',    icon:'fa-umbrella-beach',       label:'Leave Rules' },
-    { view:'positions',     icon:'fa-id-badge',             label:'Positions' },
-    { view:'attendance',     icon:'fa-clock',                label:'Attendance' },
-  ],
-  services: [
-    { view:'requests',       icon:'fa-clipboard-list',       label:'Requests' },
-    { view:'catalog',        icon:'fa-list',                 label:'Catalog' },
-    { view:'categories',     icon:'fa-tags',                 label:'Categories' },
-  ],
-  restaurant: [
-    { view:'orders',         icon:'fa-receipt',              label:'Orders' },
-    { view:'tables',         icon:'fa-table',                label:'Tables' },
-    { view:'reservations',   icon:'fa-calendar-check',       label:'Reservations' },
-    { view:'menu-items',     icon:'fa-utensils',             label:'Menu Items' },
-    { view:'menu-categories',icon:'fa-layer-group',          label:'Menu Cats' },
-    { view:'ingredients',    icon:'fa-carrot',               label:'Ingredients' },
-    { view:'purchase-orders',icon:'fa-file-invoice',         label:'Purchase Orders' },
-    { view:'kitchen',        icon:'fa-fire-burner',          label:'Kitchen' },
-  ],
-  mail: [
-    { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
-    { view:'sent',           icon:'fa-paper-plane',          label:'Sent' },
-    { view:'compose',        icon:'fa-pen',                  label:'Compose' },
-    { view:'templates',      icon:'fa-file-lines',           label:'Templates' },
-    { view:'filters',        icon:'fa-filter',               label:'Filters' },
-    { view:'scheduled',      icon:'fa-clock',                label:'Scheduled' },
-  ],
-  crm: [
-    { view:'pipeline',       icon:'fa-angles-right',         label:'Pipeline' },
-    { view:'contacts',       icon:'fa-address-book',         label:'Contacts' },
-    { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
-    { view:'forms',          icon:'fa-wpforms',              label:'Forms' },
-  ],
-  projects: [
-    { view:'projects',       icon:'fa-diagram-project',      label:'Projects' },
-    { view:'board',          icon:'fa-table-columns',        label:'Board' },
-    { view:'tasks',          icon:'fa-list-check',           label:'Tasks' },
-    { view:'mytasks',        icon:'fa-user-check',           label:'My Tasks' },
-  ],
-  'my-projects': [
-    { view:'overview',       icon:'fa-house',                label:'Overview' },
-    { view:'tasks',          icon:'fa-list-check',           label:'My Tasks' },
-    { view:'board',          icon:'fa-table-columns',        label:'Kanban Board' },
-    { view:'calendar',       icon:'fa-calendar-days',        label:'Calendar' },
-    { view:'inbox',          icon:'fa-inbox',                label:'Inbox' },
-    { view:'achievements',   icon:'fa-trophy',               label:'My Achievements' },
-  ],
-  ecommerce: [
-    { view:'dashboard',      icon:'fa-chart-line',           label:'Dashboard' },
-    { view:'orders',         icon:'fa-bag-shopping',         label:'Web Orders' },
-    { view:'products',       icon:'fa-boxes-stacked',        label:'Online Products' },
-    { view:'settings',       icon:'fa-sliders',              label:'Store Settings' },
-    { view:'template',       icon:'fa-swatchbook',           label:'Website Template' },
-    { view:'slider',         icon:'fa-images',               label:'Homepage Slider' },
-    { view:'payments',       icon:'fa-credit-card',          label:'Payment Gateways' },
-  ],
+// ── Sidebar sub-menus ─────────────────────────────────────────────────────
+// Sidebar mode hides each panel's sub-tab bar, so its sub-menu is built from those
+// same buttons: clicking an entry clicks the real tab, and _sbSync() copies the tab's
+// visibility, active state and badge back. Permissions, Home tab customizing and
+// in-page jumps therefore behave exactly as they do with the ribbon.
+// `extras` are destinations with no visible sub-tab, reached through their own button.
+const _sbViewShown = sel => () => $(sel)?.style.display === 'flex';
+const _sbTabActive = sel => () => !!$(sel)?.classList.contains('active');
+const _sbSubNavs = {
+  home: { tabs:'.home-tab-btn', extras:[
+    { btn:'#home-subnav-setup-wizard', icon:'fa-wand-magic-sparkles', label:'Setup Wizard' },
+    { btn:'#home-subnav-gear',         icon:'fa-gear',                label:'Customize Tabs' },
+  ] },
+  sales:     { tabs:'.sal-view-btn' },
+  inventory: { tabs:'.inv-subnav-btn', extras:[
+    { btn:'#rb-inv-units',     icon:'fa-ruler',         label:'Units' },
+    { btn:'#rb-inv-suppliers', icon:'fa-building-user', label:'Suppliers' },
+  ] },
+  finance:   { tabs:'#panel-finance .fin-subnav-btn[data-fin]' },
+  hr:        { tabs:'#panel-hr > .fin-subnav .fin-subnav-btn[data-hr]', extras:[
+    { btn:'#rb-leave-rules', icon:'fa-umbrella-beach', label:'Leave Rules', isActive:_sbViewShown('#leave-rules-view') },
+  ] },
+  services:  { tabs:'#panel-services .fin-subnav-btn[data-svc]' },
+  design:    { tabs:'#panel-design .fin-subnav-btn[data-ds]' },
+  restaurant:{ tabs:'#panel-restaurant > .fin-subnav .fin-subnav-btn[data-rst]', extras:[
+    { btn:'#rb-rst-purchase-orders', icon:'fa-truck', label:'Purchase Orders', isActive:_sbViewShown('#rst-po-view') },
+  ] },
+  mail:      { tabs:'#panel-mail .fin-subnav-btn[data-mail]' },
+  crm:       { tabs:'#panel-crm .fin-subnav-btn[data-crmsub]:not([style*="display:none"])', extras:[
+    { btn:'#rb-crm-contacts', icon:'fa-address-book',   label:'Contacts', isActive:_sbTabActive('[data-crmsub="contacts"]') },
+    { btn:'#rb-crm-tasks',    icon:'fa-list-check',     label:'Tasks',    isActive:_sbTabActive('[data-crmsub="tasks"]') },
+    { btn:'#rb-crm-forms',    icon:'fa-rectangle-list', label:'Forms' },
+  ] },
+  projects:      { tabs:'#panel-projects .fin-subnav-btn[data-pmsub]' },
+  'my-projects': { tabs:'#pm-mine-view .fin-subnav-btn[data-mpsub]' },
+  'event-mgmt':  { tabs:'#panel-event-mgmt .fin-subnav-btn[data-evtview]' },
+  ecommerce:     { tabs:'#panel-ecommerce .fin-subnav-btn[data-ecomview]' },
 };
 
+// Toolbar buttons that open a view, listed with the sub-tab that marks that view as open.
+// Ribbon buttons have no active state of their own, so _sbSync() lights the current one.
+// Buttons that open a modal, apply a filter or run an action are left out on purpose.
+const _sbToolViews = [
+  ['.home-tab-btn[data-home-view', { 'rb-home-dashboard':'overview', 'rb-home-daily-summary':'today', 'rb-home-analytics':'analytics', 'rb-home-orders':'orders', 'rb-home-expenses':'expenses', 'rb-home-profit':'profit', 'rb-home-payroll':'payroll' }],
+  ['.inv-subnav-btn[data-inv-view', { 'rb-inv-products':'products', 'rb-inv-categories':'categories', 'rb-inv-audit':'audit', 'rb-inv-brands':'brands', 'rb-inv-discounts':'discounts', 'rb-orders':'po', 'rb-inv-grn':'grn', 'rb-inv-cheques':'cheques', 'rb-inv-barcodes':'barcodes' }],
+  ['.fin-subnav-btn[data-fin', { 'rb-bills-list':'bills', 'rb-loans':'loans', 'rb-rentals':'rentals', 'rb-properties':'properties' }],
+  ['.fin-subnav-btn[data-hr', { 'rb-employees':'employees', 'rb-departments':'departments', 'rb-hr-payroll':'payroll', 'rb-positions':'positions', 'rb-attendance':'attendance' }],
+  ['.fin-subnav-btn[data-svc', { 'rb-svc-requests':'requests', 'rb-svc-catalog':'catalog', 'rb-svc-categories':'categories' }],
+  ['.fin-subnav-btn[data-ds', { 'rb-design-all':'all', 'rb-design-social-media':'social-media', 'rb-design-business-card':'business-card' }],
+  ['.fin-subnav-btn[data-rst', { 'rb-rst-orders':'orders', 'rb-rst-tables':'tables', 'rb-rst-reservations':'reservations', 'rb-rst-menu-items':'menu-items', 'rb-rst-menu-categories':'menu-categories', 'rb-rst-ingredients':'ingredients' }],
+  ['.fin-subnav-btn[data-mail', { 'rb-mail-inbox':'inbox', 'rb-mail-compose':'compose', 'rb-mail-sent':'sent', 'rb-mail-templates':'templates', 'rb-mail-filters':'filters', 'rb-mail-scheduled':'scheduled' }],
+  ['.fin-subnav-btn[data-crmsub', { 'rb-crm-dashboard':'dashboard', 'rb-crm-pipeline':'relation', 'rb-crm-contacts':'contacts', 'rb-crm-tasks':'tasks' }],
+  ['.fin-subnav-btn[data-pmsub', { 'rb-pm-all-projects':'projects' }],
+  ['.fin-subnav-btn[data-mpsub', { 'rb-mp-overview':'overview', 'rb-mp-tasks':'tasks', 'rb-mp-board':'board', 'rb-mp-calendar':'calendar', 'rb-mp-inbox':'inbox', 'rb-mp-achievements':'achievements' }],
+  ['.fin-subnav-btn[data-evtview', { 'rb-brd-all':'brands', 'rb-rpt-all':'reporters', 'rb-ofc-all':'officers', 'rb-agc-all':'agencies', 'rb-ss-all':'salary', 'rb-crd-all':'coordinators', 'rb-pmt-all':'promoters', 'rb-job-all':'jobs' }],
+  ['.fin-subnav-btn[data-ecomview', { 'rb-ecom-dashboard':'dashboard', 'rb-ecom-orders':'orders', 'rb-ecom-products':'products', 'rb-ecom-settings':'settings', 'rb-ecom-template':'template', 'rb-ecom-slider':'slider', 'rb-ecom-payments':'payments' }],
+].flatMap(([tab, views]) => Object.entries(views).map(([id, view]) => ({ id, isActive:_sbTabActive(`${tab}="${view}"]`) }))).concat(
+  { id:'rb-leave-rules',         isActive:_sbViewShown('#leave-rules-view') },
+  { id:'rb-rst-purchase-orders', isActive:_sbViewShown('#rst-po-view') },
+);
+
+const _sbEntries = [];  // { el, source(), isActive() } — one per rendered sub-item
+let _sbTabOrder = '';
+
+// The tab's own text, leaving out any badge span inside the button
+function _sbTabLabel(btn) {
+  return [...btn.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim();
+}
+
 function _buildSidebarSubNavs() {
-  Object.entries(_sbSubItems).forEach(([tab, items]) => {
+  Object.entries(_sbSubNavs).forEach(([tab, { tabs, extras = [] }]) => {
     const navItem = $(`.sb-nav-item[data-tab="${tab}"]`);
     if (!navItem) return;
+    const entries = [
+      ...[...$$(tabs)].map(b => ({
+        icon: b.querySelector('i')?.className || 'fa fa-circle',
+        label: _sbTabLabel(b),
+        source: () => b,
+        isActive: () => b.classList.contains('active'),
+      })),
+      ...extras.map(x => ({
+        icon: `fa ${x.icon}`,
+        label: x.label,
+        source: () => $(x.btn),
+        isActive: x.isActive || (() => false),
+      })),
+    ];
     const sub = document.createElement('div');
     sub.className = 'sb-sub-nav';
     sub.dataset.subOf = tab;
     const inner = document.createElement('div');
     inner.className = 'sb-sub-nav-inner';
-    inner.innerHTML = items.map((it, idx) =>
-      `<div class="sb-sub-item" data-tab="${tab}" data-sub-view="${it.view}" style="transition-delay:${(idx * 0.03).toFixed(2)}s"><i class="fa ${it.icon}"></i><span>${it.label}</span></div>`
-    ).join('');
+    entries.forEach((entry, idx) => {
+      const el = document.createElement('div');
+      el.className = 'sb-sub-item';
+      el.style.setProperty('--sb-i', Math.min(idx, 12));
+      el.innerHTML = `<i class="${entry.icon}"></i><span>${entry.label}</span><span class="sb-sub-badge" hidden></span>`;
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // A section opened from its chevron can belong to a tab that isn't showing yet
+        if (!navItem.classList.contains('active')) activateTab(tab);
+        entry.source()?.click();
+      });
+      inner.appendChild(el);
+      _sbEntries.push({ ...entry, el });
+    });
     sub.appendChild(inner);
     navItem.insertAdjacentElement('afterend', sub);
   });
-  // Wire sub-item clicks
-  $$('.sb-sub-item').forEach(item => {
-    item.addEventListener('click', (e) => {
-      e.stopPropagation();
-      _sbNavSubSwitch(item.dataset.tab, item.dataset.subView);
-    });
+}
+
+// Copy state from the real tabs and ribbon buttons onto the sidebar
+function _sbSync() {
+  _sbEntries.forEach(({ el, source, isActive }) => {
+    const src = source();
+    const hidden = !src || src.style.display === 'none' || src.closest('.ribbon-group')?.style.display === 'none';
+    el.style.display = hidden ? 'none' : '';
+    el.classList.toggle('active', isActive());
+    const badge = src?.querySelector('span');
+    const showBadge = !!badge && !badge.hidden && badge.style.display !== 'none';
+    const badgeEl = el.querySelector('.sb-sub-badge');
+    badgeEl.hidden = !showBadge;
+    badgeEl.textContent = showBadge ? badge.textContent.trim() : '';
+    badgeEl.classList.toggle('dot', showBadge && !badgeEl.textContent);
+  });
+  _sbToolViews.forEach(({ id, isActive }) => $(`#${id}`)?.classList.toggle('sb-tool-active', isActive()));
+
+  // Feature gating and ribbon customizing can hide or reorder top-level tabs
+  const tabs = [...$$('#ribbon-tabs .ribbon-tab[data-tab]')];
+  tabs.forEach(t => {
+    const item = $(`.sb-nav-item[data-tab="${t.dataset.tab}"]`);
+    if (item) item.style.display = t.style.display;
+  });
+  const order = tabs.map(t => t.dataset.tab).join();
+  if (order === _sbTabOrder) return;
+  _sbTabOrder = order;
+  const nav = $('#sidebar-nav');
+  tabs.forEach(t => {
+    const item = $(`.sb-nav-item[data-tab="${t.dataset.tab}"]`);
+    if (!item) return;
+    nav.appendChild(item);
+    const sub = $(`.sb-sub-nav[data-sub-of="${t.dataset.tab}"]`);
+    if (sub) nav.appendChild(sub);
+  });
+}
+
+// The sidebar-mode toolbar is one row tall; once commands wrap past it the button
+// offers "More (n)" to show them, then "Less" to fold them away again
+function _sbFitToolbar() {
+  const ribbon = $('#ribbon');
+  const tops = [...$$('.ribbon-page.active button, .ribbon-page.active .pos-ribbon-stats')]
+    .filter(el => el.offsetParent)
+    .map(el => el.getBoundingClientRect().top);
+  const firstRow = Math.min(...tops);
+  const extra = tops.filter(top => top - firstRow > 20).length;
+  const open = ribbon.classList.contains('sb-tools-open');
+  ribbon.classList.toggle('sb-tools-overflow', extra > 0 && $('#app-shell').classList.contains('sidebar-mode'));
+  ribbon.style.setProperty('--sb-tools-h', `${$('#ribbon-body').scrollHeight}px`);
+  const more = $('#sb-tools-more');
+  more.querySelector('span').textContent = open ? 'Less' : `More (${extra})`;
+  more.title = open ? 'Show fewer actions' : `Show ${extra} more action${extra === 1 ? '' : 's'}`;
+  more.setAttribute('aria-expanded', open);
+}
+
+// The selected row is the open sub-menu's current page, or the tab itself when it has none
+// showing. Extras come last, so a view like Leave Rules wins over the tab it sits on.
+function _sbSelectedRow() {
+  const item = $('.sb-nav-item.active');
+  const sub = item && $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"].open`);
+  const rows = sub ? [...sub.querySelectorAll('.sb-sub-item.active')].filter(el => el.style.display !== 'none') : [];
+  return rows.pop() || item;
+}
+
+// One highlight glides between rows rather than each row lighting up on its own. It chases
+// its row frame by frame, since a sub-menu opening above can move that row mid-flight.
+const _sbPill = { row:null, x:0, y:0, w:0, h:0, last:0, until:0, frame:0 };
+const _sbCalm = matchMedia('(prefers-reduced-motion: reduce)');
+
+function _sbPillStep(now) {
+  const p = _sbPill, pill = $('#sb-pill');
+  p.frame = 0;
+  if (!p.row?.offsetParent) { pill.classList.remove('on'); return; }
+  const to = { x:p.row.offsetLeft, y:p.row.offsetTop, w:p.row.offsetWidth, h:p.row.offsetHeight };
+  const dt = Math.min(Math.max(now - p.last, 0), 34);
+  const pull = pill.classList.contains('on') && !_sbCalm.matches ? 1 - Math.exp(-dt / 62) : 1;
+  p.last = now;
+  let settled = true;
+  Object.keys(to).forEach(k => {
+    p[k] += (to[k] - p[k]) * pull;
+    if (Math.abs(to[k] - p[k]) < .3) p[k] = to[k]; else settled = false;
+  });
+  pill.style.transform = `translate(${p.x}px, ${p.y}px)`;
+  pill.style.width = `${p.w}px`;
+  pill.style.height = `${p.h}px`;
+  pill.classList.add('on');
+  if (!settled || now < p.until) p.frame = requestAnimationFrame(_sbPillStep);
+}
+
+function _sbGlide() {
+  const p = _sbPill;
+  p.row = _sbSelectedRow();
+  $$('#sidebar-nav .sb-selected').forEach(el => el.classList.toggle('sb-selected', el === p.row));
+  p.row?.classList.add('sb-selected');
+  p.until = performance.now() + 420;  // outlasts the sub-menu's open/close
+  if (p.frame) return;
+  p.last = performance.now();
+  p.frame = requestAnimationFrame(_sbPillStep);
+}
+
+function _sbWatch() {
+  const observer = new MutationObserver(() => { _sbSync(); _sbFitToolbar(); _sbGlide(); });
+  const bars = new Set(_sbEntries.map(e => e.source()?.parentElement).filter(Boolean));
+  [...bars, $('#ribbon-tabs'), $('#ribbon-body')].forEach(el => observer.observe(el, {
+    subtree: true, childList: true, characterData: true,
+    attributes: true, attributeFilter: ['class', 'style', 'hidden'],
+  }));
+  new ResizeObserver(_sbFitToolbar).observe($('#ribbon-body'));
+
+  $('#sb-tools-more').addEventListener('click', async () => {
+    const open = $('#ribbon').classList.toggle('sb-tools-open');
+    _sbFitToolbar();
+    if (state.config) state.config.sidebar_tools_open = open;
+    await window.electronAPI.setConfig({ sidebar_tools_open: open });
   });
 }
 
 function _sbNavExpand(tabName) {
   $$('.sb-nav-item[data-tab]').forEach(item => {
     const isTarget = item.dataset.tab === tabName;
-    const sub = $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"]`);
-    if (isTarget) {
-      item.classList.add('expanded');
-      if (sub) sub.classList.add('open');
-    } else {
-      item.classList.remove('expanded');
-      if (sub) sub.classList.remove('open');
-    }
+    item.classList.toggle('expanded', isTarget);
+    $(`.sb-sub-nav[data-sub-of="${item.dataset.tab}"]`)?.classList.toggle('open', isTarget);
   });
-}
-
-function _sbSubActivate(tab, view) {
-  $$('.sb-sub-item').forEach(i => {
-    i.classList.toggle('active', i.dataset.tab === tab && i.dataset.subView === view);
-  });
-}
-
-function _sbNavSubSwitch(tab, view) {
-  if (tab === 'home')            switchHomeView(view);
-  else if (tab === 'sales')      _salSwitchView(view);
-  else if (tab === 'inventory')  switchInvView(view);
-  else if (tab === 'finance')    switchFinView(view);
-  else if (tab === 'hr')         switchHrView(view);
-  else if (tab === 'services')   switchSvcView(view);
-  else if (tab === 'restaurant') switchRstView(view);
-  else if (tab === 'mail')       window.switchMailView?.(view);
-  else if (tab === 'crm')        window.switchCrmView?.(view);
-  else if (tab === 'projects')   window.switchPmView?.(view);
-  else if (tab === 'my-projects') window.switchMpView?.(view);
-  else if (tab === 'ecommerce')  window.switchEcomView?.(view);
-  _sbSubActivate(tab, view);
+  _sbGlide();
+  // Once open, bring a sub-menu near the bottom of the list into view
+  setTimeout(() => {
+    $(`.sb-sub-nav[data-sub-of="${tabName}"].open`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, 340);
 }
 
 _buildSidebarSubNavs();
+_sbWatch();
 
 // ── Sidebar / Ribbon layout mode ───────────────────────────────────────────
 function _syncSidebarActive(tabName) {
@@ -416,8 +488,9 @@ function _syncSidebarActive(tabName) {
 function _applyLayoutMode(mode) {
   const isSidebar = mode === 'sidebar';
   $('#app-shell').classList.toggle('sidebar-mode', isSidebar);
+  $('#ribbon').classList.toggle('sb-tools-open', !!state.config?.sidebar_tools_open);
   const activeTab = $$('.ribbon-tab.active')[0]?.dataset.tab;
-  if (activeTab) _syncSidebarActive(activeTab);
+  if (activeTab) { _syncSidebarActive(activeTab); _sbNavExpand(activeTab); }
 }
 
 async function _toggleLayoutMode() {
@@ -582,14 +655,20 @@ function activateTab(tabName) {
 
 // If ribbon.json was preloaded, render from it; otherwise fall through to hardcoded HTML
 if (window._ribbonJson) { _renderRibbonFromJson(window._ribbonJson); }
+// The sidebar-mode toolbar hides these line breaks, so "Open<br>POS" needs a space to fall back on
+$$('.ribbon-btn-lg br').forEach(br => br.before(' '));
 _initRibbonTabListeners();
 $$('.sb-nav-item[data-tab]').forEach(item => {
-  item.addEventListener('click', () => {
+  item.addEventListener('click', (e) => {
     const tab = item.dataset.tab;
+    const sub = $(`.sb-sub-nav[data-sub-of="${tab}"]`);
+    // The chevron only folds a section, so its pages can be reached without loading the tab first
+    if (sub && (item.classList.contains('active') || e.target.closest('.sb-nav-chevron'))) {
+      sub.classList.toggle('open', item.classList.toggle('expanded'));
+      _sbGlide();
+      return;
+    }
     activateTab(tab);
-    // Activate first visible sub-item when switching to a tab with sub-nav
-    const firstSub = $(`.sb-sub-item[data-tab="${tab}"]`);
-    if (firstSub) _sbSubActivate(tab, firstSub.dataset.subView);
   });
 });
 $('#sidebar-file-btn').addEventListener('click', () => openBackstage('new'));
@@ -6244,6 +6323,7 @@ async function init() {
 // before applyFeatureVisibility() runs.
 function setFeaturesLoading(on) {
   $('#app-shell')?.classList.toggle('features-loading', !!on);
+  _sbGlide();
 }
 
 function showLogin() {
@@ -6801,10 +6881,6 @@ function applyFeatureVisibility() {
     tab.style.display = visible ? '' : 'none';
     tab.dataset.rbcFeature = visible ? '1' : '0';
   });
-  $$('.sb-nav-item[data-tab]').forEach(item => {
-    const show = tabFeatures[item.dataset.tab];
-    item.style.display = (show === undefined || show) ? '' : 'none';
-  });
 
   // ── Home Overview shortcut cards — hide a whole section when its feature isn't installed ──
   // data-hog-feature may list several space-separated keys (OR'd) for a
@@ -6821,9 +6897,6 @@ function applyFeatureVisibility() {
       const visible = tab.dataset.tab === 'event-mgmt';
       tab.style.display = visible ? '' : 'none';
       tab.dataset.rbcFeature = visible ? '1' : '0';
-    });
-    $$('.sb-nav-item[data-tab]').forEach(item => {
-      item.style.display = item.dataset.tab === 'event-mgmt' ? '' : 'none';
     });
     if (_activeTab() !== 'event-mgmt') activateTab('event-mgmt');
   }
@@ -14410,7 +14483,7 @@ $('#hrp-barcodes')?.addEventListener('click',    () => { if (!hasFeature('produc
 $('#rb-home-pos').addEventListener('click',           () => activateTab('pos'));
 $('#rb-home-new-sale').addEventListener('click',      () => { activateTab('pos'); });
 $('#rb-home-daily-summary').addEventListener('click', () => { activateTab('home'); switchHomeView('today'); });
-$('#rb-home-dashboard').addEventListener('click',     () => activateTab('home'));
+$('#rb-home-dashboard').addEventListener('click',     () => { activateTab('home'); [...$$('.home-tab-btn')].find(b => b.style.display !== 'none')?.click(); });
 $('#rb-home-analytics').addEventListener('click',     () => { activateTab('home'); switchHomeView('analytics'); });
 $('#rb-home-orders').addEventListener('click',        () => { activateTab('home'); switchHomeView('orders'); });
 $('#rb-home-customers').addEventListener('click',     () => toast('Customers coming soon', 'info'));
@@ -70258,7 +70331,6 @@ const TeamProfile = (() => {
     $$('#panel-projects [data-pmsub]').forEach(b => b.classList.toggle('active', b.dataset.pmsub === view));
     const el = $('#pm-overview-view'); if (el) el.style.display = view === 'overview' ? 'flex' : 'none';
     const el2 = $('#pm-projects-view'); if (el2) el2.style.display = view === 'projects' ? 'flex' : 'none';
-    _sbSubActivate('projects', view);
     if (!load) return;
     if (view === 'overview') loadPmOverview();
     if (view === 'projects') loadPmProjectsView();
@@ -72587,7 +72659,6 @@ const TeamProfile = (() => {
   async function switchMpView(view, { refresh = false } = {}) {
     mp.view = view;
     $$('#pm-mine-view [data-mpsub]').forEach(b => b.classList.toggle('active', b.dataset.mpsub === view));
-    _sbSubActivate('my-projects', view);
     ['overview', 'tasks', 'board', 'calendar', 'inbox', 'achievements'].forEach(v => {
       const el = $(`#mp-${v}-view`);
       if (el) el.style.display = v === view ? 'flex' : 'none';

@@ -124,7 +124,6 @@ const Ecom = (() => {
                     template: '#ecom-template-view', slider: '#ecom-slider-view', payments: '#ecom-payments-view' };
     Object.entries(views).forEach(([k, sel]) => $(sel)?.classList.toggle('active', k === view));
     $$('[data-ecomview]').forEach(b => b.classList.toggle('active', b.dataset.ecomview === view));
-    if (typeof _sbSubActivate === 'function') _sbSubActivate('ecommerce', view);
     if (view === 'dashboard') loadDashboard();
     if (view === 'orders')    loadOrders();
     if (view === 'products')  loadListings();
