@@ -10004,12 +10004,21 @@ function showAlert(el, msg) {
 }
 
 // ── Unauthorized auto-logout ───────────────────────────────────────────────
+// Several requests can 401 at once (startup / background sync) — handle only the first,
+// and ignore late 401s that arrive after we've already logged out.
+let _unauthorizedHandling = false;
 window.addEventListener('api-unauthorized', async () => {
-  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
-  state.config = await window.electronAPI.getConfig();
-  state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
-  showLogin();
-  toast('Session expired — please sign in again', 'error');
+  if (_unauthorizedHandling || !state.config?.token) return;
+  _unauthorizedHandling = true;
+  try {
+    await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
+    state.config = await window.electronAPI.getConfig();
+    state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
+    showLogin();
+    toast('Session expired — please sign in again', 'error');
+  } finally {
+    _unauthorizedHandling = false;
+  }
 });
 
 // ── Profile dropdown ───────────────────────────────────────────────────────
@@ -11164,6 +11173,7 @@ async function _performSignOut() {
   closeProfileMenu();
   _syncStop();
   await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
+  state.config = await window.electronAPI.getConfig();
   state.posTabs = []; state.activePosTabId = null; state._nextPosTabId = 1;
   _billingAlert.dismissed = false;
   showLogin();
