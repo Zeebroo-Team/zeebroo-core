@@ -115,7 +115,40 @@ class PosCrmLeadImportApiController extends Controller
         return response()->json(['data' => $this->imports->present($import)]);
     }
 
-    /** POST /api/v1/pos/crm/lead-imports/{import}/preview — { mapping[], source, project_id?, duplicates } */
+    /**
+     * POST /api/v1/pos/crm/lead-imports/{import}/departments — { mapping[] }
+     * The rows bundled by the department column, with a suggested department and relation for
+     * each bundle, every department with its relations, and what the user may create.
+     */
+    public function departments(Request $request, int $importId): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->abortUnlessImporter($request, $business);
+        $import   = $this->ownImport($request, $business, $importId);
+        if (! $import->isPending()) {
+            throw ValidationException::withMessages(['import' => 'This import has already been run.']);
+        }
+
+        $data = $request->validate([
+            'mapping'   => ['required', 'array'],
+            'mapping.*' => ['nullable', 'string', 'max:40'],
+        ]);
+
+        $result = $this->imports->departmentGroups($import, $this->mapping($data), $this->canUse($access));
+
+        return response()->json([
+            'data' => $result + [
+                'can_create_departments' => $access->isAdmin,
+                'can_create_relations'   => $access->can('relations_create'),
+            ],
+        ]);
+    }
+
+    /**
+     * POST /api/v1/pos/crm/lead-imports/{import}/preview — { mapping[], source, project_id?, duplicates, groups? }
+     * With "groups" (one per department bundle: key, skip?, department_id? | new_department?,
+     * project_id? | new_relation?) the import is split by the department column.
+     */
     public function preview(Request $request, int $importId): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -126,26 +159,41 @@ class PosCrmLeadImportApiController extends Controller
         }
 
         $data = $request->validate([
-            'mapping'    => ['required', 'array'],
-            'mapping.*'  => ['nullable', 'string', 'max:40'],
-            'source'     => ['required', Rule::in(array_keys(Lead::SOURCES))],
-            'project_id' => ['nullable', 'integer'],
-            'duplicates' => ['required', Rule::in(array_keys(LeadImportService::DUPLICATE_MODES))],
+            'mapping'                => ['required', 'array'],
+            'mapping.*'              => ['nullable', 'string', 'max:40'],
+            'source'                 => ['required', Rule::in(array_keys(Lead::SOURCES))],
+            'project_id'             => ['nullable', 'integer'],
+            'duplicates'             => ['required', Rule::in(array_keys(LeadImportService::DUPLICATE_MODES))],
+            'groups'                 => ['nullable', 'array', 'max:500'],
+            'groups.*.key'           => ['required', 'string', 'max:120'],
+            'groups.*.skip'          => ['nullable', 'boolean'],
+            'groups.*.department_id' => ['nullable', 'integer'],
+            'groups.*.new_department'=> ['nullable', 'string', 'max:100'],
+            'groups.*.project_id'    => ['nullable', 'integer'],
+            'groups.*.new_relation'  => ['nullable', 'string', 'max:150'],
         ]);
 
-        $project = $this->targetPipeline($business, $access, $data['project_id'] ?? null);
-        $result  = $this->imports->preview(
+        $mapping = $this->mapping($data);
+        $split   = ! empty($data['groups']);
+        $plan    = $split ? $this->imports->resolvePlan($import, $mapping, $data['groups'], $this->canUse($access)) : null;
+        if ($split) {
+            $this->authorizePlan($access, $plan);
+        }
+
+        $result = $this->imports->preview(
             $import,
-            array_map(fn ($v) => (string) $v, array_values($data['mapping'])),
+            $mapping,
             $data['source'],
-            $project,
+            $split ? null : $this->targetPipeline($business, $access, $data['project_id'] ?? null),
             $data['duplicates'],
+            $plan,
         );
 
         return response()->json([
             'data' => [
                 'import' => $this->imports->present($import->fresh(['project', 'user'])),
                 'totals' => $result['totals'],
+                'groups' => $result['groups'],
                 'rows'   => $result['rows'],
             ],
         ]);
@@ -160,8 +208,12 @@ class PosCrmLeadImportApiController extends Controller
         if ($import->status !== LeadImport::STATUS_PREVIEWED) {
             throw ValidationException::withMessages(['import' => $import->isPending() ? 'Preview the import first.' : 'This import has already been run.']);
         }
-        // The pipeline is checked again: access may have changed since the preview
-        $this->targetPipeline($business, $access, $import->project_id);
+        // The pipeline(s) are checked again: access may have changed since the preview
+        if (! empty($import->options['groups'])) {
+            $this->authorizePlan($access, $import->options['groups'], $business);
+        } else {
+            $this->targetPipeline($business, $access, $import->project_id);
+        }
 
         $import = $this->imports->start($import)->load(['project', 'user']);
         $queued = $import->status === LeadImport::STATUS_QUEUED;
@@ -217,6 +269,39 @@ class PosCrmLeadImportApiController extends Controller
 
         return "Import finished: {$import->created_count} new leads, {$import->duplicate_count} added to existing leads, "
             . "{$import->skipped_count} skipped, {$import->failed_count} failed.";
+    }
+
+    /** @return list<string> */
+    private function mapping(array $data): array
+    {
+        return array_map(fn ($v) => (string) $v, array_values($data['mapping']));
+    }
+
+    /** @return callable(Project): bool */
+    private function canUse(CrmAccess $access): callable
+    {
+        return fn (Project $p) => $this->policy->canCreateLeadIn($access, $p);
+    }
+
+    /**
+     * 403 unless the user may do everything a split import's plan asks: create departments
+     * (admins), create relations, and add leads to each existing relation.
+     */
+    private function authorizePlan(CrmAccess $access, array $plan, ?Business $business = null): void
+    {
+        $groups = array_filter($plan, fn ($g) => ! ($g['skip'] ?? false));
+
+        $this->abortUnlessAllowed(
+            (! collect($groups)->contains('new_department', true) || $access->isAdmin)
+            && (! collect($groups)->contains('new_relation', true) || $access->can('relations_create'))
+        );
+
+        if ($business !== null) {
+            $ids = array_filter(array_column($groups, 'project_id'));
+            foreach (Project::query()->where('business_id', $business->id)->whereIn('id', $ids)->get() as $project) {
+                $this->abortUnlessAllowed($this->policy->canCreateLeadIn($access, $project));
+            }
+        }
     }
 
     /** Pipelines the user may add leads to. */

@@ -636,7 +636,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/lead-imports/template',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'template'])->name('crm.lead-imports.template');
     Route::post  ('crm/lead-imports',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'store'])   ->name('crm.lead-imports.store');
     Route::get   ('crm/lead-imports/{import}',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'show'])    ->whereNumber('import')->name('crm.lead-imports.show');
-    Route::post  ('crm/lead-imports/{import}/preview', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'preview']) ->whereNumber('import')->name('crm.lead-imports.preview');
+    Route::post  ('crm/lead-imports/{import}/departments', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'departments'])->whereNumber('import')->name('crm.lead-imports.departments');
+    Route::post  ('crm/lead-imports/{import}/preview',[\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'preview']) ->whereNumber('import')->name('crm.lead-imports.preview');
     Route::post  ('crm/lead-imports/{import}/run',     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'run'])     ->whereNumber('import')->name('crm.lead-imports.run');
     Route::get   ('crm/lead-imports/{import}/errors',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'errors'])  ->whereNumber('import')->name('crm.lead-imports.errors');
     Route::delete('crm/lead-imports/{import}',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'destroy']) ->whereNumber('import')->name('crm.lead-imports.destroy');

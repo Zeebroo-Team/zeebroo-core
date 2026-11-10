@@ -46,8 +46,11 @@ class LeadIntakeService
      * @param  array<string, mixed>  $data       lead fields as LeadService::create() takes them
      * @param  string                $sourceKey  a crm_lead_sources key (manual, web_form, csv, …) or a Lead::SOURCES key
      * @param  Business|Project      $into       the business, or the pipeline the lead was entered in
+     * @param  bool                  $direct     keep the lead in $into instead of routing it to the intake
+     *                                           (a department-split import already says where each lead goes);
+     *                                           duplicates are then checked in $into only
      */
-    public function capture(array $data, string $sourceKey, Business|Project $into, ?int $userId = null): IntakeResult
+    public function capture(array $data, string $sourceKey, Business|Project $into, ?int $userId = null, bool $direct = false): IntakeResult
     {
         $target   = $into instanceof Project ? $into : null;
         $business = $into instanceof Business ? $into : $into->business;
@@ -59,8 +62,10 @@ class LeadIntakeService
             return new IntakeResult($this->leads->create($target, $data, $userId), created: true);
         }
 
-        return DB::transaction(function () use ($data, $business, $target, $userId) {
-            $pipelines = $target === null ? null : $this->duplicatePipelines($target);
+        $direct = $direct && $target !== null;
+
+        return DB::transaction(function () use ($data, $business, $target, $userId, $direct) {
+            $pipelines = $target === null ? null : ($direct ? [$target->id] : $this->duplicatePipelines($target));
             $matches   = $this->duplicates->matchingLeads($business->id, $data['phone'], $data['email'], null, $pipelines);
 
             $open = $matches->first(fn (Lead $lead) => $lead->isOpen());
@@ -68,7 +73,7 @@ class LeadIntakeService
                 return new IntakeResult($this->logRepeatEnquiry($open, $data, $userId), created: false);
             }
 
-            $project = $this->pipelineFor($business, $target, $data);
+            $project = $direct ? $target : $this->pipelineFor($business, $target, $data);
             $routed  = $target === null || $project->id !== $target->id;
 
             if ($routed) {

@@ -15,6 +15,8 @@ use Modules\CRM\Models\LeadImport;
 use Modules\CRM\Models\Project;
 use Modules\CRM\Support\LeadImportReader;
 use Modules\CRM\Support\PhoneNormalizer;
+use Modules\HRManagement\Models\Department;
+use Modules\HRManagement\Services\DepartmentService;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 
 /**
@@ -28,6 +30,12 @@ use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
  * new lead for review). Each imported row is remembered by a key per pipeline, so uploading a
  * newer export of the same form only brings in the new responses, while the same people can
  * still be imported into another pipeline.
+ *
+ * A file with a department column can be split: the rows are bundled per department value, and
+ * each bundle goes into a department (an existing one, or one created for it) and one of that
+ * department's relations (or a new one, named after the department and the file). Nothing is
+ * created until the import runs; split rows land straight in their relation, without the
+ * marketing intake routing, and count as duplicates only within it.
  */
 class LeadImportService
 {
@@ -48,6 +56,7 @@ class LeadImportService
         'estimated_value'  => 'Estimated value',
         'notes'            => 'Notes',
         'external_id'      => 'Lead ID (from the source)',
+        'department'       => 'Department',
     ];
 
     /** Keep the column as a "Column: value" line in the notes. */
@@ -78,6 +87,7 @@ class LeadImportService
         'notes' => 'notes', 'note' => 'notes', 'comments' => 'notes', 'comment' => 'notes', 'message' => 'notes', 'remarks' => 'notes',
         'external id' => 'external_id', 'lead id' => 'external_id', 'leadgen id' => 'external_id',
         'estimated value' => 'estimated_value', 'deal value' => 'estimated_value',
+        'department' => 'department', 'dept' => 'department', 'department name' => 'department',
     ];
 
     /** Header words => field, for free-text questions such as "What is your phone number?". */
@@ -101,6 +111,9 @@ class LeadImportService
         private readonly LeadIntakeService $intake,
         private readonly DuplicateLeadService $duplicates,
         private readonly CrmSettingsService $settings,
+        private readonly CrmOrgService $org,
+        private readonly ProjectService $projects,
+        private readonly DepartmentService $departments,
     ) {}
 
     // ── Upload ────────────────────────────────────────────────────────────
@@ -202,36 +215,76 @@ class LeadImportService
     /**
      * Save the mapping and check every row without saving anything.
      *
-     * @param  list<string>  $mapping
-     * @return array{rows: list<array>, totals: array<string, int>}
+     * With a department plan (see resolvePlan) the rows are checked against the relation of
+     * their department bundle and $project is not used.
+     *
+     * @param  list<string>      $mapping
+     * @param  list<array>|null  $plan
+     * @return array{rows: list<array>, totals: array<string, int>, groups: ?list<array>}
      */
-    public function preview(LeadImport $import, array $mapping, string $source, Project $project, string $duplicateMode): array
+    public function preview(LeadImport $import, array $mapping, string $source, ?Project $project, string $duplicateMode, ?array $plan = null): array
     {
         $table   = $this->readImport($import);
         $mapping = $this->validMapping($mapping, $table['headers']);
+        if ($plan === null && $project === null) {
+            throw ValidationException::withMessages(['project_id' => 'Choose the relation to import into.']);
+        }
 
         $import->update([
             'mapping'    => $mapping,
             'source'     => $source,
-            'project_id' => $project->id,
-            'options'    => ['duplicates' => $duplicateMode, 'day_first' => $this->dayFirst($table['rows'], $mapping, $import->format)],
+            'project_id' => $plan === null ? $project->id : $this->planProjectId($plan),
+            'options'    => array_filter([
+                'duplicates' => $duplicateMode,
+                'day_first'  => $this->dayFirst($table['rows'], $mapping, $import->format),
+                'groups'     => $plan,
+            ], fn ($v) => $v !== null),
             'status'     => LeadImport::STATUS_PREVIEWED,
             'total_rows' => count($table['rows']),
         ]);
 
         $context   = $this->context($import, $table['headers']);
-        $imported  = $this->importedKeys($import->business_id, $project->id, array_map(fn ($cells) => $this->evaluate($cells, $context)['key'], $table['rows']));
-        $pipelines = $this->intake->duplicatePipelines($project);
+        $evaluated = array_map(fn ($cells) => $this->evaluate($cells, $context), $table['rows']);
+        $groups    = $plan === null ? [] : array_column($plan, null, 'key');
 
-        $rows     = [];
-        $seenKeys = [];
-        $contacts = [];
-        foreach ($table['rows'] as $line => $cells) {
-            $row = $this->evaluate($cells, $context);
-            [$status, $reason] = $this->previewStatus($import, $row, $line, $imported, $seenKeys, $contacts, $duplicateMode, $pipelines);
+        // Each relation the rows go into: what is already in it, and the rows and contacts seen so far
+        $targets = [];
+        foreach ($evaluated as $line => $row) {
+            $group = $plan === null ? null : ($groups[$this->groupKey($row['department'])] ?? null);
+            if ($plan !== null && ($group === null || $group['skip'])) {
+                continue;
+            }
+            $target = $plan === null ? '*' : $this->planTarget($group);
+            $targets[$target] ??= ['keys' => [], 'project_id' => $plan === null ? $project->id : $group['project_id']];
+            $targets[$target]['keys'][] = $row['key'];
+        }
+        foreach ($targets as &$t) {
+            // A relation created by this import holds nothing yet
+            $t['imported']  = $t['project_id'] === null ? [] : $this->importedKeys($import->business_id, $t['project_id'], $t['keys']);
+            $t['pipelines'] = $t['project_id'] === null ? [] : ($plan === null ? $this->intake->duplicatePipelines($project) : [$t['project_id']]);
+            $t['seen']      = [];
+            $t['contacts']  = [];
+        }
+        unset($t);
+
+        $rows        = [];
+        $empty       = ['total' => 0, 'ok' => 0, 'duplicate' => 0, 'error' => 0, 'skipped' => 0];
+        $totals      = $empty;
+        $groupTotals = [];
+        foreach ($evaluated as $line => $row) {
+            $group = $plan === null ? null : ($groups[$this->groupKey($row['department'])] ?? null);
+
+            if ($plan !== null && ($group === null || $group['skip'])) {
+                [$status, $reason] = ['skipped', 'Department not imported.'];
+            } else {
+                $t = &$targets[$plan === null ? '*' : $this->planTarget($group)];
+                [$status, $reason] = $this->previewStatus($import, $row, $line, $t['imported'], $t['seen'], $t['contacts'], $duplicateMode, $t['pipelines']);
+                unset($t);
+            }
 
             $rows[] = [
                 'row'      => $line,
+                'group'    => $group['key'] ?? null,
                 'name'     => $row['data']['name'],
                 'phone'    => $row['data']['phone'],
                 'email'    => $row['data']['email'],
@@ -239,14 +292,323 @@ class LeadImportService
                 'reason'   => $reason,
                 'warnings' => $row['warnings'],
             ];
+
+            $totals['total']++;
+            $totals[$status]++;
+            if ($group !== null) {
+                $groupTotals[$group['key']] ??= $empty;
+                $groupTotals[$group['key']]['total']++;
+                $groupTotals[$group['key']][$status]++;
+            }
         }
 
-        $totals = ['total' => count($rows), 'ok' => 0, 'duplicate' => 0, 'error' => 0, 'skipped' => 0];
-        foreach ($rows as $r) {
-            $totals[$r['status']]++;
+        return [
+            'rows'   => $rows,
+            'totals' => $totals,
+            'groups' => $plan === null ? null : array_map(fn ($g) => $g + ['totals' => $groupTotals[$g['key']] ?? $empty], $plan),
+        ];
+    }
+
+    // ── Department split ──────────────────────────────────────────────────
+
+    /**
+     * The rows bundled by the department column, each with a suggested department (one whose
+     * name matches) and relation (one named for this file, else the department's main one),
+     * and a name for a new relation the user can change.
+     *
+     * @param  callable(Project): bool  $canUse  whether the user may add leads to a relation
+     * @return array{column: int, groups: list<array>, departments: list<array>}
+     */
+    public function departmentGroups(LeadImport $import, array $mapping, callable $canUse): array
+    {
+        $table   = $this->readImport($import);
+        $mapping = $this->validMapping($mapping, $table['headers']);
+        $column  = $this->departmentColumn($mapping);
+
+        $departments = $this->departmentChoices($import->business_id, $canUse);
+        $taken       = Project::query()->where('business_id', $import->business_id)->pluck('name')
+            ->mapWithKeys(fn ($name) => [mb_strtolower($name) => true])->all();
+
+        $groups = [];
+        foreach ($this->fileGroups($table['rows'], $column) as $key => $group) {
+            $department = $this->matchDepartment($group['value'], $departments);
+            $base       = $this->relationNameFor($group['value'], $import->file_name);
+            $relations  = $department['relations'] ?? [];
+            $relation   = collect($relations)->first(fn ($r) => mb_strtolower($r['name']) === mb_strtolower($base)) ?? ($relations[0] ?? null);
+            $name       = $this->freeRelationName($base, $taken);
+            $taken[mb_strtolower($name)] = true;
+
+            $groups[] = [
+                'key'           => $key,
+                'value'         => $group['value'],
+                'rows'          => $group['rows'],
+                'department_id' => $department['id'] ?? null,
+                'project_id'    => $relation['id'] ?? null,
+                'relation_name' => $name,
+            ];
         }
 
-        return ['rows' => $rows, 'totals' => $totals];
+        return ['column' => $column, 'groups' => $groups, 'departments' => $departments];
+    }
+
+    /**
+     * Check the department and relation chosen for each bundle of the file and turn them into
+     * the plan kept on the import. A bundle either goes into an existing department or a new
+     * one (by name), and into an existing relation of that department or a new one (by name);
+     * a bundle with no department can go into any relation. "skip" leaves the bundle out.
+     *
+     * @param  list<array>              $choices  {key, skip?, department_id?, new_department?, project_id?, new_relation?}
+     * @param  callable(Project): bool  $canUse
+     * @return list<array>
+     */
+    public function resolvePlan(LeadImport $import, array $mapping, array $choices, callable $canUse): array
+    {
+        $table   = $this->readImport($import);
+        $mapping = $this->validMapping($mapping, $table['headers']);
+        $column  = $this->departmentColumn($mapping);
+
+        $choices     = collect($choices)->keyBy(fn ($c) => (string) ($c['key'] ?? ''));
+        $departments = Department::query()->where('business_id', $import->business_id)->get(['id', 'name'])->keyBy('id');
+        $projects    = Project::query()->where('business_id', $import->business_id)->get()->keyBy('id');
+        $fail        = fn (string $message) => throw ValidationException::withMessages(['groups' => $message]);
+
+        $plan         = [];
+        $newRelations = [];   // lower-case new relation name => lower-case department name
+        foreach ($this->fileGroups($table['rows'], $column) as $key => $group) {
+            $label  = $group['value'] === '' ? 'rows with no department' : '"' . $group['value'] . '" rows';
+            $choice = $choices->get($key) ?? $fail("Choose where the {$label} go.");
+            $entry  = [
+                'key' => $key, 'value' => $group['value'], 'rows' => $group['rows'], 'skip' => false,
+                'department_id' => null, 'department_name' => null, 'new_department' => false,
+                'project_id' => null, 'relation_name' => null, 'new_relation' => false,
+            ];
+
+            if (! empty($choice['skip'])) {
+                $plan[] = ['skip' => true] + $entry;
+                continue;
+            }
+
+            $newDepartment = mb_substr(trim((string) ($choice['new_department'] ?? '')), 0, 100);
+            if ($newDepartment !== '') {
+                if ($same = $departments->first(fn (Department $d) => mb_strtolower($d->name) === mb_strtolower($newDepartment))) {
+                    $fail("A department named \"{$same->name}\" already exists — choose it for the {$label}.");
+                }
+                $entry['department_name'] = $newDepartment;
+                $entry['new_department']  = true;
+            } elseif (! empty($choice['department_id'])) {
+                $department = $departments->get((int) $choice['department_id']) ?? $fail("The department chosen for the {$label} no longer exists.");
+                $entry['department_id']   = $department->id;
+                $entry['department_name'] = $department->name;
+            }
+
+            $newRelation = mb_substr(trim((string) ($choice['new_relation'] ?? '')), 0, 150);
+            if ($newRelation !== '') {
+                if ($projects->contains(fn (Project $p) => mb_strtolower($p->name) === mb_strtolower($newRelation))) {
+                    $fail("A relation named \"{$newRelation}\" already exists — choose it, or give the new relation another name.");
+                }
+                $owner = mb_strtolower((string) $entry['department_name']);
+                if (($newRelations[mb_strtolower($newRelation)] ?? $owner) !== $owner) {
+                    $fail("The new relation \"{$newRelation}\" is used for two departments — give each its own name.");
+                }
+                $newRelations[mb_strtolower($newRelation)] = $owner;
+                $entry['relation_name'] = $newRelation;
+                $entry['new_relation']  = true;
+            } else {
+                $project = ! empty($choice['project_id']) ? $projects->get((int) $choice['project_id']) : null;
+                if ($project === null) {
+                    $fail("Choose the relation for the {$label}, or create one.");
+                }
+                if ($entry['new_department'] || ($entry['department_id'] !== null && (int) $project->department_id !== $entry['department_id'])) {
+                    $fail("The relation \"{$project->name}\" is not in the {$entry['department_name']} department.");
+                }
+                if (! $canUse($project)) {
+                    $fail("You cannot add leads to the relation \"{$project->name}\".");
+                }
+                $entry['project_id']    = $project->id;
+                $entry['relation_name'] = $project->name;
+                $entry['department_name'] ??= $project->department_id ? $departments->get($project->department_id)?->name : null;
+            }
+
+            $plan[] = $entry;
+        }
+
+        if (collect($plan)->every(fn ($g) => $g['skip'])) {
+            $fail('Every department is set to "Don\'t import" — choose where at least one goes.');
+        }
+
+        return $plan;
+    }
+
+    /** @return array<string, array{value: string, rows: int}> bundles keyed by groupKey, biggest first, "no department" last */
+    private function fileGroups(array $rows, int $column): array
+    {
+        $groups = [];
+        foreach ($rows as $cells) {
+            $value = $this->cleanDepartment((string) ($cells[$column] ?? ''));
+            $key   = $this->groupKey($value);
+            $groups[$key] ??= ['value' => $value, 'rows' => 0];
+            $groups[$key]['rows']++;
+        }
+
+        uasort($groups, fn ($a, $b) => [$a['value'] === '', -$a['rows'], $a['value']] <=> [$b['value'] === '', -$b['rows'], $b['value']]);
+
+        return $groups;
+    }
+
+    private function cleanDepartment(string $value): string
+    {
+        return mb_substr(trim(preg_replace('/\s+/u', ' ', $value)), 0, 100);
+    }
+
+    /** Prefixed so a department such as "2024" stays a string key. */
+    private function groupKey(string $department): string
+    {
+        return 'd:' . mb_strtolower($department);
+    }
+
+    /** Rows going into the same relation share their duplicate checks. */
+    private function planTarget(array $group): string
+    {
+        return $group['new_relation'] ? 'new:' . mb_strtolower($group['relation_name']) : 'p:' . $group['project_id'];
+    }
+
+    private function planProjectId(array $plan): ?int
+    {
+        return collect($plan)->first(fn ($g) => ! $g['skip'] && $g['project_id'] !== null)['project_id'] ?? null;
+    }
+
+    private function departmentColumn(array $mapping): int
+    {
+        $column = array_search('department', $mapping, true);
+        if ($column === false) {
+            throw ValidationException::withMessages(['mapping' => 'Choose the column that holds the department.']);
+        }
+
+        return $column;
+    }
+
+    /** Every department, with its relations the user may add leads to (main one first). */
+    private function departmentChoices(int $businessId, callable $canUse): array
+    {
+        $relations = Project::query()
+            ->where('business_id', $businessId)
+            ->whereNotNull('department_id')
+            ->orderBy('id')
+            ->get()
+            ->filter(fn (Project $p) => $canUse($p))
+            ->groupBy('department_id');
+
+        return Department::query()
+            ->where('business_id', $businessId)
+            ->orderBy('name')
+            ->get(['id', 'name'])
+            ->map(fn (Department $d) => [
+                'id'        => $d->id,
+                'name'      => $d->name,
+                'relations' => $relations->get($d->id, collect())->map(fn (Project $p) => ['id' => $p->id, 'name' => $p->name])->values()->all(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    /** The same name ignoring case and punctuation, else the longest close one ("Finance" for "Financial"). */
+    private function matchDepartment(string $value, array $departments): ?array
+    {
+        $v = $this->looseName($value);
+        if ($v === '') {
+            return null;
+        }
+
+        $best      = null;
+        $bestScore = 0.0;
+        foreach ($departments as $department) {
+            $n = $this->looseName($department['name']);
+            if ($n === $v) {
+                return $department;
+            }
+            $prefix = strspn($n ^ $v, "\0");
+            $score  = $prefix / max(1, min(strlen($n), strlen($v)));
+            if ($prefix >= 5 && $score >= 0.8 && $score > $bestScore) {
+                [$best, $bestScore] = [$department, $score];
+            }
+        }
+
+        return $best;
+    }
+
+    private function looseName(string $name): string
+    {
+        return preg_replace('/[^a-z0-9]+/', '', mb_strtolower($name));
+    }
+
+    /** "Operations – September Leads" for the Operations rows of September_Leads.csv. */
+    private function relationNameFor(string $department, string $fileName): string
+    {
+        $file = trim(preg_replace('/[\s_]+/u', ' ', pathinfo($fileName, PATHINFO_FILENAME)));
+        $head = $department === '' ? 'No department' : $department;
+
+        return mb_substr($file === '' ? $head : $head . ' – ' . $file, 0, 150);
+    }
+
+    /** @param array<string, true> $taken lower-case names in use */
+    private function freeRelationName(string $base, array $taken): string
+    {
+        $name = $base;
+        for ($i = 2; isset($taken[mb_strtolower($name)]); $i++) {
+            $name = mb_substr($base, 0, 140) . ' (' . $i . ')';
+        }
+
+        return $name;
+    }
+
+    /**
+     * Create the departments and relations the plan asks for (once — a name already created is
+     * reused) and point the plan at them.
+     */
+    private function createPlanTargets(LeadImport $import): void
+    {
+        $business = Business::query()->findOrFail($import->business_id);
+        $plan     = $import->options['groups'];
+        $made     = ['departments' => [], 'relations' => []];
+
+        foreach ($plan as $i => $g) {
+            if ($g['skip']) {
+                continue;
+            }
+
+            if ($g['new_department']) {
+                $department = $made['departments'][mb_strtolower($g['department_name'])] ??=
+                    Department::query()->where('business_id', $business->id)->where('name', $g['department_name'])->first()
+                    ?? $this->departments->create($business, $g['department_name']);
+                $g = array_merge($g, ['department_id' => $department->id, 'department_name' => $department->name, 'new_department' => false, 'created_department' => true]);
+            }
+
+            if ($g['new_relation']) {
+                $project = $made['relations'][mb_strtolower($g['relation_name'])] ??=
+                    Project::query()->where('business_id', $business->id)->where('name', $g['relation_name'])->first()
+                    ?? $this->createRelation($business, $import, $g);
+                $g = array_merge($g, ['project_id' => $project->id, 'relation_name' => $project->name, 'new_relation' => false, 'created_relation' => true]);
+            }
+
+            $plan[$i] = $g;
+        }
+
+        $import->update([
+            'options'    => array_merge($import->options, ['groups' => $plan]),
+            'project_id' => $this->planProjectId($plan),
+        ]);
+    }
+
+    private function createRelation(Business $business, LeadImport $import, array $group): Project
+    {
+        $project = $this->projects->create($business, [
+            'name'        => $group['relation_name'],
+            'description' => 'Leads imported from ' . $import->file_name . '.',
+        ]);
+
+        return $group['department_id'] === null
+            ? $project
+            : $this->org->linkPipeline($business, $this->org->departmentForBusiness($business, $group['department_id']), $project->id);
     }
 
     /** @return array{0: string, 1: ?string} status (ok|duplicate|error|skipped) and why */
@@ -305,13 +667,19 @@ class LeadImportService
         $queue  = $import->total_rows > self::QUEUE_ABOVE_ROWS;
         $status = $queue ? LeadImport::STATUS_QUEUED : LeadImport::STATUS_PROCESSING;
 
-        $claimed = LeadImport::query()
-            ->whereKey($import->id)
-            ->where('status', LeadImport::STATUS_PREVIEWED)
-            ->update(['status' => $status, 'started_at' => now()]);
-        if ($claimed === 0) {
-            throw ValidationException::withMessages(['import' => 'This import has already been started.']);
-        }
+        DB::transaction(function () use ($import, $status) {
+            $locked = LeadImport::query()->whereKey($import->id)->lockForUpdate()->first();
+            if ($locked === null || $locked->status !== LeadImport::STATUS_PREVIEWED) {
+                throw ValidationException::withMessages(['import' => 'This import has already been started.']);
+            }
+
+            // Departments and relations a split import asked for are made now, not at preview
+            if (! empty($locked->options['groups'])) {
+                $this->createPlanTargets($locked);
+            }
+
+            $locked->update(['status' => $status, 'started_at' => now()]);
+        });
 
         if ($queue) {
             RunLeadImportJob::dispatch($import->id);
@@ -327,24 +695,36 @@ class LeadImportService
         $import->update(['status' => LeadImport::STATUS_PROCESSING, 'started_at' => $import->started_at ?? now()]);
 
         try {
-            $project = Project::query()->where('business_id', $import->business_id)->find($import->project_id);
-            if ($project === null) {
-                throw new \RuntimeException('The pipeline for this import no longer exists.');
-            }
+            $plan     = $import->options['groups'] ?? null;
+            $groups   = $plan === null ? [] : array_column($plan, null, 'key');
+            $projects = $this->importProjects($import, $plan);
 
             $table   = $this->readImport($import);
             $context = $this->context($import, $table['headers']);
             $skipDuplicates = ($import->options['duplicates'] ?? 'log') === 'skip';
-            $pipelines = $this->intake->duplicatePipelines($project);
+            $pipelines = [];   // project id => where a row counts as a duplicate
 
-            $counts   = ['created_count' => 0, 'duplicate_count' => 0, 'skipped_count' => 0, 'failed_count' => 0];
-            $errorRows = [];
-            $processed = 0;
+            $counts      = ['created_count' => 0, 'duplicate_count' => 0, 'skipped_count' => 0, 'failed_count' => 0];
+            $groupCounts = [];
+            $errorRows   = [];
+            $processed   = 0;
 
             foreach ($table['rows'] as $line => $cells) {
-                $outcome = $this->importRow($import, $project, $cells, $context, $skipDuplicates, $pipelines);
+                $row   = $this->evaluate($cells, $context);
+                $group = $plan === null ? null : ($groups[$this->groupKey($row['department'])] ?? null);
+
+                if ($plan !== null && ($group === null || $group['skip'])) {
+                    $outcome = ['skipped'];
+                } else {
+                    $project = $projects[$plan === null ? $import->project_id : $group['project_id']];
+                    $pipelines[$project->id] ??= $plan === null ? $this->intake->duplicatePipelines($project) : [$project->id];
+                    $outcome = $this->importRow($import, $project, $row, $skipDuplicates, $pipelines[$project->id], direct: $plan !== null);
+                }
 
                 $counts[$outcome[0] . '_count']++;
+                if ($group !== null) {
+                    $groupCounts[$group['key']][$outcome[0] . '_count'] = ($groupCounts[$group['key']][$outcome[0] . '_count'] ?? 0) + 1;
+                }
                 if ($outcome[0] === 'failed') {
                     $errorRows[] = ['row' => $line, 'cells' => $cells, 'reason' => $outcome[1]];
                 }
@@ -354,9 +734,18 @@ class LeadImportService
                 }
             }
 
+            $options = $import->options;
+            if ($plan !== null) {
+                $options['groups'] = array_map(fn ($g) => array_merge($g, ['counts' => array_merge(
+                    ['created_count' => 0, 'duplicate_count' => 0, 'skipped_count' => 0, 'failed_count' => 0],
+                    $groupCounts[$g['key']] ?? [],
+                )]), $plan);
+            }
+
             $import->update([
                 'status'         => LeadImport::STATUS_COMPLETED,
                 'processed_rows' => $processed,
+                'options'        => $options,
                 'error_rows'     => $errorRows === [] ? null : ['headers' => $table['headers'], 'rows' => $errorRows],
                 'finished_at'    => now(),
             ] + $counts);
@@ -366,10 +755,25 @@ class LeadImportService
         }
     }
 
-    /** @return array{0: string, 1?: string} created|duplicate|skipped|failed, and why it failed */
-    private function importRow(LeadImport $import, Project $project, array $cells, array $context, bool $skipDuplicates, array $pipelines): array
+    /** @return array<int, Project> the relations the import's rows go into, by id */
+    private function importProjects(LeadImport $import, ?array $plan): array
     {
-        $row = $this->evaluate($cells, $context);
+        $ids = $plan === null
+            ? [$import->project_id]
+            : array_column(array_filter($plan, fn ($g) => ! $g['skip']), 'project_id');
+        $ids = array_values(array_unique(array_map('intval', array_filter($ids))));
+
+        $projects = Project::query()->where('business_id', $import->business_id)->whereIn('id', $ids)->get()->keyBy('id')->all();
+        if ($ids === [] || count($projects) !== count($ids)) {
+            throw new \RuntimeException($plan === null ? 'The pipeline for this import no longer exists.' : 'A relation for this import no longer exists.');
+        }
+
+        return $projects;
+    }
+
+    /** @return array{0: string, 1?: string} created|duplicate|skipped|failed, and why it failed */
+    private function importRow(LeadImport $import, Project $project, array $row, bool $skipDuplicates, array $pipelines, bool $direct = false): array
+    {
         if ($row['errors'] !== []) {
             return ['failed', implode(' ', $row['errors'])];
         }
@@ -388,7 +792,7 @@ class LeadImportService
         }
 
         try {
-            $result = $this->intake->capture($row['data'], $row['source'], $project, $import->user_id);
+            $result = $this->intake->capture($row['data'], $row['source'], $project, $import->user_id, $direct);
         } catch (ValidationException $e) {
             return ['failed', implode(' ', $e->validator->errors()->all())];
         } catch (\Throwable $e) {
@@ -471,6 +875,8 @@ class LeadImportService
             'project'         => $import->project ? ['id' => $import->project->id, 'name' => $import->project->name] : null,
             'mapping'         => $import->mapping ?? [],
             'duplicates'      => $import->options['duplicates'] ?? 'log',
+            // Department bundles of a split import, with what each did once run
+            'groups'          => $import->options['groups'] ?? null,
             'status'          => $import->status,
             'total_rows'      => $import->total_rows,
             'processed_rows'  => $import->processed_rows,
@@ -511,13 +917,14 @@ class LeadImportService
             'source'       => $import->source,
             'country_code' => $this->settings->phoneCountryCode($import->business_id),
             'day_first'    => (bool) ($import->options['day_first'] ?? true),
+            'split'        => ! empty($import->options['groups']),
         ];
     }
 
     /**
      * Turn the cells of a row into lead data and say what is wrong with it.
      *
-     * @return array{data: array, source: string, errors: list<string>, warnings: list<string>, key: string, date: ?CarbonImmutable, normalized_phone: ?string}
+     * @return array{data: array, source: string, department: string, errors: list<string>, warnings: list<string>, key: string, date: ?CarbonImmutable, normalized_phone: ?string}
      */
     private function evaluate(array $cells, array $context): array
     {
@@ -528,7 +935,8 @@ class LeadImportService
             if ($value === '' || $target === self::TARGET_IGNORE) {
                 continue;
             }
-            if ($target === self::TARGET_NOTE) {
+            // The department only routes a split import; otherwise it is worth keeping in the notes
+            if ($target === self::TARGET_NOTE || ($target === 'department' && ! $context['split'])) {
                 $notes[] = $this->headerLabel($context, $i) . ': ' . $value;
             } elseif (! isset($values[$target])) {
                 $values[$target] = $value;
@@ -599,6 +1007,7 @@ class LeadImportService
         return [
             'data'             => $data,
             'source'           => $this->sourceFrom($values['source'] ?? null, $context['source']),
+            'department'       => $this->cleanDepartment($values['department'] ?? ''),
             'errors'           => $errors,
             'warnings'         => $warnings,
             'key'              => sha1($key),

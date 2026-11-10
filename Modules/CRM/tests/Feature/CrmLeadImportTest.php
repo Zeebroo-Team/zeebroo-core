@@ -383,6 +383,96 @@ test('large imports run on the queue', function () {
     expect($import->fresh())->status->toBe(LeadImport::STATUS_COMPLETED)->created_count->toBe(LeadImportService::QUEUE_ABOVE_ROWS + 1);
 });
 
+// ── Department split ─────────────────────────────────────────────────────
+
+function crmImportDepartmentCsv(): string
+{
+    return implode("\n", [
+        'Name,Mobile,Department',
+        'Amal,0771000001,Sales',
+        'Bimal,0771000002,sales',
+        'Chamal,0771000003,Operations',
+        'Dimal,0771000004,Operations',
+        'Eranga,0771000005,Operations',
+        'Fathima,0771000006,',
+        'Gayan,0771000007,Warehouse',
+    ]);
+}
+
+test('a department column is detected and bundles the rows with suggestions', function () {
+    $import = crmImportUpload(crmImportDepartmentCsv(), 'September_Leads.csv')['import'];
+    expect($import->mapping)->toBe(['name', 'phone', 'department']);
+
+    $groups = $this->imports->departmentGroups($import, $import->mapping, fn () => true);
+    $by     = collect($groups['groups'])->keyBy('value');
+
+    expect($groups['column'])->toBe(2)
+        ->and($by->keys()->all())->toBe(['Operations', 'Sales', 'Warehouse', ''])
+        ->and($by['Sales']['rows'])->toBe(2)
+        ->and($by['Sales']['department_id'])->toBe(10)
+        ->and($by['Sales']['project_id'])->toBe($this->sales->id)
+        ->and($by['Operations']['department_id'])->toBeNull()
+        ->and($by['Operations']['relation_name'])->toBe('Operations – September Leads')
+        ->and($by['']['relation_name'])->toBe('No department – September Leads');
+});
+
+test('a split import creates the departments and relations it needs and puts each bundle in its relation', function () {
+    $import = crmImportUpload(crmImportDepartmentCsv(), 'September_Leads.csv')['import'];
+    $plan   = $this->imports->resolvePlan($import, $import->mapping, [
+        ['key' => 'd:sales',      'department_id' => 10, 'project_id' => $this->sales->id],
+        ['key' => 'd:operations', 'new_department' => 'Operations', 'new_relation' => 'Ops Sept'],
+        ['key' => 'd:warehouse',  'skip' => true],
+        ['key' => 'd:',           'project_id' => $this->marketing->id],
+    ], fn () => true);
+
+    $preview = $this->imports->preview($import, $import->mapping, 'csv', null, 'log', $plan);
+    $groups  = collect($preview['groups'])->keyBy('key');
+
+    expect($preview['totals'])->toMatchArray(['total' => 7, 'ok' => 6, 'skipped' => 1])
+        ->and($groups['d:operations']['totals']['ok'])->toBe(3)
+        ->and(Department::where('name', 'Operations')->exists())->toBeFalse()   // nothing made at preview
+        ->and(Lead::count())->toBe(0);
+
+    $this->imports->start($import->fresh());
+
+    $ops      = Department::where('business_id', 7)->where('name', 'Operations')->first();
+    $relation = \Modules\CRM\Models\Project::where('name', 'Ops Sept')->first();
+    $done     = collect($import->fresh()->options['groups'])->keyBy('key');
+
+    expect($ops)->not->toBeNull()
+        ->and($relation->department_id)->toBe($ops->id)
+        ->and(Lead::where('project_id', $relation->id)->pluck('name')->sort()->values()->all())->toBe(['Chamal', 'Dimal', 'Eranga'])
+        // Split rows stay in the department's relation instead of going to the marketing intake
+        ->and(Lead::where('project_id', $this->sales->id)->count())->toBe(2)
+        ->and(Lead::where('name', 'Gayan')->exists())->toBeFalse()
+        ->and($done['d:operations']['created_relation'])->toBeTrue()
+        ->and($done['d:operations']['counts']['created_count'])->toBe(3)
+        ->and($import->fresh())->created_count->toBe(6)->skipped_count->toBe(1);
+
+    // The same file again: each bundle's rows are already in their relation
+    $again   = crmImportUpload(crmImportDepartmentCsv(), 'September_Leads.csv')['import'];
+    $suggest = collect($this->imports->departmentGroups($again, $again->mapping, fn () => true)['groups'])->keyBy('key');
+    expect($suggest['d:operations']['department_id'])->toBe($ops->id)
+        ->and($suggest['d:operations']['project_id'])->toBe($relation->id);
+
+    $plan = $this->imports->resolvePlan($again, $again->mapping, $suggest->map(fn ($g) => [
+        'key' => $g['key'], 'department_id' => $g['department_id'], 'project_id' => $g['project_id'] ?? $this->marketing->id,
+    ])->values()->all(), fn () => true);
+    expect($this->imports->preview($again, $again->mapping, 'csv', null, 'log', $plan)['totals'])->toMatchArray(['ok' => 1, 'skipped' => 6]);
+});
+
+test('a split plan is refused when a relation is outside its department or a name is taken', function (array $choice, string $message) {
+    $import = crmImportUpload(crmImportDepartmentCsv())['import'];
+    $rest   = [['key' => 'd:operations', 'skip' => true], ['key' => 'd:warehouse', 'skip' => true], ['key' => 'd:', 'skip' => true]];
+
+    expect(fn () => $this->imports->resolvePlan($import, $import->mapping, [['key' => 'd:sales'] + $choice, ...$rest], fn () => true))
+        ->toThrow(ValidationException::class, $message);
+})->with([
+    'relation of another department' => [fn () => ['department_id' => 10, 'project_id' => test()->marketing->id], 'is not in the Sales department'],
+    'department name taken'          => [['new_department' => 'sales', 'new_relation' => 'X'], 'already exists'],
+    'relation name taken'            => [fn () => ['department_id' => 10, 'new_relation' => test()->sales->name], 'already exists'],
+]);
+
 // ── Desktop API ──────────────────────────────────────────────────────────
 
 class CrmLeadImportTestApi extends PosCrmLeadImportApiController
@@ -443,6 +533,38 @@ test('the desktop endpoints upload, preview and run an import', function () {
         ->and(collect($list['fields'])->pluck('key'))->toContain('phone');
 
     expect($api()->errors(crmImportRequest(4), $data['id'])->getContent())->toContain('No phone number or email.');
+});
+
+test('the desktop endpoints split an import by department, and only admins create departments', function () {
+    $api    = fn () => app(CrmLeadImportTestApi::class);
+    $upload = fn (int $user) => $api()->store(crmImportRequest($user, 'POST', [], ['files' => [UploadedFile::fake()->createWithContent('Sept.csv', crmImportDepartmentCsv())]]))->getData(true)['data'];
+    $groups = [
+        ['key' => 'd:sales',      'department_id' => 10, 'project_id' => $this->sales->id],
+        ['key' => 'd:operations', 'new_department' => 'Operations', 'new_relation' => 'Operations – Sept'],
+        ['key' => 'd:warehouse',  'skip' => true],
+        ['key' => 'd:',           'skip' => true],
+    ];
+    $body = fn (array $data) => ['mapping' => $data['mapping'], 'source' => 'csv', 'duplicates' => 'log', 'groups' => $groups];
+
+    $data = $upload(1);
+    $info = $api()->departments(crmImportRequest(1, 'POST', ['mapping' => $data['mapping']]), $data['id'])->getData(true)['data'];
+    expect($info['groups'])->toHaveCount(4)
+        ->and($info['can_create_departments'])->toBeTrue()
+        ->and(collect($info['departments'])->pluck('name')->all())->toBe(['Marketing', 'Sales']);
+
+    // A marketing user may not create a department
+    $staff = $upload(4);
+    $only  = ['groups' => [['key' => 'd:sales', 'skip' => true], $groups[1], $groups[2], $groups[3]]] + $body($staff);
+    expect(crmImportStatus(fn () => $api()->preview(crmImportRequest(4, 'POST', $only), $staff['id'])))->toBe(403);
+
+    $preview = $api()->preview(crmImportRequest(1, 'POST', $body($data)), $data['id'])->getData(true)['data'];
+    expect($preview['totals'])->toMatchArray(['ok' => 5, 'skipped' => 2])
+        ->and($preview['groups'])->toHaveCount(4)
+        ->and($preview['rows'][0]['group'])->toBe('d:sales');
+
+    $run = $api()->run(crmImportRequest(1, 'POST'), $data['id'])->getData(true)['data'];
+    expect($run['created_count'])->toBe(5)
+        ->and(collect($run['groups'])->firstWhere('key', 'd:operations')['counts']['created_count'])->toBe(3);
 });
 
 test('only the uploader runs an import and other businesses never see it', function () {
