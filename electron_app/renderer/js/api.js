@@ -657,6 +657,7 @@ const API = (() => {
     // the template / error rows through electronAPI.downloadFile.
     crmLeadImports:          ()               => request('GET',    '/crm/lead-imports'),
     crmLeadImport:           (id)             => request('GET',    `/crm/lead-imports/${id}`),
+    crmLeadImportDepartments:(id, mapping)    => request('POST',   `/crm/lead-imports/${id}/departments`, { mapping }),
     crmLeadImportPreview:    (id, body)       => request('POST',   `/crm/lead-imports/${id}/preview`, body),
     crmLeadImportRun:        (id)             => request('POST',   `/crm/lead-imports/${id}/run`),
     crmLeadImportDiscard:    (id)             => request('DELETE', `/crm/lead-imports/${id}`),

@@ -317,6 +317,12 @@ body.dark .mac-window select.po-field-input option{background:#2c2c30;color:#f5f
 .crm-imp-st.error,.crm-imp-st.failed{background:rgba(255,59,48,.14);color:#d70015}
 .crm-imp-st.skipped,.crm-imp-st.queued,.crm-imp-st.processing{background:rgba(142,142,147,.18);color:#636366}
 .crm-imp-st.completed{background:rgba(52,199,89,.16);color:#248a3d}
+.crm-imp-new{margin-left:6px;border-radius:999px;padding:1px 7px;font-size:10.5px;font-weight:600;background:rgba(0,122,255,.12);color:var(--mac-accent);white-space:nowrap}
+.crm-imp-groups td{vertical-align:top}
+.crm-imp-groups .po-field-input+.po-field-input{margin-top:6px}
+.crm-imp-groups tr.skip td{opacity:.55}
+.crm-imp-bundles tbody tr{cursor:pointer}
+.crm-imp-bundles tbody tr.sel td{background:rgba(0,122,255,.08)}
 body.dark .crm-imp-st.ok,body.dark .crm-imp-st.completed{color:#30d158}
 body.dark .crm-imp-st.duplicate{color:#ff9f0a}
 body.dark .crm-imp-st.error,body.dark .crm-imp-st.failed{color:#ff6961}
@@ -15328,7 +15334,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <div style="min-width:0"><div class="mac-title-main">Import Leads</div><div class="mac-title-sub" id="crm-import-file"></div></div>
         </div>
         <div class="crm-imp-steps" id="crm-import-steps">
-          <span data-imp-step="1">Upload</span><span data-imp-step="2">Columns</span><span data-imp-step="3">Preview</span><span data-imp-step="4">Done</span>
+          <span data-imp-step="1">Upload</span><span data-imp-step="2">Columns</span><span data-imp-step="3" style="display:none">Departments</span><span data-imp-step="4">Preview</span><span data-imp-step="5">Done</span>
         </div>
         <div class="mac-win-btns" style="margin-left:12px">
           <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>

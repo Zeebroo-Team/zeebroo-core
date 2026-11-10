@@ -66568,12 +66568,17 @@ async function submitDsCreate() {
   // ── Import leads modal ────────────────────────────────────────────────────
   // Upload a CSV / XLSX (our template, a Google Forms responses export or a Facebook
   // Lead Ads export) → the server detects the format and suggests a field per column →
-  // the user adjusts the mapping → preview (ok / duplicate / error / skipped per row,
-  // nothing saved) → run. Big files run on the server queue; step 4 polls until done.
+  // the user adjusts the mapping → (a file with a Department column: each department's rows
+  // are bundled, and the user picks or creates the department and relation for each bundle) →
+  // preview (ok / duplicate / error / skipped per row, nothing saved) → run. Big files run on
+  // the server queue; step 5 polls until done.
   let _crmImpOptions = null;   // { imports, pipelines, intake_project, fields, sources, duplicate_modes, … } from /crm/lead-imports
   let _crmImp        = null;   // the current import (with headers + sample while not run)
-  let _crmImpPreview = null;   // { totals, rows } from /preview
+  let _crmImpPreview = null;   // { totals, groups, rows } from /preview
   let _crmImpFilter  = 'all';
+  let _crmImpGroup   = '';     // preview: only the rows of this department bundle ('' = all)
+  let _crmImpSettings = null;  // { mapping, source, duplicates, project_id } from the columns step
+  let _crmImpDepts   = null;   // { groups (each with .choice), departments, can_create_* } from /departments — set when the import is split
   let _crmImpPoll    = null;
   let _crmImpChanged = false;  // leads were added — refresh the board on close
   let _crmImpRelsChanged = false; // a relation was created from "Import into" — refresh the relation list on close
@@ -66585,6 +66590,7 @@ async function submitDsCreate() {
 
   async function openCrmImportModal(lockedRelation = null) {
     _crmImp = null; _crmImpPreview = null; _crmImpFilter = 'all'; _crmImpChanged = false; _crmImpRelsChanged = false;
+    _crmImpGroup = ''; _crmImpSettings = null; _crmImpDepts = null;
     _crmImpLocked = lockedRelation;
     _macShow($('#crm-import-modal'));
     await _crmImpLoadStart();
@@ -66615,6 +66621,8 @@ async function submitDsCreate() {
       const i = Number(s.dataset.impStep);
       s.classList.toggle('active', i === n);
       s.classList.toggle('done', i < n);
+      // "Departments" is only a step for a file split by its department column
+      if (i === 3) s.style.display = _crmImpDepts || n === 3 ? '' : 'none';
     });
     $('#crm-import-file').textContent = [
       _crmImpLocked ? `Into ${_crmImpLocked.name}` : '',
@@ -66649,7 +66657,7 @@ async function submitDsCreate() {
           <td>${_crmAgo(i.created_at)}${i.user_name ? `<br><span class="crm-perms-muted">${escHtml(i.user_name)}</span>` : ''}</td>
           <td>${escHtml(i.file_name)}<br><span class="crm-perms-muted">${escHtml(i.format_label)} · ${i.total_rows} rows</span></td>
           <td>${escHtml(i.source_label || i.source)}</td>
-          <td>${escHtml(i.project?.name || '—')}</td>
+          <td>${i.groups ? _crmImpGroupsLabel(i.groups) : escHtml(i.project?.name || '—')}</td>
           <td>${_crmImpStatus(i.status)}${i.error ? `<br><span class="crm-imp-warn">${escHtml(i.error)}</span>` : ''}</td>
           <td>${i.created_count}</td><td>${i.duplicate_count}</td><td>${i.skipped_count}</td><td>${i.failed_count}</td>
           <td>${i.has_error_rows ? `<button type="button" class="po-btn-ghost" data-imp-errors="${i.id}"><i class="fa fa-download"></i> Errors</button>` : ''}</td>
@@ -66681,6 +66689,13 @@ async function submitDsCreate() {
       </div>`;
   }
 
+  // "3 departments" with the bundles in the tooltip, for a split import in the history
+  function _crmImpGroupsLabel(groups) {
+    const used = groups.filter(g => !g.skip);
+    const tip = used.map(g => `${g.department_name || 'No department'} → ${g.relation_name}`).join('\n');
+    return `<span title="${escHtml(tip)}">${used.length} department${used.length === 1 ? '' : 's'}</span>`;
+  }
+
   async function _crmImpPick(btn) {
     const result = await window.electronAPI.showOpenDialog({
       title: 'Choose a lead file',
@@ -66696,6 +66711,7 @@ async function submitDsCreate() {
     btn.innerHTML = '<i class="fa fa-folder-open"></i> Choose file…';
     if (res.status !== 201) { _crmImpError(res, 'The file could not be read.'); return; }
     _crmImp = res.body.data;
+    _crmImpSettings = null; _crmImpDepts = null;
     _crmImpRenderMapping();
   }
 
@@ -66711,10 +66727,15 @@ async function submitDsCreate() {
   function _crmImpRenderMapping() {
     _crmImpStep(2);
     const o = _crmImpOptions, imp = _crmImp;
-    const targets = [...o.fields.map(f => [f.key, f.label]), ['note', 'Add to notes'], ['', "Don't import"]];
+    // Opened from inside a relation, every lead goes there — a department column is just a note
+    const targets = [...o.fields.filter(f => !(_crmImpLocked && f.key === 'department')).map(f => [f.key, f.label]), ['note', 'Add to notes'], ['', "Don't import"]];
+    const s = _crmImpSettings;   // what was chosen before going on, when coming back
+    const mapping = (s?.mapping ?? imp.mapping).map(k => _crmImpLocked && k === 'department' ? 'note' : k);
+    const split = mapping.includes('department');
     const sampleOf = i => imp.sample.map(r => r[i]).filter(v => v).slice(0, 3).join(' · ');
     const pipelines = _crmImpPipelines();
     const curPipeline = _crmImpLocked ? _crmImpLocked.id
+      : s && s.project_id !== undefined ? (s.project_id ?? '')
       : imp.project && imp.project.id !== o.intake_project?.id ? imp.project.id : (o.intake_project ? '' : pipelines[0]?.[0]);
     const curName = pipelines.find(([id]) => String(id) === String(curPipeline ?? ''))?.[1];
     const relCtl = _crmImpLocked
@@ -66737,13 +66758,15 @@ async function submitDsCreate() {
         <div class="mac-group">
           <div class="mac-row"><div class="mac-row-label">Lead source<small>Where these leads came from</small></div>
             <div class="mac-row-ctl"><select class="po-field-input" id="crm-imp-source">
-              ${o.sources.map(s => `<option value="${s.key}"${s.key === imp.source ? ' selected' : ''}>${escHtml(s.label)}</option>`).join('')}
+              ${o.sources.map(x => `<option value="${x.key}"${x.key === (s?.source ?? imp.source) ? ' selected' : ''}>${escHtml(x.label)}</option>`).join('')}
             </select></div></div>
-          <div class="mac-row"><div class="mac-row-label">Import into<small>${_crmImpLocked ? 'The relation you opened the import from' : 'Search the relations, or type a new name to create one'}</small></div>
+          <div class="mac-row" id="crm-imp-into-row"${split ? ' style="display:none"' : ''}><div class="mac-row-label">Import into<small>${_crmImpLocked ? 'The relation you opened the import from' : 'Search the relations, or type a new name to create one'}</small></div>
             ${relCtl}</div>
+          <div class="mac-row" id="crm-imp-split-row"${split ? '' : ' style="display:none"'}><div class="mac-row-label">Import into<small>The file has a department column</small></div>
+            <div class="mac-row-ctl"><span class="crm-perms-muted"><i class="fa fa-sitemap"></i> Per department — you choose the department and relation for each in the next step</span></div></div>
           <div class="mac-row"><div class="mac-row-label">Contact already has an open lead in this relation<small>What to do with repeat enquiries</small></div>
             <div class="mac-row-ctl"><select class="po-field-input" id="crm-imp-dups">
-              ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === imp.duplicates ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
+              ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === (s?.duplicates ?? imp.duplicates) ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
             </select></div></div>
         </div>
       </div>
@@ -66755,7 +66778,7 @@ async function submitDsCreate() {
             <td><strong>${escHtml(h)}</strong></td>
             <td><div class="crm-imp-sample" title="${escHtml(sampleOf(i))}">${escHtml(sampleOf(i)) || '<em>empty</em>'}</div></td>
             <td><select class="po-field-input" data-imp-col="${i}">
-              ${targets.map(([k, label]) => `<option value="${k}"${k === (imp.mapping[i] ?? '') ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
+              ${targets.map(([k, label]) => `<option value="${k}"${k === (mapping[i] ?? '') ? ' selected' : ''}>${escHtml(label)}</option>`).join('')}
             </select></td>
           </tr>`).join('')}</tbody>
         </table>
@@ -66763,7 +66786,17 @@ async function submitDsCreate() {
 
     $('#crm-import-footer').innerHTML = `
       <button class="po-btn-ghost" data-imp-discard><i class="fa fa-arrow-left"></i> Choose another file</button>
-      <button class="po-btn-primary" data-imp-preview><i class="fa fa-eye"></i> Preview</button>`;
+      <button class="po-btn-primary" data-imp-preview></button>`;
+    _crmImpSplitToggle();
+  }
+
+  // A column set to "Department" splits the import: the relation is then chosen per department
+  function _crmImpSplitToggle() {
+    const split = Array.from($$('#crm-import-body [data-imp-col]'), x => x.value).includes('department');
+    $('#crm-imp-into-row').style.display  = split ? 'none' : '';
+    $('#crm-imp-split-row').style.display = split ? '' : 'none';
+    const btn = $('#crm-import-footer [data-imp-preview]');
+    if (btn) btn.innerHTML = split ? 'Next: Departments <i class="fa fa-arrow-right"></i>' : '<i class="fa fa-eye"></i> Preview';
   }
 
   // "Import into" — a searchable relation picker; typing a name that doesn't exist offers to create it
@@ -66855,61 +66888,208 @@ async function submitDsCreate() {
     toast(`Relation “${p.name}” created.`, 'success');
   }
 
-  async function _crmImpRunPreview(btn) {
-    const mapping = Array.from($$('#crm-import-body [data-imp-col]'), s => s.value);
+  // Columns step → the Departments step for a split file, else straight to the preview
+  async function _crmImpNext(btn) {
+    const mapping = Array.from($$('#crm-import-body [data-imp-col]'), x => x.value);
     if (!mapping.some(v => v === 'phone' || v === 'email')) { _crmImpAlert('Choose the column that holds the phone number or the email.'); return; }
     const project = $('#crm-imp-project').value;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking rows…';
-    _crmImpAlert('');
-    const res = await API.crmLeadImportPreview(_crmImp.id, {
+    _crmImpSettings = {
       mapping,
       source: $('#crm-imp-source').value,
       project_id: project ? Number(project) : null,
       duplicates: $('#crm-imp-dups').value,
+    };
+    if (!mapping.includes('department')) { _crmImpDepts = null; _crmImpRunPreview(btn); return; }
+
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Reading departments…';
+    _crmImpAlert('');
+    const res = await API.crmLeadImportDepartments(_crmImp.id, mapping);
+    btn.disabled = false;
+    btn.innerHTML = label;
+    if (res.status !== 200) { _crmImpError(res, 'The departments could not be read.'); return; }
+
+    // Keep what was chosen for a department before (going back and on again)
+    const before = Object.fromEntries((_crmImpDepts?.groups || []).map(g => [g.key, g.choice]));
+    const d = res.body.data;
+    d.groups.forEach(g => { g.choice = before[g.key] || _crmImpDefaultChoice(g, d); });
+    _crmImpDepts = d;
+    _crmImpRenderDepartments();
+  }
+
+  // The suggested department, then its relation (or a new one with the suggested name)
+  function _crmImpDefaultChoice(g, d) {
+    const dept = g.department_id ? String(g.department_id)
+      : g.value && d.can_create_departments ? 'new' : '';
+    return { dept, deptName: g.value, rel: _crmImpDefaultRel(g, d, dept), relName: g.relation_name };
+  }
+
+  function _crmImpDefaultRel(g, d, dept) {
+    const rels = _crmImpRelOptions(dept);
+    if (dept === String(g.department_id) && g.project_id) return String(g.project_id);
+    if (!dept && _crmImpOptions.intake_project && !d.can_create_relations) return String(_crmImpOptions.intake_project.id);
+    return d.can_create_relations || !rels.length ? 'new' : String(rels[0].id);
+  }
+
+  // Relations a bundle can go into: the department's own, or any relation for "no department"
+  function _crmImpRelOptions(dept) {
+    if (dept === 'new' || dept === 'skip') return [];
+    if (!dept) return _crmImpOptions.pipelines;
+    return _crmImpDepts?.departments.find(x => String(x.id) === dept)?.relations || [];
+  }
+
+  // Step 3 — the rows bundled per department: where each bundle goes
+  function _crmImpRenderDepartments() {
+    _crmImpStep(3);
+    const d = _crmImpDepts;
+    const rows = d.groups.reduce((n, g) => n + g.rows, 0);
+    const exact = v => d.departments.some(x => x.name.toLowerCase() === v.toLowerCase());
+
+    const row = (g, i) => {
+      const c = g.choice;
+      const skip = c.dept === 'skip';
+      const rels = _crmImpRelOptions(c.dept);
+      const deptOpts = [
+        ['', '— No department —'],
+        ...d.departments.map(x => [String(x.id), x.name]),
+        ...(d.can_create_departments && (g.value || c.dept === 'new') && (!exact(g.value) || c.dept === 'new') ? [['new', `+ Create department “${g.value || 'New'}”`]] : []),
+        ['skip', "Don't import these rows"],
+      ];
+      const relOpts = [
+        ...rels.map(r => [String(r.id), r.name]),
+        ...(d.can_create_relations ? [['new', '+ New relation']] : []),
+      ];
+      return `<tr class="${skip ? 'skip' : ''}">
+        <td><strong>${g.value ? escHtml(g.value) : '<em>No department</em>'}</strong><br><span class="crm-perms-muted">${g.rows.toLocaleString()} row${g.rows === 1 ? '' : 's'}</span></td>
+        <td>
+          <select class="po-field-input" data-imp-gdept="${i}">${deptOpts.map(([v, l]) => `<option value="${v}"${v === c.dept ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>
+          ${c.dept === 'new' ? `<input class="po-field-input" data-imp-gdept-name="${i}" maxlength="100" value="${escHtml(c.deptName)}" placeholder="Department name">` : ''}
+        </td>
+        <td>${skip ? '<span class="crm-perms-muted">Not imported</span>' : `
+          ${relOpts.length ? `<select class="po-field-input" data-imp-grel="${i}">${relOpts.map(([v, l]) => `<option value="${v}"${v === c.rel ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>` : '<span class="crm-imp-warn">No relation you can import into — create one first.</span>'}
+          ${c.rel === 'new' ? `<input class="po-field-input" data-imp-grel-name="${i}" maxlength="150" value="${escHtml(c.relName)}" placeholder="Relation name">` : ''}`}
+        </td>
+      </tr>`;
+    };
+
+    $('#crm-import-body').innerHTML = `
+      <div class="crm-perms-muted">
+        <strong>${rows.toLocaleString()}</strong> rows in <strong>${d.groups.filter(g => g.value).length}</strong> departments.
+        Choose the department and relation each department's rows go into — or create them. New departments and relations are only created when you click Import.
+      </div>
+      <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Leads go straight into the relation chosen for their department (not the Marketing inbox). The name of a new relation is filled in for you — change it if you like.</div>
+      <table class="crm-imp-table crm-imp-groups">
+        <thead><tr><th style="width:24%">Department in file</th><th style="width:34%">Department</th><th>Relation</th></tr></thead>
+        <tbody>${d.groups.map(row).join('')}</tbody>
+      </table>
+      ${!d.can_create_departments ? '<span class="crm-perms-muted"><i class="fa fa-lock"></i> Only the business owner or an admin can create departments.</span>' : ''}`;
+
+    $('#crm-import-footer').innerHTML = `
+      <button class="po-btn-ghost" data-imp-back-cols><i class="fa fa-arrow-left"></i> Back to columns</button>
+      <button class="po-btn-primary" data-imp-preview-split><i class="fa fa-eye"></i> Preview</button>`;
+  }
+
+  // The choices as the server takes them, or an error message
+  function _crmImpGroupsPayload() {
+    const out = [];
+    for (const g of _crmImpDepts.groups) {
+      const c = g.choice;
+      const name = g.value ? `“${g.value}”` : 'the rows with no department';
+      if (c.dept === 'skip') { out.push({ key: g.key, skip: true }); continue; }
+      if (c.dept === 'new' && !c.deptName.trim()) return `Name the new department for ${name}.`;
+      if (c.rel === 'new' && !c.relName.trim()) return `Name the new relation for ${name}.`;
+      if (c.rel !== 'new' && !c.rel) return `Choose the relation for ${name}.`;
+      out.push({
+        key: g.key,
+        department_id: /^\d+$/.test(c.dept) ? Number(c.dept) : null,
+        new_department: c.dept === 'new' ? c.deptName.trim() : null,
+        project_id: c.rel !== 'new' ? Number(c.rel) : null,
+        new_relation: c.rel === 'new' ? c.relName.trim() : null,
+      });
+    }
+    return out;
+  }
+
+  async function _crmImpRunPreview(btn) {
+    const s = _crmImpSettings;
+    const groups = _crmImpDepts ? _crmImpGroupsPayload() : null;
+    if (typeof groups === 'string') { _crmImpAlert(groups); return; }
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking rows…';
+    _crmImpAlert('');
+    const res = await API.crmLeadImportPreview(_crmImp.id, {
+      mapping: s.mapping,
+      source: s.source,
+      project_id: s.project_id,
+      duplicates: s.duplicates,
+      ...(groups ? { groups } : {}),
     });
     btn.disabled = false;
-    btn.innerHTML = '<i class="fa fa-eye"></i> Preview';
+    btn.innerHTML = label;
     if (res.status !== 200) { _crmImpError(res, 'The preview failed.'); return; }
     // Keep the columns for "Back"; the rest of the import comes back fresh
     _crmImp = { ...res.body.data.import, headers: _crmImp.headers, sample: _crmImp.sample };
     _crmImpPreview = res.body.data;
     _crmImpFilter = 'all';
+    _crmImpGroup = '';
     _crmImpRenderPreview();
   }
 
   // Step 3 — what will happen to each row
   function _crmImpRenderPreview() {
-    _crmImpStep(3);
-    const t = _crmImpPreview.totals;
-    const importable = t.ok + t.duplicate;
+    _crmImpStep(4);
+    const groups = _crmImpPreview.groups;
+    const byKey = Object.fromEntries((groups || []).map(g => [g.key, g]));
+    const inGroup = _crmImpPreview.rows.filter(r => !_crmImpGroup || r.group === _crmImpGroup);
+    // The tab counts follow the department picked in the bundle table
+    const t = _crmImpGroup ? byKey[_crmImpGroup].totals : _crmImpPreview.totals;
+    const all = _crmImpPreview.totals;
+    const importable = all.ok + all.duplicate;
     const tabs = [['all', 'All', t.total], ['ok', 'OK', t.ok], ['duplicate', 'Duplicate', t.duplicate], ['error', 'Error', t.error], ['skipped', 'Skipped', t.skipped]];
-    const rows = _crmImpPreview.rows.filter(r => _crmImpFilter === 'all' || r.status === _crmImpFilter);
+    const rows = inGroup.filter(r => _crmImpFilter === 'all' || r.status === _crmImpFilter);
     const shown = rows.slice(0, 500);
+    const deptOf = g => g.value ? escHtml(g.value) : '<em>No department</em>';
+
+    const bundles = groups ? `<table class="crm-imp-table crm-imp-bundles">
+        <thead><tr><th>Department in file</th><th>Department</th><th>Relation</th><th>Rows</th><th>OK</th><th>Duplicate</th><th>Error</th><th>Skipped</th></tr></thead>
+        <tbody>${groups.map(g => `<tr class="${g.key === _crmImpGroup ? 'sel' : ''}" data-imp-group="${escHtml(g.key)}" title="Show only these rows">
+          <td>${deptOf(g)}</td>
+          ${g.skip ? '<td colspan="2" class="crm-perms-muted">Not imported</td>' : `
+          <td>${escHtml(g.department_name || '—')}${g.new_department ? '<span class="crm-imp-new">new</span>' : ''}</td>
+          <td>${escHtml(g.relation_name)}${g.new_relation ? '<span class="crm-imp-new">new</span>' : ''}</td>`}
+          <td>${g.totals.total}</td><td>${g.totals.ok}</td><td>${g.totals.duplicate}</td><td>${g.totals.error}</td><td>${g.totals.skipped}</td>
+        </tr>`).join('')}</tbody></table>` : '';
 
     $('#crm-import-body').innerHTML = `
       <div class="crm-perms-muted">
-        Into <strong>${escHtml(_crmImp.project?.name || '')}</strong> as <strong>${escHtml(_crmImp.source_label || '')}</strong>.
+        ${groups
+          ? `Split by department into <strong>${groups.filter(g => !g.skip).length}</strong> relations as <strong>${escHtml(_crmImp.source_label || '')}</strong>. Click a department to see only its rows.`
+          : `Into <strong>${escHtml(_crmImp.project?.name || '')}</strong> as <strong>${escHtml(_crmImp.source_label || '')}</strong>.`}
         <em>Duplicate</em> rows are imported following the duplicate rules (repeat enquiry on the open lead in this relation, or a new lead flagged for review);
         <em>Error</em> and <em>Skipped</em> rows are left out.
       </div>
+      ${bundles}
       <div class="crm-inbox-tabs">${tabs.map(([k, label, n]) =>
-        `<button type="button" class="crm-inbox-tab${k === _crmImpFilter ? ' active' : ''}" data-imp-filter="${k}">${label} (${n})</button>`).join('')}</div>
+        `<button type="button" class="crm-inbox-tab${k === _crmImpFilter ? ' active' : ''}" data-imp-filter="${k}">${label} (${n})</button>`).join('')}
+        ${_crmImpGroup ? `<button type="button" class="crm-inbox-tab" data-imp-group-all><i class="fa fa-xmark"></i> ${deptOf(byKey[_crmImpGroup])}</button>` : ''}</div>
       <table class="crm-imp-table">
-        <thead><tr><th>Row</th><th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Details</th></tr></thead>
+        <thead><tr><th>Row</th>${groups ? '<th>Department</th>' : ''}<th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Details</th></tr></thead>
         <tbody>${shown.map(r => `<tr>
           <td class="crm-perms-muted">${r.row}</td>
+          ${groups ? `<td>${byKey[r.group] ? deptOf(byKey[r.group]) : ''}</td>` : ''}
           <td>${escHtml(r.name || '—')}</td>
           <td>${escHtml(r.phone || '')}</td>
           <td>${escHtml(r.email || '')}</td>
           <td>${_crmImpStatus(r.status)}</td>
           <td>${escHtml(r.reason || '')}${r.warnings.map(w => `<div class="crm-imp-warn"><i class="fa fa-triangle-exclamation"></i> ${escHtml(w)}</div>`).join('')}</td>
-        </tr>`).join('') || '<tr><td colspan="6" class="crm-perms-muted">No rows.</td></tr>'}</tbody>
+        </tr>`).join('') || `<tr><td colspan="${groups ? 7 : 6}" class="crm-perms-muted">No rows.</td></tr>`}</tbody>
       </table>
       ${rows.length > shown.length ? `<span class="crm-perms-muted">Showing the first ${shown.length} of ${rows.length} rows.</span>` : ''}`;
 
     $('#crm-import-footer').innerHTML = `
-      <button class="po-btn-ghost" data-imp-back><i class="fa fa-arrow-left"></i> Back to columns</button>
+      <button class="po-btn-ghost" data-imp-back><i class="fa fa-arrow-left"></i> Back to ${groups ? 'departments' : 'columns'}</button>
       <button class="po-btn-primary" data-imp-run${importable ? '' : ' disabled'}><i class="fa fa-file-import"></i> Import ${importable.toLocaleString()} row${importable === 1 ? '' : 's'}</button>`;
   }
 
@@ -66926,13 +67106,14 @@ async function submitDsCreate() {
     }
     _crmImp = res.body.data;
     _crmImpChanged = true;
+    if (_crmImp.groups?.some(g => g.created_relation)) _crmImpRelsChanged = true;
     toast(res.body.message || 'Import started.', 'info');
     _crmImpRenderResult();
   }
 
   // Step 4 — progress (queued imports) and the outcome
   function _crmImpRenderResult() {
-    _crmImpStep(4);
+    _crmImpStep(5);
     const i = _crmImp;
     const running = i.status === 'queued' || i.status === 'processing';
     const pct = i.total_rows ? Math.round((i.processed_rows / i.total_rows) * 100) : 0;
@@ -66949,6 +67130,15 @@ async function submitDsCreate() {
         ${total(i.skipped_count, 'skipped')}
         ${total(i.failed_count, 'failed')}
       </div>
+      ${!running && i.groups ? `<div class="mac-section"><div class="mac-section-title">By department</div>
+        <table class="crm-imp-table">
+          <thead><tr><th>Department</th><th>Relation</th><th>New</th><th>Existing</th><th>Skipped</th><th>Failed</th></tr></thead>
+          <tbody>${i.groups.filter(g => !g.skip).map(g => `<tr>
+            <td>${escHtml(g.department_name || g.value || 'No department')}${g.created_department ? '<span class="crm-imp-new">created</span>' : ''}</td>
+            <td>${escHtml(g.relation_name)}${g.created_relation ? '<span class="crm-imp-new">created</span>' : ''}</td>
+            <td>${g.counts?.created_count ?? 0}</td><td>${g.counts?.duplicate_count ?? 0}</td><td>${g.counts?.skipped_count ?? 0}</td><td>${g.counts?.failed_count ?? 0}</td>
+          </tr>`).join('')}</tbody>
+        </table></div>` : ''}
       ${!running && i.has_error_rows ? `<div class="crm-org-row"><button type="button" class="po-btn-ghost" data-imp-errors="${i.id}"><i class="fa fa-download"></i> Download failed rows (CSV)</button>
         <span class="crm-perms-muted">Fix them in the file and upload it again.</span></div>` : ''}`;
 
@@ -66977,6 +67167,13 @@ async function submitDsCreate() {
 
   $('#crm-import-modal')?.addEventListener('click', async e => {
     if (!e.target.closest('#crm-imp-rel')) _crmImpRelCloseList();
+    const bundle = e.target.closest('tr[data-imp-group]');
+    if (bundle) {
+      _crmImpGroup = _crmImpGroup === bundle.dataset.impGroup ? '' : bundle.dataset.impGroup;
+      _crmImpFilter = 'all';
+      _crmImpRenderPreview();
+      return;
+    }
     const t = e.target.closest('button');
     if (!t) return;
     if (t.matches('[data-imp-close]') || t.id === 'crm-import-modal-close') {
@@ -66995,21 +67192,29 @@ async function submitDsCreate() {
       _crmImpDownload(API.crmLeadImportErrorsPath(t.dataset.impErrors), `lead-import-${t.dataset.impErrors}-errors.csv`);
     } else if (t.matches('[data-imp-discard]')) {
       if (_crmImp) API.crmLeadImportDiscard(_crmImp.id);
-      _crmImp = null;
+      _crmImp = null; _crmImpSettings = null; _crmImpDepts = null;
       _crmImpLoadStart();
     } else if (t.matches('[data-imp-preview]')) {
+      _crmImpNext(t);
+    } else if (t.matches('[data-imp-preview-split]')) {
       _crmImpRunPreview(t);
     } else if (t.matches('[data-imp-filter]')) {
       _crmImpFilter = t.dataset.impFilter;
       _crmImpRenderPreview();
+    } else if (t.matches('[data-imp-group-all]')) {
+      _crmImpGroup = '';
+      _crmImpRenderPreview();
     } else if (t.matches('[data-imp-back]')) {
+      _crmImpAlert('');
+      if (_crmImpDepts) _crmImpRenderDepartments(); else _crmImpRenderMapping();
+    } else if (t.matches('[data-imp-back-cols]')) {
       _crmImpAlert('');
       _crmImpRenderMapping();
     } else if (t.matches('[data-imp-run]')) {
       _crmImpRun(t);
     } else if (t.matches('[data-imp-again]')) {
       clearInterval(_crmImpPoll); _crmImpPoll = null;
-      _crmImp = null;
+      _crmImp = null; _crmImpSettings = null; _crmImpDepts = null;
       _crmImpLoadStart();
     } else if (t.matches('[data-imp-inbox]')) {
       await _crmImpClose();
@@ -67017,7 +67222,31 @@ async function submitDsCreate() {
     }
   });
 
+  $('#crm-import-modal')?.addEventListener('change', e => {
+    const el = e.target;
+    if (el.matches('[data-imp-col]')) { _crmImpSplitToggle(); return; }
+    const g = _crmImpDepts?.groups[Number(el.dataset.impGdept ?? el.dataset.impGrel)];
+    if (!g) return;
+    if (el.matches('[data-imp-gdept]')) {
+      g.choice.dept = el.value;
+      // A new department starts with a new relation; any other gets its suggested one
+      g.choice.rel = el.value === 'new' ? 'new' : _crmImpDefaultRel(g, _crmImpDepts, el.value);
+    } else if (el.matches('[data-imp-grel]')) {
+      g.choice.rel = el.value;
+    } else {
+      return;
+    }
+    _crmImpRenderDepartments();
+  });
+
   $('#crm-import-modal')?.addEventListener('input', e => {
+    // Names typed for a new department / relation are kept without redrawing the table
+    const name = e.target.dataset.impGdeptName ?? e.target.dataset.impGrelName;
+    if (name !== undefined) {
+      const c = _crmImpDepts?.groups[Number(name)]?.choice;
+      if (c) c[e.target.matches('[data-imp-gdept-name]') ? 'deptName' : 'relName'] = e.target.value;
+      return;
+    }
     if (!e.target.matches('[data-imp-rel-q]')) return;
     _crmImpRelHl = 0;
     _crmImpRelRenderList();
