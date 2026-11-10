@@ -2069,7 +2069,7 @@ function createOffline({ userDataDir, getConfig, request, notify, backgroundGapM
     const customer = body.customer_id != null ? s.customers.items.find(c => String(c.id) === String(body.customer_id)) : null;
     return {
       row: {
-        invoice_number: body.reference || 'Waiting to upload', status: 'draft', status_label: 'Draft',
+        invoice_number: body.invoice_number || body.reference || 'Waiting to upload', status: 'draft', status_label: 'Draft',
         customer_name: customer?.name ?? null, reference: body.reference ?? null, issue_date: body.issue_date ?? null,
         due_date: body.due_date ?? null, is_overdue: false, total: r2(Math.max(0, subtotal - discount + tax)),
       },

@@ -66,7 +66,9 @@ class InvoiceService
             $invoice = Invoice::create([
                 'business_id'     => $business->id,
                 'branch_id'       => $this->nullableInt($data['branch_id'] ?? null),
-                'invoice_number'  => $this->nextInvoiceNumber($business),
+                'invoice_number'  => filled($data['invoice_number'] ?? '')
+                    ? trim($data['invoice_number'])
+                    : $this->nextInvoiceNumber($business),
                 'customer_id'     => $this->nullableInt($data['customer_id'] ?? null),
                 'reference'       => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'issue_date'      => $data['issue_date'],
@@ -146,6 +148,10 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($invoice, $data, $items) {
+            if (filled($data['invoice_number'] ?? '')) {
+                $invoice->invoice_number = trim($data['invoice_number']);
+            }
+
             $invoice->update([
                 'branch_id'   => $this->nullableInt($data['branch_id'] ?? null),
                 'customer_id' => $this->nullableInt($data['customer_id'] ?? null),
@@ -297,15 +303,18 @@ class InvoiceService
 
     private function nextInvoiceNumber(Business $business): string
     {
-        $last = Invoice::query()
+        // Invoice numbers can be entered manually, so scan every INV-#### number
+        // (not just the latest row) and continue from the highest sequence.
+        $existing = Invoice::query()
             ->where('business_id', $business->id)
-            ->whereNotNull('invoice_number')
-            ->orderByDesc('id')
-            ->value('invoice_number');
+            ->where('invoice_number', 'like', 'INV-%')
+            ->pluck('invoice_number');
 
         $seq = 1;
-        if ($last && preg_match('/INV-(\d+)$/i', $last, $m)) {
-            $seq = (int) $m[1] + 1;
+        foreach ($existing as $number) {
+            if (preg_match('/^INV-(\d+)$/i', $number, $m)) {
+                $seq = max($seq, (int) $m[1] + 1);
+            }
         }
 
         return 'INV-' . str_pad($seq, 4, '0', STR_PAD_LEFT);

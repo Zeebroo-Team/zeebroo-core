@@ -5398,6 +5398,7 @@ async function _invOpenForm(existing, prefill = null) {
   $('#sinv-f-tax').value               = '';
   $('#sinv-f-notes').value             = '';
   $('#sinv-f-ref').value               = '';
+  $('#sinv-f-number').value            = existing?.invoice_number || '';
   $('#sinv-subtotal').textContent      = '0.00';
   $('#sinv-grand-total').textContent   = '0.00';
   $('#sinv-f-date').value              = existing?.issue_date || new Date().toISOString().slice(0, 10);
@@ -5496,6 +5497,7 @@ $('#sinv-form-save').addEventListener('click', async () => {
   btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
 
   const body = {
+    invoice_number:  $('#sinv-f-number').value.trim() || null,
     customer_id:     parseInt($('#sinv-f-customer').value) || null,
     reference:       $('#sinv-f-ref').value.trim()    || null,
     issue_date:      $('#sinv-f-date').value,
