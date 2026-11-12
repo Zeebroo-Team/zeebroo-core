@@ -3879,7 +3879,26 @@ function _qtToPrintDoc(q) {
 }
 
 async function _qtPrint(q) {
+  await _qtSetupPull();
   await _invPrint(_qtToPrintDoc(q));
+}
+
+// Quotation Setup keys the server keeps (it renders CRM / emailed quotation PDFs);
+// printer type, header layout and letterhead stay per-computer.
+const QTPL_SERVER_KEYS = ['template', 'color', 'paper', 'orientation', 'mg_top', 'mg_bot', 'mg_left', 'mg_right', 'custom_html'];
+// Server settings column limit for the custom HTML
+const QTPL_MAX_HTML = 60000;
+
+// Pulls the server's Quotation Setup into the local quotation_* config, so a
+// layout saved on another computer prints the same here. Offline / never-saved → keep local.
+async function _qtSetupPull() {
+  let res;
+  try { res = await API.quotationSetup(); } catch (_) { return; }
+  const d = res?.status === 200 ? res.body?.data : null;
+  if (!d?.updated_at) return;
+  const update = Object.fromEntries(QTPL_SERVER_KEYS.filter(k => d[k] !== undefined).map(k => ['quotation_' + k, d[k]]));
+  if (state.config) Object.assign(state.config, update);
+  await window.electronAPI.setConfig(update);
 }
 
 // ── Form (Create / Edit) ──────────────────────────────────────────────────
@@ -29031,6 +29050,11 @@ function _bizSwRefreshAll() {
   _sal.all           = [];
   _sal.filtered      = [];
 
+  // File Manager — the open folder and listing belong to the old business
+  closeFileManagerModal();
+  Object.assign(_fmg, { folderId: null, folders: [], files: [], breadcrumbs: [], q: '' });
+  $('#fmg-search').value = '';
+
   // Reset POS carts — they belong to the old business
   state.posTabs          = [];
   state.activePosTabId   = null;
@@ -31619,6 +31643,7 @@ async function openInvoiceSetup(kind = 'invoice') {
   if (!modal) return;
   _isetupKind = kind === 'quotation' ? 'quotation' : 'invoice';
   const isQt = _isetupKind === 'quotation';
+  if (isQt) await _qtSetupPull();
   const cfg = _isetupGetCfg(_isetupKind);
   _isetupActiveTpl   = cfg.template;
   _isetupActiveColor = cfg.color || null;
@@ -31679,9 +31704,22 @@ async function _isetupSave() {
   };
   const isQt   = _isetupKind === 'quotation';
   const prefix = isQt ? 'quotation_' : 'invoice_';
+  if (values.custom_html.length > QTPL_MAX_HTML) {
+    toast(`Custom HTML is too long (${values.custom_html.length.toLocaleString()} characters, max ${QTPL_MAX_HTML.toLocaleString()}). Link images from File Manager instead of embedding them.`, 'error');
+    return;
+  }
   const update = Object.fromEntries(Object.entries(values).map(([key, v]) => [prefix + key, v]));
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
+  if (isQt) {
+    // The server copy drives CRM / emailed quotation PDFs
+    const res = await API.saveQuotationSetup(Object.fromEntries(QTPL_SERVER_KEYS.map(k => [k, values[k]])));
+    if (res.status !== 200) {
+      toast(`Saved on this computer, but not on the server: ${res.body?.message || 'request failed'}. CRM PDFs keep the old layout.`, 'error');
+      $('#isetup-modal').style.display = 'none';
+      return;
+    }
+  }
   toast(isQt ? 'Quotation setup saved' : 'Invoice setup saved', 'success');
   $('#isetup-modal').style.display = 'none';
 }
@@ -31986,58 +32024,77 @@ const QTPL_STARTERS = {
 <head>
 <meta charset="UTF-8">
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
+  @media dompdf{@page{margin:12mm 14mm 28mm 14mm}} /* server PDF page margins (see bottom) */
+  /* Prints the same from the desktop and from the server PDF (CRM download / email):
+     tables and inline blocks only — no flexbox, grid or calc(). The page frame and
+     footer strip are position:fixed so they repeat on every page. */
+  *{box-sizing:border-box}
+  body{margin:0;padding:0} /* not html — dompdf puts the @page margins on <html> */
   body{font-family:'Times New Roman',Times,serif;font-size:12.5px;color:#000;background:#fff}
-  /* Page frame + footer strip — repeated on every printed page */
-  .frame{position:fixed;top:{{mg_top}}mm;bottom:{{mg_bottom}}mm;left:{{mg_left}}mm;right:{{mg_right}}mm;border:2px solid #000;pointer-events:none}
-  .brands{position:fixed;left:{{mg_left}}mm;right:{{mg_right}}mm;bottom:{{mg_bottom}}mm;height:15mm;padding:2mm 3mm;display:flex;align-items:center;justify-content:center}
-  .brands img{max-height:11mm;max-width:100%;object-fit:contain}
+  .frame{position:fixed;top:10mm;bottom:10mm;left:10mm;right:10mm;border:2px solid #000}
+  .brands{position:fixed;left:10mm;right:10mm;bottom:11mm;height:13mm;text-align:center}
+  /* Layout table: its header / footer rows repeat on every page and keep the
+     content inside the frame and clear of the footer strip */
+  .layout{width:100%}
+  .layout > thead td{height:12mm;padding:0}
+  .layout > tfoot td{height:28mm;padding:0}
+  .layout > tbody > tr > td{padding:0 14mm}
+  /* Server PDF (dompdf) — page margins instead of the repeating rows */
+  @media dompdf{
+    .layout,.layout > tbody,.layout > tbody > tr,.layout > tbody > tr > td{display:block;width:auto}
+    .layout > thead,.layout > tfoot{display:none}
+    .layout > tbody > tr > td{padding:0}
+    .frame{top:-2mm;bottom:-18mm;left:-4mm;right:-4mm}
+    .brands{left:-4mm;right:-4mm;bottom:-17mm}
+  }
+  .brands img{max-height:12mm;max-width:100%}
   img[src=""]{display:none}
-  .layout{width:100%;border-collapse:collapse}
-  .layout > thead td{height:calc({{mg_top}}mm + 4mm)}
-  .layout > tfoot td{height:calc({{mg_bottom}}mm + 17mm)}
-  .sheet{padding:0 calc({{mg_right}}mm + 2px) 0 calc({{mg_left}}mm + 2px)}
-  /* Header */
-  .hd{border-bottom:2px solid #000;padding:3mm 4mm 3mm}
-  .hd-top{display:flex;align-items:center;gap:5mm}
-  .logo{height:20mm;max-width:55mm;object-fit:contain}
-  .co{flex:1;text-align:center}
-  .co-name{font-family:'Arial Black','Arial Rounded MT Bold',Arial,sans-serif;font-size:30px;font-weight:900;color:{{accent}};letter-spacing:.5px;line-height:1.1}
-  .co-info{font-size:15px;line-height:1.35;margin-top:1mm}
-  .doc-type{display:flex;justify-content:center;gap:16mm;margin-top:4mm;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:21px}
-  .doc-type span{display:inline-flex;align-items:center;gap:3mm}
-  .box{display:inline-flex;align-items:center;justify-content:center;width:8mm;height:6.5mm;border:2px solid #f59e0b;font-size:14px;font-style:normal;font-weight:700;vertical-align:middle}
-  .vat{text-align:right;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:12px;margin-top:1mm}
-  .to-row{display:flex;justify-content:space-between;gap:8mm;margin-top:3mm;font-weight:700;font-size:13px;line-height:1.35}
+  table{border-collapse:collapse}
+  .tick{font-family:'DejaVu Sans','Segoe UI Symbol',sans-serif;font-weight:bold}
+  .box{display:inline-block;width:8mm;height:6mm;line-height:6mm;border:2px solid #f59e0b;text-align:center;font-size:13px;vertical-align:middle}
+  /* Header — spans the full frame width */
+  .hd{margin:0 -3.5mm;padding:0 3.5mm 3mm;border-bottom:2px solid #000}
+  .hd-top{width:100%}
+  .hd-top td{vertical-align:middle}
+  .logo-cell{width:58mm}
+  .logo{max-height:20mm;max-width:55mm}
+  .co{text-align:center}
+  .co-name{font-family:'Arial Black',Helvetica,Arial,sans-serif;font-size:30px;font-weight:bold;color:{{accent}};line-height:1.15}
+  .co-info{font-size:15px;line-height:1.35}
+  .doc-type{text-align:center;margin-top:3mm;font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:21px}
+  .dt{display:inline-block;margin:0 7mm}
+  .vat{text-align:right;font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:12px;margin-top:1mm}
+  .to-row{width:100%;margin-top:2mm;font-weight:bold;font-size:13px;line-height:1.35}
+  .to-row td{vertical-align:top;padding:0}
   .to-addr{padding-left:6mm}
-  .ref{min-width:62mm}
-  .cats{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding:2.5mm 4mm;font-family:Calibri,Arial,Helvetica,sans-serif;font-weight:700;font-size:17px}
-  .cats span{display:inline-flex;align-items:center;gap:2mm}
+  .ref{width:64mm}
+  .cats{margin:0 -3.5mm;padding:2mm 3.5mm;border-bottom:2px solid #000}
+  .cats table{width:100%;font-family:Calibri,Helvetica,Arial,sans-serif;font-weight:bold;font-size:17px}
+  .cats td{padding:0;white-space:nowrap}
   /* Letter body */
-  .letter{padding:4mm 6mm 2mm;line-height:1.5}
-  .letter p{margin-bottom:3mm}
-  table.items{width:calc(100% - 8mm);margin:2mm 0 0 4mm;border-collapse:collapse}
+  .letter{padding:4mm 2mm 1mm;line-height:1.5}
+  .letter p{margin:0 0 3mm}
+  table.items{width:100%;margin-top:1mm}
   table.items th,table.items td{border:1px solid #000;padding:2mm 1.5mm;vertical-align:middle}
-  table.items th{font-size:12px;font-weight:700;text-align:center;vertical-align:top}
+  table.items th{font-size:12px;font-weight:bold;text-align:center;vertical-align:top}
   table.items th.hl{color:#dc2626}
   table.items tr{page-break-inside:avoid}
-  td.sn{font-weight:700;text-align:center;vertical-align:top;width:13mm}
+  td.sn{font-weight:bold;text-align:center;vertical-align:top;width:12mm}
   td.it{text-align:center;line-height:1.35}
-  .it-name{font-weight:700;text-decoration:underline;text-transform:uppercase}
-  td.c{text-align:center;white-space:nowrap}
-  td.b{font-weight:700}
-  mark{background:#fde047;color:#000;padding:0 1px}
-  tr.tot td{font-weight:700}
+  .it-name{font-weight:bold;text-decoration:underline;text-transform:uppercase}
+  td.c{text-align:center;white-space:nowrap;font-weight:bold}
+  .mark{background:#fde047;padding:0 1px}
+  tr.tot td{font-weight:bold}
   tr.tot td.tl{text-align:right;padding-right:3mm}
-  tr.gt td{font-size:13.5px;background:#f8fafc}
-  .notes{padding:4mm 6mm 0;line-height:1.5}
+  tr.gt td{font-size:13.5px;background:#f1f5f9}
+  .notes{padding:4mm 2mm 0;line-height:1.5}
   /* Terms + sign-off */
-  .terms{padding:5mm 6mm 0 10mm;line-height:1.5;font-size:12.5px}
-  .terms h3{font-size:13px;text-decoration:underline;margin-bottom:3mm;break-after:avoid;page-break-after:avoid}
-  .terms p{margin-bottom:3mm;text-align:justify;page-break-inside:avoid}
-  .sign{padding:4mm 6mm 0 10mm;font-weight:700;line-height:1.6;page-break-inside:avoid}
+  .terms{padding:5mm 2mm 0 6mm;line-height:1.5}
+  .terms h3{font-size:13px;text-decoration:underline;margin:0 0 3mm;page-break-after:avoid}
+  .terms p{margin:0 0 3mm;text-align:justify;page-break-inside:avoid}
+  .sign{padding:4mm 2mm 0 6mm;font-weight:bold;line-height:1.6;page-break-inside:avoid}
   .sign .up{text-transform:uppercase}
-  .sign .gap{height:20mm}
+  .sign .gap{height:18mm}
 </style>
 </head>
 <body>
@@ -32051,117 +32108,117 @@ const QTPL_STARTERS = {
 <table class="layout">
 <thead><tr><td></td></tr></thead>
 <tfoot><tr><td></td></tr></tfoot>
-<tbody><tr><td><div class="sheet">
+<tbody><tr><td>
 
-  <div class="hd">
-    <div class="hd-top">
-      {{#logo_url}}<img class="logo" src="{{logo_url}}" alt="">{{/logo_url}}
-      <div class="co">
-        <div class="co-name">{{business_name}}</div>
-        <div class="co-info">
-          {{business_address}}<br>
-          Tel: 011-0000000, 011-0000000, Fax: 011-0000000<br>
-          E-mail: info@yourcompany.lk
-        </div>
+<div class="hd">
+  <table class="hd-top"><tr>
+    {{#logo_url}}<td class="logo-cell"><img class="logo" src="{{logo_url}}" alt=""></td>{{/logo_url}}
+    <td class="co">
+      <div class="co-name">{{business_name}}</div>
+      <div class="co-info">
+        {{business_address}}<br>
+        Tel: 011-0000000, 011-0000000, Fax: 011-0000000<br>
+        E-mail: info@yourcompany.lk
       </div>
-    </div>
-    <div class="doc-type">
-      <span>QUOTATION <i class="box">{{#is_quotation}}&#10003;{{/is_quotation}}</i></span>
-      <span>PROFORMA INVOICE <i class="box">{{#is_invoice}}&#10003;{{/is_invoice}}</i></span>
-    </div>
-    <div class="vat">Vat No: 000000000 &nbsp; 0000</div>
-    <div class="to-row">
-      <div class="to">
-        To: {{customer_name}}
-        {{#customer_address}}<div class="to-addr">{{customer_address}}</div>{{/customer_address}}
-      </div>
-      <div class="ref">
-        Our Ref: {{number}}<br>
-        Date: {{date}}
-        {{#reference}}<br>Your Ref: {{reference}}{{/reference}}
-        {{#valid_until}}<br>Valid Until: {{valid_until}}{{/valid_until}}
-      </div>
-    </div>
+    </td>
+  </tr></table>
+  <div class="doc-type">
+    <span class="dt">QUOTATION <span class="box tick">{{#is_quotation}}&#10003;{{/is_quotation}}</span></span>
+    <span class="dt">PROFORMA INVOICE <span class="box tick">{{#is_invoice}}&#10003;{{/is_invoice}}</span></span>
   </div>
+  <div class="vat">Vat No: 000000000 &nbsp; 0000</div>
+  <table class="to-row"><tr>
+    <td>
+      To: {{customer_name}}
+      {{#customer_address}}<div class="to-addr">{{customer_address}}</div>{{/customer_address}}
+    </td>
+    <td class="ref">
+      Our Ref: {{number}}<br>
+      Date: {{date}}
+      {{#reference}}<br>Your Ref: {{reference}}{{/reference}}
+      {{#valid_until}}<br>Valid Until: {{valid_until}}{{/valid_until}}
+    </td>
+  </tr></table>
+</div>
 
-  <div class="cats">
-    <span>METERS <i class="box">&#10003;</i></span>
-    <span>SAFETY <i class="box"></i></span>
-    <span>LIGHTING <i class="box"></i></span>
-    <span>TOOLS <i class="box"></i></span>
-    <span>POWER UTILITIES</span>
-  </div>
+<div class="cats"><table><tr>
+  <td>METERS <span class="box tick">&#10003;</span></td>
+  <td>SAFETY <span class="box"></span></td>
+  <td>LIGHTING <span class="box"></span></td>
+  <td>TOOLS <span class="box"></span></td>
+  <td style="text-align:right">POWER UTILITIES</td>
+</tr></table></div>
 
-  <div class="letter">
-    <p>Dear Sir,</p>
-    <p>With reference to your valued inquiry, we are pleased to quote as follows,</p>
-  </div>
+<div class="letter">
+  <p>Dear Sir,</p>
+  <p>With reference to your valued inquiry, we are pleased to quote as follows,</p>
+</div>
 
-  <table class="items">
-    <thead>
-      <tr>
-        <th>S/No.</th>
-        <th>Item</th>
-        <th>Qty.</th>
-        <th>Unit Price{{#currency}}<br>({{currency}}){{/currency}}</th>
-        <th class="hl">Special Discounted Price{{#currency}} ({{currency}}){{/currency}}</th>
-        <th class="hl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
-        <th class="hl">Total Price with VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{#items}}
-      <tr>
-        <td class="sn">{{no_padded}}</td>
-        <td class="it">
-          <div class="it-name">{{name}}</div>
-          {{#details}}<div>{{details}}</div>{{/details}}
-        </td>
-        <td class="c b">{{qty_padded}}</td>
-        <td class="c b">{{unit_price}}</td>
-        <td class="c b"><mark>{{net}}</mark></td>
-        <td class="c b">{{tax}}</td>
-        <td class="c b">{{total}}</td>
-      </tr>
-      {{/items}}
-      <tr class="tot"><td colspan="6" class="tl">Sub Total</td><td class="c">{{subtotal}}</td></tr>
-      {{#has_discount}}<tr class="tot"><td colspan="6" class="tl">Discount</td><td class="c">-{{discount}}</td></tr>{{/has_discount}}
-      {{#has_tax}}<tr class="tot"><td colspan="6" class="tl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</td><td class="c">{{tax_amount}}</td></tr>{{/has_tax}}
-      <tr class="tot gt"><td colspan="6" class="tl">Grand Total{{#currency}} ({{currency}}){{/currency}}</td><td class="c">{{total}}</td></tr>
-    </tbody>
-  </table>
+<table class="items">
+  <thead>
+    <tr>
+      <th>S/No.</th>
+      <th>Item</th>
+      <th>Qty.</th>
+      <th>Unit Price{{#currency}}<br>({{currency}}){{/currency}}</th>
+      <th class="hl">Special Discounted Price{{#currency}} ({{currency}}){{/currency}}</th>
+      <th class="hl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
+      <th class="hl">Total Price with VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#items}}
+    <tr>
+      <td class="sn">{{no_padded}}</td>
+      <td class="it">
+        <div class="it-name">{{name}}</div>
+        {{#details}}<div>{{details}}</div>{{/details}}
+      </td>
+      <td class="c">{{qty_padded}}</td>
+      <td class="c">{{unit_price}}</td>
+      <td class="c"><span class="mark">{{net}}</span></td>
+      <td class="c">{{tax}}</td>
+      <td class="c">{{total}}</td>
+    </tr>
+    {{/items}}
+    <tr class="tot"><td colspan="6" class="tl">Sub Total</td><td class="c">{{subtotal}}</td></tr>
+    {{#has_discount}}<tr class="tot"><td colspan="6" class="tl">Discount</td><td class="c">-{{discount}}</td></tr>{{/has_discount}}
+    {{#has_tax}}<tr class="tot"><td colspan="6" class="tl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</td><td class="c">{{tax_amount}}</td></tr>{{/has_tax}}
+    <tr class="tot gt"><td colspan="6" class="tl">Grand Total{{#currency}} ({{currency}}){{/currency}}</td><td class="c">{{total}}</td></tr>
+  </tbody>
+</table>
 
-  {{#notes}}<div class="notes"><b>Notes:</b> {{notes}}</div>{{/notes}}
+{{#notes}}<div class="notes"><b>Notes:</b> {{notes}}</div>{{/notes}}
 
-  <div class="terms">
-    <h3>Terms &amp; Conditions</h3>
-    <p><b>Price Validity:</b> The quoted prices are valid for 30 days from the date of quotation. Prices are subject to revision thereafter without prior notice.</p>
-    <p>&bull; <b>Product Availability:</b> Delivery is subject to product availability at the time of receiving the Purchase Order (PO). In the event of unforeseen supply-chain delays, the customer will be informed accordingly.</p>
-    <p>&bull; <b>Delivery:</b> Delivery will be completed <b>within 2 working days from the date of receipt of the confirmed PO</b>, subject to product availability (mentioned above in the quote) and completion of all required commercial formalities.</p>
-    <p>&bull; <b>Training:</b> Product and user training will be provided upon delivery, where applicable, based on the product type and complexity. Training for high-value or technically advanced instruments will be provided where required. Standard/basic instruments will be supplied without formal training unless otherwise agreed.</p>
-    <p>&bull; <b>Installation &amp; Commissioning:</b> Where applicable, installation, commissioning, and initial setup will be provided by our qualified technical personnel. Any additional site requirements or services outside the agreed scope may be subject to additional charges.</p>
-    <p>&bull; <b>Calibration:</b> Calibration certificates are not included as standard. A calibration certificate will be provided only where specifically stated in the quotation/offer. If required separately, calibration can be arranged at an additional charge.</p>
-    <p>&bull; <b>Warranty:</b> The products will be covered by <b>the manufacturer's standard warranty</b> against manufacturing defects, subject to the applicable warranty terms and conditions. Warranty does not cover damage caused by misuse, accidents, unauthorized repairs, improper handling, or normal wear and tear.</p>
-    <p>&bull; <b>After-Sales Support:</b> After-sales support, including technical assistance, calibration, repairs, maintenance, troubleshooting, and product demonstrations, will be provided where applicable and subject to the manufacturer's warranty terms and service conditions. Calibration services are chargeable. Repairs for manufacturing defects will be provided free of charge within the applicable warranty period, subject to the warranty terms and conditions. Any services outside the warranty coverage will be charged separately.</p>
-    <p>&bull; <b>Technical Support:</b> Technical assistance will be available through our qualified technical team for product-related queries, troubleshooting, and application guidance during the warranty period and thereafter.</p>
-    <p>&bull; <b>Payment Terms:</b> 100% advance payment shall be made along with the Purchase Order (PO) unless otherwise agreed in writing.</p>
-    <p>&bull; <b>Documentation:</b> Relevant product documentation, including <b>user manuals, datasheets, calibration certificates, and warranty documentation</b>, where applicable, will be provided with the equipment.</p>
-    <p>&bull; <b>Scope of Supply:</b> The supply shall be strictly in accordance with the specifications, model numbers, accessories, and quantities stated in the quotation. Any additional accessories or services requested after order confirmation may be charged separately.</p>
-    <p>&bull; <b>Order Confirmation:</b> The Purchase Order should clearly specify the quoted <b>model numbers, quantities, agreed prices, and applicable terms and conditions</b> to avoid any discrepancies.</p>
-    <p>&bull; <b>Trade-In Offer:</b> Trade-in options are available for eligible existing instruments/equipment, subject to technical evaluation and assessment. The applicable trade-in value will be determined based on the condition, model, age, and market value of the equipment. {{business_name}} will reserve all the right to reject or accept the trade-in offers.</p>
-    <p>For any clarification, please contact the undersigned.</p>
-  </div>
+<div class="terms">
+  <h3>Terms &amp; Conditions</h3>
+  <p><b>Price Validity:</b> The quoted prices are valid for 30 days from the date of quotation. Prices are subject to revision thereafter without prior notice.</p>
+  <p>&bull; <b>Product Availability:</b> Delivery is subject to product availability at the time of receiving the Purchase Order (PO). In the event of unforeseen supply-chain delays, the customer will be informed accordingly.</p>
+  <p>&bull; <b>Delivery:</b> Delivery will be completed <b>within 2 working days from the date of receipt of the confirmed PO</b>, subject to product availability (mentioned above in the quote) and completion of all required commercial formalities.</p>
+  <p>&bull; <b>Training:</b> Product and user training will be provided upon delivery, where applicable, based on the product type and complexity. Training for high-value or technically advanced instruments will be provided where required. Standard/basic instruments will be supplied without formal training unless otherwise agreed.</p>
+  <p>&bull; <b>Installation &amp; Commissioning:</b> Where applicable, installation, commissioning, and initial setup will be provided by our qualified technical personnel. Any additional site requirements or services outside the agreed scope may be subject to additional charges.</p>
+  <p>&bull; <b>Calibration:</b> Calibration certificates are not included as standard. A calibration certificate will be provided only where specifically stated in the quotation/offer. If required separately, calibration can be arranged at an additional charge.</p>
+  <p>&bull; <b>Warranty:</b> The products will be covered by <b>the manufacturer's standard warranty</b> against manufacturing defects, subject to the applicable warranty terms and conditions. Warranty does not cover damage caused by misuse, accidents, unauthorized repairs, improper handling, or normal wear and tear.</p>
+  <p>&bull; <b>After-Sales Support:</b> After-sales support, including technical assistance, calibration, repairs, maintenance, troubleshooting, and product demonstrations, will be provided where applicable and subject to the manufacturer's warranty terms and service conditions. Calibration services are chargeable. Repairs for manufacturing defects will be provided free of charge within the applicable warranty period, subject to the warranty terms and conditions. Any services outside the warranty coverage will be charged separately.</p>
+  <p>&bull; <b>Technical Support:</b> Technical assistance will be available through our qualified technical team for product-related queries, troubleshooting, and application guidance during the warranty period and thereafter.</p>
+  <p>&bull; <b>Payment Terms:</b> 100% advance payment shall be made along with the Purchase Order (PO) unless otherwise agreed in writing.</p>
+  <p>&bull; <b>Documentation:</b> Relevant product documentation, including <b>user manuals, datasheets, calibration certificates, and warranty documentation</b>, where applicable, will be provided with the equipment.</p>
+  <p>&bull; <b>Scope of Supply:</b> The supply shall be strictly in accordance with the specifications, model numbers, accessories, and quantities stated in the quotation. Any additional accessories or services requested after order confirmation may be charged separately.</p>
+  <p>&bull; <b>Order Confirmation:</b> The Purchase Order should clearly specify the quoted <b>model numbers, quantities, agreed prices, and applicable terms and conditions</b> to avoid any discrepancies.</p>
+  <p>&bull; <b>Trade-In Offer:</b> Trade-in options are available for eligible existing instruments/equipment, subject to technical evaluation and assessment. The applicable trade-in value will be determined based on the condition, model, age, and market value of the equipment. {{business_name}} will reserve all the right to reject or accept the trade-in offers.</p>
+  <p>For any clarification, please contact the undersigned.</p>
+</div>
 
-  <div class="sign">
-    Yours faithfully,<br>
-    <span class="up">{{business_name}}</span>
-    <div class="gap"></div>
-    Your Name<br>
-    Designation<br>
-    Mobile: 07X XXX XXXX
-  </div>
+<div class="sign">
+  Yours faithfully,<br>
+  <span class="up">{{business_name}}</span>
+  <div class="gap"></div>
+  Your Name<br>
+  Designation<br>
+  Mobile: 07X XXX XXXX
+</div>
 
-</div></td></tr></tbody>
+</td></tr></tbody>
 </table>
 
 </body>
@@ -32323,7 +32380,7 @@ function _isetupApplyCustomHtml(html, msg) {
     const res = await window.electronAPI.readTextFile(pick.filePaths[0]);
     if (!res?.ok) { toast(res?.error || 'Could not read the file', 'error'); return; }
     if (!/<[a-z!][\s\S]*>/i.test(res.content || '')) { toast('That file does not look like HTML', 'error'); return; }
-    if (res.content.length > 2 * 1024 * 1024) { toast('HTML template is too large (max 2 MB)', 'error'); return; }
+    if (res.content.length > QTPL_MAX_HTML) { toast(`HTML template is too large (max ${QTPL_MAX_HTML.toLocaleString()} characters) — link images from File Manager instead of embedding them`, 'error'); return; }
     _isetupApplyCustomHtml(res.content, `Loaded ${pick.filePaths[0].split(/[\\/]/).pop()} — Save Setup to keep it`);
   });
 

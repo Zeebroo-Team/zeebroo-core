@@ -15,6 +15,10 @@ use Modules\Sales\Models\Quotation;
  */
 class QuotationPrintService
 {
+    public function __construct(
+        private readonly QuotationTemplateService $templates,
+    ) {}
+
     /** @return array<string, mixed> */
     public function viewData(Business $business, Quotation $quotation): array
     {
@@ -81,12 +85,22 @@ class QuotationPrintService
     public function generatePdf(Quotation $quotation): string
     {
         $business = $quotation->business()->firstOrFail();
-        $data     = $this->viewData($business, $quotation) + [
-            'pdf'     => true,
-            'logoSrc' => $this->logoDataUri($business),
-        ];
 
-        $binary = Pdf::loadView('sales::quotations.print', $data)->setPaper('a4')->output();
+        if ($this->templates->usesCustomHtml($business)) {
+            // Quotation Setup → Custom HTML: the same layout the desktop prints
+            [$w, $h] = $this->templates->paper($business);
+            // Media "print" (+ dompdf's own "dompdf" type) so templates can tell it apart from the screen preview
+            $binary  = Pdf::loadHTML($this->templates->render($business, $quotation))
+                ->setOption('defaultMediaType', 'print')
+                ->setPaper([0, 0, $w * 72 / 25.4, $h * 72 / 25.4])
+                ->output();
+        } else {
+            $data = $this->viewData($business, $quotation) + [
+                'pdf'     => true,
+                'logoSrc' => $this->logoDataUri($business),
+            ];
+            $binary = Pdf::loadView('sales::quotations.print', $data)->setPaper('a4')->output();
+        }
         $path   = 'quotations/' . $business->id . '/' . preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) ($quotation->quote_number ?: $quotation->id)) . '.pdf';
 
         if ($quotation->pdf_path && $quotation->pdf_path !== $path) {
@@ -98,11 +112,15 @@ class QuotationPrintService
         return $path;
     }
 
-    /** The stored PDF, made first if missing. */
+    /** The stored PDF, made first if missing or older than the last Quotation Setup change. */
     public function pdfPath(Quotation $quotation): string
     {
-        if ($quotation->pdf_path && Storage::disk(self::disk())->exists($quotation->pdf_path)) {
-            return $quotation->pdf_path;
+        $disk = Storage::disk(self::disk());
+        if ($quotation->pdf_path && $disk->exists($quotation->pdf_path)) {
+            $setupAt = $this->templates->get($quotation->business()->firstOrFail())['updated_at'] ?? null;
+            if (! $setupAt || $disk->lastModified($quotation->pdf_path) >= strtotime((string) $setupAt)) {
+                return $quotation->pdf_path;
+            }
         }
 
         return $this->generatePdf($quotation);

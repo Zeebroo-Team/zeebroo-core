@@ -201,6 +201,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::delete('invoices/{invoice}',                [PosInvoiceApiController::class, 'destroy']        )->name('invoices.destroy');
 
     // Quotations
+    Route::get   ('quotation-setup',                   [\Modules\Pos\Http\Controllers\Api\PosQuotationSetupApiController::class, 'show']  )->name('quotation-setup.show');
+    Route::put   ('quotation-setup',                   [\Modules\Pos\Http\Controllers\Api\PosQuotationSetupApiController::class, 'update'])->name('quotation-setup.update');
     Route::get   ('quotations',                        [PosQuotationApiController::class, 'index']        )->name('quotations.index');
     Route::post  ('quotations',                        [PosQuotationApiController::class, 'store']        )->name('quotations.store');
     Route::get   ('quotations/{quotation}',            [PosQuotationApiController::class, 'show']         )->name('quotations.show');

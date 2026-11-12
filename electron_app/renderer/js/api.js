@@ -128,6 +128,9 @@ const API = (() => {
     quotationAccept: (id)        => request('POST',   `/quotations/${id}/accept`),
     quotationReject: (id)        => request('POST',   `/quotations/${id}/reject`),
     deleteQuotation: (id)        => request('DELETE', `/quotations/${id}`),
+    // Quotation Setup — server copy used for CRM / emailed quotation PDFs
+    quotationSetup:     ()       => request('GET',    '/quotation-setup'),
+    saveQuotationSetup: (body)   => request('PUT',    '/quotation-setup', body),
 
     // Sales Orders
     salesOrders:          (q, status) => request('GET',    `/sales-orders?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
