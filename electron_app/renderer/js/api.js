@@ -430,6 +430,11 @@ const API = (() => {
 
     // File Manager
     fileManagerBrowse: (folderId, imagesOnly) => request('GET', `/online/file-manager?folder=${folderId||''}&images_only=${imagesOnly?1:0}`),
+    // Uploads go through electronAPI.apiUpload (multipart "files[]"), one file per call
+    fileManagerUploadPath:   (folderId)       => `/online/file-manager/upload${folderId ? `?folder_id=${folderId}` : ''}`,
+    fileManagerDelete:       (id)             => request('DELETE', `/online/file-manager/${id}`),
+    fileManagerCreateFolder: (name, parentId) => request('POST',   '/online/file-manager/folders', { name, parent_id: parentId || null }),
+    fileManagerDeleteFolder: (id)             => request('DELETE', `/online/file-manager/folders/${id}`),
 
     // Product Brands
     productBrands:       (q, status)  => request('GET',    `/brands?q=${encodeURIComponent(q||'')}&status=${status||''}`),

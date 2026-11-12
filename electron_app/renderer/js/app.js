@@ -3853,14 +3853,18 @@ async function _fetchLetterhead() {
 }
 
 // ── Print (with optional letterhead) ─────────────────────────────────────
-// Quotations print through the same saved Invoice Setup (template, colour,
-// paper, margins, header layout, letterhead) as invoices — only the wording differs.
+// Quotations print with their own Quotation Setup (template, colour, paper,
+// margins, header layout, letterhead), falling back to Invoice Setup values.
 function _qtToPrintDoc(q) {
   return {
     invoice_number:  q.quote_number,
     issue_date:      q.quote_date,
     due_date:        q.expiry_date,
     customer_name:   q.customer_name,
+    customer_address: q.customer_address,
+    customer_phone:  q.customer_phone,
+    customer_email:  q.customer_email,
+    reference:       q.reference,
     status:          q.status,
     status_label:    q.status_label,
     notes:           q.notes,
@@ -3870,6 +3874,7 @@ function _qtToPrintDoc(q) {
     total:           q.total,
     items:           q.items || [],
     _docLabels: { doc: 'Quotation', due: 'Valid Until', dueShort: 'Valid until', total: 'Quote Total', amtDue: 'Quote Total' },
+    _setupKind: 'quotation',
   };
 }
 
@@ -5052,7 +5057,7 @@ async function showInvoicePreviewModal(inv) {
     badge.style.color      = txtMap[inv.status] || '#64748b';
   }
 
-  const ic    = _isetupGetCfg();
+  const ic    = _isetupGetCfg(inv._setupKind);
   const geom  = _isetupGeom(ic);
   const frame = document.getElementById('invp-frame');
 
@@ -5082,7 +5087,7 @@ async function showInvoicePreviewModal(inv) {
 }
 
 async function _invPrint(inv) {
-  const ic     = _isetupGetCfg();
+  const ic     = _isetupGetCfg(inv._setupKind);
   const geom   = _isetupGeom(ic);
   const lhFull = ic.lhEnabled ? await _fetchLetterhead() : null;
   let   lhDataUrl = null;
@@ -10502,6 +10507,353 @@ $('#tpm-about').addEventListener('click', () => {
   closeProfileMenu();
   openAboutModal();
 });
+
+// ── File Manager (profile menu → PosFileManagerApiController) ────────────────
+// Same mac-window look as CRM → Import Leads. Upload by button or drag & drop (one
+// apiUpload call per file, into the open folder), browse folders, grid/list view,
+// copy a file's link, preview images, create/delete folders and delete files.
+// Module-owned files (e.g. CRM lead attachments) are listed but can only be removed
+// from their module. Classes use "fmg-" — "fm-" belongs to Feature Management.
+const FMG_UPLOAD_EXTS = ['pdf','jpg','jpeg','png','gif','webp','svg','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip','rar','7z'];
+const _fmg = {
+  folderId: null, folders: [], files: [], breadcrumbs: [],
+  filter: 'all', view: 'grid', q: '', busy: false, previewUrl: '', newIds: new Set(), dragDepth: 0,
+};
+try { _fmg.view = localStorage.getItem('fmg-view') === 'list' ? 'list' : 'grid'; } catch (_) {}
+
+$('#tpm-file-manager').addEventListener('click', () => { closeProfileMenu(); openFileManagerModal(); });
+$('#fmg-modal-close').addEventListener('click', () => closeFileManagerModal());
+$('#fmg-footer-close').addEventListener('click', () => closeFileManagerModal());
+$('#fmg-modal-overlay').addEventListener('click', e => { if (e.target === $('#fmg-modal-overlay')) closeFileManagerModal(); });
+$('#fmg-upload').addEventListener('click', () => _fmgPickAndUpload());
+$('#fmg-new-folder').addEventListener('click', () => _fmgShowNewFolder());
+$('#fmg-search').addEventListener('input', e => { _fmg.q = e.target.value.trim().toLowerCase(); _fmgRender(); });
+document.querySelectorAll('[data-fm-filter]').forEach(btn => btn.addEventListener('click', () => {
+  _fmg.filter = btn.dataset.fmFilter;
+  document.querySelectorAll('[data-fm-filter]').forEach(b => b.classList.toggle('active', b === btn));
+  _fmgRender();
+}));
+document.querySelectorAll('[data-fm-view]').forEach(btn => btn.addEventListener('click', () => {
+  _fmg.view = btn.dataset.fmView;
+  try { localStorage.setItem('fmg-view', _fmg.view); } catch (_) {}
+  _fmgRender();
+}));
+$('#fmg-preview-close').addEventListener('click', () => _fmgClosePreview());
+$('#fmg-preview').addEventListener('click', e => { if (e.target === $('#fmg-preview')) _fmgClosePreview(); });
+$('#fmg-preview-copy').addEventListener('click', e => _fmgCopyLink(_fmg.previewUrl, e.currentTarget));
+$('#fmg-preview-url').addEventListener('focus', e => e.target.select());
+// Esc closes the image preview first; otherwise the shared mac-window handler closes the window
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || $('#fmg-preview').style.display === 'none') return;
+  if ($('#app-confirm-modal')?.style.display === 'flex') return;
+  e.preventDefault();
+  _fmgClosePreview();
+});
+
+// Drag & drop files anywhere on the window
+const _fmgWin = $('#fmg-modal-overlay .fmg-window');
+const _fmgHasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+_fmgWin.addEventListener('dragenter', e => {
+  if (!_fmgHasFiles(e)) return;
+  e.preventDefault();
+  _fmg.dragDepth++;
+  _fmgWin.classList.add('is-dragging');
+});
+_fmgWin.addEventListener('dragover', e => { if (_fmgHasFiles(e)) e.preventDefault(); });
+_fmgWin.addEventListener('dragleave', () => {
+  if (--_fmg.dragDepth <= 0) { _fmg.dragDepth = 0; _fmgWin.classList.remove('is-dragging'); }
+});
+_fmgWin.addEventListener('drop', e => {
+  if (!_fmgHasFiles(e)) return;
+  e.preventDefault();
+  _fmg.dragDepth = 0;
+  _fmgWin.classList.remove('is-dragging');
+  const paths = [...e.dataTransfer.files].map(f => window.electronAPI.pathForFile(f)).filter(Boolean);
+  const ok = paths.filter(p => FMG_UPLOAD_EXTS.includes((p.split('.').pop() || '').toLowerCase()));
+  if (ok.length < paths.length) toast(`${paths.length - ok.length} file(s) skipped — that file type isn't supported`, 'error');
+  if (ok.length) _fmgUpload(ok);
+});
+
+function openFileManagerModal() {
+  const ov = $('#fmg-modal-overlay');
+  ov.classList.remove('mac-out');
+  ov.style.display = 'flex';
+  ov.classList.add('mac-in');
+  _fmgSyncTabs();
+  _fmgLoad(_fmg.folderId);
+}
+function closeFileManagerModal() {
+  const ov = $('#fmg-modal-overlay');
+  if (ov.style.display === 'none') return;
+  _fmgClosePreview();
+  ov.classList.remove('mac-in');
+  ov.classList.add('mac-out');
+  setTimeout(() => {
+    if (!ov.classList.contains('mac-out')) return; // reopened meanwhile
+    ov.classList.remove('mac-out');
+    ov.style.display = 'none';
+  }, 190);
+}
+
+function _fmgSyncTabs() {
+  document.querySelectorAll('[data-fm-filter]').forEach(b => b.classList.toggle('active', b.dataset.fmFilter === _fmg.filter));
+  document.querySelectorAll('[data-fm-view]').forEach(b => b.classList.toggle('active', b.dataset.fmView === _fmg.view));
+}
+
+async function _fmgLoad(folderId) {
+  _fmg.folderId = folderId;
+  $('#fmg-new-folder-slot').innerHTML = '';
+  $('#fmg-content').innerHTML = '<div class="fmg-empty"><i class="fa fa-spinner fa-spin"></i> Loading files…</div>';
+  const res = await API.fileManagerBrowse(folderId, false);
+  if (res.status !== 200) {
+    // A folder deleted elsewhere — fall back to the root
+    if (res.status === 404 && folderId) return _fmgLoad(null);
+    $('#fmg-content').innerHTML = `<div class="fmg-empty"><i class="fa fa-triangle-exclamation"></i> ${escHtml(res.body?.message || 'Could not load files.')}</div>`;
+    return;
+  }
+  _fmg.folders     = res.body.folders || [];
+  _fmg.files       = res.body.files || [];
+  _fmg.breadcrumbs = res.body.breadcrumbs || [];
+  _fmgRenderBreadcrumb();
+  _fmgRender();
+}
+
+function _fmgRenderBreadcrumb() {
+  const crumbs = _fmg.breadcrumbs.length ? _fmg.breadcrumbs : [{ id: null, name: 'All files' }];
+  const icon = i => i === 0 ? '<i class="fa fa-house"></i> ' : '<i class="fa fa-folder-open"></i> ';
+  $('#fmg-breadcrumb').innerHTML = crumbs.map((b, i) => i < crumbs.length - 1
+    ? `<button type="button" class="fmg-bc-btn" data-folder="${b.id ?? ''}">${icon(i)}${escHtml(b.name)}</button><i class="fa fa-chevron-right"></i>`
+    : `<span class="fmg-bc-current">${icon(i)}${escHtml(b.name)}</span>`
+  ).join('');
+  $('#fmg-breadcrumb').querySelectorAll('.fmg-bc-btn').forEach(btn =>
+    btn.addEventListener('click', () => _fmgLoad(btn.dataset.folder ? parseInt(btn.dataset.folder) : null)));
+  $('#fmg-title-sub').textContent = crumbs.map(b => b.name).join(' / ');
+}
+
+function _fmgFileIcon(f) {
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'pdf') return 'fa-file-pdf fmg-ico-pdf';
+  if (['doc','docx'].includes(ext)) return 'fa-file-word fmg-ico-word';
+  if (['xls','xlsx','csv'].includes(ext)) return 'fa-file-excel fmg-ico-excel';
+  if (['ppt','pptx'].includes(ext)) return 'fa-file-powerpoint fmg-ico-ppt';
+  if (['zip','rar','7z'].includes(ext)) return 'fa-file-zipper fmg-ico-zip';
+  return 'fa-file-lines';
+}
+function _fmgDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function _fmgRender() {
+  _fmgSyncTabs();
+  const q = _fmg.q;
+  const folders = _fmg.filter === 'all' ? _fmg.folders.filter(f => !q || f.name.toLowerCase().includes(q)) : [];
+  const files = _fmg.files.filter(f =>
+    (_fmg.filter === 'all' || (_fmg.filter === 'images') === !!f.is_image) &&
+    (!q || f.name.toLowerCase().includes(q)));
+
+  const total = _fmg.files.length, images = _fmg.files.filter(f => f.is_image).length;
+  $('#fmg-count').textContent = `${total} file${total === 1 ? '' : 's'} · ${images} image${images === 1 ? '' : 's'}` +
+    (_fmg.folders.length ? ` · ${_fmg.folders.length} folder${_fmg.folders.length === 1 ? '' : 's'}` : '');
+
+  const box = $('#fmg-content');
+  if (!folders.length && !files.length) {
+    box.innerHTML = q || _fmg.filter !== 'all'
+      ? '<div class="fmg-empty"><i class="fa fa-magnifying-glass"></i> No matching files</div>'
+      : '<div class="fmg-empty"><i class="fa fa-folder-open"></i><b>This folder is empty</b>Drag files here or use “Choose files…” above to upload.</div>';
+    return;
+  }
+
+  const copyBtn = f => `<button type="button" class="fmg-copy-btn" data-fmg-copy="${f.id}" title="Copy link"><i class="fa fa-link"></i> Copy link</button>`;
+  const openBtn = f => `<button type="button" class="fmg-icon-btn" data-fmg-open="${f.id}" title="${f.is_image ? 'Preview' : 'Open'}"><i class="fa ${f.is_image ? 'fa-eye' : 'fa-up-right-from-square'}"></i></button>`;
+  const delBtn  = f => f.managed ? '' : `<button type="button" class="fmg-icon-btn is-danger" data-fmg-del="${f.id}" title="Delete"><i class="fa fa-trash"></i></button>`;
+  const delFolderBtn = f => `<button type="button" class="fmg-icon-btn is-danger" data-fmg-del-folder="${f.id}" title="Delete folder"><i class="fa fa-trash"></i></button>`;
+
+  if (_fmg.view === 'list') {
+    box.innerHTML = `<table class="crm-imp-table fmg-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+      <tbody>
+        ${folders.map(f => `<tr>
+          <td><div class="fmg-row-name" data-fmg-folder="${f.id}"><span class="fmg-row-thumb"><i class="fa fa-folder"></i></span><b>${escHtml(f.name)}</b></div></td>
+          <td>Folder</td><td>—</td><td></td>
+          <td><div class="fmg-row-actions">${delFolderBtn(f)}</div></td></tr>`).join('')}
+        ${files.map(f => `<tr>
+          <td><div class="fmg-row-name" data-fmg-open="${f.id}">
+            <span class="fmg-row-thumb">${f.is_image ? `<img src="${escHtml(f.url)}" alt="" loading="lazy">` : `<i class="fa ${_fmgFileIcon(f)}"></i>`}</span>
+            <b title="${escHtml(f.name)}">${escHtml(f.name)}</b></div></td>
+          <td>${escHtml((f.name.split('.').pop() || '').toUpperCase())}</td>
+          <td>${escHtml(f.size || '')}</td>
+          <td>${_fmgDate(f.created_at)}</td>
+          <td><div class="fmg-row-actions">${copyBtn(f)}${openBtn(f)}${delBtn(f)}</div></td></tr>`).join('')}
+      </tbody></table>`;
+  } else {
+    box.innerHTML = `
+      ${folders.length ? `<div class="fmg-group-title">Folders</div><div class="fmg-folders">${folders.map(f => `
+        <div class="fmg-folder" data-fmg-folder="${f.id}" title="${escHtml(f.name)}">
+          <i class="fa fa-folder"></i><span class="fmg-folder-name">${escHtml(f.name)}</span>${delFolderBtn(f)}
+        </div>`).join('')}</div>` : ''}
+      ${files.length ? `<div class="fmg-group-title">Files</div><div class="fmg-files">${files.map(f => `
+        <div class="fmg-file${_fmg.newIds.has(f.id) ? ' is-new' : ''}">
+          <div class="fmg-thumb${f.is_image ? ' is-img' : ''}" data-fmg-open="${f.id}" title="${f.is_image ? 'Preview' : 'Open'}">
+            ${f.is_image ? `<img src="${escHtml(f.url)}" alt="" loading="lazy">` : `<i class="fa ${_fmgFileIcon(f)}"></i>`}
+          </div>
+          <div class="fmg-info">
+            <div class="fmg-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
+            <div class="fmg-meta">${escHtml(f.size || '')}${f.created_at ? ` · ${_fmgDate(f.created_at)}` : ''}</div>
+          </div>
+          <div class="fmg-file-actions">${copyBtn(f)}${openBtn(f)}${delBtn(f)}</div>
+        </div>`).join('')}</div>` : ''}`;
+  }
+
+  const byId = id => _fmg.files.find(f => f.id === parseInt(id));
+  box.querySelectorAll('[data-fmg-folder]').forEach(el => el.addEventListener('click', e => {
+    if (e.target.closest('[data-fmg-del-folder]')) return;
+    _fmgLoad(parseInt(el.dataset.fmgFolder));
+  }));
+  box.querySelectorAll('[data-fmg-open]').forEach(el => el.addEventListener('click', () => _fmgOpen(byId(el.dataset.fmgOpen))));
+  box.querySelectorAll('[data-fmg-copy]').forEach(btn => btn.addEventListener('click', () => _fmgCopyLink(byId(btn.dataset.fmgCopy)?.url, btn)));
+  box.querySelectorAll('[data-fmg-del]').forEach(btn => btn.addEventListener('click', () => _fmgDeleteFile(byId(btn.dataset.fmgDel))));
+  box.querySelectorAll('[data-fmg-del-folder]').forEach(btn => btn.addEventListener('click', () =>
+    _fmgDeleteFolder(_fmg.folders.find(f => f.id === parseInt(btn.dataset.fmgDelFolder)))));
+}
+
+function _fmgOpen(file) {
+  if (!file) return;
+  if (!file.is_image) { window.electronAPI.openExternal(file.url); return; }
+  _fmg.previewUrl = file.url;
+  $('#fmg-preview-img').src = file.url;
+  $('#fmg-preview-name').textContent = file.name;
+  $('#fmg-preview-url').value = file.url;
+  $('#fmg-preview').style.display = 'flex';
+}
+function _fmgClosePreview() {
+  $('#fmg-preview').style.display = 'none';
+  $('#fmg-preview-img').removeAttribute('src');
+  _fmg.previewUrl = '';
+}
+
+async function _fmgCopyLink(url, btn) {
+  if (!url) return;
+  try {
+    await copyToClipboard(url);
+  } catch (_) {
+    toast('Could not copy the link', 'error');
+    return;
+  }
+  flashCopiedBadge(btn, 'Link copied!');
+  // Buttons with a label switch to "Copied" for a moment so it's obvious which file was copied
+  if (btn?.classList.contains('fmg-copy-btn')) {
+    btn.classList.add('is-copied');
+    btn.innerHTML = '<i class="fa fa-check"></i> Copied';
+    setTimeout(() => { btn.classList.remove('is-copied'); btn.innerHTML = '<i class="fa fa-link"></i> Copy link'; }, 1400);
+  }
+}
+
+async function _fmgPickAndUpload() {
+  if (_fmg.busy) return;
+  const pick = await window.electronAPI.showOpenDialog({
+    title: 'Upload files',
+    filters: [
+      { name: 'Images & documents', extensions: FMG_UPLOAD_EXTS },
+      { name: 'Images', extensions: ['jpg','jpeg','png','gif','webp','svg'] },
+    ],
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (pick.canceled || !pick.filePaths.length) return;
+  _fmgUpload(pick.filePaths);
+}
+
+async function _fmgUpload(filePaths) {
+  if (_fmg.busy) return;
+  _fmg.busy = true;
+  const btn = $('#fmg-upload');
+  btn.disabled = true;
+  $('#fmg-progress').style.display = '';
+  const n = filePaths.length;
+  const newIds = new Set();
+  const failed = [];
+  for (const [i, filePath] of filePaths.entries()) {
+    const name = filePath.split(/[\\/]/).pop();
+    $('#fmg-progress-label').textContent = `Uploading ${i + 1} of ${n} — ${name}`;
+    $('#fmg-progress-fill').style.width = `${(i / n) * 100}%`;
+    const res = await window.electronAPI.apiUpload(API.fileManagerUploadPath(_fmg.folderId), filePath);
+    if (res.status === 201) (res.body?.data || []).forEach(f => newIds.add(f.id));
+    else failed.push(`${name}: ${res.body?.message || 'upload failed'}`);
+  }
+  $('#fmg-progress-fill').style.width = '100%';
+  _fmg.busy = false;
+  btn.disabled = false;
+  setTimeout(() => { $('#fmg-progress').style.display = 'none'; $('#fmg-progress-fill').style.width = '0'; }, 500);
+
+  if (failed.length) toast(`${failed.length} of ${n} file(s) not uploaded — ${failed[0]}`, 'error');
+  if (newIds.size) {
+    _fmg.newIds = newIds;
+    if (_fmg.filter !== 'all') _fmg.filter = 'all';
+    await _fmgLoad(_fmg.folderId);
+    $('#fmg-content .fmg-file.is-new')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => { _fmg.newIds = new Set(); $$('#fmg-content .is-new').forEach(el => el.classList.remove('is-new')); }, 4000);
+  }
+}
+
+function _fmgShowNewFolder() {
+  if ($('#fmg-new-folder-input')) { $('#fmg-new-folder-input').focus(); return; }
+  const slot = $('#fmg-new-folder-slot');
+  slot.innerHTML = `<div class="fmg-new-folder"><i class="fa fa-folder-plus"></i>
+    <input type="text" id="fmg-new-folder-input" placeholder="New folder name" maxlength="120">
+    <button type="button" class="po-btn-primary" id="fmg-new-folder-save">Create</button>
+    <button type="button" class="po-btn-ghost" id="fmg-new-folder-cancel">Cancel</button></div>`;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const input = $('#fmg-new-folder-input');
+  const save = async () => {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    $('#fmg-new-folder-save').disabled = true;
+    const res = await API.fileManagerCreateFolder(name, _fmg.folderId);
+    if (res.status === 201) { _fmgLoad(_fmg.folderId); return; }
+    $('#fmg-new-folder-save').disabled = false;
+    toast(res.body?.message || 'Could not create the folder', 'error');
+  };
+  $('#fmg-new-folder-save').addEventListener('click', save);
+  $('#fmg-new-folder-cancel').addEventListener('click', () => { slot.innerHTML = ''; });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); slot.innerHTML = ''; }
+  });
+  input.focus();
+}
+
+async function _fmgDeleteFile(file) {
+  if (!file) return;
+  const ok = await appConfirm({
+    title: 'Delete this file?',
+    message: `"${file.name}" will be permanently removed. Anywhere its link is used (products, invoices, shared links) will stop showing it.`,
+    confirmText: '<i class="fa fa-trash"></i> Delete',
+    icon: 'fa-triangle-exclamation',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = await API.fileManagerDelete(file.id);
+  if (res.status !== 200) { toast(res.body?.message || 'Could not delete the file', 'error'); return; }
+  _fmg.files = _fmg.files.filter(f => f.id !== file.id);
+  _fmgRender();
+}
+
+async function _fmgDeleteFolder(folder) {
+  if (!folder) return;
+  const ok = await appConfirm({
+    title: 'Delete this folder?',
+    message: `"${folder.name}" must be empty before it can be deleted.`,
+    confirmText: '<i class="fa fa-trash"></i> Delete',
+    icon: 'fa-triangle-exclamation',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = await API.fileManagerDeleteFolder(folder.id);
+  if (res.status !== 200) { toast(res.body?.message || 'Could not delete the folder', 'error'); return; }
+  _fmg.folders = _fmg.folders.filter(f => f.id !== folder.id);
+  _fmgRender();
+}
 
 // ── Database Backup & Import (profile menu → PosBackupApiController) ─────────
 // Export: tick sections (or Full backup) → server builds a zip → streamed to disk.
@@ -29956,6 +30308,8 @@ const INV_TEMPLATES = [
   { id: 'minimal',   name: 'Minimal',     desc: 'Pure typography, no fills or colour blocks',  swatch: '#374151', accent: '#374151' },
   { id: 'compact',   name: 'Compact',     desc: 'Card-style info grid with teal accent',       swatch: '#0891b2', accent: '#0891b2' },
   { id: 'executive', name: 'Executive',   desc: 'Dark luxury header with gold accent trim',    swatch: '#1e1b4b', accent: '#c7a84f' },
+  // Prints from the user's own HTML (uploaded or edited here) — see _qtpl* below
+  { id: 'custom',    name: 'Custom HTML', desc: 'Your own uploaded / edited HTML layout',      swatch: 'linear-gradient(135deg,#1e3a8a 0%,#1e3a8a 50%,#f59e0b 50%)', accent: '#1e3a8a' },
 ];
 
 let _isetupActiveTpl   = 'classic';
@@ -29968,23 +30322,48 @@ const INV_COLOR_PRESETS = [
   '#c7a84f', '#ea580c', '#0f172a', '#374151', '#db2777',
 ];
 
-function _isetupGetCfg() {
+// kind: 'invoice' (Invoice Setup) or 'quotation' (Quotation Setup). Quotation
+// Setup saves its own quotation_* keys; any key not saved there yet falls back
+// to the Invoice Setup value, so quotations keep printing as before until edited.
+function _isetupGetCfg(kind = 'invoice') {
   const c = state.config || {};
+  const k = name => (kind === 'quotation' && c['quotation_' + name] !== undefined)
+    ? c['quotation_' + name] : c['invoice_' + name];
+  const printer = k('printer') || '';
   return {
-    template:    c.invoice_template    || 'classic',
-    color:       c.invoice_color       || '',
+    template:    k('template')    || 'classic',
+    color:       k('color')       || '',
     // Thermal printer types were removed; legacy saved values fall back to A4.
-    printer:     (c.invoice_printer || '').startsWith('thermal_') ? 'laser_a4' : (c.invoice_printer || 'laser_a4'),
-    paper:       c.invoice_paper       || 'a4',
-    orientation: c.invoice_orientation || 'portrait',
-    mgTop:       c.invoice_mg_top      ?? 20,
-    mgBot:       c.invoice_mg_bot      ?? 20,
-    mgLeft:      c.invoice_mg_left     ?? 15,
-    mgRight:     c.invoice_mg_right    ?? 15,
-    hdrLayout:   c.invoice_hdr_layout  || 'num-left',
-    logoPos:     c.invoice_logo_pos    || 'header',
-    lhEnabled:   c.invoice_lh_enabled  !== false, // default on for existing setups
+    printer:     printer.startsWith('thermal_') ? 'laser_a4' : (printer || 'laser_a4'),
+    paper:       k('paper')       || 'a4',
+    orientation: k('orientation') || 'portrait',
+    mgTop:       k('mg_top')      ?? 20,
+    mgBot:       k('mg_bot')      ?? 20,
+    mgLeft:      k('mg_left')     ?? 15,
+    mgRight:     k('mg_right')    ?? 15,
+    hdrLayout:   k('hdr_layout')  || 'num-left',
+    logoPos:     k('logo_pos')    || 'header',
+    lhEnabled:   k('lh_enabled')  !== false, // default on for existing setups
+    customHtml:  k('custom_html') || '',
   };
+}
+
+// Which setup the modal is editing — 'invoice' or 'quotation'
+let _isetupKind = 'invoice';
+
+// The sample preview templates are written with invoice wording; swap it for
+// quotation wording when the modal is in Quotation Setup mode.
+function _isetupQuoteWording(html) {
+  return html
+    .replaceAll('INV-0024', 'QT-0024')
+    .replaceAll('>Invoice Details<', '>Quotation Details<')
+    .replaceAll('>Invoice<', '>Quotation<')
+    .replaceAll('>INVOICE<', '>QUOTATION<')
+    .replaceAll('>Invoice ', '>Quotation ')
+    .replaceAll('>Due Date<', '>Valid Until<')
+    .replaceAll('>Due<', '>Valid until<')
+    .replaceAll('>Total Due<', '>Quote Total<')
+    .replaceAll('>Amount Due<', '>Quote Total<');
 }
 
 // Resolves a template by id, optionally overriding its accent color with a
@@ -30047,8 +30426,11 @@ function _isetupGeom(cfg) {
 // two-column header container (business block + invoice-number block).
 function _isetupHdrCss(hdrLayout) {
   const sel = '.top,.banner,.hdr-top,.topbar';
-  if (hdrLayout === 'num-left')   return `${sel}{flex-direction:row-reverse}`;
-  if (hdrLayout === 'num-center') return `${sel}{justify-content:center;gap:48px}`;
+  // Title + number lines of the number block, right-aligned by every template;
+  // re-align them with the block so the number sits flush under the title.
+  const num = '.it,.in,.il,.b-lbl,.b-num,.inv-word,.inv-ref,.tb-il,.tb-in';
+  if (hdrLayout === 'num-left')   return `${sel}{flex-direction:row-reverse}${num}{text-align:left}`;
+  if (hdrLayout === 'num-center') return `${sel}{justify-content:center;gap:48px}${num}{text-align:center}`;
   return '';
 }
 
@@ -30550,6 +30932,8 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 // Builds the same HTML as the 6 template builders but populated with actual
 // invoice fields (invoice_number, customer_name, items, totals, etc.)
 function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
+  // Custom HTML owns its whole layout (header, letterhead, fonts) — no sentinels
+  if (ic.template === 'custom') return _qtplBuildDoc(ic.customHtml || QTPL_STARTERS.trading, inv, ic, cur);
   const tpl  = _isetupResolveTpl(ic.template, ic.color);
   let   mg   = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
   const a    = tpl.accent;
@@ -31126,38 +31510,47 @@ function _isetupZoomAt(newZoom, pivotX, pivotY) {
 // Cached letterhead data URL for the invoice setup preview (reset on open)
 let _isetupLhDataUrl = null;
 
-function _isetupUpdatePreview() {
+function _isetupUpdatePreview(keepView) {
   const tpl    = _isetupResolveTpl(_isetupActiveTpl, _isetupActiveColor);
   const live   = _isetupReadLive();
   const mg     = { top: live.mgTop, bot: live.mgBot, left: live.mgLeft, right: live.mgRight };
   const geom   = _isetupGeom(live);
   const iframe = $('#isetup-prev-frame');
   if (!iframe) return;
-
-  // Temporarily borrow the module-level sentinels so _iTPL* functions render
-  // with the live paper size / header layout / letterhead placement.
-  geomW    = geom.wPx;
-  geomMinH = geom.thermal ? '' : `min-height:${geom.hPx}px;`;
-  hdrCss   = _isetupHdrCss(live.hdrLayout) + _isetupPageAtCss(geom);
   _isetupLastGeom = geom;
 
-  const lhEnabled = $('#isetup-lh-enabled')?.checked !== false;
-  if (lhEnabled && _isetupLhDataUrl) {
-    const lh = _isetupLhHtml(_isetupLhDataUrl.dataUrl, _isetupLhDataUrl.contentHeight, live.logoPos, geom, mg);
-    lhLayer = lh.banner; lhCorner = lh.corner;
+  if (_isetupActiveTpl === 'custom') {
+    // Custom HTML renders with sample data through the same engine as printing
+    const ic = { ...live, color: _isetupActiveColor || '' };
+    iframe.srcdoc = _qtplBuildDoc(_isetupCustomHtml || QTPL_STARTERS.trading, _qtplSampleInv(), ic, state.currency || '');
+  } else {
+    // Temporarily borrow the module-level sentinels so _iTPL* functions render
+    // with the live paper size / header layout / letterhead placement.
+    geomW    = geom.wPx;
+    geomMinH = geom.thermal ? '' : `min-height:${geom.hPx}px;`;
+    hdrCss   = _isetupHdrCss(live.hdrLayout) + _isetupPageAtCss(geom);
+
+    const lhEnabled = $('#isetup-lh-enabled')?.checked !== false;
+    if (lhEnabled && _isetupLhDataUrl) {
+      const lh = _isetupLhHtml(_isetupLhDataUrl.dataUrl, _isetupLhDataUrl.contentHeight, live.logoPos, geom, mg);
+      lhLayer = lh.banner; lhCorner = lh.corner;
+    }
+    const doc = _isetupBuildPreviewDoc(tpl, lhLayer ? _isetupMgUnderBanner(mg) : mg, state.currency || '');
+    iframe.srcdoc = _isetupKind === 'quotation' ? _isetupQuoteWording(doc) : doc;
   }
-  iframe.srcdoc = _isetupBuildPreviewDoc(tpl, lhLayer ? _isetupMgUnderBanner(mg) : mg, state.currency || '');
 
   const pageH  = geom.hPx || INV_THERMAL_PREVIEW_H;
   const scaler = $('#isetup-prev-scaler');
-  if (scaler) { scaler.style.width = geomW + 'px'; scaler.style.height = pageH + 'px'; }
-  iframe.style.width = geomW + 'px'; iframe.style.height = pageH + 'px';
-  _invFitFrameToContent(iframe, scaler, pageH, geom.thermal ? 0 : pageH, () => _isetupResetView());
+  if (scaler) { scaler.style.width = geom.wPx + 'px'; scaler.style.height = pageH + 'px'; }
+  iframe.style.width = geom.wPx + 'px'; iframe.style.height = pageH + 'px';
+  // keepView (live HTML editing) leaves the user's zoom / pan where it is
+  const keep = keepView === true;
+  _invFitFrameToContent(iframe, scaler, pageH, geom.thermal ? 0 : pageH, keep ? null : () => _isetupResetView());
 
   // Always reset so normal preview-builder calls remain unaffected
   lhLayer = ''; lhCorner = ''; hdrCss = ''; bodyPos = ''; pgStack = '';
   geomW = 794; geomMinH = 'min-height:1123px;';
-  setTimeout(_isetupResetView, 40);
+  if (!keep) setTimeout(_isetupResetView, 40);
 }
 
 async function _isetupLoadLetterhead() {
@@ -31221,12 +31614,17 @@ function _isetupSyncThermalUI() {
   });
 }
 
-async function openInvoiceSetup() {
+async function openInvoiceSetup(kind = 'invoice') {
   const modal = $('#isetup-modal');
   if (!modal) return;
-  const cfg = _isetupGetCfg();
+  _isetupKind = kind === 'quotation' ? 'quotation' : 'invoice';
+  const isQt = _isetupKind === 'quotation';
+  const cfg = _isetupGetCfg(_isetupKind);
   _isetupActiveTpl   = cfg.template;
   _isetupActiveColor = cfg.color || null;
+
+  if ($('#isetup-hdr-title')) $('#isetup-hdr-title').textContent = isQt ? 'Quotation Setup' : 'Invoice Setup';
+  if ($('#isetup-hdr-icon'))  $('#isetup-hdr-icon').className    = isQt ? 'fa fa-file-circle-plus' : 'fa fa-file-invoice';
 
   // Populate left panel
   if ($('#isetup-printer'))    $('#isetup-printer').value    = cfg.printer;
@@ -31248,9 +31646,13 @@ async function openInvoiceSetup() {
   if (orientEl) orientEl.checked = true;
   _isetupSyncThermalUI();
 
+  _isetupCustomHtml = cfg.customHtml || QTPL_STARTERS.trading;
+  _isetupSetCoding(false);
+
   _isetupLhDataUrl = null; // clear stale cache from previous open
   _isetupRenderTpls();
   _isetupRenderColors();
+  _isetupSyncCustomUI();
   modal.style.display = 'flex';
   // Show preview immediately (no letterhead), then fetch letterhead in background
   setTimeout(_isetupUpdatePreview, 80);
@@ -31260,23 +31662,27 @@ async function openInvoiceSetup() {
 async function _isetupSave() {
   const tpl   = _isetupActiveTpl;
   const orient = document.querySelector('input[name="isetup-orient"]:checked')?.value || 'portrait';
-  const update = {
-    invoice_template:    tpl,
-    invoice_color:       _isetupActiveColor || '',
-    invoice_printer:     $('#isetup-printer')?.value    || 'laser_a4',
-    invoice_paper:       $('#isetup-paper')?.value      || 'a4',
-    invoice_orientation: orient,
-    invoice_mg_top:      parseInt($('#isetup-mg-top')?.value)   ?? 20,
-    invoice_mg_bot:      parseInt($('#isetup-mg-bot')?.value)   ?? 20,
-    invoice_mg_left:     parseInt($('#isetup-mg-left')?.value)  ?? 15,
-    invoice_mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
-    invoice_hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
-    invoice_logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
-    invoice_lh_enabled:  $('#isetup-lh-enabled')?.checked !== false,
+  const values = {
+    template:    tpl,
+    color:       _isetupActiveColor || '',
+    printer:     $('#isetup-printer')?.value    || 'laser_a4',
+    paper:       $('#isetup-paper')?.value      || 'a4',
+    orientation: orient,
+    mg_top:      parseInt($('#isetup-mg-top')?.value)   ?? 20,
+    mg_bot:      parseInt($('#isetup-mg-bot')?.value)   ?? 20,
+    mg_left:     parseInt($('#isetup-mg-left')?.value)  ?? 15,
+    mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
+    hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
+    logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
+    lh_enabled:  $('#isetup-lh-enabled')?.checked !== false,
+    custom_html: _isetupCustomHtml || '',
   };
+  const isQt   = _isetupKind === 'quotation';
+  const prefix = isQt ? 'quotation_' : 'invoice_';
+  const update = Object.fromEntries(Object.entries(values).map(([key, v]) => [prefix + key, v]));
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
-  toast('Invoice setup saved', 'success');
+  toast(isQt ? 'Quotation setup saved' : 'Invoice setup saved', 'success');
   $('#isetup-modal').style.display = 'none';
 }
 
@@ -31291,6 +31697,7 @@ $('#isetup-tpl-list')?.addEventListener('click', e => {
   _isetupActiveTpl = card.dataset.tplId;
   _isetupRenderTpls();
   _isetupRenderColors();
+  _isetupSyncCustomUI();
   _isetupUpdatePreview();
 });
 
@@ -31332,7 +31739,617 @@ $('#isetup-lh-enabled')?.addEventListener('change', e => {
   else _isetupUpdatePreview();
 });
 
-$('#rb-sal-invoice-setup')?.addEventListener('click', openInvoiceSetup);
+$('#rb-sal-invoice-setup')?.addEventListener('click',   () => openInvoiceSetup('invoice'));
+$('#rb-sal-quotation-setup')?.addEventListener('click', () => openInvoiceSetup('quotation'));
+
+// ── Custom HTML templates ────────────────────────────────────────────────
+// Invoice / Quotation Setup can print from the user's own HTML (uploaded as a
+// .html file or edited in the setup modal). Placeholders, mustache-style:
+//   {{field}}              escaped value — newlines become <br>
+//   {{{field}}}            raw HTML
+//   {{#items}}…{{/items}}  repeated once per line item (item fields win inside)
+//   {{#field}}…{{/field}}  shown when field is truthy, {{^field}}…{{/field}} when not
+// Images are plain <img src="…"> links — e.g. a File Manager "Copy link" URL.
+
+// Placeholder reference shown in the editor's "Insert field" menu
+const QTPL_FIELDS = [
+  { group: 'Document', items: [
+    ['doc_title', 'Quotation / Invoice'], ['doc_title_upper', 'QUOTATION / INVOICE'], ['number', 'Document number'],
+    ['date', 'Issue date (dd/mm/yyyy)'], ['valid_until', 'Valid until / due date'], ['reference', 'Customer reference'],
+    ['status', 'Status'], ['notes', 'Notes'],
+  ] },
+  { group: 'Customer', items: [
+    ['customer_name', 'Name'], ['customer_address', 'Address'], ['customer_phone', 'Phone'], ['customer_email', 'Email'],
+  ] },
+  { group: 'Business', items: [
+    ['business_name', 'Business name'], ['business_address', 'Address'], ['logo_url', 'Logo image URL'], ['accent', 'Accent colour'],
+  ] },
+  { group: 'Totals', items: [
+    ['subtotal', 'Subtotal'], ['discount', 'Discount'], ['tax_amount', 'Tax / VAT'], ['total', 'Grand total'],
+    ['tax_rate', 'Tax rate %'], ['currency', 'Currency'],
+  ] },
+  { group: 'Line items — inside {{#items}}', items: [
+    ['no_padded', 'Line no. (01)'], ['name', 'Item name (1st line)'], ['details', 'Item details (other lines)'],
+    ['qty', 'Quantity'], ['unit_price', 'Unit price'], ['net', 'Price after discount'], ['tax', 'Tax'], ['total', 'Line total incl. tax'],
+  ] },
+];
+
+function _qtplParse(src) {
+  const root = { children: [] }, stack = [root];
+  const re = /\{\{\{\s*([\w.]+)\s*\}\}\}|\{\{\s*([#^/]?)\s*([\w.]+)\s*\}\}/g;
+  let last = 0, m;
+  while ((m = re.exec(src))) {
+    const top = stack[stack.length - 1];
+    if (m.index > last) top.children.push(src.slice(last, m.index));
+    last = re.lastIndex;
+    if (m[1]) { top.children.push({ t: 'raw', k: m[1] }); continue; }
+    const op = m[2], key = m[3];
+    if (op === '#' || op === '^') {
+      const node = { t: op, k: key, children: [] };
+      top.children.push(node);
+      stack.push(node);
+    } else if (op === '/') {
+      if (stack.length > 1 && top.k === key) stack.pop();
+    } else {
+      top.children.push({ t: 'var', k: key });
+    }
+  }
+  if (last < src.length) stack[stack.length - 1].children.push(src.slice(last));
+  return root;
+}
+
+function _qtplLookup(ctxs, key) {
+  const [head, ...rest] = key.split('.');
+  for (let i = ctxs.length - 1; i >= 0; i--) {
+    const c = ctxs[i];
+    if (c && typeof c === 'object' && head in c) return rest.reduce((v, p) => (v == null ? v : v[p]), c[head]);
+  }
+  return undefined;
+}
+
+function _qtplRenderNodes(nodes, ctxs) {
+  return nodes.map(n => {
+    if (typeof n === 'string') return n;
+    const v = _qtplLookup(ctxs, n.k);
+    if (n.t === 'var') return v == null ? '' : escHtml(v).replace(/\r?\n/g, '<br>');
+    if (n.t === 'raw') return v == null ? '' : String(v);
+    const truthy = Array.isArray(v) ? v.length > 0 : !!v;
+    if (n.t === '^') return truthy ? '' : _qtplRenderNodes(n.children, ctxs);
+    if (!truthy) return '';
+    if (Array.isArray(v)) return v.map(item => _qtplRenderNodes(n.children, [...ctxs, item])).join('');
+    return _qtplRenderNodes(n.children, typeof v === 'object' ? [...ctxs, v] : ctxs);
+  }).join('');
+}
+
+// Uploaded HTML must not run code in the app — the CSP already blocks inline
+// scripts, this strips them (and inline handlers / javascript: links) as well.
+function _qtplSanitize(html) {
+  return String(html || '')
+    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
+    .replace(/<script\b[^>]*>/gi, '')
+    .replace(/<(iframe|object|embed)\b[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<(iframe|object|embed)\b[^>]*>/gi, '')
+    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+    .replace(/(href|src)\s*=\s*(["'])\s*javascript:[^"']*\2/gi, '$1=$2#$2');
+}
+
+function _qtplNum(n) {
+  return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// 'YYYY-MM-DD…' → dd/mm/yyyy; anything else is passed through unchanged
+function _qtplDate(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || '');
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : (v || '');
+}
+
+// Flattens a print doc (invoice, or quotation via _qtToPrintDoc) into the
+// placeholder data a custom template sees.
+function _qtplData(inv, ic, cur) {
+  const s = state.receiptSettings || {};
+  const L = inv._docLabels || {};
+  const docTitle = L.doc || 'Invoice';
+  const rates = [];
+  const items = (inv.items || []).map((it, i) => {
+    const qty   = parseFloat(it.quantity) || 0;
+    const unit  = parseFloat(it.unit_price) || 0;
+    const gross = qty * unit;
+    // Invoice lines carry discount_type/value; server quotation lines carry the amount
+    const dv    = parseFloat(it.discount_value);
+    const disc  = !isNaN(dv)
+      ? (it.discount_type === 'flat' ? Math.min(dv, gross) : gross * dv / 100)
+      : parseFloat(it.discount_amount) || 0;
+    const net   = Math.max(0, gross - disc);
+    const rate  = parseFloat(it.tax_rate ?? it.tax_pct) || 0;
+    const tax   = it.tax_amount != null
+      ? parseFloat(it.tax_amount) || 0
+      : (it.tax_type === 'flat' ? rate : net * rate / 100);
+    if (rate > 0 && it.tax_type !== 'flat') rates.push(rate);
+    const lines = String(it.description || '').split(/\r?\n/);
+    const qtyStr = qty % 1 === 0 ? String(qty) : qty.toFixed(2);
+    return {
+      no:           i + 1,
+      no_padded:    String(i + 1).padStart(2, '0'),
+      name:         lines[0],
+      details:      lines.slice(1).join('\n').trim(),
+      description:  it.description || '',
+      qty:          qtyStr,
+      qty_padded:   qty % 1 === 0 ? qtyStr.padStart(2, '0') : qtyStr,
+      unit_price:   _qtplNum(unit),
+      gross:        _qtplNum(gross),
+      discount:     _qtplNum(disc),
+      has_discount: disc > 0.001,
+      net:          _qtplNum(net),
+      unit_net:     _qtplNum(qty ? net / qty : 0),
+      tax:          _qtplNum(tax),
+      tax_rate:     rate || '',
+      total:        _qtplNum(net + tax),
+    };
+  });
+  const disc = parseFloat(inv.discount_amount) || 0;
+  const tax  = parseFloat(inv.tax_amount) || 0;
+  const geom = _isetupGeom(ic);
+  return {
+    doc_title:        docTitle,
+    doc_title_upper:  docTitle.toUpperCase(),
+    is_quotation:     inv._setupKind === 'quotation',
+    is_invoice:       inv._setupKind !== 'quotation',
+    number:           inv.invoice_number || '',
+    date:             _qtplDate(inv.issue_date),
+    valid_until:      _qtplDate(inv.due_date),
+    due_date:         _qtplDate(inv.due_date),
+    reference:        inv.reference || '',
+    status:           inv.status_label || inv.status || '',
+    notes:            inv.notes || '',
+    customer_name:    inv.customer_name || 'Walk-in Customer',
+    customer_address: inv.customer_address || '',
+    customer_phone:   inv.customer_phone || '',
+    customer_email:   inv.customer_email || '',
+    business_name:    s.business_name || state._bizName || 'Your Business',
+    business_address: s.receipt_address_line || '',
+    logo_url:         s.business_logo_url || s.receipt_logo_url || '',
+    accent:           ic.color || (INV_TEMPLATES.find(t => t.id === 'custom') || {}).accent,
+    currency:         cur || '',
+    items,
+    subtotal:         _qtplNum(inv.subtotal),
+    discount:         _qtplNum(disc),
+    has_discount:     disc > 0.001,
+    tax_amount:       _qtplNum(tax),
+    has_tax:          tax > 0.001,
+    total:            _qtplNum(inv.total),
+    // Most common line tax rate, for headings like "VAT (18%)"
+    tax_rate:         rates.length ? rates.sort((a, b) => rates.filter(r => r === b).length - rates.filter(r => r === a).length)[0] : '',
+    page_width_mm:    geom.wMm,
+    page_height_mm:   geom.hMm || '',
+    mg_top:           ic.mgTop ?? 20,
+    mg_bottom:        ic.mgBot ?? 20,
+    mg_left:          ic.mgLeft ?? 15,
+    mg_right:         ic.mgRight ?? 15,
+  };
+}
+
+function _qtplBuildDoc(html, inv, ic, cur) {
+  const out = _qtplRenderNodes(_qtplParse(_qtplSanitize(html)).children, [_qtplData(inv, ic, cur)]);
+  // Paper size from the setup goes first so the template's own @page can still override it
+  const pageCss = `<style>${_isetupPageAtCss(_isetupGeom(ic))}</style>`;
+  if (/<head\b[^>]*>/i.test(out)) return out.replace(/<head\b[^>]*>/i, h => h + pageCss);
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8">${pageCss}</head><body>${out}</body></html>`;
+}
+
+// Sample document for the setup preview, in the wording of the kind being edited
+function _qtplSampleInv() {
+  const isQt  = _isetupKind === 'quotation';
+  const today = new Date();
+  const iso   = d => d.toISOString().slice(0, 10);
+  const items = [
+    { description: 'THERMAL IMAGING CAMERA\n(Android Type C Port)\nModel TC-01A\nWarranty: Two Years\nCountry of Origin: USA\nDelivery: Within 04-06 weeks from confirmed PO', quantity: 1, unit_price: 98500, discount_amount: 6500, tax_rate: 18 },
+    { description: 'Digital Insulation Resistance Tester\nModel IR-5000\nWarranty: Two Years\nCountry of Origin: Japan\nDelivery: Ex-stock subject to prior sales', quantity: 1, unit_price: 245000, discount_amount: 15000, tax_rate: 18 },
+    { description: 'TRUE-RMS DIGITAL MULTIMETER\nModel DM-87V\nWarranty: One Year\nDelivery: Ex-stock', quantity: 2, unit_price: 64000, discount_amount: 8000, tax_rate: 18 },
+  ];
+  let sub = 0, disc = 0, tax = 0;
+  items.forEach(it => {
+    const g = it.quantity * it.unit_price;
+    sub  += g;
+    disc += it.discount_amount;
+    tax  += (g - it.discount_amount) * it.tax_rate / 100;
+  });
+  return {
+    invoice_number:   isQt ? 'QT-2611-021' : 'INV-0024',
+    issue_date:       iso(today),
+    due_date:         iso(new Date(today.getTime() + 30 * 864e5)),
+    reference:        'RFQ-118',
+    status:           'draft',
+    status_label:     'Draft',
+    customer_name:    'Acme Engineering (Pvt) Ltd',
+    customer_address: 'No. 45, Commerce Drive\nColombo 03',
+    customer_phone:   '011-2000000',
+    customer_email:   'purchasing@acme.example',
+    notes:            '',
+    items,
+    subtotal:         sub,
+    discount_amount:  disc,
+    tax_amount:       tax,
+    total:            sub - disc + tax,
+    _docLabels:       isQt ? { doc: 'Quotation' } : { doc: 'Invoice' },
+    _setupKind:       _isetupKind,
+  };
+}
+
+// Starter layouts for the "Start from" menu. `trading` is a bordered trading-
+// company quotation letter: logo + company header, doc-type tick boxes, item
+// table with discounted price / VAT columns, terms & conditions and sign-off.
+// The page frame and footer image strip are position:fixed, so they repeat on
+// every printed page; the layout table's thead/tfoot keep content clear of them.
+const QTPL_STARTERS = {
+  trading: `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Times New Roman',Times,serif;font-size:12.5px;color:#000;background:#fff}
+  /* Page frame + footer strip — repeated on every printed page */
+  .frame{position:fixed;top:{{mg_top}}mm;bottom:{{mg_bottom}}mm;left:{{mg_left}}mm;right:{{mg_right}}mm;border:2px solid #000;pointer-events:none}
+  .brands{position:fixed;left:{{mg_left}}mm;right:{{mg_right}}mm;bottom:{{mg_bottom}}mm;height:15mm;padding:2mm 3mm;display:flex;align-items:center;justify-content:center}
+  .brands img{max-height:11mm;max-width:100%;object-fit:contain}
+  img[src=""]{display:none}
+  .layout{width:100%;border-collapse:collapse}
+  .layout > thead td{height:calc({{mg_top}}mm + 4mm)}
+  .layout > tfoot td{height:calc({{mg_bottom}}mm + 17mm)}
+  .sheet{padding:0 calc({{mg_right}}mm + 2px) 0 calc({{mg_left}}mm + 2px)}
+  /* Header */
+  .hd{border-bottom:2px solid #000;padding:3mm 4mm 3mm}
+  .hd-top{display:flex;align-items:center;gap:5mm}
+  .logo{height:20mm;max-width:55mm;object-fit:contain}
+  .co{flex:1;text-align:center}
+  .co-name{font-family:'Arial Black','Arial Rounded MT Bold',Arial,sans-serif;font-size:30px;font-weight:900;color:{{accent}};letter-spacing:.5px;line-height:1.1}
+  .co-info{font-size:15px;line-height:1.35;margin-top:1mm}
+  .doc-type{display:flex;justify-content:center;gap:16mm;margin-top:4mm;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:21px}
+  .doc-type span{display:inline-flex;align-items:center;gap:3mm}
+  .box{display:inline-flex;align-items:center;justify-content:center;width:8mm;height:6.5mm;border:2px solid #f59e0b;font-size:14px;font-style:normal;font-weight:700;vertical-align:middle}
+  .vat{text-align:right;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:12px;margin-top:1mm}
+  .to-row{display:flex;justify-content:space-between;gap:8mm;margin-top:3mm;font-weight:700;font-size:13px;line-height:1.35}
+  .to-addr{padding-left:6mm}
+  .ref{min-width:62mm}
+  .cats{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding:2.5mm 4mm;font-family:Calibri,Arial,Helvetica,sans-serif;font-weight:700;font-size:17px}
+  .cats span{display:inline-flex;align-items:center;gap:2mm}
+  /* Letter body */
+  .letter{padding:4mm 6mm 2mm;line-height:1.5}
+  .letter p{margin-bottom:3mm}
+  table.items{width:calc(100% - 8mm);margin:2mm 0 0 4mm;border-collapse:collapse}
+  table.items th,table.items td{border:1px solid #000;padding:2mm 1.5mm;vertical-align:middle}
+  table.items th{font-size:12px;font-weight:700;text-align:center;vertical-align:top}
+  table.items th.hl{color:#dc2626}
+  table.items tr{page-break-inside:avoid}
+  td.sn{font-weight:700;text-align:center;vertical-align:top;width:13mm}
+  td.it{text-align:center;line-height:1.35}
+  .it-name{font-weight:700;text-decoration:underline;text-transform:uppercase}
+  td.c{text-align:center;white-space:nowrap}
+  td.b{font-weight:700}
+  mark{background:#fde047;color:#000;padding:0 1px}
+  tr.tot td{font-weight:700}
+  tr.tot td.tl{text-align:right;padding-right:3mm}
+  tr.gt td{font-size:13.5px;background:#f8fafc}
+  .notes{padding:4mm 6mm 0;line-height:1.5}
+  /* Terms + sign-off */
+  .terms{padding:5mm 6mm 0 10mm;line-height:1.5;font-size:12.5px}
+  .terms h3{font-size:13px;text-decoration:underline;margin-bottom:3mm;break-after:avoid;page-break-after:avoid}
+  .terms p{margin-bottom:3mm;text-align:justify;page-break-inside:avoid}
+  .sign{padding:4mm 6mm 0 10mm;font-weight:700;line-height:1.6;page-break-inside:avoid}
+  .sign .up{text-transform:uppercase}
+  .sign .gap{height:20mm}
+</style>
+</head>
+<body>
+
+<div class="frame"></div>
+<div class="brands">
+  <!-- Brand logos strip: put the cursor between the quotes of src="" below, then click "Image" to pick one from File Manager -->
+  <img src="" alt="">
+</div>
+
+<table class="layout">
+<thead><tr><td></td></tr></thead>
+<tfoot><tr><td></td></tr></tfoot>
+<tbody><tr><td><div class="sheet">
+
+  <div class="hd">
+    <div class="hd-top">
+      {{#logo_url}}<img class="logo" src="{{logo_url}}" alt="">{{/logo_url}}
+      <div class="co">
+        <div class="co-name">{{business_name}}</div>
+        <div class="co-info">
+          {{business_address}}<br>
+          Tel: 011-0000000, 011-0000000, Fax: 011-0000000<br>
+          E-mail: info@yourcompany.lk
+        </div>
+      </div>
+    </div>
+    <div class="doc-type">
+      <span>QUOTATION <i class="box">{{#is_quotation}}&#10003;{{/is_quotation}}</i></span>
+      <span>PROFORMA INVOICE <i class="box">{{#is_invoice}}&#10003;{{/is_invoice}}</i></span>
+    </div>
+    <div class="vat">Vat No: 000000000 &nbsp; 0000</div>
+    <div class="to-row">
+      <div class="to">
+        To: {{customer_name}}
+        {{#customer_address}}<div class="to-addr">{{customer_address}}</div>{{/customer_address}}
+      </div>
+      <div class="ref">
+        Our Ref: {{number}}<br>
+        Date: {{date}}
+        {{#reference}}<br>Your Ref: {{reference}}{{/reference}}
+        {{#valid_until}}<br>Valid Until: {{valid_until}}{{/valid_until}}
+      </div>
+    </div>
+  </div>
+
+  <div class="cats">
+    <span>METERS <i class="box">&#10003;</i></span>
+    <span>SAFETY <i class="box"></i></span>
+    <span>LIGHTING <i class="box"></i></span>
+    <span>TOOLS <i class="box"></i></span>
+    <span>POWER UTILITIES</span>
+  </div>
+
+  <div class="letter">
+    <p>Dear Sir,</p>
+    <p>With reference to your valued inquiry, we are pleased to quote as follows,</p>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th>S/No.</th>
+        <th>Item</th>
+        <th>Qty.</th>
+        <th>Unit Price{{#currency}}<br>({{currency}}){{/currency}}</th>
+        <th class="hl">Special Discounted Price{{#currency}} ({{currency}}){{/currency}}</th>
+        <th class="hl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
+        <th class="hl">Total Price with VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{#items}}
+      <tr>
+        <td class="sn">{{no_padded}}</td>
+        <td class="it">
+          <div class="it-name">{{name}}</div>
+          {{#details}}<div>{{details}}</div>{{/details}}
+        </td>
+        <td class="c b">{{qty_padded}}</td>
+        <td class="c b">{{unit_price}}</td>
+        <td class="c b"><mark>{{net}}</mark></td>
+        <td class="c b">{{tax}}</td>
+        <td class="c b">{{total}}</td>
+      </tr>
+      {{/items}}
+      <tr class="tot"><td colspan="6" class="tl">Sub Total</td><td class="c">{{subtotal}}</td></tr>
+      {{#has_discount}}<tr class="tot"><td colspan="6" class="tl">Discount</td><td class="c">-{{discount}}</td></tr>{{/has_discount}}
+      {{#has_tax}}<tr class="tot"><td colspan="6" class="tl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</td><td class="c">{{tax_amount}}</td></tr>{{/has_tax}}
+      <tr class="tot gt"><td colspan="6" class="tl">Grand Total{{#currency}} ({{currency}}){{/currency}}</td><td class="c">{{total}}</td></tr>
+    </tbody>
+  </table>
+
+  {{#notes}}<div class="notes"><b>Notes:</b> {{notes}}</div>{{/notes}}
+
+  <div class="terms">
+    <h3>Terms &amp; Conditions</h3>
+    <p><b>Price Validity:</b> The quoted prices are valid for 30 days from the date of quotation. Prices are subject to revision thereafter without prior notice.</p>
+    <p>&bull; <b>Product Availability:</b> Delivery is subject to product availability at the time of receiving the Purchase Order (PO). In the event of unforeseen supply-chain delays, the customer will be informed accordingly.</p>
+    <p>&bull; <b>Delivery:</b> Delivery will be completed <b>within 2 working days from the date of receipt of the confirmed PO</b>, subject to product availability (mentioned above in the quote) and completion of all required commercial formalities.</p>
+    <p>&bull; <b>Training:</b> Product and user training will be provided upon delivery, where applicable, based on the product type and complexity. Training for high-value or technically advanced instruments will be provided where required. Standard/basic instruments will be supplied without formal training unless otherwise agreed.</p>
+    <p>&bull; <b>Installation &amp; Commissioning:</b> Where applicable, installation, commissioning, and initial setup will be provided by our qualified technical personnel. Any additional site requirements or services outside the agreed scope may be subject to additional charges.</p>
+    <p>&bull; <b>Calibration:</b> Calibration certificates are not included as standard. A calibration certificate will be provided only where specifically stated in the quotation/offer. If required separately, calibration can be arranged at an additional charge.</p>
+    <p>&bull; <b>Warranty:</b> The products will be covered by <b>the manufacturer's standard warranty</b> against manufacturing defects, subject to the applicable warranty terms and conditions. Warranty does not cover damage caused by misuse, accidents, unauthorized repairs, improper handling, or normal wear and tear.</p>
+    <p>&bull; <b>After-Sales Support:</b> After-sales support, including technical assistance, calibration, repairs, maintenance, troubleshooting, and product demonstrations, will be provided where applicable and subject to the manufacturer's warranty terms and service conditions. Calibration services are chargeable. Repairs for manufacturing defects will be provided free of charge within the applicable warranty period, subject to the warranty terms and conditions. Any services outside the warranty coverage will be charged separately.</p>
+    <p>&bull; <b>Technical Support:</b> Technical assistance will be available through our qualified technical team for product-related queries, troubleshooting, and application guidance during the warranty period and thereafter.</p>
+    <p>&bull; <b>Payment Terms:</b> 100% advance payment shall be made along with the Purchase Order (PO) unless otherwise agreed in writing.</p>
+    <p>&bull; <b>Documentation:</b> Relevant product documentation, including <b>user manuals, datasheets, calibration certificates, and warranty documentation</b>, where applicable, will be provided with the equipment.</p>
+    <p>&bull; <b>Scope of Supply:</b> The supply shall be strictly in accordance with the specifications, model numbers, accessories, and quantities stated in the quotation. Any additional accessories or services requested after order confirmation may be charged separately.</p>
+    <p>&bull; <b>Order Confirmation:</b> The Purchase Order should clearly specify the quoted <b>model numbers, quantities, agreed prices, and applicable terms and conditions</b> to avoid any discrepancies.</p>
+    <p>&bull; <b>Trade-In Offer:</b> Trade-in options are available for eligible existing instruments/equipment, subject to technical evaluation and assessment. The applicable trade-in value will be determined based on the condition, model, age, and market value of the equipment. {{business_name}} will reserve all the right to reject or accept the trade-in offers.</p>
+    <p>For any clarification, please contact the undersigned.</p>
+  </div>
+
+  <div class="sign">
+    Yours faithfully,<br>
+    <span class="up">{{business_name}}</span>
+    <div class="gap"></div>
+    Your Name<br>
+    Designation<br>
+    Mobile: 07X XXX XXXX
+  </div>
+
+</div></td></tr></tbody>
+</table>
+
+</body>
+</html>
+`,
+  blank: `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:12px;color:#111;background:#fff}
+  .page{padding:{{mg_top}}mm {{mg_right}}mm {{mg_bottom}}mm {{mg_left}}mm}
+  h1{color:{{accent}};font-size:26px}
+  table{width:100%;border-collapse:collapse;margin-top:6mm}
+  th,td{border:1px solid #ccc;padding:6px 8px}
+  th{background:{{accent}};color:#fff;text-align:left}
+  .r{text-align:right}
+</style>
+</head>
+<body>
+<div class="page">
+  {{#logo_url}}<img src="{{logo_url}}" alt="" style="height:60px">{{/logo_url}}
+  <h1>{{doc_title_upper}} {{number}}</h1>
+  <p>{{business_name}}<br>{{business_address}}</p>
+  <p style="margin-top:4mm"><b>To:</b> {{customer_name}}<br>{{customer_address}}</p>
+  <p><b>Date:</b> {{date}} &nbsp; <b>Valid until:</b> {{valid_until}}</p>
+  <table>
+    <thead><tr><th>#</th><th>Item</th><th class="r">Qty</th><th class="r">Unit Price</th><th class="r">Total</th></tr></thead>
+    <tbody>
+      {{#items}}<tr><td>{{no}}</td><td><b>{{name}}</b><br>{{details}}</td><td class="r">{{qty}}</td><td class="r">{{unit_price}}</td><td class="r">{{total}}</td></tr>{{/items}}
+    </tbody>
+  </table>
+  <p class="r" style="margin-top:4mm">Subtotal: {{subtotal}}<br>Discount: {{discount}}<br>Tax: {{tax_amount}}<br><b>Total: {{currency}} {{total}}</b></p>
+  {{#notes}}<p style="margin-top:4mm">{{notes}}</p>{{/notes}}
+</div>
+</body>
+</html>
+`,
+};
+
+// Working copy of the custom HTML while the setup modal is open (saved on Save Setup)
+let _isetupCustomHtml = '';
+let _isetupCodeTimer  = null;
+
+// Shows the Custom HTML panel (and dims settings a custom layout ignores)
+// only while the Custom HTML template card is selected.
+function _isetupSyncCustomUI() {
+  const isCustom = _isetupActiveTpl === 'custom';
+  $('#isetup-modal')?.classList.toggle('is-custom', isCustom);
+  const box = $('#isetup-custom-box');
+  if (box) box.style.display = isCustom ? '' : 'none';
+  const size = $('#isetup-custom-size');
+  if (size) size.textContent = `${(new Blob([_isetupCustomHtml]).size / 1024).toFixed(1)} KB`;
+  if (!isCustom) _isetupSetCoding(false);
+}
+
+// Code-editing mode swaps the print-settings column for a wide HTML editor
+function _isetupSetCoding(on) {
+  const body = document.querySelector('#isetup-modal .isetup-body');
+  if (!body) return;
+  body.classList.toggle('is-coding', !!on);
+  if (on) {
+    const ta = $('#isetup-code-text');
+    if (ta) { ta.value = _isetupCustomHtml; ta.focus(); ta.setSelectionRange(0, 0); ta.scrollTop = 0; }
+  }
+}
+
+function _isetupCodeInsert(text) {
+  const ta = $('#isetup-code-text');
+  if (!ta) return;
+  ta.focus();
+  const { selectionStart: a, selectionEnd: b } = ta;
+  ta.setRangeText(text, a, b, 'end');
+  ta.dispatchEvent(new Event('input'));
+}
+
+// appConfirm sits below this modal's z-index — lift it while the setup is open
+async function _isetupConfirm(opts) {
+  const ov = $('#app-confirm-modal');
+  const prev = ov?.style.zIndex;
+  if (ov) ov.style.zIndex = '3300';
+  try { return await appConfirm(opts); } finally { if (ov) ov.style.zIndex = prev || ''; }
+}
+
+function _isetupApplyCustomHtml(html, msg) {
+  _isetupCustomHtml = html;
+  const ta = $('#isetup-code-text');
+  if (ta) ta.value = html;
+  _isetupSyncCustomUI();
+  _isetupUpdatePreview();
+  if (msg) toast(msg, 'success');
+}
+
+(function _isetupBindCustom() {
+  const ph = $('#isetup-code-ph');
+  if (ph) {
+    ph.innerHTML = '<option value="">Insert field…</option>' +
+      '<option value="__items">↳ Line-item loop block</option>' +
+      QTPL_FIELDS.map(g => `<optgroup label="${escAttr(g.group)}">${g.items.map(([k, lbl]) =>
+        `<option value="${k}">${escHtml(lbl)} — {{${k}}}</option>`).join('')}</optgroup>`).join('');
+    ph.addEventListener('change', () => {
+      const k = ph.value;
+      ph.value = '';
+      if (!k) return;
+      _isetupCodeInsert(k === '__items'
+        ? '{{#items}}\n<tr><td>{{no}}</td><td>{{name}}</td><td>{{qty}}</td><td>{{unit_price}}</td><td>{{total}}</td></tr>\n{{/items}}'
+        : `{{${k}}}`);
+    });
+  }
+
+  const ta = $('#isetup-code-text');
+  ta?.addEventListener('input', () => {
+    clearTimeout(_isetupCodeTimer);
+    _isetupCodeTimer = setTimeout(() => {
+      _isetupCustomHtml = ta.value;
+      _isetupSyncCustomUI();
+      _isetupUpdatePreview(true);
+    }, 350);
+  });
+  // Tab indents instead of leaving the editor
+  ta?.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    _isetupCodeInsert('  ');
+  });
+
+  // An image picked from File Manager (or uploaded there) goes in as its link:
+  // with the cursor inside an src="" it fills that src, otherwise a new <img>.
+  $('#isetup-code-img')?.addEventListener('click', () => {
+    const t = $('#isetup-code-text');
+    if (!t) return;
+    const a = t.selectionStart, b = t.selectionEnd;
+    openImgPicker((_id, url) => {
+      if (!url) return;
+      t.focus();
+      t.setSelectionRange(a, b);
+      const inSrc = /src=["'][^"']*$/.test(t.value.slice(0, a)) && /^[^"'<>]*["']/.test(t.value.slice(b));
+      _isetupCodeInsert(inSrc ? url : `<img src="${escAttr(url)}" alt="" style="max-width:100%">`);
+    });
+  });
+
+  $('#isetup-code-done')?.addEventListener('click', () => {
+    const t = $('#isetup-code-text');
+    if (t) _isetupCustomHtml = t.value;
+    _isetupSetCoding(false);
+    _isetupSyncCustomUI();
+    _isetupUpdatePreview();
+  });
+  $('#isetup-custom-edit')?.addEventListener('click', () => _isetupSetCoding(true));
+
+  $('#isetup-custom-upload')?.addEventListener('click', async () => {
+    const pick = await window.electronAPI.showOpenDialog({
+      title: 'Upload HTML template',
+      filters: [{ name: 'HTML template', extensions: ['html', 'htm'] }],
+      properties: ['openFile'],
+    });
+    if (pick.canceled || !pick.filePaths?.length) return;
+    const res = await window.electronAPI.readTextFile(pick.filePaths[0]);
+    if (!res?.ok) { toast(res?.error || 'Could not read the file', 'error'); return; }
+    if (!/<[a-z!][\s\S]*>/i.test(res.content || '')) { toast('That file does not look like HTML', 'error'); return; }
+    if (res.content.length > 2 * 1024 * 1024) { toast('HTML template is too large (max 2 MB)', 'error'); return; }
+    _isetupApplyCustomHtml(res.content, `Loaded ${pick.filePaths[0].split(/[\\/]/).pop()} — Save Setup to keep it`);
+  });
+
+  $('#isetup-custom-download')?.addEventListener('click', () => {
+    const name = (_isetupKind === 'quotation' ? 'quotation' : 'invoice') + '-template.html';
+    const url  = URL.createObjectURL(new Blob([_isetupCustomHtml], { type: 'text/html' }));
+    const a    = Object.assign(document.createElement('a'), { href: url, download: name });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  });
+
+  $('#isetup-custom-starter')?.addEventListener('change', async e => {
+    const key = e.target.value;
+    e.target.value = '';
+    if (!QTPL_STARTERS[key]) return;
+    const ok = await _isetupConfirm({
+      title: 'Replace the current HTML?',
+      message: 'Your current custom HTML in this setup will be replaced by the starter layout. Download it first if you want to keep a copy.',
+      confirmText: '<i class="fa fa-rotate"></i> Replace',
+      icon: 'fa-triangle-exclamation',
+    });
+    if (ok) _isetupApplyCustomHtml(QTPL_STARTERS[key], 'Starter loaded — Save Setup to keep it');
+  });
+})();
 
 // Invoice preview modal controls
 $('#invp-zoom-in')?.addEventListener('click',  () => _invpZoomAt(_invpZoom * 1.25));
@@ -63235,6 +64252,7 @@ async function submitDsCreate() {
     const tools = [
       btn(can.edit, 'data-qt-edit', 'fa-pen', 'Edit'),
       btn(can.revise, 'data-qt-revise', 'fa-code-branch', 'New version'),
+      btn((q.items || []).length > 0, 'data-qt-print', 'fa-print', 'Print'),
       btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
     ].join('');
     const actions = steps || tools ? `<div class="crm-qtx-actions">${steps}<span class="crm-fm-spacer"></span>${tools}</div>` : '';
@@ -63607,6 +64625,20 @@ async function submitDsCreate() {
       const res = await API.crmReviseLeadQuotation(lead.id, s.detail.id);
       if (res.status !== 201) { toast(_crmWsError(res, 'Could not make a new version.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
+    } else if (t.matches('[data-qt-print]') && s.detail) {
+      // Prints through Quotation Setup, same as Sales → Quotations. CRM lines carry
+      // amounts (discount_amount, tax_rate) rather than the sales form's type/value pairs.
+      const items = (s.detail.items || []).map(i => ({
+        ...i,
+        description:    i.description || i.product_name || '',
+        discount_type:  'flat',
+        discount_value: i.discount_amount || 0,
+        tax_type:       'pct',
+        tax_pct:        i.tax_rate || 0,
+      }));
+      t.disabled = true;
+      await _qtPrint({ ...s.detail, items });
+      t.disabled = false;
     } else if (t.matches('[data-qt-pdf]') && s.detail) {
       const name = `${s.detail.quote_number}.pdf`;
       t.disabled = true;

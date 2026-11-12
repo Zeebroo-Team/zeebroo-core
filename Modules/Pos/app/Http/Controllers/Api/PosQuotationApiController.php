@@ -182,6 +182,10 @@ class PosQuotationApiController extends Controller
             'tax_amount'      => round((float) $q->tax_amount, 2),
             'notes'           => $q->notes,
             'customer_id'     => $q->customer_id,
+            // Contact details for printed quotations (custom HTML templates)
+            'customer_address' => $q->customer?->address,
+            'customer_phone'   => $q->customer?->phone,
+            'customer_email'   => $q->customer?->email,
             'is_editable'     => $q->isEditable() && ! $q->isLeadQuotation(),
             // The lead it was built from — the Sales panel links back to it
             'lead'            => $q->lead ? [
