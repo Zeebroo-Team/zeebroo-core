@@ -89,7 +89,7 @@ class CrmEventSubscriber
     {
         $this->guard(function () use ($e) {
             $lead = $e->lead->fresh(['department', 'division']);
-            $this->notifier->notify($lead, [$this->notifier->headUserIdForLead($lead)], CrmNotifier::TYPE_LEAD_FORWARDED,
+            $this->notifier->notify($lead, $this->notifier->headUserIdsForLead($lead), CrmNotifier::TYPE_LEAD_FORWARDED,
                 'Lead forwarded to ' . ($lead->division?->name ?? $lead->department?->name ?? 'your department'),
                 $this->actor($e->byUserId, 'Marketing') . ' forwarded ' . $this->leadName($lead) . ' — assign someone to work it.'
                     . ($e->note ? "\nNote: " . $e->note : ''),
@@ -122,7 +122,7 @@ class CrmEventSubscriber
         $this->guard(function () use ($e) {
             $q = $e->quotation;
             $over = (bool) ($e->discount['over_limit'] ?? false);
-            $this->notifier->notify($e->lead, [$this->notifier->headUserIdForLead($e->lead)], CrmNotifier::TYPE_QUOTATION_SUBMITTED,
+            $this->notifier->notify($e->lead, $this->notifier->headUserIdsForLead($e->lead), CrmNotifier::TYPE_QUOTATION_SUBMITTED,
                 $over ? 'Discount approval needed' : 'Quotation waiting for your approval',
                 $this->actor($e->byUserId, 'Staff') . ' submitted ' . $q->quote_number . ($q->version > 1 ? ' v' . $q->version : '')
                     . ' for ' . $this->leadName($e->lead) . ' (' . number_format((float) $q->total, 2) . ')'
@@ -191,7 +191,7 @@ class CrmEventSubscriber
 
         $this->guard(function () use ($f, $lead) {
             $assignee = $f->user_id ? User::query()->whereKey($f->user_id)->value('name') : null;
-            $this->notifier->notify($lead, [(int) $f->user_id, $this->notifier->headUserIdForLead($lead)], CrmNotifier::TYPE_FOLLOW_UP_OVERDUE,
+            $this->notifier->notify($lead, [(int) $f->user_id, ...$this->notifier->headUserIdsForLead($lead)], CrmNotifier::TYPE_FOLLOW_UP_OVERDUE,
                 'Follow-up overdue',
                 'The follow-up with ' . $this->leadName($lead) . ' was due ' . $f->due_at->format('M j') . ($assignee ? ' (' . $assignee . ')' : '') . ' and is not done yet.',
                 null, ['follow_up_id' => (int) $f->id], 'crm_follow_up', (int) $f->id);
@@ -221,7 +221,7 @@ class CrmEventSubscriber
         $this->guard(function () use ($e, $lead) {
             $lead->loadMissing('lostReason');
             $won = $e->outcome === LeadClosed::WON;
-            $this->notifier->notify($lead, [$this->notifier->headUserIdForLead($lead)], CrmNotifier::TYPE_LEAD_CLOSED,
+            $this->notifier->notify($lead, $this->notifier->headUserIdsForLead($lead), CrmNotifier::TYPE_LEAD_CLOSED,
                 $won ? 'Lead won' : 'Lead lost',
                 $this->leadName($lead) . ' was ' . ($won ? 'won' : 'lost') . ' by ' . $this->actor($e->byUserId, 'the team')
                     . (! $won && $lead->lostReason ? ' — ' . $lead->lostReason->label . ($lead->lost_reason ? ': ' . $lead->lost_reason : '') : '')

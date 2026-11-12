@@ -39,6 +39,14 @@ class LeadAssignmentService
         return $this->org->assignableUsers($lead->business, $lead->project?->department_id);
     }
 
+    /** assignableUsers() with each person's HR department, job title and role in the lead's department. */
+    public function assignablePeople(Lead $lead): Collection
+    {
+        $lead->loadMissing(['project', 'business']);
+
+        return $this->org->assignablePeople($lead->business, $lead->project?->department_id);
+    }
+
     /** @return Collection<int, LeadAssignee> primary first, with their users */
     public function assignees(Lead $lead): Collection
     {

@@ -473,6 +473,97 @@ test('a split plan is refused when a relation is outside its department or a nam
     'relation name taken'            => [fn () => ['department_id' => 10, 'new_relation' => test()->sales->name], 'already exists'],
 ]);
 
+// ── Division split ───────────────────────────────────────────────────────
+
+/** A sheet like "September Leads": a division but no department, day and month in their own columns. */
+function crmImportDivisionCsv(): string
+{
+    return implode("\n", [
+        'Sl.No.,Company,Name,Mobile,E-Mail,Product,Source,Division,Date,Month,Source,Remark',
+        '1,Agri Department,Ranthika,772955178,,Irradiance Meter,WhatsApp,Measuring Instruments,1,September,Vijay,',
+        '2,UKAAYE,,777384992,ukaaye@sltnet.lk,Anemometer,WhatsApp,measuring instruments,2,September,Vijay,',
+        '3,,Chamil,777480248,,LP Gas Detector,Website,Solar,3,September,,Quote sent 2nd sep',
+    ]);
+}
+
+test('a division column without a department column is one bundle, with the department suggested from its divisions', function () {
+    app(CrmOrgService::class)->createDivision($this->business, Department::find(10), ['name' => 'Measuring Instruments']);
+
+    $import = crmImportUpload(crmImportDivisionCsv(), 'September Leads_2.csv')['import'];
+    expect($import->mapping)->toBe(['', 'company', 'name', 'phone', 'email', 'product_interest', 'source', 'division', 'date', 'month', 'note', 'notes']);
+
+    $groups = $this->imports->departmentGroups($import, $import->mapping, fn () => true);
+
+    expect($groups['column'])->toBeNull()
+        ->and($groups['division_column'])->toBe(7)
+        ->and($groups['groups'])->toHaveCount(1)
+        ->and($groups['groups'][0]['key'])->toBe('d:')
+        ->and($groups['groups'][0]['department_id'])->toBe(10)
+        ->and($groups['groups'][0]['project_id'])->toBe($this->sales->id)
+        ->and($groups['groups'][0]['divisions'])->toBe([
+            ['key' => 'v:measuring instruments', 'value' => 'Measuring Instruments', 'rows' => 2],
+            ['key' => 'v:solar', 'value' => 'Solar', 'rows' => 1],
+        ])
+        ->and(collect($groups['departments'])->firstWhere('id', 10)['divisions'][0]['name'])->toBe('Measuring Instruments');
+});
+
+test('a division split puts each lead in its division and creates the missing ones on import', function () {
+    $measuring = app(CrmOrgService::class)->createDivision($this->business, Department::find(10), ['name' => 'Measuring Instruments']);
+
+    $import = crmImportUpload(crmImportDivisionCsv(), 'September Leads_2.csv')['import'];
+    $plan   = $this->imports->resolvePlan($import, $import->mapping, [[
+        'key' => 'd:', 'department_id' => 10, 'project_id' => $this->sales->id,
+        'divisions' => [
+            ['key' => 'v:measuring instruments', 'division_id' => $measuring->id],
+            ['key' => 'v:solar', 'new_division' => 'Solar'],
+        ],
+    ]], fn () => true);
+
+    $preview = $this->imports->preview($import, $import->mapping, 'csv', null, 'log', $plan);
+    expect($preview['totals'])->toMatchArray(['total' => 3, 'ok' => 3])
+        ->and(collect($preview['rows'])->pluck('division')->all())->toBe(['Measuring Instruments', 'Measuring Instruments', 'Solar'])
+        ->and($preview['rows'][0]['warnings'])->toBe([])
+        ->and(\Modules\CRM\Models\Division::where('name', 'Solar')->exists())->toBeFalse();
+
+    $this->imports->start($import->fresh());
+
+    $solar = \Modules\CRM\Models\Division::where('department_id', 10)->where('name', 'Solar')->first();
+    $leads = Lead::where('project_id', $this->sales->id)->get()->keyBy('phone');
+
+    expect($solar)->not->toBeNull()
+        ->and($import->fresh()->created_count)->toBe(3)
+        ->and($leads['772955178']->division_id)->toBe($measuring->id)
+        ->and($leads['777384992']->division_id)->toBe($measuring->id)
+        ->and($leads['777480248']->division_id)->toBe($solar->id)
+        ->and($leads['772955178']->created_at->toDateString())->toBe('2026-09-01')
+        ->and($leads['772955178']->notes)->toContain('Source: Vijay')
+        ->and($leads['777480248']->notes)->toContain('Quote sent 2nd sep')
+        ->and(collect($import->fresh()->options['groups'][0]['divisions'])->firstWhere('key', 'v:solar')['created_division'])->toBeTrue();
+});
+
+test('a division plan is refused when the division is outside the department or its name is taken', function (string $case, string $message) {
+    app(CrmOrgService::class)->createDivision($this->business, Department::find(10), ['name' => 'Measuring Instruments']);
+    $marketing = app(CrmOrgService::class)->createDivision($this->business, Department::find(11), ['name' => 'Solar']);
+
+    $import  = crmImportUpload(crmImportDivisionCsv())['import'];
+    $choice  = $case === 'other' ? ['key' => 'v:solar', 'division_id' => $marketing->id] : ['key' => 'v:solar', 'new_division' => 'measuring instruments'];
+    $choices = [['key' => 'd:', 'department_id' => 10, 'project_id' => $this->sales->id, 'divisions' => [$choice]]];
+
+    expect(fn () => $this->imports->resolvePlan($import, $import->mapping, $choices, fn () => true))
+        ->toThrow(ValidationException::class, $message);
+})->with([
+    'division of another department' => ['other', 'is not in the Sales department'],
+    'division name taken'            => ['taken', 'already has a division named'],
+]);
+
+test('rows with no department cannot be given a division', function () {
+    $import = crmImportUpload(crmImportDivisionCsv())['import'];
+
+    expect(fn () => $this->imports->resolvePlan($import, $import->mapping, [[
+        'key' => 'd:', 'new_relation' => 'Loose', 'divisions' => [['key' => 'v:solar', 'new_division' => 'Solar']],
+    ]], fn () => true))->toThrow(ValidationException::class, 'Choose a department');
+});
+
 // ── Desktop API ──────────────────────────────────────────────────────────
 
 class CrmLeadImportTestApi extends PosCrmLeadImportApiController
@@ -565,6 +656,31 @@ test('the desktop endpoints split an import by department, and only admins creat
     $run = $api()->run(crmImportRequest(1, 'POST'), $data['id'])->getData(true)['data'];
     expect($run['created_count'])->toBe(5)
         ->and(collect($run['groups'])->firstWhere('key', 'd:operations')['counts']['created_count'])->toBe(3);
+});
+
+test('the desktop endpoints split a division-only file, and only admins create divisions', function () {
+    $api    = fn () => app(CrmLeadImportTestApi::class);
+    $upload = fn (int $user) => $api()->store(crmImportRequest($user, 'POST', [], ['files' => [UploadedFile::fake()->createWithContent('Sept.csv', crmImportDivisionCsv())]]))->getData(true)['data'];
+    $groups = fn (int $projectId) => [['key' => 'd:', 'project_id' => $projectId, 'department_id' => null, 'divisions' => [['key' => 'v:solar', 'new_division' => 'Solar']]]];
+
+    $data = $upload(1);
+    $info = $api()->departments(crmImportRequest(1, 'POST', ['mapping' => $data['mapping']]), $data['id'])->getData(true)['data'];
+    expect($info['column'])->toBeNull()
+        ->and($info['can_create_divisions'])->toBeTrue()
+        ->and($info['groups'][0]['divisions'])->toHaveCount(2);
+
+    // Kamala (marketing) may add leads to the marketing relation but not create a division
+    $staff = $upload(4);
+    expect(crmImportStatus(fn () => $api()->preview(crmImportRequest(4, 'POST', ['mapping' => $staff['mapping'], 'source' => 'csv', 'duplicates' => 'log', 'groups' => $groups($this->marketing->id)]), $staff['id'])))->toBe(403);
+
+    $preview = $api()->preview(crmImportRequest(1, 'POST', ['mapping' => $data['mapping'], 'source' => 'csv', 'duplicates' => 'log', 'groups' => $groups($this->marketing->id)]), $data['id'])->getData(true)['data'];
+    expect($preview['totals'])->toMatchArray(['ok' => 3])
+        ->and($preview['groups'][0]['department_name'])->toBe('Marketing');
+
+    $api()->run(crmImportRequest(1, 'POST'), $data['id']);
+    $solar = \Modules\CRM\Models\Division::where('department_id', 11)->where('name', 'Solar')->first();
+    expect($solar)->not->toBeNull()
+        ->and(Lead::where('phone', '777480248')->value('division_id'))->toBe($solar->id);
 });
 
 test('only the uploader runs an import and other businesses never see it', function () {

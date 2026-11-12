@@ -232,6 +232,18 @@ body.dark .mac-titlebar--traffic{background:linear-gradient(rgba(255,255,255,.04
 .crm-dept-stat span{font-size:11.5px;color:var(--mac-muted)}
 .crm-dept-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .crm-dept-foot-count{margin-right:auto;font-size:12px;color:var(--mac-muted)}
+/* Org structure people picker: results grouped by HR department */
+.org-pick-list{max-height:320px!important;padding:4px 0}
+.org-pick-group{position:sticky;top:-4px;z-index:1;padding:7px 12px 4px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mac-muted);background:var(--surface);border-top:1px solid var(--border)}
+.org-pick-group:first-child{border-top:0}
+.org-pick-group span{font-weight:500;text-transform:none;letter-spacing:0;margin-left:4px}
+.org-pick-item{display:flex;align-items:center;gap:10px;padding:7px 12px!important}
+.org-pick-main{flex:1;min-width:0;line-height:1.3}
+.org-pick-name{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org-pick-sub{display:block;font-size:11.5px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org-pick-tag{flex-shrink:0;font-size:10.5px;padding:2px 7px;border-radius:999px;color:var(--mac-muted);background:color-mix(in srgb,var(--mac-muted) 12%,transparent)}
+.org-pick-tag--here{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.org-pick-empty-icon{background:color-mix(in srgb,var(--mac-muted) 14%,transparent);color:var(--mac-muted)}
 .mac-detail{flex:1;min-width:0;min-height:0;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:14px}
 .mac-detail-body{display:flex;flex-direction:column;gap:20px}
 /* simple form windows (e.g. CRM New Relation) */
@@ -321,6 +333,32 @@ body.dark .mac-window select.po-field-input option{background:#2c2c30;color:#f5f
 .crm-imp-groups td{vertical-align:top}
 .crm-imp-groups .po-field-input+.po-field-input{margin-top:6px}
 .crm-imp-groups tr.skip td{opacity:.55}
+.crm-imp-groups tr.crm-imp-divrow>td{border-top:0;padding:0 12px 14px}
+.crm-imp-divs{border:1px solid rgba(0,0,0,.08);border-radius:10px;overflow:hidden}
+.crm-imp-divs-head{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;font-weight:600;border-bottom:1px solid rgba(0,0,0,.06);background:rgba(0,0,0,.02)}
+.crm-imp-divs-head i{color:var(--mac-accent)}
+.crm-imp-divs-head .crm-perms-muted{font-weight:400;margin-left:auto}
+.crm-imp-div{display:grid;grid-template-columns:minmax(150px,1fr) 16px minmax(0,1.7fr);align-items:center;gap:10px;padding:8px 12px}
+.crm-imp-div+.crm-imp-div{border-top:1px solid rgba(0,0,0,.05)}
+.crm-imp-div-name{min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-imp-div-name small{display:block;font-size:11.5px;font-weight:400;color:var(--mac-text-2,#6e6e73)}
+.crm-imp-div>.fa-arrow-right{font-size:11px;color:var(--mac-text-2,#8e8e93);text-align:center}
+.crm-imp-div-ctl{display:flex;align-items:center;gap:8px;min-width:0}
+.crm-imp-div-ctl select{flex:0 0 200px;min-width:0}
+.crm-imp-div-ctl select:only-child{flex:1 1 auto}
+.crm-imp-div-ctl input{flex:1 1 auto;min-width:0}
+.crm-imp-div-tag{flex:none;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-imp-div-tag.match{background:rgba(52,199,89,.14);color:#248a3d}
+.crm-imp-div-tag.new{background:rgba(0,122,255,.12);color:var(--mac-accent)}
+.crm-imp-div-tag.none{background:rgba(0,0,0,.06);color:var(--mac-text-2,#6e6e73)}
+.crm-imp-div .crm-imp-warn{grid-column:3;margin-top:-2px}
+.crm-imp-divs-foot{padding:8px 12px;border-top:1px solid rgba(0,0,0,.05)}
+body.dark .crm-imp-divs{border-color:rgba(255,255,255,.1)}
+body.dark .crm-imp-divs-head{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.08)}
+body.dark .crm-imp-div+.crm-imp-div,body.dark .crm-imp-divs-foot{border-color:rgba(255,255,255,.06)}
+body.dark .crm-imp-div-tag.match{color:#30d158}
+body.dark .crm-imp-div-tag.none{background:rgba(255,255,255,.08)}
+@media (max-width:720px){.crm-imp-div{grid-template-columns:1fr}.crm-imp-div>.fa-arrow-right{display:none}.crm-imp-div .crm-imp-warn{grid-column:1}.crm-imp-div-ctl select{flex-basis:150px}}
 .crm-imp-bundles tbody tr{cursor:pointer}
 .crm-imp-bundles tbody tr.sel td{background:rgba(0,122,255,.08)}
 body.dark .crm-imp-st.ok,body.dark .crm-imp-st.completed{color:#30d158}
@@ -608,6 +646,12 @@ body.crm-proj-deny-manage [data-mail-stage], body.crm-proj-deny-manage #rb-crm-n
 body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 /* Temporarily hidden: CRM ribbon Tasks + Forms groups */
 .ribbon-group:has(#rb-crm-tasks), .ribbon-group:has(#rb-crm-forms){display:none !important}
+/* CRM ribbon stacks shrink to their buttons, so a stack emptied by the access rules above leaves no gap */
+.ribbon-page[data-page="crm"] .ribbon-small-stack{min-width:0}
+/* Drop a whole CRM ribbon group once the access rules above have hidden every button in it */
+body:not(.crm-is-admin) .ribbon-group:has(#rb-crm-permissions),
+body:not(.crm-can-report):not(.crm-can-sales-report):not(.crm-unrestricted) .ribbon-group:has(#rb-crm-dashboard),
+body.crm-deny-followups_view:not(.crm-uses-inbox):not(.crm-can-approve) .ribbon-group:has(#rb-crm-followups){display:none !important}
 /* ── CRM Kanban ── */
 .crm-board{display:flex;gap:12px;padding:10px;overflow-x:auto;flex:1;align-items:flex-start;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--text-muted,#6b7280) 35%,transparent) transparent}
 /* Apple-style pipeline: white canvas, borderless lanes on a faint fill, floating
@@ -680,7 +724,9 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 #crm-relation-pane-pipeline .crm-col-head{flex-shrink:0}
 /* Pipeline toolbar: search, quick filters, density + Board/List switch */
 #crm-relation-pane-pipeline>.finance-toolbar{flex-wrap:nowrap;row-gap:8px}
-#crm-relation-pane-pipeline .crm-pipe-search{flex:1 1 240px;min-width:140px}
+/* Basis = min-width so the search shrinks to make room (e.g. for the "x of y leads" count) instead of wrapping the row */
+#crm-relation-pane-pipeline .crm-pipe-search{flex:1 1 140px;min-width:140px}
+#crm-relation-pane-pipeline .crm-pipe-result{flex-shrink:0}
 #crm-relation-pane-pipeline .crm-chip--select{max-width:150px;padding:0 10px;text-overflow:ellipsis}
 #crm-relation-pane-pipeline .crm-pipe-view{flex-shrink:0}
 @media (max-width:1700px){#crm-relation-pane-pipeline>.finance-toolbar{flex-wrap:wrap}}
@@ -1736,10 +1782,28 @@ body.dark .crm-qtx-dock{background:linear-gradient(transparent,#222226 16px)}
 .crm-assign-primary input:checked + i{color:#f59e0b}
 .crm-assign-history summary{font-size:12px;color:var(--text-muted);cursor:pointer;margin-bottom:8px}
 /* Assign Lead as a macOS window — grouped people list; the star toggles the primary */
-.crm-assign-win{width:460px;max-width:94vw;max-height:86vh}
-.crm-assign-main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:16px 20px}
-.crm-assign-win .crm-ws-muted{font-size:12px;line-height:1.5;color:var(--mac-muted)}
-.crm-assign-win .crm-assign-list{border:0;border-radius:10px;padding:4px;max-height:340px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 2px rgba(0,0,0,.04)}
+/* Only the people list scrolls: the hint, search, history toggle and note stay in place */
+.crm-assign-win{width:540px;max-width:94vw;height:min(700px,86vh);max-height:86vh}
+.crm-assign-main{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:12px;padding:16px 20px}
+#crm-assign-body{flex:1;min-height:0}
+#crm-assign-note{flex-shrink:0;min-height:52px}
+.crm-assign-win .crm-ws-muted{font-size:12px;line-height:1.5;color:var(--mac-muted);flex-shrink:0}
+.crm-assign-win .crm-assign-list{flex:1;min-height:140px;max-height:none;display:block;overflow-y:auto;border:0;border-radius:10px;padding:0 4px 4px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 2px rgba(0,0,0,.04)}
+.crm-assign-tools{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.crm-assign-search{flex:1;display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:8px;background:var(--mac-fill);color:var(--mac-muted);font-size:12px}
+.crm-assign-search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.crm-assign-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:13px;color:var(--text)}
+.crm-assign-count{font-size:12px;font-weight:600;color:var(--mac-muted);white-space:nowrap}
+.crm-assign-group[hidden],.crm-assign-row[hidden]{display:none!important}
+.crm-assign-group-title{position:sticky;top:0;z-index:1;display:flex;align-items:baseline;gap:4px;padding:9px 8px 5px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mac-muted);background:var(--mac-panel)}
+.crm-assign-group-title small{font-size:10.5px;font-weight:500;letter-spacing:0;text-transform:none}
+.crm-assign-group-title span{margin-left:auto;font-weight:600;letter-spacing:0}
+.crm-assign-group+.crm-assign-group{border-top:1px solid var(--mac-line)}
+.crm-assign-who{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.crm-assign-sub{font-size:11.5px;color:var(--mac-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-assign-none{padding:24px 12px;text-align:center;font-size:12.5px;color:var(--mac-muted)}
+.crm-assign-win .crm-assign-history{flex-shrink:0}
+.crm-assign-win .crm-assign-history[open] .crm-ws-tl{max-height:170px;overflow-y:auto}
 .crm-assign-win .crm-assign-row{border:0;border-radius:7px;padding:5px 6px 5px 10px;font-size:13px;transition:background .12s}
 .crm-assign-win .crm-assign-row:hover{background:var(--mac-hover)}
 .crm-assign-win .crm-assign-row:has([data-assign-user]:checked){background:rgba(0,122,255,.08)}
@@ -4167,69 +4231,101 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <button class="ribbon-btn-lg" id="rb-crm-pipeline">
               <i class="fa fa-handshake"></i>Pipeline
             </button>
-            <button class="ribbon-btn-lg primary" id="rb-crm-new-lead">
-              <i class="fa fa-user-plus"></i>New Lead
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-inbox">
-              <i class="fa fa-inbox"></i>Marketing<br>Inbox
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-approvals">
-              <i class="fa fa-file-signature"></i>Quotation<br>Approvals
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-followups">
-              <i class="fa fa-phone-volume"></i>My<br>Follow-ups
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-dashboard">
-              <i class="fa fa-chart-line"></i>CRM<br>Dashboard
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-import-leads">
-              <i class="fa fa-file-csv"></i>Import<br>Leads
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-new-lead">
+                <i class="fa fa-user-plus"></i> New Lead
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-import-leads">
+                <i class="fa fa-file-csv"></i> Import Leads
+              </button>
+            </div>
           </div>
-          <div class="ribbon-group-label">Pipeline</div>
+          <div class="ribbon-group-label">Leads</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-contacts">
-              <i class="fa fa-address-book"></i>Contacts
+            <button class="ribbon-btn-lg" id="rb-crm-followups">
+              <i class="fa fa-phone-volume"></i>My<br>Follow-ups
             </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-inbox">
+                <i class="fa fa-inbox"></i> Marketing Inbox
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-approvals">
+                <i class="fa fa-file-signature"></i> Quotation Approvals
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Activity</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-contacts">
+                <i class="fa fa-address-book"></i> Contacts
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-customers">
+                <i class="fa fa-users"></i> Customers
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Contacts</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-tasks">
-              <i class="fa fa-list-check"></i>Tasks
-            </button>
-            <button class="ribbon-btn-lg primary" id="rb-crm-new-task">
-              <i class="fa fa-calendar-plus"></i>New Task
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-tasks">
+                <i class="fa fa-list-check"></i> Tasks
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-new-task">
+                <i class="fa fa-calendar-plus"></i> New Task
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Tasks</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-forms">
-              <i class="fa fa-rectangle-list"></i>Forms
-            </button>
-            <button class="ribbon-btn-lg primary" id="rb-crm-new-form">
-              <i class="fa fa-file-circle-plus"></i>New Form
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-forms">
+                <i class="fa fa-rectangle-list"></i> Forms
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-new-form">
+                <i class="fa fa-file-circle-plus"></i> New Form
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Forms</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-projects">
-              <i class="fa fa-diagram-project"></i>Pipeline<br>Projects
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-stages">
-              <i class="fa fa-stairs"></i>Stages
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-dashboard">
+                <i class="fa fa-chart-line"></i> CRM Dashboard
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-report">
+                <i class="fa fa-file-invoice"></i> Report
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Insights</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-projects">
+                <i class="fa fa-diagram-project"></i> Pipeline Projects
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-stages">
+                <i class="fa fa-stairs"></i> Stages
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Manage</div>
         </div>
@@ -4239,18 +4335,14 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <button class="ribbon-btn-lg" id="rb-crm-permissions">
               <i class="fa fa-user-shield"></i>Permissions
             </button>
-            <button class="ribbon-btn-lg" id="rb-crm-org">
-              <i class="fa fa-sitemap"></i>Org<br>Structure
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-add-dept">
-              <i class="fa fa-building-user"></i>Add<br>Department
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-customers">
-              <i class="fa fa-users"></i>Customers
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-report">
-              <i class="fa fa-file-invoice"></i>Report
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-org">
+                <i class="fa fa-sitemap"></i> Org Structure
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-add-dept">
+                <i class="fa fa-building-user"></i> Add Department
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Access</div>
         </div>
@@ -12119,6 +12211,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                 <button class="crm-chip" data-crm-filter="customers" title="Only leads that already exist as customers"><i class="fa fa-circle-check"></i> Customers</button>
                 <button class="crm-chip" data-crm-filter="hasValue" title="Only leads with an estimated value"><i class="fa fa-coins"></i> Has value</button>
                 <select class="crm-chip crm-chip--select" id="crm-pipe-source" title="Filter by lead source"><option value="">All sources</option></select>
+                <select class="crm-chip crm-chip--select" id="crm-pipe-division" title="Filter by division" style="display:none"><option value="">All divisions</option></select>
                 <select class="crm-chip crm-chip--select" id="crm-pipe-score" title="Filter by score (Hot / Warm / Cold)">
                   <option value="">All scores</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option><option value="none">Not scored</option>
                 </select>

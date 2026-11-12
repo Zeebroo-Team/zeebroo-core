@@ -3879,7 +3879,26 @@ function _qtToPrintDoc(q) {
 }
 
 async function _qtPrint(q) {
+  await _qtSetupPull();
   await _invPrint(_qtToPrintDoc(q));
+}
+
+// Quotation Setup keys the server keeps (it renders CRM / emailed quotation PDFs);
+// printer type, header layout and letterhead stay per-computer.
+const QTPL_SERVER_KEYS = ['template', 'color', 'paper', 'orientation', 'mg_top', 'mg_bot', 'mg_left', 'mg_right', 'custom_html'];
+// Server settings column limit for the custom HTML
+const QTPL_MAX_HTML = 60000;
+
+// Pulls the server's Quotation Setup into the local quotation_* config, so a
+// layout saved on another computer prints the same here. Offline / never-saved → keep local.
+async function _qtSetupPull() {
+  let res;
+  try { res = await API.quotationSetup(); } catch (_) { return; }
+  const d = res?.status === 200 ? res.body?.data : null;
+  if (!d?.updated_at) return;
+  const update = Object.fromEntries(QTPL_SERVER_KEYS.filter(k => d[k] !== undefined).map(k => ['quotation_' + k, d[k]]));
+  if (state.config) Object.assign(state.config, update);
+  await window.electronAPI.setConfig(update);
 }
 
 // ── Form (Create / Edit) ──────────────────────────────────────────────────
@@ -7406,11 +7425,10 @@ function applyFeatureVisibility() {
   btn('#rb-mail-sync',      mail_any);
 
   // ── CRM ribbon groups + per-button fine-grained gating ──
-  grp('#rb-crm-pipeline',  crm_pipeline);                     // Pipeline group
+  grp('#rb-crm-pipeline',  crm_pipeline);                     // Leads group
   btn('#rb-crm-pipeline',  crm_pipeline);
   btn('#rb-crm-new-lead',  crm_pipeline);
-  grp('#rb-crm-contacts',  crm_contacts);                     // Contacts group
-  btn('#rb-crm-contacts',  crm_contacts);
+  btn('#rb-crm-contacts',  crm_contacts);                     // Contacts group stays for Customers
   grp('#rb-crm-tasks',     crm_tasks);                        // Tasks group
   btn('#rb-crm-tasks',     crm_tasks);
   btn('#rb-crm-new-task',  crm_tasks);
@@ -29031,6 +29049,11 @@ function _bizSwRefreshAll() {
   _sal.all           = [];
   _sal.filtered      = [];
 
+  // File Manager — the open folder and listing belong to the old business
+  closeFileManagerModal();
+  Object.assign(_fmg, { folderId: null, folders: [], files: [], breadcrumbs: [], q: '' });
+  $('#fmg-search').value = '';
+
   // Reset POS carts — they belong to the old business
   state.posTabs          = [];
   state.activePosTabId   = null;
@@ -31619,6 +31642,7 @@ async function openInvoiceSetup(kind = 'invoice') {
   if (!modal) return;
   _isetupKind = kind === 'quotation' ? 'quotation' : 'invoice';
   const isQt = _isetupKind === 'quotation';
+  if (isQt) await _qtSetupPull();
   const cfg = _isetupGetCfg(_isetupKind);
   _isetupActiveTpl   = cfg.template;
   _isetupActiveColor = cfg.color || null;
@@ -31679,9 +31703,22 @@ async function _isetupSave() {
   };
   const isQt   = _isetupKind === 'quotation';
   const prefix = isQt ? 'quotation_' : 'invoice_';
+  if (values.custom_html.length > QTPL_MAX_HTML) {
+    toast(`Custom HTML is too long (${values.custom_html.length.toLocaleString()} characters, max ${QTPL_MAX_HTML.toLocaleString()}). Link images from File Manager instead of embedding them.`, 'error');
+    return;
+  }
   const update = Object.fromEntries(Object.entries(values).map(([key, v]) => [prefix + key, v]));
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
+  if (isQt) {
+    // The server copy drives CRM / emailed quotation PDFs
+    const res = await API.saveQuotationSetup(Object.fromEntries(QTPL_SERVER_KEYS.map(k => [k, values[k]])));
+    if (res.status !== 200) {
+      toast(`Saved on this computer, but not on the server: ${res.body?.message || 'request failed'}. CRM PDFs keep the old layout.`, 'error');
+      $('#isetup-modal').style.display = 'none';
+      return;
+    }
+  }
   toast(isQt ? 'Quotation setup saved' : 'Invoice setup saved', 'success');
   $('#isetup-modal').style.display = 'none';
 }
@@ -31986,58 +32023,77 @@ const QTPL_STARTERS = {
 <head>
 <meta charset="UTF-8">
 <style>
-  *{box-sizing:border-box;margin:0;padding:0}
+  @media dompdf{@page{margin:12mm 14mm 28mm 14mm}} /* server PDF page margins (see bottom) */
+  /* Prints the same from the desktop and from the server PDF (CRM download / email):
+     tables and inline blocks only — no flexbox, grid or calc(). The page frame and
+     footer strip are position:fixed so they repeat on every page. */
+  *{box-sizing:border-box}
+  body{margin:0;padding:0} /* not html — dompdf puts the @page margins on <html> */
   body{font-family:'Times New Roman',Times,serif;font-size:12.5px;color:#000;background:#fff}
-  /* Page frame + footer strip — repeated on every printed page */
-  .frame{position:fixed;top:{{mg_top}}mm;bottom:{{mg_bottom}}mm;left:{{mg_left}}mm;right:{{mg_right}}mm;border:2px solid #000;pointer-events:none}
-  .brands{position:fixed;left:{{mg_left}}mm;right:{{mg_right}}mm;bottom:{{mg_bottom}}mm;height:15mm;padding:2mm 3mm;display:flex;align-items:center;justify-content:center}
-  .brands img{max-height:11mm;max-width:100%;object-fit:contain}
+  .frame{position:fixed;top:10mm;bottom:10mm;left:10mm;right:10mm;border:2px solid #000}
+  .brands{position:fixed;left:10mm;right:10mm;bottom:11mm;height:13mm;text-align:center}
+  /* Layout table: its header / footer rows repeat on every page and keep the
+     content inside the frame and clear of the footer strip */
+  .layout{width:100%}
+  .layout > thead td{height:12mm;padding:0}
+  .layout > tfoot td{height:28mm;padding:0}
+  .layout > tbody > tr > td{padding:0 14mm}
+  /* Server PDF (dompdf) — page margins instead of the repeating rows */
+  @media dompdf{
+    .layout,.layout > tbody,.layout > tbody > tr,.layout > tbody > tr > td{display:block;width:auto}
+    .layout > thead,.layout > tfoot{display:none}
+    .layout > tbody > tr > td{padding:0}
+    .frame{top:-2mm;bottom:-18mm;left:-4mm;right:-4mm}
+    .brands{left:-4mm;right:-4mm;bottom:-17mm}
+  }
+  .brands img{max-height:12mm;max-width:100%}
   img[src=""]{display:none}
-  .layout{width:100%;border-collapse:collapse}
-  .layout > thead td{height:calc({{mg_top}}mm + 4mm)}
-  .layout > tfoot td{height:calc({{mg_bottom}}mm + 17mm)}
-  .sheet{padding:0 calc({{mg_right}}mm + 2px) 0 calc({{mg_left}}mm + 2px)}
-  /* Header */
-  .hd{border-bottom:2px solid #000;padding:3mm 4mm 3mm}
-  .hd-top{display:flex;align-items:center;gap:5mm}
-  .logo{height:20mm;max-width:55mm;object-fit:contain}
-  .co{flex:1;text-align:center}
-  .co-name{font-family:'Arial Black','Arial Rounded MT Bold',Arial,sans-serif;font-size:30px;font-weight:900;color:{{accent}};letter-spacing:.5px;line-height:1.1}
-  .co-info{font-size:15px;line-height:1.35;margin-top:1mm}
-  .doc-type{display:flex;justify-content:center;gap:16mm;margin-top:4mm;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:21px}
-  .doc-type span{display:inline-flex;align-items:center;gap:3mm}
-  .box{display:inline-flex;align-items:center;justify-content:center;width:8mm;height:6.5mm;border:2px solid #f59e0b;font-size:14px;font-style:normal;font-weight:700;vertical-align:middle}
-  .vat{text-align:right;font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:12px;margin-top:1mm}
-  .to-row{display:flex;justify-content:space-between;gap:8mm;margin-top:3mm;font-weight:700;font-size:13px;line-height:1.35}
+  table{border-collapse:collapse}
+  .tick{font-family:'DejaVu Sans','Segoe UI Symbol',sans-serif;font-weight:bold}
+  .box{display:inline-block;width:8mm;height:6mm;line-height:6mm;border:2px solid #f59e0b;text-align:center;font-size:13px;vertical-align:middle}
+  /* Header — spans the full frame width */
+  .hd{margin:0 -3.5mm;padding:0 3.5mm 3mm;border-bottom:2px solid #000}
+  .hd-top{width:100%}
+  .hd-top td{vertical-align:middle}
+  .logo-cell{width:58mm}
+  .logo{max-height:20mm;max-width:55mm}
+  .co{text-align:center}
+  .co-name{font-family:'Arial Black',Helvetica,Arial,sans-serif;font-size:30px;font-weight:bold;color:{{accent}};line-height:1.15}
+  .co-info{font-size:15px;line-height:1.35}
+  .doc-type{text-align:center;margin-top:3mm;font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:21px}
+  .dt{display:inline-block;margin:0 7mm}
+  .vat{text-align:right;font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:12px;margin-top:1mm}
+  .to-row{width:100%;margin-top:2mm;font-weight:bold;font-size:13px;line-height:1.35}
+  .to-row td{vertical-align:top;padding:0}
   .to-addr{padding-left:6mm}
-  .ref{min-width:62mm}
-  .cats{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #000;padding:2.5mm 4mm;font-family:Calibri,Arial,Helvetica,sans-serif;font-weight:700;font-size:17px}
-  .cats span{display:inline-flex;align-items:center;gap:2mm}
+  .ref{width:64mm}
+  .cats{margin:0 -3.5mm;padding:2mm 3.5mm;border-bottom:2px solid #000}
+  .cats table{width:100%;font-family:Calibri,Helvetica,Arial,sans-serif;font-weight:bold;font-size:17px}
+  .cats td{padding:0;white-space:nowrap}
   /* Letter body */
-  .letter{padding:4mm 6mm 2mm;line-height:1.5}
-  .letter p{margin-bottom:3mm}
-  table.items{width:calc(100% - 8mm);margin:2mm 0 0 4mm;border-collapse:collapse}
+  .letter{padding:4mm 2mm 1mm;line-height:1.5}
+  .letter p{margin:0 0 3mm}
+  table.items{width:100%;margin-top:1mm}
   table.items th,table.items td{border:1px solid #000;padding:2mm 1.5mm;vertical-align:middle}
-  table.items th{font-size:12px;font-weight:700;text-align:center;vertical-align:top}
+  table.items th{font-size:12px;font-weight:bold;text-align:center;vertical-align:top}
   table.items th.hl{color:#dc2626}
   table.items tr{page-break-inside:avoid}
-  td.sn{font-weight:700;text-align:center;vertical-align:top;width:13mm}
+  td.sn{font-weight:bold;text-align:center;vertical-align:top;width:12mm}
   td.it{text-align:center;line-height:1.35}
-  .it-name{font-weight:700;text-decoration:underline;text-transform:uppercase}
-  td.c{text-align:center;white-space:nowrap}
-  td.b{font-weight:700}
-  mark{background:#fde047;color:#000;padding:0 1px}
-  tr.tot td{font-weight:700}
+  .it-name{font-weight:bold;text-decoration:underline;text-transform:uppercase}
+  td.c{text-align:center;white-space:nowrap;font-weight:bold}
+  .mark{background:#fde047;padding:0 1px}
+  tr.tot td{font-weight:bold}
   tr.tot td.tl{text-align:right;padding-right:3mm}
-  tr.gt td{font-size:13.5px;background:#f8fafc}
-  .notes{padding:4mm 6mm 0;line-height:1.5}
+  tr.gt td{font-size:13.5px;background:#f1f5f9}
+  .notes{padding:4mm 2mm 0;line-height:1.5}
   /* Terms + sign-off */
-  .terms{padding:5mm 6mm 0 10mm;line-height:1.5;font-size:12.5px}
-  .terms h3{font-size:13px;text-decoration:underline;margin-bottom:3mm;break-after:avoid;page-break-after:avoid}
-  .terms p{margin-bottom:3mm;text-align:justify;page-break-inside:avoid}
-  .sign{padding:4mm 6mm 0 10mm;font-weight:700;line-height:1.6;page-break-inside:avoid}
+  .terms{padding:5mm 2mm 0 6mm;line-height:1.5}
+  .terms h3{font-size:13px;text-decoration:underline;margin:0 0 3mm;page-break-after:avoid}
+  .terms p{margin:0 0 3mm;text-align:justify;page-break-inside:avoid}
+  .sign{padding:4mm 2mm 0 6mm;font-weight:bold;line-height:1.6;page-break-inside:avoid}
   .sign .up{text-transform:uppercase}
-  .sign .gap{height:20mm}
+  .sign .gap{height:18mm}
 </style>
 </head>
 <body>
@@ -32051,117 +32107,117 @@ const QTPL_STARTERS = {
 <table class="layout">
 <thead><tr><td></td></tr></thead>
 <tfoot><tr><td></td></tr></tfoot>
-<tbody><tr><td><div class="sheet">
+<tbody><tr><td>
 
-  <div class="hd">
-    <div class="hd-top">
-      {{#logo_url}}<img class="logo" src="{{logo_url}}" alt="">{{/logo_url}}
-      <div class="co">
-        <div class="co-name">{{business_name}}</div>
-        <div class="co-info">
-          {{business_address}}<br>
-          Tel: 011-0000000, 011-0000000, Fax: 011-0000000<br>
-          E-mail: info@yourcompany.lk
-        </div>
+<div class="hd">
+  <table class="hd-top"><tr>
+    {{#logo_url}}<td class="logo-cell"><img class="logo" src="{{logo_url}}" alt=""></td>{{/logo_url}}
+    <td class="co">
+      <div class="co-name">{{business_name}}</div>
+      <div class="co-info">
+        {{business_address}}<br>
+        Tel: 011-0000000, 011-0000000, Fax: 011-0000000<br>
+        E-mail: info@yourcompany.lk
       </div>
-    </div>
-    <div class="doc-type">
-      <span>QUOTATION <i class="box">{{#is_quotation}}&#10003;{{/is_quotation}}</i></span>
-      <span>PROFORMA INVOICE <i class="box">{{#is_invoice}}&#10003;{{/is_invoice}}</i></span>
-    </div>
-    <div class="vat">Vat No: 000000000 &nbsp; 0000</div>
-    <div class="to-row">
-      <div class="to">
-        To: {{customer_name}}
-        {{#customer_address}}<div class="to-addr">{{customer_address}}</div>{{/customer_address}}
-      </div>
-      <div class="ref">
-        Our Ref: {{number}}<br>
-        Date: {{date}}
-        {{#reference}}<br>Your Ref: {{reference}}{{/reference}}
-        {{#valid_until}}<br>Valid Until: {{valid_until}}{{/valid_until}}
-      </div>
-    </div>
+    </td>
+  </tr></table>
+  <div class="doc-type">
+    <span class="dt">QUOTATION <span class="box tick">{{#is_quotation}}&#10003;{{/is_quotation}}</span></span>
+    <span class="dt">PROFORMA INVOICE <span class="box tick">{{#is_invoice}}&#10003;{{/is_invoice}}</span></span>
   </div>
+  <div class="vat">Vat No: 000000000 &nbsp; 0000</div>
+  <table class="to-row"><tr>
+    <td>
+      To: {{customer_name}}
+      {{#customer_address}}<div class="to-addr">{{customer_address}}</div>{{/customer_address}}
+    </td>
+    <td class="ref">
+      Our Ref: {{number}}<br>
+      Date: {{date}}
+      {{#reference}}<br>Your Ref: {{reference}}{{/reference}}
+      {{#valid_until}}<br>Valid Until: {{valid_until}}{{/valid_until}}
+    </td>
+  </tr></table>
+</div>
 
-  <div class="cats">
-    <span>METERS <i class="box">&#10003;</i></span>
-    <span>SAFETY <i class="box"></i></span>
-    <span>LIGHTING <i class="box"></i></span>
-    <span>TOOLS <i class="box"></i></span>
-    <span>POWER UTILITIES</span>
-  </div>
+<div class="cats"><table><tr>
+  <td>METERS <span class="box tick">&#10003;</span></td>
+  <td>SAFETY <span class="box"></span></td>
+  <td>LIGHTING <span class="box"></span></td>
+  <td>TOOLS <span class="box"></span></td>
+  <td style="text-align:right">POWER UTILITIES</td>
+</tr></table></div>
 
-  <div class="letter">
-    <p>Dear Sir,</p>
-    <p>With reference to your valued inquiry, we are pleased to quote as follows,</p>
-  </div>
+<div class="letter">
+  <p>Dear Sir,</p>
+  <p>With reference to your valued inquiry, we are pleased to quote as follows,</p>
+</div>
 
-  <table class="items">
-    <thead>
-      <tr>
-        <th>S/No.</th>
-        <th>Item</th>
-        <th>Qty.</th>
-        <th>Unit Price{{#currency}}<br>({{currency}}){{/currency}}</th>
-        <th class="hl">Special Discounted Price{{#currency}} ({{currency}}){{/currency}}</th>
-        <th class="hl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
-        <th class="hl">Total Price with VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {{#items}}
-      <tr>
-        <td class="sn">{{no_padded}}</td>
-        <td class="it">
-          <div class="it-name">{{name}}</div>
-          {{#details}}<div>{{details}}</div>{{/details}}
-        </td>
-        <td class="c b">{{qty_padded}}</td>
-        <td class="c b">{{unit_price}}</td>
-        <td class="c b"><mark>{{net}}</mark></td>
-        <td class="c b">{{tax}}</td>
-        <td class="c b">{{total}}</td>
-      </tr>
-      {{/items}}
-      <tr class="tot"><td colspan="6" class="tl">Sub Total</td><td class="c">{{subtotal}}</td></tr>
-      {{#has_discount}}<tr class="tot"><td colspan="6" class="tl">Discount</td><td class="c">-{{discount}}</td></tr>{{/has_discount}}
-      {{#has_tax}}<tr class="tot"><td colspan="6" class="tl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</td><td class="c">{{tax_amount}}</td></tr>{{/has_tax}}
-      <tr class="tot gt"><td colspan="6" class="tl">Grand Total{{#currency}} ({{currency}}){{/currency}}</td><td class="c">{{total}}</td></tr>
-    </tbody>
-  </table>
+<table class="items">
+  <thead>
+    <tr>
+      <th>S/No.</th>
+      <th>Item</th>
+      <th>Qty.</th>
+      <th>Unit Price{{#currency}}<br>({{currency}}){{/currency}}</th>
+      <th class="hl">Special Discounted Price{{#currency}} ({{currency}}){{/currency}}</th>
+      <th class="hl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
+      <th class="hl">Total Price with VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{#items}}
+    <tr>
+      <td class="sn">{{no_padded}}</td>
+      <td class="it">
+        <div class="it-name">{{name}}</div>
+        {{#details}}<div>{{details}}</div>{{/details}}
+      </td>
+      <td class="c">{{qty_padded}}</td>
+      <td class="c">{{unit_price}}</td>
+      <td class="c"><span class="mark">{{net}}</span></td>
+      <td class="c">{{tax}}</td>
+      <td class="c">{{total}}</td>
+    </tr>
+    {{/items}}
+    <tr class="tot"><td colspan="6" class="tl">Sub Total</td><td class="c">{{subtotal}}</td></tr>
+    {{#has_discount}}<tr class="tot"><td colspan="6" class="tl">Discount</td><td class="c">-{{discount}}</td></tr>{{/has_discount}}
+    {{#has_tax}}<tr class="tot"><td colspan="6" class="tl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</td><td class="c">{{tax_amount}}</td></tr>{{/has_tax}}
+    <tr class="tot gt"><td colspan="6" class="tl">Grand Total{{#currency}} ({{currency}}){{/currency}}</td><td class="c">{{total}}</td></tr>
+  </tbody>
+</table>
 
-  {{#notes}}<div class="notes"><b>Notes:</b> {{notes}}</div>{{/notes}}
+{{#notes}}<div class="notes"><b>Notes:</b> {{notes}}</div>{{/notes}}
 
-  <div class="terms">
-    <h3>Terms &amp; Conditions</h3>
-    <p><b>Price Validity:</b> The quoted prices are valid for 30 days from the date of quotation. Prices are subject to revision thereafter without prior notice.</p>
-    <p>&bull; <b>Product Availability:</b> Delivery is subject to product availability at the time of receiving the Purchase Order (PO). In the event of unforeseen supply-chain delays, the customer will be informed accordingly.</p>
-    <p>&bull; <b>Delivery:</b> Delivery will be completed <b>within 2 working days from the date of receipt of the confirmed PO</b>, subject to product availability (mentioned above in the quote) and completion of all required commercial formalities.</p>
-    <p>&bull; <b>Training:</b> Product and user training will be provided upon delivery, where applicable, based on the product type and complexity. Training for high-value or technically advanced instruments will be provided where required. Standard/basic instruments will be supplied without formal training unless otherwise agreed.</p>
-    <p>&bull; <b>Installation &amp; Commissioning:</b> Where applicable, installation, commissioning, and initial setup will be provided by our qualified technical personnel. Any additional site requirements or services outside the agreed scope may be subject to additional charges.</p>
-    <p>&bull; <b>Calibration:</b> Calibration certificates are not included as standard. A calibration certificate will be provided only where specifically stated in the quotation/offer. If required separately, calibration can be arranged at an additional charge.</p>
-    <p>&bull; <b>Warranty:</b> The products will be covered by <b>the manufacturer's standard warranty</b> against manufacturing defects, subject to the applicable warranty terms and conditions. Warranty does not cover damage caused by misuse, accidents, unauthorized repairs, improper handling, or normal wear and tear.</p>
-    <p>&bull; <b>After-Sales Support:</b> After-sales support, including technical assistance, calibration, repairs, maintenance, troubleshooting, and product demonstrations, will be provided where applicable and subject to the manufacturer's warranty terms and service conditions. Calibration services are chargeable. Repairs for manufacturing defects will be provided free of charge within the applicable warranty period, subject to the warranty terms and conditions. Any services outside the warranty coverage will be charged separately.</p>
-    <p>&bull; <b>Technical Support:</b> Technical assistance will be available through our qualified technical team for product-related queries, troubleshooting, and application guidance during the warranty period and thereafter.</p>
-    <p>&bull; <b>Payment Terms:</b> 100% advance payment shall be made along with the Purchase Order (PO) unless otherwise agreed in writing.</p>
-    <p>&bull; <b>Documentation:</b> Relevant product documentation, including <b>user manuals, datasheets, calibration certificates, and warranty documentation</b>, where applicable, will be provided with the equipment.</p>
-    <p>&bull; <b>Scope of Supply:</b> The supply shall be strictly in accordance with the specifications, model numbers, accessories, and quantities stated in the quotation. Any additional accessories or services requested after order confirmation may be charged separately.</p>
-    <p>&bull; <b>Order Confirmation:</b> The Purchase Order should clearly specify the quoted <b>model numbers, quantities, agreed prices, and applicable terms and conditions</b> to avoid any discrepancies.</p>
-    <p>&bull; <b>Trade-In Offer:</b> Trade-in options are available for eligible existing instruments/equipment, subject to technical evaluation and assessment. The applicable trade-in value will be determined based on the condition, model, age, and market value of the equipment. {{business_name}} will reserve all the right to reject or accept the trade-in offers.</p>
-    <p>For any clarification, please contact the undersigned.</p>
-  </div>
+<div class="terms">
+  <h3>Terms &amp; Conditions</h3>
+  <p><b>Price Validity:</b> The quoted prices are valid for 30 days from the date of quotation. Prices are subject to revision thereafter without prior notice.</p>
+  <p>&bull; <b>Product Availability:</b> Delivery is subject to product availability at the time of receiving the Purchase Order (PO). In the event of unforeseen supply-chain delays, the customer will be informed accordingly.</p>
+  <p>&bull; <b>Delivery:</b> Delivery will be completed <b>within 2 working days from the date of receipt of the confirmed PO</b>, subject to product availability (mentioned above in the quote) and completion of all required commercial formalities.</p>
+  <p>&bull; <b>Training:</b> Product and user training will be provided upon delivery, where applicable, based on the product type and complexity. Training for high-value or technically advanced instruments will be provided where required. Standard/basic instruments will be supplied without formal training unless otherwise agreed.</p>
+  <p>&bull; <b>Installation &amp; Commissioning:</b> Where applicable, installation, commissioning, and initial setup will be provided by our qualified technical personnel. Any additional site requirements or services outside the agreed scope may be subject to additional charges.</p>
+  <p>&bull; <b>Calibration:</b> Calibration certificates are not included as standard. A calibration certificate will be provided only where specifically stated in the quotation/offer. If required separately, calibration can be arranged at an additional charge.</p>
+  <p>&bull; <b>Warranty:</b> The products will be covered by <b>the manufacturer's standard warranty</b> against manufacturing defects, subject to the applicable warranty terms and conditions. Warranty does not cover damage caused by misuse, accidents, unauthorized repairs, improper handling, or normal wear and tear.</p>
+  <p>&bull; <b>After-Sales Support:</b> After-sales support, including technical assistance, calibration, repairs, maintenance, troubleshooting, and product demonstrations, will be provided where applicable and subject to the manufacturer's warranty terms and service conditions. Calibration services are chargeable. Repairs for manufacturing defects will be provided free of charge within the applicable warranty period, subject to the warranty terms and conditions. Any services outside the warranty coverage will be charged separately.</p>
+  <p>&bull; <b>Technical Support:</b> Technical assistance will be available through our qualified technical team for product-related queries, troubleshooting, and application guidance during the warranty period and thereafter.</p>
+  <p>&bull; <b>Payment Terms:</b> 100% advance payment shall be made along with the Purchase Order (PO) unless otherwise agreed in writing.</p>
+  <p>&bull; <b>Documentation:</b> Relevant product documentation, including <b>user manuals, datasheets, calibration certificates, and warranty documentation</b>, where applicable, will be provided with the equipment.</p>
+  <p>&bull; <b>Scope of Supply:</b> The supply shall be strictly in accordance with the specifications, model numbers, accessories, and quantities stated in the quotation. Any additional accessories or services requested after order confirmation may be charged separately.</p>
+  <p>&bull; <b>Order Confirmation:</b> The Purchase Order should clearly specify the quoted <b>model numbers, quantities, agreed prices, and applicable terms and conditions</b> to avoid any discrepancies.</p>
+  <p>&bull; <b>Trade-In Offer:</b> Trade-in options are available for eligible existing instruments/equipment, subject to technical evaluation and assessment. The applicable trade-in value will be determined based on the condition, model, age, and market value of the equipment. {{business_name}} will reserve all the right to reject or accept the trade-in offers.</p>
+  <p>For any clarification, please contact the undersigned.</p>
+</div>
 
-  <div class="sign">
-    Yours faithfully,<br>
-    <span class="up">{{business_name}}</span>
-    <div class="gap"></div>
-    Your Name<br>
-    Designation<br>
-    Mobile: 07X XXX XXXX
-  </div>
+<div class="sign">
+  Yours faithfully,<br>
+  <span class="up">{{business_name}}</span>
+  <div class="gap"></div>
+  Your Name<br>
+  Designation<br>
+  Mobile: 07X XXX XXXX
+</div>
 
-</div></td></tr></tbody>
+</td></tr></tbody>
 </table>
 
 </body>
@@ -32323,7 +32379,7 @@ function _isetupApplyCustomHtml(html, msg) {
     const res = await window.electronAPI.readTextFile(pick.filePaths[0]);
     if (!res?.ok) { toast(res?.error || 'Could not read the file', 'error'); return; }
     if (!/<[a-z!][\s\S]*>/i.test(res.content || '')) { toast('That file does not look like HTML', 'error'); return; }
-    if (res.content.length > 2 * 1024 * 1024) { toast('HTML template is too large (max 2 MB)', 'error'); return; }
+    if (res.content.length > QTPL_MAX_HTML) { toast(`HTML template is too large (max ${QTPL_MAX_HTML.toLocaleString()} characters) — link images from File Manager instead of embedding them`, 'error'); return; }
     _isetupApplyCustomHtml(res.content, `Loaded ${pick.filePaths[0].split(/[\\/]/).pop()} — Save Setup to keep it`);
   });
 
@@ -60450,7 +60506,7 @@ async function submitDsCreate() {
   const _crmPrefSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   let _crmPipeView    = _crmPrefGet('crm.pipeline.view', 'board');
   let _crmPipeCompact = _crmPrefGet('crm.pipeline.compact', '0') === '1';
-  let _crmPipeFilter  = { q: '', customers: false, hasValue: false, source: '', score: '' };
+  let _crmPipeFilter  = { q: '', customers: false, hasValue: false, source: '', score: '', division: '' };
   let _crmColLimit    = {};
   let _crmListSort    = { key: 'created', dir: 'desc' };
   // Card order inside each board column: newest | score (hot first) | follow-up (soonest due first) | value
@@ -60733,7 +60789,7 @@ async function submitDsCreate() {
   }
 
   function _crmFilterActive() {
-    return !!(_crmPipeFilter.q || _crmPipeFilter.customers || _crmPipeFilter.hasValue || _crmPipeFilter.source || _crmPipeFilter.score);
+    return !!(_crmPipeFilter.q || _crmPipeFilter.customers || _crmPipeFilter.hasValue || _crmPipeFilter.source || _crmPipeFilter.score || _crmPipeFilter.division);
   }
 
   function _crmLeadMatches(lead) {
@@ -60741,6 +60797,7 @@ async function submitDsCreate() {
     if (_crmPipeFilter.hasValue && !(_crmDealValue(lead) > 0)) return false;
     if (_crmPipeFilter.source && (lead.source || '') !== _crmPipeFilter.source) return false;
     if (_crmPipeFilter.score === 'none' ? !!lead.score : _crmPipeFilter.score && lead.score !== _crmPipeFilter.score) return false;
+    if (_crmPipeFilter.division && !_crmDivisionMatches(lead)) return false;
     if (!_crmPipeFilter.q) return true;
     const hay = [lead.name, lead.company, lead.email, lead.phone, _crmSource(lead.source)?.label].filter(Boolean).join(' ').toLowerCase();
     return _crmPipeFilter.q.split(/\s+/).every(t => hay.includes(t));
@@ -60774,8 +60831,40 @@ async function submitDsCreate() {
     sel?.classList.toggle('active', !!_crmPipeFilter.source);
   }
 
+  // Division filter values: '' all, 'mine' the divisions this user heads, 'none' no division, else a division id
+  function _crmMyDivisionIds() {
+    const uid = _crmAccess?.user_id;
+    return (_crmPipeline?.divisions || []).filter(d => uid && d.head_user_id === uid).map(d => d.id);
+  }
+
+  function _crmDivisionMatches(lead) {
+    const f = _crmPipeFilter.division;
+    if (f === 'none') return !lead.division_id;
+    if (f === 'mine') return _crmMyDivisionIds().includes(lead.division_id);
+    return lead.division_id === Number(f);
+  }
+
+  // Shown only when the relation's department has divisions; counts are across the whole pipeline.
+  function _crmRenderDivisionFilter() {
+    const sel = $('#crm-pipe-division');
+    if (!sel) return;
+    const divisions = _crmPipeline?.divisions || [];
+    sel.style.display = divisions.length ? '' : 'none';
+    if (!divisions.length) { _crmPipeFilter.division = ''; return; }
+    const counts = {};
+    (_crmPipeline.columns || []).forEach(c => c.leads.forEach(l => { const k = l.division_id || 'none'; counts[k] = (counts[k] || 0) + 1; }));
+    const mine = _crmMyDivisionIds();
+    sel.innerHTML = '<option value="">All divisions</option>'
+      + (mine.length ? `<option value="mine">My division${mine.length !== 1 ? 's' : ''} (${mine.reduce((n, id) => n + (counts[id] || 0), 0)})</option>` : '')
+      + divisions.map(d => `<option value="${d.id}">${escHtml(d.name)} (${counts[d.id] || 0})</option>`).join('')
+      + `<option value="none">No division (${counts.none || 0})</option>`;
+    sel.value = _crmPipeFilter.division;
+    if (sel.value !== _crmPipeFilter.division) { _crmPipeFilter.division = ''; sel.value = ''; }
+    sel.classList.toggle('active', !!_crmPipeFilter.division);
+  }
+
   function _crmResetPipelineView() {
-    _crmPipeFilter = { q: '', customers: false, hasValue: false, source: '', score: '' };
+    _crmPipeFilter = { q: '', customers: false, hasValue: false, source: '', score: '', division: '' };
     _crmColLimit = {};
     const input = $('#crm-pipe-search'); if (input) input.value = '';
     const score = $('#crm-pipe-score'); if (score) { score.value = ''; score.classList.remove('active'); }
@@ -60795,6 +60884,8 @@ async function submitDsCreate() {
       density.style.display = _crmPipeView === 'board' ? '' : 'none';
       density.title = _crmPipeCompact ? 'Detailed cards' : 'Compact cards';
     }
+    // Before drawing, so a division filter left over from another relation is cleared first
+    _crmRenderDivisionFilter();
     if (_crmPipeView === 'list') _renderLeadList(); else _renderBoard();
     _crmRenderSourceFilter();
 
@@ -60941,6 +61032,11 @@ async function submitDsCreate() {
   }));
   $('#crm-pipe-source')?.addEventListener('change', e => {
     _crmPipeFilter.source = e.target.value;
+    _crmColLimit = {};
+    _crmRenderPipelineView();
+  });
+  $('#crm-pipe-division')?.addEventListener('change', e => {
+    _crmPipeFilter.division = e.target.value;
     _crmColLimit = {};
     _crmRenderPipelineView();
   });
@@ -62127,12 +62223,16 @@ async function submitDsCreate() {
   $('#crm-won-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseWon(); });
 
   function _crmDivisionFieldHtml(lead) {
-    const divisions = _crmPipeline?.divisions || [];
-    if (!divisions.length || !_crmLeadCan(lead, 'assign')) return '';
+    // Divisions the user may move the lead into (a division head: only their own), plus its current one
+    const all = _crmPipeline?.divisions || [];
+    const divisions = all.filter(d => d.can_place !== false || d.id === lead.division_id);
+    if (!divisions.some(d => d.can_place !== false) || !_crmLeadCan(lead, 'assign')) return '';
+    // Taking a lead out of every division is for those who may place it anywhere
+    const anyDivision = all.every(d => d.can_place !== false);
     return `<div class="po-field">
       <label class="po-field-label">Division</label>
       <select id="crm-lead-view-division" class="po-field-input" style="appearance:auto">
-        <option value="">— No division —</option>
+        ${anyDivision || !lead.division_id ? '<option value="">— No division —</option>' : ''}
         ${divisions.map(d => `<option value="${d.id}"${d.id === lead.division_id ? ' selected' : ''}>${escHtml(d.name)}</option>`).join('')}
       </select>
     </div>`;
@@ -65498,15 +65598,37 @@ async function submitDsCreate() {
     const primary = data.assignees.find(a => a.is_primary)?.id;
     // Someone already on the lead who has since left the department stays listed (untick to remove)
     const pickable = [
-      ...data.assignees.filter(a => !data.assignable_users.some(u => u.id === a.id)).map(a => ({ id: a.id, name: `${a.name} (not in the department)` })),
+      ...data.assignees.filter(a => !data.assignable_users.some(u => u.id === a.id)).map(a => ({ id: a.id, name: a.name, role: 'left' })),
       ...data.assignable_users,
     ];
-    const rows = pickable.map(u => `
-      <div class="crm-assign-row">
+    // Grouped: heads, division heads, the department's own staff, then people added from each other department
+    const GROUP = {
+      head:          u => ['0', 'Department heads'],
+      division_head: u => ['1', 'Division heads'],
+      staff:         u => ['2', `${u.department_name || 'Department'} staff`],
+      member:        u => [`3${u.department_name || '~'}`, `From ${u.department_name || 'no department'}`, 'added through CRM'],
+      left:          u => ['9', 'No longer in the department', 'untick to remove'],
+    };
+    const groups = new Map();
+    pickable.forEach(u => {
+      const [key, title, note] = (GROUP[u.role] || (x => [`5${x.department_name || '~'}`, x.department_name || 'No department']))(u);
+      if (!groups.has(key)) groups.set(key, { title, note, people: [] });
+      groups.get(key).people.push(u);
+    });
+    const row = u => {
+      const sub = [u.division_name ? `Heads ${u.division_name}` : '', u.job_title, u.email].filter(Boolean).map(escHtml).join(' · ');
+      const search = [u.name, u.email, u.job_title, u.department_name, u.division_name].filter(Boolean).join(' ').toLowerCase();
+      return `<div class="crm-assign-row" data-assign-search="${escHtml(search)}">
         <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}>
-          <span class="crm-assign-av">${escHtml(String(u.name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase())}</span>
-          <span class="crm-assign-name">${escHtml(u.name)}</span></label>
+          <span class="crm-assign-av">${escHtml(_crmInitials(u.name || '?'))}</span>
+          <span class="crm-assign-who"><span class="crm-assign-name">${escHtml(u.name)}</span>${sub ? `<span class="crm-assign-sub">${sub}</span>` : ''}</span></label>
         <label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
+      </div>`;
+    };
+    const rows = [...groups.keys()].sort().map(k => groups.get(k)).map(g => `
+      <div class="crm-assign-group" data-assign-group>
+        <div class="crm-assign-group-title">${escHtml(g.title)}${g.note ? ` <small>· ${escHtml(g.note)}</small>` : ''}<span>${g.people.length}</span></div>
+        ${g.people.map(row).join('')}
       </div>`).join('');
     const history = data.history.map(h => `
       <div class="crm-ws-tl-item">
@@ -65519,10 +65641,40 @@ async function submitDsCreate() {
       </div>`).join('');
     $('#crm-assign-body').innerHTML = `
       <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.</div>
-      <div class="crm-assign-list">${rows || _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet — link the staff to users in HR.')}</div>
+      ${pickable.length ? `<div class="crm-assign-tools">
+        <div class="crm-assign-search"><i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="crm-assign-search" autocomplete="off" placeholder="Search name, email, department or job title…"></div>
+        <span class="crm-assign-count" id="crm-assign-count"></span>
+      </div>` : ''}
+      <div class="crm-assign-list">${rows || _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet — link the staff to users in HR.')}
+        <div class="crm-assign-none" id="crm-assign-none" hidden>No one matches your search.</div></div>
       ${history ? `<details class="crm-assign-history"><summary>Assignment history (${data.history.length})</summary><div class="crm-ws-tl">${history}</div></details>` : ''}`;
     $('#crm-assign-save').disabled = !data.can_assign;
+    _crmAssignCount();
   }
+
+  function _crmAssignCount() {
+    const el = $('#crm-assign-count');
+    if (el) el.textContent = `${$$('#crm-assign-body [data-assign-user]:checked').length} selected`;
+  }
+
+  // Filtering hides rows instead of re-rendering, so ticks and the star survive a search
+  $('#crm-assign-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-assign-search') return;
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    $$('#crm-assign-body [data-assign-group]').forEach(g => {
+      let n = 0;
+      g.querySelectorAll('[data-assign-search]').forEach(r => {
+        const hit = !q || r.dataset.assignSearch.includes(q);
+        r.hidden = !hit;
+        if (hit) n++;
+      });
+      g.hidden = !n;
+      shown += n;
+    });
+    $('#crm-assign-none').hidden = shown > 0;
+  });
 
   function _crmCloseAssignModal() {
     _macHide($('#crm-assign-modal'));
@@ -65535,6 +65687,7 @@ async function submitDsCreate() {
     if (!row) return;
     if (e.target.type === 'radio') row.querySelector('[data-assign-user]').checked = true;
     if (e.target.matches('[data-assign-user]') && !e.target.checked) row.querySelector('input[type=radio]').checked = false;
+    _crmAssignCount();
   });
   $('#crm-assign-close')?.addEventListener('click', _crmCloseAssignModal);
   $('#crm-assign-cancel')?.addEventListener('click', _crmCloseAssignModal);
@@ -66811,9 +66964,178 @@ async function submitDsCreate() {
     }).join('') || `<span class="mac-side-empty">No department matches “${escHtml(q)}”.</span>`;
   }
 
-  function _crmOrgUserOptions(selectedId) {
-    return `<option value="">Head: department head</option>` + _crmOrg.users.map(u =>
-      `<option value="${u.id}"${u.id === selectedId ? ' selected' : ''}>Head: ${escHtml(u.name)}</option>`).join('');
+  // Searchable user picker (name or email). The hidden input carries `data-f` so the
+  // row's body readers see the picked id. `emptyLabel` is the "no one" choice, if any;
+  // `users` limits the choices (defaults to every business user).
+  function _crmOrgUserCombo(field, selectedId, { users = null, emptyLabel = '', placeholder = 'Search name, email or department…', style = '' } = {}) {
+    const cur = _crmOrg.users.find(u => u.id === selectedId);
+    return `<div class="cat-combo" data-org-user-combo style="${style}"
+        data-empty-label="${escHtml(emptyLabel)}"${users ? ` data-user-ids="${users.map(u => u.id).join(',')}"` : ''}>
+      <input type="hidden" data-f="${field}" value="${cur ? cur.id : ''}">
+      <input type="text" class="po-field-input" style="width:100%" autocomplete="off" placeholder="${escHtml(emptyLabel || placeholder)}" value="${cur ? escHtml(cur.name) : ''}">
+      <div class="cat-combo-list org-pick-list" style="display:none"></div>
+    </div>`;
+  }
+
+  function _crmWireOrgUserCombos(root) {
+    root.querySelectorAll('[data-org-user-combo]').forEach(combo => {
+      const hidden = combo.querySelector('input[type="hidden"]');
+      const input  = combo.querySelector('input[type="text"]');
+      const list   = combo.querySelector('.cat-combo-list');
+      const ids    = combo.dataset.userIds != null ? new Set(combo.dataset.userIds.split(',').filter(Boolean).map(Number)) : null;
+      const users  = ids ? _crmOrg.users.filter(u => ids.has(u.id)) : _crmOrg.users;
+      const emptyLabel = combo.dataset.emptyLabel || '';
+      let items = [], active = -1;
+
+      // Results are grouped by HR department: the open department first, then A–Z, "No department" last.
+      // `items` keeps the rendered order so keyboard moves match what is on screen.
+      const render = filter => {
+        const q = (filter || '').trim().toLowerCase();
+        const matches = users.filter(u => !q || [u.name, u.email, u.department_name, u.job_title]
+          .some(v => v && v.toLowerCase().includes(q)));
+        const groups = new Map();
+        matches.forEach(u => {
+          const key = u.department_id || 0;
+          if (!groups.has(key)) groups.set(key, { id: key, name: u.department_name || 'No department', people: [] });
+          groups.get(key).people.push(u);
+        });
+        const rank = g => g.id === _crmOrgDeptId ? 0 : g.id === 0 ? 2 : 1;
+        const ordered = [...groups.values()].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+
+        items = [];
+        let html = '';
+        if (emptyLabel && !q) {
+          items.push({ id: '', name: emptyLabel, empty: true });
+          html += `<div class="cat-combo-item org-pick-item" data-i="0">
+            <span class="crm-dept-avatar org-pick-empty-icon"><i class="fa fa-user-tie"></i></span>
+            <span class="org-pick-main"><span class="org-pick-name">${escHtml(emptyLabel)}</span>
+              <span class="org-pick-sub">No one picked — the department's head runs it</span></span></div>`;
+        }
+        ordered.forEach(g => {
+          html += `<div class="org-pick-group">${escHtml(g.id === _crmOrgDeptId ? `${g.name} · this department` : g.name)}<span>${g.people.length}</span></div>`;
+          g.people.forEach(u => {
+            const i = items.push(u) - 1;
+            const places = _crmOrgOtherPlaces(u.id, null);
+            html += `<div class="cat-combo-item org-pick-item" data-i="${i}"${places ? ` title="${escHtml(places)}"` : ''}>
+              <span class="crm-dept-avatar">${escHtml(_crmInitials(u.name || '?'))}</span>
+              <span class="org-pick-main">
+                <span class="org-pick-name">${escHtml(u.name || '—')}</span>
+                <span class="org-pick-sub">${[u.job_title, u.email].filter(Boolean).map(escHtml).join(' · ') || '&nbsp;'}</span>
+              </span>
+              ${places.startsWith('Head of') ? '<span class="org-pick-tag org-pick-tag--here">Head</span>' : ''}
+            </div>`;
+          });
+        });
+        active = items.length ? 0 : -1;
+        list.innerHTML = html || `<div class="cat-combo-empty">No one matches “${escHtml(filter.trim())}”</div>`;
+        list.querySelector('.cat-combo-item')?.classList.add('active');
+        list.scrollTop = 0;
+        list.style.display = '';
+      };
+      const highlight = () => list.querySelectorAll('.cat-combo-item').forEach((el, i) => {
+        el.classList.toggle('active', i === active);
+        if (i === active) el.scrollIntoView({ block: 'nearest' });
+      });
+      const pick = u => {
+        hidden.value = u.empty ? '' : u.id;
+        input.value = u.empty ? '' : u.name;
+        list.style.display = 'none';
+      };
+
+      list.addEventListener('mousedown', ev => {
+        const item = ev.target.closest('.cat-combo-item');
+        if (!item) return;
+        ev.preventDefault();
+        pick(items[Number(item.dataset.i)]);
+      });
+      input.addEventListener('focus', () => { input.select(); render(''); });
+      input.addEventListener('input', () => render(input.value));
+      // Leaving the field without picking restores the current choice
+      input.addEventListener('blur', () => setTimeout(() => {
+        list.style.display = 'none';
+        input.value = users.find(u => String(u.id) === hidden.value)?.name || '';
+      }, 150));
+      input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (list.style.display === 'none') { render(input.value); return; }
+          if (!items.length) return;
+          active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+          highlight();
+        } else if (e.key === 'Enter' && list.style.display !== 'none' && items[active]) {
+          e.preventDefault();
+          pick(items[active]);
+        } else if (e.key === 'Escape' && list.style.display !== 'none') {
+          e.preventDefault(); // keep the window open — just close the list
+          list.style.display = 'none';
+        }
+      });
+    });
+  }
+
+  function _crmOrgHeadCombo(selectedId) {
+    return _crmOrgUserCombo('head_user_id', selectedId, { emptyLabel: 'Head: department head', style: 'width:240px' });
+  }
+
+  // The other departments a user heads or works in (HR head or a CRM place), e.g. "Head of IT · Member of Support"
+  function _crmOrgOtherPlaces(userId, exceptDeptId) {
+    const heads = [], members = [];
+    _crmOrg.departments.forEach(x => {
+      if (x.id === exceptDeptId) return;
+      if ((x.head_user_ids || []).includes(userId)) heads.push(x.name);
+      else if ((x.members || []).some(m => m.user_id === userId)) members.push(x.name);
+    });
+    _crmOrg.departments.forEach(x => (x.divisions || []).forEach(v => {
+      if (v.head_user_id === userId) heads.push(`${x.name} › ${v.name}`);
+    }));
+    return [heads.length ? `Head of ${heads.join(', ')}` : '', members.length ? `Member of ${members.join(', ')}` : '']
+      .filter(Boolean).join(' · ');
+  }
+
+  function _crmOrgPeopleHtml(d) {
+    const person = p => p ? `${escHtml(p.name)}${p.user_name ? '' : ' <span class="crm-perms-muted">(no user)</span>'}` : '—';
+    const members = d.members || [];
+    const taken = new Set(members.map(m => m.user_id));
+    // Not already added, and not already HR staff of this department
+    const pickable = _crmOrg.users.filter(u => !taken.has(u.id) && u.department_id !== d.id);
+    const roleSelect = (role, attrs = '') => `<select class="po-field-input" data-f="role" style="width:130px"${attrs}>
+      <option value="member"${role === 'member' ? ' selected' : ''}>Member</option>
+      <option value="head"${role === 'head' ? ' selected' : ''}>Head</option></select>`;
+
+    return `
+      <div class="mac-section">
+        <div class="mac-section-title">People <span class="crm-perms-muted" style="font-weight:400">· ${d.staff_count || 0} from HR + extra people you add</span></div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-id-badge"></i></span>
+              <span><strong>From HR:</strong> ${d.head ? `Head ${person(d.head)}` : 'No head'}${d.co_head ? ` · Co-head ${person(d.co_head)}` : ''} · ${d.staff_count ? `${d.staff_count} staff` : 'No staff'}
+              <small>Change these in HR → Departments.</small></span></div>
+          </div>
+          ${members.map(m => {
+            const other = _crmOrgOtherPlaces(m.user_id, d.id);
+            return `<div class="mac-row mac-row--fields" data-org-member="${m.id}">
+              <div class="mac-row-label mac-row-label--icon" style="flex:1;min-width:150px">
+                <span class="mac-row-icon"><i class="fa ${m.role === 'head' ? 'fa-user-tie' : 'fa-user'}"></i></span>
+                <span><strong>${escHtml(m.user_name || 'User #' + m.user_id)}</strong>${m.role === 'head' ? ' <span class="mac-pill">Head</span>' : ''}
+                <small>${escHtml(other || 'Only in this department through CRM')}</small></span>
+              </div>
+              ${roleSelect(m.role, ' data-org-member-role')}
+              <button type="button" class="po-btn-ghost mac-icon-btn" data-org-member-remove title="Remove from ${escHtml(d.name)}"><i class="fa fa-user-minus" style="color:#ff3b30"></i></button>
+            </div>`;
+          }).join('') || `<div class="mac-row mac-muted-row"><span><strong>No extra people.</strong> Add someone from another department who should also work ${escHtml(d.name)} leads.</span></div>`}
+          <div class="mac-row mac-row--fields" data-org-member-new>
+            ${_crmOrgUserCombo('user_id', null, { users: pickable, placeholder: 'Add someone from another department…', style: 'flex:1;min-width:150px' })}
+            ${roleSelect('member')}
+            <button type="button" class="po-btn-primary" data-org-member-add><i class="fa fa-user-plus"></i> Add</button>
+          </div>
+          <div class="mac-row mac-muted-row" style="font-size:12px">
+            <div style="line-height:1.6">
+              <div><i class="fa fa-user" style="width:16px"></i> <strong>Member</strong> — works ${escHtml(d.name)} leads like its own staff.</div>
+              <div><i class="fa fa-user-tie" style="width:16px"></i> <strong>Head</strong> — same powers as the department head: assigns leads, approves quotations and stage moves, and gets the head's alerts. One person can head several departments.</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
   }
 
   function _crmRenderOrgEditor() {
@@ -66822,6 +67144,7 @@ async function submitDsCreate() {
     if (!d) { body.innerHTML = '<span class="crm-perms-muted">Select a department.</span>'; return; }
 
     const person = p => p ? `${escHtml(p.name)}${p.user_name ? '' : ' <span class="crm-perms-muted">(no user)</span>'}` : '—';
+    const extraHeads = (d.members || []).filter(m => m.role === 'head').map(m => escHtml(m.user_name || ''));
     const linkable = _crmOrg.pipelines.filter(p => p.department_id === null);
     const s = d.settings;
 
@@ -66830,13 +67153,15 @@ async function submitDsCreate() {
         <span class="mac-hero-icon"><i class="fa fa-building"></i></span>
         <div style="min-width:0;flex:1">
           <div class="mac-hero-name">${escHtml(d.name)}</div>
-          <div class="mac-hero-sub">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''} · ${d.staff_count} staff</div>
+          <div class="mac-hero-sub">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''}${extraHeads.length ? ' · Also headed by ' + extraHeads.join(', ') : ''} · ${d.staff_count} staff${(d.members || []).length ? ` + ${d.members.length} from CRM` : ''}</div>
         </div>
         ${s.is_marketing_intake ? '<span class="mac-pill">Marketing intake</span>' : ''}
       </div>
       ${d.warnings.length ? `<div class="mac-callout"><i class="fa fa-triangle-exclamation"></i><div>
         <strong>${d.warnings.length === 1 ? '1 thing needs' : `${d.warnings.length} things need`} attention</strong>
         <ul>${d.warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div></div>` : ''}
+
+      ${_crmOrgPeopleHtml(d)}
 
       <div class="mac-section">
         <div class="mac-section-title">Pipelines</div>
@@ -66884,14 +67209,14 @@ async function submitDsCreate() {
         <div class="mac-group">
           ${d.divisions.map(v => `<div class="mac-row mac-row--fields" data-org-div="${v.id}">
             <input type="text" class="po-field-input" data-f="name" value="${escHtml(v.name)}" maxlength="150" style="flex:1;min-width:150px">
-            <select class="po-field-input" data-f="head_user_id" style="width:210px">${_crmOrgUserOptions(v.head_user_id)}</select>
+            ${_crmOrgHeadCombo(v.head_user_id)}
             <label class="mac-switch-label"><input type="checkbox" class="mac-switch" data-f="is_active"${v.is_active ? ' checked' : ''}> Active</label>
             <button type="button" class="po-btn-ghost" data-org-div-save><i class="fa fa-check"></i> Save</button>
             <button type="button" class="po-btn-ghost mac-icon-btn" data-org-div-delete title="Delete division"><i class="fa fa-trash" style="color:#ff3b30"></i></button>
           </div>`).join('') || '<div class="mac-row mac-muted-row">No divisions yet.</div>'}
           <div class="mac-row mac-row--fields" data-org-div-new>
             <input type="text" class="po-field-input" data-f="name" placeholder="New division name" maxlength="150" style="flex:1;min-width:150px">
-            <select class="po-field-input" data-f="head_user_id" style="width:210px">${_crmOrgUserOptions(null)}</select>
+            ${_crmOrgHeadCombo(null)}
             <button type="button" class="po-btn-primary" data-org-div-add><i class="fa fa-plus"></i> Add division</button>
           </div>
         </div>
@@ -66926,6 +67251,7 @@ async function submitDsCreate() {
           </div>
         </div>
       </div>`;
+    _crmWireOrgUserCombos(body);
   }
 
   function _crmOrgDivisionBody(row) {
@@ -66989,6 +67315,21 @@ async function submitDsCreate() {
       const divId = Number(t.closest('[data-org-div]').dataset.orgDiv);
       call = () => API.crmDeleteDivision(divId);
       msg = 'Division deleted.';
+    } else if (t.matches('[data-org-member-add]')) {
+      const row = t.closest('[data-org-member-new]');
+      const userId = row.querySelector('[data-f="user_id"]').value;
+      if (!userId) { _crmOrgAlert('Pick a person to add.'); return; }
+      const role = row.querySelector('[data-f="role"]').value;
+      call = () => API.crmAddDepartmentMember(deptId, { user_id: Number(userId), role });
+      msg = role === 'head' ? 'Head added.' : 'Member added.';
+      flashSel = '[data-org-member-add]';
+    } else if (t.matches('[data-org-member-remove]')) {
+      const row = t.closest('[data-org-member]');
+      const name = row.querySelector('strong')?.textContent || 'this person';
+      if (!await appConfirm({ title: `Remove ${name}?`, message: 'They stop working this department\'s leads. Their HR department is not changed, and leads already assigned to them stay assigned.', confirmText: '<i class="fa fa-user-minus"></i> Remove', icon: 'fa-user-minus', danger: true })) return;
+      const memberId = Number(row.dataset.orgMember);
+      call = () => API.crmRemoveDepartmentMember(memberId);
+      msg = 'Removed from the department.';
     } else if (t.matches('[data-org-save-cc]')) {
       const cc = $('#crm-org-phone-cc').value.trim();
       call = () => API.crmSaveSettings({ phone_country_code: cc || null });
@@ -67008,10 +67349,25 @@ async function submitDsCreate() {
     if (res.status === 200 || res.status === 201) {
       toast(msg, 'success');
       await _crmLoadOrg();
-      _crmOrgFlashSaved(flashSel, flashSel === '[data-org-div-add]' ? 'Added' : 'Saved');
+      _crmOrgFlashSaved(flashSel, ['[data-org-div-add]', '[data-org-member-add]'].includes(flashSel) ? 'Added' : 'Saved');
     } else {
       t.disabled = false;
       _crmOrgError(res, 'Failed to save.');
+    }
+  });
+
+  // Switching a person between member and head saves straight away
+  $('#crm-org-editor-body')?.addEventListener('change', async e => {
+    const sel = e.target.closest('[data-org-member-role]');
+    if (!sel) return;
+    sel.disabled = true;
+    const res = await API.crmUpdateDepartmentMember(Number(sel.closest('[data-org-member]').dataset.orgMember), { role: sel.value });
+    if (res.status === 200) {
+      toast(sel.value === 'head' ? 'Now a head of this department.' : 'Now a member of this department.', 'success');
+      await _crmLoadOrg();
+    } else {
+      sel.disabled = false;
+      _crmOrgError(res, 'Failed to change the role.');
     }
   });
 
@@ -67601,7 +67957,10 @@ async function submitDsCreate() {
   // Upload a CSV / XLSX (our template, a Google Forms responses export or a Facebook
   // Lead Ads export) → the server detects the format and suggests a field per column →
   // the user adjusts the mapping → (a file with a Department column: each department's rows
-  // are bundled, and the user picks or creates the department and relation for each bundle) →
+  // are bundled, and the user picks or creates the department and relation for each bundle;
+  // with only a Division column all rows are one bundle and the user says which department they
+  // belong to; each bundle's division values are matched to that department's divisions, or
+  // the user creates the missing ones) →
   // preview (ok / duplicate / error / skipped per row, nothing saved) → run. Big files run on
   // the server queue; step 5 polls until done.
   let _crmImpOptions = null;   // { imports, pipelines, intake_project, fields, sources, duplicate_modes, … } from /crm/lead-imports
@@ -67708,7 +68067,8 @@ async function submitDsCreate() {
       </div>
       <div class="crm-imp-help">
         <div><strong><span class="crm-imp-help-icon crm-imp-help-icon--plain"><i class="fa fa-file-csv"></i></span> CSV template</strong>
-          Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.</div>
+          Columns: name, phone, email, company, source, product_interest, date, notes. Each lead needs a phone or an email.
+          Optional department and division columns split the leads — without a department column you choose it.</div>
         <div><strong><span class="crm-imp-help-icon" style="--tile:#ea4335"><i class="fa-brands fa-google"></i></span> Google Forms</strong>
           Open the form's responses sheet → File → Download → CSV, and upload it as it is. Each question becomes a field or a line in the notes.</div>
         <div><strong><span class="crm-imp-help-icon" style="--tile:#1877f2"><i class="fa-brands fa-facebook-f"></i></span> Facebook / Instagram Lead Ads</strong>
@@ -67759,11 +68119,12 @@ async function submitDsCreate() {
   function _crmImpRenderMapping() {
     _crmImpStep(2);
     const o = _crmImpOptions, imp = _crmImp;
-    // Opened from inside a relation, every lead goes there — a department column is just a note
-    const targets = [...o.fields.filter(f => !(_crmImpLocked && f.key === 'department')).map(f => [f.key, f.label]), ['note', 'Add to notes'], ['', "Don't import"]];
+    // Opened from inside a relation, every lead goes there — a department or division column is just a note
+    const routing = k => k === 'department' || k === 'division';
+    const targets = [...o.fields.filter(f => !(_crmImpLocked && routing(f.key))).map(f => [f.key, f.label]), ['note', 'Add to notes'], ['', "Don't import"]];
     const s = _crmImpSettings;   // what was chosen before going on, when coming back
-    const mapping = (s?.mapping ?? imp.mapping).map(k => _crmImpLocked && k === 'department' ? 'note' : k);
-    const split = mapping.includes('department');
+    const mapping = (s?.mapping ?? imp.mapping).map(k => _crmImpLocked && routing(k) ? 'note' : k);
+    const split = mapping.some(routing);
     const sampleOf = i => imp.sample.map(r => r[i]).filter(v => v).slice(0, 3).join(' · ');
     const pipelines = _crmImpPipelines();
     const curPipeline = _crmImpLocked ? _crmImpLocked.id
@@ -67794,8 +68155,8 @@ async function submitDsCreate() {
             </select></div></div>
           <div class="mac-row" id="crm-imp-into-row"${split ? ' style="display:none"' : ''}><div class="mac-row-label">Import into<small>${_crmImpLocked ? 'The relation you opened the import from' : 'Search the relations, or type a new name to create one'}</small></div>
             ${relCtl}</div>
-          <div class="mac-row" id="crm-imp-split-row"${split ? '' : ' style="display:none"'}><div class="mac-row-label">Import into<small>The file has a department column</small></div>
-            <div class="mac-row-ctl"><span class="crm-perms-muted"><i class="fa fa-sitemap"></i> Per department — you choose the department and relation for each in the next step</span></div></div>
+          <div class="mac-row" id="crm-imp-split-row"${split ? '' : ' style="display:none"'}><div class="mac-row-label">Import into<small id="crm-imp-split-why"></small></div>
+            <div class="mac-row-ctl"><span class="crm-perms-muted" id="crm-imp-split-how"></span></div></div>
           <div class="mac-row"><div class="mac-row-label">Contact already has an open lead in this relation<small>What to do with repeat enquiries</small></div>
             <div class="mac-row-ctl"><select class="po-field-input" id="crm-imp-dups">
               ${o.duplicate_modes.map(m => `<option value="${m.key}"${m.key === (s?.duplicates ?? imp.duplicates) ? ' selected' : ''}>${escHtml(m.label)}</option>`).join('')}
@@ -67822,13 +68183,21 @@ async function submitDsCreate() {
     _crmImpSplitToggle();
   }
 
-  // A column set to "Department" splits the import: the relation is then chosen per department
+  // A column set to "Department" or "Division" splits the import: the department, relation and
+  // divisions are then chosen in the next step
   function _crmImpSplitToggle() {
-    const split = Array.from($$('#crm-import-body [data-imp-col]'), x => x.value).includes('department');
+    const cols  = Array.from($$('#crm-import-body [data-imp-col]'), x => x.value);
+    const dept  = cols.includes('department'), div = cols.includes('division');
+    const split = dept || div;
     $('#crm-imp-into-row').style.display  = split ? 'none' : '';
     $('#crm-imp-split-row').style.display = split ? '' : 'none';
+    $('#crm-imp-split-why').textContent = dept && div ? 'The file has department and division columns'
+      : dept ? 'The file has a department column' : 'The file has a division column but no department';
+    $('#crm-imp-split-how').innerHTML = '<i class="fa fa-sitemap"></i> ' + (dept
+      ? 'Per department — you choose the department and relation for each in the next step'
+      : 'You choose which department these leads belong to, and match the divisions, in the next step');
     const btn = $('#crm-import-footer [data-imp-preview]');
-    if (btn) btn.innerHTML = split ? 'Next: Departments <i class="fa fa-arrow-right"></i>' : '<i class="fa fa-eye"></i> Preview';
+    if (btn) btn.innerHTML = split ? `Next: ${dept ? 'Departments' : 'Department & divisions'} <i class="fa fa-arrow-right"></i>` : '<i class="fa fa-eye"></i> Preview';
   }
 
   // "Import into" — a searchable relation picker; typing a name that doesn't exist offers to create it
@@ -67931,7 +68300,7 @@ async function submitDsCreate() {
       project_id: project ? Number(project) : null,
       duplicates: $('#crm-imp-dups').value,
     };
-    if (!mapping.includes('department')) { _crmImpDepts = null; _crmImpRunPreview(btn); return; }
+    if (!mapping.includes('department') && !mapping.includes('division')) { _crmImpDepts = null; _crmImpRunPreview(btn); return; }
 
     const label = btn.innerHTML;
     btn.disabled = true;
@@ -67945,16 +68314,51 @@ async function submitDsCreate() {
     // Keep what was chosen for a department before (going back and on again)
     const before = Object.fromEntries((_crmImpDepts?.groups || []).map(g => [g.key, g.choice]));
     const d = res.body.data;
-    d.groups.forEach(g => { g.choice = before[g.key] || _crmImpDefaultChoice(g, d); });
+    d.groups.forEach(g => {
+      const b = before[g.key];
+      g.choice = b ? { ...b, divs: { ..._crmImpDefaultDivs(g, d, b.dept), ...b.divs } } : _crmImpDefaultChoice(g, d);
+    });
     _crmImpDepts = d;
     _crmImpRenderDepartments();
   }
 
-  // The suggested department, then its relation (or a new one with the suggested name)
+  // The suggested department, then its relation (or a new one with the suggested name) and divisions
   function _crmImpDefaultChoice(g, d) {
     const dept = g.department_id ? String(g.department_id)
       : g.value && d.can_create_departments ? 'new' : '';
-    return { dept, deptName: g.value, rel: _crmImpDefaultRel(g, d, dept), relName: g.relation_name };
+    return { dept, deptName: g.value, rel: _crmImpDefaultRel(g, d, dept), relName: g.relation_name, divs: _crmImpDefaultDivs(g, d, dept) };
+  }
+
+  // Active divisions of a chosen (existing) department
+  function _crmImpDivOptions(d, dept) {
+    return /^\d+$/.test(dept) ? d.departments.find(x => String(x.id) === dept)?.divisions || [] : [];
+  }
+
+  // The same name ignoring case and punctuation, else a close one ("Measuring Instrument" for "Measuring Instruments")
+  function _crmImpMatchDivision(value, divisions) {
+    const loose = s => s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const v = loose(value);
+    let best = null, bestScore = 0;
+    for (const x of divisions) {
+      const n = loose(x.name);
+      if (n === v) return x;
+      let p = 0;
+      while (p < n.length && p < v.length && n[p] === v[p]) p++;
+      const score = p / Math.max(1, Math.min(n.length, v.length));
+      if (p >= 5 && score >= 0.8 && score > bestScore) { best = x; bestScore = score; }
+    }
+    return best;
+  }
+
+  // Each division value of a bundle: its matching division, else a new one (when the user may
+  // create divisions and a department is chosen), else none
+  function _crmImpDefaultDivs(g, d, dept) {
+    const opts = _crmImpDivOptions(d, dept);
+    const canNew = d.can_create_divisions && (dept === 'new' || /^\d+$/.test(dept));
+    return Object.fromEntries((g.divisions || []).map(v => {
+      const m = _crmImpMatchDivision(v.value, opts);
+      return [v.key, { div: m ? String(m.id) : canNew ? 'new' : '', name: v.value }];
+    }));
   }
 
   function _crmImpDefaultRel(g, d, dept) {
@@ -67971,12 +68375,55 @@ async function submitDsCreate() {
     return _crmImpDepts?.departments.find(x => String(x.id) === dept)?.relations || [];
   }
 
-  // Step 3 — the rows bundled per department: where each bundle goes
+  // Step 3 — the rows bundled per department: where each bundle goes, and its divisions
   function _crmImpRenderDepartments() {
     _crmImpStep(3);
     const d = _crmImpDepts;
+    const whole = d.column === null;   // no department column — all rows are one bundle
     const rows = d.groups.reduce((n, g) => n + g.rows, 0);
     const exact = v => d.departments.some(x => x.name.toLowerCase() === v.toLowerCase());
+
+    // The division values of a bundle and the division each goes into
+    const divRow = (g, i) => {
+      const c = g.choice;
+      if (!g.divisions?.length || c.dept === 'skip') return '';
+      const dept = c.dept;
+      const deptName = dept === 'new' ? (c.deptName.trim() || 'the new department') : d.departments.find(x => String(x.id) === dept)?.name;
+      const count = `${g.divisions.length} division${g.divisions.length === 1 ? '' : 's'} in the file`;
+      if (!dept) {
+        return `<tr class="crm-imp-divrow"><td colspan="3"><div class="crm-imp-divs"><div class="crm-imp-divs-head">
+          <i class="fa fa-layer-group"></i> ${count}<span class="crm-perms-muted">Choose a department above to match them to its divisions</span>
+        </div></div></td></tr>`;
+      }
+      const opts = _crmImpDivOptions(d, dept);
+      const state = g.divisions.map(v => c.divs[v.key] || { div: '', name: v.value });
+      const nNew = state.filter(x => x.div === 'new').length, nMatch = state.filter(x => /^\d+$/.test(x.div)).length;
+      const summary = [nMatch && `${nMatch} matched`, nNew && `${nNew} new`, state.length - nMatch - nNew && `${state.length - nMatch - nNew} without division`].filter(Boolean).join(' · ');
+      return `<tr class="crm-imp-divrow"><td colspan="3"><div class="crm-imp-divs">
+        <div class="crm-imp-divs-head"><i class="fa fa-layer-group"></i> Divisions in ${escHtml(deptName || '')}<span class="crm-perms-muted">${count} — ${summary}</span></div>
+        ${g.divisions.map((v, j) => {
+          const x = state[j];
+          const known = x.div === 'new' && opts.some(o => o.name.toLowerCase() === x.name.trim().toLowerCase());
+          const divOpts = [
+            ...opts.map(o => [String(o.id), o.name]),
+            ...(d.can_create_divisions ? [['new', '+ New division']] : []),
+            ['', 'No division'],
+          ];
+          const tag = x.div === 'new' ? ['new', 'New'] : x.div ? ['match', 'Matched'] : ['none', 'None'];
+          return `<div class="crm-imp-div">
+            <div class="crm-imp-div-name" title="${escHtml(v.value)}">${escHtml(v.value)}<small>${v.rows.toLocaleString()} row${v.rows === 1 ? '' : 's'}</small></div>
+            <i class="fa fa-arrow-right"></i>
+            <div class="crm-imp-div-ctl">
+              <select class="po-field-input" data-imp-gdiv="${i}:${j}">${divOpts.map(([val, l]) => `<option value="${val}"${val === x.div ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>${
+              x.div === 'new' ? `<input class="po-field-input" data-imp-gdiv-name="${i}:${j}" maxlength="100" value="${escHtml(x.name)}" placeholder="Division name">` : ''}
+              <span class="crm-imp-div-tag ${tag[0]}">${tag[1]}</span>
+            </div>
+            ${known ? '<div class="crm-imp-warn"><i class="fa fa-triangle-exclamation"></i> This division already exists — choose it from the list.</div>' : ''}
+          </div>`;
+        }).join('')}
+        ${!d.can_create_divisions && state.some(x => !x.div) ? '<div class="crm-imp-divs-foot crm-perms-muted"><i class="fa fa-lock"></i> Only the business owner or an admin can create divisions — values without a match are imported without one.</div>' : ''}
+      </div></td></tr>`;
+    };
 
     const row = (g, i) => {
       const c = g.choice;
@@ -67985,7 +68432,8 @@ async function submitDsCreate() {
       const deptOpts = [
         ['', '— No department —'],
         ...d.departments.map(x => [String(x.id), x.name]),
-        ...(d.can_create_departments && (g.value || c.dept === 'new') && (!exact(g.value) || c.dept === 'new') ? [['new', `+ Create department “${g.value || 'New'}”`]] : []),
+        ...(d.can_create_departments && (g.value || whole || c.dept === 'new') && (!exact(g.value) || c.dept === 'new')
+          ? [['new', g.value ? `+ Create department “${g.value}”` : '+ Create a new department']] : []),
         ['skip', "Don't import these rows"],
       ];
       const relOpts = [
@@ -67993,7 +68441,7 @@ async function submitDsCreate() {
         ...(d.can_create_relations ? [['new', '+ New relation']] : []),
       ];
       return `<tr class="${skip ? 'skip' : ''}">
-        <td><strong>${g.value ? escHtml(g.value) : '<em>No department</em>'}</strong><br><span class="crm-perms-muted">${g.rows.toLocaleString()} row${g.rows === 1 ? '' : 's'}</span></td>
+        <td><strong>${whole ? 'All rows' : g.value ? escHtml(g.value) : '<em>No department</em>'}</strong><br><span class="crm-perms-muted">${g.rows.toLocaleString()} row${g.rows === 1 ? '' : 's'}</span></td>
         <td>
           <select class="po-field-input" data-imp-gdept="${i}">${deptOpts.map(([v, l]) => `<option value="${v}"${v === c.dept ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>
           ${c.dept === 'new' ? `<input class="po-field-input" data-imp-gdept-name="${i}" maxlength="100" value="${escHtml(c.deptName)}" placeholder="Department name">` : ''}
@@ -68002,17 +68450,22 @@ async function submitDsCreate() {
           ${relOpts.length ? `<select class="po-field-input" data-imp-grel="${i}">${relOpts.map(([v, l]) => `<option value="${v}"${v === c.rel ? ' selected' : ''}>${escHtml(l)}</option>`).join('')}</select>` : '<span class="crm-imp-warn">No relation you can import into — create one first.</span>'}
           ${c.rel === 'new' ? `<input class="po-field-input" data-imp-grel-name="${i}" maxlength="150" value="${escHtml(c.relName)}" placeholder="Relation name">` : ''}`}
         </td>
-      </tr>`;
+      </tr>${divRow(g, i)}`;
     };
 
+    const hasDivs = d.division_column !== null && d.division_column !== undefined;
     $('#crm-import-body').innerHTML = `
       <div class="crm-perms-muted">
-        <strong>${rows.toLocaleString()}</strong> rows in <strong>${d.groups.filter(g => g.value).length}</strong> departments.
-        Choose the department and relation each department's rows go into — or create them. New departments and relations are only created when you click Import.
+        ${whole
+          ? `<strong>${rows.toLocaleString()}</strong> rows. The file has no department column — <strong>choose which department these leads belong to</strong> and the relation they go into, or create them.`
+          : `<strong>${rows.toLocaleString()}</strong> rows in <strong>${d.groups.filter(g => g.value).length}</strong> departments.
+             Choose the department and relation each department's rows go into — or create them.`}
+        ${hasDivs ? 'The divisions in the file are matched to the department\'s divisions; create the ones it doesn\'t have yet.' : ''}
+        New departments, relations and divisions are only created when you click Import.
       </div>
       <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Leads go straight into the relation chosen for their department (not the Marketing inbox). The name of a new relation is filled in for you — change it if you like.</div>
       <table class="crm-imp-table crm-imp-groups">
-        <thead><tr><th style="width:24%">Department in file</th><th style="width:34%">Department</th><th>Relation</th></tr></thead>
+        <thead><tr><th style="width:24%">${whole ? 'Rows' : 'Department in file'}</th><th style="width:34%">Department</th><th>Relation</th></tr></thead>
         <tbody>${d.groups.map(row).join('')}</tbody>
       </table>
       ${!d.can_create_departments ? '<span class="crm-perms-muted"><i class="fa fa-lock"></i> Only the business owner or an admin can create departments.</span>' : ''}`;
@@ -68027,17 +68480,26 @@ async function submitDsCreate() {
     const out = [];
     for (const g of _crmImpDepts.groups) {
       const c = g.choice;
-      const name = g.value ? `“${g.value}”` : 'the rows with no department';
+      const name = _crmImpDepts.column === null ? 'these rows' : g.value ? `“${g.value}”` : 'the rows with no department';
       if (c.dept === 'skip') { out.push({ key: g.key, skip: true }); continue; }
       if (c.dept === 'new' && !c.deptName.trim()) return `Name the new department for ${name}.`;
       if (c.rel === 'new' && !c.relName.trim()) return `Name the new relation for ${name}.`;
       if (c.rel !== 'new' && !c.rel) return `Choose the relation for ${name}.`;
+      // Divisions only go with a chosen department; "— No division —" is left out
+      const divisions = [];
+      for (const v of c.dept ? g.divisions || [] : []) {
+        const x = c.divs[v.key];
+        if (!x?.div) continue;
+        if (x.div === 'new' && !x.name.trim()) return `Name the new division for “${v.value}”.`;
+        divisions.push(x.div === 'new' ? { key: v.key, new_division: x.name.trim() } : { key: v.key, division_id: Number(x.div) });
+      }
       out.push({
         key: g.key,
         department_id: /^\d+$/.test(c.dept) ? Number(c.dept) : null,
         new_department: c.dept === 'new' ? c.deptName.trim() : null,
         project_id: c.rel !== 'new' ? Number(c.rel) : null,
         new_relation: c.rel === 'new' ? c.relName.trim() : null,
+        divisions,
       });
     }
     return out;
@@ -68082,14 +68544,21 @@ async function submitDsCreate() {
     const tabs = [['all', 'All', t.total], ['ok', 'OK', t.ok], ['duplicate', 'Duplicate', t.duplicate], ['error', 'Error', t.error], ['skipped', 'Skipped', t.skipped]];
     const rows = inGroup.filter(r => _crmImpFilter === 'all' || r.status === _crmImpFilter);
     const shown = rows.slice(0, 500);
-    const deptOf = g => g.value ? escHtml(g.value) : '<em>No department</em>';
+    const whole = groups?.length === 1 && groups[0].key === 'd:' && _crmImpDepts?.column === null;
+    const deptOf = g => whole ? 'All rows' : g.value ? escHtml(g.value) : '<em>No department</em>';
+    const withDivs = _crmImpPreview.rows.some(r => r.division);
+    // "2 divisions · 1 new" under a bundle's department
+    const divsOf = g => {
+      const n = (g.divisions || []).length, made = (g.divisions || []).filter(x => x.new_division).length;
+      return n ? `<br><span class="crm-perms-muted" title="${escHtml(g.divisions.map(x => `${x.value} → ${x.division_name}`).join('\n'))}">${n} division${n === 1 ? '' : 's'}${made ? ` · ${made} new` : ''}</span>` : '';
+    };
 
     const bundles = groups ? `<table class="crm-imp-table crm-imp-bundles">
         <thead><tr><th>Department in file</th><th>Department</th><th>Relation</th><th>Rows</th><th>OK</th><th>Duplicate</th><th>Error</th><th>Skipped</th></tr></thead>
         <tbody>${groups.map(g => `<tr class="${g.key === _crmImpGroup ? 'sel' : ''}" data-imp-group="${escHtml(g.key)}" title="Show only these rows">
           <td>${deptOf(g)}</td>
           ${g.skip ? '<td colspan="2" class="crm-perms-muted">Not imported</td>' : `
-          <td>${escHtml(g.department_name || '—')}${g.new_department ? '<span class="crm-imp-new">new</span>' : ''}</td>
+          <td>${escHtml(g.department_name || '—')}${g.new_department ? '<span class="crm-imp-new">new</span>' : ''}${divsOf(g)}</td>
           <td>${escHtml(g.relation_name)}${g.new_relation ? '<span class="crm-imp-new">new</span>' : ''}</td>`}
           <td>${g.totals.total}</td><td>${g.totals.ok}</td><td>${g.totals.duplicate}</td><td>${g.totals.error}</td><td>${g.totals.skipped}</td>
         </tr>`).join('')}</tbody></table>` : '';
@@ -68097,7 +68566,9 @@ async function submitDsCreate() {
     $('#crm-import-body').innerHTML = `
       <div class="crm-perms-muted">
         ${groups
-          ? `Split by department into <strong>${groups.filter(g => !g.skip).length}</strong> relations as <strong>${escHtml(_crmImp.source_label || '')}</strong>. Click a department to see only its rows.`
+          ? whole
+            ? `Into <strong>${escHtml(groups[0].relation_name || '')}</strong> (${escHtml(groups[0].department_name || 'no department')}) as <strong>${escHtml(_crmImp.source_label || '')}</strong>.`
+            : `Split by department into <strong>${groups.filter(g => !g.skip).length}</strong> relations as <strong>${escHtml(_crmImp.source_label || '')}</strong>. Click a department to see only its rows.`
           : `Into <strong>${escHtml(_crmImp.project?.name || '')}</strong> as <strong>${escHtml(_crmImp.source_label || '')}</strong>.`}
         <em>Duplicate</em> rows are imported following the duplicate rules (repeat enquiry on the open lead in this relation, or a new lead flagged for review);
         <em>Error</em> and <em>Skipped</em> rows are left out.
@@ -68107,16 +68578,17 @@ async function submitDsCreate() {
         `<button type="button" class="crm-inbox-tab${k === _crmImpFilter ? ' active' : ''}" data-imp-filter="${k}">${label} (${n})</button>`).join('')}
         ${_crmImpGroup ? `<button type="button" class="crm-inbox-tab" data-imp-group-all><i class="fa fa-xmark"></i> ${deptOf(byKey[_crmImpGroup])}</button>` : ''}</div>
       <table class="crm-imp-table">
-        <thead><tr><th>Row</th>${groups ? '<th>Department</th>' : ''}<th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Details</th></tr></thead>
+        <thead><tr><th>Row</th>${groups && !whole ? '<th>Department</th>' : ''}${withDivs ? '<th>Division</th>' : ''}<th>Name</th><th>Phone</th><th>Email</th><th>Status</th><th>Details</th></tr></thead>
         <tbody>${shown.map(r => `<tr>
           <td class="crm-perms-muted">${r.row}</td>
-          ${groups ? `<td>${byKey[r.group] ? deptOf(byKey[r.group]) : ''}</td>` : ''}
+          ${groups && !whole ? `<td>${byKey[r.group] ? deptOf(byKey[r.group]) : ''}</td>` : ''}
+          ${withDivs ? `<td>${escHtml(r.division || '—')}</td>` : ''}
           <td>${escHtml(r.name || '—')}</td>
           <td>${escHtml(r.phone || '')}</td>
           <td>${escHtml(r.email || '')}</td>
           <td>${_crmImpStatus(r.status)}</td>
           <td>${escHtml(r.reason || '')}${r.warnings.map(w => `<div class="crm-imp-warn"><i class="fa fa-triangle-exclamation"></i> ${escHtml(w)}</div>`).join('')}</td>
-        </tr>`).join('') || `<tr><td colspan="${groups ? 7 : 6}" class="crm-perms-muted">No rows.</td></tr>`}</tbody>
+        </tr>`).join('') || `<tr><td colspan="${6 + (groups && !whole ? 1 : 0) + (withDivs ? 1 : 0)}" class="crm-perms-muted">No rows.</td></tr>`}</tbody>
       </table>
       ${rows.length > shown.length ? `<span class="crm-perms-muted">Showing the first ${shown.length} of ${rows.length} rows.</span>` : ''}`;
 
@@ -68166,7 +68638,8 @@ async function submitDsCreate() {
         <table class="crm-imp-table">
           <thead><tr><th>Department</th><th>Relation</th><th>New</th><th>Existing</th><th>Skipped</th><th>Failed</th></tr></thead>
           <tbody>${i.groups.filter(g => !g.skip).map(g => `<tr>
-            <td>${escHtml(g.department_name || g.value || 'No department')}${g.created_department ? '<span class="crm-imp-new">created</span>' : ''}</td>
+            <td>${escHtml(g.department_name || g.value || 'No department')}${g.created_department ? '<span class="crm-imp-new">created</span>' : ''}${
+              (g.divisions || []).some(x => x.created_division) ? `<br><span class="crm-perms-muted">Divisions created: ${escHtml(g.divisions.filter(x => x.created_division).map(x => x.division_name).join(', '))}</span>` : ''}</td>
             <td>${escHtml(g.relation_name)}${g.created_relation ? '<span class="crm-imp-new">created</span>' : ''}</td>
             <td>${g.counts?.created_count ?? 0}</td><td>${g.counts?.duplicate_count ?? 0}</td><td>${g.counts?.skipped_count ?? 0}</td><td>${g.counts?.failed_count ?? 0}</td>
           </tr>`).join('')}</tbody>
@@ -68257,12 +68730,22 @@ async function submitDsCreate() {
   $('#crm-import-modal')?.addEventListener('change', e => {
     const el = e.target;
     if (el.matches('[data-imp-col]')) { _crmImpSplitToggle(); return; }
+    if (el.matches('[data-imp-gdiv]')) {
+      const [i, j] = el.dataset.impGdiv.split(':').map(Number);
+      const g = _crmImpDepts?.groups[i], v = g?.divisions[j];
+      if (!v) return;
+      g.choice.divs[v.key] = { div: el.value, name: g.choice.divs[v.key]?.name ?? v.value };
+      _crmImpRenderDepartments();
+      return;
+    }
     const g = _crmImpDepts?.groups[Number(el.dataset.impGdept ?? el.dataset.impGrel)];
     if (!g) return;
     if (el.matches('[data-imp-gdept]')) {
       g.choice.dept = el.value;
-      // A new department starts with a new relation; any other gets its suggested one
+      // A new department starts with a new relation; any other gets its suggested one. The
+      // divisions are matched again against the department's own
       g.choice.rel = el.value === 'new' ? 'new' : _crmImpDefaultRel(g, _crmImpDepts, el.value);
+      g.choice.divs = _crmImpDefaultDivs(g, _crmImpDepts, el.value);
     } else if (el.matches('[data-imp-grel]')) {
       g.choice.rel = el.value;
     } else {
@@ -68272,7 +68755,13 @@ async function submitDsCreate() {
   });
 
   $('#crm-import-modal')?.addEventListener('input', e => {
-    // Names typed for a new department / relation are kept without redrawing the table
+    // Names typed for a new department / relation / division are kept without redrawing the table
+    if (e.target.dataset.impGdivName !== undefined) {
+      const [i, j] = e.target.dataset.impGdivName.split(':').map(Number);
+      const g = _crmImpDepts?.groups[i], v = g?.divisions[j];
+      if (v) g.choice.divs[v.key] = { div: 'new', name: e.target.value };
+      return;
+    }
     const name = e.target.dataset.impGdeptName ?? e.target.dataset.impGrelName;
     if (name !== undefined) {
       const c = _crmImpDepts?.groups[Number(name)]?.choice;

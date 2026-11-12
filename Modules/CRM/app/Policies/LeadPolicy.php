@@ -19,11 +19,16 @@ use Modules\CRM\Services\CrmPermissionService;
  * - CEO: views every lead; changes nothing.
  * - Marketing: views and works the marketing intake pipeline and views (read-only) the leads
  *   they forwarded; forwards intake leads, clears review flags and merges duplicates.
- * - Department head (HR head, or a division head for that division): views, edits, assigns
- *   and approves everything in their department, and runs its pipeline.
+ * - Department head (HR head, or an extra head from CRM → Org Structure): views, edits,
+ *   assigns and approves everything in their department, and runs its pipeline. One user may
+ *   head several departments.
+ * - Division head: views the whole department; edits, assigns and approves the leads of their
+ *   division, keeping them inside the divisions they head (divisionScope). They may also head
+ *   other departments.
  * - Staff (and any other member): views their department's leads, edits the ones they are
  *   one of the assignees of (crm_lead_assignees), and posts messages / files on any lead of
- *   their department (see canContribute).
+ *   their department (see canContribute). "Their departments" are the HR one plus any they
+ *   were added to as a member in Org Structure — so Sales staff can work IT leads.
  * - A role with the "All Departments" permission works every pipeline.
  *
  * A pipeline no department owns is visible only to those who see everything. The per-user
@@ -115,13 +120,42 @@ class LeadPolicy
         return $access->can('leads_create') && $this->canManageProject($access, $project);
     }
 
-    /** Picking who works the pipeline's leads: admin, "All Departments", or the department head. */
+    /**
+     * Picking who works the pipeline's leads: admin, "All Departments", the department head, or
+     * a division head (for the leads of their divisions — see divisionScope).
+     */
     public function canAssignIn(CrmAccess $access, Project $project): bool
     {
         return $access->can('leads_assign')
             && ! $access->isReadOnly()
             && $this->canViewProject($access, $project)
-            && ($access->worksAllLeads() || $access->headsDepartment($access->departmentOfProject($project->id)));
+            && ($access->worksAllLeads()
+                || $access->headsDepartment($access->departmentOfProject($project->id))
+                || $access->headsDivisionIn($access->departmentOfProject($project->id)));
+    }
+
+    /**
+     * The divisions the user may place this pipeline's leads in: null for any (admin, "All
+     * Departments", the department head), else the divisions they head there — so a division
+     * head can't hand a lead over to a sibling division.
+     *
+     * @return int[]|null
+     */
+    public function divisionScope(CrmAccess $access, Project $project): ?array
+    {
+        $departmentId = $access->departmentOfProject($project->id);
+        if ($access->worksAllLeads() || $access->headsDepartment($departmentId)) {
+            return null;
+        }
+
+        return $access->headedDivisionIdsIn($departmentId);
+    }
+
+    public function canPlaceInDivision(CrmAccess $access, Project $project, ?int $divisionId): bool
+    {
+        $scope = $this->divisionScope($access, $project);
+
+        return $scope === null || ($divisionId !== null && in_array($divisionId, $scope, true));
     }
 
     /** Every lead of this pipeline is editable for the user, assigned to them or not. */

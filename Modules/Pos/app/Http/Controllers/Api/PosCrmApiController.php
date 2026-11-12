@@ -263,6 +263,7 @@ class PosCrmApiController extends Controller
         });
 
         $groupedLeads = $leads->groupBy('stage_id');
+        $canAssignIn  = $this->policy->canAssignIn($access, $project);
 
         $columns = $allStages->map(function (LeadStage $stage) use ($groupedLeads) {
             $stageLeads = $groupedLeads->get($stage->id, collect());
@@ -289,7 +290,7 @@ class PosCrmApiController extends Controller
                     'default_stage_id' => $defaultForm->default_stage_id,
                 ] : null,
                 // Only those who may assign get the list of people to assign to
-                'assignable_users'   => $this->policy->canAssignIn($access, $project)
+                'assignable_users'   => $canAssignIn
                     ? $this->org->assignableUsers($business, $project->department_id)->map(fn ($u) => ['id' => $u->id, 'name' => $u->name])->values()
                     : [],
                 'custom_data_count'  => $access->can('custom_data_view') ? $this->leads->customDataLeadCount($project) : 0,
@@ -298,10 +299,17 @@ class PosCrmApiController extends Controller
                 'custom_statuses'    => $this->customStatuses->present($this->customStatuses->listForBusiness($business)),
                 'scores'             => collect(Lead::SCORES)->map(fn ($s, $key) => ['key' => $key, 'label' => $s[0], 'color' => $s[1]])->values(),
                 'lost_reasons'       => $this->lostReasons->present($this->lostReasons->listForBusiness($business)),
-                // Divisions of the pipeline's department, for those who place leads in one
-                'divisions'          => $project->department_id && $this->policy->canAssignIn($access, $project)
+                // Divisions of the pipeline's department — everyone filters by them; can_place marks
+                // the ones this user may move a lead into (assigners; a division head only their own)
+                'divisions'          => $project->department_id
                     ? Division::query()->where('business_id', $business->id)->where('department_id', $project->department_id)
-                        ->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name'])
+                        ->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(['id', 'name', 'head_user_id'])
+                        ->map(fn (Division $d) => [
+                            'id'           => $d->id,
+                            'name'         => $d->name,
+                            'head_user_id' => $d->head_user_id ? (int) $d->head_user_id : null,
+                            'can_place'    => $canAssignIn && $this->policy->canPlaceInDivision($access, $project, $d->id),
+                        ])->values()
                     : [],
             ],
         ]);
@@ -510,7 +518,8 @@ class PosCrmApiController extends Controller
         ] + $this->leadStatusFieldRules());
 
         if (array_key_exists('division_id', $validated) && (int) $validated['division_id'] !== (int) $lead->division_id) {
-            $this->abortUnlessAllowed($this->policy->canAssign($access, $lead));
+            $this->abortUnlessAllowed($this->policy->canAssign($access, $lead)
+                && $this->policy->canPlaceInDivision($access, $lead->project, $validated['division_id'] !== null ? (int) $validated['division_id'] : null));
         }
 
         if (isset($validated['stage_id']) && (int) $validated['stage_id'] !== (int) $lead->stage_id) {

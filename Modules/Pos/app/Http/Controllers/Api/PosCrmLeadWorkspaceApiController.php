@@ -440,7 +440,7 @@ class PosCrmLeadWorkspaceApiController extends Controller
                 'status_key'       => $lead->fresh('stage')?->statusKey(),
                 'stage_id'         => $lead->stage_id,
                 'can_assign'       => $canAssign,
-                'assignable_users' => $canAssign ? $this->users($this->assignments->assignableUsers($lead)) : [],
+                'assignable_users' => $canAssign ? $this->assignments->assignablePeople($lead)->all() : [],
                 'history'          => $this->assignments->presentHistory($this->assignments->history($lead)),
             ],
         ]);

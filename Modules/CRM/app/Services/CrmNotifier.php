@@ -202,15 +202,15 @@ class CrmNotifier
         return array_values(array_unique(array_map('intval', $ids)));
     }
 
-    /** Whoever heads the lead's division, else its department. */
-    public function headUserIdForLead(Lead $lead): ?int
+    /** Whoever heads the lead's division, else every head of its department. @return int[] */
+    public function headUserIdsForLead(Lead $lead): array
     {
         if ($lead->department_id === null) {
-            return null;
+            return [];
         }
         $department = Department::query()->where('business_id', $lead->business_id)->find($lead->department_id);
 
-        return $department === null ? null : $this->org->headUserId($department, $lead->division);
+        return $department === null ? [] : $this->org->headUserIds($department, $lead->division);
     }
 
     // ── Email preference ─────────────────────────────────────────────────

@@ -29,12 +29,14 @@ use Modules\CRM\Services\Timeline\TimelineService;
 use Modules\HRManagement\Models\Department;
 use Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController;
 use Modules\Pos\Http\Controllers\Api\PosQuotationApiController;
+use Modules\Pos\Http\Controllers\Api\PosQuotationSetupApiController;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
 use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
 use Modules\Sales\Services\QuotationPrintService;
 use Modules\Sales\Services\QuotationService;
+use Modules\Sales\Services\QuotationTemplateService;
 use Modules\Settings\Services\SettingsService;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
@@ -228,6 +230,23 @@ class CrmQuotePosTestApi extends PosQuotationApiController
     {
         return Business::find(7);
     }
+}
+
+class CrmQuoteSetupTestApi extends PosQuotationSetupApiController
+{
+    protected function businessOrAbort(Request $request): Business
+    {
+        return Business::find(7);
+    }
+}
+
+/** Saves Quotation Setup through the API as the owner. */
+function crmQuoteSetupSave(array $body): \Illuminate\Http\JsonResponse
+{
+    $request = Request::create('/api/v1/pos/quotation-setup', 'PUT', $body);
+    $request->setUserResolver(fn () => User::find(1));
+
+    return app(CrmQuoteSetupTestApi::class)->update($request);
 }
 
 /** Calls the lead quotation API as a user â€” a fresh controller each time, as each request gets. */
@@ -521,6 +540,23 @@ test('submitting offers the division and department heads and emails the ticked 
     });
 });
 
+test('extra heads from Org Structure are offered as approvers, unless their CRM permissions forbid approving', function () {
+    // Kamala (4) is added as a second head of Sales
+    app(\Modules\CRM\Services\CrmOrgService::class)->saveMember(\Modules\Business\Models\Business::find(7), \Modules\HRManagement\Models\Department::find(10), 4, 'head');
+    $q = crmQuoteCreate();
+    $approverIds = fn () => array_column(app(\Modules\CRM\Services\QuotationApprovalService::class)->approvers($this->lead->fresh()), 'id');
+
+    expect($approverIds())->toBe([2, 4]);
+
+    // "Approve quotations" switched off for Nimal: off the list, and his emailed link stops working
+    app(\Modules\CRM\Services\CrmPermissionService::class)->saveForUser(\Modules\Business\Models\Business::find(7), 2, ['quotations_approve' => false], []);
+    expect($approverIds())->toBe([4]);
+
+    // Removed from the department again: Kamala is no longer an approver
+    \Modules\CRM\Models\DepartmentMember::query()->delete();
+    expect($approverIds())->toBe([]);
+});
+
 test('a head approves from the email link without signing in; the first decision wins', function () {
     Mail::fake();
     DB::table('crm_divisions')->insert(['id' => 40, 'business_id' => 7, 'department_id' => 10, 'name' => 'Rooftop', 'head_user_id' => 6]);
@@ -769,6 +805,74 @@ test('the PDF can be downloaded by anyone who sees the lead', function () {
         ->and($res->headers->get('content-type'))->toBe('application/pdf')
         ->and(Storage::disk(QuotationPrintService::disk())->exists($q->fresh()->pdf_path))->toBeTrue()
         ->and(crmQuoteStatus(fn () => crmQuote('pdf', 8, [$this->lead->id, $q->id])))->toBe(404);
+});
+
+// ── Quotation Setup → Custom HTML ──────────────────────────────────────────
+
+test('quotations keep the built-in PDF layout until Quotation Setup picks custom HTML', function () {
+    $templates = app(QuotationTemplateService::class);
+
+    expect($templates->usesCustomHtml($this->business))->toBeFalse()
+        ->and($templates->get($this->business)['template'])->toBe('classic');
+
+    // Custom with no HTML yet still falls back to the built-in layout
+    crmQuoteSetupSave(['template' => 'custom', 'custom_html' => '']);
+    expect($templates->usesCustomHtml($this->business))->toBeFalse()
+        ->and(crmQuoteStatus(fn () => crmQuoteSetupSave(['template' => 'fancy'])))->toBe(422)
+        ->and(crmQuoteStatus(fn () => crmQuoteSetupSave(['custom_html' => str_repeat('x', QuotationTemplateService::MAX_HTML + 1)])))->toBe(422);
+});
+
+test('the CRM quotation PDF is rendered from the Quotation Setup custom HTML', function () {
+    $q = crmQuoteCreate([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => "Solar panel\nWarranty: 2 years", 'quantity' => 2, 'unit_price' => 100, 'discount_amount' => 20, 'tax_rate' => 18],
+    ], ['reference' => 'RFQ-9']);
+
+    $res = crmQuoteSetupSave([
+        'template'    => 'custom',
+        'color'       => '#123456',
+        'paper'       => 'a5',
+        'custom_html' => '<html><head><style>h1{color:{{accent}}}</style></head><body onload="x()">'
+            . '<h1>{{doc_title_upper}} {{number}}</h1><p>{{business_name}} / Ref {{reference}}</p>'
+            . '{{#items}}<div class="row">{{no_padded}}|{{name}}|{{details}}|{{qty}}|{{unit_price}}|{{net}}|{{tax_rate}}%|{{tax}}|{{total}}</div>{{/items}}'
+            . '{{^notes}}<i>no notes</i>{{/notes}}<p>Total {{total}}</p><script>alert(1)</script></body></html>',
+    ]);
+    expect($res->getStatusCode())->toBe(200)
+        ->and($res->getData(true)['data']['template'])->toBe('custom');
+
+    $html = app(QuotationTemplateService::class)->render($this->business, $q->fresh());
+
+    expect($html)->toContain('<h1>QUOTATION QT-0001</h1>')
+        ->toContain('ABC Solar / Ref RFQ-9')
+        ->toContain('<div class="row">01|Solar panel|Warranty: 2 years|2|100.00|180.00|18%|32.40|212.40</div>')
+        ->toContain('<i>no notes</i>')
+        ->toContain('h1{color:#123456}')
+        ->toContain('@page{size:148mm 210mm;margin:0}')
+        ->not->toContain('<script')
+        ->not->toContain('onload');
+
+    $pdf = crmQuote('pdf', 3, [$this->lead->id, $q->id]);
+    expect($pdf->getStatusCode())->toBe(200)
+        ->and(Storage::disk(QuotationPrintService::disk())->exists($q->fresh()->pdf_path))->toBeTrue();
+});
+
+test('custom HTML images from the business File Manager are embedded for the PDF', function () {
+    $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+    Storage::disk('public')->put('file-manager/7/brands.png', $png);
+    Storage::disk('public')->put('file-manager/8/other.png', $png);
+    $q = crmQuoteCreate();
+
+    crmQuoteSetupSave([
+        'template'    => 'custom',
+        'custom_html' => '<img src="https://pos.example.com/storage/file-manager/7/brands.png">'
+            . '<img src="https://pos.example.com/storage/file-manager/8/other.png">'
+            . '<img src="https://cdn.example.com/x.png">',
+    ]);
+    $html = app(QuotationTemplateService::class)->render($this->business, $q->fresh());
+
+    expect($html)->toContain('<img src="data:image/png;base64,')
+        // another business's file and outside links are left alone
+        ->toContain('/storage/file-manager/8/other.png')
+        ->toContain('https://cdn.example.com/x.png');
 });
 
 test('the new migrations roll back and run again on SQLite', function () {

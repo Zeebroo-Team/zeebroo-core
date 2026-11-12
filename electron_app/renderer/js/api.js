@@ -128,6 +128,9 @@ const API = (() => {
     quotationAccept: (id)        => request('POST',   `/quotations/${id}/accept`),
     quotationReject: (id)        => request('POST',   `/quotations/${id}/reject`),
     deleteQuotation: (id)        => request('DELETE', `/quotations/${id}`),
+    // Quotation Setup — server copy used for CRM / emailed quotation PDFs
+    quotationSetup:     ()       => request('GET',    '/quotation-setup'),
+    saveQuotationSetup: (body)   => request('PUT',    '/quotation-setup', body),
 
     // Sales Orders
     salesOrders:          (q, status) => request('GET',    `/sales-orders?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
@@ -642,6 +645,9 @@ const API = (() => {
     crmResetRolePermissions: (roleId)          => request('DELETE', `/crm/permissions/roles/${roleId}`),
     // CRM org structure (admin only)
     crmOrg:                      ()                    => request('GET',    '/crm/org'),
+    crmAddDepartmentMember:      (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/members`, body),
+    crmUpdateDepartmentMember:   (memberId, body)      => request('PUT',    `/crm/org/members/${memberId}`, body),
+    crmRemoveDepartmentMember:   (memberId)            => request('DELETE', `/crm/org/members/${memberId}`),
     crmCreateDivision:           (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/divisions`, body),
     crmUpdateDivision:           (divisionId, body)    => request('PUT',    `/crm/org/divisions/${divisionId}`, body),
     crmDeleteDivision:           (divisionId)          => request('DELETE', `/crm/org/divisions/${divisionId}`),
