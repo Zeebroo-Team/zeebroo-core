@@ -333,6 +333,32 @@ body.dark .mac-window select.po-field-input option{background:#2c2c30;color:#f5f
 .crm-imp-groups td{vertical-align:top}
 .crm-imp-groups .po-field-input+.po-field-input{margin-top:6px}
 .crm-imp-groups tr.skip td{opacity:.55}
+.crm-imp-groups tr.crm-imp-divrow>td{border-top:0;padding:0 12px 14px}
+.crm-imp-divs{border:1px solid rgba(0,0,0,.08);border-radius:10px;overflow:hidden}
+.crm-imp-divs-head{display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;font-weight:600;border-bottom:1px solid rgba(0,0,0,.06);background:rgba(0,0,0,.02)}
+.crm-imp-divs-head i{color:var(--mac-accent)}
+.crm-imp-divs-head .crm-perms-muted{font-weight:400;margin-left:auto}
+.crm-imp-div{display:grid;grid-template-columns:minmax(150px,1fr) 16px minmax(0,1.7fr);align-items:center;gap:10px;padding:8px 12px}
+.crm-imp-div+.crm-imp-div{border-top:1px solid rgba(0,0,0,.05)}
+.crm-imp-div-name{min-width:0;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-imp-div-name small{display:block;font-size:11.5px;font-weight:400;color:var(--mac-text-2,#6e6e73)}
+.crm-imp-div>.fa-arrow-right{font-size:11px;color:var(--mac-text-2,#8e8e93);text-align:center}
+.crm-imp-div-ctl{display:flex;align-items:center;gap:8px;min-width:0}
+.crm-imp-div-ctl select{flex:0 0 200px;min-width:0}
+.crm-imp-div-ctl select:only-child{flex:1 1 auto}
+.crm-imp-div-ctl input{flex:1 1 auto;min-width:0}
+.crm-imp-div-tag{flex:none;border-radius:999px;padding:2px 8px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.crm-imp-div-tag.match{background:rgba(52,199,89,.14);color:#248a3d}
+.crm-imp-div-tag.new{background:rgba(0,122,255,.12);color:var(--mac-accent)}
+.crm-imp-div-tag.none{background:rgba(0,0,0,.06);color:var(--mac-text-2,#6e6e73)}
+.crm-imp-div .crm-imp-warn{grid-column:3;margin-top:-2px}
+.crm-imp-divs-foot{padding:8px 12px;border-top:1px solid rgba(0,0,0,.05)}
+body.dark .crm-imp-divs{border-color:rgba(255,255,255,.1)}
+body.dark .crm-imp-divs-head{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.08)}
+body.dark .crm-imp-div+.crm-imp-div,body.dark .crm-imp-divs-foot{border-color:rgba(255,255,255,.06)}
+body.dark .crm-imp-div-tag.match{color:#30d158}
+body.dark .crm-imp-div-tag.none{background:rgba(255,255,255,.08)}
+@media (max-width:720px){.crm-imp-div{grid-template-columns:1fr}.crm-imp-div>.fa-arrow-right{display:none}.crm-imp-div .crm-imp-warn{grid-column:1}.crm-imp-div-ctl select{flex-basis:150px}}
 .crm-imp-bundles tbody tr{cursor:pointer}
 .crm-imp-bundles tbody tr.sel td{background:rgba(0,122,255,.08)}
 body.dark .crm-imp-st.ok,body.dark .crm-imp-st.completed{color:#30d158}
@@ -692,7 +718,9 @@ body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 #crm-relation-pane-pipeline .crm-col-head{flex-shrink:0}
 /* Pipeline toolbar: search, quick filters, density + Board/List switch */
 #crm-relation-pane-pipeline>.finance-toolbar{flex-wrap:nowrap;row-gap:8px}
-#crm-relation-pane-pipeline .crm-pipe-search{flex:1 1 240px;min-width:140px}
+/* Basis = min-width so the search shrinks to make room (e.g. for the "x of y leads" count) instead of wrapping the row */
+#crm-relation-pane-pipeline .crm-pipe-search{flex:1 1 140px;min-width:140px}
+#crm-relation-pane-pipeline .crm-pipe-result{flex-shrink:0}
 #crm-relation-pane-pipeline .crm-chip--select{max-width:150px;padding:0 10px;text-overflow:ellipsis}
 #crm-relation-pane-pipeline .crm-pipe-view{flex-shrink:0}
 @media (max-width:1700px){#crm-relation-pane-pipeline>.finance-toolbar{flex-wrap:wrap}}

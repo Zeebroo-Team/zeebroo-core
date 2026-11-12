@@ -117,8 +117,9 @@ class PosCrmLeadImportApiController extends Controller
 
     /**
      * POST /api/v1/pos/crm/lead-imports/{import}/departments — { mapping[] }
-     * The rows bundled by the department column, with a suggested department and relation for
-     * each bundle, every department with its relations, and what the user may create.
+     * The rows bundled by the department column (one bundle when only a division column is
+     * mapped), with a suggested department and relation and the division values of each bundle,
+     * every department with its relations and divisions, and what the user may create.
      */
     public function departments(Request $request, int $importId): JsonResponse
     {
@@ -139,6 +140,7 @@ class PosCrmLeadImportApiController extends Controller
         return response()->json([
             'data' => $result + [
                 'can_create_departments' => $access->isAdmin,
+                'can_create_divisions'   => $access->isAdmin,
                 'can_create_relations'   => $access->can('relations_create'),
             ],
         ]);
@@ -147,7 +149,8 @@ class PosCrmLeadImportApiController extends Controller
     /**
      * POST /api/v1/pos/crm/lead-imports/{import}/preview — { mapping[], source, project_id?, duplicates, groups? }
      * With "groups" (one per department bundle: key, skip?, department_id? | new_department?,
-     * project_id? | new_relation?) the import is split by the department column.
+     * project_id? | new_relation?, divisions?[]: key, division_id? | new_division?) the import is
+     * split by the department / division column.
      */
     public function preview(Request $request, int $importId): JsonResponse
     {
@@ -171,6 +174,10 @@ class PosCrmLeadImportApiController extends Controller
             'groups.*.new_department'=> ['nullable', 'string', 'max:100'],
             'groups.*.project_id'    => ['nullable', 'integer'],
             'groups.*.new_relation'  => ['nullable', 'string', 'max:150'],
+            'groups.*.divisions'                => ['nullable', 'array', 'max:500'],
+            'groups.*.divisions.*.key'          => ['required', 'string', 'max:120'],
+            'groups.*.divisions.*.division_id'  => ['nullable', 'integer'],
+            'groups.*.divisions.*.new_division' => ['nullable', 'string', 'max:100'],
         ]);
 
         $mapping = $this->mapping($data);
@@ -284,15 +291,17 @@ class PosCrmLeadImportApiController extends Controller
     }
 
     /**
-     * 403 unless the user may do everything a split import's plan asks: create departments
-     * (admins), create relations, and add leads to each existing relation.
+     * 403 unless the user may do everything a split import's plan asks: create departments and
+     * divisions (admins), create relations, and add leads to each existing relation.
      */
     private function authorizePlan(CrmAccess $access, array $plan, ?Business $business = null): void
     {
-        $groups = array_filter($plan, fn ($g) => ! ($g['skip'] ?? false));
+        $groups       = array_filter($plan, fn ($g) => ! ($g['skip'] ?? false));
+        $newDivisions = collect($groups)->flatMap(fn ($g) => $g['divisions'] ?? [])->contains('new_division', true);
 
         $this->abortUnlessAllowed(
             (! collect($groups)->contains('new_department', true) || $access->isAdmin)
+            && (! $newDivisions || $access->isAdmin)
             && (! collect($groups)->contains('new_relation', true) || $access->can('relations_create'))
         );
 
