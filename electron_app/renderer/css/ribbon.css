@@ -25069,6 +25069,96 @@ body.dark .srp-row.active { background: rgba(78,142,247,.14); }
 :root[data-theme="dark"] .fov-tag--bad,  :root[data-theme="dark"] .fov-attn-icon--bad,  :root[data-theme="dark"] .fov-count:not(:empty) { background: #450a0a; color: #f87171; }
 :root[data-theme="dark"] .fov-tag--warn, :root[data-theme="dark"] .fov-attn-icon--warn { background: #451a03; color: #fbbf24; }
 
+/* -- File Manager modal (profile menu) — mac-window, like CRM Import Leads -- */
+.fmg-window { position: relative; }
+/* Flat blue glyphs, same as the ribbon icons (beats the inline green .mac-title-icon) */
+.fmg-window .mac-title-icon.fmg-title-icon { background: none; box-shadow: none; color: var(--accent); font-size: 22px; }
+.fmg-window .crm-inbox-tabs.fmg-tabs { margin-left: auto; align-self: center; }
+.fmg-window .crm-inbox-tabs.fmg-view { align-self: center; }
+.fmg-window .po-btn-primary { background: var(--accent); box-shadow: none; }
+.fmg-body > * { flex-shrink: 0; }
+.fmg-window .crm-imp-drop.fmg-drop { flex-direction: row; flex-wrap: wrap; text-align: left; padding: 16px 22px; gap: 10px 16px; }
+.fmg-drop > div:not(.crm-org-row):not(.fmg-progress) { flex: 1 1 260px; min-width: 0; }
+.fmg-drop-icon { font-size: 34px; color: var(--accent); }
+.fmg-drop .po-btn-primary, .fmg-drop .po-btn-ghost { height: 30px; padding: 0 16px; }
+.fmg-progress { flex-basis: 100%; width: 100%; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--mac-muted); }
+.fmg-progress-bar { height: 6px; border-radius: 999px; background: var(--mac-fill); overflow: hidden; }
+.fmg-progress-fill { height: 100%; width: 0; border-radius: 999px; background: var(--accent); transition: width .25s ease; }
+
+.fmg-bar { display: flex; align-items: center; gap: 10px; padding: 0 2px; }
+.fmg-breadcrumb { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-width: 0; font-size: 13px; overflow: hidden; white-space: nowrap; }
+.fmg-breadcrumb > .fa-chevron-right { font-size: 9px; color: var(--mac-muted); }
+.fmg-bc-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 3px 6px; color: var(--mac-accent); font: inherit; cursor: pointer; border-radius: 6px; }
+.fmg-bc-btn:hover { background: var(--mac-hover); }
+.fmg-bc-current { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.fmg-bc-current .fa, .fmg-bc-btn .fa { font-size: 12px; }
+.fmg-search { display: flex; align-items: center; gap: 7px; height: 28px; width: 240px; padding: 0 10px; border-radius: 7px; background: var(--mac-field); box-shadow: inset 0 0 0 .5px var(--mac-line), 0 .5px 1px rgba(0,0,0,.06); }
+.fmg-search:focus-within { box-shadow: inset 0 0 0 .5px rgba(0,0,0,.22), 0 0 0 3px rgba(0,122,255,.35); }
+.fmg-search .fa { font-size: 12px; color: var(--mac-muted); }
+.fmg-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font: inherit; font-size: 13px; color: var(--mac-text); }
+.fmg-view .crm-inbox-tab { padding: 3px 10px; }
+
+.fmg-new-folder { display: flex; align-items: center; gap: 8px; padding: 8px 12px; margin-bottom: 4px; border-radius: 10px; background: var(--mac-panel); box-shadow: 0 0 0 .5px var(--mac-line); }
+.fmg-new-folder > .fa { color: var(--accent); font-size: 15px; }
+.fmg-new-folder input { flex: 1; height: 28px; padding: 0 9px; border: 0; border-radius: 6px; font: inherit; font-size: 13px; color: var(--mac-text); background: var(--mac-field); box-shadow: inset 0 0 0 .5px var(--mac-line); outline: 0; }
+.fmg-new-folder input:focus { box-shadow: inset 0 0 0 .5px rgba(0,0,0,.22), 0 0 0 3px rgba(0,122,255,.35); }
+
+.fmg-group-title { font-size: 11.5px; font-weight: 600; color: var(--mac-muted); text-transform: uppercase; letter-spacing: .04em; padding: 6px 4px 2px; }
+.fmg-folders { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.fmg-folder { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--mac-panel); box-shadow: 0 0 0 .5px var(--mac-line), 0 1px 2px rgba(0,0,0,.04); cursor: pointer; transition: box-shadow .12s, background .12s; }
+.fmg-folder:hover { background: var(--mac-hover); box-shadow: 0 0 0 1px var(--mac-accent); }
+.fmg-folder > .fa-folder { font-size: 22px; color: var(--accent); }
+.fmg-folder-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.fmg-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: 12px; }
+.fmg-file { display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--mac-panel); box-shadow: 0 0 0 .5px var(--mac-line), 0 1px 2px rgba(0,0,0,.04); transition: box-shadow .12s, transform .12s; }
+.fmg-file:hover { box-shadow: 0 0 0 1px var(--mac-accent), 0 6px 18px rgba(0,0,0,.08); transform: translateY(-1px); }
+.fmg-file.is-new { box-shadow: 0 0 0 2px #34c759, 0 6px 18px rgba(52,199,89,.2); }
+.fmg-thumb { height: 120px; display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 38px; color: var(--accent); background: var(--mac-fill); }
+.fmg-thumb.is-img { background: repeating-conic-gradient(var(--mac-fill) 0 25%, transparent 0 50%) 0 0 / 14px 14px; }
+.fmg-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.fmg-info { padding: 8px 10px 4px; min-width: 0; }
+.fmg-name { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fmg-meta { font-size: 11px; color: var(--mac-muted); margin-top: 1px; }
+.fmg-file-actions { display: flex; align-items: center; gap: 4px; padding: 6px 8px 8px; }
+.fmg-copy-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 26px; border: 0; border-radius: 7px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; color: var(--accent); background: color-mix(in srgb, var(--accent) 11%, transparent); transition: background .12s, color .12s; }
+.fmg-copy-btn:hover { background: var(--accent); color: #fff; }
+.fmg-copy-btn.is-copied { background: #34c759; color: #fff; }
+.fmg-icon-btn { width: 26px; height: 26px; flex-shrink: 0; border: 0; border-radius: 7px; display: inline-flex; align-items: center; justify-content: center; font-size: 11.5px; cursor: pointer; color: var(--mac-muted); background: var(--mac-fill); transition: background .12s, color .12s; }
+.fmg-icon-btn:hover { background: var(--mac-hover); color: var(--mac-text); }
+.fmg-icon-btn.is-danger:hover { background: rgba(255,59,48,.14); color: #ff3b30; }
+.fmg-ico-pdf, .fmg-ico-word, .fmg-ico-excel, .fmg-ico-ppt, .fmg-ico-zip { color: var(--accent); }
+
+/* List view */
+.fmg-table td { vertical-align: middle; }
+.fmg-table .fmg-row-name { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
+.fmg-table .fmg-row-name b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 360px; }
+.fmg-row-thumb { width: 34px; height: 34px; flex-shrink: 0; border-radius: 7px; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 16px; background: var(--mac-fill); color: var(--accent); }
+.fmg-row-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.fmg-table .fmg-row-actions { display: flex; justify-content: flex-end; gap: 4px; }
+.fmg-table .fmg-copy-btn { flex: none; padding: 0 12px; }
+.fmg-table .fa-folder { color: var(--accent); }
+
+.fmg-empty { padding: 44px 20px; text-align: center; color: var(--mac-muted); font-size: 13px; display: flex; flex-direction: column; align-items: center; gap: 8px; border-radius: 12px; background: var(--mac-panel); box-shadow: 0 0 0 .5px var(--mac-line); }
+.fmg-empty > .fa { font-size: 30px; color: var(--accent); }
+.fmg-footer { align-items: center; }
+.fmg-count { margin-right: auto; font-size: 12px; color: var(--mac-muted); }
+
+.fmg-dropzone-overlay { position: absolute; inset: 0; z-index: 4; display: none; align-items: center; justify-content: center; padding: 16px; background: color-mix(in srgb, var(--accent) 10%, rgba(255,255,255,.75)); backdrop-filter: blur(2px); pointer-events: none; }
+.fmg-dropzone-overlay > div { flex: 1; align-self: stretch; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; border: 2px dashed var(--accent); border-radius: 14px; color: var(--accent); font-size: 15px; font-weight: 600; }
+.fmg-dropzone-overlay .fa { font-size: 40px; }
+.fmg-window.is-dragging .fmg-dropzone-overlay { display: flex; }
+body.dark .fmg-dropzone-overlay { background: color-mix(in srgb, var(--accent) 14%, rgba(0,0,0,.6)); }
+
+.fmg-preview { position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgba(0,0,0,.6); }
+.fmg-preview-card { max-width: 100%; max-height: 100%; display: flex; flex-direction: column; border-radius: 12px; overflow: hidden; background: var(--mac-panel); box-shadow: 0 24px 70px rgba(0,0,0,.45); }
+body.dark .fmg-preview-card { background: #2b2b30; }
+.fmg-preview-card img { min-width: 280px; max-width: 100%; max-height: calc(86vh - 150px); object-fit: contain; background: repeating-conic-gradient(var(--mac-fill) 0 25%, transparent 0 50%) 0 0 / 16px 16px; }
+.fmg-preview-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--mac-line); }
+.fmg-preview-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.fmg-preview-text b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fmg-preview-text input { width: 100%; min-width: 240px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; font: inherit; font-size: 11.5px; color: var(--mac-muted); background: var(--mac-fill); outline: 0; }
+
 /* -- Database Backup & Import modal ------------------------------------- */
 .bk-shell { width: min(680px, 94vw); max-height: 86vh; }
 .bk-tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--border-light); flex-shrink: 0; background: var(--surface); }

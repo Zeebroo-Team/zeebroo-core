@@ -3853,8 +3853,8 @@ async function _fetchLetterhead() {
 }
 
 // ── Print (with optional letterhead) ─────────────────────────────────────
-// Quotations print through the same saved Invoice Setup (template, colour,
-// paper, margins, header layout, letterhead) as invoices — only the wording differs.
+// Quotations print with their own Quotation Setup (template, colour, paper,
+// margins, header layout, letterhead), falling back to Invoice Setup values.
 function _qtToPrintDoc(q) {
   return {
     invoice_number:  q.quote_number,
@@ -3870,6 +3870,7 @@ function _qtToPrintDoc(q) {
     total:           q.total,
     items:           q.items || [],
     _docLabels: { doc: 'Quotation', due: 'Valid Until', dueShort: 'Valid until', total: 'Quote Total', amtDue: 'Quote Total' },
+    _setupKind: 'quotation',
   };
 }
 
@@ -5052,7 +5053,7 @@ async function showInvoicePreviewModal(inv) {
     badge.style.color      = txtMap[inv.status] || '#64748b';
   }
 
-  const ic    = _isetupGetCfg();
+  const ic    = _isetupGetCfg(inv._setupKind);
   const geom  = _isetupGeom(ic);
   const frame = document.getElementById('invp-frame');
 
@@ -5082,7 +5083,7 @@ async function showInvoicePreviewModal(inv) {
 }
 
 async function _invPrint(inv) {
-  const ic     = _isetupGetCfg();
+  const ic     = _isetupGetCfg(inv._setupKind);
   const geom   = _isetupGeom(ic);
   const lhFull = ic.lhEnabled ? await _fetchLetterhead() : null;
   let   lhDataUrl = null;
@@ -10502,6 +10503,353 @@ $('#tpm-about').addEventListener('click', () => {
   closeProfileMenu();
   openAboutModal();
 });
+
+// ── File Manager (profile menu → PosFileManagerApiController) ────────────────
+// Same mac-window look as CRM → Import Leads. Upload by button or drag & drop (one
+// apiUpload call per file, into the open folder), browse folders, grid/list view,
+// copy a file's link, preview images, create/delete folders and delete files.
+// Module-owned files (e.g. CRM lead attachments) are listed but can only be removed
+// from their module. Classes use "fmg-" — "fm-" belongs to Feature Management.
+const FMG_UPLOAD_EXTS = ['pdf','jpg','jpeg','png','gif','webp','svg','doc','docx','xls','xlsx','ppt','pptx','txt','csv','zip','rar','7z'];
+const _fmg = {
+  folderId: null, folders: [], files: [], breadcrumbs: [],
+  filter: 'all', view: 'grid', q: '', busy: false, previewUrl: '', newIds: new Set(), dragDepth: 0,
+};
+try { _fmg.view = localStorage.getItem('fmg-view') === 'list' ? 'list' : 'grid'; } catch (_) {}
+
+$('#tpm-file-manager').addEventListener('click', () => { closeProfileMenu(); openFileManagerModal(); });
+$('#fmg-modal-close').addEventListener('click', () => closeFileManagerModal());
+$('#fmg-footer-close').addEventListener('click', () => closeFileManagerModal());
+$('#fmg-modal-overlay').addEventListener('click', e => { if (e.target === $('#fmg-modal-overlay')) closeFileManagerModal(); });
+$('#fmg-upload').addEventListener('click', () => _fmgPickAndUpload());
+$('#fmg-new-folder').addEventListener('click', () => _fmgShowNewFolder());
+$('#fmg-search').addEventListener('input', e => { _fmg.q = e.target.value.trim().toLowerCase(); _fmgRender(); });
+document.querySelectorAll('[data-fm-filter]').forEach(btn => btn.addEventListener('click', () => {
+  _fmg.filter = btn.dataset.fmFilter;
+  document.querySelectorAll('[data-fm-filter]').forEach(b => b.classList.toggle('active', b === btn));
+  _fmgRender();
+}));
+document.querySelectorAll('[data-fm-view]').forEach(btn => btn.addEventListener('click', () => {
+  _fmg.view = btn.dataset.fmView;
+  try { localStorage.setItem('fmg-view', _fmg.view); } catch (_) {}
+  _fmgRender();
+}));
+$('#fmg-preview-close').addEventListener('click', () => _fmgClosePreview());
+$('#fmg-preview').addEventListener('click', e => { if (e.target === $('#fmg-preview')) _fmgClosePreview(); });
+$('#fmg-preview-copy').addEventListener('click', e => _fmgCopyLink(_fmg.previewUrl, e.currentTarget));
+$('#fmg-preview-url').addEventListener('focus', e => e.target.select());
+// Esc closes the image preview first; otherwise the shared mac-window handler closes the window
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || $('#fmg-preview').style.display === 'none') return;
+  if ($('#app-confirm-modal')?.style.display === 'flex') return;
+  e.preventDefault();
+  _fmgClosePreview();
+});
+
+// Drag & drop files anywhere on the window
+const _fmgWin = $('#fmg-modal-overlay .fmg-window');
+const _fmgHasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+_fmgWin.addEventListener('dragenter', e => {
+  if (!_fmgHasFiles(e)) return;
+  e.preventDefault();
+  _fmg.dragDepth++;
+  _fmgWin.classList.add('is-dragging');
+});
+_fmgWin.addEventListener('dragover', e => { if (_fmgHasFiles(e)) e.preventDefault(); });
+_fmgWin.addEventListener('dragleave', () => {
+  if (--_fmg.dragDepth <= 0) { _fmg.dragDepth = 0; _fmgWin.classList.remove('is-dragging'); }
+});
+_fmgWin.addEventListener('drop', e => {
+  if (!_fmgHasFiles(e)) return;
+  e.preventDefault();
+  _fmg.dragDepth = 0;
+  _fmgWin.classList.remove('is-dragging');
+  const paths = [...e.dataTransfer.files].map(f => window.electronAPI.pathForFile(f)).filter(Boolean);
+  const ok = paths.filter(p => FMG_UPLOAD_EXTS.includes((p.split('.').pop() || '').toLowerCase()));
+  if (ok.length < paths.length) toast(`${paths.length - ok.length} file(s) skipped — that file type isn't supported`, 'error');
+  if (ok.length) _fmgUpload(ok);
+});
+
+function openFileManagerModal() {
+  const ov = $('#fmg-modal-overlay');
+  ov.classList.remove('mac-out');
+  ov.style.display = 'flex';
+  ov.classList.add('mac-in');
+  _fmgSyncTabs();
+  _fmgLoad(_fmg.folderId);
+}
+function closeFileManagerModal() {
+  const ov = $('#fmg-modal-overlay');
+  if (ov.style.display === 'none') return;
+  _fmgClosePreview();
+  ov.classList.remove('mac-in');
+  ov.classList.add('mac-out');
+  setTimeout(() => {
+    if (!ov.classList.contains('mac-out')) return; // reopened meanwhile
+    ov.classList.remove('mac-out');
+    ov.style.display = 'none';
+  }, 190);
+}
+
+function _fmgSyncTabs() {
+  document.querySelectorAll('[data-fm-filter]').forEach(b => b.classList.toggle('active', b.dataset.fmFilter === _fmg.filter));
+  document.querySelectorAll('[data-fm-view]').forEach(b => b.classList.toggle('active', b.dataset.fmView === _fmg.view));
+}
+
+async function _fmgLoad(folderId) {
+  _fmg.folderId = folderId;
+  $('#fmg-new-folder-slot').innerHTML = '';
+  $('#fmg-content').innerHTML = '<div class="fmg-empty"><i class="fa fa-spinner fa-spin"></i> Loading files…</div>';
+  const res = await API.fileManagerBrowse(folderId, false);
+  if (res.status !== 200) {
+    // A folder deleted elsewhere — fall back to the root
+    if (res.status === 404 && folderId) return _fmgLoad(null);
+    $('#fmg-content').innerHTML = `<div class="fmg-empty"><i class="fa fa-triangle-exclamation"></i> ${escHtml(res.body?.message || 'Could not load files.')}</div>`;
+    return;
+  }
+  _fmg.folders     = res.body.folders || [];
+  _fmg.files       = res.body.files || [];
+  _fmg.breadcrumbs = res.body.breadcrumbs || [];
+  _fmgRenderBreadcrumb();
+  _fmgRender();
+}
+
+function _fmgRenderBreadcrumb() {
+  const crumbs = _fmg.breadcrumbs.length ? _fmg.breadcrumbs : [{ id: null, name: 'All files' }];
+  const icon = i => i === 0 ? '<i class="fa fa-house"></i> ' : '<i class="fa fa-folder-open"></i> ';
+  $('#fmg-breadcrumb').innerHTML = crumbs.map((b, i) => i < crumbs.length - 1
+    ? `<button type="button" class="fmg-bc-btn" data-folder="${b.id ?? ''}">${icon(i)}${escHtml(b.name)}</button><i class="fa fa-chevron-right"></i>`
+    : `<span class="fmg-bc-current">${icon(i)}${escHtml(b.name)}</span>`
+  ).join('');
+  $('#fmg-breadcrumb').querySelectorAll('.fmg-bc-btn').forEach(btn =>
+    btn.addEventListener('click', () => _fmgLoad(btn.dataset.folder ? parseInt(btn.dataset.folder) : null)));
+  $('#fmg-title-sub').textContent = crumbs.map(b => b.name).join(' / ');
+}
+
+function _fmgFileIcon(f) {
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  if (ext === 'pdf') return 'fa-file-pdf fmg-ico-pdf';
+  if (['doc','docx'].includes(ext)) return 'fa-file-word fmg-ico-word';
+  if (['xls','xlsx','csv'].includes(ext)) return 'fa-file-excel fmg-ico-excel';
+  if (['ppt','pptx'].includes(ext)) return 'fa-file-powerpoint fmg-ico-ppt';
+  if (['zip','rar','7z'].includes(ext)) return 'fa-file-zipper fmg-ico-zip';
+  return 'fa-file-lines';
+}
+function _fmgDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function _fmgRender() {
+  _fmgSyncTabs();
+  const q = _fmg.q;
+  const folders = _fmg.filter === 'all' ? _fmg.folders.filter(f => !q || f.name.toLowerCase().includes(q)) : [];
+  const files = _fmg.files.filter(f =>
+    (_fmg.filter === 'all' || (_fmg.filter === 'images') === !!f.is_image) &&
+    (!q || f.name.toLowerCase().includes(q)));
+
+  const total = _fmg.files.length, images = _fmg.files.filter(f => f.is_image).length;
+  $('#fmg-count').textContent = `${total} file${total === 1 ? '' : 's'} · ${images} image${images === 1 ? '' : 's'}` +
+    (_fmg.folders.length ? ` · ${_fmg.folders.length} folder${_fmg.folders.length === 1 ? '' : 's'}` : '');
+
+  const box = $('#fmg-content');
+  if (!folders.length && !files.length) {
+    box.innerHTML = q || _fmg.filter !== 'all'
+      ? '<div class="fmg-empty"><i class="fa fa-magnifying-glass"></i> No matching files</div>'
+      : '<div class="fmg-empty"><i class="fa fa-folder-open"></i><b>This folder is empty</b>Drag files here or use “Choose files…” above to upload.</div>';
+    return;
+  }
+
+  const copyBtn = f => `<button type="button" class="fmg-copy-btn" data-fmg-copy="${f.id}" title="Copy link"><i class="fa fa-link"></i> Copy link</button>`;
+  const openBtn = f => `<button type="button" class="fmg-icon-btn" data-fmg-open="${f.id}" title="${f.is_image ? 'Preview' : 'Open'}"><i class="fa ${f.is_image ? 'fa-eye' : 'fa-up-right-from-square'}"></i></button>`;
+  const delBtn  = f => f.managed ? '' : `<button type="button" class="fmg-icon-btn is-danger" data-fmg-del="${f.id}" title="Delete"><i class="fa fa-trash"></i></button>`;
+  const delFolderBtn = f => `<button type="button" class="fmg-icon-btn is-danger" data-fmg-del-folder="${f.id}" title="Delete folder"><i class="fa fa-trash"></i></button>`;
+
+  if (_fmg.view === 'list') {
+    box.innerHTML = `<table class="crm-imp-table fmg-table">
+      <thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Uploaded</th><th></th></tr></thead>
+      <tbody>
+        ${folders.map(f => `<tr>
+          <td><div class="fmg-row-name" data-fmg-folder="${f.id}"><span class="fmg-row-thumb"><i class="fa fa-folder"></i></span><b>${escHtml(f.name)}</b></div></td>
+          <td>Folder</td><td>—</td><td></td>
+          <td><div class="fmg-row-actions">${delFolderBtn(f)}</div></td></tr>`).join('')}
+        ${files.map(f => `<tr>
+          <td><div class="fmg-row-name" data-fmg-open="${f.id}">
+            <span class="fmg-row-thumb">${f.is_image ? `<img src="${escHtml(f.url)}" alt="" loading="lazy">` : `<i class="fa ${_fmgFileIcon(f)}"></i>`}</span>
+            <b title="${escHtml(f.name)}">${escHtml(f.name)}</b></div></td>
+          <td>${escHtml((f.name.split('.').pop() || '').toUpperCase())}</td>
+          <td>${escHtml(f.size || '')}</td>
+          <td>${_fmgDate(f.created_at)}</td>
+          <td><div class="fmg-row-actions">${copyBtn(f)}${openBtn(f)}${delBtn(f)}</div></td></tr>`).join('')}
+      </tbody></table>`;
+  } else {
+    box.innerHTML = `
+      ${folders.length ? `<div class="fmg-group-title">Folders</div><div class="fmg-folders">${folders.map(f => `
+        <div class="fmg-folder" data-fmg-folder="${f.id}" title="${escHtml(f.name)}">
+          <i class="fa fa-folder"></i><span class="fmg-folder-name">${escHtml(f.name)}</span>${delFolderBtn(f)}
+        </div>`).join('')}</div>` : ''}
+      ${files.length ? `<div class="fmg-group-title">Files</div><div class="fmg-files">${files.map(f => `
+        <div class="fmg-file${_fmg.newIds.has(f.id) ? ' is-new' : ''}">
+          <div class="fmg-thumb${f.is_image ? ' is-img' : ''}" data-fmg-open="${f.id}" title="${f.is_image ? 'Preview' : 'Open'}">
+            ${f.is_image ? `<img src="${escHtml(f.url)}" alt="" loading="lazy">` : `<i class="fa ${_fmgFileIcon(f)}"></i>`}
+          </div>
+          <div class="fmg-info">
+            <div class="fmg-name" title="${escHtml(f.name)}">${escHtml(f.name)}</div>
+            <div class="fmg-meta">${escHtml(f.size || '')}${f.created_at ? ` · ${_fmgDate(f.created_at)}` : ''}</div>
+          </div>
+          <div class="fmg-file-actions">${copyBtn(f)}${openBtn(f)}${delBtn(f)}</div>
+        </div>`).join('')}</div>` : ''}`;
+  }
+
+  const byId = id => _fmg.files.find(f => f.id === parseInt(id));
+  box.querySelectorAll('[data-fmg-folder]').forEach(el => el.addEventListener('click', e => {
+    if (e.target.closest('[data-fmg-del-folder]')) return;
+    _fmgLoad(parseInt(el.dataset.fmgFolder));
+  }));
+  box.querySelectorAll('[data-fmg-open]').forEach(el => el.addEventListener('click', () => _fmgOpen(byId(el.dataset.fmgOpen))));
+  box.querySelectorAll('[data-fmg-copy]').forEach(btn => btn.addEventListener('click', () => _fmgCopyLink(byId(btn.dataset.fmgCopy)?.url, btn)));
+  box.querySelectorAll('[data-fmg-del]').forEach(btn => btn.addEventListener('click', () => _fmgDeleteFile(byId(btn.dataset.fmgDel))));
+  box.querySelectorAll('[data-fmg-del-folder]').forEach(btn => btn.addEventListener('click', () =>
+    _fmgDeleteFolder(_fmg.folders.find(f => f.id === parseInt(btn.dataset.fmgDelFolder)))));
+}
+
+function _fmgOpen(file) {
+  if (!file) return;
+  if (!file.is_image) { window.electronAPI.openExternal(file.url); return; }
+  _fmg.previewUrl = file.url;
+  $('#fmg-preview-img').src = file.url;
+  $('#fmg-preview-name').textContent = file.name;
+  $('#fmg-preview-url').value = file.url;
+  $('#fmg-preview').style.display = 'flex';
+}
+function _fmgClosePreview() {
+  $('#fmg-preview').style.display = 'none';
+  $('#fmg-preview-img').removeAttribute('src');
+  _fmg.previewUrl = '';
+}
+
+async function _fmgCopyLink(url, btn) {
+  if (!url) return;
+  try {
+    await copyToClipboard(url);
+  } catch (_) {
+    toast('Could not copy the link', 'error');
+    return;
+  }
+  flashCopiedBadge(btn, 'Link copied!');
+  // Buttons with a label switch to "Copied" for a moment so it's obvious which file was copied
+  if (btn?.classList.contains('fmg-copy-btn')) {
+    btn.classList.add('is-copied');
+    btn.innerHTML = '<i class="fa fa-check"></i> Copied';
+    setTimeout(() => { btn.classList.remove('is-copied'); btn.innerHTML = '<i class="fa fa-link"></i> Copy link'; }, 1400);
+  }
+}
+
+async function _fmgPickAndUpload() {
+  if (_fmg.busy) return;
+  const pick = await window.electronAPI.showOpenDialog({
+    title: 'Upload files',
+    filters: [
+      { name: 'Images & documents', extensions: FMG_UPLOAD_EXTS },
+      { name: 'Images', extensions: ['jpg','jpeg','png','gif','webp','svg'] },
+    ],
+    properties: ['openFile', 'multiSelections'],
+  });
+  if (pick.canceled || !pick.filePaths.length) return;
+  _fmgUpload(pick.filePaths);
+}
+
+async function _fmgUpload(filePaths) {
+  if (_fmg.busy) return;
+  _fmg.busy = true;
+  const btn = $('#fmg-upload');
+  btn.disabled = true;
+  $('#fmg-progress').style.display = '';
+  const n = filePaths.length;
+  const newIds = new Set();
+  const failed = [];
+  for (const [i, filePath] of filePaths.entries()) {
+    const name = filePath.split(/[\\/]/).pop();
+    $('#fmg-progress-label').textContent = `Uploading ${i + 1} of ${n} — ${name}`;
+    $('#fmg-progress-fill').style.width = `${(i / n) * 100}%`;
+    const res = await window.electronAPI.apiUpload(API.fileManagerUploadPath(_fmg.folderId), filePath);
+    if (res.status === 201) (res.body?.data || []).forEach(f => newIds.add(f.id));
+    else failed.push(`${name}: ${res.body?.message || 'upload failed'}`);
+  }
+  $('#fmg-progress-fill').style.width = '100%';
+  _fmg.busy = false;
+  btn.disabled = false;
+  setTimeout(() => { $('#fmg-progress').style.display = 'none'; $('#fmg-progress-fill').style.width = '0'; }, 500);
+
+  if (failed.length) toast(`${failed.length} of ${n} file(s) not uploaded — ${failed[0]}`, 'error');
+  if (newIds.size) {
+    _fmg.newIds = newIds;
+    if (_fmg.filter !== 'all') _fmg.filter = 'all';
+    await _fmgLoad(_fmg.folderId);
+    $('#fmg-content .fmg-file.is-new')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    setTimeout(() => { _fmg.newIds = new Set(); $$('#fmg-content .is-new').forEach(el => el.classList.remove('is-new')); }, 4000);
+  }
+}
+
+function _fmgShowNewFolder() {
+  if ($('#fmg-new-folder-input')) { $('#fmg-new-folder-input').focus(); return; }
+  const slot = $('#fmg-new-folder-slot');
+  slot.innerHTML = `<div class="fmg-new-folder"><i class="fa fa-folder-plus"></i>
+    <input type="text" id="fmg-new-folder-input" placeholder="New folder name" maxlength="120">
+    <button type="button" class="po-btn-primary" id="fmg-new-folder-save">Create</button>
+    <button type="button" class="po-btn-ghost" id="fmg-new-folder-cancel">Cancel</button></div>`;
+  slot.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  const input = $('#fmg-new-folder-input');
+  const save = async () => {
+    const name = input.value.trim();
+    if (!name) { input.focus(); return; }
+    $('#fmg-new-folder-save').disabled = true;
+    const res = await API.fileManagerCreateFolder(name, _fmg.folderId);
+    if (res.status === 201) { _fmgLoad(_fmg.folderId); return; }
+    $('#fmg-new-folder-save').disabled = false;
+    toast(res.body?.message || 'Could not create the folder', 'error');
+  };
+  $('#fmg-new-folder-save').addEventListener('click', save);
+  $('#fmg-new-folder-cancel').addEventListener('click', () => { slot.innerHTML = ''; });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') save();
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); slot.innerHTML = ''; }
+  });
+  input.focus();
+}
+
+async function _fmgDeleteFile(file) {
+  if (!file) return;
+  const ok = await appConfirm({
+    title: 'Delete this file?',
+    message: `"${file.name}" will be permanently removed. Anywhere its link is used (products, invoices, shared links) will stop showing it.`,
+    confirmText: '<i class="fa fa-trash"></i> Delete',
+    icon: 'fa-triangle-exclamation',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = await API.fileManagerDelete(file.id);
+  if (res.status !== 200) { toast(res.body?.message || 'Could not delete the file', 'error'); return; }
+  _fmg.files = _fmg.files.filter(f => f.id !== file.id);
+  _fmgRender();
+}
+
+async function _fmgDeleteFolder(folder) {
+  if (!folder) return;
+  const ok = await appConfirm({
+    title: 'Delete this folder?',
+    message: `"${folder.name}" must be empty before it can be deleted.`,
+    confirmText: '<i class="fa fa-trash"></i> Delete',
+    icon: 'fa-triangle-exclamation',
+    danger: true,
+  });
+  if (!ok) return;
+  const res = await API.fileManagerDeleteFolder(folder.id);
+  if (res.status !== 200) { toast(res.body?.message || 'Could not delete the folder', 'error'); return; }
+  _fmg.folders = _fmg.folders.filter(f => f.id !== folder.id);
+  _fmgRender();
+}
 
 // ── Database Backup & Import (profile menu → PosBackupApiController) ─────────
 // Export: tick sections (or Full backup) → server builds a zip → streamed to disk.
@@ -29968,23 +30316,47 @@ const INV_COLOR_PRESETS = [
   '#c7a84f', '#ea580c', '#0f172a', '#374151', '#db2777',
 ];
 
-function _isetupGetCfg() {
+// kind: 'invoice' (Invoice Setup) or 'quotation' (Quotation Setup). Quotation
+// Setup saves its own quotation_* keys; any key not saved there yet falls back
+// to the Invoice Setup value, so quotations keep printing as before until edited.
+function _isetupGetCfg(kind = 'invoice') {
   const c = state.config || {};
+  const k = name => (kind === 'quotation' && c['quotation_' + name] !== undefined)
+    ? c['quotation_' + name] : c['invoice_' + name];
+  const printer = k('printer') || '';
   return {
-    template:    c.invoice_template    || 'classic',
-    color:       c.invoice_color       || '',
+    template:    k('template')    || 'classic',
+    color:       k('color')       || '',
     // Thermal printer types were removed; legacy saved values fall back to A4.
-    printer:     (c.invoice_printer || '').startsWith('thermal_') ? 'laser_a4' : (c.invoice_printer || 'laser_a4'),
-    paper:       c.invoice_paper       || 'a4',
-    orientation: c.invoice_orientation || 'portrait',
-    mgTop:       c.invoice_mg_top      ?? 20,
-    mgBot:       c.invoice_mg_bot      ?? 20,
-    mgLeft:      c.invoice_mg_left     ?? 15,
-    mgRight:     c.invoice_mg_right    ?? 15,
-    hdrLayout:   c.invoice_hdr_layout  || 'num-left',
-    logoPos:     c.invoice_logo_pos    || 'header',
-    lhEnabled:   c.invoice_lh_enabled  !== false, // default on for existing setups
+    printer:     printer.startsWith('thermal_') ? 'laser_a4' : (printer || 'laser_a4'),
+    paper:       k('paper')       || 'a4',
+    orientation: k('orientation') || 'portrait',
+    mgTop:       k('mg_top')      ?? 20,
+    mgBot:       k('mg_bot')      ?? 20,
+    mgLeft:      k('mg_left')     ?? 15,
+    mgRight:     k('mg_right')    ?? 15,
+    hdrLayout:   k('hdr_layout')  || 'num-left',
+    logoPos:     k('logo_pos')    || 'header',
+    lhEnabled:   k('lh_enabled')  !== false, // default on for existing setups
   };
+}
+
+// Which setup the modal is editing — 'invoice' or 'quotation'
+let _isetupKind = 'invoice';
+
+// The sample preview templates are written with invoice wording; swap it for
+// quotation wording when the modal is in Quotation Setup mode.
+function _isetupQuoteWording(html) {
+  return html
+    .replaceAll('INV-0024', 'QT-0024')
+    .replaceAll('>Invoice Details<', '>Quotation Details<')
+    .replaceAll('>Invoice<', '>Quotation<')
+    .replaceAll('>INVOICE<', '>QUOTATION<')
+    .replaceAll('>Invoice ', '>Quotation ')
+    .replaceAll('>Due Date<', '>Valid Until<')
+    .replaceAll('>Due<', '>Valid until<')
+    .replaceAll('>Total Due<', '>Quote Total<')
+    .replaceAll('>Amount Due<', '>Quote Total<');
 }
 
 // Resolves a template by id, optionally overriding its accent color with a
@@ -30047,8 +30419,11 @@ function _isetupGeom(cfg) {
 // two-column header container (business block + invoice-number block).
 function _isetupHdrCss(hdrLayout) {
   const sel = '.top,.banner,.hdr-top,.topbar';
-  if (hdrLayout === 'num-left')   return `${sel}{flex-direction:row-reverse}`;
-  if (hdrLayout === 'num-center') return `${sel}{justify-content:center;gap:48px}`;
+  // Title + number lines of the number block, right-aligned by every template;
+  // re-align them with the block so the number sits flush under the title.
+  const num = '.it,.in,.il,.b-lbl,.b-num,.inv-word,.inv-ref,.tb-il,.tb-in';
+  if (hdrLayout === 'num-left')   return `${sel}{flex-direction:row-reverse}${num}{text-align:left}`;
+  if (hdrLayout === 'num-center') return `${sel}{justify-content:center;gap:48px}${num}{text-align:center}`;
   return '';
 }
 
@@ -31146,7 +31521,8 @@ function _isetupUpdatePreview() {
     const lh = _isetupLhHtml(_isetupLhDataUrl.dataUrl, _isetupLhDataUrl.contentHeight, live.logoPos, geom, mg);
     lhLayer = lh.banner; lhCorner = lh.corner;
   }
-  iframe.srcdoc = _isetupBuildPreviewDoc(tpl, lhLayer ? _isetupMgUnderBanner(mg) : mg, state.currency || '');
+  const doc = _isetupBuildPreviewDoc(tpl, lhLayer ? _isetupMgUnderBanner(mg) : mg, state.currency || '');
+  iframe.srcdoc = _isetupKind === 'quotation' ? _isetupQuoteWording(doc) : doc;
 
   const pageH  = geom.hPx || INV_THERMAL_PREVIEW_H;
   const scaler = $('#isetup-prev-scaler');
@@ -31221,12 +31597,17 @@ function _isetupSyncThermalUI() {
   });
 }
 
-async function openInvoiceSetup() {
+async function openInvoiceSetup(kind = 'invoice') {
   const modal = $('#isetup-modal');
   if (!modal) return;
-  const cfg = _isetupGetCfg();
+  _isetupKind = kind === 'quotation' ? 'quotation' : 'invoice';
+  const isQt = _isetupKind === 'quotation';
+  const cfg = _isetupGetCfg(_isetupKind);
   _isetupActiveTpl   = cfg.template;
   _isetupActiveColor = cfg.color || null;
+
+  if ($('#isetup-hdr-title')) $('#isetup-hdr-title').textContent = isQt ? 'Quotation Setup' : 'Invoice Setup';
+  if ($('#isetup-hdr-icon'))  $('#isetup-hdr-icon').className    = isQt ? 'fa fa-file-circle-plus' : 'fa fa-file-invoice';
 
   // Populate left panel
   if ($('#isetup-printer'))    $('#isetup-printer').value    = cfg.printer;
@@ -31260,23 +31641,26 @@ async function openInvoiceSetup() {
 async function _isetupSave() {
   const tpl   = _isetupActiveTpl;
   const orient = document.querySelector('input[name="isetup-orient"]:checked')?.value || 'portrait';
-  const update = {
-    invoice_template:    tpl,
-    invoice_color:       _isetupActiveColor || '',
-    invoice_printer:     $('#isetup-printer')?.value    || 'laser_a4',
-    invoice_paper:       $('#isetup-paper')?.value      || 'a4',
-    invoice_orientation: orient,
-    invoice_mg_top:      parseInt($('#isetup-mg-top')?.value)   ?? 20,
-    invoice_mg_bot:      parseInt($('#isetup-mg-bot')?.value)   ?? 20,
-    invoice_mg_left:     parseInt($('#isetup-mg-left')?.value)  ?? 15,
-    invoice_mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
-    invoice_hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
-    invoice_logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
-    invoice_lh_enabled:  $('#isetup-lh-enabled')?.checked !== false,
+  const values = {
+    template:    tpl,
+    color:       _isetupActiveColor || '',
+    printer:     $('#isetup-printer')?.value    || 'laser_a4',
+    paper:       $('#isetup-paper')?.value      || 'a4',
+    orientation: orient,
+    mg_top:      parseInt($('#isetup-mg-top')?.value)   ?? 20,
+    mg_bot:      parseInt($('#isetup-mg-bot')?.value)   ?? 20,
+    mg_left:     parseInt($('#isetup-mg-left')?.value)  ?? 15,
+    mg_right:    parseInt($('#isetup-mg-right')?.value) ?? 15,
+    hdr_layout:  $('#isetup-hdr-layout')?.value || 'num-left',
+    logo_pos:    $('#isetup-logo-pos')?.value   || 'header',
+    lh_enabled:  $('#isetup-lh-enabled')?.checked !== false,
   };
+  const isQt   = _isetupKind === 'quotation';
+  const prefix = isQt ? 'quotation_' : 'invoice_';
+  const update = Object.fromEntries(Object.entries(values).map(([key, v]) => [prefix + key, v]));
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
-  toast('Invoice setup saved', 'success');
+  toast(isQt ? 'Quotation setup saved' : 'Invoice setup saved', 'success');
   $('#isetup-modal').style.display = 'none';
 }
 
@@ -31332,7 +31716,8 @@ $('#isetup-lh-enabled')?.addEventListener('change', e => {
   else _isetupUpdatePreview();
 });
 
-$('#rb-sal-invoice-setup')?.addEventListener('click', openInvoiceSetup);
+$('#rb-sal-invoice-setup')?.addEventListener('click',   () => openInvoiceSetup('invoice'));
+$('#rb-sal-quotation-setup')?.addEventListener('click', () => openInvoiceSetup('quotation'));
 
 // Invoice preview modal controls
 $('#invp-zoom-in')?.addEventListener('click',  () => _invpZoomAt(_invpZoom * 1.25));
@@ -63235,6 +63620,7 @@ async function submitDsCreate() {
     const tools = [
       btn(can.edit, 'data-qt-edit', 'fa-pen', 'Edit'),
       btn(can.revise, 'data-qt-revise', 'fa-code-branch', 'New version'),
+      btn((q.items || []).length > 0, 'data-qt-print', 'fa-print', 'Print'),
       btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
     ].join('');
     const actions = steps || tools ? `<div class="crm-qtx-actions">${steps}<span class="crm-fm-spacer"></span>${tools}</div>` : '';
@@ -63607,6 +63993,20 @@ async function submitDsCreate() {
       const res = await API.crmReviseLeadQuotation(lead.id, s.detail.id);
       if (res.status !== 201) { toast(_crmWsError(res, 'Could not make a new version.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
+    } else if (t.matches('[data-qt-print]') && s.detail) {
+      // Prints through Quotation Setup, same as Sales → Quotations. CRM lines carry
+      // amounts (discount_amount, tax_rate) rather than the sales form's type/value pairs.
+      const items = (s.detail.items || []).map(i => ({
+        ...i,
+        description:    i.description || i.product_name || '',
+        discount_type:  'flat',
+        discount_value: i.discount_amount || 0,
+        tax_type:       'pct',
+        tax_pct:        i.tax_rate || 0,
+      }));
+      t.disabled = true;
+      await _qtPrint({ ...s.detail, items });
+      t.disabled = false;
     } else if (t.matches('[data-qt-pdf]') && s.detail) {
       const name = `${s.detail.quote_number}.pdf`;
       t.disabled = true;

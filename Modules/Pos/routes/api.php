@@ -155,6 +155,10 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::delete('online/products/{product}', [PosProductApiController::class, 'destroy'])->name('online.products.destroy');
     Route::get('online/file-manager', [PosFileManagerApiController::class, 'browse'])->name('online.file-manager.browse');
     Route::post('online/file-manager/upload', [PosFileManagerApiController::class, 'upload'])->name('online.file-manager.upload');
+    // File Manager modal (profile menu) — folders + delete
+    Route::post  ('online/file-manager/folders',          [PosFileManagerApiController::class, 'storeFolder'])->name('online.file-manager.folders.store');
+    Route::delete('online/file-manager/folders/{folder}', [PosFileManagerApiController::class, 'destroyFolder'])->where('folder', '[0-9]+')->name('online.file-manager.folders.destroy');
+    Route::delete('online/file-manager/{file}',           [PosFileManagerApiController::class, 'destroy'])->where('file', '[0-9]+')->name('online.file-manager.destroy');
     Route::post('online/checkout', [PosCheckoutApiController::class, 'store'])->name('online.checkout');
 
     Route::get('online/features', [PosSettingsApiController::class, 'features'])->name('online.features');

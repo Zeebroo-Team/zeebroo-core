@@ -3307,6 +3307,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <button class="tpm-item" id="tpm-developers">
             <i class="fa fa-code"></i> Developers
           </button>
+          <button class="tpm-item" id="tpm-file-manager">
+            <i class="fa fa-folder-open"></i> File Manager
+          </button>
           <button class="tpm-item" id="tpm-backup">
             <i class="fa fa-database"></i> Database Backup &amp; Import
           </button>
@@ -3678,6 +3681,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
               </button>
               <button class="ribbon-btn-sm" id="rb-sal-invoice-setup">
                 <i class="fa fa-sliders"></i> Invoice Setup
+              </button>
+              <button class="ribbon-btn-sm" id="rb-sal-quotation-setup">
+                <i class="fa fa-file-pen"></i> Quotation Setup
               </button>
             </div>
             <div class="ribbon-small-stack">
@@ -18433,9 +18439,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <!-- Header -->
     <div class="isetup-hdr">
       <div class="isetup-hdr-left">
-        <div class="isetup-hdr-icon"><i class="fa fa-file-invoice"></i></div>
+        <div class="isetup-hdr-icon"><i id="isetup-hdr-icon" class="fa fa-file-invoice"></i></div>
         <div>
-          <div class="isetup-hdr-title">Invoice Setup</div>
+          <div class="isetup-hdr-title" id="isetup-hdr-title">Invoice Setup</div>
           <div class="isetup-hdr-sub">Configure template, paper size and print layout</div>
         </div>
       </div>
@@ -23372,6 +23378,82 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <div id="feat-mgmt-detail-view" style="display:none;flex:1;flex-direction:column;min-height:0;overflow-y:auto">
       <button class="fm-detail-back" id="feat-mgmt-back"><i class="fa fa-arrow-left"></i> Back to all features</button>
       <div id="feat-mgmt-detail-body"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── File Manager modal (profile menu → PosFileManagerApiController) ────── -->
+<div class="modal-overlay mac-overlay" id="fmg-modal-overlay" style="display:none">
+  <div class="mac-window fmg-window" style="width:1100px;max-width:96vw;height:86vh">
+    <div class="mac-titlebar">
+      <div class="mac-title">
+        <span class="mac-title-icon fmg-title-icon"><i class="fa fa-folder-open"></i></span>
+        <div style="min-width:0"><div class="mac-title-main">File Manager</div><div class="mac-title-sub" id="fmg-title-sub"></div></div>
+      </div>
+      <div class="crm-inbox-tabs fmg-tabs" role="tablist">
+        <button type="button" class="crm-inbox-tab active" data-fm-filter="all">All</button>
+        <button type="button" class="crm-inbox-tab" data-fm-filter="images">Images</button>
+        <button type="button" class="crm-inbox-tab" data-fm-filter="docs">Documents</button>
+      </div>
+      <div class="mac-win-btns" style="margin-left:12px">
+        <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+        <button type="button" class="mac-close-btn" id="fmg-modal-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+      </div>
+    </div>
+
+    <div class="crm-imp-body fmg-body" id="fmg-body">
+      <!-- Upload zone — click the button or drop files anywhere on the window -->
+      <div class="crm-imp-drop fmg-drop" id="fmg-drop">
+        <i class="fa fa-cloud-arrow-up fmg-drop-icon"></i>
+        <div><strong>Upload images &amp; documents</strong><br>
+          <span class="crm-perms-muted">Drag files here or choose them from your computer. JPG, PNG, WEBP, SVG, PDF, Word, Excel, CSV, ZIP — up to 20 MB each.</span></div>
+        <div class="crm-org-row">
+          <button type="button" class="po-btn-primary" id="fmg-upload"><i class="fa fa-folder-open"></i> Choose files…</button>
+          <button type="button" class="po-btn-ghost" id="fmg-new-folder"><i class="fa fa-folder-plus"></i> New folder</button>
+        </div>
+        <div class="fmg-progress" id="fmg-progress" style="display:none">
+          <div class="fmg-progress-bar"><div class="fmg-progress-fill" id="fmg-progress-fill"></div></div>
+          <span id="fmg-progress-label"></span>
+        </div>
+      </div>
+
+      <div class="crm-imp-note"><i class="fa fa-circle-info"></i> Click <b>&nbsp;Copy link&nbsp;</b> on any file to paste it into products, invoices, emails or your website. Files go into the folder you have open.</div>
+
+      <div class="mac-section">
+        <div class="fmg-bar">
+          <div class="fmg-breadcrumb" id="fmg-breadcrumb"></div>
+          <div class="fmg-search">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="fmg-search" placeholder="Search files…">
+          </div>
+          <div class="crm-inbox-tabs fmg-view" role="tablist" aria-label="View">
+            <button type="button" class="crm-inbox-tab active" data-fm-view="grid" title="Grid"><i class="fa fa-grip"></i></button>
+            <button type="button" class="crm-inbox-tab" data-fm-view="list" title="List"><i class="fa fa-list"></i></button>
+          </div>
+        </div>
+        <div id="fmg-new-folder-slot"></div>
+        <div id="fmg-content"></div>
+      </div>
+    </div>
+
+    <div class="po-aim-footer mac-footer fmg-footer">
+      <span class="fmg-count" id="fmg-count"></span>
+      <button type="button" class="po-btn-ghost" id="fmg-footer-close"><i class="fa fa-xmark"></i> Close</button>
+    </div>
+
+    <!-- Drop overlay while dragging files over the window -->
+    <div class="fmg-dropzone-overlay" id="fmg-dropzone-overlay"><div><i class="fa fa-cloud-arrow-up"></i><span>Drop to upload</span></div></div>
+
+    <!-- Image preview (click a thumbnail) -->
+    <div class="fmg-preview" id="fmg-preview" style="display:none">
+      <div class="fmg-preview-card">
+        <img id="fmg-preview-img" alt="">
+        <div class="fmg-preview-bar">
+          <div class="fmg-preview-text"><b id="fmg-preview-name"></b><input type="text" id="fmg-preview-url" readonly></div>
+          <button type="button" class="po-btn-primary" id="fmg-preview-copy"><i class="fa fa-link"></i> Copy link</button>
+          <button type="button" class="po-btn-ghost" id="fmg-preview-close"><i class="fa fa-xmark"></i> Close</button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

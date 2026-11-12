@@ -142,7 +142,8 @@
           "items": [
             { "type": "stack", "items": [
               { "type": "sm", "id": "rb-sal-refresh",       "icon": "fa-rotate",           "label": "Refresh" },
-              { "type": "sm", "id": "rb-sal-invoice-setup", "icon": "fa-sliders",          "label": "Invoice Setup" }
+              { "type": "sm", "id": "rb-sal-invoice-setup", "icon": "fa-sliders",          "label": "Invoice Setup" },
+              { "type": "sm", "id": "rb-sal-quotation-setup", "icon": "fa-file-pen",       "label": "Quotation Setup" }
             ]},
             { "type": "stack", "items": [
               { "type": "sm", "id": "rb-sal-all",           "icon": "fa-list",             "label": "All Sales" },
