@@ -134,6 +134,22 @@ final class CrmAccess
         return $divisionId !== null && array_key_exists($divisionId, $this->headDivisions);
     }
 
+    /** Heads at least one division of this department. */
+    public function headsDivisionIn(?int $departmentId): bool
+    {
+        return $this->headedDivisionIdsIn($departmentId) !== [];
+    }
+
+    /** The divisions of this department the user heads. @return int[] */
+    public function headedDivisionIdsIn(?int $departmentId): array
+    {
+        if ($departmentId === null) {
+            return [];
+        }
+
+        return array_keys(array_filter($this->headDivisions, fn (int $d) => $d === $departmentId));
+    }
+
     public function inDepartment(?int $departmentId): bool
     {
         return $departmentId !== null && in_array($departmentId, $this->departmentIds, true);
@@ -226,6 +242,8 @@ final class CrmAccess
             'department_ids'       => array_values($this->departmentIds),
             'head_department_ids'  => array_values($this->headDepartmentIds),
             'head_division_ids'    => array_keys($this->headDivisions),
+            // division id => its department, so the client can tell which department each sits in
+            'head_divisions'       => (object) $this->headDivisions,
             'is_head'              => $this->isHead(),
             'intake_department_id' => $this->intakeDepartmentId,
             'read_only'            => $this->isReadOnly(),

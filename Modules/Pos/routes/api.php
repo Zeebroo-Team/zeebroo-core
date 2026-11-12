@@ -615,8 +615,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::put   ('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'updateRole'])->whereNumber('role')->name('crm.permissions.roles.update');
     Route::delete('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'resetRole']) ->whereNumber('role')->name('crm.permissions.roles.reset');
 
-    // CRM org structure (departments → divisions, department pipelines, department settings)
+    // CRM org structure (departments → members & heads, divisions, department pipelines, department settings)
     Route::get   ('crm/org',                                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'index'])          ->name('crm.org.index');
+    Route::post  ('crm/org/departments/{department}/members',   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'storeMember'])    ->whereNumber('department')->name('crm.org.members.store');
+    Route::put   ('crm/org/members/{member}',                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateMember'])   ->whereNumber('member')->name('crm.org.members.update');
+    Route::delete('crm/org/members/{member}',                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'destroyMember'])  ->whereNumber('member')->name('crm.org.members.destroy');
     Route::post  ('crm/org/departments/{department}/divisions', [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
     Route::put   ('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');
     Route::delete('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'destroyDivision'])->whereNumber('division')->name('crm.org.divisions.destroy');

@@ -540,6 +540,23 @@ test('submitting offers the division and department heads and emails the ticked 
     });
 });
 
+test('extra heads from Org Structure are offered as approvers, unless their CRM permissions forbid approving', function () {
+    // Kamala (4) is added as a second head of Sales
+    app(\Modules\CRM\Services\CrmOrgService::class)->saveMember(\Modules\Business\Models\Business::find(7), \Modules\HRManagement\Models\Department::find(10), 4, 'head');
+    $q = crmQuoteCreate();
+    $approverIds = fn () => array_column(app(\Modules\CRM\Services\QuotationApprovalService::class)->approvers($this->lead->fresh()), 'id');
+
+    expect($approverIds())->toBe([2, 4]);
+
+    // "Approve quotations" switched off for Nimal: off the list, and his emailed link stops working
+    app(\Modules\CRM\Services\CrmPermissionService::class)->saveForUser(\Modules\Business\Models\Business::find(7), 2, ['quotations_approve' => false], []);
+    expect($approverIds())->toBe([4]);
+
+    // Removed from the department again: Kamala is no longer an approver
+    \Modules\CRM\Models\DepartmentMember::query()->delete();
+    expect($approverIds())->toBe([]);
+});
+
 test('a head approves from the email link without signing in; the first decision wins', function () {
     Mail::fake();
     DB::table('crm_divisions')->insert(['id' => 40, 'business_id' => 7, 'department_id' => 10, 'name' => 'Rooftop', 'head_user_id' => 6]);

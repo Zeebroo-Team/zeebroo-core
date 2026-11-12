@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessMember;
+use Modules\CRM\Models\DepartmentMember;
 use Modules\CRM\Models\DepartmentSetting;
 use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Lead;
@@ -20,6 +21,10 @@ use Modules\HRManagement\Models\Employee;
  * number of pipelines (crm_projects) per department, and per-department CRM settings.
  * The first pipeline linked is the department's main one — where intake and forwarded
  * leads land unless another is picked. The HR department head is the CRM department head.
+ *
+ * On top of HR, crm_department_members gives a user extra places: a member works another
+ * department's leads like its own staff, a head runs another department like its HR head. So
+ * one person can head Sales and IT, and a Sales employee can work IT leads.
  */
 class CrmOrgService
 {
@@ -61,6 +66,14 @@ class CrmOrgService
             ->get()
             ->groupBy('department_id');
 
+        $extra = DepartmentMember::query()
+            ->where('business_id', $business->id)
+            ->whereIn('department_id', $ids)
+            ->with('user:id,name,email')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('department_id');
+
         // [department_id => ['total' => n, 'unlinked' => n]]
         $staff = Employee::query()
             ->where('business_id', $business->id)
@@ -70,7 +83,7 @@ class CrmOrgService
             ->get()
             ->keyBy('department_id');
 
-        return $departments->map(function (Department $d) use ($pipelines, $settings, $divisions, $staff) {
+        return $departments->map(function (Department $d) use ($pipelines, $settings, $divisions, $staff, $extra) {
             $linked  = $pipelines->get($d->id, collect())->map(fn (Project $p) => [
                 'id'     => $p->id,
                 'name'   => $p->name,
@@ -78,13 +91,22 @@ class CrmOrgService
             ])->values();
             $setting = $settings->get($d->id);
             $counts  = $staff->get($d->id);
+            $members = $extra->get($d->id, collect());
+            $hrHead  = $this->headUserIdFromLoaded($d);
+            $heads   = collect([$hrHead])
+                ->concat($members->where('role', DepartmentMember::ROLE_HEAD)->pluck('user_id'))
+                ->filter()->map(fn ($id) => (int) $id)->unique()->values();
 
             return [
                 'id'            => $d->id,
                 'name'          => $d->name,
                 'head'          => $this->employeeSummary($d->headEmployee),
                 'co_head'       => $this->employeeSummary($d->coHeadEmployee),
-                'head_user_id'  => $this->headUserIdFromLoaded($d),
+                'head_user_id'  => $heads->first(),
+                // The HR head plus the extra CRM heads
+                'head_user_ids' => $heads->all(),
+                // Users placed here on top of HR: other departments' staff and extra heads
+                'members'       => $members->map(fn (DepartmentMember $m) => $this->memberSummary($m))->values()->all(),
                 // The main pipeline, then every linked one (main first)
                 'pipeline'      => $linked->first(),
                 'pipelines'     => $linked->all(),
@@ -92,7 +114,7 @@ class CrmOrgService
                 'divisions'     => $divisions->get($d->id, collect())->map(fn (Division $v) => $this->divisionSummary($v))->values()->all(),
                 'staff_count'   => (int) ($counts->total ?? 0),
                 'unlinked_staff_count' => (int) ($counts->unlinked ?? 0),
-                'warnings'      => $this->warnings($d, (int) ($counts->unlinked ?? 0)),
+                'warnings'      => $this->warnings($d, (int) ($counts->unlinked ?? 0), $members->contains('role', DepartmentMember::ROLE_HEAD)),
             ];
         })->values()->all();
     }
@@ -113,22 +135,42 @@ class CrmOrgService
 
     /**
      * The user who heads this department for CRM purposes: a division's own head wins,
-     * then the HR head, then the HR co-head. Null when none of them has a Zeebroo user.
+     * then the HR head, then the HR co-head, then the first extra CRM head. Null when none
+     * of them has a Zeebroo user.
      */
     public function headUserId(Department $department, ?Division $division = null): ?int
     {
+        return $this->headUserIds($department, $division)[0] ?? null;
+    }
+
+    /**
+     * Everyone who heads this department for CRM purposes — who gets the head's approvals and
+     * alerts. A division with its own head is run by that head alone; otherwise the HR head
+     * (or co-head) and every extra CRM head.
+     *
+     * @return int[]
+     */
+    public function headUserIds(Department $department, ?Division $division = null): array
+    {
         if ($division !== null && (int) $division->department_id === (int) $department->id && $division->head_user_id) {
-            return (int) $division->head_user_id;
+            return [(int) $division->head_user_id];
         }
 
         $department->loadMissing(['headEmployee', 'coHeadEmployee']);
 
-        return $this->headUserIdFromLoaded($department);
+        return collect([$this->headUserIdFromLoaded($department)])
+            ->concat($this->extraUserIds($department, DepartmentMember::ROLE_HEAD))
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
-     * Users of the department's HR staff who have a Zeebroo login and are still on the team
-     * (the owner or an active member) — a removed user keeps their HR record but gets no leads.
+     * Users of the department's HR staff who have a Zeebroo login, plus the users placed in it
+     * through the CRM (crm_department_members), who are still on the team (the owner or an
+     * active member) — a removed user keeps their HR record but gets no leads.
      *
      * @return int[]
      */
@@ -138,22 +180,27 @@ class CrmOrgService
             ->where('business_id', $department->business_id)
             ->where('status', 'active')
             ->pluck('user_id')
-            ->push(Business::query()->whereKey($department->business_id)->value('user_id'));
+            ->push(Business::query()->whereKey($department->business_id)->value('user_id'))
+            ->filter()
+            ->map(fn ($id) => (int) $id);
 
         return Employee::query()
             ->where('business_id', $department->business_id)
             ->where('department_id', $department->id)
-            ->whereIn('user_id', $teamIds->filter())
+            ->whereNotNull('user_id')
             ->pluck('user_id')
+            ->concat($this->extraUserIds($department))
             ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $teamIds->contains($id))
             ->unique()
             ->values()
             ->all();
     }
 
     /**
-     * Who a pipeline's leads can be assigned to: the department's staff with a login plus its
-     * head, or every business user for a pipeline no department owns.
+     * Who a pipeline's leads can be assigned to: the department's staff with a login, its
+     * extra members, its heads and its division heads, or every business user for a pipeline
+     * no department owns.
      *
      * @return Collection<int, User>
      */
@@ -167,15 +214,22 @@ class CrmOrgService
             return $this->businessUsers($business);
         }
 
-        $ids = $this->memberUserIds($department);
-        if ($headId = $this->headUserId($department)) {
-            $ids[] = $headId;
-        }
+        $ids = [
+            ...$this->memberUserIds($department),
+            ...$this->headUserIds($department),
+            ...Division::query()
+                ->where('department_id', $department->id)
+                ->where('is_active', true)
+                ->whereNotNull('head_user_id')
+                ->pluck('head_user_id')
+                ->map(fn ($id) => (int) $id)
+                ->all(),
+        ];
 
         return User::query()->whereIn('id', array_unique($ids))->orderBy('name')->get(['id', 'name', 'email']);
     }
 
-    /** Departments the user works in through their HR employee record. @return int[] */
+    /** Departments the user works in through their HR employee record or a CRM place. @return int[] */
     public function departmentIdsForUser(Business $business, int $userId): array
     {
         return Employee::query()
@@ -183,13 +237,17 @@ class CrmOrgService
             ->where('user_id', $userId)
             ->whereNotNull('department_id')
             ->pluck('department_id')
+            ->concat(DepartmentMember::query()
+                ->where('business_id', $business->id)
+                ->where('user_id', $userId)
+                ->pluck('department_id'))
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values()
             ->all();
     }
 
-    /** Departments whose head user (see headUserId) is this user. @return int[] */
+    /** Departments this user heads: as HR head (or the stand-in co-head) or as an extra CRM head. @return int[] */
     public function headedDepartmentIds(Business $business, int $userId): array
     {
         return Department::query()
@@ -198,7 +256,13 @@ class CrmOrgService
             ->get()
             ->filter(fn (Department $d) => $this->headUserIdFromLoaded($d) === $userId)
             ->pluck('id')
+            ->concat(DepartmentMember::query()
+                ->where('business_id', $business->id)
+                ->where('user_id', $userId)
+                ->where('role', DepartmentMember::ROLE_HEAD)
+                ->pluck('department_id'))
             ->map(fn ($id) => (int) $id)
+            ->unique()
             ->values()
             ->all();
     }
@@ -242,6 +306,78 @@ class CrmOrgService
             ->get(['id', 'name', 'email']);
     }
 
+    /**
+     * businessUsers() with each user's HR department and job title, for the
+     * org structure pickers (so people can be told apart and found by department).
+     */
+    public function businessUsersWithPlaces(Business $business): Collection
+    {
+        $users = $this->businessUsers($business);
+        $employees = $this->employeesByUser($business, $users->pluck('id'));
+
+        return $users->map(fn (User $u) => $this->userWithPlace($u, $employees->get($u->id)))->values();
+    }
+
+    /**
+     * assignableUsers() with each person's HR department, job title and how they belong to
+     * the pipeline's department: head, division_head (+ division), staff (its HR staff) or
+     * member (added through the CRM from another department).
+     */
+    public function assignablePeople(Business $business, ?int $departmentId): Collection
+    {
+        $users = $this->assignableUsers($business, $departmentId);
+        $employees = $this->employeesByUser($business, $users->pluck('id'));
+
+        $department = $departmentId !== null
+            ? Department::query()->where('business_id', $business->id)->find($departmentId)
+            : null;
+        $heads = $department ? $this->headUserIds($department) : [];
+        $divisionHeads = $department
+            ? Division::query()
+                ->where('department_id', $department->id)
+                ->where('is_active', true)
+                ->whereNotNull('head_user_id')
+                ->pluck('name', 'head_user_id')
+            : collect();
+
+        return $users->map(function (User $u) use ($employees, $department, $heads, $divisionHeads) {
+            $person = $this->userWithPlace($u, $employees->get($u->id));
+            $person['role'] = match (true) {
+                $department === null                                   => null,
+                in_array($u->id, $heads, true)                         => 'head',
+                $divisionHeads->has($u->id)                            => 'division_head',
+                $person['department_id'] === (int) $department->id     => 'staff',
+                default                                                => 'member',
+            };
+            $person['division_name'] = $divisionHeads->get($u->id);
+
+            return $person;
+        })->values();
+    }
+
+    /** HR employee records of these users, keyed by user id. */
+    private function employeesByUser(Business $business, Collection $userIds): Collection
+    {
+        return Employee::query()
+            ->where('business_id', $business->id)
+            ->whereIn('user_id', $userIds)
+            ->with(['department:id,name', 'jobTitle'])
+            ->get()
+            ->keyBy('user_id');
+    }
+
+    private function userWithPlace(User $user, ?Employee $employee): array
+    {
+        return [
+            'id'              => (int) $user->id,
+            'name'            => $user->name,
+            'email'           => $user->email,
+            'department_id'   => $employee?->department_id ? (int) $employee->department_id : null,
+            'department_name' => $employee?->department?->name,
+            'job_title'       => $employee?->jobTitle?->name,
+        ];
+    }
+
     // ── Divisions ────────────────────────────────────────────────────────
 
     public function createDivision(Business $business, Department $department, array $data): Division
@@ -280,6 +416,36 @@ class CrmOrgService
     public function deleteDivision(Division $division): void
     {
         $division->delete();
+    }
+
+    // ── Extra members and heads ──────────────────────────────────────────
+
+    public function memberForBusiness(Business $business, int $memberId): DepartmentMember
+    {
+        return DepartmentMember::query()
+            ->where('business_id', $business->id)
+            ->findOrFail($memberId);
+    }
+
+    /** Place a user in the department as a member or a head; placing them again changes their role. */
+    public function saveMember(Business $business, Department $department, int $userId, string $role): DepartmentMember
+    {
+        if (! $this->businessUsers($business)->contains('id', $userId)) {
+            throw ValidationException::withMessages(['user_id' => 'Pick a user of this business.']);
+        }
+        if (! in_array($role, DepartmentMember::ROLES, true)) {
+            throw ValidationException::withMessages(['role' => 'The role must be member or head.']);
+        }
+
+        return DepartmentMember::updateOrCreate(
+            ['department_id' => $department->id, 'user_id' => $userId],
+            ['business_id' => $business->id, 'role' => $role],
+        )->load('user:id,name,email');
+    }
+
+    public function removeMember(DepartmentMember $member): void
+    {
+        $member->delete();
     }
 
     // ── Pipeline link ────────────────────────────────────────────────────
@@ -397,12 +563,24 @@ class CrmOrgService
         return $userId ? (int) $userId : null;
     }
 
-    private function warnings(Department $department, int $unlinkedStaff): array
+    /** Users placed in the department through the CRM, of one role or both. */
+    private function extraUserIds(Department $department, ?string $role = null): Collection
+    {
+        return DepartmentMember::query()
+            ->where('department_id', $department->id)
+            ->when($role !== null, fn ($q) => $q->where('role', $role))
+            ->orderBy('id')
+            ->pluck('user_id');
+    }
+
+    private function warnings(Department $department, int $unlinkedStaff, bool $hasExtraHead = false): array
     {
         $warnings = [];
 
         if ($department->headEmployee === null) {
-            $warnings[] = 'No department head is set.';
+            if (! $hasExtraHead) {
+                $warnings[] = 'No department head is set.';
+            }
         } elseif ($department->headEmployee->user_id === null) {
             $warnings[] = 'Head ' . $department->headEmployee->full_name . ' has no linked Zeebroo user.';
         }
@@ -440,6 +618,17 @@ class CrmOrgService
                 ? (float) $setting->discount_approval_limit_percent
                 : null,
             'followup_days'                   => $setting?->followupDays() ?? DepartmentSetting::DEFAULT_FOLLOWUP_DAYS,
+        ];
+    }
+
+    private function memberSummary(DepartmentMember $member): array
+    {
+        return [
+            'id'         => $member->id,
+            'user_id'    => (int) $member->user_id,
+            'user_name'  => $member->user?->name,
+            'user_email' => $member->user?->email,
+            'role'       => $member->role,
         ];
     }
 

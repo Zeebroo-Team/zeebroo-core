@@ -113,6 +113,7 @@ beforeEach(function () {
         '2026_11_07_100000_create_crm_follow_ups_table.php',
         '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
         '2026_11_10_100000_add_crm_permissions_to_business_roles_table.php',
+        '2026_11_12_100000_create_crm_department_members_table.php',
     ] as $file) {
         (require $dir . $file)->up();
     }
@@ -243,6 +244,112 @@ test('the HR co-head runs the department when the head has no login', function (
 
     expect($this->policy->canAssign(($this->access)(3), Lead::find(2)))->toBeTrue()
         ->and($this->policy->canView(($this->access)(2), Lead::find(2)))->toBeFalse();
+});
+
+// ── Places beyond HR: members, extra heads, division heads ──────────────
+
+test('a Sales employee added to Support works Support leads like its own staff', function () {
+    app(\Modules\CRM\Services\CrmOrgService::class)->saveMember($this->business, \Modules\HRManagement\Models\Department::find(12), 3, 'member');
+    $sunil = ($this->access)(3);
+
+    expect($sunil->departmentIds)->toEqualCanonicalizing([10, 12])
+        ->and($this->policy->canView($sunil, Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canEdit($sunil, Lead::find(4)))->toBeFalse()   // not assigned to them
+        ->and($this->policy->canContribute($sunil, Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canAssign($sunil, Lead::find(4)))->toBeFalse()
+        ->and(app(\Modules\CRM\Services\CrmOrgService::class)->assignableUsers($this->business, 12)->pluck('id')->sort()->values()->all())->toBe([3, 6]);
+
+    DB::table('crm_lead_assignees')->insert(['business_id' => 7, 'lead_id' => 4, 'user_id' => 3, 'is_primary' => false]);
+    expect($this->policy->canEdit(($this->access)(3), Lead::find(4)))->toBeTrue();
+});
+
+test('the Sales head added as a Support head runs both departments', function () {
+    app(\Modules\CRM\Services\CrmOrgService::class)->saveMember($this->business, \Modules\HRManagement\Models\Department::find(12), 2, 'head');
+    $nimal = ($this->access)(2);
+
+    expect($nimal->headDepartmentIds)->toEqualCanonicalizing([10, 12])
+        ->and($this->policy->canAssign($nimal, Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canApprove($nimal, Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canManageProject($nimal, Project::find(3)))->toBeTrue()
+        ->and($this->policy->canAssign($nimal, Lead::find(2)))->toBeTrue()
+        ->and($this->policy->canView($nimal, Lead::find(3)))->toBeFalse();  // still not Marketing
+});
+
+test('a division head works their division and keeps its leads inside it', function () {
+    Schema::table('crm_leads', fn (Blueprint $t) => $t->unsignedBigInteger('division_id')->nullable());
+    // Priya (Support staff) heads the Solar division of Sales; lead 2 is a Solar lead
+    DB::table('crm_divisions')->insert([
+        ['id' => 50, 'business_id' => 7, 'department_id' => 10, 'name' => 'Solar',   'head_user_id' => 6, 'is_active' => true],
+        ['id' => 51, 'business_id' => 7, 'department_id' => 10, 'name' => 'Battery', 'head_user_id' => null, 'is_active' => true],
+    ]);
+    DB::table('crm_leads')->where('id', 2)->update(['division_id' => 50]);
+    $priya = ($this->access)(6);
+    $sales = Project::find(1);
+
+    expect($this->policy->canView($priya, Lead::find(1)))->toBeTrue()          // sees the whole department
+        ->and($this->policy->canAssign($priya, Lead::find(1)))->toBeFalse()    // not in her division
+        ->and($this->policy->canAssign($priya, Lead::find(2)))->toBeTrue()
+        ->and($this->policy->canApprove($priya, Lead::find(2)))->toBeTrue()
+        ->and($this->policy->canAssignIn($priya, $sales))->toBeTrue()
+        ->and($this->policy->canManageProject($priya, $sales))->toBeFalse()
+        ->and($this->policy->divisionScope($priya, $sales))->toBe([50])
+        ->and($this->policy->canPlaceInDivision($priya, $sales, 50))->toBeTrue()
+        ->and($this->policy->canPlaceInDivision($priya, $sales, 51))->toBeFalse()
+        ->and($this->policy->canPlaceInDivision($priya, $sales, null))->toBeFalse()
+        // the department head places leads anywhere
+        ->and($this->policy->divisionScope(($this->access)(2), $sales))->toBeNull();
+
+    // The API refuses to move her lead into a sibling division
+    expect(crmLeadStatus(fn () => app(CrmLeadAccessTestApi::class)
+        ->updateLead(crmLeadRequest(6, 'PUT', ['name' => 'Sales open', 'division_id' => 51]), 2)))->toBe(403)
+        ->and(Lead::find(2)->division_id)->toBe(50);
+});
+
+test('role and user CRM permissions still narrow an added head, member and division head', function () {
+    Schema::table('crm_leads', fn (Blueprint $t) => $t->unsignedBigInteger('division_id')->nullable());
+    $org         = app(\Modules\CRM\Services\CrmOrgService::class);
+    $permissions = app(CrmPermissionService::class);
+    $support     = \Modules\HRManagement\Models\Department::find(12);
+
+    // Extra head with "Assign leads" and "Approve quotations" switched off for them
+    $org->saveMember($this->business, $support, 2, 'head');
+    $permissions->saveForUser($this->business, 2, ['leads_assign' => false, 'quotations_approve' => false], []);
+    $nimal = ($this->access)(2);
+    expect($this->policy->canEdit($nimal, Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canAssign($nimal, Lead::find(4)))->toBeFalse()
+        ->and($this->policy->canAssignIn($nimal, Project::find(3)))->toBeFalse()
+        ->and($this->policy->canApproveQuotation($nimal, Lead::find(4)))->toBeFalse()
+        ->and($nimal->toArray()['can_assign'])->toBeFalse();
+
+    // Added member: the CRM Staff role template blocks "Messages & files", their own setting blocks viewing
+    $org->saveMember($this->business, $support, 3, 'member');
+    $permissions->saveForRole($this->business, BusinessRole::where('business_id', 7)->where('slug', 'crm_staff')->first(), ['lead_collaborate' => false], []);
+    expect($this->policy->canView(($this->access)(3), Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canContribute(($this->access)(3), Lead::find(4)))->toBeFalse();
+    $permissions->saveForUser($this->business, 3, ['leads_view' => false], []);
+    expect($this->policy->canView(($this->access)(3), Lead::find(4)))->toBeFalse();
+
+    // A hidden stage stays hidden in a department joined through the CRM
+    $permissions->resetForUser($this->business, 3);
+    $permissions->saveForUser($this->business, 3, [], [3 => []]);
+    expect($this->policy->canViewProject(($this->access)(3), Project::find(3)))->toBeFalse();
+
+    // Division head with "Assign leads" off can't assign or move leads between divisions
+    DB::table('crm_divisions')->insert(['id' => 50, 'business_id' => 7, 'department_id' => 10, 'name' => 'Solar', 'head_user_id' => 6, 'is_active' => true]);
+    DB::table('crm_leads')->where('id', 2)->update(['division_id' => 50]);
+    $permissions->saveForUser($this->business, 6, ['leads_assign' => false], []);
+    $priya = ($this->access)(6);
+    expect($this->policy->canAssign($priya, Lead::find(2)))->toBeFalse()
+        ->and($this->policy->canAssignIn($priya, Project::find(1)))->toBeFalse()
+        ->and($this->policy->canEdit($priya, Lead::find(2)))->toBeTrue();
+
+    // The CEO made a head through the CRM stays view-only
+    $org->saveMember($this->business, $support, 5, 'head');
+    $chen = ($this->access)(5);
+    expect($this->policy->canView($chen, Lead::find(4)))->toBeTrue()
+        ->and($this->policy->canEdit($chen, Lead::find(4)))->toBeFalse()
+        ->and($this->policy->canAssign($chen, Lead::find(4)))->toBeFalse()
+        ->and($this->policy->canApprove($chen, Lead::find(4)))->toBeFalse();
 });
 
 // ── Pipelines ────────────────────────────────────────────────────────────

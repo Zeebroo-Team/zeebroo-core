@@ -60507,7 +60507,7 @@ async function submitDsCreate() {
   const _crmPrefSet = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
   let _crmPipeView    = _crmPrefGet('crm.pipeline.view', 'board');
   let _crmPipeCompact = _crmPrefGet('crm.pipeline.compact', '0') === '1';
-  let _crmPipeFilter  = { q: '', customers: false, hasValue: false, source: '', score: '' };
+  let _crmPipeFilter  = { q: '', customers: false, hasValue: false, source: '', score: '', division: '' };
   let _crmColLimit    = {};
   let _crmListSort    = { key: 'created', dir: 'desc' };
   // Card order inside each board column: newest | score (hot first) | follow-up (soonest due first) | value
@@ -60790,7 +60790,7 @@ async function submitDsCreate() {
   }
 
   function _crmFilterActive() {
-    return !!(_crmPipeFilter.q || _crmPipeFilter.customers || _crmPipeFilter.hasValue || _crmPipeFilter.source || _crmPipeFilter.score);
+    return !!(_crmPipeFilter.q || _crmPipeFilter.customers || _crmPipeFilter.hasValue || _crmPipeFilter.source || _crmPipeFilter.score || _crmPipeFilter.division);
   }
 
   function _crmLeadMatches(lead) {
@@ -60798,6 +60798,7 @@ async function submitDsCreate() {
     if (_crmPipeFilter.hasValue && !(_crmDealValue(lead) > 0)) return false;
     if (_crmPipeFilter.source && (lead.source || '') !== _crmPipeFilter.source) return false;
     if (_crmPipeFilter.score === 'none' ? !!lead.score : _crmPipeFilter.score && lead.score !== _crmPipeFilter.score) return false;
+    if (_crmPipeFilter.division && !_crmDivisionMatches(lead)) return false;
     if (!_crmPipeFilter.q) return true;
     const hay = [lead.name, lead.company, lead.email, lead.phone, _crmSource(lead.source)?.label].filter(Boolean).join(' ').toLowerCase();
     return _crmPipeFilter.q.split(/\s+/).every(t => hay.includes(t));
@@ -60831,8 +60832,40 @@ async function submitDsCreate() {
     sel?.classList.toggle('active', !!_crmPipeFilter.source);
   }
 
+  // Division filter values: '' all, 'mine' the divisions this user heads, 'none' no division, else a division id
+  function _crmMyDivisionIds() {
+    const uid = _crmAccess?.user_id;
+    return (_crmPipeline?.divisions || []).filter(d => uid && d.head_user_id === uid).map(d => d.id);
+  }
+
+  function _crmDivisionMatches(lead) {
+    const f = _crmPipeFilter.division;
+    if (f === 'none') return !lead.division_id;
+    if (f === 'mine') return _crmMyDivisionIds().includes(lead.division_id);
+    return lead.division_id === Number(f);
+  }
+
+  // Shown only when the relation's department has divisions; counts are across the whole pipeline.
+  function _crmRenderDivisionFilter() {
+    const sel = $('#crm-pipe-division');
+    if (!sel) return;
+    const divisions = _crmPipeline?.divisions || [];
+    sel.style.display = divisions.length ? '' : 'none';
+    if (!divisions.length) { _crmPipeFilter.division = ''; return; }
+    const counts = {};
+    (_crmPipeline.columns || []).forEach(c => c.leads.forEach(l => { const k = l.division_id || 'none'; counts[k] = (counts[k] || 0) + 1; }));
+    const mine = _crmMyDivisionIds();
+    sel.innerHTML = '<option value="">All divisions</option>'
+      + (mine.length ? `<option value="mine">My division${mine.length !== 1 ? 's' : ''} (${mine.reduce((n, id) => n + (counts[id] || 0), 0)})</option>` : '')
+      + divisions.map(d => `<option value="${d.id}">${escHtml(d.name)} (${counts[d.id] || 0})</option>`).join('')
+      + `<option value="none">No division (${counts.none || 0})</option>`;
+    sel.value = _crmPipeFilter.division;
+    if (sel.value !== _crmPipeFilter.division) { _crmPipeFilter.division = ''; sel.value = ''; }
+    sel.classList.toggle('active', !!_crmPipeFilter.division);
+  }
+
   function _crmResetPipelineView() {
-    _crmPipeFilter = { q: '', customers: false, hasValue: false, source: '', score: '' };
+    _crmPipeFilter = { q: '', customers: false, hasValue: false, source: '', score: '', division: '' };
     _crmColLimit = {};
     const input = $('#crm-pipe-search'); if (input) input.value = '';
     const score = $('#crm-pipe-score'); if (score) { score.value = ''; score.classList.remove('active'); }
@@ -60852,6 +60885,8 @@ async function submitDsCreate() {
       density.style.display = _crmPipeView === 'board' ? '' : 'none';
       density.title = _crmPipeCompact ? 'Detailed cards' : 'Compact cards';
     }
+    // Before drawing, so a division filter left over from another relation is cleared first
+    _crmRenderDivisionFilter();
     if (_crmPipeView === 'list') _renderLeadList(); else _renderBoard();
     _crmRenderSourceFilter();
 
@@ -60998,6 +61033,11 @@ async function submitDsCreate() {
   }));
   $('#crm-pipe-source')?.addEventListener('change', e => {
     _crmPipeFilter.source = e.target.value;
+    _crmColLimit = {};
+    _crmRenderPipelineView();
+  });
+  $('#crm-pipe-division')?.addEventListener('change', e => {
+    _crmPipeFilter.division = e.target.value;
     _crmColLimit = {};
     _crmRenderPipelineView();
   });
@@ -62184,12 +62224,16 @@ async function submitDsCreate() {
   $('#crm-won-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseWon(); });
 
   function _crmDivisionFieldHtml(lead) {
-    const divisions = _crmPipeline?.divisions || [];
-    if (!divisions.length || !_crmLeadCan(lead, 'assign')) return '';
+    // Divisions the user may move the lead into (a division head: only their own), plus its current one
+    const all = _crmPipeline?.divisions || [];
+    const divisions = all.filter(d => d.can_place !== false || d.id === lead.division_id);
+    if (!divisions.some(d => d.can_place !== false) || !_crmLeadCan(lead, 'assign')) return '';
+    // Taking a lead out of every division is for those who may place it anywhere
+    const anyDivision = all.every(d => d.can_place !== false);
     return `<div class="po-field">
       <label class="po-field-label">Division</label>
       <select id="crm-lead-view-division" class="po-field-input" style="appearance:auto">
-        <option value="">— No division —</option>
+        ${anyDivision || !lead.division_id ? '<option value="">— No division —</option>' : ''}
         ${divisions.map(d => `<option value="${d.id}"${d.id === lead.division_id ? ' selected' : ''}>${escHtml(d.name)}</option>`).join('')}
       </select>
     </div>`;
@@ -65555,15 +65599,37 @@ async function submitDsCreate() {
     const primary = data.assignees.find(a => a.is_primary)?.id;
     // Someone already on the lead who has since left the department stays listed (untick to remove)
     const pickable = [
-      ...data.assignees.filter(a => !data.assignable_users.some(u => u.id === a.id)).map(a => ({ id: a.id, name: `${a.name} (not in the department)` })),
+      ...data.assignees.filter(a => !data.assignable_users.some(u => u.id === a.id)).map(a => ({ id: a.id, name: a.name, role: 'left' })),
       ...data.assignable_users,
     ];
-    const rows = pickable.map(u => `
-      <div class="crm-assign-row">
+    // Grouped: heads, division heads, the department's own staff, then people added from each other department
+    const GROUP = {
+      head:          u => ['0', 'Department heads'],
+      division_head: u => ['1', 'Division heads'],
+      staff:         u => ['2', `${u.department_name || 'Department'} staff`],
+      member:        u => [`3${u.department_name || '~'}`, `From ${u.department_name || 'no department'}`, 'added through CRM'],
+      left:          u => ['9', 'No longer in the department', 'untick to remove'],
+    };
+    const groups = new Map();
+    pickable.forEach(u => {
+      const [key, title, note] = (GROUP[u.role] || (x => [`5${x.department_name || '~'}`, x.department_name || 'No department']))(u);
+      if (!groups.has(key)) groups.set(key, { title, note, people: [] });
+      groups.get(key).people.push(u);
+    });
+    const row = u => {
+      const sub = [u.division_name ? `Heads ${u.division_name}` : '', u.job_title, u.email].filter(Boolean).map(escHtml).join(' · ');
+      const search = [u.name, u.email, u.job_title, u.department_name, u.division_name].filter(Boolean).join(' ').toLowerCase();
+      return `<div class="crm-assign-row" data-assign-search="${escHtml(search)}">
         <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}>
-          <span class="crm-assign-av">${escHtml(String(u.name || '?').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join('').toUpperCase())}</span>
-          <span class="crm-assign-name">${escHtml(u.name)}</span></label>
+          <span class="crm-assign-av">${escHtml(_crmInitials(u.name || '?'))}</span>
+          <span class="crm-assign-who"><span class="crm-assign-name">${escHtml(u.name)}</span>${sub ? `<span class="crm-assign-sub">${sub}</span>` : ''}</span></label>
         <label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
+      </div>`;
+    };
+    const rows = [...groups.keys()].sort().map(k => groups.get(k)).map(g => `
+      <div class="crm-assign-group" data-assign-group>
+        <div class="crm-assign-group-title">${escHtml(g.title)}${g.note ? ` <small>· ${escHtml(g.note)}</small>` : ''}<span>${g.people.length}</span></div>
+        ${g.people.map(row).join('')}
       </div>`).join('');
     const history = data.history.map(h => `
       <div class="crm-ws-tl-item">
@@ -65576,10 +65642,40 @@ async function submitDsCreate() {
       </div>`).join('');
     $('#crm-assign-body').innerHTML = `
       <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.</div>
-      <div class="crm-assign-list">${rows || _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet — link the staff to users in HR.')}</div>
+      ${pickable.length ? `<div class="crm-assign-tools">
+        <div class="crm-assign-search"><i class="fa fa-magnifying-glass"></i>
+          <input type="text" id="crm-assign-search" autocomplete="off" placeholder="Search name, email, department or job title…"></div>
+        <span class="crm-assign-count" id="crm-assign-count"></span>
+      </div>` : ''}
+      <div class="crm-assign-list">${rows || _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet — link the staff to users in HR.')}
+        <div class="crm-assign-none" id="crm-assign-none" hidden>No one matches your search.</div></div>
       ${history ? `<details class="crm-assign-history"><summary>Assignment history (${data.history.length})</summary><div class="crm-ws-tl">${history}</div></details>` : ''}`;
     $('#crm-assign-save').disabled = !data.can_assign;
+    _crmAssignCount();
   }
+
+  function _crmAssignCount() {
+    const el = $('#crm-assign-count');
+    if (el) el.textContent = `${$$('#crm-assign-body [data-assign-user]:checked').length} selected`;
+  }
+
+  // Filtering hides rows instead of re-rendering, so ticks and the star survive a search
+  $('#crm-assign-body')?.addEventListener('input', e => {
+    if (e.target.id !== 'crm-assign-search') return;
+    const q = e.target.value.trim().toLowerCase();
+    let shown = 0;
+    $$('#crm-assign-body [data-assign-group]').forEach(g => {
+      let n = 0;
+      g.querySelectorAll('[data-assign-search]').forEach(r => {
+        const hit = !q || r.dataset.assignSearch.includes(q);
+        r.hidden = !hit;
+        if (hit) n++;
+      });
+      g.hidden = !n;
+      shown += n;
+    });
+    $('#crm-assign-none').hidden = shown > 0;
+  });
 
   function _crmCloseAssignModal() {
     _macHide($('#crm-assign-modal'));
@@ -65592,6 +65688,7 @@ async function submitDsCreate() {
     if (!row) return;
     if (e.target.type === 'radio') row.querySelector('[data-assign-user]').checked = true;
     if (e.target.matches('[data-assign-user]') && !e.target.checked) row.querySelector('input[type=radio]').checked = false;
+    _crmAssignCount();
   });
   $('#crm-assign-close')?.addEventListener('click', _crmCloseAssignModal);
   $('#crm-assign-cancel')?.addEventListener('click', _crmCloseAssignModal);
@@ -66868,9 +66965,178 @@ async function submitDsCreate() {
     }).join('') || `<span class="mac-side-empty">No department matches “${escHtml(q)}”.</span>`;
   }
 
-  function _crmOrgUserOptions(selectedId) {
-    return `<option value="">Head: department head</option>` + _crmOrg.users.map(u =>
-      `<option value="${u.id}"${u.id === selectedId ? ' selected' : ''}>Head: ${escHtml(u.name)}</option>`).join('');
+  // Searchable user picker (name or email). The hidden input carries `data-f` so the
+  // row's body readers see the picked id. `emptyLabel` is the "no one" choice, if any;
+  // `users` limits the choices (defaults to every business user).
+  function _crmOrgUserCombo(field, selectedId, { users = null, emptyLabel = '', placeholder = 'Search name, email or department…', style = '' } = {}) {
+    const cur = _crmOrg.users.find(u => u.id === selectedId);
+    return `<div class="cat-combo" data-org-user-combo style="${style}"
+        data-empty-label="${escHtml(emptyLabel)}"${users ? ` data-user-ids="${users.map(u => u.id).join(',')}"` : ''}>
+      <input type="hidden" data-f="${field}" value="${cur ? cur.id : ''}">
+      <input type="text" class="po-field-input" style="width:100%" autocomplete="off" placeholder="${escHtml(emptyLabel || placeholder)}" value="${cur ? escHtml(cur.name) : ''}">
+      <div class="cat-combo-list org-pick-list" style="display:none"></div>
+    </div>`;
+  }
+
+  function _crmWireOrgUserCombos(root) {
+    root.querySelectorAll('[data-org-user-combo]').forEach(combo => {
+      const hidden = combo.querySelector('input[type="hidden"]');
+      const input  = combo.querySelector('input[type="text"]');
+      const list   = combo.querySelector('.cat-combo-list');
+      const ids    = combo.dataset.userIds != null ? new Set(combo.dataset.userIds.split(',').filter(Boolean).map(Number)) : null;
+      const users  = ids ? _crmOrg.users.filter(u => ids.has(u.id)) : _crmOrg.users;
+      const emptyLabel = combo.dataset.emptyLabel || '';
+      let items = [], active = -1;
+
+      // Results are grouped by HR department: the open department first, then A–Z, "No department" last.
+      // `items` keeps the rendered order so keyboard moves match what is on screen.
+      const render = filter => {
+        const q = (filter || '').trim().toLowerCase();
+        const matches = users.filter(u => !q || [u.name, u.email, u.department_name, u.job_title]
+          .some(v => v && v.toLowerCase().includes(q)));
+        const groups = new Map();
+        matches.forEach(u => {
+          const key = u.department_id || 0;
+          if (!groups.has(key)) groups.set(key, { id: key, name: u.department_name || 'No department', people: [] });
+          groups.get(key).people.push(u);
+        });
+        const rank = g => g.id === _crmOrgDeptId ? 0 : g.id === 0 ? 2 : 1;
+        const ordered = [...groups.values()].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+
+        items = [];
+        let html = '';
+        if (emptyLabel && !q) {
+          items.push({ id: '', name: emptyLabel, empty: true });
+          html += `<div class="cat-combo-item org-pick-item" data-i="0">
+            <span class="crm-dept-avatar org-pick-empty-icon"><i class="fa fa-user-tie"></i></span>
+            <span class="org-pick-main"><span class="org-pick-name">${escHtml(emptyLabel)}</span>
+              <span class="org-pick-sub">No one picked — the department's head runs it</span></span></div>`;
+        }
+        ordered.forEach(g => {
+          html += `<div class="org-pick-group">${escHtml(g.id === _crmOrgDeptId ? `${g.name} · this department` : g.name)}<span>${g.people.length}</span></div>`;
+          g.people.forEach(u => {
+            const i = items.push(u) - 1;
+            const places = _crmOrgOtherPlaces(u.id, null);
+            html += `<div class="cat-combo-item org-pick-item" data-i="${i}"${places ? ` title="${escHtml(places)}"` : ''}>
+              <span class="crm-dept-avatar">${escHtml(_crmInitials(u.name || '?'))}</span>
+              <span class="org-pick-main">
+                <span class="org-pick-name">${escHtml(u.name || '—')}</span>
+                <span class="org-pick-sub">${[u.job_title, u.email].filter(Boolean).map(escHtml).join(' · ') || '&nbsp;'}</span>
+              </span>
+              ${places.startsWith('Head of') ? '<span class="org-pick-tag org-pick-tag--here">Head</span>' : ''}
+            </div>`;
+          });
+        });
+        active = items.length ? 0 : -1;
+        list.innerHTML = html || `<div class="cat-combo-empty">No one matches “${escHtml(filter.trim())}”</div>`;
+        list.querySelector('.cat-combo-item')?.classList.add('active');
+        list.scrollTop = 0;
+        list.style.display = '';
+      };
+      const highlight = () => list.querySelectorAll('.cat-combo-item').forEach((el, i) => {
+        el.classList.toggle('active', i === active);
+        if (i === active) el.scrollIntoView({ block: 'nearest' });
+      });
+      const pick = u => {
+        hidden.value = u.empty ? '' : u.id;
+        input.value = u.empty ? '' : u.name;
+        list.style.display = 'none';
+      };
+
+      list.addEventListener('mousedown', ev => {
+        const item = ev.target.closest('.cat-combo-item');
+        if (!item) return;
+        ev.preventDefault();
+        pick(items[Number(item.dataset.i)]);
+      });
+      input.addEventListener('focus', () => { input.select(); render(''); });
+      input.addEventListener('input', () => render(input.value));
+      // Leaving the field without picking restores the current choice
+      input.addEventListener('blur', () => setTimeout(() => {
+        list.style.display = 'none';
+        input.value = users.find(u => String(u.id) === hidden.value)?.name || '';
+      }, 150));
+      input.addEventListener('keydown', e => {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (list.style.display === 'none') { render(input.value); return; }
+          if (!items.length) return;
+          active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+          highlight();
+        } else if (e.key === 'Enter' && list.style.display !== 'none' && items[active]) {
+          e.preventDefault();
+          pick(items[active]);
+        } else if (e.key === 'Escape' && list.style.display !== 'none') {
+          e.preventDefault(); // keep the window open — just close the list
+          list.style.display = 'none';
+        }
+      });
+    });
+  }
+
+  function _crmOrgHeadCombo(selectedId) {
+    return _crmOrgUserCombo('head_user_id', selectedId, { emptyLabel: 'Head: department head', style: 'width:240px' });
+  }
+
+  // The other departments a user heads or works in (HR head or a CRM place), e.g. "Head of IT · Member of Support"
+  function _crmOrgOtherPlaces(userId, exceptDeptId) {
+    const heads = [], members = [];
+    _crmOrg.departments.forEach(x => {
+      if (x.id === exceptDeptId) return;
+      if ((x.head_user_ids || []).includes(userId)) heads.push(x.name);
+      else if ((x.members || []).some(m => m.user_id === userId)) members.push(x.name);
+    });
+    _crmOrg.departments.forEach(x => (x.divisions || []).forEach(v => {
+      if (v.head_user_id === userId) heads.push(`${x.name} › ${v.name}`);
+    }));
+    return [heads.length ? `Head of ${heads.join(', ')}` : '', members.length ? `Member of ${members.join(', ')}` : '']
+      .filter(Boolean).join(' · ');
+  }
+
+  function _crmOrgPeopleHtml(d) {
+    const person = p => p ? `${escHtml(p.name)}${p.user_name ? '' : ' <span class="crm-perms-muted">(no user)</span>'}` : '—';
+    const members = d.members || [];
+    const taken = new Set(members.map(m => m.user_id));
+    // Not already added, and not already HR staff of this department
+    const pickable = _crmOrg.users.filter(u => !taken.has(u.id) && u.department_id !== d.id);
+    const roleSelect = (role, attrs = '') => `<select class="po-field-input" data-f="role" style="width:130px"${attrs}>
+      <option value="member"${role === 'member' ? ' selected' : ''}>Member</option>
+      <option value="head"${role === 'head' ? ' selected' : ''}>Head</option></select>`;
+
+    return `
+      <div class="mac-section">
+        <div class="mac-section-title">People <span class="crm-perms-muted" style="font-weight:400">· ${d.staff_count || 0} from HR + extra people you add</span></div>
+        <div class="mac-group">
+          <div class="mac-row">
+            <div class="mac-row-label mac-row-label--icon"><span class="mac-row-icon"><i class="fa fa-id-badge"></i></span>
+              <span><strong>From HR:</strong> ${d.head ? `Head ${person(d.head)}` : 'No head'}${d.co_head ? ` · Co-head ${person(d.co_head)}` : ''} · ${d.staff_count ? `${d.staff_count} staff` : 'No staff'}
+              <small>Change these in HR → Departments.</small></span></div>
+          </div>
+          ${members.map(m => {
+            const other = _crmOrgOtherPlaces(m.user_id, d.id);
+            return `<div class="mac-row mac-row--fields" data-org-member="${m.id}">
+              <div class="mac-row-label mac-row-label--icon" style="flex:1;min-width:150px">
+                <span class="mac-row-icon"><i class="fa ${m.role === 'head' ? 'fa-user-tie' : 'fa-user'}"></i></span>
+                <span><strong>${escHtml(m.user_name || 'User #' + m.user_id)}</strong>${m.role === 'head' ? ' <span class="mac-pill">Head</span>' : ''}
+                <small>${escHtml(other || 'Only in this department through CRM')}</small></span>
+              </div>
+              ${roleSelect(m.role, ' data-org-member-role')}
+              <button type="button" class="po-btn-ghost mac-icon-btn" data-org-member-remove title="Remove from ${escHtml(d.name)}"><i class="fa fa-user-minus" style="color:#ff3b30"></i></button>
+            </div>`;
+          }).join('') || `<div class="mac-row mac-muted-row"><span><strong>No extra people.</strong> Add someone from another department who should also work ${escHtml(d.name)} leads.</span></div>`}
+          <div class="mac-row mac-row--fields" data-org-member-new>
+            ${_crmOrgUserCombo('user_id', null, { users: pickable, placeholder: 'Add someone from another department…', style: 'flex:1;min-width:150px' })}
+            ${roleSelect('member')}
+            <button type="button" class="po-btn-primary" data-org-member-add><i class="fa fa-user-plus"></i> Add</button>
+          </div>
+          <div class="mac-row mac-muted-row" style="font-size:12px">
+            <div style="line-height:1.6">
+              <div><i class="fa fa-user" style="width:16px"></i> <strong>Member</strong> — works ${escHtml(d.name)} leads like its own staff.</div>
+              <div><i class="fa fa-user-tie" style="width:16px"></i> <strong>Head</strong> — same powers as the department head: assigns leads, approves quotations and stage moves, and gets the head's alerts. One person can head several departments.</div>
+            </div>
+          </div>
+        </div>
+      </div>`;
   }
 
   function _crmRenderOrgEditor() {
@@ -66879,6 +67145,7 @@ async function submitDsCreate() {
     if (!d) { body.innerHTML = '<span class="crm-perms-muted">Select a department.</span>'; return; }
 
     const person = p => p ? `${escHtml(p.name)}${p.user_name ? '' : ' <span class="crm-perms-muted">(no user)</span>'}` : '—';
+    const extraHeads = (d.members || []).filter(m => m.role === 'head').map(m => escHtml(m.user_name || ''));
     const linkable = _crmOrg.pipelines.filter(p => p.department_id === null);
     const s = d.settings;
 
@@ -66887,13 +67154,15 @@ async function submitDsCreate() {
         <span class="mac-hero-icon"><i class="fa fa-building"></i></span>
         <div style="min-width:0;flex:1">
           <div class="mac-hero-name">${escHtml(d.name)}</div>
-          <div class="mac-hero-sub">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''} · ${d.staff_count} staff</div>
+          <div class="mac-hero-sub">Head: ${person(d.head)}${d.co_head ? ' · Co-head: ' + person(d.co_head) : ''}${extraHeads.length ? ' · Also headed by ' + extraHeads.join(', ') : ''} · ${d.staff_count} staff${(d.members || []).length ? ` + ${d.members.length} from CRM` : ''}</div>
         </div>
         ${s.is_marketing_intake ? '<span class="mac-pill">Marketing intake</span>' : ''}
       </div>
       ${d.warnings.length ? `<div class="mac-callout"><i class="fa fa-triangle-exclamation"></i><div>
         <strong>${d.warnings.length === 1 ? '1 thing needs' : `${d.warnings.length} things need`} attention</strong>
         <ul>${d.warnings.map(w => `<li>${escHtml(w)}</li>`).join('')}</ul></div></div>` : ''}
+
+      ${_crmOrgPeopleHtml(d)}
 
       <div class="mac-section">
         <div class="mac-section-title">Pipelines</div>
@@ -66941,14 +67210,14 @@ async function submitDsCreate() {
         <div class="mac-group">
           ${d.divisions.map(v => `<div class="mac-row mac-row--fields" data-org-div="${v.id}">
             <input type="text" class="po-field-input" data-f="name" value="${escHtml(v.name)}" maxlength="150" style="flex:1;min-width:150px">
-            <select class="po-field-input" data-f="head_user_id" style="width:210px">${_crmOrgUserOptions(v.head_user_id)}</select>
+            ${_crmOrgHeadCombo(v.head_user_id)}
             <label class="mac-switch-label"><input type="checkbox" class="mac-switch" data-f="is_active"${v.is_active ? ' checked' : ''}> Active</label>
             <button type="button" class="po-btn-ghost" data-org-div-save><i class="fa fa-check"></i> Save</button>
             <button type="button" class="po-btn-ghost mac-icon-btn" data-org-div-delete title="Delete division"><i class="fa fa-trash" style="color:#ff3b30"></i></button>
           </div>`).join('') || '<div class="mac-row mac-muted-row">No divisions yet.</div>'}
           <div class="mac-row mac-row--fields" data-org-div-new>
             <input type="text" class="po-field-input" data-f="name" placeholder="New division name" maxlength="150" style="flex:1;min-width:150px">
-            <select class="po-field-input" data-f="head_user_id" style="width:210px">${_crmOrgUserOptions(null)}</select>
+            ${_crmOrgHeadCombo(null)}
             <button type="button" class="po-btn-primary" data-org-div-add><i class="fa fa-plus"></i> Add division</button>
           </div>
         </div>
@@ -66983,6 +67252,7 @@ async function submitDsCreate() {
           </div>
         </div>
       </div>`;
+    _crmWireOrgUserCombos(body);
   }
 
   function _crmOrgDivisionBody(row) {
@@ -67046,6 +67316,21 @@ async function submitDsCreate() {
       const divId = Number(t.closest('[data-org-div]').dataset.orgDiv);
       call = () => API.crmDeleteDivision(divId);
       msg = 'Division deleted.';
+    } else if (t.matches('[data-org-member-add]')) {
+      const row = t.closest('[data-org-member-new]');
+      const userId = row.querySelector('[data-f="user_id"]').value;
+      if (!userId) { _crmOrgAlert('Pick a person to add.'); return; }
+      const role = row.querySelector('[data-f="role"]').value;
+      call = () => API.crmAddDepartmentMember(deptId, { user_id: Number(userId), role });
+      msg = role === 'head' ? 'Head added.' : 'Member added.';
+      flashSel = '[data-org-member-add]';
+    } else if (t.matches('[data-org-member-remove]')) {
+      const row = t.closest('[data-org-member]');
+      const name = row.querySelector('strong')?.textContent || 'this person';
+      if (!await appConfirm({ title: `Remove ${name}?`, message: 'They stop working this department\'s leads. Their HR department is not changed, and leads already assigned to them stay assigned.', confirmText: '<i class="fa fa-user-minus"></i> Remove', icon: 'fa-user-minus', danger: true })) return;
+      const memberId = Number(row.dataset.orgMember);
+      call = () => API.crmRemoveDepartmentMember(memberId);
+      msg = 'Removed from the department.';
     } else if (t.matches('[data-org-save-cc]')) {
       const cc = $('#crm-org-phone-cc').value.trim();
       call = () => API.crmSaveSettings({ phone_country_code: cc || null });
@@ -67065,10 +67350,25 @@ async function submitDsCreate() {
     if (res.status === 200 || res.status === 201) {
       toast(msg, 'success');
       await _crmLoadOrg();
-      _crmOrgFlashSaved(flashSel, flashSel === '[data-org-div-add]' ? 'Added' : 'Saved');
+      _crmOrgFlashSaved(flashSel, ['[data-org-div-add]', '[data-org-member-add]'].includes(flashSel) ? 'Added' : 'Saved');
     } else {
       t.disabled = false;
       _crmOrgError(res, 'Failed to save.');
+    }
+  });
+
+  // Switching a person between member and head saves straight away
+  $('#crm-org-editor-body')?.addEventListener('change', async e => {
+    const sel = e.target.closest('[data-org-member-role]');
+    if (!sel) return;
+    sel.disabled = true;
+    const res = await API.crmUpdateDepartmentMember(Number(sel.closest('[data-org-member]').dataset.orgMember), { role: sel.value });
+    if (res.status === 200) {
+      toast(sel.value === 'head' ? 'Now a head of this department.' : 'Now a member of this department.', 'success');
+      await _crmLoadOrg();
+    } else {
+      sel.disabled = false;
+      _crmOrgError(res, 'Failed to change the role.');
     }
   });
 

@@ -232,6 +232,18 @@ body.dark .mac-titlebar--traffic{background:linear-gradient(rgba(255,255,255,.04
 .crm-dept-stat span{font-size:11.5px;color:var(--mac-muted)}
 .crm-dept-avatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .crm-dept-foot-count{margin-right:auto;font-size:12px;color:var(--mac-muted)}
+/* Org structure people picker: results grouped by HR department */
+.org-pick-list{max-height:320px!important;padding:4px 0}
+.org-pick-group{position:sticky;top:-4px;z-index:1;padding:7px 12px 4px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mac-muted);background:var(--surface);border-top:1px solid var(--border)}
+.org-pick-group:first-child{border-top:0}
+.org-pick-group span{font-weight:500;text-transform:none;letter-spacing:0;margin-left:4px}
+.org-pick-item{display:flex;align-items:center;gap:10px;padding:7px 12px!important}
+.org-pick-main{flex:1;min-width:0;line-height:1.3}
+.org-pick-name{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org-pick-sub{display:block;font-size:11.5px;opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org-pick-tag{flex-shrink:0;font-size:10.5px;padding:2px 7px;border-radius:999px;color:var(--mac-muted);background:color-mix(in srgb,var(--mac-muted) 12%,transparent)}
+.org-pick-tag--here{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.org-pick-empty-icon{background:color-mix(in srgb,var(--mac-muted) 14%,transparent);color:var(--mac-muted)}
 .mac-detail{flex:1;min-width:0;min-height:0;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:14px}
 .mac-detail-body{display:flex;flex-direction:column;gap:20px}
 /* simple form windows (e.g. CRM New Relation) */
@@ -1736,10 +1748,28 @@ body.dark .crm-qtx-dock{background:linear-gradient(transparent,#222226 16px)}
 .crm-assign-primary input:checked + i{color:#f59e0b}
 .crm-assign-history summary{font-size:12px;color:var(--text-muted);cursor:pointer;margin-bottom:8px}
 /* Assign Lead as a macOS window — grouped people list; the star toggles the primary */
-.crm-assign-win{width:460px;max-width:94vw;max-height:86vh}
-.crm-assign-main{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding:16px 20px}
-.crm-assign-win .crm-ws-muted{font-size:12px;line-height:1.5;color:var(--mac-muted)}
-.crm-assign-win .crm-assign-list{border:0;border-radius:10px;padding:4px;max-height:340px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 2px rgba(0,0,0,.04)}
+/* Only the people list scrolls: the hint, search, history toggle and note stay in place */
+.crm-assign-win{width:540px;max-width:94vw;height:min(700px,86vh);max-height:86vh}
+.crm-assign-main{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:12px;padding:16px 20px}
+#crm-assign-body{flex:1;min-height:0}
+#crm-assign-note{flex-shrink:0;min-height:52px}
+.crm-assign-win .crm-ws-muted{font-size:12px;line-height:1.5;color:var(--mac-muted);flex-shrink:0}
+.crm-assign-win .crm-assign-list{flex:1;min-height:140px;max-height:none;display:block;overflow-y:auto;border:0;border-radius:10px;padding:0 4px 4px;background:var(--mac-panel);box-shadow:0 0 0 .5px var(--mac-line),0 1px 2px rgba(0,0,0,.04)}
+.crm-assign-tools{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.crm-assign-search{flex:1;display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:8px;background:var(--mac-fill);color:var(--mac-muted);font-size:12px}
+.crm-assign-search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent)}
+.crm-assign-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:13px;color:var(--text)}
+.crm-assign-count{font-size:12px;font-weight:600;color:var(--mac-muted);white-space:nowrap}
+.crm-assign-group[hidden],.crm-assign-row[hidden]{display:none!important}
+.crm-assign-group-title{position:sticky;top:0;z-index:1;display:flex;align-items:baseline;gap:4px;padding:9px 8px 5px;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mac-muted);background:var(--mac-panel)}
+.crm-assign-group-title small{font-size:10.5px;font-weight:500;letter-spacing:0;text-transform:none}
+.crm-assign-group-title span{margin-left:auto;font-weight:600;letter-spacing:0}
+.crm-assign-group+.crm-assign-group{border-top:1px solid var(--mac-line)}
+.crm-assign-who{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.crm-assign-sub{font-size:11.5px;color:var(--mac-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.crm-assign-none{padding:24px 12px;text-align:center;font-size:12.5px;color:var(--mac-muted)}
+.crm-assign-win .crm-assign-history{flex-shrink:0}
+.crm-assign-win .crm-assign-history[open] .crm-ws-tl{max-height:170px;overflow-y:auto}
 .crm-assign-win .crm-assign-row{border:0;border-radius:7px;padding:5px 6px 5px 10px;font-size:13px;transition:background .12s}
 .crm-assign-win .crm-assign-row:hover{background:var(--mac-hover)}
 .crm-assign-win .crm-assign-row:has([data-assign-user]:checked){background:rgba(0,122,255,.08)}
@@ -12119,6 +12149,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                 <button class="crm-chip" data-crm-filter="customers" title="Only leads that already exist as customers"><i class="fa fa-circle-check"></i> Customers</button>
                 <button class="crm-chip" data-crm-filter="hasValue" title="Only leads with an estimated value"><i class="fa fa-coins"></i> Has value</button>
                 <select class="crm-chip crm-chip--select" id="crm-pipe-source" title="Filter by lead source"><option value="">All sources</option></select>
+                <select class="crm-chip crm-chip--select" id="crm-pipe-division" title="Filter by division" style="display:none"><option value="">All divisions</option></select>
                 <select class="crm-chip crm-chip--select" id="crm-pipe-score" title="Filter by score (Hot / Warm / Cold)">
                   <option value="">All scores</option><option value="hot">Hot</option><option value="warm">Warm</option><option value="cold">Cold</option><option value="none">Not scored</option>
                 </select>

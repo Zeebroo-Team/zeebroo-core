@@ -233,8 +233,11 @@ class LeadController extends Controller
         if ($changeAssignee && $assignee !== null) {
             $this->assignments->assertAssignable($lead, [$assignee]);
         }
-        // Like the assignee, only those who may assign place the lead in a division
-        if (! $this->leadPolicy()->canAssign($access, $lead)) {
+        // Like the assignee, only those who may assign place the lead in a division — a division
+        // head only in one of the divisions they head
+        $newDivision = isset($data['division_id']) ? (int) $data['division_id'] : null;
+        if (! $this->leadPolicy()->canAssign($access, $lead)
+            || ($newDivision !== (int) $lead->division_id && ! $this->leadPolicy()->canPlaceInDivision($access, $lead->project, $newDivision))) {
             unset($data['division_id']);
         }
         if (isset($data['stage_id']) && (int) $data['stage_id'] !== (int) $lead->stage_id) {

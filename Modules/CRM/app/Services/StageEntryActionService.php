@@ -62,7 +62,7 @@ class StageEntryActionService
                     $ids[] = (int) $lead->assigned_to;
                 }
                 if ($notify['head']) {
-                    $ids[] = $this->notifier->headUserIdForLead($lead);
+                    $ids = [...$ids, ...$this->notifier->headUserIdsForLead($lead)];
                 }
                 $this->notifier->notify($lead, array_filter($ids), CrmNotifier::TYPE_LEAD_STAGE,
                     'Lead moved to ' . $stage->name,

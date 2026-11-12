@@ -50,7 +50,7 @@ class StageMoveRequestService
         });
 
         $by = $userId ? User::query()->whereKey($userId)->value('name') : null;
-        $this->notifier->notify($lead, [$this->notifier->headUserIdForLead($lead)], CrmNotifier::TYPE_STAGE_APPROVAL,
+        $this->notifier->notify($lead, $this->notifier->headUserIdsForLead($lead), CrmNotifier::TYPE_STAGE_APPROVAL,
             'Stage move waiting for your approval',
             ($by ?? 'Someone') . ' wants to move ' . $this->leadName($lead) . ' to "' . $to->name . '".'
                 . (filled($context['reason'] ?? null) ? "\nReason: " . $context['reason'] : ''),

@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\CRM\Models\DepartmentMember;
 use Modules\CRM\Models\DepartmentSetting;
 use Modules\CRM\Models\Division;
 use Modules\CRM\Models\Project;
@@ -27,6 +28,7 @@ function crmOrgMigrations(): array
         $dir . '2026_10_31_100100_add_department_id_to_crm_projects_table.php',
         $dir . '2026_10_31_100200_create_crm_department_settings_table.php',
         $dir . '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
+        $dir . '2026_11_12_100000_create_crm_department_members_table.php',
     ];
 }
 
@@ -215,6 +217,80 @@ test('department members are the HR staff with a login', function () {
         ->and($this->org->memberUserIds($this->mkt))->toBe([4]);
 });
 
+// ── Extra members and heads (crm_department_members) ─────────────────────
+
+test('a user from another department can be a member of this one too', function () {
+    // Kamala works in Marketing (HR) and is added to Sales through the CRM
+    $this->org->saveMember($this->business, $this->sales, 4, DepartmentMember::ROLE_MEMBER);
+
+    expect($this->org->memberUserIds($this->sales))->toEqualCanonicalizing([2, 3, 4])
+        ->and($this->org->departmentIdsForUser($this->business, 4))->toEqualCanonicalizing([10, 11])
+        ->and($this->org->headedDepartmentIds($this->business, 4))->toBe([])
+        ->and($this->org->assignableUsers($this->business, 10)->pluck('id')->sort()->values()->all())->toBe([2, 3, 4]);
+});
+
+test('one user can head several departments', function () {
+    // Nimal heads Sales in HR and Marketing through the CRM
+    $this->org->saveMember($this->business, $this->mkt, 2, DepartmentMember::ROLE_HEAD);
+
+    expect($this->org->headedDepartmentIds($this->business, 2))->toEqualCanonicalizing([10, 11])
+        ->and($this->org->headUserIds($this->mkt))->toBe([3, 2])
+        // the HR head (here the stand-in co-head) stays the main one
+        ->and($this->org->headUserId($this->mkt))->toBe(3);
+});
+
+test('an extra head stands in when the HR department has no head', function () {
+    DB::table('hr_departments')->where('id', 11)->update(['head_employee_id' => null, 'co_head_employee_id' => null]);
+    expect(collect($this->org->departments($this->business))->firstWhere('id', 11)['warnings'])->toContain('No department head is set.');
+
+    $this->org->saveMember($this->business, Department::find(11), 4, DepartmentMember::ROLE_HEAD);
+    $mkt = collect($this->org->departments($this->business))->firstWhere('id', 11);
+
+    expect($this->org->headUserId(Department::find(11)))->toBe(4)
+        ->and($mkt['head_user_id'])->toBe(4)
+        ->and($mkt['head_user_ids'])->toBe([4])
+        ->and($mkt['members'][0])->toMatchArray(['user_id' => 4, 'user_name' => 'Kamala', 'role' => 'head'])
+        ->and($mkt['warnings'])->not->toContain('No department head is set.');
+});
+
+test('a division head can also head another department and is assignable in their own', function () {
+    // Kamala heads the Solar division of Sales and the whole of Marketing (as an extra head)
+    $solar = $this->org->createDivision($this->business, $this->sales, ['name' => 'Solar', 'head_user_id' => 4]);
+    DB::table('hr_employees')->where('id', 104)->update(['department_id' => null]);
+    $this->org->saveMember($this->business, $this->mkt, 4, DepartmentMember::ROLE_HEAD);
+
+    expect($this->org->headedDivisions($this->business, 4))->toBe([$solar->id => 10])
+        ->and($this->org->headedDepartmentIds($this->business, 4))->toBe([11])
+        ->and($this->org->assignableUsers($this->business, 10)->pluck('id')->sort()->values()->all())->toBe([2, 3, 4])
+        // a Solar lead goes to the division head only; the rest of Sales to its heads
+        ->and($this->org->headUserIds($this->sales, $solar))->toBe([4])
+        ->and($this->org->headUserIds($this->sales))->toBe([2]);
+});
+
+test('placing a user again changes their role, and removing them leaves HR alone', function () {
+    $member = $this->org->saveMember($this->business, $this->sales, 4, DepartmentMember::ROLE_MEMBER);
+    $head   = $this->org->saveMember($this->business, $this->sales, 4, DepartmentMember::ROLE_HEAD);
+
+    expect($head->id)->toBe($member->id)
+        ->and(DepartmentMember::count())->toBe(1)
+        ->and($this->org->headedDepartmentIds($this->business, 4))->toBe([10]);
+
+    $this->org->removeMember($head);
+    expect($this->org->departmentIdsForUser($this->business, 4))->toBe([11]);
+});
+
+test('only users of the business can be placed, and a removed member gets no leads', function () {
+    expect(fn () => $this->org->saveMember($this->business, $this->sales, 9, DepartmentMember::ROLE_MEMBER))
+        ->toThrow(ValidationException::class)
+        ->and(fn () => $this->org->saveMember($this->business, $this->sales, 4, 'owner'))
+        ->toThrow(ValidationException::class);
+
+    $this->org->saveMember($this->business, $this->sales, 4, DepartmentMember::ROLE_MEMBER);
+    DB::table('business_members')->where('user_id', 4)->update(['status' => 'inactive']);
+
+    expect($this->org->memberUserIds($this->sales))->toEqualCanonicalizing([2, 3]);
+});
+
 test('only one department per business can be the marketing intake', function () {
     $this->org->saveSettings($this->business, $this->sales, ['is_marketing_intake' => true]);
     expect($this->org->marketingIntakeDepartment($this->business)->id)->toBe(10);
@@ -379,4 +455,32 @@ test('the API adds a division and links a new pipeline for an admin', function (
 
     expect(fn () => $api->storeDivision(crmOrgRequest(1, 'POST', ['name' => 'X']), 20))
         ->toThrow(ModelNotFoundException::class);
+});
+
+test('the API adds, re-roles and removes a department member for an admin only', function () {
+    $api = crmOrgApi();
+
+    $created = $api->storeMember(crmOrgRequest(1, 'POST', ['user_id' => 4, 'role' => 'member']), 10);
+    $id = $created->getData(true)['data']['id'];
+    expect($created->getStatusCode())->toBe(201);
+
+    $sales = collect($api->index(crmOrgRequest(1))->getData(true)['data']['departments'])->firstWhere('id', 10);
+    expect($sales['members'])->toHaveCount(1)
+        ->and($sales['members'][0]['user_name'])->toBe('Kamala');
+
+    expect($api->updateMember(crmOrgRequest(3, 'PUT', ['role' => 'head']), $id)->getData(true)['data']['role'])->toBe('head')
+        ->and(fn () => $api->updateMember(crmOrgRequest(1, 'PUT', ['role' => 'owner']), $id))->toThrow(ValidationException::class);
+
+    $status = function (callable $call) {
+        try {
+            return $call()->getStatusCode();
+        } catch (HttpResponseException $e) {
+            return $e->getResponse()->getStatusCode();
+        }
+    };
+    expect($status(fn () => $api->storeMember(crmOrgRequest(2, 'POST', ['user_id' => 2, 'role' => 'head']), 11)))->toBe(403)
+        ->and($status(fn () => $api->destroyMember(crmOrgRequest(2, 'DELETE'), $id)))->toBe(403);
+
+    expect($api->destroyMember(crmOrgRequest(1, 'DELETE'), $id)->getStatusCode())->toBe(200)
+        ->and(DepartmentMember::count())->toBe(0);
 });

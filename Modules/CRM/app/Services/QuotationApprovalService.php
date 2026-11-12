@@ -2,6 +2,7 @@
 
 namespace Modules\CRM\Services;
 
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -9,6 +10,7 @@ use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\CRM\Events\QuotationDecided;
 use Modules\CRM\Events\QuotationSubmitted;
+use Modules\CRM\Models\DepartmentMember;
 use Modules\CRM\Models\DepartmentSetting;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Models\LeadStage;
@@ -196,8 +198,9 @@ class QuotationApprovalService
 
     /**
      * Who a submitted quotation can be emailed to for approval: the lead's division head (when
-     * the lead sits in a division) and the department head / co-head — each a Zeebroo user with
-     * an email, once. Any one of them approving is enough.
+     * the lead sits in a division), the department head / co-head and the extra heads from Org
+     * Structure — each a Zeebroo user with an email whose CRM permissions let them approve, once.
+     * Any one of them approving is enough. A head taken off later loses their emailed link.
      *
      * @return list<array{id: int, name: string, email: string, role: string}>
      */
@@ -206,18 +209,37 @@ class QuotationApprovalService
         $lead->loadMissing(['division.headUser', 'department.headEmployee.user', 'department.coHeadEmployee.user']);
         $division = $lead->division !== null && (int) $lead->division->department_id === (int) $lead->department_id ? $lead->division : null;
 
+        // Heads placed through CRM → Org Structure, beside the HR head and co-head
+        $extraHeads = $lead->department_id === null ? collect() : DepartmentMember::query()
+            ->where('department_id', $lead->department_id)
+            ->where('role', DepartmentMember::ROLE_HEAD)
+            ->with('user:id,name,email')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (DepartmentMember $m) => [$m->user, 'Department head']);
+
         $list = [];
         foreach ([
             [$division?->headUser, 'Division head'],
             [$lead->department?->headEmployee?->user, 'Department head'],
             [$lead->department?->coHeadEmployee?->user, 'Department co-head'],
+            ...$extraHeads,
         ] as [$user, $role]) {
-            if ($user !== null && $user->email && ! isset($list[$user->id])) {
+            // Only heads whose CRM permissions let them approve: "Approve quotations" switched off
+            // for their role or for them, or a view-only role (CEO), keeps them off the email
+            if ($user !== null && $user->email && ! isset($list[$user->id]) && $this->mayApprove($lead, $user)) {
                 $list[$user->id] = ['id' => (int) $user->id, 'name' => $user->name, 'email' => $user->email, 'role' => $role];
             }
         }
 
         return array_values($list);
+    }
+
+    private function mayApprove(Lead $lead, User $user): bool
+    {
+        $access = app(CrmPermissionService::class)->accessFor($lead->business, $user);
+
+        return $this->policy->canApproveQuotation($access, $lead);
     }
 
     /**
