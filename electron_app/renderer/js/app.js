@@ -30968,8 +30968,9 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
 // invoice fields (invoice_number, customer_name, items, totals, etc.)
 function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   // Custom HTML owns its whole layout (header, letterhead, fonts) — no sentinels
-  if (ic.template === 'custom') return _qtplBuildDoc(ic.customHtml || QTPL_STARTERS.trading, inv, ic, cur);
-  const tpl  = _isetupResolveTpl(ic.template, ic.color);
+  // Custom selected but no HTML uploaded yet → print with Classic
+  if (ic.template === 'custom' && (ic.customHtml || '').trim()) return _qtplBuildDoc(ic.customHtml, inv, ic, cur);
+  const tpl  = _isetupResolveTpl(ic.template === 'custom' ? 'classic' : ic.template, ic.color);
   let   mg   = { top: ic.mgTop, bot: ic.mgBot, left: ic.mgLeft, right: ic.mgRight };
   const a    = tpl.accent;
   const biz  = escHtml(state.receiptSettings?.business_name        || 'Your Business');
@@ -31557,7 +31558,12 @@ function _isetupUpdatePreview(keepView) {
   if (_isetupActiveTpl === 'custom') {
     // Custom HTML renders with sample data through the same engine as printing
     const ic = { ...live, color: _isetupActiveColor || '' };
-    iframe.srcdoc = _qtplBuildDoc(_isetupCustomHtml || QTPL_STARTERS.trading, _qtplSampleInv(), ic, state.currency || '');
+    iframe.srcdoc = (_isetupCustomHtml || '').trim()
+      ? _qtplBuildDoc(_isetupCustomHtml, _qtplSampleInv(), ic, state.currency || '')
+      : `<!DOCTYPE html><html><body style="margin:0;font-family:Arial,sans-serif;color:#64748b;background:#fff">
+<div style="padding:120px 40px;text-align:center"><div style="font-size:42px;color:#cbd5e1">&lt;/&gt;</div>
+<div style="font-size:16px;font-weight:bold;color:#334155;margin-top:12px">No custom HTML yet</div>
+<div style="font-size:13px;margin-top:8px;line-height:1.5">Upload your own .html quotation layout, write one with Edit HTML,<br>or start from the blank skeleton.</div></div></body></html>`;
   } else {
     // Temporarily borrow the module-level sentinels so _iTPL* functions render
     // with the live paper size / header layout / letterhead placement.
@@ -31682,7 +31688,7 @@ async function openInvoiceSetup(kind = 'invoice') {
   if (orientEl) orientEl.checked = true;
   _isetupSyncThermalUI();
 
-  _isetupCustomHtml = cfg.customHtml || QTPL_STARTERS.trading;
+  _isetupCustomHtml = cfg.customHtml || '';
   _isetupSetCoding(false);
 
   _isetupLhDataUrl = null; // clear stale cache from previous open
@@ -31715,6 +31721,10 @@ async function _isetupSave() {
   };
   const isQt   = _isetupKind === 'quotation';
   const prefix = isQt ? 'quotation_' : 'invoice_';
+  if (tpl === 'custom' && !values.custom_html.trim()) {
+    toast('Custom HTML is empty — upload an .html layout or write one with Edit HTML first.', 'error');
+    return;
+  }
   if (values.custom_html.length > QTPL_MAX_HTML) {
     toast(`Custom HTML is too long (${values.custom_html.length.toLocaleString()} characters, max ${QTPL_MAX_HTML.toLocaleString()}). Link images from File Manager instead of embedding them.`, 'error');
     return;
@@ -32025,217 +32035,9 @@ function _qtplSampleInv() {
   };
 }
 
-// Starter layouts for the "Start from" menu. `trading` is a bordered trading-
-// company quotation letter: logo + company header, doc-type tick boxes, item
-// table with discounted price / VAT columns, terms & conditions and sign-off.
-// The page frame and footer image strip are position:fixed, so they repeat on
-// every printed page; the layout table's thead/tfoot keep content clear of them.
+// Starter layouts for the "Start from" menu. Only neutral skeletons live here —
+// a business's own quotation form is uploaded by that business and stored per business.
 const QTPL_STARTERS = {
-  trading: `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  @media dompdf{@page{margin:12mm 14mm 28mm 14mm}} /* server PDF page margins (see bottom) */
-  /* Prints the same from the desktop and from the server PDF (CRM download / email):
-     tables and inline blocks only — no flexbox, grid or calc(). The page frame and
-     footer strip are position:fixed so they repeat on every page. */
-  *{box-sizing:border-box}
-  body{margin:0;padding:0} /* not html — dompdf puts the @page margins on <html> */
-  body{font-family:'Times New Roman',Times,serif;font-size:12.5px;color:#000;background:#fff}
-  .frame{position:fixed;top:10mm;bottom:10mm;left:10mm;right:10mm;border:2px solid #000}
-  .brands{position:fixed;left:10mm;right:10mm;bottom:11mm;height:13mm;text-align:center}
-  /* Layout table: its header / footer rows repeat on every page and keep the
-     content inside the frame and clear of the footer strip */
-  .layout{width:100%}
-  .layout > thead td{height:12mm;padding:0}
-  .layout > tfoot td{height:28mm;padding:0}
-  .layout > tbody > tr > td{padding:0 14mm}
-  /* Server PDF (dompdf) — page margins instead of the repeating rows */
-  @media dompdf{
-    .layout,.layout > tbody,.layout > tbody > tr,.layout > tbody > tr > td{display:block;width:auto}
-    .layout > thead,.layout > tfoot{display:none}
-    .layout > tbody > tr > td{padding:0}
-    .frame{top:-2mm;bottom:-18mm;left:-4mm;right:-4mm}
-    .brands{left:-4mm;right:-4mm;bottom:-17mm}
-  }
-  .brands img{max-height:12mm;max-width:100%}
-  img[src=""]{display:none}
-  table{border-collapse:collapse}
-  .tick{font-family:'DejaVu Sans','Segoe UI Symbol',sans-serif;font-weight:bold}
-  .box{display:inline-block;width:8mm;height:6mm;line-height:6mm;border:2px solid #f59e0b;text-align:center;font-size:13px;vertical-align:middle}
-  /* Header — spans the full frame width */
-  .hd{margin:0 -3.5mm;padding:0 3.5mm 3mm;border-bottom:2px solid #000}
-  .hd-top{width:100%}
-  .hd-top td{vertical-align:middle}
-  .logo-cell{width:58mm}
-  .logo{max-height:20mm;max-width:55mm}
-  .co{text-align:center}
-  .co-name{font-family:'Arial Black',Helvetica,Arial,sans-serif;font-size:30px;font-weight:bold;color:{{accent}};line-height:1.15}
-  .co-info{font-size:15px;line-height:1.35}
-  .doc-type{text-align:center;margin-top:3mm;font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:21px}
-  .dt{display:inline-block;margin:0 7mm}
-  .vat{text-align:right;font-family:Helvetica,Arial,sans-serif;font-weight:bold;font-size:12px;margin-top:1mm}
-  .to-row{width:100%;margin-top:2mm;font-weight:bold;font-size:13px;line-height:1.35}
-  .to-row td{vertical-align:top;padding:0}
-  .to-addr{padding-left:6mm}
-  .ref{width:64mm}
-  .cats{margin:0 -3.5mm;padding:2mm 3.5mm;border-bottom:2px solid #000}
-  .cats table{width:100%;font-family:Calibri,Helvetica,Arial,sans-serif;font-weight:bold;font-size:17px}
-  .cats td{padding:0;white-space:nowrap}
-  /* Letter body */
-  .letter{padding:4mm 2mm 1mm;line-height:1.5}
-  .letter p{margin:0 0 3mm}
-  table.items{width:100%;margin-top:1mm}
-  table.items th,table.items td{border:1px solid #000;padding:2mm 1.5mm;vertical-align:middle}
-  table.items th{font-size:12px;font-weight:bold;text-align:center;vertical-align:top}
-  table.items th.hl{color:#dc2626}
-  table.items tr{page-break-inside:avoid}
-  td.sn{font-weight:bold;text-align:center;vertical-align:top;width:12mm}
-  td.it{text-align:center;line-height:1.35}
-  .it-name{font-weight:bold;text-decoration:underline;text-transform:uppercase}
-  td.c{text-align:center;white-space:nowrap;font-weight:bold}
-  .mark{background:#fde047;padding:0 1px}
-  tr.tot td{font-weight:bold}
-  tr.tot td.tl{text-align:right;padding-right:3mm}
-  tr.gt td{font-size:13.5px;background:#f1f5f9}
-  .notes{padding:4mm 2mm 0;line-height:1.5}
-  /* Terms + sign-off */
-  .terms{padding:5mm 2mm 0 6mm;line-height:1.5}
-  .terms h3{font-size:13px;text-decoration:underline;margin:0 0 3mm;page-break-after:avoid}
-  .terms p{margin:0 0 3mm;text-align:justify;page-break-inside:avoid}
-  .sign{padding:4mm 2mm 0 6mm;font-weight:bold;line-height:1.6;page-break-inside:avoid}
-  .sign .up{text-transform:uppercase}
-  .sign .gap{height:18mm}
-</style>
-</head>
-<body>
-
-<div class="frame"></div>
-<div class="brands">
-  <!-- Brand logos strip: put the cursor between the quotes of src="" below, then click "Image" to pick one from File Manager -->
-  <img src="" alt="">
-</div>
-
-<table class="layout">
-<thead><tr><td></td></tr></thead>
-<tfoot><tr><td></td></tr></tfoot>
-<tbody><tr><td>
-
-<div class="hd">
-  <table class="hd-top"><tr>
-    {{#logo_url}}<td class="logo-cell"><img class="logo" src="{{logo_url}}" alt=""></td>{{/logo_url}}
-    <td class="co">
-      <div class="co-name">{{business_name}}</div>
-      <div class="co-info">
-        {{business_address}}<br>
-        Tel: 011-0000000, 011-0000000, Fax: 011-0000000<br>
-        E-mail: info@yourcompany.lk
-      </div>
-    </td>
-  </tr></table>
-  <div class="doc-type">
-    <span class="dt">QUOTATION <span class="box tick">{{#is_quotation}}&#10003;{{/is_quotation}}</span></span>
-    <span class="dt">PROFORMA INVOICE <span class="box tick">{{#is_invoice}}&#10003;{{/is_invoice}}</span></span>
-  </div>
-  <div class="vat">Vat No: 000000000 &nbsp; 0000</div>
-  <table class="to-row"><tr>
-    <td>
-      To: {{customer_name}}
-      {{#customer_address}}<div class="to-addr">{{customer_address}}</div>{{/customer_address}}
-    </td>
-    <td class="ref">
-      Our Ref: {{number}}<br>
-      Date: {{date}}
-      {{#reference}}<br>Your Ref: {{reference}}{{/reference}}
-      {{#valid_until}}<br>Valid Until: {{valid_until}}{{/valid_until}}
-    </td>
-  </tr></table>
-</div>
-
-<div class="cats"><table><tr>
-  <td>METERS <span class="box tick">&#10003;</span></td>
-  <td>SAFETY <span class="box"></span></td>
-  <td>LIGHTING <span class="box"></span></td>
-  <td>TOOLS <span class="box"></span></td>
-  <td style="text-align:right">POWER UTILITIES</td>
-</tr></table></div>
-
-<div class="letter">
-  <p>Dear Sir,</p>
-  <p>With reference to your valued inquiry, we are pleased to quote as follows,</p>
-</div>
-
-<table class="items">
-  <thead>
-    <tr>
-      <th>S/No.</th>
-      <th>Item</th>
-      <th>Qty.</th>
-      <th>Unit Price{{#currency}}<br>({{currency}}){{/currency}}</th>
-      <th class="hl">Special Discounted Price{{#currency}} ({{currency}}){{/currency}}</th>
-      <th class="hl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
-      <th class="hl">Total Price with VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</th>
-    </tr>
-  </thead>
-  <tbody>
-    {{#items}}
-    <tr>
-      <td class="sn">{{no_padded}}</td>
-      <td class="it">
-        <div class="it-name">{{name}}</div>
-        {{#details}}<div>{{details}}</div>{{/details}}
-      </td>
-      <td class="c">{{qty_padded}}</td>
-      <td class="c">{{unit_price}}</td>
-      <td class="c"><span class="mark">{{net}}</span></td>
-      <td class="c">{{tax}}</td>
-      <td class="c">{{total}}</td>
-    </tr>
-    {{/items}}
-    <tr class="tot"><td colspan="6" class="tl">Sub Total</td><td class="c">{{subtotal}}</td></tr>
-    {{#has_discount}}<tr class="tot"><td colspan="6" class="tl">Discount</td><td class="c">-{{discount}}</td></tr>{{/has_discount}}
-    {{#has_tax}}<tr class="tot"><td colspan="6" class="tl">VAT{{#tax_rate}} ({{tax_rate}}%){{/tax_rate}}</td><td class="c">{{tax_amount}}</td></tr>{{/has_tax}}
-    <tr class="tot gt"><td colspan="6" class="tl">Grand Total{{#currency}} ({{currency}}){{/currency}}</td><td class="c">{{total}}</td></tr>
-  </tbody>
-</table>
-
-{{#notes}}<div class="notes"><b>Notes:</b> {{notes}}</div>{{/notes}}
-
-<div class="terms">
-  <h3>Terms &amp; Conditions</h3>
-  <p><b>Price Validity:</b> The quoted prices are valid for 30 days from the date of quotation. Prices are subject to revision thereafter without prior notice.</p>
-  <p>&bull; <b>Product Availability:</b> Delivery is subject to product availability at the time of receiving the Purchase Order (PO). In the event of unforeseen supply-chain delays, the customer will be informed accordingly.</p>
-  <p>&bull; <b>Delivery:</b> Delivery will be completed <b>within 2 working days from the date of receipt of the confirmed PO</b>, subject to product availability (mentioned above in the quote) and completion of all required commercial formalities.</p>
-  <p>&bull; <b>Training:</b> Product and user training will be provided upon delivery, where applicable, based on the product type and complexity. Training for high-value or technically advanced instruments will be provided where required. Standard/basic instruments will be supplied without formal training unless otherwise agreed.</p>
-  <p>&bull; <b>Installation &amp; Commissioning:</b> Where applicable, installation, commissioning, and initial setup will be provided by our qualified technical personnel. Any additional site requirements or services outside the agreed scope may be subject to additional charges.</p>
-  <p>&bull; <b>Calibration:</b> Calibration certificates are not included as standard. A calibration certificate will be provided only where specifically stated in the quotation/offer. If required separately, calibration can be arranged at an additional charge.</p>
-  <p>&bull; <b>Warranty:</b> The products will be covered by <b>the manufacturer's standard warranty</b> against manufacturing defects, subject to the applicable warranty terms and conditions. Warranty does not cover damage caused by misuse, accidents, unauthorized repairs, improper handling, or normal wear and tear.</p>
-  <p>&bull; <b>After-Sales Support:</b> After-sales support, including technical assistance, calibration, repairs, maintenance, troubleshooting, and product demonstrations, will be provided where applicable and subject to the manufacturer's warranty terms and service conditions. Calibration services are chargeable. Repairs for manufacturing defects will be provided free of charge within the applicable warranty period, subject to the warranty terms and conditions. Any services outside the warranty coverage will be charged separately.</p>
-  <p>&bull; <b>Technical Support:</b> Technical assistance will be available through our qualified technical team for product-related queries, troubleshooting, and application guidance during the warranty period and thereafter.</p>
-  <p>&bull; <b>Payment Terms:</b> 100% advance payment shall be made along with the Purchase Order (PO) unless otherwise agreed in writing.</p>
-  <p>&bull; <b>Documentation:</b> Relevant product documentation, including <b>user manuals, datasheets, calibration certificates, and warranty documentation</b>, where applicable, will be provided with the equipment.</p>
-  <p>&bull; <b>Scope of Supply:</b> The supply shall be strictly in accordance with the specifications, model numbers, accessories, and quantities stated in the quotation. Any additional accessories or services requested after order confirmation may be charged separately.</p>
-  <p>&bull; <b>Order Confirmation:</b> The Purchase Order should clearly specify the quoted <b>model numbers, quantities, agreed prices, and applicable terms and conditions</b> to avoid any discrepancies.</p>
-  <p>&bull; <b>Trade-In Offer:</b> Trade-in options are available for eligible existing instruments/equipment, subject to technical evaluation and assessment. The applicable trade-in value will be determined based on the condition, model, age, and market value of the equipment. {{business_name}} will reserve all the right to reject or accept the trade-in offers.</p>
-  <p>For any clarification, please contact the undersigned.</p>
-</div>
-
-<div class="sign">
-  Yours faithfully,<br>
-  <span class="up">{{business_name}}</span>
-  <div class="gap"></div>
-  Your Name<br>
-  Designation<br>
-  Mobile: 07X XXX XXXX
-</div>
-
-</td></tr></tbody>
-</table>
-
-</body>
-</html>
-`,
   blank: `<!DOCTYPE html>
 <html>
 <head>
@@ -32410,7 +32212,7 @@ function _isetupApplyCustomHtml(html, msg) {
     const key = e.target.value;
     e.target.value = '';
     if (!QTPL_STARTERS[key]) return;
-    const ok = await _isetupConfirm({
+    const ok = !(_isetupCustomHtml || '').trim() || await _isetupConfirm({
       title: 'Replace the current HTML?',
       message: 'Your current custom HTML in this setup will be replaced by the starter layout. Download it first if you want to keep a copy.',
       confirmText: '<i class="fa fa-rotate"></i> Replace',
