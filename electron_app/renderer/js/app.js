@@ -3889,14 +3889,26 @@ const QTPL_SERVER_KEYS = ['template', 'color', 'paper', 'orientation', 'mg_top',
 // Server settings column limit for the custom HTML
 const QTPL_MAX_HTML = 60000;
 
-// Pulls the server's Quotation Setup into the local quotation_* config, so a
-// layout saved on another computer prints the same here. Offline / never-saved → keep local.
+// Pulls the server's Quotation Setup into the local quotation_* config. The setup
+// (incl. Custom HTML) belongs to the business, not the computer: the server copy is
+// the source of truth (it returns defaults for a business that never saved one), and
+// the local copy is tagged with its business so another business never prints with it.
 async function _qtSetupPull() {
-  let res;
-  try { res = await API.quotationSetup(); } catch (_) { return; }
+  const bizId = state.config?.business_id ?? null;
+  let res = null;
+  try { res = await API.quotationSetup(); } catch (_) { /* offline */ }
   const d = res?.status === 200 ? res.body?.data : null;
-  if (!d?.updated_at) return;
-  const update = Object.fromEntries(QTPL_SERVER_KEYS.filter(k => d[k] !== undefined).map(k => ['quotation_' + k, d[k]]));
+
+  let update;
+  if (d) {
+    update = Object.fromEntries(QTPL_SERVER_KEYS.filter(k => d[k] !== undefined).map(k => ['quotation_' + k, d[k]]));
+  } else if (state.config?.quotation_business_id !== bizId) {
+    // Offline and the local copy is another business's (or untagged legacy) → drop it
+    update = Object.fromEntries(QTPL_SERVER_KEYS.map(k => ['quotation_' + k, null]));
+  } else {
+    return;
+  }
+  update.quotation_business_id = bizId;
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
 }
@@ -31708,6 +31720,7 @@ async function _isetupSave() {
     return;
   }
   const update = Object.fromEntries(Object.entries(values).map(([key, v]) => [prefix + key, v]));
+  if (isQt) update.quotation_business_id = state.config?.business_id ?? null;
   if (state.config) Object.assign(state.config, update);
   await window.electronAPI.setConfig(update);
   if (isQt) {
