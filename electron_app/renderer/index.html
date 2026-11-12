@@ -646,6 +646,12 @@ body.crm-proj-deny-manage [data-mail-stage], body.crm-proj-deny-manage #rb-crm-n
 body.crm-deny-tasks_complete .crm-task-check{pointer-events:none;opacity:.4}
 /* Temporarily hidden: CRM ribbon Tasks + Forms groups */
 .ribbon-group:has(#rb-crm-tasks), .ribbon-group:has(#rb-crm-forms){display:none !important}
+/* CRM ribbon stacks shrink to their buttons, so a stack emptied by the access rules above leaves no gap */
+.ribbon-page[data-page="crm"] .ribbon-small-stack{min-width:0}
+/* Drop a whole CRM ribbon group once the access rules above have hidden every button in it */
+body:not(.crm-is-admin) .ribbon-group:has(#rb-crm-permissions),
+body:not(.crm-can-report):not(.crm-can-sales-report):not(.crm-unrestricted) .ribbon-group:has(#rb-crm-dashboard),
+body.crm-deny-followups_view:not(.crm-uses-inbox):not(.crm-can-approve) .ribbon-group:has(#rb-crm-followups){display:none !important}
 /* ── CRM Kanban ── */
 .crm-board{display:flex;gap:12px;padding:10px;overflow-x:auto;flex:1;align-items:flex-start;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--text-muted,#6b7280) 35%,transparent) transparent}
 /* Apple-style pipeline: white canvas, borderless lanes on a faint fill, floating
@@ -4225,69 +4231,101 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <button class="ribbon-btn-lg" id="rb-crm-pipeline">
               <i class="fa fa-handshake"></i>Pipeline
             </button>
-            <button class="ribbon-btn-lg primary" id="rb-crm-new-lead">
-              <i class="fa fa-user-plus"></i>New Lead
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-inbox">
-              <i class="fa fa-inbox"></i>Marketing<br>Inbox
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-approvals">
-              <i class="fa fa-file-signature"></i>Quotation<br>Approvals
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-followups">
-              <i class="fa fa-phone-volume"></i>My<br>Follow-ups
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-dashboard">
-              <i class="fa fa-chart-line"></i>CRM<br>Dashboard
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-import-leads">
-              <i class="fa fa-file-csv"></i>Import<br>Leads
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-new-lead">
+                <i class="fa fa-user-plus"></i> New Lead
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-import-leads">
+                <i class="fa fa-file-csv"></i> Import Leads
+              </button>
+            </div>
           </div>
-          <div class="ribbon-group-label">Pipeline</div>
+          <div class="ribbon-group-label">Leads</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-contacts">
-              <i class="fa fa-address-book"></i>Contacts
+            <button class="ribbon-btn-lg" id="rb-crm-followups">
+              <i class="fa fa-phone-volume"></i>My<br>Follow-ups
             </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-inbox">
+                <i class="fa fa-inbox"></i> Marketing Inbox
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-approvals">
+                <i class="fa fa-file-signature"></i> Quotation Approvals
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Activity</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-contacts">
+                <i class="fa fa-address-book"></i> Contacts
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-customers">
+                <i class="fa fa-users"></i> Customers
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Contacts</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-tasks">
-              <i class="fa fa-list-check"></i>Tasks
-            </button>
-            <button class="ribbon-btn-lg primary" id="rb-crm-new-task">
-              <i class="fa fa-calendar-plus"></i>New Task
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-tasks">
+                <i class="fa fa-list-check"></i> Tasks
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-new-task">
+                <i class="fa fa-calendar-plus"></i> New Task
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Tasks</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-forms">
-              <i class="fa fa-rectangle-list"></i>Forms
-            </button>
-            <button class="ribbon-btn-lg primary" id="rb-crm-new-form">
-              <i class="fa fa-file-circle-plus"></i>New Form
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-forms">
+                <i class="fa fa-rectangle-list"></i> Forms
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-new-form">
+                <i class="fa fa-file-circle-plus"></i> New Form
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Forms</div>
         </div>
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
-            <button class="ribbon-btn-lg" id="rb-crm-projects">
-              <i class="fa fa-diagram-project"></i>Pipeline<br>Projects
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-stages">
-              <i class="fa fa-stairs"></i>Stages
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-dashboard">
+                <i class="fa fa-chart-line"></i> CRM Dashboard
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-report">
+                <i class="fa fa-file-invoice"></i> Report
+              </button>
+            </div>
+          </div>
+          <div class="ribbon-group-label">Insights</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-projects">
+                <i class="fa fa-diagram-project"></i> Pipeline Projects
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-stages">
+                <i class="fa fa-stairs"></i> Stages
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Manage</div>
         </div>
@@ -4297,18 +4335,14 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <button class="ribbon-btn-lg" id="rb-crm-permissions">
               <i class="fa fa-user-shield"></i>Permissions
             </button>
-            <button class="ribbon-btn-lg" id="rb-crm-org">
-              <i class="fa fa-sitemap"></i>Org<br>Structure
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-add-dept">
-              <i class="fa fa-building-user"></i>Add<br>Department
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-customers">
-              <i class="fa fa-users"></i>Customers
-            </button>
-            <button class="ribbon-btn-lg" id="rb-crm-report">
-              <i class="fa fa-file-invoice"></i>Report
-            </button>
+            <div class="ribbon-small-stack">
+              <button class="ribbon-btn-sm" id="rb-crm-org">
+                <i class="fa fa-sitemap"></i> Org Structure
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-add-dept">
+                <i class="fa fa-building-user"></i> Add Department
+              </button>
+            </div>
           </div>
           <div class="ribbon-group-label">Access</div>
         </div>

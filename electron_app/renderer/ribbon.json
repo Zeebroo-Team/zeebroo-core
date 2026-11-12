@@ -458,53 +458,79 @@
       "tab": "crm",
       "groups": [
         {
-          "label": "Relations",
+          "label": "Leads",
           "items": [
-            { "type": "lg", "id": "rb-crm-pipeline",      "icon": "fa-handshake",          "label": "Relations" },
-            { "type": "lg", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",          "label": "New Lead",        "primary": true },
-            { "type": "lg", "id": "rb-crm-inbox",         "icon": "fa-inbox",              "label": "Marketing Inbox" },
-            { "type": "lg", "id": "rb-crm-approvals",     "icon": "fa-file-signature",     "label": "Quotation Approvals" },
-            { "type": "lg", "id": "rb-crm-followups",     "icon": "fa-phone-volume",       "label": "My Follow-ups" },
-            { "type": "lg", "id": "rb-crm-dashboard",     "icon": "fa-chart-line",         "label": "CRM Dashboard" },
-            { "type": "lg", "id": "rb-crm-import-leads",  "icon": "fa-file-csv",           "label": "Import Leads" }
+            { "type": "lg", "id": "rb-crm-pipeline",      "icon": "fa-handshake",          "label": "Pipeline" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-new-lead",      "icon": "fa-user-plus",        "label": "New Lead" },
+              { "type": "sm", "id": "rb-crm-import-leads",  "icon": "fa-file-csv",         "label": "Import Leads" }
+            ]}
+          ]
+        },
+        {
+          "label": "Activity",
+          "items": [
+            { "type": "lg", "id": "rb-crm-followups",     "icon": "fa-phone-volume",       "label": "My\nFollow-ups" },
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-inbox",         "icon": "fa-inbox",            "label": "Marketing Inbox" },
+              { "type": "sm", "id": "rb-crm-approvals",     "icon": "fa-file-signature",   "label": "Quotation Approvals" }
+            ]}
           ]
         },
         {
           "label": "Contacts",
           "items": [
-            { "type": "lg", "id": "rb-crm-contacts",      "icon": "fa-address-book",       "label": "Contacts" }
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-contacts",      "icon": "fa-address-book",     "label": "Contacts" },
+              { "type": "sm", "id": "rb-crm-customers",     "icon": "fa-users",            "label": "Customers" }
+            ]}
           ]
         },
         {
           "label": "Tasks",
           "items": [
-            { "type": "lg", "id": "rb-crm-tasks",         "icon": "fa-list-check",         "label": "Tasks" },
-            { "type": "lg", "id": "rb-crm-new-task",      "icon": "fa-calendar-plus",              "label": "New Task",        "primary": true }
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-tasks",         "icon": "fa-list-check",       "label": "Tasks" },
+              { "type": "sm", "id": "rb-crm-new-task",      "icon": "fa-calendar-plus",    "label": "New Task" }
+            ]}
           ]
         },
         {
           "label": "Forms",
           "items": [
-            { "type": "lg", "id": "rb-crm-forms",         "icon": "fa-rectangle-list",    "label": "Forms" },
-            { "type": "lg", "id": "rb-crm-new-form",      "icon": "fa-file-circle-plus",   "label": "New Form",        "primary": true }
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-forms",         "icon": "fa-rectangle-list",   "label": "Forms" },
+              { "type": "sm", "id": "rb-crm-new-form",      "icon": "fa-file-circle-plus", "label": "New Form" }
+            ]}
+          ]
+        },
+        {
+          "label": "Insights",
+          "items": [
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-dashboard",     "icon": "fa-chart-line",       "label": "CRM Dashboard" },
+              { "type": "sm", "id": "rb-crm-report",        "icon": "fa-file-invoice",     "label": "Report" },
+              { "type": "sm", "id": "rb-crm-audit",         "icon": "fa-shield-halved",    "label": "Audit Log" }
+            ]}
           ]
         },
         {
           "label": "Manage",
           "items": [
-            { "type": "lg", "id": "rb-crm-projects",      "icon": "fa-diagram-project",   "label": "New Relation" },
-            { "type": "lg", "id": "rb-crm-stages",        "icon": "fa-stairs",             "label": "Stages" }
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-projects",      "icon": "fa-diagram-project",  "label": "Pipeline Projects" },
+              { "type": "sm", "id": "rb-crm-stages",        "icon": "fa-stairs",           "label": "Stages" }
+            ]}
           ]
         },
         {
           "label": "Access",
           "items": [
             { "type": "lg", "id": "rb-crm-permissions",   "icon": "fa-user-shield",        "label": "Permissions" },
-            { "type": "lg", "id": "rb-crm-org",           "icon": "fa-sitemap",            "label": "Org Structure" },
-            { "type": "lg", "id": "rb-crm-add-dept",      "icon": "fa-building-user",      "label": "Add Department" },
-            { "type": "lg", "id": "rb-crm-customers",     "icon": "fa-users",              "label": "Customers" },
-            { "type": "lg", "id": "rb-crm-report",        "icon": "fa-file-invoice",       "label": "Report" },
-            { "type": "lg", "id": "rb-crm-audit",         "icon": "fa-shield-halved",      "label": "Audit Log" }
+            { "type": "stack", "items": [
+              { "type": "sm", "id": "rb-crm-org",           "icon": "fa-sitemap",          "label": "Org Structure" },
+              { "type": "sm", "id": "rb-crm-add-dept",      "icon": "fa-building-user",    "label": "Add Department" }
+            ]}
           ]
         },
         {

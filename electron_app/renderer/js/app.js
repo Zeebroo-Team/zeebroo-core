@@ -7425,11 +7425,10 @@ function applyFeatureVisibility() {
   btn('#rb-mail-sync',      mail_any);
 
   // ── CRM ribbon groups + per-button fine-grained gating ──
-  grp('#rb-crm-pipeline',  crm_pipeline);                     // Pipeline group
+  grp('#rb-crm-pipeline',  crm_pipeline);                     // Leads group
   btn('#rb-crm-pipeline',  crm_pipeline);
   btn('#rb-crm-new-lead',  crm_pipeline);
-  grp('#rb-crm-contacts',  crm_contacts);                     // Contacts group
-  btn('#rb-crm-contacts',  crm_contacts);
+  btn('#rb-crm-contacts',  crm_contacts);                     // Contacts group stays for Customers
   grp('#rb-crm-tasks',     crm_tasks);                        // Tasks group
   btn('#rb-crm-tasks',     crm_tasks);
   btn('#rb-crm-new-task',  crm_tasks);
