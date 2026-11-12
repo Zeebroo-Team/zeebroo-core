@@ -18451,6 +18451,20 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <!-- 3-column body -->
     <div class="isetup-body">
 
+      <!-- LEFT (Custom HTML editing mode): HTML template editor -->
+      <div class="isetup-code" id="isetup-code-pane">
+        <div class="isetup-code-bar">
+          <span class="isetup-sec-title"><i class="fa fa-code"></i> HTML Template</span>
+          <div class="isetup-code-actions">
+            <button type="button" class="isetup-code-btn" id="isetup-code-img" title="Insert an image link from File Manager"><i class="fa fa-image"></i> Image</button>
+            <select id="isetup-code-ph" class="isetup-sel isetup-code-ph" title="Insert a data placeholder at the cursor"></select>
+            <button type="button" class="isetup-code-btn is-primary" id="isetup-code-done"><i class="fa fa-check"></i> Done</button>
+          </div>
+        </div>
+        <textarea id="isetup-code-text" class="isetup-code-text" spellcheck="false" autocomplete="off" wrap="off"></textarea>
+        <div class="isetup-hint">The preview updates as you type. <code>{{field}}</code> inserts data, <code>{{#items}}…{{/items}}</code> repeats per line item, <code>{{#field}}…{{/field}}</code> shows only when it has a value. Scripts are removed.</div>
+      </div>
+
       <!-- LEFT: Print settings -->
       <div class="isetup-left">
 
@@ -18555,6 +18569,22 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="isetup-right">
         <div class="isetup-sec-title"><i class="fa fa-palette"></i> Templates</div>
         <div id="isetup-tpl-list" class="isetup-tpl-list"></div>
+
+        <!-- Custom HTML template tools (shown while the Custom HTML card is selected) -->
+        <div id="isetup-custom-box" class="isetup-custom-box" style="display:none">
+          <div class="isetup-sec-title"><i class="fa fa-code"></i> Custom HTML <span class="isetup-unit" id="isetup-custom-size"></span></div>
+          <button type="button" class="isetup-custom-btn is-primary" id="isetup-custom-edit"><i class="fa fa-pen-to-square"></i> Edit HTML</button>
+          <div class="isetup-custom-row">
+            <button type="button" class="isetup-custom-btn" id="isetup-custom-upload"><i class="fa fa-file-arrow-up"></i> Upload .html</button>
+            <button type="button" class="isetup-custom-btn" id="isetup-custom-download"><i class="fa fa-file-arrow-down"></i> Download</button>
+          </div>
+          <select id="isetup-custom-starter" class="isetup-sel">
+            <option value="">Start from a layout…</option>
+            <option value="trading">Trading letter — bordered, T&amp;C, sign-off</option>
+            <option value="blank">Blank skeleton</option>
+          </select>
+          <div class="isetup-hint">Images: copy a link in File Manager and use it in <code>&lt;img src="…"&gt;</code>, or use <b>Image</b> in the editor. Use <code>{{accent}}</code> to follow the colour below.</div>
+        </div>
 
         <div class="isetup-sec-title" style="margin-top:20px"><i class="fa fa-fill-drip"></i> Accent Color</div>
         <div id="isetup-color-list" class="isetup-color-list"></div>

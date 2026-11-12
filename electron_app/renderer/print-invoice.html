@@ -168,6 +168,13 @@ body {
     var h = data.height || 1400; // continuous roll paper: fall back to a tall preview box
     if (page)  { page.style.width  = w + 'px'; page.style.minHeight = h + 'px'; }
     if (frame) { frame.style.width = w + 'px'; frame.style.height   = h + 'px'; }
+    // Multi-page documents (e.g. a long custom HTML quotation) grow past one page
+    frame.onload = function () {
+      try {
+        var ch = frame.contentDocument.documentElement.scrollHeight;
+        if (ch > h) { frame.style.height = ch + 'px'; if (page) page.style.minHeight = ch + 'px'; }
+      } catch (_) {}
+    };
 
     document.getElementById('pi-loading').style.display = 'none';
     document.getElementById('pi-topbar').style.display  = 'flex';
