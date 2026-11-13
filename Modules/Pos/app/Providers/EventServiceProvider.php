@@ -2,7 +2,9 @@
 
 namespace Modules\Pos\Providers;
 
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Foundation\Support\Providers\EventServiceProvider as ServiceProvider;
+use Modules\Pos\Listeners\RevokePosWebAppTokens;
 
 class EventServiceProvider extends ServiceProvider
 {
@@ -11,7 +13,11 @@ class EventServiceProvider extends ServiceProvider
      *
      * @var array<string, array<int, string>>
      */
-    protected $listen = [];
+    protected $listen = [
+        Logout::class => [
+            RevokePosWebAppTokens::class,
+        ],
+    ];
 
     /**
      * Indicates if events should be discovered.

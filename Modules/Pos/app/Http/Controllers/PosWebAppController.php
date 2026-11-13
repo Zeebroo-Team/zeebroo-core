@@ -3,7 +3,11 @@
 namespace Modules\Pos\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Modules\Business\Models\Business;
+use Modules\Pos\Services\PosWebAppHandoffService;
 use Modules\Pos\Services\PosWebAppService;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -12,7 +16,23 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  */
 class PosWebAppController extends Controller
 {
-    public function __construct(private PosWebAppService $webApp) {}
+    public function __construct(
+        private PosWebAppService $webApp,
+        private PosWebAppHandoffService $handoff,
+    ) {}
+
+    /**
+     * GET /pos-app/launch — open the POS web app already signed in as the
+     * current web-session user, on the business selected in the web navbar.
+     */
+    public function launch(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        $business = Business::currentForNavbar($user);
+        $code = $this->handoff->issue($user, $business?->id, $request->session()->getId());
+
+        return redirect()->to(url('/pos-app').'?handoff='.$code);
+    }
 
     public function show(?string $path = null): Response|BinaryFileResponse
     {
@@ -24,7 +44,7 @@ class PosWebAppController extends Controller
             $shimUrl = asset('pos-web/browser-shim.js').'?v='.(is_file($shim) ? filemtime($shim) : '0');
 
             return response(
-                $this->webApp->renderHtml($file['path'], url('/pos-app'), $shimUrl, url('/api/v1/pos')),
+                $this->webApp->renderHtml($file['path'], url('/pos-app'), $shimUrl, url('/api/v1/pos'), route('logout'), csrf_token()),
                 200,
                 ['Content-Type' => $file['mime'], 'Cache-Control' => 'no-cache, must-revalidate'],
             );

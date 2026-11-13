@@ -19,6 +19,8 @@
   var script      = document.currentScript;
   var API_BASE    = ((script && script.dataset.apiBase) || (location.origin + '/api/v1/pos')).replace(/\/$/, '');
   var APP_VERSION = (script && script.dataset.appVersion) || '0.0.0';
+  var WEB_LOGOUT_URL = (script && script.dataset.webLogoutUrl) || '';
+  var CSRF_TOKEN  = (script && script.dataset.csrf) || '';
   var API_ORIGIN  = new URL(API_BASE, location.href).origin;
 
   var CONFIG_KEY  = 'zb_web_config';
@@ -691,6 +693,63 @@
     }
   }
 
+  // ── Web-session handoff ───────────────────────────────────────────────────
+  // "Continue to Dashboard" (GET /pos-app/launch) lands here with
+  // ?handoff=<one-time code>. Swap it for a Bearer token so the user is signed
+  // in as the same account / business as the web dashboard. getConfig() waits
+  // for this, so the app's init() sees the new token on its first read.
+  var handoffReady = (function () {
+    var url;
+    try { url = new URL(location.href); } catch (_) { return Promise.resolve(); }
+    var code = url.searchParams.get('handoff');
+    if (!code) return Promise.resolve();
+
+    // Drop the code from the address bar / history straight away.
+    url.searchParams.delete('handoff');
+    try { history.replaceState(history.state, '', url.pathname + url.search + url.hash); } catch (_) {}
+
+    return jsonRequest('POST', '/auth/web-handoff', { code: code, device_name: readConfig().device_name }, 30000)
+      .then(function (res) {
+        var b = res.body || {};
+        if (res.status !== 200 || !b.access_token) {
+          notify((b && b.message) || 'Could not sign you in automatically — please sign in.');
+          return;
+        }
+        // Replace whatever account this browser was signed in to before.
+        writeJson(CONFIG_KEY, Object.assign(readConfig(), {
+          token: b.access_token,
+          business_id: b.business_id || null,
+          branch_id: null,
+          web_session: true, // signed in from the website → sign out of both together
+        }));
+      })
+      .catch(function () {});
+  })();
+
+  // ── Sign out ──────────────────────────────────────────────────────────────
+  // The app signs out by clearing the token (setConfig({ token: null })). The
+  // desktop just forgets it; here we also revoke it on the server and, when
+  // the token came from the website (web_session), end the website session.
+  // Revoke answering 401 means the token had already expired / been revoked
+  // (e.g. the user signed out of the website first) — then there is nothing
+  // more to do, and the website is left alone.
+  async function signOut(old) {
+    var res = await jsonRequest('POST', '/auth/revoke', null, 10000);
+    if (res.status !== 200 || !old.web_session || !WEB_LOGOUT_URL || !CSRF_TOKEN) return;
+    try {
+      await fetch(WEB_LOGOUT_URL, {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': CSRF_TOKEN, 'X-Requested-With': 'XMLHttpRequest', Accept: 'text/html' },
+        credentials: 'same-origin',
+        redirect: 'manual',
+      });
+    } catch (_) {}
+  }
+
+  function isSignOut(patch, old) {
+    return !!patch && Object.prototype.hasOwnProperty.call(patch, 'token') && !patch.token && !!old.token;
+  }
+
   // ── Offline mode is desktop-only; the browser always talks to the server ──
   function offlineStatus() {
     return { online: navigator.onLine !== false, pending: 0, failed: 0, browser: true };
@@ -718,12 +777,20 @@
     arch: '',
 
     getConfig: function () {
-      return Promise.resolve(Object.assign(readConfig(), { api_base_url: API_BASE, app_version: APP_VERSION }));
+      return handoffReady.then(function () {
+        return Object.assign(readConfig(), { api_base_url: API_BASE, app_version: APP_VERSION });
+      });
     },
     setConfig: function (patch) {
-      var next = Object.assign(readConfig(), patch || {});
-      writeJson(CONFIG_KEY, next);
-      return Promise.resolve(next);
+      return handoffReady.then(async function () {
+        var old = readConfig();
+        if (isSignOut(patch, old)) await signOut(old);
+        var next = Object.assign(readConfig(), patch || {});
+        // A token from the app's own sign-in form is not tied to the website.
+        if (patch && Object.prototype.hasOwnProperty.call(patch, 'token')) next.web_session = false;
+        writeJson(CONFIG_KEY, next);
+        return next;
+      });
     },
 
     apiRequest: apiRequest,

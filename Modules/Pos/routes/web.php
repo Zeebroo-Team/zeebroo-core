@@ -29,6 +29,13 @@ use Modules\Pos\Http\Controllers\StockAuditController;
 use Modules\Pos\Http\Controllers\StockTransferController;
 use Modules\Pos\Http\Controllers\SubscriptionController;
 
+// "Continue to Dashboard" on Get Started — hands the web session over to the
+// POS web app (one-time code → Bearer token, see PosWebAppHandoffService).
+// Registered before the catch-all below so "launch" is not served as a file.
+Route::get('/pos-app/launch', [PosWebAppController::class, 'launch'])
+    ->middleware(['auth', 'verified'])
+    ->name('pos.web-app.launch');
+
 // Desktop POS app in a web browser — serves electron_app/renderer with the
 // browser shim injected. Sign-in happens inside the app (Bearer token against
 // /api/v1/pos), so the web session middlewares don't apply here.
