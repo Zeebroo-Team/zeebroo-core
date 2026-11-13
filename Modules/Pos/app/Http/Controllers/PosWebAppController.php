@@ -30,9 +30,16 @@ class PosWebAppController extends Controller
             );
         }
 
-        return response()->file($file['path'], [
+        // no-cache = the browser keeps its copy but checks with us on every load,
+        // so a changed CSS/JS file shows up straight away; an unchanged one is a
+        // cheap 304. (A max-age here served stale app.js/ribbon.css after edits.)
+        $response = response()->file($file['path'], [
             'Content-Type' => $file['mime'],
-            'Cache-Control' => 'public, max-age=300',
+            'Cache-Control' => 'no-cache, must-revalidate',
         ]);
+        $response->setAutoEtag();
+        $response->isNotModified(request());
+
+        return $response;
     }
 }

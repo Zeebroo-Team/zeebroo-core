@@ -26,6 +26,17 @@ it('serves renderer assets with the right content type', function () {
     expect($res->headers->get('Content-Type'))->toContain('application/javascript');
 });
 
+it('makes the browser revalidate renderer assets so edits show up at once', function () {
+    $res = $this->get('/pos-app/css/ribbon.css');
+
+    $res->assertOk();
+    expect($res->headers->get('Cache-Control'))->toContain('no-cache')
+        ->and($res->headers->get('ETag'))->not->toBeEmpty();
+
+    $this->get('/pos-app/css/ribbon.css', ['If-None-Match' => $res->headers->get('ETag')])
+        ->assertStatus(304);
+});
+
 it('returns 404 for missing files, path traversal and disallowed types', function (string $path) {
     $this->get($path)->assertNotFound();
 })->with([
