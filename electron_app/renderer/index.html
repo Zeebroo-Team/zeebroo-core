@@ -7319,7 +7319,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                     </div>
                     <input type="hidden" id="sc-f-discount-type" value="percentage">
                     <label class="cm-label" id="sc-sw-value-label">Discount Percentage (%) <span style="color:#ef4444">*</span></label>
-                    <input type="number" id="sc-f-discount-value" class="cm-input" placeholder="10" min="0.01" step="0.01" onwheel="this.blur()">
+                    <input type="number" id="sc-f-discount-value" class="cm-input" placeholder="10" min="0.01" step="0.01" data-wheel-blur>
                   </div>
 
                   <!-- Individual mode fields -->
@@ -7331,7 +7331,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                     </div>
                     <input type="hidden" id="sc-f-idef-discount-type" value="percentage">
                     <div style="display:flex;gap:8px;align-items:stretch">
-                      <input type="number" id="sc-f-idef-discount-value" class="cm-input" style="flex:1" placeholder="Leave blank to set each product's discount manually" min="0.01" step="0.01" onwheel="this.blur()">
+                      <input type="number" id="sc-f-idef-discount-value" class="cm-input" style="flex:1" placeholder="Leave blank to set each product's discount manually" min="0.01" step="0.01" data-wheel-blur>
                       <button type="button" id="sc-idef-apply-all" class="po-btn-ghost" style="white-space:nowrap" title="Overwrite every product below with this discount"><i class="fa fa-arrow-down"></i> Apply to all</button>
                     </div>
                     <div style="font-size:12px;color:var(--text-muted)">New products start with this discount. Use "Apply to all" to push it onto products already added below.</div>
@@ -7412,7 +7412,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                 <div class="gc-gv-cards-head">
                   <span><i class="fa fa-layer-group"></i> Cards in this group</span>
                   <div class="gc-gv-add">
-                    <input type="number" id="gc-gv-add-qty" class="cm-input" value="1" min="1" max="500" onwheel="this.blur()">
+                    <input type="number" id="gc-gv-add-qty" class="cm-input" value="1" min="1" max="500" data-wheel-blur>
                     <button class="po-btn-ghost" id="gc-gv-add-btn"><i class="fa fa-plus"></i> Generate more</button>
                   </div>
                 </div>
@@ -7452,11 +7452,11 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
                       <div>
                         <label class="cm-label">Value per Card <span style="color:#ef4444">*</span></label>
-                        <input type="number" id="gc-f-value" class="cm-input" placeholder="5000" min="0.01" step="0.01" onwheel="this.blur()">
+                        <input type="number" id="gc-f-value" class="cm-input" placeholder="5000" min="0.01" step="0.01" data-wheel-blur>
                       </div>
                       <div id="gc-f-qty-wrap">
                         <label class="cm-label">How many cards? <span style="color:#ef4444">*</span></label>
-                        <input type="number" id="gc-f-qty" class="cm-input" value="1" min="1" max="500" step="1" onwheel="this.blur()">
+                        <input type="number" id="gc-f-qty" class="cm-input" value="1" min="1" max="500" step="1" data-wheel-blur>
                       </div>
                     </div>
                     <div class="gc-hint" id="gc-f-value-hint" style="display:none"></div>
@@ -7572,7 +7572,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                         <button type="button" class="cp-type-btn active" data-cp-type="percent">%</button>
                         <button type="button" class="cp-type-btn" data-cp-type="flat">Flat</button>
                       </div>
-                      <input type="number" id="cp-f-value" class="cm-input" style="flex:1" placeholder="10" min="0.01" step="0.01" onwheel="this.blur()">
+                      <input type="number" id="cp-f-value" class="cm-input" style="flex:1" placeholder="10" min="0.01" step="0.01" data-wheel-blur>
                     </div>
                     <div class="gc-hint" id="cp-f-value-hint">Percentage off the bill (after any order discount).</div>
                   </div>
@@ -7588,7 +7588,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
                   <div class="gc-f-block">
                     <label class="cm-label">Number of Coupons <span style="color:#ef4444">*</span></label>
-                    <input type="number" id="cp-f-qty" class="cm-input" value="100" min="1" max="100000" step="1" onwheel="this.blur()">
+                    <input type="number" id="cp-f-qty" class="cm-input" value="100" min="1" max="100000" step="1" data-wheel-blur>
                     <div class="gc-hint" id="cp-f-qty-hint">How many times this code can be used in total.</div>
                   </div>
 
@@ -25373,21 +25373,6 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 <script src="js/d3.min.js"></script>
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>
-<!-- Preload ribbon.json synchronously so app.js can render ribbon before wiring listeners -->
-<script>
-(function () {
-  try {
-    var xhr = new XMLHttpRequest();
-    xhr.open('GET', './ribbon.json', false); // synchronous — local file only
-    xhr.send(null);
-    if (xhr.status === 200 || xhr.status === 0) {
-      window._ribbonJson = JSON.parse(xhr.responseText);
-    }
-  } catch (e) {
-    console.warn('[ribbon] Could not preload ribbon.json:', e);
-  }
-})();
-</script>
 <script src="js/app.js"></script>
 <script src="js/ecommerce.js"></script>
 <script src="js/ribbon-customize.js"></script>

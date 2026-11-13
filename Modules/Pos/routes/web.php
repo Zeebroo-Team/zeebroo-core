@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureWebSubscriptionSettled;
+use App\Http\Middleware\RedirectHrPortalOnlyUsers;
 use Illuminate\Support\Facades\Route;
 use Modules\Pos\Http\Controllers\Admin\PosSettingsAdminController;
 use Modules\Pos\Http\Controllers\BrandMgmtAgencyController;
@@ -17,13 +20,26 @@ use Modules\Pos\Http\Controllers\NotificationController;
 use Modules\Pos\Http\Controllers\PosController;
 use Modules\Pos\Http\Controllers\PosPrintSettingsController;
 use Modules\Pos\Http\Controllers\PosProductController;
+use Modules\Pos\Http\Controllers\PosWebAppController;
+use Modules\Pos\Http\Controllers\ProductRentalController;
+use Modules\Pos\Http\Controllers\RegisterSessionController;
+use Modules\Pos\Http\Controllers\RegisterSettingsController;
 use Modules\Pos\Http\Controllers\SaleController;
 use Modules\Pos\Http\Controllers\StockAuditController;
 use Modules\Pos\Http\Controllers\StockTransferController;
 use Modules\Pos\Http\Controllers\SubscriptionController;
-use Modules\Pos\Http\Controllers\ProductRentalController;
-use Modules\Pos\Http\Controllers\RegisterSessionController;
-use Modules\Pos\Http\Controllers\RegisterSettingsController;
+
+// Desktop POS app in a web browser — serves electron_app/renderer with the
+// browser shim injected. Sign-in happens inside the app (Bearer token against
+// /api/v1/pos), so the web session middlewares don't apply here.
+Route::get('/pos-app/{path?}', [PosWebAppController::class, 'show'])
+    ->where('path', '.*')
+    ->withoutMiddleware([
+        EnsureAccountIsActive::class,
+        RedirectHrPortalOnlyUsers::class,
+        EnsureWebSubscriptionSettled::class,
+    ])
+    ->name('pos.web-app');
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
