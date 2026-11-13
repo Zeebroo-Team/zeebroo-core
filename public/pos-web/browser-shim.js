@@ -314,9 +314,13 @@
     });
   }
 
-  // Receipt CSS — mirrors _thermalHtml() in electron_app/main.js.
-  var THERMAL_SAFE_MM = { 80: 68, 58: 45 };
-  var THERMAL_MARGIN_MM = 3;
+  // Receipt CSS — mirrors _thermalHtml(..., { leftAlign: true }) in electron_app/main.js,
+  // i.e. the direct-print layout the desktop app sends to the thermal driver.
+  // No custom @page size: thermal drivers (e.g. EPSON TM-T81III) reject a custom
+  // paper length, so the browser centres/scales the page on the driver's paper.
+  // The receipt is pinned to the left edge so it sits under the print head on any
+  // page width, and @page margin 0 leaves no room for browser headers/footers.
+  var THERMAL_HEAD_MM = { 80: 72, 58: 48 };
   function receiptMargins(m) {
     m = m || {};
     function v(x) { return Math.min(20, Math.max(0, parseFloat(x) || 0)); }
@@ -324,13 +328,17 @@
   }
   function receiptHtml(html, paperWidth, margins) {
     var paperMm = paperWidth === 58 ? 58 : 80;
-    var contentMm = THERMAL_SAFE_MM[paperMm];
+    var contentMm = THERMAL_HEAD_MM[paperMm];
     var mg = receiptMargins(margins);
+    // Top/bottom margins are spacers ending in a 0.5 mm dot so the driver's
+    // "Paper Reduction" doesn't trim them away as blank paper.
+    var top = mg.top ? '<div class="mg-spacer top" style="height:' + mg.top + 'mm"></div>' : '';
+    var bottom = mg.bottom ? '<div class="mg-spacer bottom" style="height:' + mg.bottom + 'mm"></div>' : '';
     return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Receipt</title><style>' +
       '*{margin:0;padding:0;box-sizing:border-box}' +
       'html{width:100%;background:#fff}' +
-      'body{width:100%;margin:0 auto;max-width:' + contentMm + 'mm;padding:' + mg.top + 'mm ' + mg.right + 'mm ' + mg.bottom + 'mm ' + mg.left + 'mm;background:#fff;color:#000;font-family:"Courier New",Courier,monospace;font-size:10pt;line-height:1.45;overflow-wrap:anywhere}' +
-      '@page{margin:' + THERMAL_MARGIN_MM + 'mm;size:' + paperMm + 'mm 297mm}' +
+      'body{width:100%;margin:0;max-width:' + (contentMm + mg.left) + 'mm;padding:0 ' + mg.right + 'mm 0 ' + mg.left + 'mm;background:#fff;color:#000;font-family:"Courier New",Courier,monospace;font-size:10pt;line-height:1.45;overflow-wrap:anywhere}' +
+      '@page{margin:0}' +
       '.rcpt-paper{width:100%}' +
       '.rcpt-logo-wrap{text-align:center;margin-bottom:8px}' +
       '.rcpt-logo-img{max-width:min(100%, calc(100px * var(--rcpt-logo-scale, 1)));max-height:calc(48px * var(--rcpt-logo-scale, 1));object-fit:contain;display:block;margin:0 auto}' +
@@ -365,25 +373,16 @@
       '.rcpt-item-disc .rid-per{width:52px;text-align:right}' +
       '.rcpt-item-disc .rid-total{width:58px;text-align:right}' +
       (paperMm === 58 ? 'html,body{font-size:9pt}.ih-price,.ri-price,.rid-per{display:none}.ih-qty,.ri-qty{width:22px}' : '') +
-      '</style></head><body>' + (html || '') + '</body></html>';
+      '.mg-spacer{position:relative}' +
+      '.mg-spacer::after{content:"";position:absolute;left:50%;width:0.5mm;height:0;border-top:0.5mm solid #000}' +
+      '.mg-spacer.top::after{top:0}' +
+      '.mg-spacer.bottom::after{bottom:0}' +
+      '</style></head><body>' + top + (html || '') + bottom + '</body></html>';
   }
 
-  async function printReceiptHtml(opts) {
+  function printReceiptHtml(opts) {
     opts = opts || {};
-    var paperMm = opts.paperWidth === 58 ? 58 : 80;
-    var doc = receiptHtml(opts.html, opts.paperWidth, opts.margins);
-    var p = printDocument(doc, 'Receipt');
-    // Roll paper has no fixed length — size the page to the receipt's height.
-    if (printFrame) {
-      printFrame.__beforePrint = function (d) {
-        var px = Math.max(d.body.scrollHeight, d.documentElement.scrollHeight);
-        var mm = Math.ceil(px * 25.4 / 96 + THERMAL_MARGIN_MM * 2 + 2);
-        var s = d.createElement('style');
-        s.textContent = '@page{size:' + paperMm + 'mm ' + mm + 'mm}';
-        d.head.appendChild(s);
-      };
-    }
-    return p;
+    return printDocument(receiptHtml(opts.html, opts.paperWidth, opts.margins), 'Receipt');
   }
 
   function printerConfig() {
