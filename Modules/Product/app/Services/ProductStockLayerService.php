@@ -290,6 +290,69 @@ class ProductStockLayerService
     }
 
     /**
+     * Checkout sells from batches whenever a product has any, so a stock count typed
+     * on the product must be mirrored in its batches or the POS refuses the sale.
+     * Raising the count adds an adjustment batch for the difference; lowering it
+     * draws the difference out of the oldest batches. Products with no batches sell
+     * from stock_quantity directly and are left alone. stock_quantity itself is not
+     * touched — the caller has already set it to $targetQuantity.
+     */
+    public function reconcileLayersToStock(Product $product, float $targetQuantity): void
+    {
+        $layers = ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $product->business_id)
+            ->orderBy('received_at')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($layers->isEmpty()) {
+            return;
+        }
+
+        $diff = round(max(0.0, $targetQuantity) - (float) $layers->sum('quantity_remaining'), 3);
+
+        if ($diff > 0.0005) {
+            $product->loadMissing('business');
+            $unitCost = round(max(0.0, (float) $product->cost_price), 2);
+
+            $layer = ProductStockLayer::query()->create([
+                'business_id' => $product->business_id,
+                'branch_id' => null,
+                'product_id' => $product->id,
+                'goods_receive_note_item_id' => null,
+                'quantity_received' => $diff,
+                'quantity_remaining' => $diff,
+                'unit_cost' => $unitCost,
+                'selling_unit_price' => $product->business instanceof Business
+                    ? $this->resolveSellingUnitPrice($product->business, $product, $unitCost, null)
+                    : ($product->unit_price !== null ? round((float) $product->unit_price, 2) : null),
+                'received_at' => now()->toDateString(),
+            ]);
+
+            $this->assignBatchSku($layer, $product);
+
+            return;
+        }
+
+        $toRemove = -$diff;
+        foreach ($layers as $layer) {
+            if ($toRemove <= 0.0005) {
+                break;
+            }
+            $available = (float) $layer->quantity_remaining;
+            if ($available <= 0) {
+                continue;
+            }
+            $take = min($toRemove, $available);
+            $layer->quantity_remaining = round($available - $take, 3);
+            $layer->save();
+            $toRemove = round($toRemove - $take, 3);
+        }
+    }
+
+    /**
      * Batches copy the product's selling price when received, and the POS sells at the
      * batch's price. So a new product price has to reach the in-stock batches still on
      * the old one, or the POS never sees it. Batches on any other price keep it.
