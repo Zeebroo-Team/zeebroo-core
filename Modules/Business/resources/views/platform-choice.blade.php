@@ -257,7 +257,7 @@
                 </div>
                 <h3 class="plat-opt-title"><i class="fa fa-globe" aria-hidden="true"></i> Web App</h3>
                 <p class="plat-opt-desc">Use Zeebroo in your browser — nothing to install, works anywhere.</p>
-                <a href="{{ route('dashboard') }}" class="plat-btn plat-btn--outline">
+                <a href="{{ route('pos.web-app.launch') }}" class="plat-btn plat-btn--outline">
                     <i class="fa fa-arrow-right" aria-hidden="true"></i> Continue to Dashboard
                 </a>
             </div>

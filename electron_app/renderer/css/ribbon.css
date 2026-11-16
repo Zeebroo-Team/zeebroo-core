@@ -1306,6 +1306,19 @@ body.dark .ribbon-btn-sm:hover { background: rgba(78,142,247,.15); border-color:
 .mp-avatar-btn:focus-visible .mp-avatar-overlay,
 .mp-avatar-btn.is-busy .mp-avatar-overlay { opacity: 1; }
 
+/* My Profile window — mac-window, like CRM Import Leads / File Manager */
+.mp-window .mac-title-icon.mp-title-icon { background: none; box-shadow: none; color: var(--accent); font-size: 22px; }
+.mp-window .po-btn-primary { background: var(--accent); box-shadow: none; }
+.mp-body > * { flex-shrink: 0; }
+.mp-window .crm-imp-drop.mp-photo { flex-direction: row; flex-wrap: wrap; align-items: center; text-align: left; padding: 18px 22px; gap: 12px 20px; }
+.mp-photo-text { flex: 1 1 240px; min-width: 0; font-size: 13.5px; }
+.mp-photo .po-btn-primary, .mp-photo .po-btn-ghost { height: 30px; padding: 0 16px; }
+.mp-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start; }
+.mp-card { display: flex; flex-direction: column; gap: 14px; padding: 16px; }
+.mp-window .mac-group.mp-card { padding: 16px; }
+.mp-window .mac-field input.po-field-input { height: 32px; }
+.mp-window .qap-alert { margin: 0; }
+
 .tpm-info { display: flex; flex-direction: column; overflow: hidden; }
 .tpm-name  { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tpm-email { font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

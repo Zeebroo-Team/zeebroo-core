@@ -21,6 +21,7 @@ use Modules\Package\Models\Package;
 use Modules\Payment\Models\Payment;
 use Modules\Payment\Services\PaymentProvisioningService;
 use Modules\Pos\Services\PosUserAvatarService;
+use Modules\Pos\Services\PosWebAppHandoffService;
 
 class PosAuthApiController extends Controller
 {
@@ -356,6 +357,38 @@ class PosAuthApiController extends Controller
             'message'            => 'A new verification code has been sent to '.$user->email.'.',
             'expires_in_minutes' => $verification->expiryMinutes(),
             'retry_after'        => EmailVerificationService::RESEND_SECONDS,
+        ]);
+    }
+
+    /**
+     * POST /api/v1/pos/auth/web-handoff — swap the one-time code from
+     * GET /pos-app/launch for a Bearer token (POS web app opened from the
+     * signed-in web dashboard). Same response shape as auth/token, plus the
+     * business selected in the web session.
+     */
+    public function webHandoff(Request $request, PosWebAppHandoffService $handoff): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:128'],
+            'device_name' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $deviceName = $validated['device_name'] ?? 'pos-web';
+        $result = $handoff->redeem($validated['code'], $deviceName);
+
+        if ($result === null) {
+            return response()->json([
+                'message' => 'This sign-in link has expired. Please sign in again.',
+            ], 401);
+        }
+
+        UserActivityLog::record($result['user'], UserActivityLog::PLATFORM_WEB, UserActivityLog::EVENT_LOGIN, $request, $deviceName);
+
+        return response()->json([
+            'token_type' => 'Bearer',
+            'access_token' => $result['token'],
+            'user' => $this->userPayload($result['user']),
+            'business_id' => $result['business_id'],
         ]);
     }
 

@@ -173,6 +173,43 @@ document.addEventListener('keydown', e => {
 
 function setStatus(msg) { $('#status-text').textContent = msg; }
 
+// Number inputs marked data-wheel-blur lose focus on mouse wheel, so scrolling
+// the page never changes their value by accident. (Replaces inline onwheel
+// handlers, which the page's Content-Security-Policy blocks.)
+document.addEventListener('wheel', (e) => {
+  const el = e.target;
+  if (el instanceof HTMLInputElement && el.hasAttribute('data-wheel-blur') && document.activeElement === el) el.blur();
+}, { capture: true, passive: true });
+
+// Broken-image fallbacks, also CSP-safe (no inline onerror). Mark the <img> with
+// data-img-fallback:
+//   "remove"   → drop the image
+//   "initials" → swap for <span class="{data-fallback-class}">{data-i}</span>
+//   "next"     → hide it and show the next sibling (a placeholder) as flex
+// 'error' does not bubble, so this listens in the capture phase.
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.dataset.imgFallback) return;
+  const mode = img.dataset.imgFallback;
+  if (mode === 'initials') {
+    const span = document.createElement('span');
+    span.className = img.dataset.fallbackClass || img.className;
+    span.textContent = img.dataset.i || '';
+    img.replaceWith(span);
+  } else if (mode === 'next') {
+    img.style.display = 'none';
+    if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+  } else {
+    img.remove();
+  }
+}, true);
+
+// Clicking the empty part of a chip field (data-focus-input) focuses its <input>.
+document.addEventListener('click', (e) => {
+  const box = e.target instanceof Element && e.target.closest('[data-focus-input]');
+  if (box && e.target === box) box.querySelector('input')?.focus();
+});
+
 // ── Window controls ────────────────────────────────────────────────────────
 // Login screen window controls (Windows/Linux — non-macOS)
 const lMinEl   = document.getElementById('l-min-win');
@@ -7973,238 +8010,6 @@ function _bwzShowBillingPanel() {
   _bwzBillingRefresh();
 }
 
-/* _bwzLoadExisting — replaced by _bwzBillingRefresh (simplified billing panel) */
-async function _bwzLoadExisting() {
-  return _bwzBillingRefresh();
-  const [loansRes, rentalsRes, propsRes, billsRes] = await Promise.all([
-    API.loans(), API.rentalList(), API.propertyList(), API.bills(),
-  ]);
-
-  // Row style — steps 1, 2, 3
-  function renderRows(containerId, items, dotColor) {
-    const el = $(`#${containerId}`);
-    if (!el) return;
-    if (!items.length) { el.innerHTML = ''; return; }
-    el.innerHTML = `<div class="bwz-ss-existing-label">Already added</div>
-      <div class="bwz-ss-existing-list">` +
-      items.map(item => {
-        const name = escHtml(item.name || item.property_name || item.account_name || '—');
-        const meta = item.monthly_fmt || item.cost_fmt || item.borrowed_amount_fmt || '';
-        return `<div class="bwz-ss-existing-row">
-          <div class="bwz-ss-existing-dot" style="background:${dotColor}"></div>
-          <span class="bwz-ss-existing-name">${name}</span>
-          ${meta ? `<span class="bwz-ss-existing-meta">${escHtml(String(meta))}</span>` : ''}
-        </div>`;
-      }).join('') + `</div>`;
-  }
-
-  // Hub-and-spoke diagram — step 4: each item = center, 5 bill types orbit around it
-  const HUB_BILLS = [
-    { name: 'Water',    icon: 'fa-droplet',  bg: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', billName: 'Water Bill',      category: 'water'       },
-    { name: 'Electric', icon: 'fa-bolt',      bg: 'linear-gradient(135deg,#f59e0b,#d97706)', billName: 'Electricity Bill', category: 'electricity' },
-    { name: 'Gas',      icon: 'fa-fire',      bg: 'linear-gradient(135deg,#ef4444,#b91c1c)', billName: 'Gas Bill',         category: 'gas'         },
-    { name: 'Wastes',   icon: 'fa-trash-can', bg: 'linear-gradient(135deg,#6b7280,#374151)', billName: 'Waste Bill',       category: 'waste'       },
-    { name: 'Others',   icon: 'fa-ellipsis',  bg: 'linear-gradient(135deg,#8b5cf6,#6d28d9)', billName: 'Other Bill',       category: 'other'       },
-  ];
-  // Hub geometry: button is exactly 38×38 (circle), so translate(-50%,-50%) places circle-center at (CX+R·cos, CY+R·sin)
-  const CX = 110, CY = 110, R = 82;
-  const CENTER_R = 26; // half of 52px center circle
-  const SPOKE_R  = 19; // half of 38px spoke circle
-
-  const allBills = billsRes.status === 200 ? (billsRes.body?.data || []) : [];
-
-  // items = [{ item, color, icon, assignType }, ...], bills = full bills array
-  function renderCards(containerId, taggedItems) {
-    const el = $(`#${containerId}`);
-    if (!el) return;
-    if (!taggedItems.length) { el.innerHTML = ''; return; }
-
-    // ── Helper: find bills already linked to this item + category ───
-    const idKey = { rental: 'rental_id', property: 'property_id' };
-    function matchedBills(assignType, itemId, category) {
-      const id = Number(itemId);
-      return allBills.filter(b =>
-        b.assignment_type === assignType &&
-        Number(b[idKey[assignType]] ?? b.assign_id ?? -1) === id &&
-        b.bill_category === category
-      );
-    }
-    function billSummaryJson(bills) {
-      return JSON.stringify(bills.map(b => ({
-        name:   b.name || '',
-        amt:    b.amount_fmt || '',
-        cadence: b.cadence || '',
-        overdue: !!b.overdue,
-      })));
-    }
-
-    // ── Helper: common spoke/pill button attrs ───────────────────────
-    function spokeAttrs(bill, assignType, itemId) {
-      const mb = matchedBills(assignType, itemId, bill.category);
-      return `data-bill-name="${escHtml(bill.billName)}" data-bill-cat="${escHtml(bill.category)}" data-assign-type="${escHtml(assignType)}" data-assign-id="${escHtml(itemId)}" data-existing='${billSummaryJson(mb)}' title="${escHtml(bill.billName)}"`;
-    }
-
-    if (taggedItems.length > 2) {
-      // ── List mode: compact rows when > 2 items ────────────────────
-      el.innerHTML = `<div class="bwz-bill-list">` +
-        taggedItems.map(({ item, color, icon, assignType }, idx) => {
-          const name   = item.name || item.property_name || item.account_name || '—';
-          const itemId = String(item.id || '');
-          const pills  = HUB_BILLS.map(bill => {
-            const mb = matchedBills(assignType, itemId, bill.category);
-            return `<button class="bwz-hub-spoke bwz-bill-pill${mb.length ? ' has-bills' : ''}" ${spokeAttrs(bill, assignType, itemId)}>
-               <div class="bwz-hub-spoke-circle" style="background:${bill.bg}"><i class="fa ${bill.icon}"></i></div>
-               <span class="bwz-hub-spoke-label">${escHtml(bill.name)}</span>
-               ${mb.length ? `<span class="bwz-pill-badge">${mb.length}</span>` : ''}
-             </button>`;
-          }).join('');
-          return `<div class="bwz-bill-list-row" style="animation-delay:${idx * 0.06}s">
-            <div class="bwz-bill-list-item">
-              <div class="bwz-bill-list-dot" style="background:${color}"><i class="fa ${icon}"></i></div>
-              <span class="bwz-bill-list-name" title="${escHtml(name)}">${escHtml(name)}</span>
-            </div>
-            <div class="bwz-bill-pill-row">${pills}</div>
-          </div>`;
-        }).join('') + `</div>`;
-
-    } else {
-      // ── Hub mode: full pentagon diagram for ≤ 2 items ────────────
-      el.innerHTML = `<div class="bwz-hub-row">` +
-        taggedItems.map(({ item, color, icon, assignType }, idx) => {
-          const name   = item.name || item.property_name || item.account_name || '—';
-          const meta   = item.cost_fmt || item.amount_fmt || item.monthly_fmt || '';
-          const itemId = String(item.id || '');
-
-          let svgLines = '';
-          const spokes = HUB_BILLS.map((bill, i) => {
-            const a  = (i * 72 - 90) * Math.PI / 180;
-            const sx = CX + R * Math.cos(a);
-            const sy = CY + R * Math.sin(a);
-            const ux = Math.cos(a), uy = Math.sin(a);
-            svgLines += `<line x1="${(CX + ux * CENTER_R).toFixed(1)}" y1="${(CY + uy * CENTER_R).toFixed(1)}" x2="${(sx - ux * SPOKE_R).toFixed(1)}" y2="${(sy - uy * SPOKE_R).toFixed(1)}" stroke="var(--border)" stroke-width="1.5" stroke-dasharray="4 3" stroke-linecap="round"/>`;
-            const mb = matchedBills(assignType, itemId, bill.category);
-            return `<button class="bwz-hub-spoke${mb.length ? ' has-bills' : ''}" style="left:${sx.toFixed(1)}px;top:${sy.toFixed(1)}px" ${spokeAttrs(bill, assignType, itemId)}>
-              <div class="bwz-hub-spoke-circle" style="background:${bill.bg}"><i class="fa ${bill.icon}"></i></div>
-              <span class="bwz-hub-spoke-label">${escHtml(bill.name)}</span>
-              ${mb.length ? `<span class="bwz-pill-badge">${mb.length}</span>` : ''}
-            </button>`;
-          }).join('');
-
-          return `<div class="bwz-hub" style="animation-delay:${idx * 0.12}s">
-            <svg class="bwz-hub-svg" width="220" height="220" xmlns="http://www.w3.org/2000/svg">${svgLines}</svg>
-            <div class="bwz-hub-center">
-              <div class="bwz-hub-center-circle" style="background:${color}"><i class="fa ${icon}"></i></div>
-              <span class="bwz-hub-center-label" title="${escHtml(name)}">${escHtml(name)}</span>
-              ${meta ? `<span class="bwz-hub-center-meta">${escHtml(meta)}</span>` : ''}
-            </div>
-            ${spokes}
-          </div>`;
-        }).join('') + `</div>`;
-    }
-
-    // Wire spoke clicks — pre-fill name, category, and assignment in the bill modal
-    el.querySelectorAll('.bwz-hub-spoke').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const billName   = btn.dataset.billName   || '';
-        const billCat    = btn.dataset.billCat    || '';
-        const assignType = btn.dataset.assignType || 'none';
-        const assignId   = btn.dataset.assignId   || '';
-
-        _bwz.billingActive = true; _bwz.billingNextStep = 'billing';
-        _bwzGoBehind();
-        activateTab('finance'); switchFinView('bills');
-
-        await new Promise(r => setTimeout(r, 80)); // let view switch settle
-        await openBillCreateModal();                // resets form + loads targets
-
-        // 1. Name
-        if (billName) $('#bill-name').value = billName;
-
-        // 2. Bill category
-        if (billCat) {
-          $('#bill-category').value = billCat;
-          $('#bill-cat-other-wrap').style.display = billCat === 'other' ? '' : 'none';
-        }
-
-        // 3. Assignment — type dropdown → populate target list → select item
-        if (assignType && assignType !== 'none') {
-          $('#bill-assign-type').value = assignType;
-          syncAssignTarget(assignType);              // populates #bill-assign-target from already-loaded billData
-          if (assignId) $('#bill-assign-target').value = assignId;
-        }
-
-        // Move focus to amount so the user just types the amount and saves
-        $('#bill-amount').focus();
-      });
-    });
-
-    // ── Hover tooltip: show existing bill summary ────────────────────
-    let _bwzTip = null;
-    function _showBillTip(btn, rect) {
-      _hideBillTip();
-      let existing = [];
-      try { existing = JSON.parse(btn.dataset.existing || '[]'); } catch(e) {}
-      if (!existing.length) return;
-      const tip = document.createElement('div');
-      tip.className = 'bwz-bill-tip';
-      tip.innerHTML = existing.map(b => `
-        <div class="bwz-bill-tip-row">
-          <span class="bwz-bill-tip-name">${escHtml(b.name || '—')}</span>
-          <span class="bwz-bill-tip-amt ${b.overdue ? 'overdue' : ''}">${escHtml(b.amt || '')}${b.cadence ? ' · ' + escHtml(b.cadence) : ''}</span>
-        </div>`).join('');
-      document.body.appendChild(tip);
-      _bwzTip = tip;
-      // Position above the button
-      const tr = tip.getBoundingClientRect();
-      let left = rect.left + rect.width / 2 - tr.width / 2;
-      let top  = rect.top  - tr.height - 8;
-      if (left < 6) left = 6;
-      if (left + tr.width > window.innerWidth - 6) left = window.innerWidth - tr.width - 6;
-      if (top < 6) top = rect.bottom + 8;
-      tip.style.left = left + 'px';
-      tip.style.top  = top  + 'px';
-      tip.style.opacity = '1';
-    }
-    function _hideBillTip() {
-      if (_bwzTip) { _bwzTip.remove(); _bwzTip = null; }
-    }
-    el.querySelectorAll('.bwz-hub-spoke').forEach(btn => {
-      btn.addEventListener('mouseenter', () => _showBillTip(btn, btn.getBoundingClientRect()));
-      btn.addEventListener('mouseleave', _hideBillTip);
-    });
-  }
-
-  const loans      = loansRes.status   === 200 ? (loansRes.body?.data   || []) : [];
-  const rentals    = rentalsRes.status === 200 ? (rentalsRes.body?.data  || []) : [];
-  const properties = propsRes.status   === 200 ? (propsRes.body?.data    || []) : [];
-
-  // Steps 1–3: row lists
-  renderRows('bwz-ss-existing-loans',      loans,      '#8b5cf6');
-  renderRows('bwz-ss-existing-rentals',    rentals,    '#f59e0b');
-  renderRows('bwz-ss-existing-properties', properties, '#10b981');
-
-  // Step 4: rentals + properties merged into one hub row, each with assignType for auto-fill
-  const billHubItems = [
-    ...rentals.map(item    => ({ item, color: '#f59e0b', icon: 'fa-house',     assignType: 'rental'   })),
-    ...properties.map(item => ({ item, color: '#10b981', icon: 'fa-building',  assignType: 'property' })),
-  ];
-  renderCards('bwz-ss-existing-bills-rentals', billHubItems);
-  const billsPropsEl = $('#bwz-ss-existing-bills-properties');
-  if (billsPropsEl) billsPropsEl.innerHTML = '';
-
-  // Update the Next button label based on whether any bills have been added
-  const skipBtn = $('#bwz-ss-bill-skip');
-  if (skipBtn) {
-    if (allBills.length > 0) {
-      skipBtn.innerHTML = '<i class="fa fa-circle-check"></i> Bills ready — Continue';
-      skipBtn.classList.add('bwz-ss-bill-skip-done');
-    } else {
-      skipBtn.innerHTML = '<i class="fa fa-forward-step"></i> I\'ll add these later — Continue';
-      skipBtn.classList.remove('bwz-ss-bill-skip-done');
-    }
-  }
-}
-
 // ── Simplified billing refresh — update row badges ─────────────────────────
 async function _bwzBillingRefresh() {
   const [loansRes, rentalsRes, propsRes, billsRes] = await Promise.all([
@@ -12092,14 +11897,19 @@ async function openMyProfileModal() {
   $('#mp-f-name').value  = name;
   $('#mp-f-email').value = email;
   _mpRenderAvatar();
+  $('#mp-title-sub').textContent = email;
 
-  $('#my-profile-modal-overlay').style.display = 'flex';
+  const ov = $('#my-profile-modal-overlay');
+  ov.classList.remove('mac-out');
+  ov.style.display = 'flex';
+  ov.classList.add('mac-in');
 
   // Refresh from server in case another session changed it
   const res = await API.me();
   if (res.status === 200 && res.body?.data) {
     $('#mp-f-name').value  = res.body.data.name  || name;
     $('#mp-f-email').value = res.body.data.email || email;
+    $('#mp-title-sub').textContent = $('#mp-f-email').value;
     state._userAvatar = res.body.data.avatar_url || null;
     _mpRenderAvatar();
   }
@@ -12169,7 +11979,15 @@ $('#mp-avatar-remove').addEventListener('click', async () => {
 });
 
 function _closeMyProfileModal() {
-  $('#my-profile-modal-overlay').style.display = 'none';
+  const ov = $('#my-profile-modal-overlay');
+  if (ov.style.display === 'none') return;
+  ov.classList.remove('mac-in');
+  ov.classList.add('mac-out');
+  setTimeout(() => {
+    if (!ov.classList.contains('mac-out')) return; // reopened meanwhile
+    ov.classList.remove('mac-out');
+    ov.style.display = 'none';
+  }, 190);
 }
 
 $('#my-profile-modal-close').addEventListener('click', _closeMyProfileModal);
@@ -20166,12 +19984,20 @@ function _discRender() {
       <td style="font-size:11px;color:var(--text-muted)">${d.ends_at || '—'}</td>
       <td style="text-align:center">${_discStatusBadge(d)}</td>
       <td style="text-align:center">
-        <button class="cat-action-btn" onclick="_discOpenModal(${d.id})"><i class="fa fa-pen"></i> Edit</button>
-        <button class="cat-action-btn danger" onclick="_discDelete(${d.id})"><i class="fa fa-trash"></i></button>
+        <button class="cat-action-btn" data-disc-edit="${d.id}"><i class="fa fa-pen"></i> Edit</button>
+        <button class="cat-action-btn danger" data-disc-del="${d.id}"><i class="fa fa-trash"></i></button>
       </td>
     </tr>`;
   }).join('');
 }
+
+// Row Edit / Delete (delegated — inline onclick is blocked by the page's CSP)
+$('#disc-tbody')?.addEventListener('click', e => {
+  const edit = e.target.closest('[data-disc-edit]');
+  if (edit) { _discOpenModal(+edit.dataset.discEdit); return; }
+  const del = e.target.closest('[data-disc-del]');
+  if (del) _discDelete(+del.dataset.discDel);
+});
 
 function _discOpenModal(id) {
   _disc.editingId = id || null;
@@ -20631,7 +20457,7 @@ function _scRenderItems() {
           <button type="button" class="sc-item-type-btn${item.discount_type === 'percentage' ? ' active' : ''}" data-idx="${i}" data-type="percentage" title="Percentage">%</button>
           <button type="button" class="sc-item-type-btn${item.discount_type === 'flat' ? ' active' : ''}" data-idx="${i}" data-type="flat" title="Flat amount"><i class="fa fa-minus"></i></button>
         </div>
-        <input type="number" class="sc-item-value${item.discount_value ? '' : ' sc-item-value-empty'}" min="0.01" step="0.01" placeholder="e.g. 10" value="${item.discount_value ?? ''}" data-idx="${i}" onwheel="this.blur()">
+        <input type="number" class="sc-item-value${item.discount_value ? '' : ' sc-item-value-empty'}" min="0.01" step="0.01" placeholder="e.g. 10" value="${item.discount_value ?? ''}" data-idx="${i}" data-wheel-blur>
         <span class="sc-camp-item-final${final == null ? ' sc-camp-item-final-empty' : ''}" id="sc-item-final-${i}">${final != null ? `→ ${formatMoney(final)}` : (price ? 'Set a discount' : '')}</span>
       </div>
     </div>`;
@@ -21796,12 +21622,20 @@ function _brandRender() {
       <td style="text-align:right">${b.products_count}</td>
       <td style="text-align:center">${statusBadge}</td>
       <td style="text-align:center">
-        <button class="cat-action-btn" onclick="_brandOpenModal(${b.id})"><i class="fa fa-pen"></i> Edit</button>
-        <button class="cat-action-btn danger" onclick="_brandDelete(${b.id})"><i class="fa fa-trash"></i></button>
+        <button class="cat-action-btn" data-brand-edit="${b.id}"><i class="fa fa-pen"></i> Edit</button>
+        <button class="cat-action-btn danger" data-brand-del="${b.id}"><i class="fa fa-trash"></i></button>
       </td>
     </tr>`;
   }).join('');
 }
+
+// Row Edit / Delete (delegated — inline onclick is blocked by the page's CSP)
+$('#brand-tbody')?.addEventListener('click', e => {
+  const edit = e.target.closest('[data-brand-edit]');
+  if (edit) { _brandOpenModal(+edit.dataset.brandEdit); return; }
+  const del = e.target.closest('[data-brand-del]');
+  if (del) _brandDelete(+del.dataset.brandDel);
+});
 
 function _brandOpenModal(id) {
   _brand.editingId = id || null;
@@ -46866,7 +46700,7 @@ function _rstMiRender() {
         <span class="rst-mi-card-price">${item.price.toFixed(2)}</span>
         <div style="display:flex;align-items:center;gap:6px">
           ${avail}
-          <button class="rst-mi-toggle-btn" data-id="${item.id}" title="Toggle availability" onclick="event.stopPropagation()">
+          <button class="rst-mi-toggle-btn" data-id="${item.id}" title="Toggle availability">
             <i class="fa fa-${item.is_available ? 'eye-slash' : 'eye'}"></i>
           </button>
         </div>
@@ -55502,10 +55336,11 @@ async function loadDesigns() {
         </div>
         <p class="ds-empty-title">${em.title}</p>
         <p class="ds-empty-sub">${em.sub}</p>
-        <button class="ds-empty-btn" onclick="openDsCreateModal()">
+        <button class="ds-empty-btn">
           <i class="fa fa-plus"></i> ${escHtml(btnLabel)}
         </button>
       </div>`;
+    area.querySelector('.ds-empty-btn').addEventListener('click', () => openDsCreateModal());
     $('#ds-footer-text').textContent = '';
     return;
   }
@@ -56042,10 +55877,11 @@ async function submitDsCreate() {
           <i class="fa fa-file-contract"></i>
           <div class="ds-proposals-empty-title">No project proposals yet</div>
           <div class="ds-proposals-empty-sub">Create a multi-page project proposal and open each page in the Design Studio.</div>
-          <button class="svc-form-btn svc-form-btn--primary" onclick="document.getElementById('ds-prop-new-btn').click()">
+          <button class="svc-form-btn svc-form-btn--primary" data-prop-new>
             <i class="fa fa-plus"></i> New Project Proposal
           </button>
         </div>`;
+      area.querySelector('[data-prop-new]').addEventListener('click', () => $('#ds-prop-new-btn')?.click());
       return;
     }
 
@@ -60046,7 +59882,7 @@ async function submitDsCreate() {
     // Letters only — the initials are also written into the inline onerror handler below
     const initials = (e.initials || (p.name || '?').trim().charAt(0).toUpperCase()).replace(/[^\p{L}\p{N}]/gu, '') || '?';
     const avatar = e.photo_url
-      ? `<img class="crm-hf-avatar" src="${escHtml(e.photo_url)}" alt="" onerror="this.outerHTML='<span class=&quot;crm-hf-avatar&quot;>${initials}</span>'">`
+      ? `<img class="crm-hf-avatar" src="${escHtml(e.photo_url)}" alt="" data-img-fallback="initials" data-i="${initials}">`
       : `<span class="crm-hf-avatar">${initials}</span>`;
     const role = [e.job_title, e.department].filter(Boolean).map(escHtml).join(' · ');
     const meta = [
@@ -61407,7 +61243,7 @@ async function submitDsCreate() {
   // User photo with their initial underneath — if the image fails to load it removes itself.
   function _crmAvatarHtml(user, size = 22) {
     const initial = escHtml((user?.name || 'S').trim().charAt(0).toUpperCase() || 'S');
-    const img = user?.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="" onerror="this.remove()">` : '';
+    const img = user?.avatar_url ? `<img src="${escHtml(user.avatar_url)}" alt="" data-img-fallback="remove">` : '';
     const icon = user ? initial : '<i class="fa fa-robot"></i>';
     return `<span class="crm-av" style="width:${size}px;height:${size}px;font-size:${Math.round(size * 0.45)}px">${icon}${img}</span>`;
   }
@@ -62063,7 +61899,7 @@ async function submitDsCreate() {
     box.innerHTML = _crmEditProducts.map((p, i) => `
       <span class="crm-lead-product-chip">
         <span class="crm-lead-product-name" title="${escHtml(p.name)}">${escHtml(p.name)}</span>
-        <label class="crm-lead-product-qty" title="Quantity">×<input type="number" min="0" step="any" placeholder="qty" value="${p.quantity ?? ''}" data-crm-product-qty="${i}" onwheel="this.blur()"></label>
+        <label class="crm-lead-product-qty" title="Quantity">×<input type="number" min="0" step="any" placeholder="qty" value="${p.quantity ?? ''}" data-crm-product-qty="${i}" data-wheel-blur></label>
         <button type="button" data-crm-product-remove="${i}" title="Remove"><i class="fa fa-xmark"></i></button>
       </span>`).join('');
   }
@@ -62306,7 +62142,7 @@ async function submitDsCreate() {
       const e = p.employee || {};
       const initials = escHtml(e.initials || _crmInitials(p.name || '?'));
       const avatar = e.photo_url
-        ? `<img class="crm-lv-av" src="${escHtml(e.photo_url)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'crm-lv-av',textContent:this.dataset.i}))" data-i="${initials}">`
+        ? `<img class="crm-lv-av" src="${escHtml(e.photo_url)}" alt="" data-img-fallback="initials" data-i="${initials}">`
         : `<span class="crm-lv-av">${initials}</span>`;
       const info = [e.job_title && escHtml(e.job_title), sub].filter(Boolean).join(' · ');
       const contact = [
@@ -63933,10 +63769,10 @@ async function submitDsCreate() {
           <input class="po-field-input" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="Description">
           ${l.item_type === 'product' && l.product_id ? `<div class="crm-ws-muted crm-qt-sub"><i class="fa fa-box"></i> ${escHtml(l.sku || 'Product')}</div>` : ''}
         </td>
-        <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" onwheel="this.blur()"></td>
-        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" onwheel="this.blur()"></td>
-        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="discount_amount" data-qt-i="${i}" value="${l.discount_amount ? escHtml(String(l.discount_amount)) : ''}" placeholder="0" onwheel="this.blur()"></td>
-        <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" onwheel="this.blur()"></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" data-wheel-blur></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" data-wheel-blur></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="discount_amount" data-qt-i="${i}" value="${l.discount_amount ? escHtml(String(l.discount_amount)) : ''}" placeholder="0" data-wheel-blur></td>
+        <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" data-wheel-blur></td>
         <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
         <td data-qt-stock="${i}">${_crmQtStockCellHtml(s, i)}</td>
         <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-minus"></i></button></td>
@@ -63987,8 +63823,8 @@ async function submitDsCreate() {
           <div class="crm-qtx-card-h"><i class="fa fa-calculator"></i> Summary</div>
           <div class="crm-qt-totals">
             <div><span>Subtotal</span><span id="crm-qt-t-sub">${_crmQtMoney(t.subtotal)}</span></div>
-            <div><span>Extra discount</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="discount_amount" value="${f.discount_amount ? escHtml(String(f.discount_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
-            <div><span>Extra tax</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="tax_amount" value="${f.tax_amount ? escHtml(String(f.tax_amount)) : ''}" placeholder="0" onwheel="this.blur()"></div>
+            <div><span>Extra discount</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="discount_amount" value="${f.discount_amount ? escHtml(String(f.discount_amount)) : ''}" placeholder="0" data-wheel-blur></div>
+            <div><span>Extra tax</span><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-h="tax_amount" value="${f.tax_amount ? escHtml(String(f.tax_amount)) : ''}" placeholder="0" data-wheel-blur></div>
             <div><span>Discount (all)</span><span id="crm-qt-t-disc">−${_crmQtMoney(t.discount)}</span></div>
             <div><span>Tax (all)</span><span id="crm-qt-t-tax">+${_crmQtMoney(t.tax)}</span></div>
             <div class="crm-qt-grand"><span>Total</span><span id="crm-qt-t-total">${_crmQtMoney(t.total)}</span></div>
@@ -64195,7 +64031,7 @@ async function submitDsCreate() {
         <div class="crm-qt-grid">
           <label style="grid-column:span 2">To<input class="po-field-input" type="email" id="crm-qt-send-to" value="${escHtml(s.send.to || '')}" placeholder="customer@example.com"></label>
           <div class="crm-qt-field" style="grid-column:span 2"><span>CC <span class="crm-ws-muted">(pick a team member or the customer, or type any email)</span></span>
-            <div class="po-field-input crm-qt-cc" onclick="if(event.target===this)this.querySelector('input').focus()"><span id="crm-qt-cc-chips">${_crmQtCcChipsHtml(s.send.cc)}</span><input id="crm-qt-send-cc" list="crm-qt-cc-list" autocomplete="off" placeholder="Add email…"></div>
+            <div class="po-field-input crm-qt-cc" data-focus-input><span id="crm-qt-cc-chips">${_crmQtCcChipsHtml(s.send.cc)}</span><input id="crm-qt-send-cc" list="crm-qt-cc-list" autocomplete="off" placeholder="Add email…"></div>
             <datalist id="crm-qt-cc-list">${(q.send_defaults?.cc_options || []).map(o =>
               `<option value="${escHtml(o.email)}">${escHtml(o.name)} · ${o.kind === 'customer' ? 'Customer' : 'Department'}</option>`).join('')}</datalist></div>
           <label style="grid-column:1/-1">Subject<input class="po-field-input" id="crm-qt-send-subject" maxlength="255" value="${escHtml(s.send.subject || '')}"></label>
@@ -64217,7 +64053,7 @@ async function submitDsCreate() {
             `<label><input type="radio" name="crm-qt-response" value="${key}"${r.response === key ? ' checked' : ''}> <i class="fa ${icon}"></i> ${label}</label>`).join('')}
         </div>
         <div class="crm-qt-grid">
-          <label data-qt-resp-for="discount_request"${r.response === 'discount_request' ? '' : ' style="display:none"'}>Discount asked (%) *<input class="po-field-input crm-qt-numin" type="number" min="0.01" max="100" step="any" id="crm-qt-resp-discount" value="${escHtml(String(r.requested_discount ?? ''))}" onwheel="this.blur()"></label>
+          <label data-qt-resp-for="discount_request"${r.response === 'discount_request' ? '' : ' style="display:none"'}>Discount asked (%) *<input class="po-field-input crm-qt-numin" type="number" min="0.01" max="100" step="any" id="crm-qt-resp-discount" value="${escHtml(String(r.requested_discount ?? ''))}" data-wheel-blur></label>
           <label data-qt-resp-for="reject" style="grid-column:span 2${r.response === 'reject' ? '' : ';display:none'}">Lost reason *<select class="po-field-input" id="crm-qt-resp-lost"><option value="">— Pick a reason —</option>${lostReasons.map(x => `<option value="${x.id}"${+r.lost_reason_id === x.id ? ' selected' : ''}>${escHtml(x.label)}</option>`).join('')}</select></label>
           <label style="grid-column:1/-1">Notes<textarea class="po-field-input" id="crm-qt-resp-notes" rows="3" maxlength="2000" style="resize:vertical" placeholder="What exactly did they say?">${escHtml(r.notes || '')}</textarea></label>
         </div>
@@ -72058,7 +71894,7 @@ const TeamProfile = (() => {
     const colorBar = p.color ? `<div class="pm-project-card--color-bar" style="background:${esc(p.color)}"></div>` : '';
     const thumb = `
       <div class="pm-project-card-thumb">
-        <img class="pm-project-card-thumb-img" src="${esc(p.image_url || '')}" alt="" style="${p.image_url ? '' : 'display:none'}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <img class="pm-project-card-thumb-img" src="${esc(p.image_url || '')}" alt="" style="${p.image_url ? '' : 'display:none'}" data-img-fallback="next">
         <div class="pm-project-card-thumb-placeholder" style="${p.image_url ? 'display:none' : 'display:flex'}"><i class="fa fa-diagram-project"></i></div>
       </div>`;
     const card = document.createElement('div');
@@ -74561,7 +74397,7 @@ const TeamProfile = (() => {
         <div class="mp-prow" data-pid="${p.id}" style="--c:${color}" title="Open this project on the kanban board">
           <div class="mp-prow-main">
             <div class="mp-pcard-avatar">${p.image_url
-              ? `<img src="${esc(p.image_url)}" alt="" onerror="this.remove()">`
+              ? `<img src="${esc(p.image_url)}" alt="" data-img-fallback="remove">`
               : esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
             <div class="mp-pcard-title">
               <div class="mp-pcard-name" title="${esc(p.name)}">${esc(p.name)}</div>
@@ -76249,7 +76085,7 @@ const TeamProfile = (() => {
     body.innerHTML = `
       <div class="mp-pd-head">
         <div class="mp-pd-avatar" style="background:${esc(color)}">${p.image_url
-          ? `<img src="${esc(p.image_url)}" alt="" onerror="this.remove()">`
+          ? `<img src="${esc(p.image_url)}" alt="" data-img-fallback="remove">`
           : esc((p.name || '?').trim().charAt(0).toUpperCase())}</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:16px;font-weight:700;overflow-wrap:anywhere">${esc(p.name)}</div>
