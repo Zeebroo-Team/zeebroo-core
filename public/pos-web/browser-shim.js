@@ -21,6 +21,7 @@
   var APP_VERSION = (script && script.dataset.appVersion) || '0.0.0';
   var WEB_LOGOUT_URL = (script && script.dataset.webLogoutUrl) || '';
   var CSRF_TOKEN  = (script && script.dataset.csrf) || '';
+  var WEB_LOGIN_URL = (script && script.dataset.webLoginUrl) || '';
   var API_ORIGIN  = new URL(API_BASE, location.href).origin;
 
   var CONFIG_KEY  = 'zb_web_config';
@@ -37,6 +38,72 @@
     try { localStorage.setItem(key, JSON.stringify(value)); return true; } catch (_) { return false; }
   }
   function readConfig() { return Object.assign({}, DEFAULT_CONFIG, readJson(CONFIG_KEY, {})); }
+
+  // ── Boot loader ───────────────────────────────────────────────────────────
+  // The renderer shows #login-screen by default until init() has read the
+  // config. Coming from "Continue to Dashboard" (?handoff=) or with a saved
+  // token the user is already signed in, so that login form would only flash
+  // for a moment. Cover the page with a loader instead, and take it away once
+  // the app has picked a screen (it sets #login-screen's inline display).
+  // showLoader(text) covers the page and returns a finish() that removes it.
+  function showLoader(text) {
+    var dark = !!readConfig().dark_mode;
+    var root = document.documentElement;
+    root.classList.add('zb-booting');
+
+    var style = document.createElement('style');
+    style.textContent =
+      'html.zb-booting #login-screen,html.zb-booting #app-shell{visibility:hidden!important}' +
+      '#zb-boot{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;' +
+        'background:' + (dark ? '#0f172a' : '#fff') + ';color:' + (dark ? '#cbd5e1' : '#475569') + ';' +
+        'font:500 14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;transition:opacity .25s ease}' +
+      '#zb-boot.zb-done{opacity:0;pointer-events:none}' +
+      '#zb-boot .zb-ring{width:44px;height:44px;border-radius:50%;border:4px solid ' + (dark ? '#1e293b' : '#e2e8f0') + ';' +
+        'border-top-color:#3b82f6;animation:zb-spin .8s linear infinite}' +
+      '#zb-boot .zb-dots::after{content:"";animation:zb-dots 1.2s steps(4,end) infinite}' +
+      '@keyframes zb-spin{to{transform:rotate(360deg)}}' +
+      '@keyframes zb-dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}' +
+      '@media (prefers-reduced-motion:reduce){#zb-boot .zb-ring{animation-duration:2.4s}#zb-boot .zb-dots::after{animation:none;content:"..."}}';
+    (document.head || root).appendChild(style);
+
+    var overlay = document.createElement('div');
+    overlay.id = 'zb-boot';
+    overlay.setAttribute('role', 'status');
+    overlay.setAttribute('aria-live', 'polite');
+    overlay.innerHTML = '<div class="zb-ring"></div><div class="zb-dots"></div>';
+    overlay.lastChild.textContent = text;
+    (document.body || root).appendChild(overlay);
+
+    var finished = false;
+    return function finish() {
+      if (finished) return;
+      finished = true;
+      root.classList.remove('zb-booting');
+      overlay.classList.add('zb-done');
+      setTimeout(function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); style.remove(); }, 300);
+    };
+  }
+
+  (function bootLoader() {
+    var signingIn = false;
+    try { signingIn = new URL(location.href).searchParams.has('handoff'); } catch (_) {}
+    if (!signingIn && !readConfig().token) return;
+
+    var finish = showLoader(signingIn ? 'Signing you in to Zeebroo POS' : 'Opening Zeebroo POS');
+
+    // Never leave the user stuck behind the loader.
+    setTimeout(finish, 20000);
+
+    document.addEventListener('DOMContentLoaded', function () {
+      var login = document.getElementById('login-screen');
+      if (!login) { finish(); return; } // not the main POS page
+      if (login.style.display) { finish(); return; }
+      var mo = new MutationObserver(function () {
+        if (login.style.display) { mo.disconnect(); finish(); }
+      });
+      mo.observe(login, { attributes: true, attributeFilter: ['style'] });
+    });
+  })();
 
   function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -783,11 +850,20 @@
     setConfig: function (patch) {
       return handoffReady.then(async function () {
         var old = readConfig();
-        if (isSignOut(patch, old)) await signOut(old);
+        var signingOut = isSignOut(patch, old);
+        // Signed in from the website → sign out back to the website's login
+        // page, never the app's own login screen.
+        var toWebsite = signingOut && old.web_session && WEB_LOGIN_URL;
+        if (toWebsite) showLoader('Signing out');
+        if (signingOut) await signOut(old);
         var next = Object.assign(readConfig(), patch || {});
         // A token from the app's own sign-in form is not tied to the website.
         if (patch && Object.prototype.hasOwnProperty.call(patch, 'token')) next.web_session = false;
         writeJson(CONFIG_KEY, next);
+        if (toWebsite) {
+          location.replace(WEB_LOGIN_URL);
+          return new Promise(function () {}); // the page is going away
+        }
         return next;
       });
     },

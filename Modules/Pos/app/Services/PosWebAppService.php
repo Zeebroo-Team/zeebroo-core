@@ -75,7 +75,7 @@ class PosWebAppService
      * Return an HTML page with the <base> tag and browser shim injected right
      * after <head>, before any of the page's own scripts run.
      */
-    public function renderHtml(string $path, string $baseUrl, string $shimUrl, string $apiBaseUrl, ?string $logoutUrl = null, ?string $csrfToken = null): string
+    public function renderHtml(string $path, string $baseUrl, string $shimUrl, string $apiBaseUrl, ?string $logoutUrl = null, ?string $csrfToken = null, ?string $loginUrl = null): string
     {
         $html = (string) file_get_contents($path);
 
@@ -83,6 +83,11 @@ class PosWebAppService
         $logoutAttrs = $logoutUrl !== null && $csrfToken !== null
             ? ' data-web-logout-url="'.e($logoutUrl).'" data-csrf="'.e($csrfToken).'"'
             : '';
+        // After that sign-out the browser goes back to the website's login page
+        // instead of the app's own login screen.
+        if ($loginUrl !== null) {
+            $logoutAttrs .= ' data-web-login-url="'.e($loginUrl).'"';
+        }
 
         $inject = "\n".'<base href="'.e(rtrim($baseUrl, '/').'/').'">'
             ."\n".'<script src="'.e($shimUrl).'" data-api-base="'.e(rtrim($apiBaseUrl, '/')).'"'
