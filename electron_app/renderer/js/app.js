@@ -4691,7 +4691,23 @@ async function _invOpenDetail(id) {
   $('#sinv-detail-body').innerHTML = body;
 
   // Wire actions
-  $('#invd-edit')?.addEventListener('click', () => _invOpenForm(inv));
+  $('#invd-edit')?.addEventListener('click', async () => {
+    if (inv.status === 'paid') {
+      const ok = await appConfirm({
+        title: `Edit paid invoice ${inv.invoice_number}?`,
+        message: 'This invoice is already marked as paid. Changing items, quantities or prices will change '
+          + 'the invoice total, and product stock will be adjusted to match the new quantities. '
+          + 'Any payment already received will not be changed automatically, and copies already sent '
+          + 'to the customer will no longer match. Only continue if you need to correct this invoice.',
+        icon: 'fa-triangle-exclamation',
+        danger: true,
+        confirmText: '<i class="fa fa-pen"></i> Edit Anyway',
+        cancelText: 'Cancel',
+      });
+      if (!ok) return;
+    }
+    _invOpenForm(inv);
+  });
   $('#invd-sent')?.addEventListener('click', () => _invShowSendModal(inv));
   $('#invd-paid')?.addEventListener('click', async () => {
     const r = await API.invoicePaid(inv.id);
