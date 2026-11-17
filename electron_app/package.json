@@ -17,13 +17,10 @@
     "build:win": "electron-builder --win",
     "build:linux": "electron-builder --linux"
   },
-  "dependencies": {
-    "electron-store": "^8.1.0",
-    "playwright-core": "^1.61.0"
-  },
   "devDependencies": {
-    "electron": "41.10.6",
-    "electron-builder": "^26.15.3"
+    "electron": "42.11.18",
+    "electron-builder": "^26.18.0",
+    "playwright-core": "^1.61.0"
   },
   "build": {
     "appId": "com.zeebroo.pos-desktop",
@@ -41,8 +38,6 @@
       "preload.js",
       "renderer/**/*",
       "node_modules/**/*",
-      "!node_modules/playwright-core/.local-browsers/**/*",
-      "!node_modules/playwright-core/bin/**/*",
       "!**/*.map",
       "!**/*.d.ts"
     ],
@@ -104,8 +99,11 @@
     }
   },
   "overrides": {
-    "fast-uri": "^3.1.8",
-    "brace-expansion": "^5.0.8",
-    "tar": "^7.5.21"
+    "fast-uri": "^3.1.9",
+    "brace-expansion": "^5.0.12",
+    "@xmldom/xmldom": "^0.8.15",
+    "tar": "^7.5.21",
+    "minimatch@^9.0.0": "^11.0.1",
+    "minimatch@^10.0.0": "^11.0.1"
   }
 }

@@ -18,8 +18,8 @@
     "build:linux": "electron-builder --linux"
   },
   "devDependencies": {
-    "electron": "^40.10.6",
-    "electron-builder": "^26.15.3"
+    "electron": "^42.11.18",
+    "electron-builder": "^26.18.0"
   },
   "build": {
     "appId": "com.zeebroo.pos-lite",
