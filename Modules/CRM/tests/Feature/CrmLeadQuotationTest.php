@@ -452,6 +452,45 @@ test('the customer address is filled from the lead\'s customer, can be changed, 
     expect(app(QuotationService::class)->revise($q)->customer_address)->toBe('5 Hill St, Kandy');
 });
 
+test('the printed quotation is addressed to the lead until it has a customer', function () {
+    $this->lead->update(['company' => 'Kasun Stores', 'phone' => '0771234567']);
+    $q = crmQuoteCreate(null, ['customer_address' => "12 B\nMatara"]);
+
+    expect(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['bill_to'])->toBe([
+        'name' => 'Kasun Stores', 'contact' => 'Kasun', 'address' => "12 B\nMatara", 'phone' => '0771234567', 'email' => 'kasun@example.com',
+    ]);
+
+    // Once it is the customer's, the customer's details win
+    $customerId = DB::table('pos_customers')->insertGetId(['business_id' => 7, 'name' => 'Kasun Stores (Pvt) Ltd', 'phone' => '0112000000']);
+    $q->update(['customer_id' => $customerId]);
+    expect($q->fresh()->billTo())->toMatchArray(['name' => 'Kasun Stores (Pvt) Ltd', 'address' => "12 B\nMatara", 'phone' => '0112000000']);
+
+    // No customer, no lead → walk-in
+    expect((new Quotation)->billTo()['name'])->toBe('Walk-in Customer');
+});
+
+test('each line takes an optional note that is returned, editable, and carries to a new version', function () {
+    $q = crmQuoteCreate([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'notes' => '  Black frame, deliver to site  ', 'quantity' => 1, 'unit_price' => 100],
+        ['item_type' => 'custom', 'description' => 'Labour', 'quantity' => 1, 'unit_price' => 50],
+    ]);
+
+    $items = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['items'];
+    expect(array_column($items, 'notes'))->toBe(['Black frame, deliver to site', null]);
+
+    $detail = crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'notes' => 'Silver frame', 'quantity' => 1, 'unit_price' => 100],
+    ]))->getData(true)['data'];
+    expect($detail['items'][0]['notes'])->toBe('Silver frame');
+
+    $q->refresh()->update(['status' => Quotation::STATUS_REJECTED]);
+    expect(app(QuotationService::class)->revise($q)->items->sole()->notes)->toBe('Silver frame');
+
+    expect(crmQuoteStatus(fn () => crmQuote('store', 3, [$this->lead->id], 'POST', crmQuoteBody([
+        ['item_type' => 'custom', 'description' => 'X', 'notes' => str_repeat('a', 1001), 'quantity' => 1, 'unit_price' => 1],
+    ]))))->toBe(422);
+});
+
 test('who may create a quotation on the lead', function (int $userId, int $status) {
     expect(crmQuoteStatus(fn () => crmQuote('store', $userId, [$this->lead->id], 'POST', crmQuoteBody())))->toBe($status);
 })->with([

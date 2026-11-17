@@ -89,7 +89,7 @@ class QuotationTemplateService
     public function render(Business $business, Quotation $quotation): string
     {
         $setup = $this->get($business);
-        $quotation->loadMissing(['customer', 'items.product']);
+        $quotation->loadMissing(['customer', 'lead', 'items.product']);
 
         $html = $this->inlineImages($business, $this->sanitize($setup['custom_html']));
         $out  = $this->renderNodes($this->parse($html), [$this->data($business, $quotation, $setup)]);
@@ -129,8 +129,10 @@ class QuotationTemplateService
                 'no'           => $i + 1,
                 'no_padded'    => str_pad((string) ($i + 1), 2, '0', STR_PAD_LEFT),
                 'name'         => $lines[0] ?? '',
-                'details'      => trim(implode("\n", array_slice($lines, 1))),
+                // The line's own note prints with the item's details in every template
+                'details'      => trim(implode("\n", array_filter([implode("\n", array_slice($lines, 1)), trim((string) $it->notes)], 'strlen'))),
                 'description'  => (string) $it->description,
+                'note'         => (string) ($it->notes ?? ''),
                 'qty'          => $qtyStr,
                 'qty_padded'   => fmod($qty, 1.0) == 0.0 ? str_pad($qtyStr, 2, '0', STR_PAD_LEFT) : $qtyStr,
                 'unit_price'   => $this->num($unit),
@@ -156,6 +158,7 @@ class QuotationTemplateService
         $disc = (float) $q->discount_amount;
         $tax  = (float) $q->tax_amount;
         [$wMm, $hMm] = $this->paper($business);
+        $bill = $q->billTo();
 
         return [
             'doc_title'        => 'Quotation',
@@ -169,10 +172,11 @@ class QuotationTemplateService
             'reference'        => (string) ($q->reference ?? ''),
             'status'           => method_exists($q, 'statusLabel') ? (string) $q->statusLabel() : (string) $q->status,
             'notes'            => (string) ($q->notes ?? ''),
-            'customer_name'    => (string) ($q->customer?->name ?: 'Walk-in Customer'),
-            'customer_address' => (string) ($q->customer?->address ?? ''),
-            'customer_phone'   => (string) ($q->customer?->phone ?? ''),
-            'customer_email'   => (string) ($q->customer?->email ?? ''),
+            'customer_name'    => $bill['name'],
+            'customer_contact' => $bill['contact'],
+            'customer_address' => $bill['address'],
+            'customer_phone'   => $bill['phone'],
+            'customer_email'   => $bill['email'],
             'business_name'    => (string) $business->name,
             'business_address' => (string) ($business->getSetting('pos.receipt_address', '') ?: ''),
             'logo_url'         => $this->logoSrc($business),
