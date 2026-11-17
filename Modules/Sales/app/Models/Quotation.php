@@ -86,6 +86,36 @@ class Quotation extends Model
         return $this->belongsTo(Lead::class, 'lead_id');
     }
 
+    /**
+     * Who the quotation is addressed to: the customer, else the CRM lead it was built for
+     * (not converted to a customer yet), else a walk-in. The quotation's own address wins.
+     *
+     * @return array{name: string, contact: string, address: string, phone: string, email: string}
+     */
+    public function billTo(): array
+    {
+        if ($c = $this->customer) {
+            return [
+                'name'    => (string) $c->name,
+                'contact' => (string) ($c->contact_name ?? ''),
+                'address' => (string) ($this->customer_address ?: ($c->address ?? '')),
+                'phone'   => (string) ($c->phone ?? ''),
+                'email'   => (string) ($c->email ?? ''),
+            ];
+        }
+        if ($this->lead_id && ($l = $this->lead)) {
+            return [
+                'name'    => (string) ($l->company ?: $l->name),
+                'contact' => $l->company ? (string) $l->name : '',
+                'address' => (string) ($this->customer_address ?? ''),
+                'phone'   => (string) ($l->phone ?? ''),
+                'email'   => (string) ($l->email ?? ''),
+            ];
+        }
+
+        return ['name' => 'Walk-in Customer', 'contact' => '', 'address' => (string) ($this->customer_address ?? ''), 'phone' => '', 'email' => ''];
+    }
+
     /** The version this one revises. */
     public function parent(): BelongsTo
     {

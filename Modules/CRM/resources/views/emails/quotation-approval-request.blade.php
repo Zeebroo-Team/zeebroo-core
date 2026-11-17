@@ -220,6 +220,7 @@
                     <td style="{{ $td }}">
                         {{ $i->description ?: $i->product?->name ?: $i->serviceItem?->name ?: '—' }}
                         @if($i->product?->sku)<div style="font-size:11px;color:{{ $muted }};">SKU {{ $i->product->sku }}</div>@endif
+                        @if($i->notes)<div style="font-size:11px;color:{{ $muted }};font-style:italic;white-space:pre-line;">{{ $i->notes }}</div>@endif
                     </td>
                     <td style="{{ $td }}text-align:right;white-space:nowrap;">{{ $num($i->quantity, 3) }}</td>
                     <td style="{{ $td }}text-align:right;white-space:nowrap;">{{ $money($i->unit_price) }}</td>

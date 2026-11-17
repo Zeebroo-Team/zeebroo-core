@@ -3893,14 +3893,17 @@ async function _fetchLetterhead() {
 // Quotations print with their own Quotation Setup (template, colour, paper,
 // margins, header layout, letterhead), falling back to Invoice Setup values.
 function _qtToPrintDoc(q) {
+  // CRM quotations carry bill_to: the customer, else the lead not converted yet
+  const b = q.bill_to || {};
   return {
     invoice_number:  q.quote_number,
     issue_date:      q.quote_date,
     due_date:        q.expiry_date,
-    customer_name:   q.customer_name,
-    customer_address: q.customer_address,
-    customer_phone:  q.customer_phone,
-    customer_email:  q.customer_email,
+    customer_name:   b.name || q.customer_name,
+    customer_contact: b.contact || q.customer_contact || '',
+    customer_address: b.address || q.customer_address,
+    customer_phone:  b.phone || q.customer_phone,
+    customer_email:  b.email || q.customer_email,
     reference:       q.reference,
     status:          q.status,
     status_label:    q.status_label,
@@ -30909,7 +30912,11 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
       rentalLine = `<div style="font-size:9px;color:#b45309;font-weight:600;margin-top:2px">📅 ${parts.join(' · ')}</div>`;
     }
 
-    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${wtyLine}${rentalLine}</td><td class="r">${qty}</td><td class="r">${money(up)}</td>${discTd}${taxTd}<td class="r b">${money(lt)}</td></tr>`;
+    const noteLine = it.notes
+      ? `<div style="font-size:10px;color:#475569;margin-top:2px;white-space:pre-line">${escHtml(String(it.notes).trim())}</div>`
+      : '';
+
+    return `<tr><td class="n">${n}</td><td><b>${escHtml(it.description || '')}</b>${noteLine}${wtyLine}${rentalLine}</td><td class="r">${qty}</td><td class="r">${money(up)}</td>${discTd}${taxTd}<td class="r b">${money(lt)}</td></tr>`;
   }).join('\n    ');
 
   // ── Summary rows ──────────────────────────────────────────────────────────
@@ -31653,7 +31660,7 @@ const QTPL_FIELDS = [
     ['status', 'Status'], ['notes', 'Notes'],
   ] },
   { group: 'Customer', items: [
-    ['customer_name', 'Name'], ['customer_address', 'Address'], ['customer_phone', 'Phone'], ['customer_email', 'Email'],
+    ['customer_name', 'Name'], ['customer_contact', 'Contact person'], ['customer_address', 'Address'], ['customer_phone', 'Phone'], ['customer_email', 'Email'],
   ] },
   { group: 'Business', items: [
     ['business_name', 'Business name'], ['business_address', 'Address'], ['logo_url', 'Logo image URL'], ['accent', 'Accent colour'],
@@ -31663,7 +31670,7 @@ const QTPL_FIELDS = [
     ['tax_rate', 'Tax rate %'], ['currency', 'Currency'],
   ] },
   { group: 'Line items — inside {{#items}}', items: [
-    ['no_padded', 'Line no. (01)'], ['name', 'Item name (1st line)'], ['details', 'Item details (other lines)'],
+    ['no_padded', 'Line no. (01)'], ['name', 'Item name (1st line)'], ['details', 'Item details (other lines + note)'], ['note', 'Item note only'],
     ['qty', 'Quantity'], ['unit_price', 'Unit price'], ['net', 'Price after discount'], ['tax', 'Tax'], ['total', 'Line total incl. tax'],
   ] },
 ];
@@ -31761,12 +31768,15 @@ function _qtplData(inv, ic, cur) {
     if (rate > 0 && it.tax_type !== 'flat') rates.push(rate);
     const lines = String(it.description || '').split(/\r?\n/);
     const qtyStr = qty % 1 === 0 ? String(qty) : qty.toFixed(2);
+    const note  = String(it.notes || '').trim();
     return {
       no:           i + 1,
       no_padded:    String(i + 1).padStart(2, '0'),
       name:         lines[0],
-      details:      lines.slice(1).join('\n').trim(),
+      // The line's own note prints with the item's details, under the name
+      details:      [lines.slice(1).join('\n').trim(), note].filter(Boolean).join('\n'),
       description:  it.description || '',
+      note,
       qty:          qtyStr,
       qty_padded:   qty % 1 === 0 ? qtyStr.padStart(2, '0') : qtyStr,
       unit_price:   _qtplNum(unit),
@@ -31796,6 +31806,7 @@ function _qtplData(inv, ic, cur) {
     status:           inv.status_label || inv.status || '',
     notes:            inv.notes || '',
     customer_name:    inv.customer_name || 'Walk-in Customer',
+    customer_contact: inv.customer_contact || '',
     customer_address: inv.customer_address || '',
     customer_phone:   inv.customer_phone || '',
     customer_email:   inv.customer_email || '',
@@ -63713,7 +63724,7 @@ async function submitDsCreate() {
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
-        sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
+        notes: i.notes || '', sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
       })),
     };
   }
@@ -63766,8 +63777,16 @@ async function submitDsCreate() {
     const rows = f.lines.map((l, i) => `
       <tr data-qt-line="${i}">
         <td>
-          <input class="po-field-input" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="Description">
+          <input class="po-field-input" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="What are you quoting? e.g. Installation, delivery…">
           ${l.item_type === 'product' && l.product_id ? `<div class="crm-ws-muted crm-qt-sub"><i class="fa fa-box"></i> ${escHtml(l.sku || 'Product')}</div>` : ''}
+          <div class="crm-qt-note${l.notes || l._noteOpen ? ' open' : ''}">
+            <button type="button" class="crm-qt-note-add" data-qt-note-open="${i}"><i class="fa fa-plus"></i> Add note</button>
+            <div class="crm-qt-note-box">
+              <i class="fa fa-note-sticky"></i>
+              <textarea rows="${Math.min(6, Math.max(1, String(l.notes || '').split('\n').length))}" maxlength="1000" data-qt-f="notes" data-qt-i="${i}" placeholder="e.g. colour, size, delivery or warranty remark — printed under this item">${escHtml(l.notes || '')}</textarea>
+              <button type="button" class="crm-qt-note-clear" data-qt-note-clear="${i}" title="Remove note"><i class="fa fa-xmark"></i></button>
+            </div>
+          </div>
         </td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" data-wheel-blur></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" data-wheel-blur></td>
@@ -63899,7 +63918,7 @@ async function submitDsCreate() {
       .filter(l => (l.description || '').trim() || l.product_id)
       .map(l => ({
         item_type: l.item_type || 'custom', product_id: l.product_id || null, service_item_id: l.service_item_id || null,
-        description: (l.description || '').trim(), quantity: _crmQtNum(l.quantity), unit_price: _crmQtNum(l.unit_price),
+        description: (l.description || '').trim(), notes: (l.notes || '').trim() || null, quantity: _crmQtNum(l.quantity), unit_price: _crmQtNum(l.unit_price),
         discount_amount: _crmQtNum(l.discount_amount), tax_rate: _crmQtNum(l.tax_rate),
       }));
     if (!items.length) return fail('Add at least one line.');
@@ -63970,7 +63989,7 @@ async function submitDsCreate() {
     };
     const rows = (q.items || []).map((i, idx) => `<tr>
         <td>${idx + 1}</td>
-        <td>${escHtml(i.description || i.product_name || '—')}${i.sku ? `<div class="crm-ws-muted crm-qt-sub">${escHtml(i.sku)}</div>` : ''}</td>
+        <td>${escHtml(i.description || i.product_name || '—')}${i.sku ? `<div class="crm-ws-muted crm-qt-sub">${escHtml(i.sku)}</div>` : ''}${i.notes ? `<div class="crm-ws-muted crm-qt-sub crm-qt-note-view"><i class="fa fa-note-sticky"></i> ${escHtml(i.notes)}</div>` : ''}</td>
         <td class="crm-qt-right">${_crmQtQty(i.quantity)}</td>
         <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}</td>
         ${lineDisc ? `<td class="crm-qt-right">${i.discount_amount > 0 ? '−' + _crmQtMoney(i.discount_amount) : '—'}</td>` : ''}
@@ -64219,6 +64238,7 @@ async function submitDsCreate() {
       if (!line) return;
       line[el.dataset.qtF] = el.value;
       el.closest('tr')?.classList.remove('crm-qt-line--error');
+      if (el.dataset.qtF === 'notes') { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; return; }
       _crmQtRefreshTotals();
       if (el.dataset.qtF === 'quantity') _crmQtScheduleStock(lead);
     } else if (el.dataset.qtH !== undefined) {
@@ -64288,6 +64308,20 @@ async function submitDsCreate() {
       s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
       _crmRenderWsTab();
       $$('#crm-qt-edit-body [data-qt-f="description"]').pop()?.focus();
+    } else if (t.dataset.qtNoteOpen !== undefined && s.form) {
+      // Open the line's note field in place — no re-render, so other fields keep their state
+      const line = s.form.lines[+t.dataset.qtNoteOpen];
+      if (line) line._noteOpen = true;
+      const wrap = t.closest('.crm-qt-note');
+      wrap?.classList.add('open');
+      wrap?.querySelector('textarea')?.focus();
+    } else if (t.dataset.qtNoteClear !== undefined && s.form) {
+      const line = s.form.lines[+t.dataset.qtNoteClear];
+      if (line) { line.notes = ''; line._noteOpen = false; }
+      const wrap = t.closest('.crm-qt-note');
+      const box = wrap?.querySelector('textarea');
+      if (box) { box.value = ''; box.style.height = ''; }
+      wrap?.classList.remove('open');
     } else if (t.dataset.qtLineDel !== undefined && s.form) {
       s.form.lines.splice(+t.dataset.qtLineDel, 1);
       s.stock = null;

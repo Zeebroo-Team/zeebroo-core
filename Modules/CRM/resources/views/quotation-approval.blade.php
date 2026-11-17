@@ -352,7 +352,8 @@
                             <tr>
                                 <td class="sub">{{ $loop->iteration }}</td>
                                 <td>{{ $i->description ?: $i->product?->name ?: $i->serviceItem?->name ?: '—' }}
-                                    @if($i->product?->sku)<div class="sub">SKU {{ $i->product->sku }}</div>@endif</td>
+                                    @if($i->product?->sku)<div class="sub">SKU {{ $i->product->sku }}</div>@endif
+                                    @if($i->notes)<div class="sub" style="white-space:pre-line">{{ $i->notes }}</div>@endif</td>
                                 <td class="r">{{ $num($i->quantity, 3) }}</td>
                                 <td class="r">{{ $money($i->unit_price) }}</td>
                                 @if($hasLineDisc)<td class="r" style="color:var(--bad)">{{ (float) $i->discount_amount > 0 ? '−' . $money($i->discount_amount) : '—' }}</td>@endif

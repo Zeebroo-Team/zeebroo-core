@@ -350,6 +350,7 @@ class PosCrmLeadQuotationApiController extends Controller
             'items.*.product_id'      => ['nullable', 'integer', Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'items.*.service_item_id' => ['nullable', 'integer'],
             'items.*.description'     => ['nullable', 'string', 'max:255'],
+            'items.*.notes'           => ['nullable', 'string', 'max:1000'],
             'items.*.quantity'        => ['required', 'numeric', 'min:0.001'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
@@ -388,6 +389,7 @@ class PosCrmLeadQuotationApiController extends Controller
 
     private function presentDetail(Business $business, CrmAccess $access, Lead $lead, Quotation $q): array
     {
+        $q->setRelation('lead', $lead);
         $q->load(['customer', 'items.product:id,name,sku', 'approvals.byUser:id,name', 'dispatches.sentBy:id,name', 'customerResponses.recordedBy:id,name', 'submittedBy:id,name', 'approvedBy:id,name']);
 
         $items = $q->items->map(fn (QuotationItem $i) => [
@@ -398,6 +400,7 @@ class PosCrmLeadQuotationApiController extends Controller
             'product_name'    => $i->product?->name,
             'sku'             => $i->product?->sku,
             'description'     => $i->description,
+            'notes'           => $i->notes,
             'quantity'        => round((float) $i->quantity, 3),
             'unit_price'      => round((float) $i->unit_price, 2),
             'discount_amount' => round((float) $i->discount_amount, 2),
@@ -420,6 +423,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'notes'         => $q->notes,
             'customer_id'   => $q->customer_id,
             'customer_address' => $q->customer_address,
+            // Who the printed quotation is addressed to — the customer, else the lead
+            'bill_to'       => $q->billTo(),
             'branch_id'     => $q->branch_id,
             'subtotal'      => round((float) $q->subtotal, 2),
             'discount_amount' => round((float) $q->discount_amount, 2),

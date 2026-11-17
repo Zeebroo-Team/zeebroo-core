@@ -197,6 +197,9 @@ body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
                         @if($sublabel)
                             <br><span style="color:#64748b;font-size:10px;">{{ $sublabel }}</span>
                         @endif
+                        @if($item->notes)
+                            <br><span style="color:#64748b;font-size:10px;font-style:italic;white-space:pre-line;">{{ $item->notes }}</span>
+                        @endif
                     </td>
                     <td class="r">{{ $fmtQty($item->quantity) }}</td>
                     <td class="r">{{ $money($item->unit_price) }}</td>
