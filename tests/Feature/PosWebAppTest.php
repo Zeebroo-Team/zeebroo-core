@@ -111,7 +111,8 @@ it('gives the app page what it needs to end the website session on sign out', fu
     $html = $this->get('/pos-app')->getContent();
 
     expect($html)->toContain('data-web-logout-url="'.route('logout').'"')
-        ->and($html)->toMatch('/data-csrf="[^"]+"/');
+        ->and($html)->toMatch('/data-csrf="[^"]+"/')
+        ->and($html)->toContain('data-web-login-url="'.route('login').'"');
 });
 
 it('revokes POS web-app tokens when the website signs out', function () {

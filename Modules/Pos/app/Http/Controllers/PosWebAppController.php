@@ -44,7 +44,7 @@ class PosWebAppController extends Controller
             $shimUrl = asset('pos-web/browser-shim.js').'?v='.(is_file($shim) ? filemtime($shim) : '0');
 
             return response(
-                $this->webApp->renderHtml($file['path'], url('/pos-app'), $shimUrl, url('/api/v1/pos'), route('logout'), csrf_token()),
+                $this->webApp->renderHtml($file['path'], url('/pos-app'), $shimUrl, url('/api/v1/pos'), route('logout'), csrf_token(), route('login')),
                 200,
                 ['Content-Type' => $file['mime'], 'Cache-Control' => 'no-cache, must-revalidate'],
             );

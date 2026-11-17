@@ -86,7 +86,9 @@ class Invoice extends Model
 
     public function isEditable(): bool
     {
-        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_SENT]);
+        // Paid invoices stay editable (the UI warns first); InvoiceService::update
+        // keeps product stock in step with any quantity changes.
+        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_SENT, self::STATUS_PAID]);
     }
 
     public function isPaymentDue(): bool
