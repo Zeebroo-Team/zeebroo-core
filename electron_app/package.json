@@ -1,6 +1,6 @@
 {
   "name": "zeebroo-pos-desktop",
-  "version": "6.0.0",
+  "version": "6.27.0",
   "description": "Zeebroo POS Desktop — Electron ribbon interface",
   "author": {
     "name": "Zeebroo",
@@ -37,6 +37,7 @@
     "files": [
       "main.js",
       "config.js",
+      "offline.js",
       "preload.js",
       "renderer/**/*",
       "node_modules/**/*",

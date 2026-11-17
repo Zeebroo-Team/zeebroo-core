@@ -218,7 +218,7 @@
 
             {{-- Download links --}}
             <td>
-              @if($release->windows_url || $release->macos_url || $release->linux_url)
+              @if($release->windows_url || $release->macos_url || $release->macos_intel_url || $release->linux_url)
                 <div class="arl-plat">
                   @if($release->windows_url)
                     <a href="{{ $release->windows_url }}" target="_blank" class="arl-plat-link" title="Windows">
@@ -226,8 +226,13 @@
                     </a>
                   @endif
                   @if($release->macos_url)
-                    <a href="{{ $release->macos_url }}" target="_blank" class="arl-plat-link" title="macOS">
-                      <i class="fa fa-brands fa-apple"></i> Mac
+                    <a href="{{ $release->macos_url }}" target="_blank" class="arl-plat-link" title="macOS — Apple Silicon (M1/M2/M3/M4)">
+                      <i class="fa fa-brands fa-apple"></i> Mac M-series
+                    </a>
+                  @endif
+                  @if($release->macos_intel_url)
+                    <a href="{{ $release->macos_intel_url }}" target="_blank" class="arl-plat-link" title="macOS — Intel">
+                      <i class="fa fa-brands fa-apple"></i> Mac Intel
                     </a>
                   @endif
                   @if($release->linux_url)
@@ -267,9 +272,11 @@
                         data-release-date="{{ $release->release_date?->toDateString() }}"
                         data-channel="{{ $release->channel }}"
                         data-is-latest="{{ $release->is_latest ? '1' : '0' }}"
+                        data-notified="{{ $release->users_notified_at ? '1' : '0' }}"
                         data-notes="{{ implode("\n", $release->notes ?? []) }}"
                         data-windows-url="{{ $release->windows_url }}"
                         data-macos-url="{{ $release->macos_url }}"
+                        data-macos-intel-url="{{ $release->macos_intel_url }}"
                         data-linux-url="{{ $release->linux_url }}">
                   <i class="fa fa-pen"></i> Edit
                 </button>
@@ -369,6 +376,13 @@
           </label>
         </div>
 
+        <div class="arl-field" id="arl-notify-field">
+          <label class="arl-check-row" style="text-transform:none;letter-spacing:0;font-weight:normal;cursor:pointer">
+            <input type="checkbox" name="notify_users" id="arl-f-notify" value="1" {{ old('notify_users', $arlIsEditReopen ? 0 : 1) ? 'checked' : '' }}>
+            <span><strong>Email users</strong> — announce this release using the <a href="{{ route('admin.automated-emails.edit', 'new_release') }}" target="_blank">New release</a> template (sent once per release)</span>
+          </label>
+        </div>
+
         <div class="arl-field">
           <label>Release Notes</label>
           <textarea name="notes" id="arl-f-notes" rows="4"
@@ -385,10 +399,19 @@
         </div>
 
         <div class="arl-field">
-          <label><i class="fa fa-brands fa-apple" style="width:14px;text-align:center"></i> macOS Download URL</label>
+          <label><i class="fa fa-brands fa-apple" style="width:14px;text-align:center"></i> macOS (Apple Silicon) Download URL</label>
           <input type="url" name="macos_url" id="arl-f-macos-url" value="{{ old('macos_url') }}"
                  placeholder="https://downloads.sourceforge.net/…/Zeebroo POS-5.0.0-arm64.zip">
+          <p class="arl-field-hint">The <strong>-arm64.zip</strong> build, for M1/M2/M3/M4 Macs.</p>
           @error('macos_url')<p class="arl-field-err">{{ $message }}</p>@enderror
+        </div>
+
+        <div class="arl-field">
+          <label><i class="fa fa-brands fa-apple" style="width:14px;text-align:center"></i> macOS (Intel) Download URL</label>
+          <input type="url" name="macos_intel_url" id="arl-f-macos-intel-url" value="{{ old('macos_intel_url') }}"
+                 placeholder="https://downloads.sourceforge.net/…/Zeebroo POS-5.0.0-x64.zip">
+          <p class="arl-field-hint">The <strong>-x64.zip</strong> build, for Macs with an Intel processor.</p>
+          @error('macos_intel_url')<p class="arl-field-err">{{ $message }}</p>@enderror
         </div>
 
         <div class="arl-field">
@@ -431,9 +454,12 @@
   var releaseDateEl = document.getElementById('arl-f-release-date');
   var channelEl     = document.getElementById('arl-f-channel');
   var isLatestEl    = document.getElementById('arl-f-is-latest');
+  var notifyEl      = document.getElementById('arl-f-notify');
+  var notifyField   = document.getElementById('arl-notify-field');
   var notesEl       = document.getElementById('arl-f-notes');
   var windowsEl     = document.getElementById('arl-f-windows-url');
   var macosEl       = document.getElementById('arl-f-macos-url');
+  var macosIntelEl  = document.getElementById('arl-f-macos-intel-url');
   var linuxEl       = document.getElementById('arl-f-linux-url');
 
   function openModal() { modal.classList.add('is-open'); modal.scrollTop = 0; document.body.style.overflow = 'hidden'; }
@@ -453,9 +479,12 @@
     releaseDateEl.value = new Date().toISOString().slice(0, 10);
     channelEl.value = 'stable';
     isLatestEl.checked = true;
+    notifyField.style.display = '';
+    notifyEl.checked = true;
     notesEl.value = '';
     windowsEl.value = '';
     macosEl.value = '';
+    macosIntelEl.value = '';
     linuxEl.value = '';
   }
 
@@ -490,9 +519,13 @@
       releaseDateEl.value = btn.getAttribute('data-release-date');
       channelEl.value = btn.getAttribute('data-channel');
       isLatestEl.checked = btn.getAttribute('data-is-latest') === '1';
+      // Already announced releases can't be emailed again.
+      notifyField.style.display = btn.getAttribute('data-notified') === '1' ? 'none' : '';
+      notifyEl.checked = false;
       notesEl.value = btn.getAttribute('data-notes');
       windowsEl.value = btn.getAttribute('data-windows-url');
       macosEl.value = btn.getAttribute('data-macos-url');
+      macosIntelEl.value = btn.getAttribute('data-macos-intel-url');
       linuxEl.value = btn.getAttribute('data-linux-url');
 
       openModal();

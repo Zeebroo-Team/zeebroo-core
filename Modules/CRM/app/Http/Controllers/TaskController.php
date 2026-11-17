@@ -33,7 +33,7 @@ class TaskController extends Controller
         return view('crm::tasks.index', [
             'business'        => $business,
             'hasTasks'        => $this->taskService->businessHasTasks($business),
-            'tasks'           => $this->taskService->listForBusiness($business, $filter),
+            'tasks'           => $this->taskService->listForBusiness($business, $filter, $this->crmAccess($request, $business)),
             'filter'          => $filter,
             'filterTabs'      => ['open' => 'Open', 'overdue' => 'Overdue', 'completed' => 'Completed', 'all' => 'All'],
             'assignableUsers' => $this->assignableUsers($business),
@@ -50,6 +50,8 @@ class TaskController extends Controller
         $data = $this->validated($request);
 
         $subject = $this->resolveSubject($business, (string) $request->input('subject_type', ''), (int) $request->input('subject_id', 0));
+        $access  = $this->crmAccess($request, $business);
+        abort_unless($access->can('tasks_create') && $this->canWorkSubject($access, $subject), 403);
 
         $this->taskService->create($business, $data, $subject, $request->user()?->id);
 
@@ -112,6 +114,7 @@ class TaskController extends Controller
         }
 
         abort_unless($this->taskService->taskForBusiness($business, $task) instanceof Task, 404);
+        abort_unless($this->canWorkSubject($this->crmAccess($request, $business), $task->subject), 403);
 
         return $business;
     }

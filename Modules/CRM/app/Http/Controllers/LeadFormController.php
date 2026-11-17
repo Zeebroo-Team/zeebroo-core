@@ -42,7 +42,7 @@ class LeadFormController extends Controller
 
     public function store(Request $request, Project $project): RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'forms_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -153,7 +153,7 @@ class LeadFormController extends Controller
 
     private function requireForm(Request $request, Project $project, LeadForm $form): Business|RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project, 'forms_manage');
         if ($business instanceof RedirectResponse) {
             return $business;
         }

@@ -5,11 +5,13 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesOfflineTime;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\PosCashDrawerService;
 
 class PosCashDrawerApiController extends Controller
 {
+    use ResolvesOfflineTime;
     use ResolvesPosBusinessForApi;
 
     public function __construct(
@@ -30,17 +32,20 @@ class PosCashDrawerApiController extends Controller
 
         $validated = $request->validate([
             'opening_float' => ['required', 'numeric', 'min:0', 'max:9999999'],
+            'occurred_at'   => ['nullable', 'date'],
         ]);
+        $date = $this->offlineOccurredAt($request)?->toDateString();
 
         $opening = $this->drawer->setOpening(
             $business,
             (float) $validated['opening_float'],
             $request->user()?->id,
+            $date,
         );
 
         return response()->json([
             'message' => 'Opening cash recorded.',
-            'data'    => $this->drawer->todayStatus($business),
+            'data'    => $this->drawer->todayStatus($business, $date),
         ], 200);
     }
 
@@ -52,18 +57,21 @@ class PosCashDrawerApiController extends Controller
         $validated = $request->validate([
             'amount' => ['required', 'numeric', 'min:0.01', 'max:9999999'],
             'note'   => ['nullable', 'string', 'max:255'],
+            'occurred_at' => ['nullable', 'date'],
         ]);
+        $date = $this->offlineOccurredAt($request)?->toDateString();
 
         $this->drawer->addWithdrawal(
             $business,
             (float) $validated['amount'],
             $validated['note'] ?? null,
             $request->user()?->id,
+            $date,
         );
 
         return response()->json([
             'message' => 'Withdrawal recorded.',
-            'data'    => $this->drawer->todayStatus($business),
+            'data'    => $this->drawer->todayStatus($business, $date),
         ]);
     }
 }

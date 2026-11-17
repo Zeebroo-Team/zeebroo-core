@@ -58,6 +58,10 @@ class StripeSubscriptionService
                     'product_data' => [
                         'name' => $package->name.' plan (monthly)',
                         'description' => 'Monthly subscription for '.$business->name,
+                        // Required by Stripe's Managed Payments (enabled by
+                        // default on this account) for ad-hoc price_data line
+                        // items — SaaS/subscription software tax category.
+                        'tax_code' => 'txcd_10103000',
                     ],
                 ],
             ]],

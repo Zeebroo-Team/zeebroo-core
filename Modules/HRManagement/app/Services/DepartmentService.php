@@ -52,6 +52,38 @@ class DepartmentService
         ])->save();
     }
 
+    /**
+     * Departments each employee leads, keyed by employee id — one query for the whole business.
+     *
+     * @return array<int, list<array{department_id: int, department: string, role: string, role_label: string}>>
+     */
+    public function leadershipLookup(Business $business): array
+    {
+        $lookup = [];
+
+        $departments = Department::query()
+            ->where('business_id', $business->id)
+            ->where(fn ($q) => $q->whereNotNull('head_employee_id')->orWhereNotNull('co_head_employee_id'))
+            ->orderBy('name')
+            ->get(['id', 'name', 'head_employee_id', 'co_head_employee_id']);
+
+        foreach ($departments as $department) {
+            foreach (['head' => 'Department Head', 'co_head' => 'Department Co-Head'] as $role => $label) {
+                $employeeId = $department->{$role.'_employee_id'};
+                if ($employeeId !== null) {
+                    $lookup[(int) $employeeId][] = [
+                        'department_id' => $department->id,
+                        'department'    => $department->name,
+                        'role'          => $role,
+                        'role_label'    => $label,
+                    ];
+                }
+            }
+        }
+
+        return $lookup;
+    }
+
     public function updateSalaryRange(Business $business, Department $department, ?float $salaryRangeMin, ?float $salaryRangeMax): void
     {
         abort_unless((int) $department->business_id === (int) $business->id, 403);

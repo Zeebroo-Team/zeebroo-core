@@ -44,6 +44,46 @@ class StockTransferService
         return $transfer;
     }
 
+    /**
+     * Products that have stock remaining in at least one branch, with the
+     * available quantity per branch so the picker can filter by source branch.
+     *
+     * @return list<array{id: int, name: string, sku: ?string, stock: array<int, float>}>
+     */
+    public function transferableCatalog(Business $business): array
+    {
+        $stockRows = ProductStockLayer::query()
+            ->where('business_id', $business->id)
+            ->whereNotNull('branch_id')
+            ->where('quantity_remaining', '>', 0)
+            ->groupBy('product_id', 'branch_id')
+            ->get(['product_id', 'branch_id', DB::raw('SUM(quantity_remaining) as qty')]);
+
+        $stockByProduct = [];
+        foreach ($stockRows as $row) {
+            $stockByProduct[(int) $row->product_id][(int) $row->branch_id] = round((float) $row->qty, 3);
+        }
+
+        if (empty($stockByProduct)) {
+            return [];
+        }
+
+        return Product::query()
+            ->where('business_id', $business->id)
+            ->where('is_bundle', false)
+            ->whereIn('id', array_keys($stockByProduct))
+            ->orderBy('name')
+            ->get(['id', 'name', 'sku'])
+            ->map(static fn (Product $p) => [
+                'id'    => (int) $p->id,
+                'name'  => $p->name,
+                'sku'   => $p->sku,
+                'stock' => $stockByProduct[(int) $p->id] ?? [],
+            ])
+            ->values()
+            ->all();
+    }
+
     // ── Mutations ──────────────────────────────────────────────────
 
     public function create(Business $business, array $data, User $user): StockTransfer

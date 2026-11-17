@@ -8,6 +8,7 @@ import '../../dashboard/widgets/stat_tile.dart';
 import '../../inventory/widgets/list_states.dart';
 import '../../inventory/widgets/picker_sheet.dart';
 import 'finance_common.dart';
+import '../../payments/data/payment_manager_repository.dart';
 
 const _kAssignmentTypes = [
   ('renovation', 'Renovation'),
@@ -16,7 +17,14 @@ const _kAssignmentTypes = [
 ];
 
 const _kRenovationReferences = [
-  'Painting', 'Plumbing', 'Electrical', 'Flooring', 'Interior', 'Exterior', 'General', 'Other',
+  'Painting',
+  'Plumbing',
+  'Electrical',
+  'Flooring',
+  'Interior',
+  'Exterior',
+  'General',
+  'Other',
 ];
 
 const _kPropertyWorkTypes = [
@@ -34,7 +42,8 @@ class ModificationsTab extends StatefulWidget {
   State<ModificationsTab> createState() => _ModificationsTabState();
 }
 
-class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepAliveClientMixin {
+class _ModificationsTabState extends State<ModificationsTab>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -55,7 +64,10 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeModifications, bypassCache: forceRefresh);
+      final res = await ApiClient.instance.get(
+        ApiEndpoints.financeModifications,
+        bypassCache: forceRefresh,
+      );
       final body = res.data;
       _modifications = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -84,10 +96,16 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
     );
     if (!confirmed) return;
     try {
-      await ApiClient.instance.delete(ApiEndpoints.financeModification((modification['id'] as num).toInt()));
+      await ApiClient.instance.delete(
+        ApiEndpoints.financeModification((modification['id'] as num).toInt()),
+      );
       _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+      }
     }
   }
 
@@ -101,7 +119,14 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
           child: Row(
             children: [
               const Expanded(
-                child: Text('Modifications', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+                child: Text(
+                  'Modifications',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
               ),
               AddButton(onTap: _openAdd),
             ],
@@ -114,8 +139,12 @@ class _ModificationsTabState extends State<ModificationsTab> with AutomaticKeepA
 
   Widget _buildBody() {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null && _modifications.isEmpty) return ErrorState(error: _error!, onRetry: _load);
-    if (_modifications.isEmpty) return const EmptyState(message: 'No modifications yet.');
+    if (_error != null && _modifications.isEmpty) {
+      return ErrorState(error: _error!, onRetry: _load);
+    }
+    if (_modifications.isEmpty) {
+      return const EmptyState(message: 'No modifications yet.');
+    }
 
     return RefreshIndicator(
       onRefresh: () => _load(forceRefresh: true),
@@ -156,7 +185,10 @@ class _ModificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final typeLabel = _kAssignmentTypes
-        .firstWhere((t) => t.$1 == modification['assignment_type'], orElse: () => ('', 'Other'))
+        .firstWhere(
+          (t) => t.$1 == modification['assignment_type'],
+          orElse: () => ('', 'Other'),
+        )
         .$2;
     final workTypeLabel = modification['work_type_label'] as String?;
     final billsCount = (modification['bills_count'] as num?)?.toInt() ?? 0;
@@ -175,11 +207,19 @@ class _ModificationCard extends StatelessWidget {
                   (modification['name'] as String?) ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.textMuted),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  size: 20,
+                  color: AppColors.textMuted,
+                ),
                 onPressed: onDelete,
               ),
             ],
@@ -189,13 +229,21 @@ class _ModificationCard extends StatelessWidget {
             runSpacing: 6,
             children: [
               FinanceBadge(label: typeLabel, color: AppColors.primary),
-              if (workTypeLabel != null && workTypeLabel.isNotEmpty) FinanceBadge(label: workTypeLabel, color: AppColors.textMuted),
-              if (billsCount > 0) FinanceBadge(label: '$billsCount bill${billsCount == 1 ? '' : 's'}', color: AppColors.warning),
+              if (workTypeLabel != null && workTypeLabel.isNotEmpty)
+                FinanceBadge(label: workTypeLabel, color: AppColors.textMuted),
+              if (billsCount > 0)
+                FinanceBadge(
+                  label: '$billsCount bill${billsCount == 1 ? '' : 's'}',
+                  color: AppColors.warning,
+                ),
             ],
           ),
           if (assignmentDisplay != null && assignmentDisplay.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(assignmentDisplay, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            Text(
+              assignmentDisplay,
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
           ],
           const SizedBox(height: 8),
           Row(
@@ -203,17 +251,30 @@ class _ModificationCard extends StatelessWidget {
             children: [
               Text(
                 duration != null && duration.isNotEmpty ? duration : '',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
               ),
               Text(
-                (modification['estimated_cost_fmt'] as String?) ?? formatMoney(modification['estimated_cost']),
-                style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                (modification['estimated_cost_fmt'] as String?) ??
+                    formatMoney(modification['estimated_cost']),
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
               ),
             ],
           ),
           if (description != null && description.isNotEmpty) ...[
             const SizedBox(height: 6),
-            Text(description, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+            Text(
+              description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
           ],
         ],
       ),
@@ -222,7 +283,13 @@ class _ModificationCard extends StatelessWidget {
 }
 
 class AddModificationSheet extends StatefulWidget {
-  const AddModificationSheet();
+  const AddModificationSheet({
+    super.key,
+    this.record,
+    this.repository = const PaymentManagerRepository(),
+  });
+  final Map<String, dynamic>? record;
+  final PaymentManagerRepository repository;
 
   @override
   State<AddModificationSheet> createState() => AddModificationSheetState();
@@ -251,6 +318,27 @@ class AddModificationSheetState extends State<AddModificationSheet> {
   @override
   void initState() {
     super.initState();
+    final r = widget.record;
+    if (r != null) {
+      _nameCtrl.text = r['name']?.toString() ?? '';
+      _estimatedCostCtrl.text = r['estimated_cost']?.toString() ?? '';
+      _durationCtrl.text = r['duration']?.toString() ?? '';
+      _descriptionCtrl.text = r['description']?.toString() ?? '';
+      _assignmentType = r['assignment_type'] ?? 'renovation';
+      final reference = r['assignment_reference']?.toString() ?? '';
+      if (_assignmentType == 'renovation') {
+        _renovationReference = _kRenovationReferences.contains(reference)
+            ? reference
+            : 'Other';
+        _renovationOtherCtrl.text = reference;
+      } else if (_assignmentType == 'property') {
+        _propertyId = int.tryParse(reference);
+        _propertyWorkType = r['property_work_type'] ?? 'repair';
+        _propertyWorkTypeOtherCtrl.text = r['property_work_type_other'] ?? '';
+      } else {
+        _otherReferenceCtrl.text = reference;
+      }
+    }
     _loadProperties();
   }
 
@@ -268,10 +356,18 @@ class AddModificationSheetState extends State<AddModificationSheet> {
 
   Future<void> _loadProperties() async {
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeBillAssignmentTargets);
-      final data = ((res.data is Map ? res.data['data'] : null) as Map?)?.cast<String, dynamic>() ?? {};
+      final res = await widget.repository.get(
+        ApiEndpoints.financeBillAssignmentTargets,
+      );
+      final data =
+          ((res is Map ? res['data'] : null) as Map?)
+              ?.cast<String, dynamic>() ??
+          {};
       final list = data['properties'] as List? ?? [];
-      _properties = list.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      _properties = list
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
@@ -281,8 +377,11 @@ class AddModificationSheetState extends State<AddModificationSheet> {
 
   Future<void> _submit() async {
     final formOk = _formKey.currentState?.validate() ?? false;
+    if (_saving) return;
     if (!formOk) return;
-    if (_assignmentType == 'renovation' && _renovationReference == 'Other' && _renovationOtherCtrl.text.trim().isEmpty) {
+    if (_assignmentType == 'renovation' &&
+        _renovationReference == 'Other' &&
+        _renovationOtherCtrl.text.trim().isEmpty) {
       setState(() => _error = 'Describe the renovation.');
       return;
     }
@@ -291,7 +390,8 @@ class AddModificationSheetState extends State<AddModificationSheet> {
         setState(() => _error = 'Pick a property.');
         return;
       }
-      if (_propertyWorkType == 'other' && _propertyWorkTypeOtherCtrl.text.trim().isEmpty) {
+      if (_propertyWorkType == 'other' &&
+          _propertyWorkTypeOtherCtrl.text.trim().isEmpty) {
         setState(() => _error = 'Describe the work type.');
         return;
       }
@@ -302,28 +402,38 @@ class AddModificationSheetState extends State<AddModificationSheet> {
       _error = null;
     });
     try {
-      await ApiClient.instance.post(
-        ApiEndpoints.financeModifications,
-        data: {
-          'name': _nameCtrl.text.trim(),
-          'assignment_type': _assignmentType,
-          'estimated_cost': double.tryParse(_estimatedCostCtrl.text.trim()) ?? 0,
-          if (_durationCtrl.text.trim().isNotEmpty) 'duration': _durationCtrl.text.trim(),
-          if (_descriptionCtrl.text.trim().isNotEmpty) 'description': _descriptionCtrl.text.trim(),
-          if (_assignmentType == 'renovation')
-            'assignment_reference': _renovationReference == 'Other' ? _renovationOtherCtrl.text.trim() : _renovationReference,
-          if (_assignmentType == 'property') ...{
-            'assignment_reference': _propertyId,
-            'property_work_type': _propertyWorkType,
-            if (_propertyWorkType == 'other') 'property_work_type_other': _propertyWorkTypeOtherCtrl.text.trim(),
-          },
-          if (_assignmentType == 'other' && _otherReferenceCtrl.text.trim().isNotEmpty)
-            'assignment_reference': _otherReferenceCtrl.text.trim(),
+      await widget.repository.save(ApiEndpoints.financeModifications, {
+        if (widget.record != null) ...{
+          'duration': null,
+          'description': null,
+          'assignment_reference': null,
+          'property_work_type': null,
+          'property_work_type_other': null,
         },
-      );
+        'name': _nameCtrl.text.trim(),
+        'assignment_type': _assignmentType,
+        'estimated_cost': double.tryParse(_estimatedCostCtrl.text.trim()) ?? 0,
+        if (_durationCtrl.text.trim().isNotEmpty)
+          'duration': _durationCtrl.text.trim(),
+        if (_descriptionCtrl.text.trim().isNotEmpty)
+          'description': _descriptionCtrl.text.trim(),
+        if (_assignmentType == 'renovation')
+          'assignment_reference': _renovationReference == 'Other'
+              ? _renovationOtherCtrl.text.trim()
+              : _renovationReference,
+        if (_assignmentType == 'property') ...{
+          'assignment_reference': _propertyId,
+          'property_work_type': _propertyWorkType,
+          if (_propertyWorkType == 'other')
+            'property_work_type_other': _propertyWorkTypeOtherCtrl.text.trim(),
+        },
+        if (_assignmentType == 'other' &&
+            _otherReferenceCtrl.text.trim().isNotEmpty)
+          'assignment_reference': _otherReferenceCtrl.text.trim(),
+      }, id: (widget.record?['id'] as num?)?.toInt());
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      setState(() => _error = apiErrorMessage(e));
+      if (mounted) setState(() => _error = apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -331,7 +441,7 @@ class AddModificationSheetState extends State<AddModificationSheet> {
 
   @override
   Widget build(BuildContext context) => FormSheetShell(
-    title: 'Add modification',
+    title: widget.record == null ? 'Add modification' : 'Edit modification',
     loading: _loadingOptions,
     child: Form(
       key: _formKey,
@@ -342,36 +452,61 @@ class AddModificationSheetState extends State<AddModificationSheet> {
           TextFormField(
             controller: _nameCtrl,
             decoration: const InputDecoration(labelText: 'Modification name'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Required' : null,
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<String>(
             initialValue: _assignmentType,
             decoration: const InputDecoration(labelText: 'Type'),
-            items: [for (final t in _kAssignmentTypes) DropdownMenuItem(value: t.$1, child: Text(t.$2))],
-            onChanged: (v) => setState(() => _assignmentType = v ?? _assignmentType),
+            items: [
+              for (final t in _kAssignmentTypes)
+                DropdownMenuItem(value: t.$1, child: Text(t.$2)),
+            ],
+            onChanged: (v) =>
+                setState(() => _assignmentType = v ?? _assignmentType),
           ),
           if (_assignmentType == 'renovation') ...[
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               initialValue: _renovationReference,
               decoration: const InputDecoration(labelText: 'Renovation area'),
-              items: [for (final r in _kRenovationReferences) DropdownMenuItem(value: r, child: Text(r))],
-              onChanged: (v) => setState(() => _renovationReference = v ?? _renovationReference),
+              items: [
+                for (final r in _kRenovationReferences)
+                  DropdownMenuItem(value: r, child: Text(r)),
+              ],
+              onChanged: (v) => setState(
+                () => _renovationReference = v ?? _renovationReference,
+              ),
             ),
             if (_renovationReference == 'Other') ...[
               const SizedBox(height: 14),
-              TextFormField(controller: _renovationOtherCtrl, decoration: const InputDecoration(labelText: 'Describe the renovation')),
+              TextFormField(
+                controller: _renovationOtherCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Describe the renovation',
+                ),
+              ),
             ],
           ],
           if (_assignmentType == 'property') ...[
             const SizedBox(height: 14),
             DropdownButtonFormField<int>(
+              isExpanded: true,
               initialValue: _propertyId,
               decoration: const InputDecoration(labelText: 'Property'),
               items: [
+                if (_propertyId != null &&
+                    !_properties.any((e) => e['id'] == _propertyId))
+                  DropdownMenuItem(
+                    value: _propertyId,
+                    child: const Text('Current property (unavailable)'),
+                  ),
                 for (final p in _properties)
-                  DropdownMenuItem(value: (p['id'] as num).toInt(), child: Text(p['name'] as String? ?? '')),
+                  DropdownMenuItem(
+                    value: (p['id'] as num).toInt(),
+                    child: Text(p['name'] as String? ?? ''),
+                  ),
               ],
               onChanged: (v) => setState(() => _propertyId = v),
             ),
@@ -379,17 +514,31 @@ class AddModificationSheetState extends State<AddModificationSheet> {
             DropdownButtonFormField<String>(
               initialValue: _propertyWorkType,
               decoration: const InputDecoration(labelText: 'Work type'),
-              items: [for (final w in _kPropertyWorkTypes) DropdownMenuItem(value: w.$1, child: Text(w.$2))],
-              onChanged: (v) => setState(() => _propertyWorkType = v ?? _propertyWorkType),
+              items: [
+                for (final w in _kPropertyWorkTypes)
+                  DropdownMenuItem(value: w.$1, child: Text(w.$2)),
+              ],
+              onChanged: (v) =>
+                  setState(() => _propertyWorkType = v ?? _propertyWorkType),
             ),
             if (_propertyWorkType == 'other') ...[
               const SizedBox(height: 14),
-              TextFormField(controller: _propertyWorkTypeOtherCtrl, decoration: const InputDecoration(labelText: 'Describe the work type')),
+              TextFormField(
+                controller: _propertyWorkTypeOtherCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Describe the work type',
+                ),
+              ),
             ],
           ],
           if (_assignmentType == 'other') ...[
             const SizedBox(height: 14),
-            TextFormField(controller: _otherReferenceCtrl, decoration: const InputDecoration(labelText: 'Reference (optional)')),
+            TextFormField(
+              controller: _otherReferenceCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Reference (optional)',
+              ),
+            ),
           ],
           const SizedBox(height: 14),
           TextFormField(
@@ -402,16 +551,25 @@ class AddModificationSheetState extends State<AddModificationSheet> {
             },
           ),
           const SizedBox(height: 14),
-          TextFormField(controller: _durationCtrl, decoration: const InputDecoration(labelText: 'Duration (optional)')),
+          TextFormField(
+            controller: _durationCtrl,
+            decoration: const InputDecoration(labelText: 'Duration (optional)'),
+          ),
           const SizedBox(height: 14),
           TextFormField(
             controller: _descriptionCtrl,
             maxLines: 3,
-            decoration: const InputDecoration(labelText: 'Description (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Description (optional)',
+            ),
           ),
           sheetError(_error),
           const SizedBox(height: 8),
-          SheetSubmitButton(label: 'Add modification', saving: _saving, onPressed: _submit),
+          SheetSubmitButton(
+            label: widget.record == null ? 'Add modification' : 'Save changes',
+            saving: _saving,
+            onPressed: _submit,
+          ),
         ],
       ),
     ),

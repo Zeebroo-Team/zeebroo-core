@@ -24,6 +24,7 @@ final class HrPayslipLeaveService
             ->where('business_id', $cycle->business_id)
             ->where('employee_id', $employee->id)
             ->where('status', LeaveRequest::STATUS_APPROVED)
+            ->where('leave_type', '!=', LeaveRequest::TYPE_SHORT)
             ->whereDate('starts_on', '<=', $periodEndYmd)
             ->whereDate('ends_on', '>=', $periodStartYmd)
             ->orderBy('starts_on')

@@ -59,6 +59,25 @@ class PosSettingsService
 
     public const KEY_RECEIPT_LOGO_URL = 'pos.receipt_logo_url';
 
+    /** Printed receipt margins in mm (0–20 each), for printers that clip or offset the bill. */
+    public const RECEIPT_MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+
+    public const RECEIPT_MARGIN_MAX_MM = 20;
+
+    /** Gap in mm (0–20) between the receipt logo and the business name. */
+    public const KEY_RECEIPT_LOGO_GAP = 'pos.receipt_logo_gap';
+
+    public const RECEIPT_LOGO_GAP_DEFAULT_MM = 2;
+
+    /** Receipt logo size as a percentage (50–300) of the default logo footprint. */
+    public const KEY_RECEIPT_LOGO_SIZE = 'pos.receipt_logo_size';
+
+    public const RECEIPT_LOGO_SIZE_DEFAULT = 100;
+
+    public const RECEIPT_LOGO_SIZE_MIN = 50;
+
+    public const RECEIPT_LOGO_SIZE_MAX = 300;
+
     public const KEY_BUSINESS_LOGO_URL = 'business.logo_url';
 
     /** @var string `before` | `after` — where the currency code sits relative to the amount */
@@ -184,6 +203,12 @@ class PosSettingsService
                 $v = strtolower(trim((string) ($business->getSetting(self::KEY_RECEIPT_MODE, 'bill') ?: 'bill')));
                 return in_array($v, ['bill', 'invoice'], true) ? $v : 'bill';
             })(),
+            'receipt_margin_top'         => $this->receiptMargin($business, 'top'),
+            'receipt_margin_right'       => $this->receiptMargin($business, 'right'),
+            'receipt_margin_bottom'      => $this->receiptMargin($business, 'bottom'),
+            'receipt_margin_left'        => $this->receiptMargin($business, 'left'),
+            'receipt_logo_gap'           => $this->clampReceiptMargin($business->getSetting(self::KEY_RECEIPT_LOGO_GAP, self::RECEIPT_LOGO_GAP_DEFAULT_MM)),
+            'receipt_logo_size'          => $this->clampReceiptLogoSize($business->getSetting(self::KEY_RECEIPT_LOGO_SIZE, self::RECEIPT_LOGO_SIZE_DEFAULT)),
             // Branch / warehouse
             'multi_warehouse_branch'   => (bool) $business->getSetting('business.multi_warehouse_branch', false),
             'branch_product_separate'  => (bool) $business->getSetting('business.branch_product_separate', false),
@@ -240,6 +265,25 @@ class PosSettingsService
      *
      * @return list<string>
      */
+    private function receiptMargin(Business $business, string $side): float
+    {
+        return $this->clampReceiptMargin($business->getSetting('pos.receipt_margin_'.$side, 0));
+    }
+
+    private function clampReceiptMargin(mixed $value): float
+    {
+        return round(min(self::RECEIPT_MARGIN_MAX_MM, max(0, (float) $value)), 1);
+    }
+
+    private function clampReceiptLogoSize(mixed $value): int
+    {
+        if (! is_numeric($value)) {
+            return self::RECEIPT_LOGO_SIZE_DEFAULT;
+        }
+
+        return (int) round(min(self::RECEIPT_LOGO_SIZE_MAX, max(self::RECEIPT_LOGO_SIZE_MIN, (float) $value)));
+    }
+
     /** Current purchasing mode, falling back to the legacy purchase_order_enabled flag. */
     private function resolvePurchasingMode(Business $business): string
     {
@@ -309,7 +353,7 @@ class PosSettingsService
 
         if (array_key_exists('display_theme', $data)) {
             $theme = strtolower(trim((string) ($data['display_theme'] ?? 'light')));
-            if (! in_array($theme, ['light', 'dark'], true)) {
+            if (! in_array($theme, ['inherit', 'light', 'dark'], true)) {
                 $theme = 'light';
             }
             $business->setSetting(self::KEY_DISPLAY_THEME, $theme);
@@ -396,6 +440,20 @@ class PosSettingsService
 
         if (array_key_exists('receipt_logo_url', $data)) {
             $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $data['receipt_logo_url'] ? trim((string) $data['receipt_logo_url']) : null);
+        }
+
+        foreach (self::RECEIPT_MARGIN_SIDES as $side) {
+            if (array_key_exists('receipt_margin_'.$side, $data)) {
+                $business->setSetting('pos.receipt_margin_'.$side, $this->clampReceiptMargin($data['receipt_margin_'.$side] ?? 0));
+            }
+        }
+
+        if (array_key_exists('receipt_logo_gap', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_LOGO_GAP, $this->clampReceiptMargin($data['receipt_logo_gap'] ?? self::RECEIPT_LOGO_GAP_DEFAULT_MM));
+        }
+
+        if (array_key_exists('receipt_logo_size', $data)) {
+            $business->setSetting(self::KEY_RECEIPT_LOGO_SIZE, $this->clampReceiptLogoSize($data['receipt_logo_size'] ?? self::RECEIPT_LOGO_SIZE_DEFAULT));
         }
 
         if (array_key_exists('business_logo_url', $data)) {
@@ -550,6 +608,43 @@ class PosSettingsService
         }
 
         return $url;
+    }
+
+    /**
+     * Stores an uploaded receipt logo (web Settings → Receipt Setting) and returns its public URL.
+     * Served through the CORS-safe media proxy so POS Lite / Flutter clients can load it too.
+     */
+    public function uploadReceiptLogo(Business $business, UploadedFile $file): string
+    {
+        $oldUrl = (string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: '');
+
+        $path = $file->store('receipt-logos/'.$business->id, 'public');
+        $url  = route('api.media.business-file', ['business' => $business->id, 'path' => $path]);
+        $business->setSetting(self::KEY_RECEIPT_LOGO_URL, $url);
+
+        $this->deleteStoredReceiptLogo($oldUrl, $business->id);
+
+        return $url;
+    }
+
+    /** Clears the receipt logo, deleting the file when it was one we uploaded. */
+    public function removeReceiptLogo(Business $business): void
+    {
+        $oldUrl = (string) ($business->getSetting(self::KEY_RECEIPT_LOGO_URL, '') ?: '');
+        $business->setSetting(self::KEY_RECEIPT_LOGO_URL, null);
+        $this->deleteStoredReceiptLogo($oldUrl, $business->id);
+    }
+
+    private function deleteStoredReceiptLogo(string $url, int $businessId): void
+    {
+        if ($url === '' || ! preg_match('#/receipt-logos/'.$businessId.'/([A-Za-z0-9._-]+)$#', $url, $m)) {
+            return;
+        }
+
+        $path = 'receipt-logos/'.$businessId.'/'.$m[1];
+        if (Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
     }
 
     /** Maps a previously-uploaded logo URL back to its storage path, or null if it wasn't one we stored. */

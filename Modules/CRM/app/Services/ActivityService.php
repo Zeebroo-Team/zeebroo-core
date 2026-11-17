@@ -13,6 +13,10 @@ class ActivityService
 {
     public function create(Business $business, Model $subject, array $data, ?int $userId): Activity
     {
+        if ($subject instanceof \Modules\CRM\Models\Lead && $userId !== null) {
+            $subject->recordFirstResponse();
+        }
+
         return Activity::create([
             'business_id' => $business->id,
             'subject_type' => $subject->getMorphClass(),

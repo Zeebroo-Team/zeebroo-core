@@ -111,7 +111,7 @@ class PosSettingsApiController extends Controller
     public function features(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','sales_management','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','ecommerce','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','sales_management','service_management','social_media_campaign','stock_management'];
         $allowed  = $business->effectiveFeatureKeys();
         $stored   = $business->getSetting('business.features') ?? [];
         $enabled  = array_values(array_filter($all, fn ($k) => in_array($k, $allowed, true) && ! empty($stored[$k])));
@@ -129,7 +129,7 @@ class PosSettingsApiController extends Controller
     public function updateFeatures(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
-        $all      = ['account_management','automation_editor','bill_management','crm','developers','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','sales_management','service_management','social_media_campaign','stock_management'];
+        $all      = ['account_management','automation_editor','bill_management','crm','developers','ecommerce','event_management','human_resources','mail','point_of_sale','product_management','project_management','restaurant','sales_management','service_management','social_media_campaign','stock_management'];
         $allowed  = $business->effectiveFeatureKeys();
         $validated = $request->validate([
             'features'   => ['required', 'array'],
@@ -163,6 +163,12 @@ class PosSettingsApiController extends Controller
             'display_theme'               => ['nullable', 'string', 'in:light,dark,inherit'],
             'receipt_mode'                => ['nullable', 'string', 'in:bill,invoice'],
             'receipt_logo_url'            => ['nullable', 'string', 'max:1000'],
+            'receipt_margin_top'          => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'receipt_margin_right'        => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'receipt_margin_bottom'       => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'receipt_margin_left'         => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'receipt_logo_gap'            => ['nullable', 'numeric', 'min:0', 'max:20'],
+            'receipt_logo_size'           => ['nullable', 'integer', 'min:50', 'max:300'],
             'business_logo_url'           => ['nullable', 'string', 'max:1000'],
             'receipt_header'              => ['nullable', 'string', 'max:200'],
             'receipt_footer'              => ['nullable', 'string', 'max:200'],

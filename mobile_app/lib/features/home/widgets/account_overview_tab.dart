@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
+import '../../pos/screens/offline_sales_screen.dart';
 import 'add_account_sheet.dart';
 
 /// First home tab — a compact balance row for the business's bank accounts
 /// (tap to switch or add an account), the caller's [belowBalance] content
-/// (today's sales + quick actions), then a recent-transactions feed sourced
-/// from bill/rental payments.
+/// (today's sales + quick actions), then today's recent POS sales — the same
+/// feed as the desktop app's "Recent Transactions".
 class AccountOverviewTab extends StatefulWidget {
   const AccountOverviewTab({super.key, this.belowBalance, this.onPullRefresh});
 
@@ -20,10 +23,10 @@ class AccountOverviewTab extends StatefulWidget {
   final VoidCallback? onPullRefresh;
 
   @override
-  State<AccountOverviewTab> createState() => _AccountOverviewTabState();
+  State<AccountOverviewTab> createState() => AccountOverviewTabState();
 }
 
-class _AccountOverviewTabState extends State<AccountOverviewTab>
+class AccountOverviewTabState extends State<AccountOverviewTab>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -35,10 +38,57 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
   int? _defaultAccountId;
   bool _settingDefault = false;
 
+  /// Today's sales saved on this phone that haven't uploaded yet — listed
+  /// above the server's recent sales (once uploaded they come from the server).
+  List<Map<String, dynamic>> _waitingTxns = [];
+
   @override
   void initState() {
     super.initState();
+    OfflineSales.instance.addListener(_onOfflineChanged);
     _load();
+  }
+
+  @override
+  void dispose() {
+    OfflineSales.instance.removeListener(_onOfflineChanged);
+    super.dispose();
+  }
+
+  int _lastWaiting = 0;
+
+  void _onOfflineChanged() {
+    final waiting = OfflineSales.instance.waitingCount;
+    // Fewer waiting: some just uploaded and now show up in the server's list.
+    if (waiting < _lastWaiting) {
+      reloadRecentSales();
+    } else {
+      _loadWaiting().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+    _lastWaiting = waiting;
+  }
+
+  Future<void> _loadWaiting() async {
+    try {
+      final sales = await OfflineSales.instance.todayWaitingSales();
+      _waitingTxns = [
+        for (final s in sales)
+          {
+            'sale_number': s.offlineRef,
+            'sold_at': s.createdAt.toIso8601String(),
+            'payment_method': s.receipt['payment_method'],
+            'total': s.total,
+            'items_count': (s.receipt['items'] as List? ?? const [])
+                .whereType<Map>()
+                .fold<num>(0, (sum, i) => sum + ((i['quantity'] as num?) ?? 0)),
+            'offline': true,
+            'needs_attention': s.needsAttention,
+          },
+      ];
+      _lastWaiting = OfflineSales.instance.waitingCount;
+    } catch (_) {}
   }
 
   Future<void> _load({bool forceRefresh = false}) async {
@@ -48,15 +98,17 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
     try {
       final results = await Future.wait([
         ApiClient.instance.get(ApiEndpoints.accounts, bypassCache: forceRefresh),
-        ApiClient.instance.get(ApiEndpoints.expensesOverview, bypassCache: forceRefresh),
+        ApiClient.instance.get(ApiEndpoints.todaySummary, bypassCache: forceRefresh),
         ApiClient.instance.get(ApiEndpoints.businessSettings, bypassCache: forceRefresh),
       ]);
 
       final accRaw = results[0].data;
       final accounts = (accRaw is Map ? accRaw['data'] : accRaw) as List? ?? [];
-      final expRaw = results[1].data;
-      final expData = (expRaw is Map ? expRaw['data'] : expRaw) as Map<String, dynamic>?;
-      final recent = (expData?['recent_payments'] as List?) ?? [];
+      // Same `recent_sales` feed the desktop app's Today summary renders
+      // under "Recent Transactions".
+      final todayRaw = results[1].data;
+      final todayData = (todayRaw is Map ? todayRaw['data'] : todayRaw) as Map<String, dynamic>?;
+      final recent = (todayData?['recent_sales'] as List?) ?? [];
       final settingsRaw = results[2].data;
       final settingsData = (settingsRaw is Map ? settingsRaw['data'] : settingsRaw) as Map<String, dynamic>?;
 
@@ -71,8 +123,26 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
+      // After the server, so a sale that uploaded meanwhile isn't listed twice.
+      await _loadWaiting();
       if (mounted) setState(() {});
     }
+  }
+
+  /// Quietly re-fetches just the recent sales list (no error card, no
+  /// spinner) — used by the Overview's background auto-refresh.
+  Future<void> reloadRecentSales() async {
+    try {
+      final res = await ApiClient.instance.get(ApiEndpoints.todaySummary, bypassCache: true);
+      final raw = res.data;
+      final data = (raw is Map ? raw['data'] : raw) as Map<String, dynamic>?;
+      final recent = (data?['recent_sales'] as List?) ?? [];
+      _recentTxns = recent.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+    } catch (_) {
+      // Keep showing the last good list; the next tick or a pull-to-refresh retries.
+    }
+    await _loadWaiting();
+    if (mounted) setState(() {});
   }
 
   Future<void> _setDefaultAccount(int accountId) async {
@@ -225,7 +295,8 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
             const SizedBox(height: 14),
             widget.belowBalance!,
           ],
-          if (_error == null) ...[
+          // Offline, the sales made on this phone are still listed.
+          if (_error == null || _waitingTxns.isNotEmpty) ...[
             const SizedBox(height: 26),
             _buildRecentTransactions(),
           ],
@@ -312,68 +383,97 @@ class _AccountOverviewTabState extends State<AccountOverviewTab>
     );
   }
 
-  Widget _buildRecentTransactions() => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      const Text('Recent transactions', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
-      const SizedBox(height: 12),
-      if (_recentTxns.isEmpty)
-        Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
-          ),
-          child: const Text('No transactions yet.', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
-        )
-      else
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
-          ),
-          child: Column(
-            children: [
-              for (var i = 0; i < _recentTxns.length; i++) ...[
-                if (i > 0) const Divider(height: 1, color: AppColors.border),
-                _TransactionTile(txn: _recentTxns[i]),
+  Widget _buildRecentTransactions() {
+    final txns = [..._waitingTxns, ..._recentTxns];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Recent transactions', style: TextStyle(fontSize: 16.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+        const SizedBox(height: 12),
+        if (txns.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+            ),
+            child: const Text('No sales recorded today.',style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [BoxShadow(color: AppColors.shadow, blurRadius: 16, offset: Offset(0, 4))],
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < txns.length; i++) ...[
+                  if (i > 0) const Divider(height: 1, color: AppColors.border),
+                  _TransactionTile(txn: txns[i]),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-    ],
-  );
+      ],
+    );
+  }
 }
 
 class _TransactionTile extends StatelessWidget {
   const _TransactionTile({required this.txn});
   final Map<String, dynamic> txn;
 
+  static const _methodIcons = {
+    'cash': Icons.payments_rounded,
+    'card': Icons.credit_card_rounded,
+    'credit': Icons.volunteer_activism_rounded,
+  };
+
   @override
   Widget build(BuildContext context) {
-    final title = (txn['source_title'] as String?) ?? (txn['source_label'] as String?) ?? 'Payment';
-    final subtitle = [txn['source_label'], txn['date_fmt']]
-        .whereType<String>()
-        .where((s) => s.isNotEmpty)
-        .join(' · ');
-    final amount = formatMoney(txn['amount']);
+    final title = (txn['sale_number'] as String?) ?? '#${txn['id']}';
+    final soldAt = DateTime.tryParse(txn['sold_at'] as String? ?? '')?.toLocal();
+    final items = (txn['items_count'] as num?)?.toInt() ?? 0;
+    final offline = txn['offline'] == true;
+    final attention = txn['needs_attention'] == true;
+    final subtitle = [
+      if (soldAt != null) DateFormat('hh:mm a').format(soldAt),
+      '$items item${items == 1 ? '' : 's'}',
+      if (offline) attention ? 'Needs attention' : 'Waiting to upload',
+    ].join(' · ');
+    final accent = attention ? AppColors.error : AppColors.warning;
 
     return ListTile(
+      key: offline ? ValueKey('recent-offline-$title') : null,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      // Offline sales open the list where they can be uploaded or fixed.
+      onTap: offline
+          ? () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OfflineSalesScreen()))
+          : null,
       leading: Container(
         width: 38,
         height: 38,
-        decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(11)),
+        decoration: BoxDecoration(
+          color: offline ? accent.withValues(alpha: 0.12) : AppColors.primaryLt,
+          borderRadius: BorderRadius.circular(11),
+        ),
         alignment: Alignment.center,
-        child: const Icon(Icons.arrow_upward_rounded, size: 17, color: AppColors.error),
+        child: Icon(
+          offline ? Icons.cloud_queue_rounded : (_methodIcons[txn['payment_method']] ?? Icons.receipt_rounded),
+          size: 18,
+          color: offline ? accent : AppColors.primaryDk,
+        ),
       ),
       title: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5, color: AppColors.textDark)),
-      subtitle: subtitle.isEmpty
-          ? null
-          : Text(subtitle, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted)),
-      trailing: Text('-$amount', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.error)),
+      subtitle: Text(
+        subtitle,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 11.5, color: offline ? accent : AppColors.textMuted),
+      ),
+      trailing: Text(formatMoney(txn['total']), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5, color: AppColors.textDark)),
     );
   }
 }

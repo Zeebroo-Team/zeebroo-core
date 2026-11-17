@@ -16452,7 +16452,8 @@ Location: /purchases
             <tr><td>is_latest<span class="param-required">opt</span></td><td class="param-type">boolean</td><td>When true, unmarks other releases on the same channel.</td></tr>
             <tr><td>notes<span class="param-required">opt</span></td><td class="param-type">array of strings</td><td>Changelog bullet points.</td></tr>
             <tr><td>windows_url<span class="param-required">opt</span></td><td class="param-type">string (url)</td><td>Windows installer download link.</td></tr>
-            <tr><td>macos_url<span class="param-required">opt</span></td><td class="param-type">string (url)</td><td>macOS installer download link.</td></tr>
+            <tr><td>macos_url<span class="param-required">opt</span></td><td class="param-type">string (url)</td><td>macOS Apple Silicon (arm64) download link.</td></tr>
+            <tr><td>macos_intel_url<span class="param-required">opt</span></td><td class="param-type">string (url)</td><td>macOS Intel (x64) download link.</td></tr>
             <tr><td>linux_url<span class="param-required">opt</span></td><td class="param-type">string (url)</td><td>Linux installer download link.</td></tr>
           </tbody>
         </table>
@@ -16468,7 +16469,8 @@ Location: /purchases
     "is_latest": true,
     "notes": ["Cashier management added", "Bug fixes"],
     "windows_url": "https://.../Zeebroo-Setup-4.3.0.exe",
-    "macos_url": "https://.../Zeebroo-4.3.0.dmg",
+    "macos_url": "https://.../Zeebroo-4.3.0-arm64.zip",
+    "macos_intel_url": "https://.../Zeebroo-4.3.0-x64.zip",
     "linux_url": null,
     "created_at": "2026-07-31T10:00:00.000000Z",
     "updated_at": "2026-07-31T10:00:00.000000Z"
@@ -16506,7 +16508,8 @@ Location: /purchases
       "is_latest": true,
       "notes": ["Cashier management added"],
       "windows_url": "https://.../Zeebroo-Setup-4.3.0.exe",
-      "macos_url": "https://.../Zeebroo-4.3.0.dmg",
+      "macos_url": "https://.../Zeebroo-4.3.0-arm64.zip",
+      "macos_intel_url": "https://.../Zeebroo-4.3.0-x64.zip",
       "linux_url": null
     }
   ]
@@ -16536,7 +16539,8 @@ Location: /purchases
     "channel": "stable",
     "is_latest": true,
     "windows_url": "https://.../Zeebroo-Setup-4.3.0.exe",
-    "macos_url": "https://.../Zeebroo-4.3.0.dmg",
+    "macos_url": "https://.../Zeebroo-4.3.0-arm64.zip",
+    "macos_intel_url": "https://.../Zeebroo-4.3.0-x64.zip",
     "linux_url": null
   }
 }</code></pre>

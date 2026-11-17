@@ -60,7 +60,24 @@ class PosExpenseModificationApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        return $this->saveModification($request);
+    }
+
+    public function update(Request $request, Modification $modification): JsonResponse
+    {
+        return $this->saveModification($request, $modification);
+    }
+
+    private function saveModification(Request $request, ?Modification $modification = null): JsonResponse
+    {
         $business = $this->businessOrAbort($request);
+
+        if ($modification !== null) {
+            $this->abortUnlessPerm($request, $business, 'fin_assets');
+            if ((int) $modification->business_id !== (int) $business->id) {
+                return response()->json(['message' => 'Modification not found.'], 404);
+            }
+        }
 
         $type = (string) $request->input('assignment_type', 'renovation');
 
@@ -97,9 +114,7 @@ class PosExpenseModificationApiController extends Controller
         $isOtherWorkType = $type === 'property'
             && ($validated['property_work_type'] ?? null) === Modification::PROPERTY_WORK_TYPE_OTHER;
 
-        $modification = Modification::create([
-            'business_id'              => $business->id,
-            'created_by_user_id'       => $request->user()->id,
+        $payload = [
             'name'                     => $validated['name'],
             'assignment_type'          => $validated['assignment_type'],
             'assignment_reference'     => $validated['assignment_reference'] ?? null,
@@ -108,12 +123,22 @@ class PosExpenseModificationApiController extends Controller
             'estimated_cost'           => (float) $validated['estimated_cost'],
             'duration'                 => $validated['duration'] ?? null,
             'description'              => $validated['description'] ?? null,
-        ]);
+        ];
+
+        $editing = $modification !== null;
+        if ($editing) {
+            $modification->update($payload);
+        } else {
+            $modification = Modification::create(array_merge($payload, [
+                'business_id' => $business->id,
+                'created_by_user_id' => $request->user()->id,
+            ]));
+        }
 
         return response()->json([
-            'message' => 'Modification created.',
+            'message' => $editing ? 'Modification updated.' : 'Modification created.',
             'data'    => $this->format($modification, []),
-        ], 201);
+        ], $editing ? 200 : 201);
     }
 
     public function show(Request $request, Modification $modification): JsonResponse
@@ -196,6 +221,7 @@ class PosExpenseModificationApiController extends Controller
                 $propertyLookup,
             ),
             'property_work_type'  => $modification->property_work_type,
+            'property_work_type_other' => $modification->property_work_type_other,
             'work_type_label'     => $workTypeLabel,
             'estimated_cost'      => (float) ($modification->estimated_cost ?? 0),
             'estimated_cost_fmt'  => number_format((float) ($modification->estimated_cost ?? 0), 2, '.', ','),

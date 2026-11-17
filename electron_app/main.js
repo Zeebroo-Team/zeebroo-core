@@ -2,8 +2,9 @@
 
 const path = require('path');
 const fs   = require('fs');
-const { app, BrowserWindow, ipcMain, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, clipboard, nativeImage } = require('electron');
 const { API_BASE_URL } = require('./config');
+const { createOffline } = require('./offline');
 
 let CONFIG_PATH;
 
@@ -332,7 +333,13 @@ ipcMain.handle('get-printers', async (e) => {
 ipcMain.handle('get-printer-config', () => {
   config = loadConfig();
   const tp = config.thermalPrinter || {};
-  return { name: tp.name || '', silent: tp.silent !== false, paperWidth: tp.paperWidth || 80, mode: tp.mode || 'escpos' };
+  return {
+    name:        tp.name || '',
+    silent:      tp.silent !== false,
+    paperWidth:  tp.paperWidth || 80,
+    mode:        tp.mode || 'escpos',
+    showPreview: tp.showPreview !== false,
+  };
 });
 
 ipcMain.handle('set-printer-config', (_e, cfg) => {
@@ -342,40 +349,118 @@ ipcMain.handle('set-printer-config', (_e, cfg) => {
     silent:     cfg.silent !== false,
     paperWidth: cfg.paperWidth === 58 ? 58 : 80,
     mode:       cfg.mode === 'html' ? 'html' : 'escpos',
+    showPreview: cfg.showPreview !== false,
   };
   saveConfig(config);
   return true;
 });
 
+// User-set receipt margins (mm) from the Receipt Layout Editor — each side clamped to 0–20.
+const RECEIPT_MARGIN_MAX_MM = 20;
+function _receiptMargins(m = {}) {
+  const v = (x) => Math.min(RECEIPT_MARGIN_MAX_MM, Math.max(0, parseFloat(x) || 0));
+  return { top: v(m.top), right: v(m.right), bottom: v(m.bottom), left: v(m.left) };
+}
+
+// Printer's default code page is plain ASCII — swap common typographic characters
+// for ASCII look-alikes so they don't print as '?'.
+const _ESCPOS_ASCII = {
+  '—': '-', '–': '-', '−': '-', '‘': "'", '’': "'",
+  '“': '"', '”': '"', '•': '*', '…': '...', ' ': ' ', '×': 'x',
+};
+function _escposAscii(s) {
+  return String(s || '').replace(/[—–−‘’“”•… ×]/g, (ch) => _ESCPOS_ASCII[ch]);
+}
+
+// ── Receipt logo → 1-bit raster for ESC/POS (GS v 0) ─────────────────────────
+// Same footprint as the HTML receipt's logo (max 100×48 CSS px ≈ 26×13 mm at 203 dpi),
+// scaled by the Logo size setting (50–300 %) and capped to the print head width.
+const LOGO_MAX_W_DOTS = 208;
+const LOGO_MAX_H_DOTS = 104;
+
+async function _loadLogoRaster(url, sizePct = 100, maxWidthDots = 576) {
+  if (!url) return null;
+  try {
+    let buf;
+    if (url.startsWith('data:')) {
+      buf = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+    } else {
+      const abs = /^https?:\/\//i.test(url) ? url : new URL(url, API_BASE_URL).href;
+      const res = await fetch(abs);
+      if (!res.ok) return null;
+      buf = Buffer.from(await res.arrayBuffer());
+    }
+    let img = nativeImage.createFromBuffer(buf);  // PNG / JPEG
+    if (img.isEmpty()) return null;
+
+    const pct   = Number.isFinite(parseFloat(sizePct)) ? Math.min(300, Math.max(50, parseFloat(sizePct))) : 100;
+    const maxW  = Math.min(maxWidthDots, Math.round(LOGO_MAX_W_DOTS * pct / 100));
+    const maxH  = Math.round(LOGO_MAX_H_DOTS * pct / 100);
+    const src   = img.getSize();
+    const scale = Math.min(1, maxW / src.width, maxH / src.height);
+    const w     = Math.max(1, Math.round(src.width  * scale));
+    const h     = Math.max(1, Math.round(src.height * scale));
+    img = img.resize({ width: w, height: h, quality: 'best' });
+
+    const size = img.getSize();
+    const bgra = img.toBitmap();  // BGRA, row-major
+    if (bgra.length < size.width * size.height * 4) return null;
+
+    const bytesPerRow = Math.ceil(size.width / 8);
+    const bits = Buffer.alloc(bytesPerRow * size.height);
+    for (let y = 0; y < size.height; y++) {
+      for (let x = 0; x < size.width; x++) {
+        const i = (y * size.width + x) * 4;
+        const a = bgra[i + 3] / 255;
+        // Composite onto white paper, then threshold the luminance
+        const lum = (0.114 * bgra[i] + 0.587 * bgra[i + 1] + 0.299 * bgra[i + 2]) * a + 255 * (1 - a);
+        if (lum < 160) bits[y * bytesPerRow + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+    }
+    return { width: size.width, height: size.height, bytesPerRow, bits };
+  } catch (_) {
+    return null;  // a broken logo must never block the receipt
+  }
+}
+
 // ── ESC/POS builder — pure Node.js, no native modules ────────────────────────
-function _escposBuffer(receipt, paperWidth) {
-  const COL  = paperWidth === 58 ? 30 : 42;
-  const NAMW = paperWidth === 58 ? 14 : 20;  // item name column width
+function _escposBuffer(receipt, paperWidth, margins = {}, logo = null) {
+  // Font A is 12 dots wide (1.5 mm at 203 dpi): 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
+  const MM_PER_COL = 1.5;
+  const DOTS_PER_MM = 8;
+  const mg   = _receiptMargins(margins);
+  const LPAD = Math.round(mg.left  / MM_PER_COL);  // left margin, in columns
+  const RPAD = Math.round(mg.right / MM_PER_COL);  // right margin, in columns
+  const COL  = Math.max(20, (paperWidth === 58 ? 32 : 48) - LPAD - RPAD);
   const QTYF = 4;                              // qty column
-  const PRCF = paperWidth === 58 ?  0 :  8;  // price column (skipped on 58mm)
-  const TOTF = COL - NAMW - QTYF - PRCF;     // total column
+  const PRCF = paperWidth === 58 ?  0 : 10;  // price column (skipped on 58mm)
+  const TOTF = paperWidth === 58 ? 12 : 10;  // total column
+  const NAMW = Math.max(6, COL - QTYF - PRCF - TOTF);  // item name column takes what's left
 
   const buf = [];
   const push    = (...b)  => buf.push(...b);
   const text    = (s) => {
-    for (const ch of String(s || '')) {
+    for (const ch of _escposAscii(s)) {
       const c = ch.charCodeAt(0);
-      buf.push(c < 128 ? c : 0x3F);  // non-ASCII → '?'
+      buf.push(c < 128 ? c : 0x3F);  // remaining non-ASCII → '?'
     }
   };
-  const println = (s = '') => { text(s); push(0x0A); };
+  const println = (s = '') => { text(' '.repeat(LPAD) + s); push(0x0A); };
 
   // ESC/POS commands
+  // Centering is done with spaces (ctr) inside the margin-reduced width, so the printer
+  // always stays left-aligned — ESC a 1 would re-centre the already padded line.
   const alignL  = () => push(0x1B, 0x61, 0x00);
-  const alignC  = () => push(0x1B, 0x61, 0x01);
+  const alignC  = alignL;
   const boldOn  = () => push(0x1B, 0x45, 0x01);
   const boldOff = () => push(0x1B, 0x45, 0x00);
   const feed    = (n = 1) => push(0x1B, 0x64, n);
+  const feedMm  = (mm) => { const d = Math.round(mm * DOTS_PER_MM); if (d > 0) push(0x1B, 0x4A, Math.min(255, d)); };
   const cut     = ()       => push(0x1D, 0x56, 0x42, 0x03);  // partial cut + 3-line feed
 
   // Layout helpers
-  const line  = () => { text('-'.repeat(COL)); push(0x0A); };
-  const dline = () => { text('='.repeat(COL)); push(0x0A); };
+  const line  = () => println('-'.repeat(COL));
+  const dline = () => println('='.repeat(COL));
   const ctr   = (s) => {
     s = String(s || '').slice(0, COL);
     const pad = Math.max(0, Math.floor((COL - s.length) / 2));
@@ -386,15 +471,32 @@ function _escposBuffer(receipt, paperWidth) {
     right = String(right || '');
     const gap = COL - left.length - right.length;
     if (gap <= 0) {
-      text(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
+      println(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
     } else {
-      text(left + ' '.repeat(gap) + right);
+      println(left + ' '.repeat(gap) + right);
     }
-    push(0x0A);
   };
 
   // ── Build receipt ──────────────────────────────────────────────────────────
   push(0x1B, 0x40);  // ESC @ — initialize printer
+  feedMm(mg.top);
+
+  // Logo — centred inside the margins by left-padding each raster row with blank bytes
+  if (logo) {
+    const headDots = paperWidth === 58 ? 384 : 576;
+    const areaL    = LPAD * 12;
+    const areaW    = headDots - LPAD * 12 - RPAD * 12;
+    const padBytes = Math.max(0, Math.floor((areaL + Math.max(0, (areaW - logo.width) / 2)) / 8));
+    const rowBytes = Math.min(Math.ceil(headDots / 8), padBytes + logo.bytesPerRow);
+    const copy     = rowBytes - padBytes;
+    push(0x1D, 0x76, 0x30, 0x00, rowBytes & 0xFF, rowBytes >> 8, logo.height & 0xFF, logo.height >> 8);
+    for (let y = 0; y < logo.height; y++) {
+      for (let p = 0; p < padBytes; p++) buf.push(0);
+      for (let b = 0; b < copy; b++) buf.push(logo.bits[y * logo.bytesPerRow + b]);
+    }
+    const gap = Math.min(20, Math.max(0, parseFloat(receipt.logoGap)));
+    feedMm(Number.isFinite(gap) ? gap : 2);
+  }
 
   // Header
   if (receipt.businessName) {
@@ -414,6 +516,8 @@ function _escposBuffer(receipt, paperWidth) {
 
   // Metadata
   rowLR('Receipt No.:', String(receipt.saleNumber || ''));
+  // Printed while offline: the number on the customer's first receipt
+  if (receipt.offlineRef) rowLR('Offline No.:', String(receipt.offlineRef));
   rowLR('Date:',        String(receipt.date        || ''));
   if (receipt.customer) rowLR('Customer:', String(receipt.customer));
   if (receipt.cashier)  rowLR('Cashier:',  String(receipt.cashier));
@@ -487,6 +591,7 @@ function _escposBuffer(receipt, paperWidth) {
   println(ctr('[ ' + String(receipt.paymentMethod || 'CASH').toUpperCase() + ' ]'));
 
   feed(3);
+  feedMm(mg.bottom);
   cut();
 
   return Buffer.from(buf);
@@ -570,48 +675,70 @@ public static class WP {
 }
 
 ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
-  const { receipt, name, paperWidth = 80 } = opts;
+  const { receipt, name, paperWidth = 80, margins = {} } = opts;
   if (!name) return { success: false, error: 'No printer name specified' };
   try {
-    const buffer = _escposBuffer(receipt, paperWidth);
+    const mg     = _receiptMargins(margins);
+    const head   = paperWidth === 58 ? 384 : 576;
+    // Keep the logo inside the left/right margins — same column rounding as _escposBuffer (12 dots per col)
+    const maxW   = Math.max(8, head - (Math.round(mg.left / 1.5) + Math.round(mg.right / 1.5)) * 12);
+    const logo   = await _loadLogoRaster(receipt?.logoUrl, receipt?.logoSize, maxW);
+    const buffer = _escposBuffer(receipt, paperWidth, margins, logo);
     return await _sendRawToPrinter(name, buffer);
   } catch (err) {
     return { success: false, error: err.message || String(err) };
   }
 });
 
-ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
-  const { html = '', name = '', silent = true, paperWidth = 80 } = opts;
-
-  return new Promise((resolve) => {
-    const paperMm   = paperWidth === 58 ? 58 : 80;
-    const marginMm  = 3;
-    const contentMm = paperMm - marginMm * 2;
-
-    // Build a fully self-contained, clean HTML page for the thermal printer.
-    // Running in a dedicated hidden window avoids all main-app CSS interference
-    // and lets us use marginType:'printableArea' which every Windows driver accepts.
-    const fullHtml = `<!DOCTYPE html>
+// Build a fully self-contained, clean HTML page for the thermal printer.
+// Running in a dedicated hidden window avoids all main-app CSS interference.
+const THERMAL_MARGIN_MM = 3;
+// Thermal heads print narrower than the roll: 80mm → 72mm (576 dots), 58mm → 48mm (384 dots).
+// Keep content inside that with a little slack for the driver's left offset, so the right edge isn't clipped.
+const THERMAL_SAFE_MM = { 80: 68, 58: 45 };
+// Left-aligned direct print starts at the print head's left edge, so it can use the full head width.
+const THERMAL_HEAD_MM = { 80: 72, 58: 48 };
+// leftAlign: pin the receipt to the page's left edge instead of centring it. Used for
+// direct printing — the driver's page may be wider than the roll (A4 / Letter default),
+// and a centred receipt would then land outside the print head's area.
+function _thermalHtml(html, paperWidth, margins = {}, { leftAlign = false } = {}) {
+  const paperMm   = paperWidth === 58 ? 58 : 80;
+  const contentMm = (leftAlign ? THERMAL_HEAD_MM : THERMAL_SAFE_MM)[paperMm];
+  // User margins pad the safe area: top/bottom add blank paper, left/right shift and narrow the content
+  const mg        = _receiptMargins(margins);
+  // Direct print: thermal drivers' "Paper Reduction" trims blank paper at the top / bottom
+  // of the page, which would swallow a blank top/bottom margin. Build those margins as
+  // spacers ending in a 0.5 mm dot so the driver sees printed content and keeps the feed.
+  const vSpacers  = leftAlign;
+  const padV      = (v) => (vSpacers ? 0 : v);
+  return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
+<title>Receipt</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
-  html, body {
-    width: ${contentMm}mm;
+  html { width:100%; background:#fff; }
+  body {
+    width:100%; margin:${leftAlign ? '0' : '0 auto'};
+    /* Left-aligned: the left margin shifts the receipt over the print head; the right margin narrows it */
+    max-width: ${leftAlign ? contentMm + mg.left : contentMm}mm;
+    padding: ${padV(mg.top)}mm ${mg.right}mm ${padV(mg.bottom)}mm ${mg.left}mm;
     background: #fff; color: #000;
     font-family: 'Courier New', Courier, monospace;
     font-size: 10pt; line-height: 1.45;
+    overflow-wrap:anywhere;
   }
-  @page { size: ${paperMm}mm auto; margin: ${marginMm}mm; }
+  @page { margin: 0; }
   .rcpt-paper { width:100%; }
   .rcpt-logo-wrap    { text-align:center; margin-bottom:8px; }
-  .rcpt-logo-img     { max-width:100px; max-height:48px; object-fit:contain; display:block; margin:0 auto; }
+  .rcpt-logo-img     { max-width:min(100%, calc(100px * var(--rcpt-logo-scale, 1))); max-height:calc(48px * var(--rcpt-logo-scale, 1)); object-fit:contain; display:block; margin:0 auto; }
   .rcpt-biz-name     { text-align:center; font-size:12pt; font-weight:700; margin-bottom:2px; }
   .rcpt-biz-sub      { text-align:center; font-size:8.5pt; color:#555; margin-bottom:8px; }
   .rcpt-divider      { border:none; border-top:1px dashed #999; margin:6px 0; }
   .rcpt-divider-solid{ border:none; border-top:1px solid #555; margin:6px 0; }
-  .rcpt-meta         { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-meta         { display:flex; justify-content:space-between; gap:6px; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-meta > *:last-child, .rcpt-customer > *:last-child, .rcpt-total-row > *:last-child { text-align:right; min-width:0; }
   .rcpt-items-header { display:flex; font-size:8pt; font-weight:700; text-transform:uppercase; color:#333; padding:3px 0; border-top:1px dashed #aaa; border-bottom:1px dashed #aaa; margin:4px 0; }
   .rcpt-items-header .ih-name  { flex:1; min-width:0; }
   .rcpt-items-header .ih-qty   { width:28px; text-align:right; flex-shrink:0; }
@@ -631,72 +758,202 @@ ipcMain.handle('print-receipt-thermal', (_e, opts = {}) => {
   .rcpt-footer       { text-align:center; font-size:8pt; color:#555; margin-top:10px; line-height:1.5; }
   .rcpt-thank        { text-align:center; font-size:10pt; font-weight:700; margin:8px 0 3px; }
   .rcpt-note         { font-size:8.5pt; color:#444; margin:4px 0; font-style:italic; white-space:pre-wrap; }
-  .rcpt-customer     { display:flex; justify-content:space-between; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-customer     { display:flex; justify-content:space-between; gap:6px; font-size:8.5pt; color:#333; margin:1px 0; }
+  .rcpt-item-disc    { display:flex; font-size:8pt; font-style:italic; padding:0 0 2px 8px; }
+  .rcpt-item-disc .rid-label { flex:1; }
+  .rcpt-item-disc .rid-per   { width:52px; text-align:right; }
+  .rcpt-item-disc .rid-total { width:58px; text-align:right; }
+  ${paperMm === 58 ? `
+  html, body { font-size:9pt; }
+  .ih-price, .ri-price, .rid-per { display:none; }
+  .ih-qty, .ri-qty { width:22px; }` : ''}
+  .mg-spacer { position:relative; }
+  /* Centred — a dot at the left edge can fall outside the print head and be trimmed as blank */
+  .mg-spacer::after { content:''; position:absolute; left:50%; width:0.5mm; height:0; border-top:0.5mm solid #000; }
+  .mg-spacer.top::after    { top:0; }
+  .mg-spacer.bottom::after { bottom:0; }
 </style>
 </head>
-<body>${html}</body>
+<body>${vSpacers && mg.top ? `<div class="mg-spacer top" style="height:${mg.top}mm"></div>` : ''}${html}${vSpacers && mg.bottom ? `<div class="mg-spacer bottom" style="height:${mg.bottom}mm"></div>` : ''}</body>
 </html>`;
+}
 
-    const thermalWin = new BrowserWindow({
-      width: 400, height: 600,
-      show: false,
-      skipTaskbar: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-      },
-    });
+// Wait (max 3 s) for the receipt's images (logo) to load, then return the
+// rendered receipt height in px (body, not documentElement — the latter is never
+// shorter than the hidden window).
+function _thermalContentHeightPx(win) {
+  return win.webContents.executeJavaScript(`
+    Promise.race([
+      Promise.all([...document.images].map(img => img.complete ? null
+        : new Promise(r => { img.onload = img.onerror = r; }))),
+      new Promise(r => setTimeout(r, 3000)),
+    ]).then(() => document.fonts ? document.fonts.ready : null)
+      .then(() => Math.ceil(document.body.getBoundingClientRect().height))
+  `);
+}
 
-    let resolved = false;
-    const done = (result) => {
-      if (resolved) return;
-      resolved = true;
-      if (!thermalWin.isDestroyed()) thermalWin.destroy();
-      resolve(result);
-    };
+ipcMain.handle('print-receipt-thermal', async (_e, opts = {}) => {
+  const { html = '', name = '', silent = true, paperWidth = 80, margins = {} } = opts;
 
-    // 15-second guard — destroy and resolve if the driver hangs
-    const guard = setTimeout(() => done({ success: false, error: 'Print timeout' }), 15000);
-
-    thermalWin.webContents.once('did-finish-load', () => {
-      // 500 ms for fonts / images to settle before the print job starts
-      setTimeout(() => {
-        const printOpts = {
-          silent,
-          printBackground: false,
-          // 'printableArea' is accepted by every Windows driver; 'none' causes errors
-          margins: { marginType: 'printableArea' },
-        };
-        if (name) printOpts.deviceName = name;
-        thermalWin.webContents.print(printOpts, (success, failureReason) => {
-          clearTimeout(guard);
-          done({ success, error: failureReason || null });
-        });
-      }, 500);
-    });
-
-    thermalWin.once('closed', () => {
-      clearTimeout(guard);
-      done({ success: false, error: 'Window closed before print completed' });
-    });
-
-    thermalWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(fullHtml));
+  const thermalWin = new BrowserWindow({
+    width: 400, height: 600,
+    show: false,
+    skipTaskbar: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+    },
   });
+
+  try {
+    await thermalWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth, margins, { leftAlign: true })));
+    await _thermalContentHeightPx(thermalWin);  // wait for the logo / fonts before printing
+
+    // No pageSize — print on the driver's own paper. Thermal drivers (e.g. EPSON
+    // TM-T81III) don't accept a custom paper length; Chromium then centres the smaller
+    // page on the driver's paper, leaving a big top gap and clipping the left edge.
+    // The receipt is left-aligned (above) so it sits under the print head on any page width.
+    const printOpts = {
+      silent,
+      printBackground: false,
+      // 'printableArea' is accepted by every Windows driver; 'none' causes errors
+      margins: { marginType: 'printableArea' },
+    };
+    if (name) printOpts.deviceName = name;
+
+    return await new Promise((resolve) => {
+      // Guard only silent jobs against a hung driver — with the system dialog open the
+      // cashier may take as long as they like, and destroying the window would kill it.
+      const guard = silent
+        ? setTimeout(() => resolve({ success: false, error: 'Print timeout — printer not responding' }), 20000)
+        : null;
+      thermalWin.webContents.print(printOpts, (success, failureReason) => {
+        if (guard) clearTimeout(guard);
+        resolve({
+          success,
+          error: success ? null
+            : (failureReason === 'cancelled' ? 'Print cancelled' : (failureReason || 'Print failed')),
+          cancelled: failureReason === 'cancelled',
+        });
+      });
+    });
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!thermalWin.isDestroyed()) thermalWin.destroy();
+  }
+});
+
+// Windows' system print dialog can't preview Electron pages ("This app doesn't
+// support print preview"), so when no printer is configured we render the receipt
+// to a PDF at the exact roll width and open it in Chromium's PDF viewer, which
+// shows a true-size preview and has its own Print button.
+ipcMain.handle('preview-receipt-pdf', async (_e, opts = {}) => {
+  const { html = '', paperWidth = 80, margins = {} } = opts;
+  const os      = require('os');
+  const paperMm = paperWidth === 58 ? 58 : 80;
+  const MM_PER_IN = 25.4;
+
+  const renderWin = new BrowserWindow({
+    width: 400, height: 600, show: false, skipTaskbar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+  });
+  try {
+    await renderWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(_thermalHtml(html, paperWidth, margins)));
+    // Roll paper has no fixed length — size the page to the receipt's content height
+    const contentPx = await _thermalContentHeightPx(renderWin);
+    const heightMm  = (contentPx * MM_PER_IN / 96) + THERMAL_MARGIN_MM * 2 + 2;
+    const marginIn  = THERMAL_MARGIN_MM / MM_PER_IN;
+
+    const pdf = await renderWin.webContents.printToPDF({
+      pageSize:        { width: paperMm / MM_PER_IN, height: heightMm / MM_PER_IN },
+      margins:         { top: marginIn, bottom: marginIn, left: marginIn, right: marginIn },
+      printBackground: true,
+    });
+
+    const pdfPath = path.join(os.tmpdir(), `zeebroo-receipt-${Date.now()}.pdf`);
+    fs.writeFileSync(pdfPath, pdf);
+
+    const previewWin = new BrowserWindow({
+      width: 520, height: 820, title: `Receipt preview — ${paperMm} mm`,
+      parent: BrowserWindow.fromWebContents(_e.sender) || undefined,
+      autoHideMenuBar: true,
+      webPreferences: { plugins: true, nodeIntegration: false, contextIsolation: true, sandbox: true },
+    });
+    previewWin.on('page-title-updated', (ev) => ev.preventDefault());  // keep our title, not the file path
+    previewWin.once('closed', () => { try { fs.unlinkSync(pdfPath); } catch (_) {} });
+    await previewWin.loadFile(pdfPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!renderWin.isDestroyed()) renderWin.destroy();
+  }
+});
+
+// Renders a self-contained HTML report (e.g. Finance → Sales Reports) to an A4 PDF,
+// asks where to save it, then opens it in the default PDF viewer.
+ipcMain.handle('save-html-pdf', async (e, opts = {}) => {
+  const { html = '', filename = 'report.pdf', landscape = false } = opts;
+  const os      = require('os');
+  const tmpHtml = path.join(os.tmpdir(), `zeebroo-report-${Date.now()}.html`);
+  // printToPDF has no progress callback — report stages so the UI can show it's working
+  const stage = (s) => { if (!e.sender.isDestroyed()) e.sender.send('save-html-pdf-progress', s); };
+
+  const renderWin = new BrowserWindow({
+    width: 1000, height: 1400, show: false, skipTaskbar: true,
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, javascript: false },
+  });
+  try {
+    // A file instead of a data: URL — reports with many transaction rows get large
+    stage('loading');
+    fs.writeFileSync(tmpHtml, html, 'utf8');
+    await renderWin.loadFile(tmpHtml);
+
+    stage('rendering');
+    const pdf = await renderWin.webContents.printToPDF({
+      pageSize: 'A4',
+      landscape: !!landscape,
+      printBackground: true,
+      margins: { top: 0.45, bottom: 0.55, left: 0.45, right: 0.45 },
+      displayHeaderFooter: true,
+      headerTemplate: '<div></div>',
+      footerTemplate: '<div style="font-size:8px;color:#9ca3af;width:100%;text-align:center;font-family:Segoe UI,Arial,sans-serif">Page <span class="pageNumber"></span> of <span class="totalPages"></span></div>',
+    });
+
+    stage('saving-dialog');
+    const parent = BrowserWindow.fromWebContents(e.sender) || mainWindow;
+    const { canceled, filePath } = await dialog.showSaveDialog(parent, {
+      defaultPath: filename,
+      filters: [{ name: 'PDF document', extensions: ['pdf'] }],
+    });
+    if (canceled || !filePath) return { success: false, canceled: true };
+
+    stage('writing');
+    fs.writeFileSync(filePath, pdf);
+    shell.openPath(filePath);
+    return { success: true, path: filePath };
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!renderWin.isDestroyed()) renderWin.destroy();
+    try { fs.unlinkSync(tmpHtml); } catch (_) {}
+  }
 });
 
 // ── API proxy (avoids CORS in renderer) ──────────────────────────────────
 const https = require('https');
 const http  = require('http');
 
-function apiRequest(method, path_, body, token, businessId, branchId) {
+function apiRequest(method, path_, body, token, businessId, branchId, timeoutMs = 120000, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
     const base = API_BASE_URL.replace(/\/$/, '');
     const url  = new URL(base + path_);
     const isHttps = url.protocol === 'https:';
     const lib  = isHttps ? https : http;
 
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', ...extraHeaders };
     if (token)      headers['Authorization'] = `Bearer ${token}`;
     if (businessId) headers['X-Business-Id'] = String(businessId);
     if (branchId)   headers['X-Branch-Id']   = String(branchId);
@@ -710,7 +967,7 @@ function apiRequest(method, path_, body, token, businessId, branchId) {
       path: url.pathname + url.search,
       method,
       headers,
-      timeout: 120000,
+      timeout: timeoutMs,
     }, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
@@ -720,20 +977,55 @@ function apiRequest(method, path_, body, token, businessId, branchId) {
       });
     });
 
-    req.on('timeout', () => { req.destroy(new Error('Request timed out after 120s')); });
+    req.on('timeout', () => { req.destroy(new Error(`Request timed out after ${Math.round(timeoutMs / 1000)}s`)); });
     req.on('error', reject);
     if (payload) req.write(payload);
     req.end();
   });
 }
 
+// ── Offline mode (see offline.js) ─────────────────────────────────────────
+// Every renderer API call goes through it: pass-through while online, local
+// catalog + queued sales while the internet is down.
+let offline = null;
+function getOffline() {
+  if (!offline) {
+    offline = createOffline({
+      userDataDir: app.getPath('userData'),
+      getConfig:   () => config,
+      request: (method, p, body, opts = {}) => apiRequest(
+        method, p, body, config.token,
+        opts.businessId ?? config.business_id,
+        opts.branchId !== undefined ? opts.branchId : config.branch_id,
+        opts.timeout,
+        // Exactly-once writes for the offline queue (Modules\Pos\Http\Middleware\PosIdempotency)
+        opts.idempotencyKey ? { 'Idempotency-Key': opts.idempotencyKey } : {},
+      ),
+      notify: (status) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('offline-status', status);
+      },
+    });
+  }
+  return offline;
+}
+
+app.whenReady().then(() => getOffline().start());
+app.on('before-quit', () => offline?.stop());
+
 ipcMain.handle('api-request', async (_e, { method, path: p, body }) => {
   try {
-    return await apiRequest(method, p, body, config.token, config.business_id, config.branch_id);
+    return await getOffline().handle(method, p, body);
   } catch (err) {
     return { status: 0, body: { message: err.message } };
   }
 });
+
+ipcMain.handle('offline-status',  () => getOffline().status());
+ipcMain.handle('offline-outbox',  () => getOffline().listOutbox());
+ipcMain.handle('offline-sync',    (_e, opts) => getOffline().syncNow(opts || {}));
+ipcMain.handle('offline-retry',   (_e, clientUuid) => getOffline().retryEntry(clientUuid));
+ipcMain.handle('offline-discard', (_e, clientUuid) => getOffline().discardEntry(clientUuid));
+ipcMain.handle('offline-events',  () => getOffline().listEvents());
 
 // Downloads a binary file (e.g. a PDF receipt) from the API and lets the user
 // save it to disk — apiRequest() always JSON.parses the response, which isn't
@@ -760,7 +1052,7 @@ function apiDownloadFile(path_, token, businessId, branchId) {
     }, (res) => {
       const chunks = [];
       res.on('data', chunk => chunks.push(chunk));
-      res.on('end', () => resolve({ status: res.statusCode, buffer: Buffer.concat(chunks) }));
+      res.on('end', () => resolve({ status: res.statusCode, buffer: Buffer.concat(chunks), contentType: res.headers['content-type'] || '' }));
     });
 
     req.on('timeout', () => { req.destroy(new Error('Request timed out after 120s')); });
@@ -787,6 +1079,22 @@ ipcMain.handle('api-download-file', async (_e, { path: p, suggestedFilename }) =
 
     fs.writeFileSync(filePath, res.buffer);
     return { status: 200, savedPath: filePath };
+  } catch (err) {
+    return { status: 0, message: err.message };
+  }
+});
+
+// Fetches an authenticated file (e.g. an uploaded image) and returns it as a data: URL so the
+// renderer can show an inline preview without exposing the API token to <img> requests.
+const PREVIEW_MAX_BYTES = 25 * 1024 * 1024;
+ipcMain.handle('api-fetch-data-url', async (_e, { path: p }) => {
+  try {
+    const res = await apiDownloadFile(p, config.token, config.business_id, config.branch_id);
+    if (res.status !== 200) return { status: res.status, message: `Preview failed (HTTP ${res.status}).` };
+    if (res.buffer.length > PREVIEW_MAX_BYTES) return { status: 413, message: 'File is too large to preview.' };
+    let mime = String(res.contentType).split(';')[0].trim();
+    if (!mime || mime === 'application/octet-stream') mime = extMime(p);
+    return { status: 200, dataUrl: `data:${mime};base64,${res.buffer.toString('base64')}` };
   } catch (err) {
     return { status: 0, message: err.message };
   }
@@ -821,7 +1129,14 @@ ipcMain.handle('fetch-json', async (_e, url) => {
 });
 
 // ── Multipart file upload ─────────────────────────────────────────────────
-const MIME_EXT = { jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', svg:'image/svg+xml', pdf:'application/pdf' };
+const MIME_EXT = {
+  jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', svg:'image/svg+xml', bmp:'image/bmp', pdf:'application/pdf',
+  doc:'application/msword', docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xls:'application/vnd.ms-excel', xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  ppt:'application/vnd.ms-powerpoint', pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  odt:'application/vnd.oasis.opendocument.text', ods:'application/vnd.oasis.opendocument.spreadsheet',
+  txt:'text/plain', csv:'text/csv', rtf:'application/rtf', zip:'application/zip', rar:'application/vnd.rar', '7z':'application/x-7z-compressed',
+};
 function extMime(filePath) {
   const ext = path.extname(filePath).slice(1).toLowerCase();
   return MIME_EXT[ext] || 'application/octet-stream';
@@ -830,7 +1145,7 @@ function buildMultipart(boundary, files) {
   const CRLF = '\r\n';
   const parts = [];
   for (const { fieldName, filePath, fileName, mime } of files) {
-    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${fieldName}"; filename="${fileName}"${CRLF}Content-Type: ${mime}${CRLF}${CRLF}`));
+    parts.push(Buffer.from(`--${boundary}${CRLF}Content-Disposition: form-data; name="${fieldName}"; filename="${String(fileName).replace(/["\r\n]/g, '')}"${CRLF}Content-Type: ${mime}${CRLF}${CRLF}`));
     parts.push(fs.readFileSync(filePath));
     parts.push(Buffer.from(CRLF));
   }
@@ -878,6 +1193,134 @@ ipcMain.handle('read-text-file', async (_e, filePath) => {
     return { ok: true, content: fs.readFileSync(filePath, 'utf8') };
   } catch (err) {
     return { ok: false, error: err.message };
+  }
+});
+
+// ── Database Backup & Import ──────────────────────────────────────────────
+// Backup zips can be hundreds of MB, so they are streamed to/from disk here in
+// the main process (never buffered through IPC). Progress is pushed to the
+// renderer on 'backup-transfer-progress' as { kind, done, total }.
+function backupHeaders(extra) {
+  const headers = { Accept: 'application/json', ...extra };
+  if (config.token)       headers['Authorization'] = `Bearer ${config.token}`;
+  if (config.business_id) headers['X-Business-Id'] = String(config.business_id);
+  if (config.branch_id)   headers['X-Branch-Id']   = String(config.branch_id);
+  return headers;
+}
+
+function backupProgress(sender, kind, done, total) {
+  if (!sender.isDestroyed()) sender.send('backup-transfer-progress', { kind, done, total });
+}
+
+// JSON request with a long timeout — export and validate run for minutes on big businesses.
+ipcMain.handle('backup-api', async (_e, { method, path: p, body }) => {
+  try {
+    const url  = new URL(API_BASE_URL.replace(/\/$/, '') + p);
+    const lib  = url.protocol === 'https:' ? https : http;
+    const payload = body ? JSON.stringify(body) : null;
+    const headers = backupHeaders({ 'Content-Type': 'application/json' });
+    if (payload) headers['Content-Length'] = Buffer.byteLength(payload);
+    return await new Promise((resolve, reject) => {
+      const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method, headers, timeout: 15 * 60 * 1000 }, (res) => {
+        let data = '';
+        res.on('data', c => { data += c; });
+        res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(data) }); } catch (_) { resolve({ status: res.statusCode, body: data }); } });
+      });
+      req.on('timeout', () => req.destroy(new Error('The server took too long to respond.')));
+      req.on('error', reject);
+      if (payload) req.write(payload);
+      req.end();
+    });
+  } catch (err) {
+    return { status: 0, body: { message: err.message } };
+  }
+});
+
+ipcMain.handle('backup-pick-zip', async () => {
+  const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    title: 'Choose a Zeebroo backup',
+    properties: ['openFile'],
+    filters: [{ name: 'Zeebroo backup (.zip)', extensions: ['zip'] }],
+  });
+  if (canceled || !filePaths[0]) return { canceled: true };
+  const st = fs.statSync(filePaths[0]);
+  return { canceled: false, path: filePaths[0], name: path.basename(filePaths[0]), size: st.size };
+});
+
+// Streams an API download straight to a file the user picks.
+ipcMain.handle('backup-download', async (e, { path: p, suggestedFilename }) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save backup',
+    defaultPath: suggestedFilename || 'zeebroo-backup.zip',
+    filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+  });
+  if (canceled || !filePath) return { status: 0, canceled: true };
+
+  try {
+    const url = new URL(API_BASE_URL.replace(/\/$/, '') + p);
+    const lib = url.protocol === 'https:' ? https : http;
+    return await new Promise((resolve) => {
+      const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method: 'GET', headers: backupHeaders({ Accept: 'application/zip, application/json' }), timeout: 15 * 60 * 1000 }, (res) => {
+        if (res.statusCode !== 200) {
+          let data = '';
+          res.on('data', c => { data += c; });
+          res.on('end', () => { let message = `Download failed (HTTP ${res.statusCode}).`; try { message = JSON.parse(data).message || message; } catch (_) {} resolve({ status: res.statusCode, message }); });
+          return;
+        }
+        const total = Number(res.headers['content-length'] || 0);
+        let done = 0;
+        const out = fs.createWriteStream(filePath);
+        res.on('data', (c) => { done += c.length; backupProgress(e.sender, 'download', done, total); });
+        res.pipe(out);
+        out.on('finish', () => resolve({ status: 200, savedPath: filePath, size: done }));
+        out.on('error', (err) => resolve({ status: 0, message: err.message }));
+      });
+      req.on('timeout', () => req.destroy(new Error('Download timed out.')));
+      req.on('error', (err) => { try { fs.unlinkSync(filePath); } catch (_) {} resolve({ status: 0, message: err.message }); });
+      req.end();
+    });
+  } catch (err) {
+    return { status: 0, message: err.message };
+  }
+});
+
+// Uploads a local zip to /backup/imports/{id}/chunk in sequential raw chunks.
+ipcMain.handle('backup-upload', async (e, { importId, filePath, chunkBytes, startIndex }) => {
+  const size  = fs.statSync(filePath).size;
+  const chunk = Math.max(256 * 1024, Math.min(Number(chunkBytes) || 4 * 1024 * 1024, 8 * 1024 * 1024));
+  const fd    = fs.openSync(filePath, 'r');
+  const base  = API_BASE_URL.replace(/\/$/, '');
+  let index   = Number(startIndex) || 0;
+  let offset  = index * chunk;
+  let last    = null;
+  try {
+    while (offset < size) {
+      const len = Math.min(chunk, size - offset);
+      const buf = Buffer.alloc(len);
+      fs.readSync(fd, buf, 0, len, offset);
+      const url = new URL(`${base}/backup/imports/${importId}/chunk?index=${index}`);
+      const lib = url.protocol === 'https:' ? https : http;
+      last = await new Promise((resolve, reject) => {
+        const req = lib.request({ hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? 443 : 80), path: url.pathname + url.search, method: 'POST', headers: backupHeaders({ 'Content-Type': 'application/octet-stream', 'Content-Length': len }), timeout: 5 * 60 * 1000 }, (res) => {
+          let data = '';
+          res.on('data', c => { data += c; });
+          res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(data) }); } catch (_) { resolve({ status: res.statusCode, body: data }); } });
+        });
+        req.on('timeout', () => req.destroy(new Error('Upload timed out.')));
+        req.on('error', reject);
+        req.write(buf);
+        req.end();
+      });
+      if (last.status !== 200) return last;
+      offset += len;
+      index++;
+      backupProgress(e.sender, 'upload', offset, size);
+    }
+    return last || { status: 0, body: { message: 'The file is empty.' } };
+  } catch (err) {
+    return { status: 0, body: { message: err.message } };
+  } finally {
+    fs.closeSync(fd);
   }
 });
 

@@ -21,13 +21,17 @@
     </div>
 
     <div class="error-box" id="login-error"></div>
+    <div class="success-box" id="login-success"></div>
     <form class="form active" id="login-form">
       <div class="field">
         <label for="login-email">Email</label>
         <input id="login-email" type="email" autocomplete="username" required placeholder="you@business.com" />
       </div>
       <div class="field">
-        <label for="login-password">Password</label>
+        <div class="label-row">
+          <label for="login-password">Password</label>
+          <a class="forgot-link" id="go-forgot">Forgot password?</a>
+        </div>
         <input id="login-password" type="password" autocomplete="current-password" required placeholder="••••••••" />
       </div>
       <button class="submit-btn" id="login-submit" type="submit">Log In</button>
@@ -49,6 +53,39 @@
       </div>
       <button class="submit-btn" id="cashier-submit" type="submit">Cashier Log In</button>
       <p class="switch-line cashier-switch"><a id="go-owner"><i class="fa-solid fa-arrow-left"></i> Owner login</a></p>
+    </form>
+
+    <!-- Forgot password, step 1: email (PosAuthApiController@forgotPassword) -->
+    <form class="form" id="forgot-form">
+      <p class="form-hint">Enter your account email and we'll send you a 6-digit code.</p>
+      <div class="field">
+        <label for="forgot-email">Email</label>
+        <input id="forgot-email" type="email" autocomplete="username" required placeholder="you@business.com" />
+      </div>
+      <button class="submit-btn" id="forgot-submit" type="submit">Send Code</button>
+      <p class="switch-line cashier-switch"><a class="go-login-back"><i class="fa-solid fa-arrow-left"></i> Back to login</a></p>
+    </form>
+
+    <!-- Forgot password, step 2: code + new password (PosAuthApiController@resetPassword) -->
+    <form class="form" id="reset-form">
+      <p class="form-hint" id="reset-hint"></p>
+      <div class="field">
+        <label for="reset-otp">6-digit code</label>
+        <input id="reset-otp" class="otp-input" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" required placeholder="••••••" />
+      </div>
+      <div class="row-2">
+        <div class="field">
+          <label for="reset-password">New password</label>
+          <input id="reset-password" type="password" autocomplete="new-password" required placeholder="At least 8 chars" />
+        </div>
+        <div class="field">
+          <label for="reset-password2">Confirm</label>
+          <input id="reset-password2" type="password" autocomplete="new-password" required placeholder="Repeat" />
+        </div>
+      </div>
+      <button class="submit-btn" id="reset-submit" type="submit">Reset Password</button>
+      <p class="switch-line cashier-switch">Didn't get it? <a id="forgot-resend">Send a new code</a></p>
+      <p class="switch-line cashier-switch" style="margin-top:0"><a class="go-login-back"><i class="fa-solid fa-arrow-left"></i> Back to login</a></p>
     </form>
 
     <div class="error-box" id="signup-error"></div>

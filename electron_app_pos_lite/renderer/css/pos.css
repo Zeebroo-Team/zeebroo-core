@@ -168,6 +168,16 @@ html, body {
 }
 .mode-tab:hover { color: var(--text); }
 .mode-tab.active { color: var(--accent); border-color: var(--accent); background: #eef0ff; }
+.mode-kbd {
+  font-size: 10px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--muted);
+  background: #f1f2f5;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
 
 /* ── Category chips ──────────────────────────────────────────────────── */
 .chip-scroll-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; }
@@ -260,6 +270,9 @@ html, body {
 }
 .product-card:hover { border-color: var(--accent); box-shadow: 0 3px 10px rgba(79, 70, 229, 0.12); }
 .product-card.out-of-stock { opacity: 0.45; cursor: not-allowed; }
+.product-card.needs-setup { border-style: dashed; }
+.product-card.needs-setup .product-stock { color: var(--accent); font-weight: 600; }
+.qs-hint { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
 
 .product-thumb {
   width: 100%;
@@ -316,6 +329,54 @@ html, body {
   justify-content: space-between;
 }
 .cart-header i { color: var(--accent); margin-right: 6px; }
+
+/* ── Fly-to-cart animation + cart counter ────────────────────────────── */
+.fly-to-cart {
+  position: fixed; z-index: 99999; pointer-events: none;
+  border-radius: 10px; overflow: hidden;
+  background: #f3f4f6; color: var(--muted); font-size: 22px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  display: flex; align-items: center; justify-content: center;
+  will-change: transform, opacity;
+}
+.fly-to-cart img { width: 100%; height: 100%; object-fit: cover; }
+.product-card.fly-press { animation: flyPress .28s ease; }
+@keyframes flyPress {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(.95); }
+  100% { transform: scale(1); }
+}
+.cart-icon-wrap { position: relative; display: inline-flex; align-items: center; margin-right: 8px; }
+.cart-icon-wrap #cart-icon { margin-right: 0; display: inline-block; }
+#cart-icon.cart-bump { animation: cartBump .45s cubic-bezier(.3,1.6,.5,1); }
+@keyframes cartBump {
+  0%   { transform: scale(1) rotate(0); }
+  30%  { transform: scale(1.45) rotate(-12deg); }
+  60%  { transform: scale(.9) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.cart-count-badge {
+  position: absolute; top: -9px; right: -11px;
+  min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px;
+  background: #ef4444; color: #fff; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center;
+  box-shadow: 0 0 0 2px #fff;
+}
+.cart-count-badge.count-pop { animation: countPop .4s cubic-bezier(.3,1.6,.5,1); }
+@keyframes countPop {
+  0%   { transform: scale(1); }
+  35%  { transform: scale(1.6); }
+  100% { transform: scale(1); }
+}
+.cart-count-plus {
+  position: absolute; top: -10px; right: -16px; pointer-events: none;
+  color: #16a34a; font-size: 12px; font-weight: 800; white-space: nowrap;
+  animation: countPlus .8s ease-out forwards;
+}
+@keyframes countPlus {
+  0%   { opacity: 0; transform: translateY(4px) scale(.8); }
+  20%  { opacity: 1; transform: translateY(-4px) scale(1.1); }
+  100% { opacity: 0; transform: translateY(-22px) scale(1); }
+}
 
 .cart-customer-box {
   padding: 0 18px 12px;
@@ -473,6 +534,44 @@ html, body {
   color: var(--muted);
 }
 .pm-btn.active { border-color: var(--accent); color: var(--accent); background: #eef0ff; }
+.payment-methods .pm-btn { white-space: nowrap; }
+
+/* ── Cheque payment fields (checkout) ───────────────────────────────────── */
+#cheque-section { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+#cheque-section[hidden] { display: none; }
+.co-chq-notice {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 11px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: #fff7ed; color: #c2410c; border: 1px solid rgba(194,65,12,.25);
+}
+.co-chq-notice[hidden] { display: none; }
+.co-chq-amount {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc;
+  font-size: 12px; color: var(--muted);
+}
+.co-chq-amount strong { font-size: 20px; font-weight: 800; color: var(--text, #0f172a); font-variant-numeric: tabular-nums; }
+.co-chq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.co-chq-req { color: #dc2626; }
+.co-chq-opt { font-weight: 400; }
+.co-chq-hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.co-chq-hint i { color: var(--accent); margin-right: 3px; }
+
+/* ── Credit payment fields (checkout) ───────────────────────────────────── */
+#credit-section { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+#credit-section[hidden] { display: none; }
+.co-credit-box {
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border); background: #f8fafc;
+  font-size: 12px; color: var(--muted);
+}
+.co-credit-box[hidden] { display: none; }
+.co-credit-row { display: flex; justify-content: space-between; align-items: baseline; }
+.co-credit-row strong { color: var(--text, #0f172a); font-variant-numeric: tabular-nums; }
+.co-credit-row.avail strong { color: #16a34a; }
+.co-credit-box.is-over { border-color: rgba(220,38,38,.35); background: #fef2f2; }
+.co-credit-box.is-over .co-credit-row.avail strong { color: #dc2626; }
+.co-credit-warn { margin-top: 4px; color: #b91c1c; font-weight: 600; line-height: 1.4; }
 
 /* ── Cart footer actions (Clear / Checkout) ─────────────────────────────── */
 .cart-actions { display: flex; gap: 10px; margin-top: 14px; }
@@ -922,6 +1021,10 @@ html, body {
   width: 100%;
   max-width: 320px;
 }
+/* 58 mm roll (Settings → Printer): narrower paper, Price / Disc columns dropped like the printout */
+.receipt-doc--bill[data-paper="58"] { font-size: 10px; padding: 12px 10px; }
+.receipt-doc--bill[data-paper="58"] .rd-col-price,
+.receipt-doc--bill[data-paper="58"] .rd-col-disc { display: none; }
 .receipt-doc--bill .rd-center { text-align: center; }
 .receipt-doc--bill .rd-business { font-weight: bold; font-size: 13px; }
 .receipt-doc--bill .rd-meta { font-size: 10px; margin: 1px 0; }

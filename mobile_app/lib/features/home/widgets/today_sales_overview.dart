@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
 
@@ -23,10 +24,42 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
   String? _error;
   Map<String, dynamic> _sales = const {};
 
+  /// Today's sales made offline that the server doesn't have yet — added on
+  /// top of the server's figures (once uploaded they're in the server's).
+  ({int count, double total, double items, Map<String, double> byMethod}) _waiting =
+      (count: 0, total: 0.0, items: 0.0, byMethod: const {});
+  int _lastPending = 0;
+
   @override
   void initState() {
     super.initState();
+    OfflineSales.instance.addListener(_onOfflineChanged);
     reload();
+  }
+
+  @override
+  void dispose() {
+    OfflineSales.instance.removeListener(_onOfflineChanged);
+    super.dispose();
+  }
+
+  void _onOfflineChanged() {
+    final pending = OfflineSales.instance.waitingCount;
+    // Fewer waiting: some just uploaded, so the server's totals changed too.
+    if (pending < _lastPending) {
+      reload(force: true);
+    } else {
+      _loadWaiting().then((_) {
+        if (mounted) setState(() {});
+      });
+    }
+    _lastPending = pending;
+  }
+
+  Future<void> _loadWaiting() async {
+    try {
+      _waiting = await OfflineSales.instance.todayWaiting();
+    } catch (_) {}
   }
 
   Future<void> reload({bool force = false}) async {
@@ -41,7 +74,12 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
       _sales = sales is Map ? Map<String, dynamic>.from(sales) : const {};
     } catch (e) {
       _error = apiErrorMessage(e);
+      _sales = const {};
     } finally {
+      // Read after the server so an upload finishing in between is not
+      // counted twice (it has left the waiting list by now).
+      await _loadWaiting();
+      _lastPending = OfflineSales.instance.waitingCount;
       if (mounted) setState(() {});
     }
   }
@@ -54,7 +92,7 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
   double _methodTotal(String method) {
     final by = _sales['by_method'];
     final entry = by is Map ? by[method] : null;
-    return entry is Map ? _toDouble(entry['total']) : 0;
+    return (entry is Map ? _toDouble(entry['total']) : 0) + (_waiting.byMethod[method] ?? 0);
   }
 
   static String _dateLabel() {
@@ -64,7 +102,8 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
 
   @override
   Widget build(BuildContext context) {
-    return _error != null ? _buildError() : _buildBody();
+    // Offline but with sales on the phone: still show what was sold here.
+    return _error != null && _waiting.count == 0 ? _buildError() : _buildBody();
   }
 
   Widget _buildError() => Row(
@@ -79,10 +118,11 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
   );
 
   Widget _buildBody() {
-    final revenue = _toDouble(_sales['revenue']);
+    final revenue = _toDouble(_sales['revenue']) + _waiting.total;
     final profit = _toDouble(_sales['gross_profit']);
-    final count = _toDouble(_sales['count']).toInt();
-    final items = _toDouble(_sales['items_sold']).toInt();
+    final count = _toDouble(_sales['count']).toInt() + _waiting.count;
+    final items = (_toDouble(_sales['items_sold']) + _waiting.items).round();
+    final serverDown = _error != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,7 +171,8 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
                             style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
                           ),
                           const SizedBox(height: 2),
-                          _ProfitInline(profit: profit),
+                          // Profit needs cost prices the phone doesn't have offline.
+                          if (!serverDown) _ProfitInline(profit: profit),
                         ],
                       ),
               ),
@@ -139,6 +180,24 @@ class TodaySalesOverviewState extends State<TodaySalesOverview> {
           ],
         ),
         ..._buildSplit(),
+        if (_waiting.count > 0) ...[
+          const SizedBox(height: 8),
+          Row(
+            key: const ValueKey('today-sales-offline-note'),
+            children: [
+              Icon(serverDown ? Icons.cloud_off_rounded : Icons.cloud_queue_rounded, size: 14, color: AppColors.warning),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  serverDown
+                      ? 'Offline — showing only the ${_waiting.count} sale${_waiting.count == 1 ? '' : 's'} saved on this phone'
+                      : 'Includes ${_waiting.count} offline sale${_waiting.count == 1 ? '' : 's'} waiting to upload',
+                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: AppColors.warning),
+                ),
+              ),
+            ],
+          ),
+        ],
       ],
     );
   }

@@ -56,6 +56,20 @@
                     {{ $tabName === 'hr' ? 'HR' : ucfirst($tabName) }}
                 </a>
             @endforeach
+            @if($scopeType === 'business')
+                @foreach([
+                    ['route' => 'settings.printer', 'icon' => 'fa-print', 'label' => 'Printer'],
+                    ['route' => 'settings.receipt', 'icon' => 'fa-receipt', 'label' => 'Receipt Setting'],
+                    ['route' => 'sales.invoice-setup.edit', 'icon' => 'fa-file-invoice', 'label' => 'Invoice Setup'],
+                ] as $printLink)
+                    @if(Route::has($printLink['route']))
+                        <a href="{{ route($printLink['route']) }}"
+                           style="text-decoration:none;padding:5px 9px;border-radius:999px;border:1px solid var(--border);font-size:12px;background:var(--card);color:var(--text);display:inline-flex;align-items:center;gap:5px;">
+                            <i class="fa {{ $printLink['icon'] }}" style="color:var(--primary);font-size:11px;" aria-hidden="true"></i>{{ $printLink['label'] }}
+                        </a>
+                    @endif
+                @endforeach
+            @endif
             </div>
         </div>
         <form id="settingsBulkForm" method="post" action="{{ route('settings.bulk.store') }}" enctype="multipart/form-data" style="margin-top:8px;border:1px solid var(--border);border-radius:10px;padding:10px;display:grid;gap:8px;">

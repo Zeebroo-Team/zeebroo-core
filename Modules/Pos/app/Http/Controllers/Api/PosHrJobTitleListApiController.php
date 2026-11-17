@@ -26,6 +26,7 @@ class PosHrJobTitleListApiController extends Controller
         }
 
         $jobTitles = JobTitle::where('business_id', $business->id)
+            ->with('leavePolicy:id,name')
             ->withCount('employees')
             ->orderBy('name')
             ->get();
@@ -49,10 +50,11 @@ class PosHrJobTitleListApiController extends Controller
                 Rule::unique('hr_job_titles', 'name')
                     ->where(fn ($q) => $q->where('business_id', $business->id)),
             ],
+            'leave_policy_id' => $this->leavePolicyRule($business->id),
         ]);
 
-        $jobTitle = $this->service->create($business, $validated['name']);
-        $jobTitle->loadCount('employees');
+        $jobTitle = $this->service->create($business, $validated['name'], $validated['leave_policy_id'] ?? null);
+        $jobTitle->load('leavePolicy:id,name')->loadCount('employees');
 
         return response()->json(['data' => $this->format($jobTitle)], 201);
     }
@@ -72,10 +74,11 @@ class PosHrJobTitleListApiController extends Controller
                     ->where(fn ($q) => $q->where('business_id', $business->id))
                     ->ignore($jobTitle->id),
             ],
+            'leave_policy_id' => $this->leavePolicyRule($business->id),
         ]);
 
-        $jobTitle = $this->service->rename($jobTitle, $validated['name']);
-        $jobTitle->loadCount('employees');
+        $jobTitle = $this->service->update($jobTitle, $validated['name'], $validated['leave_policy_id'] ?? null);
+        $jobTitle->load('leavePolicy:id,name')->loadCount('employees');
 
         return response()->json(['data' => $this->format($jobTitle)]);
     }
@@ -99,12 +102,23 @@ class PosHrJobTitleListApiController extends Controller
         return response()->json(['message' => 'Position deleted.']);
     }
 
+    /** Optional; must be one of this business's leave rules. Null = default rule applies. */
+    private function leavePolicyRule(int $businessId): array
+    {
+        return [
+            'nullable', 'integer',
+            Rule::exists('hr_leave_policies', 'id')->where(fn ($q) => $q->where('business_id', $businessId)),
+        ];
+    }
+
     private function format(JobTitle $jt): array
     {
         return [
-            'id'              => $jt->id,
-            'name'            => $jt->name,
-            'employees_count' => (int) ($jt->employees_count ?? 0),
+            'id'                => $jt->id,
+            'name'              => $jt->name,
+            'employees_count'   => (int) ($jt->employees_count ?? 0),
+            'leave_policy_id'   => $jt->leave_policy_id,
+            'leave_policy_name' => $jt->leavePolicy?->name,
         ];
     }
 }

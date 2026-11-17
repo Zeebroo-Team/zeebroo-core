@@ -136,7 +136,7 @@ class SubscriptionSummaryService
                 && in_array($payment->payment_status, $actionable, true)
                 && $payment->due_at === null
             ) {
-                $payment->update(['due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS)]);
+                $payment->update(['due_at' => Payment::dueAtFor($payment->business)]);
             }
         }
     }

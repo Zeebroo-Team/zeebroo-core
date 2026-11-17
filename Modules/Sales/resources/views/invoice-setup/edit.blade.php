@@ -27,6 +27,9 @@
 
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
     @include('sales::partials.sales-hub-nav')
+    @if(Route::has('settings.printer'))
+        @include('pos::settings.partials.print-settings-nav')
+    @endif
 
     @if(session('status'))
         <div class="pcat-banner pcat-banner--ok" style="font-weight:600;">{{ session('status') }}</div>

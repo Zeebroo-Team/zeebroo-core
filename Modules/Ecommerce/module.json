@@ -1,0 +1,11 @@
+{
+    "name": "Ecommerce",
+    "alias": "ecommerce",
+    "description": "Online store — publish catalog products to a public storefront, take web orders and manage fulfilment.",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\Ecommerce\\Providers\\EcommerceServiceProvider"
+    ],
+    "files": []
+}

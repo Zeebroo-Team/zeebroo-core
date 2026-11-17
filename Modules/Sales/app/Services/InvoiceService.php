@@ -10,6 +10,8 @@ use Modules\Business\Models\Business;
 use Modules\Pos\Models\Sale;
 use Modules\Pos\Services\CustomerSubscriptionService;
 use Modules\Pos\Services\SaleStockConsumptionService;
+use Modules\Product\Models\Product;
+use Modules\Product\Models\ProductStockLayer;
 use Modules\Sales\Models\Invoice;
 use Modules\Sales\Models\InvoiceItem;
 
@@ -66,7 +68,9 @@ class InvoiceService
             $invoice = Invoice::create([
                 'business_id'     => $business->id,
                 'branch_id'       => $this->nullableInt($data['branch_id'] ?? null),
-                'invoice_number'  => $this->nextInvoiceNumber($business),
+                'invoice_number'  => filled($data['invoice_number'] ?? '')
+                    ? trim($data['invoice_number'])
+                    : $this->nextInvoiceNumber($business),
                 'customer_id'     => $this->nullableInt($data['customer_id'] ?? null),
                 'reference'       => filled($data['reference'] ?? '') ? $data['reference'] : null,
                 'issue_date'      => $data['issue_date'],
@@ -146,6 +150,15 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($invoice, $data, $items) {
+            // Stock was already taken out when this invoice was paid, so editing a
+            // paid invoice must only move stock by the change in quantities.
+            $wasPaid   = $invoice->status === Invoice::STATUS_PAID;
+            $oldQtyMap = $wasPaid ? $this->productQuantities($invoice) : [];
+
+            if (filled($data['invoice_number'] ?? '')) {
+                $invoice->invoice_number = trim($data['invoice_number']);
+            }
+
             $invoice->update([
                 'branch_id'   => $this->nullableInt($data['branch_id'] ?? null),
                 'customer_id' => $this->nullableInt($data['customer_id'] ?? null),
@@ -159,8 +172,66 @@ class InvoiceService
             $this->syncItems($invoice, $items);
             $this->recalculateTotals($invoice, $data);
 
+            if ($wasPaid) {
+                $this->applyStockDelta($oldQtyMap, $this->productQuantities($invoice->fresh()));
+            }
+
             return $invoice->fresh();
         });
+    }
+
+    /**
+     * Total quantity per product on the invoice's stocked lines.
+     *
+     * @return array<int, float>
+     */
+    private function productQuantities(Invoice $invoice): array
+    {
+        $map = [];
+        foreach ($invoice->items()->whereNotNull('product_id')->get(['product_id', 'quantity']) as $item) {
+            $pid       = (int) $item->product_id;
+            $map[$pid] = round(($map[$pid] ?? 0) + max(0.0, (float) $item->quantity), 3);
+        }
+
+        return $map;
+    }
+
+    /**
+     * Take out extra stock for increased quantities and put stock back for
+     * reduced or removed lines.
+     *
+     * @param  array<int, float>  $old
+     * @param  array<int, float>  $new
+     */
+    private function applyStockDelta(array $old, array $new): void
+    {
+        foreach (array_unique([...array_keys($old), ...array_keys($new)]) as $pid) {
+            $delta = round(($new[$pid] ?? 0) - ($old[$pid] ?? 0), 3);
+            if (abs($delta) < 0.0001) {
+                continue;
+            }
+
+            $product = Product::find($pid);
+            if (!$product) {
+                continue;
+            }
+
+            if ($delta > 0) {
+                $this->stockConsumption->consumeFifo($product, $delta);
+            } else {
+                // The paid-invoice consumption did not record which batch it used,
+                // so return the stock to the product's newest batch (if any) to keep
+                // batches and the product's stock counter in step.
+                $layerId = ProductStockLayer::query()
+                    ->where('product_id', $product->id)
+                    ->where('business_id', $product->business_id)
+                    ->orderByDesc('received_at')
+                    ->orderByDesc('id')
+                    ->value('id');
+
+                $this->stockConsumption->restoreSaleItem($layerId ? (int) $layerId : null, abs($delta), $product);
+            }
+        }
     }
 
     public function markSent(Invoice $invoice): Invoice
@@ -297,18 +368,40 @@ class InvoiceService
 
     private function nextInvoiceNumber(Business $business): string
     {
-        $last = Invoice::query()
+        // Invoice numbers can be entered manually (e.g. "800", "000780",
+        // "INV-0075"). Continue from the highest numeric sequence across all of
+        // them, keeping that number's prefix and zero-padding — so after a user
+        // sets "800" the next auto invoice is "801", after "000780" it is "000781".
+        $existing = Invoice::query()
             ->where('business_id', $business->id)
-            ->whereNotNull('invoice_number')
-            ->orderByDesc('id')
-            ->value('invoice_number');
+            ->pluck('invoice_number')
+            ->filter()
+            ->map(fn ($n) => (string) $n);
 
-        $seq = 1;
-        if ($last && preg_match('/INV-(\d+)$/i', $last, $m)) {
-            $seq = (int) $m[1] + 1;
+        $prefix = 'INV-';
+        $width  = 4;
+        $max    = 0;
+
+        foreach ($existing as $number) {
+            if (!preg_match('/^(\D*)(\d+)$/', trim($number), $m)) {
+                continue;
+            }
+            $value = (int) $m[2];
+            if ($value > $max) {
+                $max    = $value;
+                $prefix = $m[1];
+                $width  = strlen($m[2]);
+            }
         }
 
-        return 'INV-' . str_pad($seq, 4, '0', STR_PAD_LEFT);
+        $taken = $existing->map(fn ($n) => strtolower(trim($n)))->flip();
+        $seq   = $max + 1;
+        do {
+            $candidate = $prefix . str_pad((string) $seq, $width, '0', STR_PAD_LEFT);
+            $seq++;
+        } while ($taken->has(strtolower($candidate)));
+
+        return $candidate;
     }
 
     private function syncItems(Invoice $invoice, array $rawItems): void

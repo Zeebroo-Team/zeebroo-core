@@ -5,6 +5,7 @@ import '../widgets/barcodes_tab.dart';
 import '../widgets/brands_tab.dart';
 import '../widgets/categories_tab.dart';
 import '../widgets/cheques_tab.dart';
+import '../widgets/customers_tab.dart';
 import '../widgets/discounts_tab.dart';
 import '../widgets/goods_receive_tab.dart';
 import '../widgets/products_tab.dart';
@@ -26,11 +27,14 @@ const _kTabLabels = [
   'Discounts',
   'Brands',
   'Suppliers',
+  'Customers',
   'Barcodes',
 ];
 
+// Only these cards appear on the Inventory overview. The remaining tabs
+// (Products, Categories, Discounts, ...) stay in the TabBarView because other
+// overview screens deep-link into them via `initialTabIndex`.
 const _kOverviewItems = [
-  _OverviewItem('Products', Icons.inventory_2_rounded, Color(0xFF6366F1), 1),
   _OverviewItem(
     'Purchase Orders',
     Icons.shopping_cart_rounded,
@@ -43,7 +47,6 @@ const _kOverviewItems = [
     Color(0xFF10B981),
     3,
   ),
-  _OverviewItem('Cheques', Icons.receipt_rounded, Color(0xFFF59E0B), 4),
   _OverviewItem('Stock Audit', Icons.fact_check_rounded, Color(0xFFEF4444), 5),
   _OverviewItem(
     'Stock Transfer',
@@ -51,20 +54,12 @@ const _kOverviewItems = [
     Color(0xFF8B5CF6),
     6,
   ),
-  _OverviewItem('Categories', Icons.category_rounded, Color(0xFF06B6D4), 7),
-  _OverviewItem('Discounts', Icons.local_offer_rounded, Color(0xFFEC4899), 8),
-  _OverviewItem('Brands', Icons.verified_rounded, Color(0xFF84CC16), 9),
-  _OverviewItem(
-    'Suppliers',
-    Icons.local_shipping_outlined,
-    Color(0xFF14B8A6),
-    10,
-  ),
+  _OverviewItem('Cheques', Icons.receipt_rounded, Color(0xFFF59E0B), 4),
   _OverviewItem(
     'Barcodes',
     Icons.qr_code_scanner_rounded,
     Color(0xFF64748B),
-    11,
+    12,
   ),
 ];
 
@@ -83,7 +78,16 @@ class _OverviewItem {
 /// — this is an always-available menu entry (not gated by the business's
 /// enabled plan features), reached from the side drawer.
 class InventoryScreen extends StatefulWidget {
-  const InventoryScreen({super.key});
+  const InventoryScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.title = 'Inventory',
+    this.returnToOverviewOnBack = true,
+  });
+
+  final int initialTabIndex;
+  final String title;
+  final bool returnToOverviewOnBack;
 
   @override
   State<InventoryScreen> createState() => _InventoryScreenState();
@@ -92,7 +96,11 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController =
-      TabController(length: _kTabLabels.length, vsync: this)..addListener(() {
+      TabController(
+        length: _kTabLabels.length,
+        initialIndex: widget.initialTabIndex.clamp(0, _kTabLabels.length - 1),
+        vsync: this,
+      )..addListener(() {
         if (mounted) setState(() {});
       });
 
@@ -104,34 +112,6 @@ class _InventoryScreenState extends State<InventoryScreen>
     super.dispose();
   }
 
-  Widget _pill(String label, int index) {
-    final selected = _tabController.index == index;
-    return GestureDetector(
-      onTap: () => _tabController.animateTo(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? AppColors.primary : Colors.transparent,
-            width: 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? AppColors.primary : AppColors.textMuted,
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppColors.surface,
@@ -140,54 +120,37 @@ class _InventoryScreenState extends State<InventoryScreen>
       foregroundColor: AppColors.textDark,
       elevation: 0,
       centerTitle: true,
-      title: const Text(
-        'Inventory',
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+      leading: IconButton(
+        onPressed: () {
+          if (widget.returnToOverviewOnBack && _tabController.index != 0) {
+            _tabController.animateTo(0);
+          } else {
+            Navigator.of(context).pop();
+          }
+        },
+        icon: const Icon(Icons.arrow_back_rounded),
+      ),
+      title: Text(
+        widget.title,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
       ),
     ),
-    body: Column(
+    body: TabBarView(
+      controller: _tabController,
       children: [
-        Container(
-          color: AppColors.surface,
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < _kTabLabels.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 4),
-                    _pill(_kTabLabels[i], i),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-        const Divider(height: 1, color: AppColors.border),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _InventoryOverview(onNavigate: _goToTab),
-              const ProductsTab(),
-              const PurchaseOrdersTab(),
-              const GoodsReceiveTab(),
-              const ChequesTab(),
-              const StockAuditsTab(),
-              const StockTransfersTab(),
-              const CategoriesTab(),
-              const DiscountsTab(),
-              const BrandsTab(),
-              const SuppliersTab(),
-              const BarcodesTab(),
-            ],
-          ),
-        ),
+        _InventoryOverview(onNavigate: _goToTab),
+        const ProductsTab(),
+        const PurchaseOrdersTab(),
+        const GoodsReceiveTab(),
+        const ChequesTab(),
+        const StockAuditsTab(),
+        const StockTransfersTab(),
+        const CategoriesTab(),
+        const DiscountsTab(),
+        const BrandsTab(),
+        const SuppliersTab(),
+        const CustomersTab(),
+        const BarcodesTab(),
       ],
     ),
   );

@@ -86,6 +86,17 @@
                     </div>
                     <div class="pcat-card__meta">
                         <span class="muted">{{ $s->leads_count ?? 0 }} lead{{ ($s->leads_count ?? 0) !== 1 ? 's' : '' }}</span>
+                        @if($s->system_key)
+                            <span class="pcat-badge" title="Standard status">{{ \Modules\CRM\Models\LeadStage::statusLabel($s->system_key) }}</span>
+                        @else
+                            <span class="pcat-badge" style="color:#f59e0b;" title="Pick the standard status this stage stands for">No status</span>
+                        @endif
+                        @if($s->isReserved())
+                            <span class="pcat-badge" title="Set by the quotation workflow, not by moving leads"><i class="fa fa-lock"></i> Automatic</span>
+                        @endif
+                        @if($s->requires_reason)
+                            <span class="pcat-badge" title="Moving a lead here asks for a reason"><i class="fa fa-comment"></i> Reason</span>
+                        @endif
                         @if($s->is_won)
                             <span class="pcat-badge pcat-badge--on">Won outcome</span>
                         @elseif($s->is_lost)
@@ -96,7 +107,7 @@
                 <div class="pcat-card__actions">
                     <button type="button"
                             style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;font-size:12px;font-weight:700;border-radius:8px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--text);cursor:pointer;"
-                            onclick="stgOpenEdit({{ $s->id }},'{{ addslashes($s->name) }}','{{ $s->color }}',{{ $s->is_won ? 'true' : 'false' }},{{ $s->is_lost ? 'true' : 'false' }})">
+                            onclick="stgOpenEdit({{ $s->id }},'{{ addslashes($s->name) }}','{{ $s->color }}','{{ $s->system_key }}',{{ $s->requires_reason ? 'true' : 'false' }})">
                         <i class="fa fa-pen"></i> Edit
                     </button>
                     @if(($s->leads_count ?? 0) > 0)
@@ -136,17 +147,19 @@
                         <label for="stg-add-color">Color</label>
                         <input id="stg-add-color" type="color" name="color" value="{{ old('color', '#64748b') }}" class="stg-color-input">
                     </div>
-                    <div class="pcat-active-row">
-                        <label class="pcat-active-row__lbl" for="stg-add-won">Counts as won</label>
-                        <label class="pcat-switch">
-                            <input type="checkbox" id="stg-add-won" name="is_won" value="1" data-stg-outcome="won">
-                            <span class="pcat-switch-slider"></span>
-                        </label>
+                    <div class="pcat-field">
+                        <label for="stg-add-status">Standard status</label>
+                        <select id="stg-add-status" name="system_key" required>
+                            @foreach(\Modules\CRM\Models\LeadStage::statusOptions() as $opt)
+                                <option value="{{ $opt['key'] }}" @selected(old('system_key', 'in_process') === $opt['key'])>{{ $opt['label'] }}{{ $opt['reserved'] ? ' (automatic)' : '' }}</option>
+                            @endforeach
+                        </select>
+                        <div class="muted" style="font-size:11px;margin-top:4px;">Every department reports on the same statuses; this stage counts as the one picked here.</div>
                     </div>
                     <div class="pcat-active-row">
-                        <label class="pcat-active-row__lbl" for="stg-add-lost">Counts as lost</label>
+                        <label class="pcat-active-row__lbl" for="stg-add-reason">Ask for a reason when a lead moves here</label>
                         <label class="pcat-switch">
-                            <input type="checkbox" id="stg-add-lost" name="is_lost" value="1" data-stg-outcome="lost">
+                            <input type="checkbox" id="stg-add-reason" name="requires_reason" value="1">
                             <span class="pcat-switch-slider"></span>
                         </label>
                     </div>
@@ -179,17 +192,18 @@
                         <label for="stg-edit-color">Color</label>
                         <input id="stg-edit-color" type="color" name="color" class="stg-color-input">
                     </div>
-                    <div class="pcat-active-row">
-                        <label class="pcat-active-row__lbl" for="stg-edit-won">Counts as won</label>
-                        <label class="pcat-switch">
-                            <input type="checkbox" id="stg-edit-won" name="is_won" value="1" data-stg-outcome="won">
-                            <span class="pcat-switch-slider"></span>
-                        </label>
+                    <div class="pcat-field">
+                        <label for="stg-edit-status">Standard status</label>
+                        <select id="stg-edit-status" name="system_key" required>
+                            @foreach(\Modules\CRM\Models\LeadStage::statusOptions() as $opt)
+                                <option value="{{ $opt['key'] }}">{{ $opt['label'] }}{{ $opt['reserved'] ? ' (automatic)' : '' }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div class="pcat-active-row">
-                        <label class="pcat-active-row__lbl" for="stg-edit-lost">Counts as lost</label>
+                        <label class="pcat-active-row__lbl" for="stg-edit-reason">Ask for a reason when a lead moves here</label>
                         <label class="pcat-switch">
-                            <input type="checkbox" id="stg-edit-lost" name="is_lost" value="1" data-stg-outcome="lost">
+                            <input type="checkbox" id="stg-edit-reason" name="requires_reason" value="1">
                             <span class="pcat-switch-slider"></span>
                         </label>
                     </div>
@@ -235,23 +249,29 @@
         if (editModal?.classList.contains('pcat-modal--open')) closeModal(editModal);
     });
 
-    // Mutually exclusive won/lost toggles within each form.
-    document.querySelectorAll('[data-stg-outcome]').forEach(function (box) {
-        box.addEventListener('change', function () {
-            if (!box.checked) return;
-            var form = box.closest('form');
-            var other = form?.querySelector('[data-stg-outcome="' + (box.dataset.stgOutcome === 'won' ? 'lost' : 'won') + '"]');
-            if (other) other.checked = false;
-        });
+    // Lost stages always ask for a lost reason
+    ['stg-add', 'stg-edit'].forEach(function (prefix) {
+        var status = document.getElementById(prefix + '-status');
+        var reason = document.getElementById(prefix + '-reason');
+        function sync() {
+            var lost = status.value === 'lost';
+            if (lost) reason.checked = true;
+            reason.disabled = lost;
+        }
+        status?.addEventListener('change', sync);
+        reason?.closest('form')?.addEventListener('submit', function () { reason.disabled = false; });
+        if (status && reason) sync();
     });
 
-    window.stgOpenEdit = function (id, name, color, isWon, isLost) {
+    window.stgOpenEdit = function (id, name, color, systemKey, requiresReason) {
         var form = document.getElementById('stg-edit-form');
         if (form) form.action = '{{ url('/crm/projects/' . $project->id . '/stages') }}/' + id;
         document.getElementById('stg-edit-name').value = name;
         document.getElementById('stg-edit-color').value = color || '#64748b';
-        document.getElementById('stg-edit-won').checked = Boolean(isWon);
-        document.getElementById('stg-edit-lost').checked = Boolean(isLost);
+        var status = document.getElementById('stg-edit-status');
+        status.value = systemKey || 'in_process';
+        document.getElementById('stg-edit-reason').checked = Boolean(requiresReason);
+        status.dispatchEvent(new Event('change'));
         openModal(editModal);
         requestAnimationFrame(function () { document.getElementById('stg-edit-name')?.focus(); });
     };

@@ -24,6 +24,13 @@ const API = (() => {
     // Cashier account (Modules/Pos PosCashierApiController@login) — POS-only session
     cashierLogin: (slug, username, password) =>
       request('POST', '/cashier/login', { slug, username, password }),
+    // Forgot password (PosAuthApiController forgotPassword / resetPassword)
+    forgotPassword: (email) => request('POST', '/auth/password/forgot', { email }),
+    resetPassword: (email, otp, password) =>
+      request('POST', '/auth/password/reset', { email, otp, password, password_confirmation: password }),
+    // Sign-up email verification — "Verify your email" bar in navbar.js (PosAuthApiController verifyEmail / resendEmailVerification)
+    verifyEmail: (otp) => request('POST', '/auth/email/verify', { otp }),
+    resendEmailVerification: () => request('POST', '/auth/email/resend'),
     register: (payload) =>
       request('POST', '/auth/register', { ...payload, platform: 'pos_lite', password_confirmation: payload.password, device_name: 'pos-lite' }),
     businessCategories: () => request('GET', '/auth/business-categories'),
@@ -54,6 +61,12 @@ const API = (() => {
       const suffix = qs.toString();
       return request('GET', '/online/products' + (suffix ? `?${suffix}` : ''));
     },
+    // Barcode Generator picker — every sellable product (name, SKU, stock, label price), unpaginated
+    barcodeProducts: () => request('GET', '/online/barcodes/products'),
+    // Give products without a barcode a generated SKU (saved on the product); max 500 ids per call
+    barcodeGenerateSkus: (ids) => request('POST', '/online/barcodes/generate-skus', { product_ids: ids }),
+    // Exact product SKU or batch SKU (barcode scan)
+    productBySku: (sku) => request('GET', `/online/products/sku/${encodeURIComponent(sku)}`),
     posCategories: () => request('GET', '/online/categories'),
     checkout: (payload) => request('POST', '/online/checkout', payload),
 
@@ -70,9 +83,18 @@ const API = (() => {
     createProduct: (payload) => request('POST', '/online/products', payload),
     importProducts: (rows) => request('POST', '/online/products/import', { rows }),
     updateProduct: (id, payload) => request('PATCH', `/online/products/${id}`, payload),
+    quickSetupProduct: (id, payload) => request('POST', `/online/products/${id}/quick-setup`, payload),
     deleteProduct: (id) => request('DELETE', `/online/products/${id}`),
     productSearch: (q, perPage) => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
     productStockHistory: (id) => request('GET', `/online/products/${id}/stock-history`),
+    updateLayerSellingPrice: (productId, layerId, price) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/selling-price`, { selling_unit_price: price }),
+    updateLayerWholesalePrice: (productId, layerId, price) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/wholesale-price`, { wholesale_unit_price: price }),
+    updateLayerCostPrice: (productId, layerId, cost) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/cost-price`, { unit_cost: cost }),
+    updateLayerBarcode: (productId, layerId, barcode) =>
+      request('PATCH', `/online/products/${productId}/stock-layers/${layerId}/barcode`, { batch_sku: barcode }),
     productSalesChart: (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
 
     productCategories: (q, page, perPage) => {
@@ -127,6 +149,12 @@ const API = (() => {
     customerCategories: () => request('GET', '/customer-categories'),
     createCustomerCategory: (payload) => request('POST', '/customer-categories', payload),
     importCustomers: (rows) => request('POST', '/customers/import', { rows }),
+    // Customer detail tabs (same endpoints the main app's customer modal uses)
+    customerSubscriptions: (id) => request('GET', `/customers/${id}/subscriptions`),
+    customerWarranties: (id) => request('GET', `/customers/${id}/warranties`),
+    customerCreditSales: (id) => request('GET', `/customers/${id}/credit-sales`),
+    customerCreditPayment: (id, payload) => request('POST', `/customers/${id}/credit-payments`, payload),
+    customerRentals: (id) => request('GET', `/product-rentals?customer_id=${encodeURIComponent(id)}&status=all&per_page=100`),
 
     // Suppliers — full CRUD (Contacts hub). `API.suppliers()` further below stays
     // as the lightweight active-only picker used by Stock forms.
@@ -162,6 +190,8 @@ const API = (() => {
       return request('GET', '/sales' + (suffix ? `?${suffix}` : ''));
     },
     sale: (id) => request('GET', `/sales/${id}`),
+    // Sales Management — Pending Credits (unpaid credit sales grouped by customer)
+    pendingCredits: () => request('GET', '/sales/pending-credits'),
     voidSale: (id) => request('POST', `/sales/${id}/void`),
     processReturn: (id, payload) => request('POST', `/sales/${id}/return`, payload),
     returnReasons: () => request('GET', '/online/return-reasons'),
@@ -175,6 +205,37 @@ const API = (() => {
       return request('GET', '/sale-returns' + (suffix ? `?${suffix}` : ''));
     },
     saleReturn: (id) => request('GET', `/sale-returns/${id}`),
+
+    // Sales Management — Reverted Bills (bills undone because they were entered by mistake)
+    revertSale: (id, payload) => request('POST', `/sales/${id}/revert`, payload),
+    saleRevertReasons: () => request('GET', '/sale-reverts/reasons'),
+    saleReverts: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.reason && params.reason !== 'all') qs.set('reason', params.reason);
+      if (params.dateFrom) qs.set('date_from', params.dateFrom);
+      if (params.dateTo) qs.set('date_to', params.dateTo);
+      qs.set('page', params.page || 1);
+      return request('GET', '/sale-reverts?' + qs.toString());
+    },
+    saleRevert: (id) => request('GET', `/sale-reverts/${id}`),
+
+    // Sales Management — Cheques (customer cheques taken at checkout; claim = deposit the money)
+    saleCheques: (params = {}) => {
+      const qs = new URLSearchParams();
+      if (params.q) qs.set('q', params.q);
+      if (params.status && params.status !== 'all') qs.set('status', params.status);
+      if (params.customerId) qs.set('customer_id', params.customerId);
+      if (params.dateFrom) qs.set('date_from', params.dateFrom);
+      if (params.dateTo) qs.set('date_to', params.dateTo);
+      if (params.perPage) qs.set('per_page', params.perPage);
+      qs.set('page', params.page || 1);
+      return request('GET', '/sale-cheques?' + qs.toString());
+    },
+    saleCheque: (id) => request('GET', `/sale-cheques/${id}`),
+    // payload: { deposit_account_id?, notes? } — falls back to the POS default deposit account
+    claimSaleCheque: (id, payload) => request('POST', `/sale-cheques/${id}/claim`, payload || {}),
+    bounceSaleCheque: (id, payload) => request('POST', `/sale-cheques/${id}/bounce`, payload),
 
     // Sales Management — History (paginated, with summary + filters)
     salesHistory: (params = {}) => {

@@ -162,6 +162,10 @@
           </div>
         </div>
         <div class="field">
+          <label for="cf-credit-limit">Credit Limit <span class="field-hint">(leave empty for no limit)</span></label>
+          <input type="text" inputmode="decimal" id="cf-credit-limit" placeholder="e.g. 1000.00" autocomplete="off" />
+        </div>
+        <div class="field">
           <label for="cf-notes">Notes</label>
           <textarea id="cf-notes" placeholder="Optional"></textarea>
         </div>
@@ -200,12 +204,33 @@
 
   <!-- View Customer modal -->
   <div class="modal-backdrop" id="cust-view-modal">
-    <div class="modal">
-      <div class="modal-head">
-        <h2 id="cust-view-name">Customer</h2>
+    <div class="modal modal-cv">
+      <div class="cv-head">
+        <div class="cv-avatar" id="cust-view-avatar">?</div>
+        <div class="cv-titles">
+          <h2 id="cust-view-name">Customer</h2>
+          <span class="cv-sales-badge" id="cust-view-sales-badge"></span>
+        </div>
         <button class="modal-close" data-close="cust-view-modal"><i class="fa-solid fa-xmark"></i></button>
       </div>
-      <div class="modal-body" id="cust-view-body"></div>
+      <div class="cv-rental-alert" id="cust-view-rental-alert" style="display:none"></div>
+      <div class="cv-fields" id="cust-view-fields"></div>
+      <div class="cv-tabs" id="cust-view-tabs">
+        <button class="cv-tab active" data-cv-tab="sales"><i class="fa-solid fa-clock-rotate-left"></i> Recent Sales</button>
+        <button class="cv-tab" data-cv-tab="subs"><i class="fa-solid fa-rotate"></i> Subscriptions</button>
+        <button class="cv-tab" data-cv-tab="warranty"><i class="fa-solid fa-shield-halved"></i> Warranty</button>
+        <button class="cv-tab" data-cv-tab="credit"><i class="fa-solid fa-hand-holding-dollar"></i> Credit / Due</button>
+        <button class="cv-tab" data-cv-tab="rentals"><i class="fa-solid fa-calendar-days"></i> Rentals <span class="cv-tab-count" id="cust-view-rentals-count" style="display:none"></span></button>
+        <button class="cv-tab" data-cv-tab="cheques"><i class="fa-solid fa-money-check"></i> Cheques</button>
+      </div>
+      <div class="cv-panels" id="cust-view-panels">
+        <div class="cv-panel" data-cv-panel="sales"></div>
+        <div class="cv-panel" data-cv-panel="subs" style="display:none"></div>
+        <div class="cv-panel" data-cv-panel="warranty" style="display:none"></div>
+        <div class="cv-panel" data-cv-panel="credit" style="display:none"></div>
+        <div class="cv-panel" data-cv-panel="rentals" style="display:none"></div>
+        <div class="cv-panel" data-cv-panel="cheques" style="display:none"></div>
+      </div>
       <div class="modal-foot">
         <button class="ghost-btn danger-text" id="cust-view-delete-btn"><i class="fa-solid fa-trash"></i> Delete</button>
         <button class="ghost-btn" id="cust-view-edit-btn"><i class="fa-solid fa-pen"></i> Edit</button>

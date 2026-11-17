@@ -43,6 +43,13 @@ class Business extends Model
 {
     use HasSettings;
 
+    /**
+     * Session flag that re-arms the Get Started page for team members. Their
+     * prompt can't live in platform_choice_shown_at — that column belongs to
+     * the owner's row, so a member's login would re-prompt the owner.
+     */
+    public const PLATFORM_CHOICE_SESSION_KEY = 'platform_choice_pending';
+
     /** Members (non-owner users assigned to this business). */
     public function members(): HasMany
     {
@@ -100,7 +107,14 @@ class Business extends Model
             'brand_features' => 'array',
             'has_unlimited_access' => 'boolean',
             'has_manual_features' => 'boolean',
+            'payment_grace_days' => 'integer',
         ];
+    }
+
+    /** Days this business's unpaid subscription payments stay open before access locks. */
+    public function paymentGraceDays(): int
+    {
+        return $this->payment_grace_days ?? (int) config('subscription.grace_period_days', 2);
     }
 
     public function user(): BelongsTo
@@ -181,7 +195,7 @@ class Business extends Model
 
     /**
      * The unpaid subscription payment still inside its grace period
-     * (Payment::GRACE_PERIOD_DAYS) — used to warn the business before
+     * (Payment::gracePeriodDaysFor()) — used to warn the business before
      * overdueSubscriptionPayment() starts locking access. Null when nothing
      * is due.
      */

@@ -25,6 +25,10 @@ class AuthService
         Role::firstOrCreate(['name' => $roleName, 'guard_name' => 'web']);
         $user->assignRole($roleName);
 
+        // Used by both web sign-up and the pos-desktop register API. Emails the verification
+        // code when that automation is on (welcome follows once verified), else the welcome email.
+        app(EmailVerificationService::class)->startFor($user);
+
         return $user;
     }
 

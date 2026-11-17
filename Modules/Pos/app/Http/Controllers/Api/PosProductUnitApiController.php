@@ -5,6 +5,7 @@ namespace Modules\Pos\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Product\Models\ProductUnit;
 use Modules\Product\Services\ProductUnitService;
@@ -31,7 +32,10 @@ class PosProductUnitApiController extends Controller
         $business = $this->businessOrAbort($request);
 
         $data = $request->validate([
-            'name'         => ['required', 'string', 'max:80'],
+            'name'         => [
+                'required', 'string', 'max:80',
+                Rule::unique('product_units', 'name')->where('business_id', $business->id),
+            ],
             'abbreviation' => ['nullable', 'string', 'max:20'],
             'is_active'    => ['boolean'],
         ]);
@@ -48,7 +52,12 @@ class PosProductUnitApiController extends Controller
         abort_unless((int) $productUnit->business_id === (int) $business->id, 404);
 
         $data = $request->validate([
-            'name'         => ['sometimes', 'string', 'max:80'],
+            'name'         => [
+                'sometimes', 'required', 'string', 'max:80',
+                Rule::unique('product_units', 'name')
+                    ->where('business_id', $business->id)
+                    ->ignore($productUnit->id),
+            ],
             'abbreviation' => ['nullable', 'string', 'max:20'],
             'is_active'    => ['boolean'],
         ]);

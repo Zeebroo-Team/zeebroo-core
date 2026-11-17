@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Modules\Account\Models\Account;
 use Modules\Business\Models\Branch;
@@ -24,6 +25,8 @@ class Sale extends Model
 
     public const PAYMENT_CREDIT = 'credit';
 
+    public const PAYMENT_CHEQUE = 'cheque';
+
     public const CHANNEL_RETAIL = 'retail';
 
     public const CHANNEL_ONLINE = 'online';
@@ -36,6 +39,8 @@ class Sale extends Model
         'pos_counter_id',
         'user_id',
         'sale_number',
+        'client_uuid',
+        'offline_ref',
         'status',
         'payment_method',
         'channel',
@@ -103,6 +108,30 @@ class Sale extends Model
         return $this->belongsTo(Customer::class, 'pos_customer_id');
     }
 
+    public function creditPayments(): HasMany
+    {
+        return $this->hasMany(CreditPayment::class, 'pos_sale_id');
+    }
+
+    /** Unpaid balance of a credit sale (0 for cash/card sales). */
+    public function creditDue(): float
+    {
+        if ($this->payment_method !== self::PAYMENT_CREDIT) {
+            return 0.0;
+        }
+
+        return max(round((float) $this->total - (float) $this->amount_paid, 2), 0.0);
+    }
+
+    /** A credit sale with money still owed whose due date has passed. */
+    public function isCreditOverdue(): bool
+    {
+        return $this->status === self::STATUS_COMPLETED
+            && $this->creditDue() > 0.005
+            && $this->credit_due_date !== null
+            && $this->credit_due_date->lt(now()->startOfDay());
+    }
+
     public function giftCard(): BelongsTo
     {
         return $this->belongsTo(GiftCard::class, 'pos_gift_card_id');
@@ -129,6 +158,16 @@ class Sale extends Model
         return $this->hasMany(SaleReturn::class, 'pos_sale_id')->orderBy('returned_at');
     }
 
+    public function revert(): HasOne
+    {
+        return $this->hasOne(SaleRevert::class, 'pos_sale_id');
+    }
+
+    public function cheque(): HasOne
+    {
+        return $this->hasOne(SaleCheque::class, 'pos_sale_id');
+    }
+
     public function ledgerTransactions(): MorphMany
     {
         return $this->morphMany(LedgerTransaction::class, 'transactionable');
@@ -151,6 +190,7 @@ class Sale extends Model
             self::PAYMENT_CASH => 'Cash',
             self::PAYMENT_CARD => 'Card payment',
             self::PAYMENT_CREDIT => 'Credit payment',
+            self::PAYMENT_CHEQUE => 'Cheque',
         ];
     }
 

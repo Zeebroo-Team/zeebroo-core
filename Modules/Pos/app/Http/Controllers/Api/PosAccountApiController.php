@@ -84,6 +84,7 @@ class PosAccountApiController extends Controller
             'data' => [
                 'id'              => $account->id,
                 'account_name'    => $account->account_name,
+                'bank_name'       => $account->bank_name,
                 'current_balance' => (float) $account->current_balance,
             ],
         ], 201);

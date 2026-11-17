@@ -1,6 +1,6 @@
 'use strict';
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // Window controls
@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Platform
   platform: process.platform,
+  arch:     process.arch, // 'arm64' on Apple Silicon, 'x64' on Intel Macs
 
   // Config
   getConfig: ()       => ipcRenderer.invoke('config-get'),
@@ -24,16 +25,38 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // API
   apiRequest:      (method, path, body) => ipcRenderer.invoke('api-request', { method, path, body }),
   downloadFile:    (path, suggestedFilename) => ipcRenderer.invoke('api-download-file', { path, suggestedFilename }),
+  fetchDataUrl:    (path)               => ipcRenderer.invoke('api-fetch-data-url', { path }),
   printReceipt:    ()                   => ipcRenderer.invoke('print-receipt'),
   getPrinters:         ()      => ipcRenderer.invoke('get-printers'),
   getPrinterConfig:    ()      => ipcRenderer.invoke('get-printer-config'),
   setPrinterConfig:    (cfg)   => ipcRenderer.invoke('set-printer-config', cfg),
   printReceiptThermal: (opts)  => ipcRenderer.invoke('print-receipt-thermal', opts),
   printReceiptEscpos:  (opts)  => ipcRenderer.invoke('print-receipt-escpos', opts),
+  previewReceiptPdf:   (opts)  => ipcRenderer.invoke('preview-receipt-pdf', opts),
+  saveHtmlPdf:         (opts)  => ipcRenderer.invoke('save-html-pdf', opts),
+  // Stage updates while save-html-pdf runs: 'loading' | 'rendering' | 'saving-dialog' | 'writing'
+  onPdfProgress: (cb) => {
+    const fn = (_e, stage) => cb(stage);
+    ipcRenderer.on('save-html-pdf-progress', fn);
+    return () => ipcRenderer.removeListener('save-html-pdf-progress', fn);
+  },
   fetchJson:       (url)                => ipcRenderer.invoke('fetch-json', url),
   apiUpload:       (apiPath, filePath)  => ipcRenderer.invoke('api-upload', { path: apiPath, filePath }),
+  // Local path of a File dropped from Explorer / Finder (File.path is gone in recent Electron)
+  pathForFile:     (file)               => webUtils.getPathForFile(file),
   showOpenDialog:  (options)            => ipcRenderer.invoke('show-open-dialog', options),
   readTextFile:    (filePath)           => ipcRenderer.invoke('read-text-file', filePath),
+
+  // Database Backup & Import (profile menu)
+  backupApi:       (method, path, body) => ipcRenderer.invoke('backup-api', { method, path, body }),
+  backupPickZip:   ()                   => ipcRenderer.invoke('backup-pick-zip'),
+  backupDownload:  (path, suggestedFilename) => ipcRenderer.invoke('backup-download', { path, suggestedFilename }),
+  backupUpload:    (opts)               => ipcRenderer.invoke('backup-upload', opts),
+  onBackupProgress: (cb) => {
+    const fn = (_e, p) => cb(p);
+    ipcRenderer.on('backup-transfer-progress', fn);
+    return () => ipcRenderer.removeListener('backup-transfer-progress', fn);
+  },
   checkForUpdate:   ()                    => ipcRenderer.invoke('check-for-update'),
   downloadUpdate:   (opts)               => ipcRenderer.invoke('download-update', opts),
   onDownloadProgress: (cb)              => ipcRenderer.on('download-progress', (_e, pct) => cb(pct)),
@@ -82,6 +105,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   kdsClose:         ()       => ipcRenderer.send('kds-close'),
   kdsFullscreen:    (flag)   => ipcRenderer.send('kds-fullscreen', flag),
   kdsIsFullScreen:  ()       => ipcRenderer.invoke('kds-is-fullscreen'),
+
+  // Offline mode — local catalog + queued sales (offline.js)
+  offlineStatus:   ()     => ipcRenderer.invoke('offline-status'),
+  offlineOutbox:   ()     => ipcRenderer.invoke('offline-outbox'),
+  offlineSync:     (opts) => ipcRenderer.invoke('offline-sync', opts),
+  offlineRetry:    (uuid) => ipcRenderer.invoke('offline-retry', uuid),
+  offlineDiscard:  (uuid) => ipcRenderer.invoke('offline-discard', uuid),
+  offlineEvents:   ()     => ipcRenderer.invoke('offline-events'),
+  onOfflineStatus: (cb)   => ipcRenderer.on('offline-status', (_e, s) => cb(s)),
 
   // App version (shown in About modal, compared in Check for Updates)
   appVersion: () => ipcRenderer.invoke('app-version'),

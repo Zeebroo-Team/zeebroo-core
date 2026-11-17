@@ -15,6 +15,7 @@ class LeadStageLog extends Model
         'from_stage_id',
         'to_stage_id',
         'changed_by',
+        'reason',
     ];
 
     public function lead(): BelongsTo

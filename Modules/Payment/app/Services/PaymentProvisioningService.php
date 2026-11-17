@@ -50,7 +50,7 @@ class PaymentProvisioningService
             'platform' => $platform,
             'amount' => $amount,
             'currency' => strtolower($package->currency),
-            'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
+            'due_at' => Payment::dueAtFor($business),
         ]);
 
         $business->setSetting('business.subscription_status', 'pending_payment');

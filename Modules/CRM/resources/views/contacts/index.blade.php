@@ -22,6 +22,11 @@
         @if(filled($search))
             <a href="{{ route('crm.contacts.index') }}" class="linkbtn" style="padding:6px 14px;font-size:12px;background:transparent;border:1px solid var(--border);color:var(--muted);">Clear</a>
         @endif
+        @if($canImport)
+            <a href="{{ route('crm.contacts.import.index') }}" class="linkbtn" style="padding:6px 14px;font-size:12px;margin-left:auto;display:inline-flex;align-items:center;gap:6px;">
+                <i class="fa fa-file-import"></i> Import customers
+            </a>
+        @endif
     </form>
 
     @if($customers->isEmpty())

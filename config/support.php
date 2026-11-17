@@ -11,6 +11,6 @@ return [
     'hours' => env('SUPPORT_HOURS', 'Mon – Fri, 9:00 AM – 6:00 PM'),
     'address' => env('SUPPORT_ADDRESS', 'Colombo, Sri Lanka'),
     'website' => env('SUPPORT_WEBSITE', 'https://zeebroo.com'),
-    'docs_url' => 'https://zeebroo.com/tutorial',
+    'docs_url' => 'https://zeebroo.com/docs',
     'youtube_url' => 'https://www.youtube.com/@zeebroo-erp',
 ];

@@ -329,7 +329,7 @@ class GiftCardService
      * Spend $amount from the card for a sale. Must run inside the checkout
      * transaction — the row lock keeps two tills from double-spending a card.
      */
-    public function redeemForSale(Business $business, string $code, float $amount, Sale $sale, ?User $user): GiftCard
+    public function redeemForSale(Business $business, string $code, float $amount, Sale $sale, ?User $user, ?\Carbon\CarbonInterface $on = null): GiftCard
     {
         $card = GiftCard::query()
             ->where('business_id', $business->id)
@@ -341,7 +341,7 @@ class GiftCardService
             throw ValidationException::withMessages(['gift_card_code' => 'Gift card not found.']);
         }
 
-        $this->assertRedeemable($card);
+        $this->assertRedeemable($card, $on);
 
         $amount = round($amount, 2);
         if ($amount > (float) $card->balance + self::MONEY_TOLERANCE) {
@@ -391,9 +391,9 @@ class GiftCardService
         ]);
     }
 
-    public function assertRedeemable(GiftCard $card): void
+    public function assertRedeemable(GiftCard $card, ?\Carbon\CarbonInterface $on = null): void
     {
-        $message = match ($card->status()) {
+        $message = match ($card->status($on)) {
             GiftCard::STATUS_DISABLED  => 'This gift card is disabled.',
             GiftCard::STATUS_EXPIRED   => 'This gift card expired on '.$card->expires_at?->toDateString().'.',
             GiftCard::STATUS_SCHEDULED => 'This gift card is not valid until '.$card->valid_from?->toDateString().'.',

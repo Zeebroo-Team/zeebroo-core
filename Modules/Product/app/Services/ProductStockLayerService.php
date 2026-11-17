@@ -14,17 +14,19 @@ class ProductStockLayerService
 {
     public function defaultSellingUnitPrice(Business $business, Product $product, float $unitCost): ?float
     {
+        // The product's own selling price always wins; the markup is only a fallback
+        // for products that have no selling price set.
+        if ($product->unit_price !== null && (float) $product->unit_price > 0) {
+            return round((float) $product->unit_price, 2);
+        }
+
         if ($unitCost <= 0) {
-            return $product->unit_price !== null ? round((float) $product->unit_price, 2) : null;
+            return null;
         }
 
         $markup = (float) get_settings('product.stock_selling_markup_percent', 25, $business);
         if ($markup > 0) {
             return round($unitCost * (1 + ($markup / 100)), 2);
-        }
-
-        if ($product->unit_price !== null && (float) $product->unit_price > $unitCost) {
-            return round((float) $product->unit_price, 2);
         }
 
         return round($unitCost, 2);
@@ -285,6 +287,128 @@ class ProductStockLayerService
         }
 
         return $layer->refresh();
+    }
+
+    /**
+     * Checkout sells from batches whenever a product has any, so a stock count typed
+     * on the product must be mirrored in its batches or the POS refuses the sale.
+     * Raising the count adds an adjustment batch for the difference; lowering it
+     * draws the difference out of the oldest batches. Products with no batches sell
+     * from stock_quantity directly and are left alone. stock_quantity itself is not
+     * touched — the caller has already set it to $targetQuantity.
+     */
+    public function reconcileLayersToStock(Product $product, float $targetQuantity): void
+    {
+        $layers = ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $product->business_id)
+            ->orderBy('received_at')
+            ->orderBy('id')
+            ->lockForUpdate()
+            ->get();
+
+        if ($layers->isEmpty()) {
+            return;
+        }
+
+        $diff = round(max(0.0, $targetQuantity) - (float) $layers->sum('quantity_remaining'), 3);
+
+        if ($diff > 0.0005) {
+            $product->loadMissing('business');
+            $unitCost = round(max(0.0, (float) $product->cost_price), 2);
+
+            $layer = ProductStockLayer::query()->create([
+                'business_id' => $product->business_id,
+                'branch_id' => null,
+                'product_id' => $product->id,
+                'goods_receive_note_item_id' => null,
+                'quantity_received' => $diff,
+                'quantity_remaining' => $diff,
+                'unit_cost' => $unitCost,
+                'selling_unit_price' => $product->business instanceof Business
+                    ? $this->resolveSellingUnitPrice($product->business, $product, $unitCost, null)
+                    : ($product->unit_price !== null ? round((float) $product->unit_price, 2) : null),
+                'received_at' => now()->toDateString(),
+            ]);
+
+            $this->assignBatchSku($layer, $product);
+
+            return;
+        }
+
+        $toRemove = -$diff;
+        foreach ($layers as $layer) {
+            if ($toRemove <= 0.0005) {
+                break;
+            }
+            $available = (float) $layer->quantity_remaining;
+            if ($available <= 0) {
+                continue;
+            }
+            $take = min($toRemove, $available);
+            $layer->quantity_remaining = round($available - $take, 3);
+            $layer->save();
+            $toRemove = round($toRemove - $take, 3);
+        }
+    }
+
+    /**
+     * Batches copy the product's selling price when received, and the POS sells at the
+     * batch's price. So a new product price has to reach the in-stock batches still on
+     * the old one, or the POS never sees it. Batches on any other price keep it.
+     */
+    public function moveBatchesToProductPrice(Product $product, float $oldPrice): void
+    {
+        $price = (float) $product->unit_price;
+        if ($this->samePrice($price, $oldPrice)) {
+            return;
+        }
+
+        foreach ($this->batchesFollowingProductPrice($product) as $layer) {
+            if ($this->samePrice((float) $layer->selling_unit_price, $oldPrice)) {
+                $this->updateSellingPrice($layer, $price);
+            }
+        }
+    }
+
+    /**
+     * In-stock batches the POS will sell at something other than the product's price.
+     *
+     * @return EloquentCollection<int, ProductStockLayer>
+     */
+    public function batchesOnOtherPrice(Product $product): EloquentCollection
+    {
+        return $this->batchesFollowingProductPrice($product)
+            ->reject(fn (ProductStockLayer $layer) => $this->samePrice((float) $layer->selling_unit_price, (float) $product->unit_price))
+            ->values();
+    }
+
+    /**
+     * None when the product has no price (0 counts as unset, see defaultSellingUnitPrice())
+     * or uses linked dynamic pricing, whose batches always sell at 1.00. A batch with no
+     * price of its own already sells at the product's.
+     *
+     * @return EloquentCollection<int, ProductStockLayer>
+     */
+    private function batchesFollowingProductPrice(Product $product): EloquentCollection
+    {
+        if ((float) $product->unit_price <= 0 || ($product->is_dynamic_pricing && $product->dynamic_price_qty_linked)) {
+            return new EloquentCollection;
+        }
+
+        return ProductStockLayer::query()
+            ->where('product_id', $product->id)
+            ->where('business_id', $product->business_id)
+            ->where('quantity_remaining', '>', 0)
+            ->whereNotNull('selling_unit_price')
+            ->orderBy('received_at')
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function samePrice(float $a, float $b): bool
+    {
+        return abs($a - $b) < 0.005;
     }
 
     public function updateCostPrice(ProductStockLayer $layer, float $unitCost): ProductStockLayer

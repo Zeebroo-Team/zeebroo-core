@@ -60,7 +60,7 @@
 @endphp
 
 <div id="pos-bill-modal" class="pos-bill-modal is-open" role="dialog" aria-modal="true" aria-labelledby="pos-bill-title" aria-hidden="false"
-     data-pos-bill-print="{{ e(json_encode($posBillPrintData)) }}">
+     data-pos-bill-print="{{ json_encode($posBillPrintData) }}">
     <div class="pos-bill-modal__backdrop" data-pos-bill-close tabindex="-1" aria-label="Close"></div>
     <div class="pos-bill-modal__panel">
         <div class="pos-bill-modal__head">

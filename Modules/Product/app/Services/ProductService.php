@@ -4,6 +4,7 @@ namespace Modules\Product\Services;
 
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Modules\Business\Models\Business;
 use Modules\Product\Models\Product;
 
@@ -12,6 +13,7 @@ class ProductService
     public function __construct(
         private readonly ProductImageService $productImageService,
         private readonly ProductBundleService $productBundleService,
+        private readonly ProductStockLayerService $productStockLayerService,
     ) {
     }
 
@@ -117,8 +119,20 @@ class ProductService
         );
         unset($data['is_bundle']);
 
-        $product->fill($data);
-        $product->save();
+        $oldStock = (float) $product->stock_quantity;
+
+        DB::transaction(function () use ($product, $data, $oldStock): void {
+            $product->fill($data);
+            $product->save();
+
+            if (array_key_exists('stock_quantity', $data)
+                && $data['stock_quantity'] !== null
+                && abs((float) $data['stock_quantity'] - $oldStock) > 0.0005) {
+                $this->productStockLayerService->reconcileLayersToStock($product, (float) $data['stock_quantity']);
+            }
+        });
+
+        $this->productStockLayerService->moveBatchesToProductPrice($product, $oldPrice);
 
         if (is_array($categoryIds)) {
             $product->categories()->sync($categoryIds);

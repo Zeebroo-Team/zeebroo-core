@@ -270,6 +270,9 @@ class PaymentController extends Controller
             'stripe_payment_intent_id' => $paymentIntentId,
             'stripe_subscription_status' => 'active',
             'paid_at' => now(),
+            // A resumed checkout (canceled/failed first) must not keep its stale failure state.
+            'failure_reason' => null,
+            'due_at' => null,
         ]);
 
         $payment->business?->setSetting('business.subscription_status', 'active');
@@ -354,7 +357,7 @@ class PaymentController extends Controller
             $target->update([
                 'payment_status' => Payment::STATUS_FAILED,
                 'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
-                'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
+                'due_at' => Payment::dueAtFor($anchor->business),
                 'stripe_invoice_id' => $invoice->id,
             ]);
         } else {
@@ -376,7 +379,7 @@ class PaymentController extends Controller
                 'stripe_subscription_id' => $this->invoiceSubscriptionId($invoice) ?? $anchor->stripe_subscription_id,
                 'stripe_invoice_id' => $invoice->id,
                 'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
-                'due_at' => now()->addDays(Payment::GRACE_PERIOD_DAYS),
+                'due_at' => Payment::dueAtFor($anchor->business),
             ]);
         }
 

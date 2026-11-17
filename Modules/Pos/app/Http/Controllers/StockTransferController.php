@@ -9,7 +9,6 @@ use Illuminate\View\View;
 use Modules\Pos\Http\Controllers\Concerns\ResolvesPosBusiness;
 use Modules\Pos\Models\StockTransfer;
 use Modules\Pos\Services\StockTransferService;
-use Modules\Product\Services\ProductBundleService;
 
 class StockTransferController extends Controller
 {
@@ -17,7 +16,6 @@ class StockTransferController extends Controller
 
     public function __construct(
         private readonly StockTransferService $service,
-        private readonly ProductBundleService $productCatalog,
     ) {
     }
 
@@ -38,7 +36,7 @@ class StockTransferController extends Controller
         if ($business instanceof RedirectResponse) return $business;
 
         $branches = $business->branches()->orderBy('name')->get();
-        $catalog = $this->productCatalog->pickerCatalogForBusiness($business);
+        $catalog = $this->service->transferableCatalog($business);
         $currency = (string) (get_settings('business.currency', '', $business) ?: '');
 
         return view('pos::stock-transfers.create', compact('business', 'branches', 'catalog', 'currency'));

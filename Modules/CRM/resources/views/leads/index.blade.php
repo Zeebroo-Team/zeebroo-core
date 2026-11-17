@@ -3,7 +3,8 @@
 @php
     $hasLeads         = $hasLeads ?? false;
     $hasForms         = $hasForms ?? false;
-    $hasActiveFilters = filled($search ?? '') || ($stageFilter ?? 'all') !== 'all' || ($statusFilter ?? 'open') !== 'open';
+    $hasActiveFilters = filled($search ?? '') || ($stageFilter ?? 'all') !== 'all' || ($statusFilter ?? 'open') !== 'open' || filled($sourceFilter ?? null);
+    $leadSources      = \Modules\CRM\Models\Lead::SOURCES;
     $modalOpen        = $hasLeads && $errors->any();
 @endphp
 
@@ -17,6 +18,7 @@
 .ld-stat__label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:0 0 6px;}
 .ld-stat__value{font-size:22px;font-weight:800;color:var(--text);margin:0;line-height:1.15;}
 .ld-stat__sub{font-size:11px;color:var(--muted);margin:3px 0 0;}
+.ld-src{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;color:var(--src);background:color-mix(in srgb,var(--src) 12%,transparent);white-space:nowrap;}
 </style>
 
 <div class="pcat-page-card card" style="max-width:100%;padding:14px;">
@@ -80,6 +82,13 @@
                     <option value="{{ $opt->id }}" @selected((string) ($stageFilter ?? 'all') === (string) $opt->id)>{{ $opt->name }}</option>
                 @endforeach
             </select>
+            <select name="source"
+                    style="padding:5px 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;background:var(--card);color:var(--text);cursor:pointer;">
+                <option value="">All sources</option>
+                @foreach($leadSources as $key => [$label])
+                    <option value="{{ $key }}" @selected(($sourceFilter ?? null) === $key)>{{ $label }}</option>
+                @endforeach
+            </select>
             <button type="submit" class="linkbtn" style="padding:5px 12px;font-size:12px;">Filter</button>
             @if($hasActiveFilters)
                 <a href="{{ route('crm.projects.leads.index', $project) }}" class="linkbtn"
@@ -99,10 +108,12 @@
                    style="padding:8px 16px;font-size:13px;background:transparent;border:1px solid var(--border);color:var(--text);text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
                     <i class="fa fa-table-columns"></i> Board view
                 </a>
+                @if($canCreateLead)
                 <button type="button" id="ld-modal-open" class="linkbtn"
                         style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
                     <i class="fa fa-plus"></i> New lead
                 </button>
+                @endif
             @endif
         </div>
     </div>
@@ -120,7 +131,7 @@
                     <i class="fa fa-plus"></i> Create a lead form
                 </a>
             </section>
-        @else
+        @elseif($canCreateLead)
             <section class="pcat-inline">
                 <h2>New lead</h2>
                 <p class="pcat-muted">Capture a prospect, then move it through the pipeline as you follow up.</p>
@@ -143,6 +154,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Company</th>
+                            <th>Source</th>
                             <th>Stage</th>
                             <th style="text-align:right;">Value</th>
                             <th>Assigned to</th>
@@ -154,12 +166,25 @@
                             <tr>
                                 <td>
                                     <strong style="color:var(--text);">{{ $l->name }}</strong>
+                                    @if($l->score)
+                                        <span class="ld-stage" style="border-color:{{ \Modules\CRM\Models\Lead::SCORES[$l->score][1] }};color:{{ \Modules\CRM\Models\Lead::SCORES[$l->score][1] }};margin-left:4px;">{{ \Modules\CRM\Models\Lead::scoreLabel($l->score) }}</span>
+                                    @endif
                                     @if($l->email)<div class="muted" style="font-size:11px;">{{ $l->email }}</div>@endif
                                 </td>
                                 <td>{{ $l->company ?? '—' }}</td>
+                                <td>
+                                    @if($l->source)
+                                        @php
+                                            [$srcLabel, $srcIcon, $srcColor] = $leadSources[$l->source] ?? [\Modules\CRM\Models\Lead::sourceLabel($l->source), 'fa fa-tag', '#94a3b8'];
+                                        @endphp
+                                        <span class="ld-src" style="--src:{{ $srcColor }};"><i class="{{ $srcIcon }}"></i> {{ $srcLabel }}</span>
+                                    @else
+                                        <span class="muted">—</span>
+                                    @endif
+                                </td>
                                 <td><span class="ld-stage" style="border-color:{{ $l->stageColor() }};color:{{ $l->stageColor() }};">{{ $l->stageLabel() }}</span></td>
                                 <td style="text-align:right;font-weight:700;">{{ $l->estimated_value !== null ? number_format((float) $l->estimated_value, 2) : '—' }}</td>
-                                <td>{{ $l->assignedTo?->name ?? '—' }}</td>
+                                <td>@include('crm::partials.assignee-chips', ['assignees' => $l->assignees, 'compact' => true, 'emptyText' => '—'])</td>
                                 <td style="text-align:right;">
                                     <a href="{{ route('crm.leads.show', $l) }}" class="pcat-link">
                                         <i class="fa fa-eye"></i> View

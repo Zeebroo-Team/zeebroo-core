@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const https = require('https');
-const { app, BrowserWindow, Menu, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, dialog, shell, nativeImage } = require('electron');
 const { API_BASE_URL } = require('./config');
 
 // ── Local config (token + selected business) ───────────────────────────────
@@ -450,8 +450,18 @@ function apiDownloadFile(path_, token, businessId, branchId) {
 // renderer is denied by default (no setWindowOpenHandler is registered, and
 // Electron 14+ denies popups by default), so printing has to go through a
 // real BrowserWindow created here rather than a popup document.write().
+// Big documents (e.g. thousands of barcode labels) are too large for a data:
+// URL, so print / PDF documents are loaded from a temp file instead.
+function _writeTempHtml(html, prefix) {
+  const os = require('os');
+  const file = path.join(os.tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`);
+  fs.writeFileSync(file, html, 'utf8');
+  return file;
+}
+
 ipcMain.handle('print-html', (_e, { html }) => {
   return new Promise((resolve) => {
+    const tmpHtml = _writeTempHtml(html, 'zeebroo-lite-print');
     const win = new BrowserWindow({
       width: 480,
       height: 720,
@@ -459,6 +469,7 @@ ipcMain.handle('print-html', (_e, { html }) => {
       show: false,
       webPreferences: { sandbox: true },
     });
+    win.once('closed', () => { try { fs.unlinkSync(tmpHtml); } catch (_) {} });
     win.once('ready-to-show', () => {
       win.show();
       win.webContents.print({ printBackground: true }, () => {
@@ -466,22 +477,30 @@ ipcMain.handle('print-html', (_e, { html }) => {
       });
       resolve(true);
     });
-    win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    win.loadFile(tmpHtml);
   });
 });
 
 // Renders the given HTML to a PDF (via Electron's printToPDF) and lets the
 // user save it — same save-dialog + fs.writeFileSync shape as api-download-file
 // below, just generating the PDF locally instead of fetching one from the API.
-ipcMain.handle('save-html-as-pdf', async (_e, { html, suggestedFilename }) => {
+// printToPDF has no progress callback, so stages are sent to the renderer
+// ('loading' | 'rendering' | 'saving-dialog' | 'writing') for a progress UI.
+ipcMain.handle('save-html-as-pdf', async (e, { html, suggestedFilename }) => {
   let win;
+  let tmpHtml;
+  const stage = (s) => { if (!e.sender.isDestroyed()) e.sender.send('save-html-as-pdf-progress', s); };
   try {
+    stage('loading');
+    tmpHtml = _writeTempHtml(html, 'zeebroo-lite-pdf');
     win = new BrowserWindow({ show: false, webPreferences: { sandbox: true } });
-    await win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    await win.loadFile(tmpHtml);
+    stage('rendering');
     const buffer = await win.webContents.printToPDF({ printBackground: true });
     win.destroy();
     win = null;
 
+    stage('saving-dialog');
     const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
       defaultPath: suggestedFilename || 'document.pdf',
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
@@ -490,11 +509,442 @@ ipcMain.handle('save-html-as-pdf', async (_e, { html, suggestedFilename }) => {
       return { status: 0, canceled: true };
     }
 
+    stage('writing');
     fs.writeFileSync(filePath, buffer);
     return { status: 200, savedPath: filePath };
   } catch (err) {
     if (win) { try { win.destroy(); } catch (_) {} }
     return { status: 0, message: err.message };
+  } finally {
+    if (tmpHtml) { try { fs.unlinkSync(tmpHtml); } catch (_) {} }
+  }
+});
+
+// ── Thermal printer support (Settings → Printer) ────────────────────────
+// Same shape as the full desktop app (electron_app/main.js). The printer is a
+// per-device choice, so it lives in the local config.json, not on the server.
+ipcMain.handle('get-printers', async (e) => {
+  try {
+    const win = BrowserWindow.fromWebContents(e.sender);
+    const list = await win.webContents.getPrintersAsync();
+    return list.map((p) => ({ name: p.name, displayName: p.displayName || p.name, isDefault: p.isDefault || false }));
+  } catch (_) { return []; }
+});
+
+ipcMain.handle('get-printer-config', () => {
+  config = loadConfig();
+  const tp = config.thermalPrinter || {};
+  return {
+    name:        tp.name || '',
+    silent:      tp.silent !== false,
+    paperWidth:  tp.paperWidth || 80,
+    mode:        tp.mode || 'escpos',
+    showPreview: tp.showPreview !== false,
+  };
+});
+
+ipcMain.handle('set-printer-config', (_e, cfg) => {
+  config = loadConfig();
+  config.thermalPrinter = {
+    name:        String(cfg.name || ''),
+    silent:      cfg.silent !== false,
+    paperWidth:  cfg.paperWidth === 58 ? 58 : 80,
+    mode:        cfg.mode === 'html' ? 'html' : 'escpos',
+    showPreview: cfg.showPreview !== false,
+  };
+  saveConfig(config);
+  return true;
+});
+
+// User-set receipt margins (mm) from the Receipt Layout Editor — each side clamped to 0–20.
+const RECEIPT_MARGIN_MAX_MM = 20;
+function _receiptMargins(m = {}) {
+  const v = (x) => Math.min(RECEIPT_MARGIN_MAX_MM, Math.max(0, parseFloat(x) || 0));
+  return { top: v(m.top), right: v(m.right), bottom: v(m.bottom), left: v(m.left) };
+}
+
+// Printer's default code page is plain ASCII — swap common typographic characters
+// for ASCII look-alikes so they don't print as '?'.
+const _ESCPOS_ASCII = {
+  '—': '-', '–': '-', '−': '-', '‘': "'", '’': "'",
+  '“': '"', '”': '"', '•': '*', '…': '...', ' ': ' ', '×': 'x',
+};
+function _escposAscii(s) {
+  return String(s || '').replace(/[—–−‘’“”•… ×]/g, (ch) => _ESCPOS_ASCII[ch]);
+}
+
+// Receipt logo → 1-bit raster for ESC/POS (GS v 0), max ~26×13 mm at 203 dpi,
+// scaled by the Logo size setting (50–300 %) and capped to the printable width.
+const LOGO_MAX_W_DOTS = 208;
+const LOGO_MAX_H_DOTS = 104;
+
+async function _loadLogoRaster(url, sizePct = 100, maxWidthDots = 576) {
+  if (!url) return null;
+  try {
+    let buf;
+    if (url.startsWith('data:')) {
+      buf = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+    } else {
+      const abs = /^https?:\/\//i.test(url) ? url : new URL(url, API_BASE_URL).href;
+      const res = await fetch(abs);
+      if (!res.ok) return null;
+      buf = Buffer.from(await res.arrayBuffer());
+    }
+    let img = nativeImage.createFromBuffer(buf);  // PNG / JPEG
+    if (img.isEmpty()) return null;
+
+    const pct   = Number.isFinite(parseFloat(sizePct)) ? Math.min(300, Math.max(50, parseFloat(sizePct))) : 100;
+    const maxW  = Math.min(maxWidthDots, Math.round(LOGO_MAX_W_DOTS * pct / 100));
+    const maxH  = Math.round(LOGO_MAX_H_DOTS * pct / 100);
+    const src   = img.getSize();
+    const scale = Math.min(1, maxW / src.width, maxH / src.height);
+    img = img.resize({
+      width:   Math.max(1, Math.round(src.width  * scale)),
+      height:  Math.max(1, Math.round(src.height * scale)),
+      quality: 'best',
+    });
+
+    const size = img.getSize();
+    const bgra = img.toBitmap();  // BGRA, row-major
+    if (bgra.length < size.width * size.height * 4) return null;
+
+    const bytesPerRow = Math.ceil(size.width / 8);
+    const bits = Buffer.alloc(bytesPerRow * size.height);
+    for (let y = 0; y < size.height; y++) {
+      for (let x = 0; x < size.width; x++) {
+        const i = (y * size.width + x) * 4;
+        const a = bgra[i + 3] / 255;
+        // Composite onto white paper, then threshold the luminance
+        const lum = (0.114 * bgra[i] + 0.587 * bgra[i + 1] + 0.299 * bgra[i + 2]) * a + 255 * (1 - a);
+        if (lum < 160) bits[y * bytesPerRow + (x >> 3)] |= 0x80 >> (x & 7);
+      }
+    }
+    return { width: size.width, height: size.height, bytesPerRow, bits };
+  } catch (_) {
+    return null;  // a broken logo must never block the receipt
+  }
+}
+
+// ESC/POS builder — pure Node.js, no native modules
+function _escposBuffer(receipt, paperWidth, margins = {}, logo = null) {
+  // Font A is 12 dots wide (1.5 mm at 203 dpi): 80mm heads print 576 dots (48 cols), 58mm heads 384 dots (32 cols)
+  const MM_PER_COL = 1.5;
+  const DOTS_PER_MM = 8;
+  const mg   = _receiptMargins(margins);
+  const LPAD = Math.round(mg.left  / MM_PER_COL);  // left margin, in columns
+  const RPAD = Math.round(mg.right / MM_PER_COL);  // right margin, in columns
+  const COL  = Math.max(20, (paperWidth === 58 ? 32 : 48) - LPAD - RPAD);
+  const QTYF = 4;                              // qty column
+  const PRCF = paperWidth === 58 ?  0 : 10;  // price column (skipped on 58mm)
+  const TOTF = paperWidth === 58 ? 12 : 10;  // total column
+  const NAMW = Math.max(6, COL - QTYF - PRCF - TOTF);  // item name column takes what's left
+
+  const buf = [];
+  const push = (...b) => buf.push(...b);
+  const text = (s) => {
+    for (const ch of _escposAscii(s)) {
+      const c = ch.charCodeAt(0);
+      buf.push(c < 128 ? c : 0x3F);  // remaining non-ASCII → '?'
+    }
+  };
+  const println = (s = '') => { text(' '.repeat(LPAD) + s); push(0x0A); };
+
+  // Centering is done with spaces (ctr) inside the margin-reduced width, so the printer
+  // always stays left-aligned — ESC a 1 would re-centre the already padded line.
+  const alignL  = () => push(0x1B, 0x61, 0x00);
+  const alignC  = alignL;
+  const boldOn  = () => push(0x1B, 0x45, 0x01);
+  const boldOff = () => push(0x1B, 0x45, 0x00);
+  const feed    = (n = 1) => push(0x1B, 0x64, n);
+  const feedMm  = (mm) => { const d = Math.round(mm * DOTS_PER_MM); if (d > 0) push(0x1B, 0x4A, Math.min(255, d)); };
+  const cut     = () => push(0x1D, 0x56, 0x42, 0x03);  // partial cut + 3-line feed
+
+  const line  = () => println('-'.repeat(COL));
+  const dline = () => println('='.repeat(COL));
+  const ctr   = (s) => {
+    s = String(s || '').slice(0, COL);
+    return ' '.repeat(Math.max(0, Math.floor((COL - s.length) / 2))) + s;
+  };
+  const rowLR = (left, right) => {
+    left = String(left || ''); right = String(right || '');
+    const gap = COL - left.length - right.length;
+    if (gap <= 0) println(left.slice(0, Math.max(0, COL - right.length - 1)) + ' ' + right);
+    else println(left + ' '.repeat(gap) + right);
+  };
+  const money = (amount) => {
+    const num = parseFloat(amount || 0).toFixed(2);
+    if (!receipt.currency) return num;
+    return receipt.currencyPosition === 'before' ? `${receipt.currency} ${num}` : `${num} ${receipt.currency}`;
+  };
+
+  push(0x1B, 0x40);  // ESC @ — initialize printer
+  feedMm(mg.top);
+
+  // Logo — centred inside the margins by left-padding each raster row with blank bytes,
+  // then the user's logo → business-name gap (mm)
+  if (logo) {
+    const headDots = paperWidth === 58 ? 384 : 576;
+    const areaL    = LPAD * 12;
+    const areaW    = headDots - LPAD * 12 - RPAD * 12;
+    const padBytes = Math.max(0, Math.floor((areaL + Math.max(0, (areaW - logo.width) / 2)) / 8));
+    const rowBytes = Math.min(Math.ceil(headDots / 8), padBytes + logo.bytesPerRow);
+    const copy     = rowBytes - padBytes;
+    push(0x1D, 0x76, 0x30, 0x00, rowBytes & 0xFF, rowBytes >> 8, logo.height & 0xFF, logo.height >> 8);
+    for (let y = 0; y < logo.height; y++) {
+      for (let p = 0; p < padBytes; p++) buf.push(0);
+      for (let b = 0; b < copy; b++) buf.push(logo.bits[y * logo.bytesPerRow + b]);
+    }
+    const gap = Math.min(20, Math.max(0, parseFloat(receipt.logoGap)));
+    feedMm(Number.isFinite(gap) ? gap : 2);
+  }
+
+  if (receipt.businessName) { alignC(); boldOn(); println(ctr(receipt.businessName)); boldOff(); }
+  if (receipt.address) {
+    alignC();
+    for (const l of receipt.address.split('\n')) if (l.trim()) println(ctr(l.trim()));
+  }
+  if (receipt.header) { alignC(); println(ctr(receipt.header)); }
+
+  alignL(); line();
+  rowLR('Receipt No.:', String(receipt.saleNumber || ''));
+  rowLR('Date:',        String(receipt.date || ''));
+  if (receipt.customer) rowLR('Customer:', String(receipt.customer));
+  if (receipt.cashier)  rowLR('Cashier:',  String(receipt.cashier));
+  line();
+
+  const ih = 'ITEM'.padEnd(NAMW) + 'QTY'.padStart(QTYF) + (PRCF ? 'PRICE'.padStart(PRCF) : '') + 'TOTAL'.padStart(TOTF);
+  boldOn(); println(ih.slice(0, COL)); boldOff();
+  line();
+
+  for (const item of (receipt.items || [])) {
+    const name  = String(item.name || '').slice(0, NAMW).padEnd(NAMW);
+    const qtyN  = parseFloat(item.qty) || 0;
+    const qty   = (qtyN % 1 === 0 ? String(Math.round(qtyN)) : qtyN.toFixed(2)).padStart(QTYF);
+    const price = PRCF ? parseFloat(item.price).toFixed(2).padStart(PRCF) : '';
+    const total = parseFloat(item.total).toFixed(2).padStart(TOTF);
+    println((name + qty + price + total).slice(0, COL));
+    if (parseFloat(item.discount) > 0) println(('  Discount: -' + parseFloat(item.discount).toFixed(2)).slice(0, COL));
+  }
+  line();
+
+  rowLR('Subtotal:', money(receipt.subtotal));
+  if (parseFloat(receipt.discount) > 0) {
+    rowLR('Discount' + (receipt.discountPct ? ' (' + receipt.discountPct + '%)' : '') + ':', '-' + money(receipt.discount));
+  }
+  if (parseFloat(receipt.couponDiscount) > 0.005) {
+    rowLR('Coupon' + (receipt.couponCode ? ' ' + receipt.couponCode : '') + ':', '-' + money(receipt.couponDiscount));
+  }
+
+  dline();
+  boldOn(); rowLR('TOTAL:', money(receipt.total)); boldOff();
+
+  if (parseFloat(receipt.giftCardAmount) > 0.005) {
+    rowLR('Gift card' + (receipt.giftCardCode ? ' ' + receipt.giftCardCode : '') + ':', '-' + money(receipt.giftCardAmount));
+    if (receipt.giftCardBalance != null) rowLR('Gift card balance:', money(receipt.giftCardBalance));
+  }
+  if (receipt.tendered != null) rowLR('Cash received:', money(receipt.tendered));
+  else rowLR('Paid (' + (receipt.paymentMethod || 'Cash') + '):', money(receipt.paid));
+  if (parseFloat(receipt.change) > 0.005) rowLR('Change:', money(receipt.change));
+
+  if (receipt.notes) {
+    line(); alignL();
+    for (const l of receipt.notes.split('\n')) println(l.slice(0, COL));
+  }
+
+  feed(1);
+  alignC(); boldOn();
+  println(ctr(String(receipt.footer || 'Thank you for your purchase!')));
+  boldOff();
+  println(ctr('[ ' + String(receipt.paymentMethod || 'CASH').toUpperCase() + ' ]'));
+
+  feed(3);
+  feedMm(mg.bottom);
+  cut();
+  return Buffer.from(buf);
+}
+
+// Send raw ESC/POS bytes to a printer.
+// Windows: PowerShell → winspool.drv RAW datatype (bypasses GDI completely). Mac/Linux: lp -o raw
+async function _sendRawToPrinter(printerName, buffer) {
+  const os = require('os');
+  const { execFile } = require('child_process');
+
+  const tmpBin = path.join(os.tmpdir(), `escpos-${Date.now()}.bin`);
+  fs.writeFileSync(tmpBin, buffer);
+
+  return new Promise((resolve) => {
+    const cleanup = (psFile) => {
+      try { fs.unlinkSync(tmpBin); } catch (_) {}
+      if (psFile) try { fs.unlinkSync(psFile); } catch (_) {}
+    };
+
+    if (process.platform === 'win32') {
+      const psScript = `param([string]$N, [string]$F)
+$ErrorActionPreference = 'Stop'
+try {
+  $b = [IO.File]::ReadAllBytes($F)
+  Add-Type -TypeDefinition @"
+using System; using System.Runtime.InteropServices;
+[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+public struct DOCINFOA { public string pDocName; public string pOutputFile; public string pDataType; }
+public static class WP {
+  [DllImport("winspool.drv", CharSet=CharSet.Ansi, ExactSpelling=true)]
+  public static extern bool OpenPrinterA(string n, out IntPtr h, IntPtr d);
+  [DllImport("winspool.drv")] public static extern bool ClosePrinter(IntPtr h);
+  [DllImport("winspool.drv", CharSet=CharSet.Ansi, ExactSpelling=true)]
+  public static extern int StartDocPrinterA(IntPtr h, int lv, ref DOCINFOA di);
+  [DllImport("winspool.drv")] public static extern bool EndDocPrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool StartPagePrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool EndPagePrinter(IntPtr h);
+  [DllImport("winspool.drv")] public static extern bool WritePrinter(IntPtr h, byte[] b, int n, out int w);
+}
+"@
+  $h = [IntPtr]::Zero
+  if (-not [WP]::OpenPrinterA($N, [ref]$h, [IntPtr]::Zero)) { throw "Cannot open printer '$N'" }
+  $di = New-Object DOCINFOA; $di.pDocName = 'Receipt'; $di.pDataType = 'RAW'
+  if ([WP]::StartDocPrinterA($h, 1, [ref]$di) -le 0) { [WP]::ClosePrinter($h); throw 'StartDocPrinter failed' }
+  [WP]::StartPagePrinter($h)  | Out-Null
+  $w = 0; [WP]::WritePrinter($h, $b, $b.Length, [ref]$w) | Out-Null
+  [WP]::EndPagePrinter($h)   | Out-Null
+  [WP]::EndDocPrinter($h)    | Out-Null
+  [WP]::ClosePrinter($h)     | Out-Null
+  Write-Output "OK:$w"
+} catch { Write-Output "ERR:$($_.Exception.Message)"; exit 1 }`;
+
+      const tmpPs = path.join(os.tmpdir(), `escpos-${Date.now()}.ps1`);
+      fs.writeFileSync(tmpPs, psScript, 'utf8');
+
+      execFile(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', tmpPs, '-N', printerName, '-F', tmpBin],
+        { timeout: 12000 },
+        (err, stdout) => {
+          cleanup(tmpPs);
+          if (err) return resolve({ success: false, error: err.message });
+          const out = String(stdout || '').trim();
+          if (out.startsWith('ERR:')) return resolve({ success: false, error: out.slice(4) });
+          resolve({ success: true });
+        }
+      );
+    } else {
+      execFile('lp', ['-d', printerName, '-o', 'raw', tmpBin], { timeout: 10000 }, (err) => {
+        cleanup(null);
+        if (err) return resolve({ success: false, error: err.message });
+        resolve({ success: true });
+      });
+    }
+  });
+}
+
+ipcMain.handle('print-receipt-escpos', async (_e, opts = {}) => {
+  const { receipt, name, paperWidth = 80, margins = {} } = opts;
+  if (!name) return { success: false, error: 'No printer specified' };
+  try {
+    // Keep the logo inside the left/right margins — same column rounding as _escposBuffer (12 dots per col)
+    const mg   = _receiptMargins(margins);
+    const maxW = Math.max(8, (paperWidth === 58 ? 384 : 576) - (Math.round(mg.left / 1.5) + Math.round(mg.right / 1.5)) * 12);
+    const logo = await _loadLogoRaster(receipt?.logoUrl, receipt?.logoSize, maxW);
+    return await _sendRawToPrinter(name, _escposBuffer(receipt || {}, paperWidth, margins, logo));
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  }
+});
+
+// Print a complete HTML receipt document straight to a printer (no dialog when
+// silent). Empty name → the Windows default printer.
+// Wait (max 3 s) for the receipt's images (logo) and fonts to load, then return the
+// rendered receipt height in px (body, not documentElement — the latter is never
+// shorter than the hidden window).
+function _receiptContentHeightPx(win) {
+  return win.webContents.executeJavaScript(`
+    Promise.race([
+      Promise.all([...document.images].map(img => img.complete ? null
+        : new Promise(r => { img.onload = img.onerror = r; }))),
+      new Promise(r => setTimeout(r, 3000)),
+    ]).then(() => document.fonts ? document.fonts.ready : null)
+      .then(() => Math.ceil(document.body.getBoundingClientRect().height))
+  `);
+}
+
+ipcMain.handle('print-receipt-silent', async (_e, opts = {}) => {
+  const { html = '', name = '', silent = true } = opts;
+  const win = new BrowserWindow({ width: 400, height: 600, show: false, skipTaskbar: true, webPreferences: { sandbox: true } });
+  try {
+    await win.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+    await _receiptContentHeightPx(win);  // wait for the logo / fonts before printing
+
+    // No pageSize — print on the driver's own paper. Thermal drivers (e.g. EPSON
+    // TM-T81III) don't accept a custom paper length; Chromium then centres the smaller
+    // page on the driver's paper, leaving a big top gap and clipping the left edge.
+    const printOpts = { silent, printBackground: true, margins: { marginType: 'printableArea' } };
+    if (name) printOpts.deviceName = name;
+
+    return await new Promise((resolve) => {
+      // Guard only silent jobs against a hung driver — with the system dialog open the
+      // cashier may take as long as they like, and destroying the window would kill it.
+      const guard = silent
+        ? setTimeout(() => resolve({ success: false, error: 'Print timeout — printer not responding' }), 20000)
+        : null;
+      win.webContents.print(printOpts, (success, failureReason) => {
+        if (guard) clearTimeout(guard);
+        resolve({
+          success,
+          error: success ? null
+            : (failureReason === 'cancelled' ? 'Print cancelled' : (failureReason || 'Print failed')),
+          cancelled: failureReason === 'cancelled',
+        });
+      });
+    });
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+});
+
+// Windows' system print dialog can't preview Electron pages ("This app doesn't
+// support print preview"), so with no printer configured the receipt is rendered
+// to a PDF at the exact roll width and opened in Chromium's PDF viewer, which
+// shows a true-size preview and has its own Print button.
+ipcMain.handle('preview-receipt-pdf', async (e, opts = {}) => {
+  const { html = '', paperWidth = 80 } = opts;
+  const os = require('os');
+  const paperMm = paperWidth === 58 ? 58 : 80;
+  const MM_PER_IN = 25.4;
+  const MARGIN_MM = 4;  // matches the receipt document's @page margin
+
+  const renderWin = new BrowserWindow({ width: 400, height: 600, show: false, skipTaskbar: true, webPreferences: { sandbox: true } });
+  try {
+    await renderWin.loadURL('data:text/html;charset=UTF-8,' + encodeURIComponent(html));
+
+    // Roll paper has no fixed length — size the page to the receipt's content height
+    const contentPx = await _receiptContentHeightPx(renderWin);
+    const heightMm = (contentPx * MM_PER_IN / 96) + MARGIN_MM * 2 + 2;
+    const marginIn = MARGIN_MM / MM_PER_IN;
+
+    const pdf = await renderWin.webContents.printToPDF({
+      pageSize: { width: paperMm / MM_PER_IN, height: heightMm / MM_PER_IN },
+      margins: { top: marginIn, bottom: marginIn, left: marginIn, right: marginIn },
+      printBackground: true,
+    });
+
+    const pdfPath = path.join(os.tmpdir(), `zeebroo-lite-receipt-${Date.now()}.pdf`);
+    fs.writeFileSync(pdfPath, pdf);
+
+    const previewWin = new BrowserWindow({
+      width: 520, height: 820, title: `Receipt preview — ${paperMm} mm`,
+      parent: BrowserWindow.fromWebContents(e.sender) || undefined,
+      autoHideMenuBar: true,
+      webPreferences: { plugins: true, sandbox: true },
+    });
+    previewWin.on('page-title-updated', (ev) => ev.preventDefault());  // keep our title, not the file path
+    previewWin.once('closed', () => { try { fs.unlinkSync(pdfPath); } catch (_) {} });
+    await previewWin.loadFile(pdfPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message || String(err) };
+  } finally {
+    if (!renderWin.isDestroyed()) renderWin.destroy();
   }
 });
 

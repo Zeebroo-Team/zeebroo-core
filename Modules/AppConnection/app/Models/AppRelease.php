@@ -22,7 +22,8 @@ class AppRelease extends Model
         'is_latest',
         'notes',
         'windows_url',
-        'macos_url',
+        'macos_url',       // Apple Silicon (arm64)
+        'macos_intel_url', // Intel (x64)
         'linux_url',
     ];
 

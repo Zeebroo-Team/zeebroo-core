@@ -26,6 +26,15 @@ const apPriceInput = document.getElementById('ap-price');
 const apErrorEl = document.getElementById('ap-error');
 const apSaveBtn = document.getElementById('ap-save-btn');
 
+// Quick setup modal (price + opening stock for an unpriced product)
+const quickSetupModal = document.getElementById('quick-setup-modal');
+const qsNameEl = document.getElementById('qs-name');
+const qsPriceInput = document.getElementById('qs-price');
+const qsCostInput = document.getElementById('qs-cost');
+const qsStockInput = document.getElementById('qs-stock');
+const qsErrorEl = document.getElementById('qs-error');
+const qsSaveBtn = document.getElementById('qs-save-btn');
+
 // Customer select (lives inside the customer-picker modal)
 const customerPickerModal = document.getElementById('customer-picker-modal');
 const customerChipEl = document.getElementById('customer-chip');
@@ -139,8 +148,11 @@ const passwordConfirmBtn = document.getElementById('password-confirm-btn');
 let products = [];
 let cart = []; // { cartKey, product_id, name, price, customPrice, qty, stock, isRental?, isDynamic?, ... }
 let paymentMethod = 'cash';
+let creditInfo = { customerId: null, data: null }; // the selected customer's credit summary (credit checkout)
 let searchDebounce = null;
 let posSettings = {}; // POS/Sale settings from the General tab (Settings → General)
+// Receipt Layout Editor saved (js/navbar.js) — next receipt uses the new layout/language
+window.addEventListener('receipt-layout-saved', (e) => { posSettings = { ...posSettings, ...e.detail }; });
 let posInvoiceSetup = {}; // Template/paper/margins/accent color from Settings → Invoice Setup
 
 let currentMode = 'products'; // 'products' | 'rental' | 'dynamic'
@@ -182,6 +194,7 @@ document.querySelectorAll('.mode-tab').forEach((btn) => {
     btn.classList.add('active');
     currentMode = btn.dataset.mode;
     loadProducts(searchInput.value.trim());
+    focusSearch();
   });
 });
 
@@ -346,6 +359,80 @@ async function saveAddProduct() {
 }
 apSaveBtn.addEventListener('click', saveAddProduct);
 
+// ── Quick setup: unpriced, unstocked product (e.g. from the SQL dump import) ──
+// Clicking it asks for a selling price + opening stock, saves, then adds it to the cart.
+function needsQuickSetup(p) {
+  return !p.is_dynamic_pricing && !p.is_bundle && !p.is_rental && !p.is_subscription
+    && (Number(p.unit_sell_price) || 0) <= 0
+    && (Number(p.stock_quantity) || 0) <= 0;
+}
+
+let quickSetupProduct = null;
+
+function openQuickSetupModal(product) {
+  quickSetupProduct = product;
+  qsNameEl.textContent = product.name;
+  qsPriceInput.value = '';
+  qsCostInput.value = '';
+  qsStockInput.value = '';
+  qsErrorEl.classList.remove('show');
+  quickSetupModal.classList.add('show');
+  qsPriceInput.focus();
+}
+function closeQuickSetupModal() {
+  quickSetupModal.classList.remove('show');
+  quickSetupProduct = null;
+  focusSearch();
+}
+
+async function saveQuickSetup() {
+  const product = quickSetupProduct;
+  if (!product) return;
+  const price = parseFloat(qsPriceInput.value);
+  const cost = parseFloat(qsCostInput.value);
+  const stock = parseFloat(qsStockInput.value);
+
+  qsErrorEl.classList.remove('show');
+  const fail = (msg, input) => {
+    qsErrorEl.textContent = msg;
+    qsErrorEl.classList.add('show');
+    input?.focus();
+  };
+  if (!(price > 0)) return fail(t('Enter a selling price greater than 0.'), qsPriceInput);
+  if (!(stock > 0)) return fail(t('Enter a starting stock greater than 0.'), qsStockInput);
+
+  qsSaveBtn.disabled = true;
+  try {
+    const res = await API.quickSetupProduct(product.id, {
+      unit_price: price,
+      cost_price: isNaN(cost) ? null : cost,
+      stock_quantity: stock,
+    });
+    if (res.status !== 200 || !res.body?.data) {
+      const firstKey = res.body?.errors ? Object.keys(res.body.errors)[0] : null;
+      return fail(t(firstKey ? res.body.errors[firstKey][0] : (res.body?.message || 'Could not set up product.')));
+    }
+
+    const updated = res.body.data;
+    const idx = products.findIndex((p) => p.id === product.id);
+    if (idx >= 0) products[idx] = updated; else products.push(updated);
+    renderProducts();
+    // The grid was re-rendered — point the fly-to-cart animation at the new card
+    const newCard = grid.querySelector(`.product-card[data-id="${updated.id}"]`);
+    if (newCard && flySrc?.productId === updated.id) flySrc.card = newCard;
+
+    closeQuickSetupModal();
+    showToast(t('{name} is ready to sell.', { name: updated.name }), 'success');
+    if (!needsQuickSetup(updated)) routeAddToCart(updated.id);
+  } finally {
+    qsSaveBtn.disabled = false;
+  }
+}
+qsSaveBtn.addEventListener('click', saveQuickSetup);
+quickSetupModal.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); saveQuickSetup(); }
+});
+
 // ── Products ────────────────────────────────────────────────────────────
 function unitPrice(p) {
   return p.discounted_sell_price !== null && p.discounted_sell_price !== undefined
@@ -392,7 +479,11 @@ function renderProducts() {
   }
 
   grid.innerHTML = products.map((p) => {
-    const outOfStock = Number(p.stock_quantity) <= 0;
+    const needsSetup = needsQuickSetup(p);
+    const outOfStock = !needsSetup && Number(p.stock_quantity) <= 0;
+    const stockLabel = needsSetup
+      ? `<i class="fa-solid fa-tag"></i> ${t('Set price & stock')}`
+      : outOfStock ? t('Out of stock') : t('{n} left', { n: Math.floor(p.stock_quantity) });
     const thumb = p.image_url
       ? `<img src="${p.image_url}" alt="">`
       : '<i class="fa-solid fa-box"></i>';
@@ -419,27 +510,34 @@ function renderProducts() {
     const tagsRow = tags.length ? `<div class="product-tags">${tags.join('')}</div>` : '';
 
     return `
-      <div class="product-card ${outOfStock ? 'out-of-stock' : ''}" data-id="${p.id}">
+      <div class="product-card ${outOfStock ? 'out-of-stock' : ''} ${needsSetup ? 'needs-setup' : ''}" data-id="${p.id}">
         ${badge}
         <div class="product-thumb">${thumb}</div>
         <div class="product-name">${p.name}</div>
         ${tagsRow}
         <div class="product-meta">
           <span class="product-price">${priceLabel(p)}</span>
-          <span class="product-stock">${outOfStock ? t('Out of stock') : t('{n} left', { n: Math.floor(p.stock_quantity) })}</span>
+          <span class="product-stock">${stockLabel}</span>
         </div>
       </div>`;
   }).join('');
 
   grid.querySelectorAll('.product-card:not(.out-of-stock)').forEach((card) => {
-    card.addEventListener('click', () => routeAddToCart(Number(card.dataset.id)));
+    card.addEventListener('click', () => {
+      setFlySource(card);
+      routeAddToCart(Number(card.dataset.id));
+    });
   });
 }
 
+let loadProductsSeq = 0;
 async function loadProducts(query = '') {
+  const seq = ++loadProductsSeq;
   grid.innerHTML = `<div class="loading-state">${t('Loading products…')}</div>`;
   const filter = currentMode === 'rental' ? 'rental' : currentMode === 'dynamic' ? 'dynamic' : null;
   const res = await API.products(query, { filter, categoryId: currentCategoryId || null });
+  // A newer request (e.g. the reset after a barcode scan) superseded this one
+  if (seq !== loadProductsSeq) return;
   if (res.status !== 200) {
     grid.innerHTML = `<div class="empty-state">${t('Could not load products ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
     return;
@@ -448,15 +546,87 @@ async function loadProducts(query = '') {
   renderProducts();
 }
 
+// ── Barcode scan: exact product SKU or batch SKU (e.g. 32423-011) ───────
+let scanIdleTimer = null;
+
+function findScanMatch(code) {
+  const lower = code.toLowerCase();
+  return products.find((p) =>
+    (p.sku && p.sku.toLowerCase() === lower) ||
+    (p.layers || []).some((l) => (l.batch_sku || '').toLowerCase() === lower)
+  ) || null;
+}
+
+function clearSearchAfterScan() {
+  clearTimeout(searchDebounce);
+  clearTimeout(scanIdleTimer);
+  searchInput.value = '';
+  loadProducts('');
+}
+
+// Returns true when the code resolved to a product and was routed to the cart.
+async function addByScan(code, { remote = true } = {}) {
+  if (!code) return false;
+  let product = findScanMatch(code);
+  if (!product && remote) {
+    const res = await API.productBySku(code);
+    const card = res.status === 200 ? (res.body?.data || null) : null;
+    if (card && card.id) {
+      product = products.find((p) => p.id === card.id) || card;
+      if (!products.includes(product)) products.push(product);
+    }
+  }
+  if (!product) return false;
+  if (Number(product.stock_quantity) <= 0 && !product.is_rental && !product.is_dynamic_pricing && !needsQuickSetup(product)) {
+    showToast(t('{name} is out of stock', { name: product.name }), 'error');
+    clearSearchAfterScan();
+    return true;
+  }
+  routeAddToCart(product.id);
+  clearSearchAfterScan();
+  return true;
+}
+
 searchInput.addEventListener('input', () => {
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => loadProducts(searchInput.value.trim()), 300);
+  // Scanners without an Enter suffix: add an exact match once typing pauses.
+  // Waiting avoids adding SKU "32423" while "32423-011" is still being typed.
+  clearTimeout(scanIdleTimer);
+  const q = searchInput.value.trim();
+  if (q) {
+    scanIdleTimer = setTimeout(() => {
+      if (searchInput.value.trim() === q) addByScan(q, { remote: false });
+    }, 250);
+  }
 });
+
+searchInput.addEventListener('keydown', async (e) => {
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  clearTimeout(scanIdleTimer);
+  const q = searchInput.value.trim();
+  if (!q) return;
+  if (await addByScan(q)) return;
+  // No exact code — add the single search hit if there is exactly one
+  clearTimeout(searchDebounce);
+  await loadProducts(q);
+  if (products.length === 1) { routeAddToCart(products[0].id); clearSearchAfterScan(); }
+  else if (!products.length) showToast(t('No product found for "{code}"', { code: q }), 'error');
+});
+
+// Keep the search box focused so barcode scans always land there
+function focusSearch() {
+  setTimeout(() => {
+    if (!isAnyPosModalOpen() && searchInput.offsetParent !== null) searchInput.focus();
+  }, 60);
+}
 
 // ── Add-to-cart routing (plain product vs. rental vs. dynamic pricing) ──
 function routeAddToCart(productId) {
   const product = products.find((p) => p.id === productId);
   if (!product) return;
+  if (needsQuickSetup(product)) return void openQuickSetupModal(product);
   if (product.is_rental) return void addRentalToCart(product);
   if (product.is_dynamic_pricing) return void addDynamicToCart(product);
   return addToCart(productId);
@@ -469,24 +639,143 @@ function playBeep() {
   _beep.play().catch(() => {});
 }
 
-function addToCart(productId) {
+// ── Fly-to-cart animation ────────────────────────────────────────────────
+// The clicked card is remembered so the animation plays once the item is
+// actually added (after any price / rental / dynamic-price prompts resolve).
+let flySrc = null;
+let flyInFlight = 0;
+let flyPendingDiff = 0;
+
+function setFlySource(card) {
+  flySrc = { card, productId: Number(card.dataset.id), at: Date.now() };
+}
+
+function flyToCart(productId) {
+  const src = flySrc;
+  flySrc = null;
+  if (!src || src.productId !== productId || !src.card.isConnected) return;
+  if (Date.now() - src.at > 60000) return;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+  const target = document.getElementById('cart-icon');
+  const visual = src.card.querySelector('.product-thumb');
+  if (!target || !visual) return;
+
+  const from = visual.getBoundingClientRect();
+  const to = target.getBoundingClientRect();
+  if (!from.width || !to.width) return;
+
+  src.card.classList.remove('fly-press');
+  void src.card.offsetWidth;
+  src.card.classList.add('fly-press');
+
+  const ghost = document.createElement('div');
+  ghost.className = 'fly-to-cart';
+  ghost.innerHTML = visual.innerHTML;
+  Object.assign(ghost.style, {
+    left: from.left + 'px', top: from.top + 'px',
+    width: from.width + 'px', height: from.height + 'px',
+  });
+  document.body.appendChild(ghost);
+
+  // Parabolic "jump" path: rises above the start, then drops into the cart icon
+  const dx = (to.left + to.width / 2) - (from.left + from.width / 2);
+  const dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+  const jump = Math.max(90, Math.abs(dx) * 0.25);
+  const endScale = Math.max(0.08, 28 / from.width);
+  const steps = 14;
+  const frames = [];
+  for (let i = 0; i <= steps; i++) {
+    const p = i / steps;
+    const x = dx * p;
+    const y = dy * p - jump * 4 * p * (1 - p);
+    const s = 1 + (endScale - 1) * p * p;
+    frames.push({
+      transform: `translate(${x}px, ${y}px) scale(${s}) rotate(${25 * p}deg)`,
+      opacity: p > 0.85 ? 1 - (p - 0.85) / 0.15 * 0.6 : 1,
+      offset: p,
+    });
+  }
+
+  flyInFlight++;
+  const anim = ghost.animate(frames, { duration: 700, easing: 'cubic-bezier(.45,.05,.55,.95)', fill: 'forwards' });
+  anim.onfinish = anim.oncancel = () => {
+    ghost.remove();
+    flyInFlight = Math.max(0, flyInFlight - 1);
+    if (!flyInFlight && flyPendingDiff > 0) {
+      popCartBadge(flyPendingDiff);
+      flyPendingDiff = 0;
+    }
+    const icon = document.getElementById('cart-icon');
+    if (!icon) return;
+    icon.classList.remove('cart-bump');
+    void icon.offsetWidth;
+    icon.classList.add('cart-bump');
+    icon.addEventListener('animationend', () => icon.classList.remove('cart-bump'), { once: true });
+  };
+}
+
+// ── Cart icon counter — pops and shows "+N" when the count goes up ───────
+let cartBadgeCount = 0;
+
+function updateCartBadge() {
+  const badge = document.getElementById('cart-count-badge');
+  if (!badge) return;
+  const count = cart.reduce((s, c) => s + (Number(c.qty) || 0), 0);
+  const diff = count - cartBadgeCount;
+  cartBadgeCount = count;
+
+  badge.textContent = count > 999 ? '999+' : String(+count.toFixed(2));
+  badge.style.display = count > 0 ? '' : 'none';
+  if (diff <= 0) return;
+  // A product is mid-flight — pop when it lands in the cart instead
+  if (flyInFlight) { flyPendingDiff += diff; return; }
+  popCartBadge(diff);
+}
+
+function popCartBadge(diff) {
+  const badge = document.getElementById('cart-count-badge');
+  if (!badge || diff <= 0 || badge.style.display === 'none') return;
+  badge.classList.remove('count-pop');
+  void badge.offsetWidth;
+  badge.classList.add('count-pop');
+
+  const plus = document.createElement('span');
+  plus.className = 'cart-count-plus';
+  plus.textContent = `+${+diff.toFixed(2)}`;
+  badge.parentNode.appendChild(plus);
+  plus.addEventListener('animationend', () => plus.remove(), { once: true });
+}
+
+async function addToCart(productId) {
   const product = products.find((p) => p.id === productId);
   if (!product) return;
 
+  // Changeable-price products: cashier confirms / edits the selling price first
+  let changeablePrice = null;
+  if (product.is_changeable_price) {
+    const result = await pickDynamicPrice(product, { prefill: unitPrice(product) });
+    if (!result) return;
+    changeablePrice = Math.round(result.amount * 100) / 100;
+  }
+
   playBeep();
 
-  const cartKey = `p-${productId}`;
+  // Changeable-price items merge only with lines sold at the same price
+  const cartKey = changeablePrice != null ? `p-${productId}-cp-${changeablePrice}` : `p-${productId}`;
   const existing = cart.find((c) => c.cartKey === cartKey);
   if (existing) {
-    if (existing.qty < product.stock_quantity) existing.qty += 1;
-    else showToast(t('No more stock available for this item.'), 'error');
+    if (existing.qty < product.stock_quantity) {
+      existing.qty += 1;
+      flyToCart(productId);
+    } else showToast(t('No more stock available for this item.'), 'error');
     renderCart();
     return;
   }
 
-  let price = unitPrice(product);
-  let customPrice = null;
-  if (posSettings.choose_price) {
+  let price = changeablePrice ?? unitPrice(product);
+  let customPrice = changeablePrice;
+  if (changeablePrice == null && posSettings.choose_price) {
     const input = window.prompt(t('Enter unit price for {name}:', { name: product.name }), price.toFixed(2));
     if (input === null) return; // cashier cancelled — don't add the item
     const parsed = parseFloat(input);
@@ -519,6 +808,7 @@ function addToCart(productId) {
     warrantyDate,
     itemDiscountPercent: 0,
   });
+  flyToCart(productId);
   renderCart();
 }
 
@@ -543,9 +833,12 @@ async function addRentalToCart(product) {
   const existing = cart.find((c) => c.cartKey === cartKey);
 
   if (existing) {
-    if (existing.qty < product.stock_quantity) existing.qty += 1;
-    else showToast(t('No more stock available for this rental.'), 'error');
+    if (existing.qty < product.stock_quantity) {
+      existing.qty += 1;
+      flyToCart(product.id);
+    } else showToast(t('No more stock available for this rental.'), 'error');
   } else {
+    flyToCart(product.id);
     cart.push({
       cartKey,
       product_id: product.id,
@@ -584,6 +877,7 @@ async function addDynamicToCart(product) {
     customUnitPrice: linked ? null : result.amount,
     itemDiscountPercent: 0,
   });
+  flyToCart(product.id);
   renderCart();
 }
 
@@ -615,6 +909,7 @@ function lineTotal(c) {
 }
 
 function renderCart() {
+  updateCartBadge();
   if (!cart.length) {
     cartItemsEl.innerHTML = `<div class="cart-empty">${t('Cart is empty. Click a product to add it.')}</div>`;
   } else {
@@ -685,9 +980,88 @@ document.querySelectorAll('.pm-btn').forEach((btn) => {
     btn.classList.add('active');
     paymentMethod = btn.dataset.method;
     tenderSection.style.display = paymentMethod === 'cash' ? '' : 'none';
+    syncChequeSection();
     updateCheckoutTender();
+    if (paymentMethod === 'cheque' && selectedCustomer) document.getElementById('cheque-number-input').focus();
   });
 });
+
+// ── Cheque payment ───────────────────────────────────────────────────────
+// A cheque sale needs a customer, the cheque number and the date on the cheque.
+// The money reaches an account only when the cheque is claimed (Sales → Cheques).
+function syncChequeSection() {
+  document.getElementById('cheque-section').hidden = paymentMethod !== 'cheque';
+  document.getElementById('cheque-customer-notice').hidden = paymentMethod !== 'cheque' || !!selectedCustomer;
+  syncCreditSection();
+}
+
+// ── Credit payment ───────────────────────────────────────────────────────
+// A credit sale needs a customer and can't take them past their credit limit
+// (the server checks this too). The money is received later — Sales → Pending
+// Credits, or the customer's Credit / Due tab in Contacts.
+
+function syncCreditSection() {
+  const isCredit = paymentMethod === 'credit';
+  document.getElementById('credit-section').hidden = !isCredit;
+  document.getElementById('credit-customer-notice').hidden = !isCredit || !!selectedCustomer;
+  renderCreditLimitBox();
+}
+
+// How much this sale would go past the customer's available credit (0 = fits, or no limit)
+function creditOverBy() {
+  const info = creditInfo.data;
+  if (!selectedCustomer || creditInfo.customerId !== selectedCustomer.id || !info || info.credit_limit == null) return 0;
+  const over = Math.round((amountDueAfterGiftCard() - Number(info.credit_available || 0)) * 100) / 100;
+  return over > 0.005 ? over : 0;
+}
+
+function renderCreditLimitBox() {
+  const box = document.getElementById('credit-limit-box');
+  if (paymentMethod !== 'credit' || !selectedCustomer) { box.hidden = true; return; }
+
+  const custId = selectedCustomer.id;
+  if (creditInfo.customerId !== custId) {
+    creditInfo = { customerId: custId, data: null };
+    box.className = 'co-credit-box';
+    box.innerHTML = `<span><i class="fa-solid fa-spinner fa-spin"></i> ${t('Checking credit limit…')}</span>`;
+    box.hidden = false;
+    API.customer(custId).then((res) => {
+      if (creditInfo.customerId !== custId) return;
+      creditInfo.data = res.status === 200 ? res.body.data : { credit_limit: null, credit_outstanding: 0 };
+      renderCreditLimitBox();
+      updateCheckoutTender();
+    });
+    return;
+  }
+  const info = creditInfo.data;
+  if (!info) return; // still loading
+
+  const owed = Number(info.credit_outstanding) || 0;
+  const row = (label, val, cls = '') => `<div class="co-credit-row ${cls}"><span>${label}</span><strong>${val}</strong></div>`;
+  if (info.credit_limit == null) {
+    box.className = 'co-credit-box';
+    box.innerHTML = row(t('Credit limit'), t('No limit')) + row(t('Outstanding'), money(owed));
+    box.hidden = false;
+    return;
+  }
+
+  const over = creditOverBy();
+  box.className = `co-credit-box${over > 0 ? ' is-over' : ''}`;
+  box.innerHTML = row(t('Credit limit'), money(info.credit_limit))
+    + row(t('Outstanding'), money(owed))
+    + row(t('Available'), money(info.credit_available), 'avail')
+    + (over > 0 ? `<div class="co-credit-warn"><i class="fa-solid fa-triangle-exclamation"></i> ${t('This sale ({total}) is {over} over the available credit.', { total: money(amountDueAfterGiftCard()), over: money(over) })}</div>` : '');
+  box.hidden = false;
+}
+
+function resetChequeFields() {
+  document.getElementById('cheque-number-input').value = '';
+  document.getElementById('cheque-bank-input').value = '';
+  // Defaults to today — most cheques aren't post-dated
+  const d = new Date();
+  document.getElementById('cheque-date-input').value =
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // ── Customer select ──────────────────────────────────────────────────────
 function refreshCheckoutCustomerBox() {
@@ -704,6 +1078,7 @@ function refreshCheckoutCustomerBox() {
     cartCustomerChipEl.hidden = true;
     cartCustomerEmptyEl.hidden = false;
   }
+  syncChequeSection();
 }
 
 function selectCustomer(customer) {
@@ -982,18 +1357,19 @@ dynamicConfirmBtn.addEventListener('click', () => {
   resolve({ amount });
 });
 
-function pickDynamicPrice(product) {
+// Also used by changeable-price products, with the catalog price as `prefill`.
+function pickDynamicPrice(product, { prefill = null } = {}) {
   return new Promise((resolve) => {
     currentDynamicProduct = product;
     dynamicSubtitleEl.textContent = product.name || '';
     dynamicLabelEl.textContent = product.dynamic_price_qty_linked ? t('Amount') : t('Price');
-    dynamicAmountInput.value = '';
+    dynamicAmountInput.value = prefill != null ? Number(prefill).toFixed(2) : '';
     dynamicErrorEl.classList.remove('show');
     updateDynamicHint();
 
     pendingDynamicResolve = resolve;
     dynamicModal.classList.add('show');
-    setTimeout(() => dynamicAmountInput.focus(), 50);
+    setTimeout(() => { dynamicAmountInput.focus(); dynamicAmountInput.select(); }, 50);
   });
 }
 
@@ -1004,6 +1380,7 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'dynamic-modal') closeDynamicModal();
     if (btn.dataset.close === 'receipt-modal') closeReceiptModal();
     if (btn.dataset.close === 'add-product-modal') closeAddProductModal();
+    if (btn.dataset.close === 'quick-setup-modal') closeQuickSetupModal();
     if (btn.dataset.close === 'customer-picker-modal') closeCustomerPickerModal();
     if (btn.dataset.close === 'checkout-modal') closeCheckoutModal();
     if (btn.dataset.close === 'refund-modal') closeRefundModal();
@@ -1012,12 +1389,13 @@ document.querySelectorAll('.modal-backdrop [data-close]').forEach((btn) => {
     if (btn.dataset.close === 'password-confirm-modal') closePasswordConfirmModal();
   });
 });
-[rentalModal, dynamicModal, receiptModal, addProductModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
+[rentalModal, dynamicModal, receiptModal, addProductModal, quickSetupModal, customerPickerModal, checkoutModal, refundModal, eodModal, cashWithdrawModal, passwordConfirmModal].forEach((bg) => {
   bg.addEventListener('click', (e) => {
     if (e.target !== bg) return;
     if (bg === rentalModal) closeRentalModal();
     else if (bg === dynamicModal) closeDynamicModal();
     else if (bg === addProductModal) closeAddProductModal();
+    else if (bg === quickSetupModal) closeQuickSetupModal();
     else if (bg === customerPickerModal) closeCustomerPickerModal();
     else if (bg === checkoutModal) closeCheckoutModal();
     else if (bg === refundModal) closeRefundModal();
@@ -1033,6 +1411,7 @@ document.addEventListener('keydown', (e) => {
   const couponCheck = document.getElementById('coupon-check-modal');
   if (couponCheck.classList.contains('show')) couponCheck.classList.remove('show');
   else if (giftCheck.classList.contains('show')) giftCheck.classList.remove('show');
+  else if (quickSetupModal.classList.contains('show')) closeQuickSetupModal();
   else if (rentalModal.classList.contains('show')) closeRentalModal();
   else if (dynamicModal.classList.contains('show')) closeDynamicModal();
   else if (customerPickerModal.classList.contains('show')) closeCustomerPickerModal();
@@ -1298,16 +1677,26 @@ function fmtQty(n) {
   return (Number(n) || 0).toFixed(3).replace(/\.?0+$/, '');
 }
 
-function warrantyLabel(item) {
-  if (!item.warranty_type) return null;
-  if (item.warranty_type === 'lifetime') return t('Lifetime warranty');
-  return item.warranty_expires_at ? t('Warranty until {date}', { date: item.warranty_expires_at }) : t('Warranty');
+// Printed-receipt labels follow the Receipt Layout Editor's print language
+// (POS setting receipt_language), not the app UI language — js/navbar.js ReceiptLabels.
+function receiptLang() {
+  return window.ReceiptLabels ? window.ReceiptLabels.langFrom(posSettings) : 'en';
 }
 
-function rentalLabel(item) {
+function receiptT() {
+  return window.ReceiptLabels ? window.ReceiptLabels.forLang(receiptLang()) : tReceipt;
+}
+
+function warrantyLabel(item, rt) {
+  if (!item.warranty_type) return null;
+  if (item.warranty_type === 'lifetime') return rt('Lifetime warranty');
+  return item.warranty_expires_at ? rt('Warranty until {date}', { date: item.warranty_expires_at }) : rt('Warranty');
+}
+
+function rentalLabel(item, rt) {
   if (!item.rental_return_date) return null;
-  let s = t('Return {date}', { date: item.rental_return_date }) + ' · ' + t('Daily {rate}', { rate: money(item.rental_daily_rate) });
-  if (item.rental_late_fee_multiplier > 0) s += ' · ' + t('Late {mult}× rate/day', { mult: item.rental_late_fee_multiplier });
+  let s = rt('Return {date}', { date: item.rental_return_date }) + ' · ' + rt('Daily {rate}', { rate: money(item.rental_daily_rate) });
+  if (item.rental_late_fee_multiplier > 0) s += ' · ' + rt('Late {mult}× rate/day', { mult: item.rental_late_fee_multiplier });
   return s;
 }
 
@@ -1326,12 +1715,13 @@ function fmtPct(pct) {
 }
 
 function buildReceiptData(sale) {
+  const rt = receiptT();
   const soldAtDate = sale.sold_at ? new Date(sale.sold_at) : null;
   return {
     saleNumber: sale.sale_number,
     soldAt: soldAtDate ? soldAtDate.toLocaleString() : '',
     soldAtDate: soldAtDate ? soldAtDate.toLocaleDateString() : '',
-    paymentLabel: sale.payment_method_label || sale.payment_method,
+    paymentLabel: rt(sale.payment_method_label || sale.payment_method || ''),
     customerName: sale.customer_name || '',
     cashierName: sale.cashier?.name || '',
     notes: sale.notes || '',
@@ -1354,26 +1744,30 @@ function buildReceiptData(sale) {
       unit: it.unit_sell_price,
       line: it.line_total,
       discountPct: itemDiscountPctFromSale(it),
-      warranty: warrantyLabel(it),
-      rental: rentalLabel(it),
+      warranty: warrantyLabel(it, rt),
+      rental: rentalLabel(it, rt),
     })),
   };
 }
 
 function renderBillHtml(data) {
+  const rt = receiptT();
   const showName = posSettings.show_business_name !== false;
   const showAddr = !!posSettings.show_business_address;
   const businessName = posSettings.business_name || '';
   const addr = posSettings.receipt_address_line || '';
   const header = posSettings.receipt_header || '';
-  const footer = posSettings.receipt_footer || t('Thank you for your purchase!');
+  const footer = posSettings.receipt_footer || rt('Thank you for your purchase!');
+  const logoUrl = posSettings.receipt_logo_url || '';
+  const logoGap = window.ReceiptPrinter.logoGapFrom(posSettings);
+  const logoStyle = window.ReceiptPrinter.logoImgStyle(posSettings.receipt_logo_size);
 
   const rows = data.items.map((it) => {
     let row = `<tr>
       <td><div class="rd-item-name">${esc(it.name)}</div>${it.sku ? `<div class="rd-item-sub">${esc(it.sku)}</div>` : ''}</td>
       <td class="rd-center-col">${esc(fmtQty(it.qty))}</td>
-      <td class="rd-right">${esc(money(it.unit))}</td>
-      <td class="rd-center-col${it.discountPct > 0.05 ? ' rd-discount' : ''}">${it.discountPct > 0.05 ? esc(fmtPct(it.discountPct)) + '%' : '—'}</td>
+      <td class="rd-right rd-col-price">${esc(money(it.unit))}</td>
+      <td class="rd-center-col rd-col-disc${it.discountPct > 0.05 ? ' rd-discount' : ''}">${it.discountPct > 0.05 ? esc(fmtPct(it.discountPct)) + '%' : '—'}</td>
       <td class="rd-right"><strong>${esc(money(it.line))}</strong></td>
     </tr>`;
     if (it.warranty) row += `<tr><td colspan="5" class="rd-note rd-warranty">${esc(it.warranty)}</td></tr>`;
@@ -1381,81 +1775,102 @@ function renderBillHtml(data) {
     return row;
   }).join('');
 
-  let totals = '';
-  if (data.discountAmount > 0.001 || data.couponDiscount > 0.001) {
-    totals += `<div class="rd-row"><span>${t('Subtotal')}</span><span>${esc(money(data.subtotal))}</span></div>`;
-  }
+  let totals = `<div class="rd-row"><span>${esc(rt('Subtotal'))}</span><span>${esc(money(data.subtotal))}</span></div>`;
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
-    totals += `<div class="rd-row"><span>${t('Discount')}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Discount'))}${pctLabel}</span><span>&minus;${esc(money(data.discountAmount))}</span></div>`;
   }
   if (data.couponDiscount > 0.001) {
-    totals += `<div class="rd-row"><span>${t('Coupon')}${data.couponCode ? ` ${esc(data.couponCode)}` : ''}</span><span>&minus;${esc(money(data.couponDiscount))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Coupon'))}${data.couponCode ? ` ${esc(data.couponCode)}` : ''}</span><span>&minus;${esc(money(data.couponDiscount))}</span></div>`;
   }
-  totals += `<div class="rd-row rd-total"><span>${t('Total')}</span><span>${esc(money(data.total))}</span></div>`;
+  totals += `<div class="rd-row rd-total"><span>${esc(rt('Total'))}</span><span>${esc(money(data.total))}</span></div>`;
   if (data.giftCardAmount > 0.001) {
-    totals += `<div class="rd-row"><span>${t('Gift card')}${data.giftCardCode ? ` ${esc(data.giftCardCode)}` : ''}</span><span>&minus;${esc(money(data.giftCardAmount))}</span></div>`;
-    if (data.giftCardBalance != null) totals += `<div class="rd-row"><span>${t('Gift card balance')}</span><span>${esc(money(data.giftCardBalance))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Gift card'))}${data.giftCardCode ? ` ${esc(data.giftCardCode)}` : ''}</span><span>&minus;${esc(money(data.giftCardAmount))}</span></div>`;
+    if (data.giftCardBalance != null) totals += `<div class="rd-row"><span>${esc(rt('Gift card balance'))}</span><span>${esc(money(data.giftCardBalance))}</span></div>`;
   }
   if (data.amountTendered != null) {
-    totals += `<div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(money(data.amountTendered))}</span></div>`;
-    totals += `<div class="rd-row"><span>${t('Change')}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
+    totals += `<div class="rd-row"><span>${esc(rt('Cash Received'))}</span><span>${esc(money(data.amountTendered))}</span></div>`;
+  } else {
+    const paidVia = data.giftCardAmount > 0.001 ? Math.max(0, Number(data.total) - data.giftCardAmount) : (data.amountPaid ?? data.total);
+    totals += `<div class="rd-row"><span>${esc(rt('Paid'))}${data.paymentLabel ? ` (${esc(data.paymentLabel)})` : ''}</span><span>${esc(money(paidVia))}</span></div>`;
+  }
+  if (data.amountTendered != null || Number(data.changeAmount) > 0.005) {
+    totals += `<div class="rd-row"><span>${esc(rt('Change'))}</span><span>${esc(money(data.changeAmount || 0))}</span></div>`;
   }
 
   return `
     <div class="rd-center">
+      ${logoUrl ? `<div style="margin-bottom:${logoGap}mm"><img src="${esc(logoUrl)}" alt="" style="${logoStyle};display:block;margin:0 auto"></div>` : ''}
       ${showName ? `<div class="rd-business">${esc(businessName)}</div>` : ''}
       ${showAddr && addr ? `<div class="rd-meta">${esc(addr)}</div>` : ''}
       ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
     </div>
     <hr>
-    <div class="rd-row"><span>${t('Receipt #')}</span><strong>${esc(data.saleNumber)}</strong></div>
-    <div class="rd-row"><span>${t('Date & Time')}</span><strong>${esc(data.soldAt)}</strong></div>
-    <div class="rd-row"><span>${t('Payment')}</span><strong>${esc(data.paymentLabel)}</strong></div>
-    ${data.customerName ? `<div class="rd-row"><span>${t('Customer')}</span><strong>${esc(data.customerName)}</strong></div>` : ''}
-    ${data.cashierName ? `<div class="rd-row"><span>${t('Cashier')}</span><strong>${esc(data.cashierName)}</strong></div>` : ''}
+    <div class="rd-row"><span>${esc(rt('Receipt #'))}</span><strong>${esc(data.saleNumber)}</strong></div>
+    <div class="rd-row"><span>${esc(rt('Date & Time'))}</span><strong>${esc(data.soldAt)}</strong></div>
+    <div class="rd-row"><span>${esc(rt('Payment'))}</span><strong>${esc(data.paymentLabel)}</strong></div>
+    ${data.customerName ? `<div class="rd-row"><span>${esc(rt('Customer'))}</span><strong>${esc(data.customerName)}</strong></div>` : ''}
+    ${data.cashierName ? `<div class="rd-row"><span>${esc(rt('Cashier'))}</span><strong>${esc(data.cashierName)}</strong></div>` : ''}
     <hr>
     <table>
-      <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right">${t('Price')}</th><th class="rd-center-col">${t('Disc')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
+      <thead><tr><th>${esc(rt('Item'))}</th><th class="rd-center-col">${esc(rt('Qty'))}</th><th class="rd-right rd-col-price">${esc(rt('Price'))}</th><th class="rd-center-col rd-col-disc">${esc(rt('Disc'))}</th><th class="rd-right">${esc(rt('Amount'))}</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
     <hr>
     ${totals}
-    ${data.notes ? `<hr><div class="rd-note">${t('Notes')}: ${esc(data.notes)}</div>` : ''}
+    ${data.notes ? `<hr><div class="rd-note">${esc(rt('Notes'))}: ${esc(data.notes)}</div>` : ''}
     <hr>
     <div class="rd-footer">${esc(footer)}</div>
   `;
 }
 
-function receiptDocStyles() {
-  const widthMm = posSettings.receipt_paper_width === '58' ? 58 : 80;
-  return `
-    @page { size: ${widthMm}mm auto; margin: 4mm; }
-    * { box-sizing: border-box; }
-    body { font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm}mm; }
-    .rd-center { text-align:center; }
-    .rd-business { font-weight:bold; font-size:13px; }
-    .rd-meta { font-size:10px; margin:1px 0; }
-    hr { border:none; border-top:1px dashed #000; margin:8px 0; }
-    table { width:100%; border-collapse:collapse; font-size:10px; margin:6px 0; }
-    th { text-align:left; font-size:9px; padding:2px 2px 4px; border-bottom:1px solid #000; }
-    td { padding:3px 2px; vertical-align:top; }
-    .rd-item-name { font-weight:bold; font-size:11px; }
-    .rd-item-sub { font-size:9px; color:#555; margin-top:1px; }
-    .rd-right { text-align:right; }
-    .rd-center-col { text-align:center; }
-    .rd-row { display:flex; justify-content:space-between; margin:2px 0; font-size:11px; }
-    .rd-total { font-weight:bold; font-size:13px; border-top:1px solid #000; padding-top:4px; margin-top:4px; }
-    .rd-footer { text-align:center; font-size:10px; margin-top:6px; }
-    .rd-note { font-size:9px; padding:1px 0 4px; }
-    .rd-warranty { color:#0369a1; }
-    .rd-rental { color:#0f766e; }
-    .rd-discount { color:#b45309; }
-  `;
+// Paper width comes from Settings → Printer (local, per device — js/navbar.js ReceiptPrinter)
+function buildFullReceiptDocument(data, paperWidth = 80) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(data.saleNumber || '')}</title><style>${window.ReceiptPrinter.docStyles(paperWidth)}</style></head><body>${renderBillHtml(data)}</body></html>`;
 }
 
-function buildFullReceiptDocument(data) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${esc(data.saleNumber || '')}</title><style>${receiptDocStyles()}</style></head><body>${renderBillHtml(data)}</body></html>`;
+// Flat receipt data for ESC/POS printing (main.js _escposBuffer)
+function buildEscposReceiptData(data) {
+  return {
+    logoUrl: posSettings.receipt_logo_url || '',
+    logoGap: window.ReceiptPrinter.logoGapFrom(posSettings),
+    logoSize: window.ReceiptPrinter.logoSizeFrom(posSettings),
+    businessName: posSettings.show_business_name !== false ? (posSettings.business_name || '') : '',
+    address: posSettings.show_business_address ? (posSettings.receipt_address_line || '') : '',
+    header: posSettings.receipt_header || '',
+    footer: posSettings.receipt_footer || 'Thank you for your purchase!',
+    lang: receiptLang(),
+    currency: (posSettings.currency || 'LKR').toUpperCase(),
+    currencyPosition: posSettings.currency_position === 'before' ? 'before' : 'after',
+    saleNumber: data.saleNumber || '',
+    date: data.soldAt || '',
+    customer: data.customerName || '',
+    cashier: data.cashierName || '',
+    items: data.items.map((it) => {
+      const gross = (Number(it.unit) || 0) * (Number(it.qty) || 0);
+      return {
+        name: it.name || '',
+        qty: Number(it.qty) || 0,
+        price: Number(it.unit) || 0,
+        total: Number(it.line) || 0,
+        discount: Math.max(0, Math.round((gross - (Number(it.line) || 0)) * 100) / 100), // unit is pre-discount
+      };
+    }),
+    subtotal: Number(data.subtotal) || 0,
+    discount: Number(data.discountAmount) || 0,
+    discountPct: data.discountPercent || '',
+    couponDiscount: data.couponDiscount,
+    couponCode: data.couponCode,
+    total: Number(data.total) || 0,
+    giftCardAmount: data.giftCardAmount,
+    giftCardCode: data.giftCardCode,
+    giftCardBalance: data.giftCardBalance,
+    paid: Number(data.amountPaid ?? data.total) || 0,
+    tendered: data.amountTendered != null ? Number(data.amountTendered) : null,
+    change: Number(data.changeAmount) || 0,
+    paymentMethod: data.paymentLabel || '',
+    notes: data.notes || '',
+  };
 }
 
 // Builds the "Invoice" mode document using the SAME 5 real templates (Classic /
@@ -1492,10 +1907,10 @@ function buildInvoiceDocument(data) {
     total: esc(money(it.line)),
   }));
 
-  const totalsLines = [{ label: esc(t('Subtotal')), value: esc(money(data.subtotal)) }];
+  const totalsLines = [{ label: esc(tReceipt('Subtotal')), value: esc(money(data.subtotal)) }];
   if (data.discountAmount > 0.001) {
     const pctLabel = data.discountPercent ? ` (${data.discountPercent}%)` : '';
-    totalsLines.push({ label: esc(t('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
+    totalsLines.push({ label: esc(tReceipt('Discount') + pctLabel), value: '−' + esc(money(data.discountAmount)), color: '#ef4444' });
   }
   if (data.couponDiscount > 0.001) {
     totalsLines.push({ label: esc(`${t('Coupon')} ${data.couponCode}`.trim()), value: '−' + esc(money(data.couponDiscount)), color: '#ef4444' });
@@ -1524,7 +1939,7 @@ function buildInvoiceDocument(data) {
     billToLines: '',
     items,
     totalsLines,
-    grandLabel: esc(t('Total')),
+    grandLabel: esc(tReceipt('Total')),
     grandValue: esc(money(data.total)),
     notesHtml: data.notes ? esc(data.notes) : '',
     footerRight: '',
@@ -1544,9 +1959,13 @@ function renderInvoicePreview(built) {
   receiptPreviewEl.querySelector('iframe').srcdoc = built.html;
 }
 
-function showReceiptModal(sale) {
+// afterSale: called from checkout — honours Settings → Printer "Show receipt
+// preview after sale"; when that is off the bill prints straight away, no popup.
+async function showReceiptModal(sale, { afterSale = false } = {}) {
   const mode = posSettings.receipt_mode === 'invoice' ? 'invoice' : 'bill';
   const data = buildReceiptData(sale);
+  const printerCfg = await window.electronAPI.getPrinterConfig().catch(() => null) || {};
+  const paperWidth = printerCfg.paperWidth === 58 ? 58 : 80;
   receiptSaleNumberEl.textContent = sale.sale_number || '';
 
   const built = mode === 'invoice' ? buildInvoiceDocument(data) : null;
@@ -1554,8 +1973,17 @@ function showReceiptModal(sale) {
     renderInvoicePreview(built);
     currentReceiptDoc = { mode: 'invoice', data, html: built.html };
   } else {
-    receiptPreviewEl.innerHTML = `<div class="receipt-doc receipt-doc--bill">${renderBillHtml(data)}</div>`;
-    currentReceiptDoc = { mode: 'bill', data, html: buildFullReceiptDocument(data) };
+    receiptPreviewEl.innerHTML = `<div class="receipt-doc receipt-doc--bill" data-paper="${paperWidth}" style="max-width:${window.ReceiptPrinter.previewWidthPx(paperWidth)}px">${renderBillHtml(data)}</div>`;
+    currentReceiptDoc = { mode: 'bill', data, html: buildFullReceiptDocument(data, paperWidth) };
+
+    if (afterSale && printerCfg.showPreview === false) {
+      const res = await window.ReceiptPrinter.print({
+        html: currentReceiptDoc.html, escpos: buildEscposReceiptData(data), cfg: printerCfg, auto: true,
+      });
+      if (!res.ok) showToast(res.message, 'error');
+      currentReceiptDoc = null;
+      return;
+    }
   }
   receiptModal.classList.add('show');
 }
@@ -1569,7 +1997,15 @@ receiptPrintBtn.addEventListener('click', async () => {
   if (!currentReceiptDoc) return;
   receiptPrintBtn.disabled = true;
   try {
-    await window.electronAPI.printHtml(currentReceiptDoc.html);
+    if (currentReceiptDoc.mode === 'bill') {
+      // Thermal bill → configured printer (ESC/POS / silent), or true-size PDF preview when none is set
+      const res = await window.ReceiptPrinter.print({
+        html: currentReceiptDoc.html, escpos: buildEscposReceiptData(currentReceiptDoc.data),
+      });
+      if (!res.ok && !res.cancelled) showToast(res.message, 'error');
+    } else {
+      await window.electronAPI.printHtml(currentReceiptDoc.html); // A4/A5 invoice → system print dialog
+    }
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -1836,6 +2272,7 @@ document.getElementById('co-gc-remove').addEventListener('click', () => {
 function updateCheckoutTender() {
   const total = amountDueAfterGiftCard();
   coAmountDueEl.textContent = money(total);
+  document.getElementById('cheque-amount').textContent = money(total);
   renderCheckoutCoupon();
   renderCheckoutGiftCard();
 
@@ -1845,7 +2282,8 @@ function updateCheckoutTender() {
   coChangeEl.classList.toggle('negative', change < 0);
 
   const insufficientCash = paymentMethod === 'cash' && change < -0.001;
-  checkoutCompleteBtn.disabled = cart.length === 0 || insufficientCash;
+  if (paymentMethod === 'credit') renderCreditLimitBox(); // the due changes with coupons / gift cards
+  checkoutCompleteBtn.disabled = cart.length === 0 || insufficientCash || creditOverBy() > 0;
 }
 
 discountInput.addEventListener('input', () => { renderCart(); refreshCheckoutSummary(); });
@@ -1855,9 +2293,16 @@ numpadEl.addEventListener('click', (e) => {
   if (!btn) return;
   const key = btn.dataset.key;
   let val = amountReceivedInput.value;
+  // Amount still holds the auto-filled due → the next digit/dot starts a fresh entry
+  const isPrefilled = val === amountDueAfterGiftCard().toFixed(2);
   if (key === 'back') val = val.slice(0, -1);
-  else if (key === '.') { if (!val.includes('.')) val += '.'; }
-  else val += key;
+  else if (key === '.') { if (isPrefilled) val = '0.'; else if (!val.includes('.')) val += '.'; }
+  else {
+    val = (isPrefilled || val === '0' || val === '') ? key : val + key;
+    // Max 2 decimal places
+    const parts = val.split('.');
+    if (parts[1] && parts[1].length > 2) val = parts[0] + '.' + parts[1].slice(0, 2);
+  }
   amountReceivedInput.value = val;
   updateCheckoutTender();
 });
@@ -1886,6 +2331,10 @@ function openCheckoutModal() {
   document.querySelector('#checkout-payment-methods .pm-btn[data-method="cash"]').classList.add('active');
   paymentMethod = 'cash';
   tenderSection.style.display = '';
+  resetChequeFields();
+  document.getElementById('credit-due-date-input').value = '';
+  creditInfo = { customerId: null, data: null }; // re-check the limit — dues may have changed since
+  syncChequeSection();
   checkoutNoteInput.value = '';
   checkoutGiftCard = null;
   document.getElementById('co-gc-entry').hidden = true;
@@ -1926,6 +2375,36 @@ checkoutCompleteBtn.addEventListener('click', async () => {
     openCustomerPickerModal();
     return;
   }
+  if (paymentMethod === 'credit' && creditOverBy() > 0) {
+    showToast(t('Credit limit exceeded for {name}: available {available}, this sale {total}. Reduce the bill, or receive a payment on their dues first.', {
+      name: selectedCustomer.label,
+      available: money(creditInfo.data.credit_available),
+      total: money(amountDueAfterGiftCard()),
+    }), 'error');
+    return;
+  }
+  const creditDueDate = document.getElementById('credit-due-date-input').value;
+
+  const chequeNumber = document.getElementById('cheque-number-input').value.trim();
+  const chequeDate = document.getElementById('cheque-date-input').value;
+  const chequeBank = document.getElementById('cheque-bank-input').value.trim();
+  if (paymentMethod === 'cheque') {
+    if (!selectedCustomer) {
+      showToast(t('Select a customer for cheque payment.'), 'error');
+      openCustomerPickerModal();
+      return;
+    }
+    if (!chequeNumber) {
+      showToast(t('Enter the cheque number.'), 'error');
+      document.getElementById('cheque-number-input').focus();
+      return;
+    }
+    if (!chequeDate) {
+      showToast(t('Enter the date written on the cheque.'), 'error');
+      document.getElementById('cheque-date-input').focus();
+      return;
+    }
+  }
 
   const { discountType: orderDiscountType, discountValue: orderDiscountValue, total: orderTotal } = currentOrderTotals();
   const giftAmount = giftCardApplied(orderTotal);
@@ -1957,6 +2436,8 @@ checkoutCompleteBtn.addEventListener('click', async () => {
       ...(orderDiscountValue > 0 && orderDiscountType === 'percent' ? { discount_percent: orderDiscountValue } : {}),
       ...(selectedCustomer ? { pos_customer_id: selectedCustomer.id } : {}),
       ...(paymentMethod === 'cash' ? { amount_tendered: amountTendered } : {}),
+      ...(paymentMethod === 'credit' && creditDueDate ? { credit_due_date: creditDueDate } : {}),
+      ...(paymentMethod === 'cheque' ? { cheque_number: chequeNumber, cheque_date: chequeDate, ...(chequeBank ? { cheque_bank: chequeBank } : {}) } : {}),
       ...(checkoutGiftCard && giftAmount > 0 ? { gift_card_code: checkoutGiftCard.code, gift_card_amount: giftAmount } : {}),
       ...(checkoutCoupon ? { coupon_code: checkoutCoupon.code } : {}),
       ...(notes ? { notes } : {}),
@@ -1974,7 +2455,7 @@ checkoutCompleteBtn.addEventListener('click', async () => {
     clearCustomerSelection();
     loadProducts(searchInput.value.trim()); // refresh stock counts
     closeCheckoutModal();
-    showReceiptModal(sale);
+    await showReceiptModal(sale, { afterSale: true });
   } catch (err) {
     showToast(err.message, 'error');
   } finally {
@@ -2223,7 +2704,7 @@ shiftOpenSkipBtn.addEventListener('click', () => {
 // sales, withdrawals, running balance) into one read-only overview, plus the
 // Withdraw Cash action (password-gated — see below).
 function methodLabel(method) {
-  return { cash: t('Cash'), card: t('Card'), credit: t('Credit') }[method] || esc(method);
+  return { cash: t('Cash'), card: t('Card'), credit: t('Credit'), cheque: t('Cheque') }[method] || esc(method);
 }
 
 function openEodModal() {
@@ -2251,7 +2732,7 @@ async function _loadEodData() {
   _eodDrawer = drawer;
 
   const byMethod = sales.by_method || {};
-  const methodTabs = ['cash', 'card', 'credit'].map((m) => {
+  const methodTabs = ['cash', 'card', 'credit', 'cheque'].map((m) => {
     const entry = byMethod[m] || { count: 0, total: 0 };
     return `<div class="eod-method-tab">
       <div class="eod-method-name">${esc(methodLabel(m))}</div>
@@ -2428,12 +2909,32 @@ async function loadSettings() {
 // ── Keyboard shortcuts (see js/navbar.js for the app-wide F1/F11 ones) ──
 function isAnyPosModalOpen() {
   return [rentalModal, dynamicModal, customerPickerModal, checkoutModal, receiptModal, refundModal,
-    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal]
+    shiftOpenModal, eodModal, cashWithdrawModal, passwordConfirmModal, addProductModal, quickSetupModal,
+    giftCheckModal, couponCheckModal]
     .some((m) => m.classList.contains('show'));
 }
 
 document.addEventListener('keydown', (e) => {
   if (isAnyPosModalOpen()) return;
+  const mod = e.ctrlKey || e.metaKey;
+
+  // Ctrl+G gift card balance, Ctrl+K coupon check
+  if (mod && !e.shiftKey && !e.altKey) {
+    const k = e.key.toLowerCase();
+    if (k === 'g') { e.preventDefault(); openGiftCheckModal(); return; }
+    if (k === 'k') { e.preventDefault(); openCouponCheckModal(); return; }
+  }
+
+  // Alt+1…3 switch Products / Rental / Dynamic mode tabs
+  if (e.altKey && !mod && !e.shiftKey) {
+    const mode = { '1': 'products', '2': 'rental', '3': 'dynamic' }[e.key];
+    if (mode) {
+      e.preventDefault();
+      document.querySelector(`.mode-tab[data-mode="${mode}"]`)?.click();
+      return;
+    }
+  }
+
   switch (e.key) {
     case 'F2':
       e.preventDefault();
@@ -2462,8 +2963,16 @@ document.addEventListener('keydown', (e) => {
       e.preventDefault();
       openCheckoutModal();
       break;
-    default:
-      return;
+    default: {
+      // Barcode scanner capture: route stray typing (focus on a card/button/body) into the search
+      const el = document.activeElement;
+      const editable = el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable);
+      if (editable || mod || e.altKey || e.key.length !== 1) return;
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.value += e.key;
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    }
   }
 });
 
@@ -2473,3 +2982,4 @@ loadCategories();
 loadProducts();
 _checkShiftOpen();
 renderCart();
+focusSearch();

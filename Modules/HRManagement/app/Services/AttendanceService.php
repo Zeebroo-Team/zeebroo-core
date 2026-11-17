@@ -58,9 +58,20 @@ final class AttendanceService
      */
     public function listRecent(Business $business, ?string $search = null, int $limit = 300): Collection
     {
-        $query = AttendanceRecord::query()
-            ->where('business_id', $business->id)
-            ->with(['employee:id,full_name,employee_id']);
+        return $this->recentQuery($business, $search)
+            ->with(['employee:id,full_name,employee_id'])
+            ->orderByDesc('work_date')->orderByDesc('id')->limit($limit)->get();
+    }
+
+    /** Total records matching the search — listRecent() only returns the latest $limit of them. */
+    public function countRecent(Business $business, ?string $search = null): int
+    {
+        return $this->recentQuery($business, $search)->count();
+    }
+
+    private function recentQuery(Business $business, ?string $search): \Illuminate\Database\Eloquent\Builder
+    {
+        $query = AttendanceRecord::query()->where('business_id', $business->id);
 
         $search = trim((string) $search);
         if ($search !== '') {
@@ -70,20 +81,21 @@ final class AttendanceService
             });
         }
 
-        return $query->orderByDesc('work_date')->orderByDesc('id')->limit($limit)->get();
+        return $query;
     }
 
     /**
      * Import check-in/check-out attendance rows uploaded from the desktop app (CSV).
      *
      * @param  array<int, array{employee_id?: string, check_in?: string, check_out?: string}>  $rows
-     * @return array{imported: int, skipped: int, errors: array<int, array{row: int, employee_id: mixed, message: string}>}
+     * @return array{imported: int, skipped: int, errors: array<int, array{row: int, employee_id: mixed, message: string}>, date_from: ?string, date_to: ?string}
      */
     public function importFromRows(Business $business, array $rows, int $recordedByUserId): array
     {
         $imported = 0;
         $skipped = 0;
         $errors = [];
+        $dates = [];
 
         foreach ($rows as $idx => $row) {
             try {
@@ -116,21 +128,30 @@ final class AttendanceService
                     $workedMinutes = (int) $checkIn->diffInMinutes($checkOut);
                 }
 
-                AttendanceRecord::query()->updateOrCreate(
-                    [
+                $workDate = ($checkIn ?? $checkOut)->toDateString();
+                $dates[] = $workDate;
+
+                // whereDate, not updateOrCreate: some drivers store the date as "Y-m-d 00:00:00", so an exact
+                // match on "Y-m-d" misses the existing row and the insert hits the one-record-per-day unique key.
+                $record = AttendanceRecord::query()
+                    ->where('business_id', $business->id)
+                    ->where('employee_id', $employee->id)
+                    ->whereDate('work_date', $workDate)
+                    ->first()
+                    ?? new AttendanceRecord([
                         'business_id' => $business->id,
                         'employee_id' => $employee->id,
-                        'work_date' => ($checkIn ?? $checkOut)->toDateString(),
-                    ],
-                    [
-                        'status' => AttendanceRecord::STATUS_PRESENT,
-                        'check_in_at' => $checkIn,
-                        'check_out_at' => $checkOut,
-                        'worked_minutes' => $workedMinutes,
-                        'source' => 'csv_import',
-                        'recorded_by_user_id' => $recordedByUserId,
-                    ]
-                );
+                        'work_date' => $workDate,
+                    ]);
+
+                $record->fill([
+                    'status' => AttendanceRecord::STATUS_PRESENT,
+                    'check_in_at' => $checkIn,
+                    'check_out_at' => $checkOut,
+                    'worked_minutes' => $workedMinutes,
+                    'source' => 'csv_import',
+                    'recorded_by_user_id' => $recordedByUserId,
+                ])->save();
 
                 $imported++;
             } catch (\Throwable $e) {
@@ -143,7 +164,14 @@ final class AttendanceService
             }
         }
 
-        return ['imported' => $imported, 'skipped' => $skipped, 'errors' => $errors];
+        // The imported date range lets the desktop offer "Check missing attendance" for exactly these days.
+        return [
+            'imported' => $imported,
+            'skipped' => $skipped,
+            'errors' => $errors,
+            'date_from' => $dates ? min($dates) : null,
+            'date_to' => $dates ? max($dates) : null,
+        ];
     }
 
     /**

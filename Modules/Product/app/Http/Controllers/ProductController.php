@@ -477,6 +477,7 @@ class ProductController extends Controller
             'subscription_free_trial' => ['nullable', 'boolean'],
             'is_dynamic_pricing' => ['nullable', 'boolean'],
             'dynamic_price_qty_linked' => ['nullable', 'boolean'],
+            'is_changeable_price' => ['nullable', 'boolean'],
             'item_wise_tax' => ['nullable', 'boolean'],
             'item_wise_discount' => ['nullable', 'boolean'],
 
@@ -525,7 +526,8 @@ class ProductController extends Controller
         $validated['subscription_free_trial'] = $request->boolean('subscription_free_trial');
         $validated['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
         $validated['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
-        $validated['item_wise_tax']        = $request->boolean('item_wise_tax');
+        $validated['is_changeable_price']  = $request->boolean('is_changeable_price') && ! $validated['is_dynamic_pricing'];
+        $validated['item_wise_tax']       = $request->boolean('item_wise_tax');
         $validated['item_wise_discount']   = $request->boolean('item_wise_discount');
         $validated['courier_delivery']     = $request->boolean('courier_delivery');
 

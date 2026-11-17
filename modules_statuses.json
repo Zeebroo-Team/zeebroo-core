@@ -27,5 +27,6 @@
     "EventManagement": true,
     "AdvertisingAgency": true,
     "Package": true,
-    "Payment": true
+    "Payment": true,
+    "Ecommerce": true
 }

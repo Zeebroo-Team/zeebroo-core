@@ -99,6 +99,7 @@ class ProjectController extends Controller
             'business'    => $business,
             'project'     => $project,
             'stats'       => $stats,
+            'stages'      => $this->taskService->statusesForProject($project),
             'milestones'  => $milestones,
             'recentTasks' => $recentTasks,
             'hasTasks'    => $project->tasks()->exists(),
@@ -112,9 +113,16 @@ class ProjectController extends Controller
             return $business;
         }
 
+        $members   = $this->projectService->membersForProject($project);
+        $memberIds = $members->pluck('id')->all();
+
         return view('projectmanage::projects.edit', [
             'business'          => $business,
             'project'           => $project,
+            'members'           => $members,
+            'availableUsers'    => $this->projectService->businessUsers($business)
+                ->reject(fn (array $u) => in_array($u['id'], $memberIds, true))
+                ->values(),
             'assignableTargets' => $this->projectService->assignableTargets($business),
             'customers'         => Customer::query()->where('business_id', $business->id)->orderBy('name')->get(['id', 'name']),
         ]);
@@ -157,6 +165,41 @@ class ProjectController extends Controller
         }
 
         return redirect()->route('pm.projects.index')->with('status', 'Project deleted.');
+    }
+
+    public function addMembers(Request $request, Project $project): RedirectResponse
+    {
+        $business = $this->requireProject($request, $project);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $data = $request->validate([
+            'user_ids'   => ['required', 'array', 'min:1', 'max:200'],
+            'user_ids.*' => ['integer'],
+        ]);
+
+        try {
+            $this->projectService->addMembers($project, $data['user_ids'], (int) $request->user()?->id);
+        } catch (ValidationException $e) {
+            return redirect()->route('pm.projects.edit', $project)->withErrors($e->errors());
+        }
+
+        return redirect()->route('pm.projects.edit', $project)->with('status', 'Team updated.');
+    }
+
+    public function removeMember(Request $request, Project $project, int $user): RedirectResponse
+    {
+        $business = $this->requireProject($request, $project);
+        if ($business instanceof RedirectResponse) {
+            return $business;
+        }
+
+        $unassigned = $this->projectService->removeMember($project, $user);
+
+        return redirect()->route('pm.projects.edit', $project)->with('status', $unassigned
+            ? "Member removed and taken off {$unassigned} task(s)."
+            : 'Member removed.');
     }
 
     private function validatedProjectData(Request $request): array

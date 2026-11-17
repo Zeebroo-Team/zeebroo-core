@@ -1172,16 +1172,32 @@ window.GUIDE_CONFIG = {
     /* ── Finance Overview ────────────────────────────────────────────── */
     {
       "id": "fin_overview",
-      "intent_patterns": ["finance overview", "financial overview", "finance flow",
+      "intent_patterns": ["finance overview", "financial overview", "finance summary",
                           "go to finance", "open finance", "view finance",
-                          "how to view finance", "i want to see finance overview"],
+                          "how to view finance", "i want to see finance overview",
+                          "finance user guide", "finance manual"],
       "reply": "Opening the Finance Overview!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='finance']",    "wait": 500 },
+        { "type": "walk_click",   "selector": ".fin-subnav-btn[data-fin='overview']", "wait": 600 },
+        { "type": "wait_visible", "selector": "#finance-overview-view" },
+        { "type": "walk_to",      "selector": "#fov-sections" },
+        { "type": "bubble",       "text": "The Finance Overview summarises every Finance section with shortcuts to each one, plus a step-by-step user guide below.", "wait": 4500 }
+      ]
+    },
+
+    /* ── Financial Flow Chart ────────────────────────────────────────── */
+    {
+      "id": "fin_flow_chart",
+      "intent_patterns": ["finance flow", "financial flow chart", "flow chart",
+                          "finance diagram", "money flow"],
+      "reply": "Opening the Financial Flow Chart!",
       "steps": [
         { "type": "walk_click",   "selector": "[data-tab='finance']",    "wait": 500 },
         { "type": "walk_click",   "selector": ".fin-subnav-btn[data-fin='flow']", "wait": 600 },
         { "type": "wait_visible", "selector": "#finance-flow-view" },
         { "type": "walk_to",      "selector": "#finance-flow-view" },
-        { "type": "bubble",       "text": "The Finance Overview shows a live flow diagram of all your financial commitments — bills, loans, rentals, and properties — in one view.", "wait": 4500 }
+        { "type": "bubble",       "text": "The Financial Flow Chart shows a live diagram of all your financial commitments — bills, loans, rentals, and properties — in one view.", "wait": 4500 }
       ]
     },
 
@@ -1326,10 +1342,27 @@ window.GUIDE_CONFIG = {
       ]
     },
 
-    /* ── Finance Reports (coming soon) ───────────────────────────────── */
+    /* ── Finance → Sales Reports ─────────────────────────────────────── */
+    {
+      "id": "fin_sales_reports",
+      "intent_patterns": ["sales reports", "sales report", "show sales report", "sales by branch",
+                          "sales by warehouse", "how much did i sell", "revenue report", "quotation report",
+                          "sales by category", "returns report", "daily sales report", "profit summary"],
+      "reply": "Opening Sales Reports!",
+      "steps": [
+        { "type": "walk_click",   "selector": "[data-tab='finance']",    "wait": 500 },
+        { "type": "walk_click",   "selector": "#rb-fin-sales",           "wait": 900 },
+        { "type": "highlight",    "selector": "#sales-report-view .srp-bar" },
+        { "type": "bubble",       "text": "Pick a period or set your own From / To dates, then filter by branch / warehouse or counter. The report combines POS sales, paid invoices, quotations and sales orders — use Export to save it as a PDF report or a CSV for Excel.", "wait": 5500 },
+        { "type": "bubble",       "text": "Below the chart, the tabs break it down further: profit summary, branches, cashiers, weekday and hour, categories, customers, returns and a period-by-period table.", "wait": 5000 },
+        { "type": "unhighlight",  "selector": "#sales-report-view .srp-bar" }
+      ]
+    },
+
+    /* ── Finance Reports (Profit Analytics coming soon) ──────────────── */
     {
       "id": "fin_reports",
-      "intent_patterns": ["finance reports", "profit analytics", "sales reports", "financial reports",
+      "intent_patterns": ["finance reports", "profit analytics", "financial reports",
                           "how to view financial reports", "i want to see finance reports",
                           "profit and loss report", "finance analytics"],
       "reply": "Let me show you where the Finance Reports buttons are!",
@@ -1337,7 +1370,7 @@ window.GUIDE_CONFIG = {
         { "type": "walk_click",   "selector": "[data-tab='finance']",    "wait": 500 },
         { "type": "walk_to",      "selector": "[data-page='finance'] .ribbon-group-label" },
         { "type": "highlight",    "selector": "[data-page='finance'] .ribbon-group:last-child" },
-        { "type": "bubble",       "text": "The Profit Analytics and Sales Reports buttons are in the Reports group on the Finance ribbon. These are being prepared — they will be available in an upcoming update.", "wait": 5000 },
+        { "type": "bubble",       "text": "The Reports group on the Finance ribbon holds Sales Reports — every sale, invoice and quotation with branch and date filters. Profit Analytics is being prepared for an upcoming update.", "wait": 5000 },
         { "type": "unhighlight",  "selector": "[data-page='finance'] .ribbon-group:last-child" }
       ]
     },

@@ -24,6 +24,7 @@ class GlassBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     this.onPosTap,
+    this.onScannerTap,
   });
 
   final List<NavTabData> tabs;
@@ -32,6 +33,7 @@ class GlassBottomNav extends StatelessWidget {
 
   /// When provided, a prominent POS button is inserted in the center of the bar.
   final VoidCallback? onPosTap;
+  final VoidCallback? onScannerTap;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +69,21 @@ class GlassBottomNav extends StatelessWidget {
                     const Expanded(child: SizedBox()),
                     _PosCenterButton(onTap: onPosTap!),
                     const Expanded(child: SizedBox()),
-                    const SizedBox(width: 80),
+                    SizedBox(
+                      width: 80,
+                      child: onScannerTap == null
+                          ? null
+                          : _NavButton(
+                              data: const NavTabData(
+                                label: 'Scanner',
+                                icon: Icons.qr_code_scanner_rounded,
+                                activeIcon: Icons.qr_code_scanner_rounded,
+                              ),
+                              selected: false,
+                              foregroundColor: AppColors.primary,
+                              onTap: onScannerTap!,
+                            ),
+                    ),
                   ],
                 )
               : Row(
@@ -109,14 +125,17 @@ class _NavButton extends StatelessWidget {
     required this.data,
     required this.selected,
     required this.onTap,
+    this.foregroundColor,
   });
   final NavTabData data;
   final bool selected;
   final VoidCallback onTap;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.textHint;
+    final color =
+        foregroundColor ?? (selected ? AppColors.primary : AppColors.textHint);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),

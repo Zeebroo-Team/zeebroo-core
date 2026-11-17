@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/contact_autofill_button.dart';
 import 'picker_sheet.dart';
 
 Future<Map<String, dynamic>?> showSupplierFormSheet(
@@ -182,7 +183,17 @@ class _SupplierFormSheetState extends State<SupplierFormSheet> {
                   controller: _nameCtrl,
                   autofocus: true,
                   textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(labelText: 'Supplier name'),
+                  decoration: InputDecoration(
+                    labelText: 'Supplier name',
+                    suffixIcon: ContactAutofillButton.maybe(
+                      name: _nameCtrl,
+                      contactPerson: _contactCtrl,
+                      phone: _phoneCtrl,
+                      email: _emailCtrl,
+                      address: _addressCtrl,
+                      enabled: !_saving,
+                    ),
+                  ),
                   validator: (value) => value == null || value.trim().isEmpty
                       ? 'Supplier name is required'
                       : null,

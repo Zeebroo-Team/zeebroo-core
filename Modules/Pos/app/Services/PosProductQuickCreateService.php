@@ -2,6 +2,7 @@
 
 namespace Modules\Pos\Services;
 
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -38,6 +39,16 @@ class PosProductQuickCreateService
             ? (int) $validated['branch_id']
             : null;
 
+        // Opening stock can be spread across several branches (e.g. CSV import):
+        // each listed branch receives the full opening quantity as its own layer,
+        // while the product itself stays shared (null) so every branch lists it.
+        $stockBranchIds = array_values(array_unique(array_map('intval', $validated['branch_ids'] ?? [])));
+        if ($stockBranchIds !== []) {
+            $branchId = null;
+        } else {
+            $stockBranchIds = [$branchId];
+        }
+
         $data = $this->catalogOptions->normalizeProductCatalogFields($business, [
             'name' => $validated['name'],
             'sku' => $validated['sku'] ?? null,
@@ -56,25 +67,80 @@ class PosProductQuickCreateService
             $data['branch_id'] = $branchId;
         }
 
-        $product = $this->productService->create($business, $data);
+        $product = DB::transaction(function () use ($business, $data, $openingStock, $costPrice, $unitPrice, $wholesalePrice, $stockBranchIds) {
+            $product = $this->productService->create($business, $data);
 
-        if ($openingStock > 0) {
-            $this->stockLayers->createManualLayer(
-                $business,
-                $product,
-                $openingStock,
-                $costPrice,      // unit cost (what was paid to acquire)
-                $unitPrice,      // selling price per unit
-                $wholesalePrice, // wholesale price per unit
-                $branchId,       // stock layer is scoped to this branch
-            );
-        }
+            if ($openingStock > 0) {
+                foreach ($stockBranchIds as $layerBranchId) {
+                    $this->stockLayers->createManualLayer(
+                        $business,
+                        $product,
+                        $openingStock,
+                        $costPrice,      // unit cost (what was paid to acquire)
+                        $unitPrice,      // selling price per unit
+                        $wholesalePrice, // wholesale price per unit
+                        $layerBranchId,  // stock layer is scoped to this branch
+                    );
+                }
+            }
+
+            return $product;
+        });
 
         return $this->posCatalog->productCardForProduct($product->fresh([
             'productUnit',
             'imageFile',
             'categories',
         ]));
+    }
+
+    /**
+     * Give an existing, unpriced product (e.g. one brought in by the SQL dump
+     * import with price 0 and no stock) a selling price and opening stock, so
+     * the cashier can sell it straight from the POS grid.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>
+     */
+    public function setup(Business $business, Product $product, array $input): array
+    {
+        $validated = Validator::make($input, [
+            'unit_price'     => ['required', 'numeric', 'gt:0'],
+            'cost_price'     => ['nullable', 'numeric', 'min:0'],
+            'stock_quantity' => ['required', 'numeric', 'gt:0'],
+            'branch_id'      => [
+                'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
+        ])->validate();
+
+        $unitPrice = (float) $validated['unit_price'];
+        $costPrice = isset($validated['cost_price']) ? (float) $validated['cost_price'] : 0.0;
+        $branchId  = isset($validated['branch_id']) && $validated['branch_id'] > 0 ? (int) $validated['branch_id'] : null;
+
+        DB::transaction(function () use ($business, $product, $validated, $unitPrice, $costPrice, $branchId) {
+            $this->productService->update($product, [
+                'unit_price' => $unitPrice,
+                'cost_price' => $costPrice ?: $product->cost_price,
+            ]);
+
+            $this->stockLayers->createManualLayer(
+                $business,
+                $product,
+                (float) $validated['stock_quantity'],
+                $costPrice,
+                $unitPrice,
+                $product->wholesale_price !== null ? (float) $product->wholesale_price : null,
+                $branchId,
+            );
+        });
+
+        return $this->posCatalog->productCardForProduct(
+            $product->fresh(['productUnit', 'imageFile', 'categories']),
+            $branchId,
+            (bool) get_settings('business.branch_stock_separate', false, $business),
+        );
     }
 
     /**
@@ -97,6 +163,11 @@ class PosProductQuickCreateService
             ],
             'branch_id' => [
                 'nullable',
+                'integer',
+                Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
+            'branch_ids' => ['nullable', 'array'],
+            'branch_ids.*' => [
                 'integer',
                 Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
             ],

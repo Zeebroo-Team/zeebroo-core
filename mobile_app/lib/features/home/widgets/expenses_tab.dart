@@ -4,7 +4,11 @@ import '../../../core/api/api_client.dart';
 import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/money.dart';
+import '../../../core/offline/offline_expenses.dart';
+import '../../../core/offline/offline_sales.dart';
 import '../../finance/widgets/bills_tab.dart';
+import '../../finance/widgets/quick_expense_sheet.dart';
+import '../../pos/screens/offline_sales_screen.dart';
 import '../../finance/widgets/loans_tab.dart';
 import '../../finance/widgets/modifications_tab.dart';
 import '../../finance/widgets/rentals_tab.dart';
@@ -114,6 +118,9 @@ class _ExpensesTabState extends State<ExpensesTab>
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 120),
         children: [
+          // Above the error card on purpose: it still works offline.
+          _QuickExpenseCard(onSaved: () => _reloadAll(force: true)),
+          const SizedBox(height: 16),
           if (_error != null)
             _ErrorCard(message: _error!, onRetry: _reloadAll)
           else
@@ -654,5 +661,102 @@ class _ErrorCard extends StatelessWidget {
         TextButton.icon(onPressed: onRetry, icon: const Icon(Icons.refresh, size: 16), label: const Text('Retry')),
       ],
     ),
+  );
+}
+
+/// "Quick expense" button plus, when some are saved on the phone, how many
+/// expenses are still waiting to upload (they aren't in the totals below yet).
+class _QuickExpenseCard extends StatefulWidget {
+  const _QuickExpenseCard({required this.onSaved});
+  final VoidCallback onSaved;
+
+  @override
+  State<_QuickExpenseCard> createState() => _QuickExpenseCardState();
+}
+
+class _QuickExpenseCardState extends State<_QuickExpenseCard> {
+  final _expenses = OfflineExpenses.instance;
+  ({int count, double total}) _waiting = (count: 0, total: 0.0);
+  int _lastWaitingCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _expenses.addListener(_onChanged);
+    _expenses.start();
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _expenses.removeListener(_onChanged);
+    super.dispose();
+  }
+
+  void _onChanged() {
+    // Expenses just went up to the server — reload the tab's figures.
+    if (_expenses.waitingCount < _lastWaitingCount) widget.onSaved();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final waiting = await _expenses.waitingTotals();
+      if (!mounted) return;
+      setState(() {
+        _waiting = waiting;
+        _lastWaitingCount = _expenses.waitingCount;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _add() async {
+    final saved = await QuickExpenseSheet.show(context);
+    if (saved == true) {
+      widget.onSaved();
+      _refresh();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      OutlinedButton.icon(
+        key: const ValueKey('quick-expense-button'),
+        onPressed: _add,
+        icon: const Icon(Icons.add_card_rounded),
+        label: const Text('Quick expense'),
+      ),
+      if (_waiting.count > 0) ...[
+        const SizedBox(height: 10),
+        Material(
+          color: AppColors.warning.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(12),
+          child: InkWell(
+            key: const ValueKey('offline-expenses-waiting'),
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const OfflineSalesScreen())),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.cloud_queue_rounded, size: 18, color: AppColors.warning),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${_waiting.count} expense${_waiting.count == 1 ? '' : 's'} (${formatMoney(_waiting.total)}) '
+                      'saved on this phone, not in the totals yet${OfflineSales.instance.uploading ? ' — uploading…' : ''}',
+                      style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right_rounded, size: 18),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    ],
   );
 }

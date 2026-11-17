@@ -35,9 +35,10 @@
 
 /* ── fields ── */
 .svcf-field{}
-.svcf-field label{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;}
-.svcf-field label .svcf-req{color:#ef4444;font-size:11px;}
-.svcf-field label .svcf-opt{font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);opacity:.8;background:color-mix(in srgb,var(--border) 60%,transparent);padding:1px 5px;border-radius:4px;}
+/* direct children only — nested labels (status cards, etc.) keep their own styling */
+.svcf-field > label{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px;}
+.svcf-field > label .svcf-req{color:#ef4444;font-size:11px;}
+.svcf-field > label .svcf-opt{font-size:9px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);opacity:.8;background:color-mix(in srgb,var(--border) 60%,transparent);padding:1px 5px;border-radius:4px;}
 .svcf-input,.svcf-textarea{
     width:100%;box-sizing:border-box;padding:9px 12px;
     border:1px solid var(--border);border-radius:8px;
@@ -78,7 +79,7 @@
     transition:border-color .15s,background .15s;user-select:none;
 }
 .svcf-status-card input{display:none;}
-.svcf-status-card__dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:background .15s;}
+.svcf-status-card__dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;background:var(--border);transition:background .15s;}
 .svcf-status-card__label{font-size:13px;font-weight:700;color:var(--text);}
 .svcf-status-card--active:has(input:checked){border-color:#10b981;background:color-mix(in srgb,#10b981 8%,transparent);}
 .svcf-status-card--active:has(input:checked) .svcf-status-card__dot{background:#10b981;}
@@ -276,7 +277,7 @@
                     <label class="svcf-status-card svcf-status-card--active">
                         <input type="radio" name="is_active" value="1"
                                @checked(old('is_active', $item->is_active ?? true) == '1')>
-                        <span class="svcf-status-card__dot" style="background:var(--border);"></span>
+                        <span class="svcf-status-card__dot"></span>
                         <div>
                             <div class="svcf-status-card__label">Active</div>
                             <div style="font-size:11px;color:var(--muted);">Visible &amp; bookable</div>
@@ -285,7 +286,7 @@
                     <label class="svcf-status-card svcf-status-card--inactive">
                         <input type="radio" name="is_active" value="0"
                                @checked(old('is_active', $item->is_active ?? true) == '0')>
-                        <span class="svcf-status-card__dot" style="background:var(--border);"></span>
+                        <span class="svcf-status-card__dot"></span>
                         <div>
                             <div class="svcf-status-card__label">Inactive</div>
                             <div style="font-size:11px;color:var(--muted);">Hidden from catalog</div>

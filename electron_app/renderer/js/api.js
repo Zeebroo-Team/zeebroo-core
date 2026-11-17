@@ -12,6 +12,10 @@ const API = (() => {
     if (res.status === 402 && res.body?.code === 'subscription_ended') {
       window.dispatchEvent(new CustomEvent('api-subscription-ended'));
     }
+    // Offline mode kept a change on this PC (checkout shows its own message)
+    if (res.offline && method !== 'GET' && res.status >= 200 && res.status < 300 && path !== '/online/checkout') {
+      window.dispatchEvent(new CustomEvent('api-saved-offline', { detail: res.body?.message }));
+    }
     return res;
   }
 
@@ -26,11 +30,19 @@ const API = (() => {
       publicRequest('POST', '/auth/token', { email, password, device_name: deviceName }),
     cashierLogin: (slug, username, password) =>
       publicRequest('POST', '/cashier/login', { slug, username, password }),
-    register:           (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
+    // Forgot password: emails a 6-digit code, then the code + new password resets it
+    forgotPassword: (email) =>
+      publicRequest('POST', '/auth/password/forgot', { email }),
+    resetPassword:  (email, otp, password) =>
+      publicRequest('POST', '/auth/password/reset', { email, otp, password, password_confirmation: password }),
+    register:          (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
       publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, package_id: packageId, email, password, password_confirmation: password, device_name: deviceName }),
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     packages:           () => publicRequest('GET', '/auth/packages'),
     me:                 () => request('GET', '/auth/me'),
+    // Sign-up email verification — "Verify your email" banner (PosAuthApiController verifyEmail / resendEmailVerification)
+    verifyEmail:        (otp) => request('POST', '/auth/email/verify', { otp }),
+    resendEmailVerification: () => request('POST', '/auth/email/resend'),
     startPaymentCheckout: (paymentId) => request('POST', '/auth/payment/checkout-session', { payment_id: paymentId }),
     paymentStatus:        (paymentId) => request('GET', `/auth/payment/${paymentId}/status`),
     paymentHistory:       () => request('GET', '/auth/payment/history'),
@@ -39,6 +51,9 @@ const API = (() => {
     paymentDetail:        (paymentId) => request('GET', `/auth/payment/${paymentId}`),
     updateProfile:      (body) => request('PUT', '/auth/profile', body),
     updatePassword:     (body) => request('PUT', '/auth/password', body),
+    // Profile photo — upload goes through electronAPI.apiUpload (multipart "files[]").
+    profileAvatarUploadPath: '/auth/profile/avatar',
+    deleteProfileAvatar: () => request('DELETE', '/auth/profile/avatar'),
 
     // Business selection
     businesses:      ()     => request('GET',  '/businesses'),
@@ -60,6 +75,8 @@ const API = (() => {
     },
     campaignProducts: () => request('GET', '/online/sale-campaigns/products'),
     productSearch:(q, perPage)    => request('GET', `/online/products?q=${encodeURIComponent(q || '')}&per_page=${perPage || 20}`),
+    barcodeProducts:(q)           => request('GET', `/online/barcodes/products${q ? `?q=${encodeURIComponent(q)}` : ''}`),
+    barcodeGenerateSkus:(ids)     => request('POST', '/online/barcodes/generate-skus', { product_ids: ids }),
     product:          (id)         => request('GET', `/online/products/${id}`),
     productSalesChart:  (id, period) => request('GET', `/online/products/${id}/sales-chart?period=${period || 'weekly'}`),
     productStockHistory:(id)        => request('GET', `/online/products/${id}/stock-history`),
@@ -75,8 +92,19 @@ const API = (() => {
     backfillBatchSkus: (productId)    => request('POST', `/online/products/${productId}/backfill-batch-skus`),
     checkout:     (body)              => request('POST', '/online/checkout', body),
     createProduct: (body)              => request('POST',   '/online/products', body),
-    importProducts:(rows)             => request('POST',   '/online/products/import', { rows }),
+    importProducts:(rows, branchIds = []) => request('POST', '/online/products/import', { rows, branch_ids: branchIds }),
+    exportProducts:(filters = {}, page = 1, perPage = 1000, ids = []) => {
+      const p = new URLSearchParams({ page, per_page: perPage });
+      if (filters.q)           p.set('q',            filters.q);
+      if (filters.catId)       p.set('category',     filters.catId);
+      if (filters.brandId)     p.set('brand_id',     filters.brandId);
+      if (filters.stockStatus) p.set('stock_status', filters.stockStatus);
+      if (filters.sort)        p.set('sort',         filters.sort);
+      ids.forEach(id => p.append('ids[]', id));
+      return request('GET', `/online/products/export?${p.toString()}`);
+    },
     updateProduct: (id, body)          => request('PATCH',  `/online/products/${id}`, body),
+    quickSetupProduct: (id, body)      => request('POST',   `/online/products/${id}/quick-setup`, body),
     deleteProduct: (id)                => request('DELETE', `/online/products/${id}`),
 
     // Invoices
@@ -100,6 +128,9 @@ const API = (() => {
     quotationAccept: (id)        => request('POST',   `/quotations/${id}/accept`),
     quotationReject: (id)        => request('POST',   `/quotations/${id}/reject`),
     deleteQuotation: (id)        => request('DELETE', `/quotations/${id}`),
+    // Quotation Setup — server copy used for CRM / emailed quotation PDFs
+    quotationSetup:     ()       => request('GET',    '/quotation-setup'),
+    saveQuotationSetup: (body)   => request('PUT',    '/quotation-setup', body),
 
     // Sales Orders
     salesOrders:          (q, status) => request('GET',    `/sales-orders?q=${encodeURIComponent(q||'')}&status=${status||'all'}`),
@@ -118,6 +149,8 @@ const API = (() => {
     customerSubscriptions:(customerId)=> request('GET',    `/customers/${customerId}/subscriptions`),
     customerWarranties:   (customerId)=> request('GET',    `/customers/${customerId}/warranties`),
     customerCreditSales:  (customerId)=> request('GET',    `/customers/${customerId}/credit-sales`),
+    customerCreditPayment:(customerId, body) => request('POST', `/customers/${customerId}/credit-payments`, body),
+    customerRentals:      (customerId)=> request('GET',    `/product-rentals?customer_id=${encodeURIComponent(customerId)}&status=all&per_page=100`),
     cancelSubscription:   (id)        => request('POST',   `/subscriptions/${id}/cancel`),
     pauseSubscription:    (id)        => request('POST',   `/subscriptions/${id}/pause`),
     resumeSubscription:   (id)        => request('POST',   `/subscriptions/${id}/resume`),
@@ -152,12 +185,40 @@ const API = (() => {
       return request('GET', `/sales/history?${p.toString()}`);
     },
     processReturn:(id, body)          => request('POST', `/sales/${id}/return`, body),
+    // Revert a bill entered by mistake — body: { reason, notes }
+    revertSale:         (id, body)    => request('POST', `/sales/${id}/revert`, body),
+    saleRevertReasons:  ()            => request('GET',  '/sale-reverts/reasons'),
+    saleRevert:         (id)          => request('GET',  `/sale-reverts/${id}`),
+    saleReverts:        (params)      => {
+      const p = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+      return request('GET', `/sale-reverts?${p.toString()}`);
+    },
+    // Customer cheques taken at checkout (Sales → Cheques, Customers → Cheques)
+    saleCheques:        (params)      => {
+      const p = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+      return request('GET', `/sale-cheques?${p.toString()}`);
+    },
+    saleCheque:         (id)          => request('GET',  `/sale-cheques/${id}`),
+    // body: { deposit_account_id?, notes? } — falls back to the POS default deposit account
+    claimSaleCheque:    (id, body)    => request('POST', `/sale-cheques/${id}/claim`, body || {}),
+    bounceSaleCheque:   (id, body)    => request('POST', `/sale-cheques/${id}/bounce`, body),
     returnReasons:()                  => request('GET',  '/online/return-reasons'),
 
     // Finance — expenses / bills / profit
     expensesOverview: ()              => request('GET',    '/expenses/overview'),
     profitReport:     (period)        => request('GET',    `/profit-report?period=${period}`),
+    // Finance → Sales Reports: { date_from, date_to, branch_id ('' | id | 'none'), counter_id, group_by,
+    //   source, status, q, page, per_page, export }
+    // `kind`: '' = summary, 'products' (today back 30 days only, + source), 'customers'
+    salesReport:      (params, kind = '') => {
+      const p = new URLSearchParams();
+      Object.entries(params || {}).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') p.set(k, String(v)); });
+      return request('GET', `/reports/sales${kind ? `/${kind}` : ''}?${p.toString()}`);
+    },
     payrollOverview:  ()              => request('GET',    '/payroll-overview'),
+    businessFlowSummary: ()           => request('GET',    '/business-flow/summary'),
     createBill:   (body)              => request('POST',   '/expenses/bills', body),
     bills:        ()                  => request('GET',    '/expenses/bills'),
     bill:         (id)                => request('GET',    `/expenses/bills/${id}`),
@@ -185,6 +246,7 @@ const API = (() => {
     billTargets:  ()                  => request('GET',  '/expenses/bill-assignment-targets'),
     // Finance — flow overview
     financeFlow:    ()         => request('GET', '/finance/flow'),
+    financeOverview: ()        => request('GET', '/finance/overview'),
 
     // Notifications
     notifications: (params) => {
@@ -240,10 +302,22 @@ const API = (() => {
     // HR
     employees:      ()     => request('GET',  '/hr/employees'),
     employee:       (id)   => request('GET',  `/hr/employees/${id}`),
+    employeeLeave:  (id, year) => request('GET', `/hr/employees/${id}/leave${year ? '?year=' + year : ''}`),
+    employeeBills:  (id)   => request('GET',  `/hr/employees/${id}/bills`),
     createEmployee: (body) => request('POST', '/hr/employees', body),
+    updateEmployeeField: (id, body) => request('PATCH', `/hr/employees/${id}`, body),
+    // HR — employee system access (team invitation to sign in to this business)
+    employeeAccess:       (id)       => request('GET',    `/hr/employees/${id}/access`),
+    grantEmployeeAccess:  (id, role) => request('POST',   `/hr/employees/${id}/access`, { role }),
+    resendEmployeeAccess: (id)       => request('POST',   `/hr/employees/${id}/access/resend`),
+    revokeEmployeeAccess: (id)       => request('DELETE', `/hr/employees/${id}/access`),
     departments:      ()     => request('GET',    '/hr/departments'),
     createDepartment: (body) => request('POST',   '/hr/departments', body),
     deleteDepartment: (id)   => request('DELETE', `/hr/departments/${id}`),
+    department:       (id)   => request('GET',    `/hr/departments/${id}`),
+    departmentBills:  (id)   => request('GET',    `/hr/departments/${id}/bills`),
+    updateDepartmentSalaryRange: (id, body) => request('PATCH', `/hr/departments/${id}/salary-range`, body),
+    updateDepartmentLeadership:  (id, body) => request('PATCH', `/hr/departments/${id}/leadership`, body),
     jobTitles:      ()     => request('GET',  '/hr/job-titles'),
 
     // HR — Positions (job titles)
@@ -252,9 +326,28 @@ const API = (() => {
     updatePosition: (id, body) => request('PUT', `/hr/job-titles/${id}`, body),
     deletePosition: (id)   => request('DELETE', `/hr/job-titles/${id}`),
 
+    // HR — Leave requests (give leave, approve / reject)
+    leaveRequests:  (params = {}) => request('GET', '/hr/leave-requests' + (Object.keys(params).length ? '?' + new URLSearchParams(params) : '')),
+    previewLeave:   (body)        => request('POST',   '/hr/leave-requests/preview', body),
+    createLeave:    (body)        => request('POST',   '/hr/leave-requests', body),
+    decideLeave:    (id, status)  => request('PATCH',  `/hr/leave-requests/${id}/status`, { status }),
+    deleteLeave:    (id)          => request('DELETE', `/hr/leave-requests/${id}`),
+
+    // HR — Leave rules (annual / casual / sick / short leave entitlements)
+    leavePolicies:      ()         => request('GET',    '/hr/leave-policies'),
+    createLeavePolicy:  (body)     => request('POST',   '/hr/leave-policies', body),
+    updateLeavePolicy:  (id, body) => request('PUT',    `/hr/leave-policies/${id}`, body),
+    deleteLeavePolicy:  (id)       => request('DELETE', `/hr/leave-policies/${id}`),
+
+    // HR — Settings (working schedule + custom fields)
+    hrSettings:       ()      => request('GET',  '/hr/settings'),
+    hrSettingsUpdate: (body)  => request('PUT',  '/hr/settings', body),
+
     // HR — Attendance
-    attendance:       (q)     => request('GET',  `/hr/attendance${q ? '?q=' + encodeURIComponent(q) : ''}`),
+    attendance:      (params = {}) => request('GET', '/hr/attendance' + (Object.keys(params).length ? '?' + new URLSearchParams(params) : '')),
     importAttendance: (rows)  => request('POST', '/hr/attendance/import', { rows }),
+    attendanceGaps:   (params) => request('GET',  '/hr/attendance/gaps?' + new URLSearchParams(params)),
+    resolveAttendanceGaps: (items, allowOverride) => request('POST', '/hr/attendance/gaps/resolve', { items, allow_override: !!allowOverride }),
 
     // HR — Allowance types
     allowanceTypes:      ()     => request('GET',    '/hr/allowance-types'),
@@ -304,7 +397,10 @@ const API = (() => {
     customers:      (q, page, categoryId) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
-    importCustomers:(rows) => request('POST', '/customers/import', { rows }),
+    // opts: { duplicates: 'skip'|'update' } — duplicates of existing customers are skipped by default
+    importCustomers:(rows, opts = {}) => request('POST', '/customers/import', { rows, ...opts }),
+    previewCustomerImport: (rows, opts = {}) => request('POST', '/customers/import/preview', { rows, ...opts }),
+    customerDuplicates: (phone, email, ignoreId) => request('GET', `/customers/duplicates?phone=${encodeURIComponent(phone || '')}&email=${encodeURIComponent(email || '')}${ignoreId ? `&ignore_id=${ignoreId}` : ''}`),
     updateCustomer: (id, body) => request('PATCH',  `/customers/${id}`, body),
     deleteCustomer: (id)   => request('DELETE', `/customers/${id}`),
 
@@ -337,6 +433,11 @@ const API = (() => {
 
     // File Manager
     fileManagerBrowse: (folderId, imagesOnly) => request('GET', `/online/file-manager?folder=${folderId||''}&images_only=${imagesOnly?1:0}`),
+    // Uploads go through electronAPI.apiUpload (multipart "files[]"), one file per call
+    fileManagerUploadPath:   (folderId)       => `/online/file-manager/upload${folderId ? `?folder_id=${folderId}` : ''}`,
+    fileManagerDelete:       (id)             => request('DELETE', `/online/file-manager/${id}`),
+    fileManagerCreateFolder: (name, parentId) => request('POST',   '/online/file-manager/folders', { name, parent_id: parentId || null }),
+    fileManagerDeleteFolder: (id)             => request('DELETE', `/online/file-manager/folders/${id}`),
 
     // Product Brands
     productBrands:       (q, status)  => request('GET',    `/brands?q=${encodeURIComponent(q||'')}&status=${status||''}`),
@@ -495,6 +596,8 @@ const API = (() => {
     usersAdd:    (body)              => request('POST',   '/users', body),
     usersUpdate: (memberId, body)    => request('PUT',    `/users/${memberId}`, body),
     usersRemove: (memberId)          => request('DELETE', `/users/${memberId}`),
+    usersInviteResend: (inviteId)    => request('POST',   `/users/invitations/${inviteId}/resend`),
+    usersInviteCancel: (inviteId)    => request('DELETE', `/users/invitations/${inviteId}`),
 
     // Role Management
     rolesList:   ()               => request('GET',    '/roles'),
@@ -533,17 +636,67 @@ const API = (() => {
     guideConversationShow: (id) => request('GET', `/guide/conversations/${id}`),
     guideConversationDelete: (id) => request('DELETE', `/guide/conversations/${id}`),
 
+    // CRM permissions
+    crmPermissions:          ()                => request('GET',    '/crm/permissions'),
+    crmMyPermissions:        ()                => request('GET',    '/crm/permissions/me'),
+    crmSaveUserPermissions:  (userId, body)    => request('PUT',    `/crm/permissions/users/${userId}`, body),
+    crmResetUserPermissions: (userId)          => request('DELETE', `/crm/permissions/users/${userId}`),
+    crmSaveRolePermissions:  (roleId, body)    => request('PUT',    `/crm/permissions/roles/${roleId}`, body),
+    crmResetRolePermissions: (roleId)          => request('DELETE', `/crm/permissions/roles/${roleId}`),
+    // CRM org structure (admin only)
+    crmOrg:                      ()                    => request('GET',    '/crm/org'),
+    crmAddDepartmentMember:      (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/members`, body),
+    crmUpdateDepartmentMember:   (memberId, body)      => request('PUT',    `/crm/org/members/${memberId}`, body),
+    crmRemoveDepartmentMember:   (memberId)            => request('DELETE', `/crm/org/members/${memberId}`),
+    crmCreateDivision:           (departmentId, body)  => request('POST',   `/crm/org/departments/${departmentId}/divisions`, body),
+    crmUpdateDivision:           (divisionId, body)    => request('PUT',    `/crm/org/divisions/${divisionId}`, body),
+    crmDeleteDivision:           (divisionId)          => request('DELETE', `/crm/org/divisions/${divisionId}`),
+    crmSaveDepartmentSettings:   (departmentId, body)  => request('PUT',    `/crm/org/departments/${departmentId}/settings`, body),
+    crmLinkDepartmentPipeline:   (departmentId, projectId) => request('POST', `/crm/org/departments/${departmentId}/pipeline`, { project_id: projectId || null }),
+    crmUnlinkDepartmentPipeline: (departmentId, projectId) => request('DELETE', `/crm/org/departments/${departmentId}/pipelines/${projectId}`),
+    crmSettings:                 ()                    => request('GET',    '/crm/settings'),
+    crmSaveSettings:             (body)                => request('PUT',    '/crm/settings', body),
+    // Marketing inbox
+    crmInbox:             (filter, q)          => request('GET',    `/crm/inbox?filter=${encodeURIComponent(filter||'all')}&q=${encodeURIComponent(q||'')}`),
+    crmInboxLead:         (leadId)             => request('GET',    `/crm/inbox/leads/${leadId}`),
+    crmInboxUpdateLead:   (leadId, body)       => request('PUT',    `/crm/inbox/leads/${leadId}`, body),
+    crmInboxVerify:       (leadId)             => request('POST',   `/crm/inbox/leads/${leadId}/verify`),
+    crmInboxClearReview:  (leadId)             => request('POST',   `/crm/inbox/leads/${leadId}/review`),
+    crmInboxForward:      (leadId, body)       => request('POST',   `/crm/inbox/leads/${leadId}/forward`, body),
+    crmInboxMerge:        (leadId, targetId)   => request('POST',   `/crm/inbox/leads/${leadId}/merge`, { target_lead_id: targetId }),
+    // Lead bulk upload — the file goes through electronAPI.apiUpload (multipart "files[]"),
+    // the template / error rows through electronAPI.downloadFile.
+    crmLeadImports:          ()               => request('GET',    '/crm/lead-imports'),
+    crmLeadImport:           (id)             => request('GET',    `/crm/lead-imports/${id}`),
+    crmLeadImportDepartments:(id, mapping)    => request('POST',   `/crm/lead-imports/${id}/departments`, { mapping }),
+    crmLeadImportPreview:    (id, body)       => request('POST',   `/crm/lead-imports/${id}/preview`, body),
+    crmLeadImportRun:        (id)             => request('POST',   `/crm/lead-imports/${id}/run`),
+    crmLeadImportDiscard:    (id)             => request('DELETE', `/crm/lead-imports/${id}`),
+    crmLeadImportUploadPath:   '/crm/lead-imports',
+    crmLeadImportTemplatePath: '/crm/lead-imports/template',
+    crmLeadImportErrorsPath: (id)             => `/crm/lead-imports/${id}/errors`,
     // CRM
     crmProjects:     ()                   => request('GET',    '/crm/projects'),
     crmCreateProject:(body)               => request('POST',   '/crm/projects', body),
     crmDeleteProject:(projectId)          => request('DELETE', `/crm/projects/${projectId}`),
+    crmForceDeleteProject:(projectId, confirmName) => request('POST', `/crm/projects/${projectId}/force-delete`, { confirm_name: confirmName }),
     crmPipeline:     (projectId)          => request('GET',    `/crm/projects/${projectId}/pipeline`),
     crmCustomDataLeads: (projectId)       => request('GET',    `/crm/projects/${projectId}/custom-data-leads`),
-    crmProjectContacts: (projectId, q, stageId) => request('GET', `/crm/projects/${projectId}/contacts?q=${encodeURIComponent(q||'')}&stage_id=${encodeURIComponent(stageId||'')}`),
+    crmProjectContacts: (projectId, q, stageId, source) => request('GET', `/crm/projects/${projectId}/contacts?q=${encodeURIComponent(q||'')}&stage_id=${encodeURIComponent(stageId||'')}&source=${encodeURIComponent(source||'')}`),
     crmStages:       (projectId)          => request('GET',    `/crm/projects/${projectId}/stages`),
     crmCreateStage:  (projectId, body)    => request('POST',   `/crm/projects/${projectId}/stages`, body),
     crmUpdateStage:  (projectId, stageId, body) => request('PUT', `/crm/projects/${projectId}/stages/${stageId}`, body),
     crmDeleteStage:  (projectId, stageId) => request('DELETE', `/crm/projects/${projectId}/stages/${stageId}`),
+    crmUpdateStageBehaviours: (projectId, stageId, body) => request('PUT', `/crm/projects/${projectId}/stages/${stageId}/behaviours`, body),
+    crmBulkDeleteStages: (projectId, ids) => request('POST', `/crm/projects/${projectId}/stages/bulk-delete`, { ids }),
+    crmSetChecklistItem:    (leadId, item, done)      => request('POST', `/crm/leads/${leadId}/checklist`, { item, done }),
+    crmApproveStageMove:   (leadId, requestId)       => request('POST', `/crm/leads/${leadId}/stage-requests/${requestId}/approve`),
+    crmRejectStageMove:     (leadId, requestId, note) => request('POST', `/crm/leads/${leadId}/stage-requests/${requestId}/reject`, { note }),
+    crmCustomStatuses:     ()           => request('GET',    '/crm/custom-statuses'),
+    crmCreateCustomStatus:  (body)       => request('POST',   '/crm/custom-statuses', body),
+    crmUpdateCustomStatus:  (id, body)   => request('PUT',    `/crm/custom-statuses/${id}`, body),
+    crmDeleteCustomStatus:  (id)         => request('DELETE', `/crm/custom-statuses/${id}`),
+    crmRestoreStandardStages:(projectId) => request('POST', `/crm/projects/${projectId}/stages/restore-standard`),
     crmReorderStages:    (projectId, ids)              => request('POST',   `/crm/projects/${projectId}/stages/reorder`, { ids }),
     crmStageMailTemplate:       (projectId, stageId)       => request('GET',    `/crm/projects/${projectId}/stages/${stageId}/mail-template`),
     crmSaveStageMailTemplate:   (projectId, stageId, body) => request('PUT',    `/crm/projects/${projectId}/stages/${stageId}/mail-template`, body),
@@ -551,9 +704,81 @@ const API = (() => {
     crmSendStageMail:           (projectId, stageId)       => request('POST',   `/crm/projects/${projectId}/stages/${stageId}/mail-template/send`),
     crmCreateLead:   (projectId, body)    => request('POST',   `/crm/projects/${projectId}/leads`, body),
     crmUpdateLead:   (leadId, body)       => request('PUT',    `/crm/leads/${leadId}`, body),
-    crmMoveLead:     (leadId, stageId)    => request('POST',   `/crm/leads/${leadId}/move-stage`, { stage_id: stageId }),
+    // extra: { lost_reason_id, lost_reason } for a lost stage, { reason } for a stage that asks for one
+    crmMoveLead:     (leadId, stageId, extra = {}) => request('POST', `/crm/leads/${leadId}/move-stage`, { stage_id: stageId, ...extra }),
+    crmHoldLead:     (leadId, reason)     => request('POST',   `/crm/leads/${leadId}/hold`, { reason: reason || null }),
+    crmResumeLead:   (leadId)             => request('POST',   `/crm/leads/${leadId}/resume`),
+    crmConvertLead:  (leadId)             => request('POST',   `/crm/leads/${leadId}/convert`),
+    crmStatuses:     ()                   => request('GET',    '/crm/statuses'),
+    crmLostReasons:  ()                   => request('GET',    '/crm/lost-reasons'),
+    crmLeadSources:  ()                   => request('GET',    '/crm/lead-sources'),
     crmDeleteLead:   (leadId)             => request('DELETE', `/crm/leads/${leadId}`),
-    crmContacts:     (q)                  => request('GET',    `/crm/contacts?q=${encodeURIComponent(q||'')}`),
+    crmLeadHistory:  (leadId)             => request('GET',    `/crm/leads/${leadId}/history`),
+    // Lead workspace: assignees (+ history), unified timeline, internal messages, files, tasks.
+    // Files upload through electronAPI.apiUpload (multipart "files[]"); downloads through
+    // electronAPI.downloadFile and image previews through electronAPI.fetchDataUrl.
+    crmLeadWorkspace:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/workspace`),
+    crmLeadAssignees:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/assignees`),
+    crmLeadSummary:           (leadId)                 => request('GET',    `/crm/leads/${leadId}/summary`),
+    crmLeadNotificationsRead: (leadId, types = null)   => request('POST',   `/crm/leads/${leadId}/notifications/read`, { types }),
+    crmSyncLeadAssignees:     (leadId, body)           => request('PUT',    `/crm/leads/${leadId}/assignees`, body),
+    crmAddLeadAssignees:      (leadId, body)           => request('POST',   `/crm/leads/${leadId}/assignees`, body),
+    crmRemoveLeadAssignee:    (leadId, userId)         => request('DELETE', `/crm/leads/${leadId}/assignees/${userId}`),
+    crmPrimaryLeadAssignee:   (leadId, userId)         => request('POST',   `/crm/leads/${leadId}/assignees/${userId}/primary`),
+    crmLeadTimeline:          (leadId, types)          => request('GET',    `/crm/leads/${leadId}/timeline${types ? `?types=${encodeURIComponent(types)}` : ''}`),
+    crmLeadMessages:          (leadId)                 => request('GET',    `/crm/leads/${leadId}/messages`),
+    crmPostLeadMessage:       (leadId, body)           => request('POST',   `/crm/leads/${leadId}/messages`, body),
+    crmUpdateLeadMessage:     (leadId, messageId, body) => request('PUT',   `/crm/leads/${leadId}/messages/${messageId}`, body),
+    crmDeleteLeadMessage:     (leadId, messageId)      => request('DELETE', `/crm/leads/${leadId}/messages/${messageId}`),
+    crmLeadAttachments:       (leadId)                 => request('GET',    `/crm/leads/${leadId}/attachments`),
+    crmDeleteLeadAttachment:  (leadId, attachmentId)   => request('DELETE', `/crm/leads/${leadId}/attachments/${attachmentId}`),
+    crmLeadAttachmentUploadPath:   (leadId)                       => `/crm/leads/${leadId}/attachments`,
+    crmLeadAttachmentDownloadPath: (leadId, attachmentId, inline) => `/crm/leads/${leadId}/attachments/${attachmentId}/download${inline ? '?inline=1' : ''}`,
+    crmLeadTasks:             (leadId)                 => request('GET',    `/crm/leads/${leadId}/tasks`),
+    crmCreateLeadTask:        (leadId, body)           => request('POST',   `/crm/leads/${leadId}/tasks`, body),
+    // Lead quotations (PosCrmLeadQuotationApiController): build from inventory → submit → head approves → PDF → send
+    crmLeadQuotations:        (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations`),
+    crmLeadQuotation:         (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}`),
+    crmCreateLeadQuotation:   (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations`, body),
+    crmUpdateLeadQuotation:   (leadId, id, body)       => request('PUT',    `/crm/leads/${leadId}/quotations/${id}`, body),
+    crmLeadQuotationStock:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations/stock-check`, body),
+    crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
+    // action: submit | approve | return | reject — body { comment }
+    crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),
+    crmSendLeadQuotation:     (leadId, id, body)       => request('POST',   `/crm/leads/${leadId}/quotations/${id}/send`, body),
+    crmLeadQuotationPdfPath:  (leadId, id)             => `/crm/leads/${leadId}/quotations/${id}/pdf`,
+    // Negotiation: body { response: accept|reject|discount_request, requested_discount?, notes?, lost_reason_id?, lost_reason? }
+    crmLeadQuotationRespond:  (leadId, id, body)       => request('POST',   `/crm/leads/${leadId}/quotations/${id}/responses`, body),
+    crmLeadQuotationVersions: (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}/versions`),
+    crmLeadQuotationDiff:     (leadId, id, againstId)  => request('GET',    `/crm/leads/${leadId}/quotations/${id}/diff${againstId ? `?against=${againstId}` : ''}`),
+    crmCustomerQuotationVersions: (customerId, id)     => request('GET',    `/crm/customers/${customerId}/quotations/${id}/versions`),
+    crmQuotationApprovals:    ()                       => request('GET',    '/crm/quotation-approvals'),
+    // Closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
+    crmLeadCloseOptions:      (leadId)                 => request('GET',    `/crm/leads/${leadId}/close-options`),
+    crmLeadWon:               (leadId, body)           => request('POST',   `/crm/leads/${leadId}/won`, body),
+    crmLeadLost:              (leadId, body)           => request('POST',   `/crm/leads/${leadId}/lost`, body),
+    crmLeadReopen:            (leadId, reason)         => request('POST',   `/crm/leads/${leadId}/reopen`, { reason }),
+    // Follow-ups: my / team list (scope mine|team, status pending|overdue|today|done|all), the lead's tab, log one
+    crmFollowUps:             (scope, status)          => request('GET',    `/crm/follow-ups?scope=${scope || 'mine'}&status=${status || 'pending'}`),
+    crmLeadFollowUps:         (leadId)                 => request('GET',    `/crm/leads/${leadId}/follow-ups`),
+    crmCreateLeadFollowUp:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/follow-ups`, body),
+    crmLogFollowUp:           (id, body)               => request('POST',   `/crm/follow-ups/${id}/log`, body),
+    crmCancelFollowUp:        (id)                     => request('POST',   `/crm/follow-ups/${id}/cancel`),
+    crmNotificationPrefs:     ()                       => request('GET',    '/crm/notification-preferences'),
+    crmSaveNotificationPrefs: (body)                   => request('PUT',    '/crm/notification-preferences', body),
+    // Management dashboard (admin, CEO, heads) — params: from, to, department_id, division_id, user_id, source
+    crmDashboard:             (params = {})            => request('GET',    `/crm/reports/dashboard?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmDashboardExportPath:   (format, params = {})    => `/crm/reports/dashboard/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
+    // Sales analysis report (ribbon → Report) — dashboard params plus group_by, status, search; format: pdf | csv
+    crmSalesAnalysis:         (params = {})            => request('GET',    `/crm/reports/sales-analysis?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmSalesAnalysisExportPath: (format, params = {})  => `/crm/reports/sales-analysis/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
+    // Row-level CRM audit log — admins only
+    crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmProjectHistoryFlow: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history/flow?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmOverview:     ()                 => request('GET',    '/crm/overview'),
+    crmContacts:     (q)                => request('GET',    `/crm/contacts?q=${encodeURIComponent(q||'')}`),
+    crmCustomer:     (customerId)       => request('GET',    `/crm/customers/${customerId}`),
     crmTasks:        (filter)             => request('GET',    `/crm/tasks?filter=${filter||'open'}`),
     crmCreateTask:   (body)               => request('POST',   '/crm/tasks', body),
     crmCompleteTask: (taskId)             => request('POST',   `/crm/tasks/${taskId}/complete`),
@@ -562,6 +787,7 @@ const API = (() => {
     // CRM Forms
     crmForms:             (projectId)                 => request('GET',    `/crm/projects/${projectId}/forms`),
     crmCreateForm:        (projectId, body)           => request('POST',   `/crm/projects/${projectId}/forms`, body),
+    crmManualEntryForm:   (projectId)                 => request('POST',   `/crm/projects/${projectId}/forms/manual-entry`),
     crmGetForm:           (projectId, formId)         => request('GET',    `/crm/projects/${projectId}/forms/${formId}`),
     crmUpdateForm:        (projectId, formId, body)   => request('PUT',    `/crm/projects/${projectId}/forms/${formId}`, body),
     crmSetDefaultForm:    (projectId, formId)         => request('POST',   `/crm/projects/${projectId}/forms/${formId}/default`),
@@ -627,20 +853,99 @@ const API = (() => {
     pmProjectCreate:       (body)      => request('POST',   '/pm/projects', body),
     pmProjectUpdate:       (id, body)  => request('PATCH',  `/pm/projects/${id}`, body),
     pmProjectDelete:       (id)        => request('DELETE', `/pm/projects/${id}`),
+    pmMembers:             (pid)       => request('GET',    `/pm/projects/${pid}/members`),
+    pmMemberAdd:           (pid, ids)  => request('POST',   `/pm/projects/${pid}/members`, { user_ids: ids }),
+    pmMemberRemove:        (pid, uid)  => request('DELETE', `/pm/projects/${pid}/members/${uid}`),
+    pmTeamMemberProfile:   (uid)       => request('GET',    `/pm/team-members/${uid}`),
     pmBoard:               (id)        => request('GET',    `/pm/projects/${id}/board`),
+    pmStatuses:            (pid)       => request('GET',    `/pm/projects/${pid}/statuses`),
+    pmStatusCreate:        (pid, body) => request('POST',   `/pm/projects/${pid}/statuses`, body),
+    pmStatusUpdate:        (id, body)  => request('PATCH',  `/pm/statuses/${id}`, body),
+    pmStatusDelete:        (id)        => request('DELETE', `/pm/statuses/${id}`),
+    // By status key — also works for the built-ins (todo / in_progress / review / done)
+    pmStatusUpdateKey:     (pid, key, body) => request('PATCH',  `/pm/projects/${pid}/statuses/${encodeURIComponent(key)}`, body),
+    pmStatusDeleteKey:     (pid, key)  => request('DELETE', `/pm/projects/${pid}/statuses/${encodeURIComponent(key)}`),
     pmTasks:               (id, qs)    => request('GET',    `/pm/projects/${id}/tasks${qs ? `?${qs}` : ''}`),
     pmTaskCreate:          (id, body)  => request('POST',   `/pm/projects/${id}/tasks`, body),
+    pmTaskShow:            (id)        => request('GET',    `/pm/tasks/${id}`),
     pmTaskStatus:          (id, status)=> request('PATCH',  `/pm/tasks/${id}/status`, { status }),
+    pmTaskCompletion:      (id, cs)    => request('PATCH',  `/pm/tasks/${id}/completion-status`, { completion_status: cs }),
     pmTaskComplete:        (id)        => request('POST',   `/pm/tasks/${id}/complete`, {}),
     pmTaskReopen:          (id)        => request('POST',   `/pm/tasks/${id}/reopen`, {}),
-    pmTaskComment:         (id, body)  => request('POST',   `/pm/tasks/${id}/comments`, { body }),
+    pmTaskComment:         (id, body, parentId = null, hasFiles = false) => request('POST', `/pm/tasks/${id}/comments`, { body, parent_id: parentId, has_files: hasFiles }),
+    pmCommentAttachmentUploadPath: (commentId) => `/pm/comments/${commentId}/attachments`,
     pmTaskTime:            (id, data)  => request('POST',   `/pm/tasks/${id}/time`, data),
     pmTaskDelete:          (id)        => request('DELETE', `/pm/tasks/${id}`),
+    // Task attachments — uploads go through electronAPI.apiUpload (multipart "files[]"),
+    // downloads through electronAPI.downloadFile (binary + save dialog).
+    pmTaskAttachments:          (tid)  => request('GET',    `/pm/tasks/${tid}/attachments`),
+    pmTaskAttachmentUploadPath: (tid)  => `/pm/tasks/${tid}/attachments`,
+    pmTaskAttachmentDownloadPath:(id)  => `/pm/task-attachments/${id}/download`,
+    pmTaskAttachmentDelete:     (id)   => request('DELETE', `/pm/task-attachments/${id}`),
+    pmMyWorkAttachments:          (tid) => request('GET',    `/pm/my-work/tasks/${tid}/attachments`),
+    pmMyWorkAttachmentUploadPath: (tid) => `/pm/my-work/tasks/${tid}/attachments`,
+    pmMyWorkAttachmentDownloadPath:(id) => `/pm/my-work/attachments/${id}/download`,
+    pmMyWorkAttachmentDelete:     (id)  => request('DELETE', `/pm/my-work/attachments/${id}`),
     pmMyTasks:             (filter)    => request('GET',    `/pm/my-tasks${filter ? `?filter=${filter}` : ''}`),
+    // My Projects panel (Assigned Project Access) — only tasks assigned to the caller
+    pmMyWork:              ()          => request('GET',    '/pm/my-work'),
+    pmMyWorkTaskShow:      (id)        => request('GET',    `/pm/my-work/tasks/${id}`),
+    pmMyWorkProjectShow:   (id)        => request('GET',    `/pm/my-work/projects/${id}`),
+    pmMyWorkTaskStatus:    (id, status)=> request('PATCH',  `/pm/my-work/tasks/${id}/status`, { status }),
+    pmMyWorkTaskCompletion:(id, cs)    => request('PATCH',  `/pm/my-work/tasks/${id}/completion-status`, { completion_status: cs }),
+    pmMyWorkTaskComment:   (id, body, parentId = null, hasFiles = false) => request('POST', `/pm/my-work/tasks/${id}/comments`, { body, parent_id: parentId, has_files: hasFiles }),
+    pmMyWorkCommentAttachmentUploadPath: (commentId) => `/pm/my-work/comments/${commentId}/attachments`,
+    pmMyWorkTaskCreate:    (data)      => request('POST',   '/pm/my-work/tasks', data),
+    // Task deletion: owner deletes; others send a delete request the owner approves / rejects
+    pmMyWorkTaskDelete:          (id)         => request('DELETE', `/pm/my-work/tasks/${id}`),
+    pmMyWorkTaskDeleteRequest:   (id, reason) => request('POST',   `/pm/my-work/tasks/${id}/delete-request`, { reason: reason || null }),
+    pmMyWorkDeleteRequests:      ()           => request('GET',    '/pm/my-work/delete-requests'),
+    pmMyWorkDeleteRequestShow:   (id)         => request('GET',    `/pm/my-work/delete-requests/${id}`),
+    pmMyWorkDeleteRequestApprove:(id)         => request('POST',   `/pm/my-work/delete-requests/${id}/approve`),
+    pmMyWorkDeleteRequestReject: (id)         => request('POST',   `/pm/my-work/delete-requests/${id}/reject`),
+    // My Projects → Inbox (team messages). Attachments upload per file via electronAPI.apiUpload
+    // after the message is sent; downloads go through electronAPI.downloadFile.
+    pmInbox:               (params = {}) => request('GET', `/pm/inbox?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    pmInboxCounts:         ()          => request('GET',    '/pm/inbox/counts'),
+    pmInboxContacts:       ()          => request('GET',    '/pm/inbox/contacts'),
+    pmInboxThread:         (id)        => request('GET',    `/pm/inbox/threads/${id}`),
+    pmInboxSend:           (data)      => request('POST',   '/pm/inbox/threads', data),
+    pmInboxReply:          (id, body)  => request('POST',   `/pm/inbox/threads/${id}/reply`, { body }),
+    pmInboxAction:         (ids, action) => request('POST', '/pm/inbox/threads/actions', { ids, action }),
+    pmInboxAttachmentUploadPath:   (messageId) => `/pm/inbox/messages/${messageId}/attachments`,
+    pmInboxAttachmentDownloadPath: (id)        => `/pm/inbox/attachments/${id}/download`,
     pmMilestones:          (pid)       => request('GET',    `/pm/projects/${pid}/milestones`),
     pmMilestoneCreate:     (pid, body) => request('POST',   `/pm/projects/${pid}/milestones`, body),
+    pmMilestoneUpdate:     (id, body)  => request('PATCH',  `/pm/milestones/${id}`, body),
+    pmMilestoneReorder:    (pid, ids)  => request('POST',   `/pm/projects/${pid}/milestones/reorder`, { ids }),
     pmMilestoneComplete:   (id)        => request('POST',   `/pm/milestones/${id}/complete`, {}),
+    pmMilestoneReopen:     (id)        => request('POST',   `/pm/milestones/${id}/reopen`, {}),
+    pmTaskMilestone:       (id, mid)   => request('PATCH',  `/pm/tasks/${id}/milestone`, { milestone_id: mid }),
+    pmTaskAssign:          (id, ids)   => request('PATCH',  `/pm/tasks/${id}/assignees`, { assignee_ids: ids }),
     pmMilestoneDelete:     (id)        => request('DELETE', `/pm/milestones/${id}`),
+
+    // E-Commerce (online store) — Modules/Ecommerce/routes/api.php
+    ecomDashboard:         ()          => request('GET',    '/ecom/dashboard'),
+    ecomStore:             ()          => request('GET',    '/ecom/store'),
+    ecomStoreUpdate:       (body)      => request('PATCH',  '/ecom/store', body),
+    ecomListings:          (q, state)  => request('GET',    `/ecom/listings?q=${encodeURIComponent(q||'')}&state=${encodeURIComponent(state||'')}`),
+    ecomListingCandidates: (q)         => request('GET',    `/ecom/listings/candidates?q=${encodeURIComponent(q||'')}`),
+    ecomListingsAdd:       (ids)       => request('POST',   '/ecom/listings', { product_ids: ids }),
+    ecomListingUpdate:     (id, body)  => request('PATCH',  `/ecom/listings/${id}`, body),
+    ecomListingDelete:     (id)        => request('DELETE', `/ecom/listings/${id}`),
+    ecomOrders:            (q, status, page) => request('GET', `/ecom/orders?q=${encodeURIComponent(q||'')}&status=${encodeURIComponent(status||'')}&page=${page||1}`),
+    ecomOrder:             (id)        => request('GET',    `/ecom/orders/${id}`),
+    ecomOrderUpdate:       (id, body)  => request('PATCH',  `/ecom/orders/${id}`, body),
+    ecomGateways:          ()          => request('GET',    '/ecom/payment-gateways'),
+    ecomGatewayUpdate:     (key, body) => request('PATCH',  `/ecom/payment-gateways/${key}`, body),
+    ecomTemplates:         ()          => request('GET',    '/ecom/templates'),
+    ecomSlides:            ()          => request('GET',    '/ecom/slides'),
+    ecomSlideCreate:       (body)      => request('POST',   '/ecom/slides', body),
+    ecomSlideUpdate:       (id, body)  => request('PATCH',  `/ecom/slides/${id}`, body),
+    ecomSlideDelete:       (id)        => request('DELETE', `/ecom/slides/${id}`),
+    ecomSlidesReorder:     (ids)       => request('POST',   '/ecom/slides/reorder', { ids }),
+    // Store logo / banner / slide images upload through the existing File Manager endpoint (multipart "files[]").
+    ecomImageUploadPath:   '/online/file-manager/upload',
 
     // Brand Management
     brands:       (q)          => request('GET',    `/brand-mgmt/brands?q=${encodeURIComponent(q||'')}`),
@@ -716,5 +1021,17 @@ const API = (() => {
     devWebhookUpdate:          (id,body) => request('PATCH',  `/developers/webhooks/${id}`, body),
     devWebhookRegenerateSecret:(id)      => request('POST',   `/developers/webhooks/${id}/regenerate-secret`),
     devWebhookDelete:          (id)      => request('DELETE', `/developers/webhooks/${id}`),
+
+    // Database Backup & Import (PosBackupApiController). Export/validate can run for minutes,
+    // so they go through electronAPI.backupApi (long timeout); upload/download stream in main.js.
+    backupSummary:      ()         => request('GET',    '/backup/summary'),
+    backupExport:       (body)     => window.electronAPI.backupApi('POST', '/backup/exports', body),
+    backupExportPath:   (token, filename) => `/backup/exports/${token}/download?filename=${encodeURIComponent(filename || 'zeebroo-backup.zip')}`,
+    backupImportStart:  (filename, size) => request('POST', '/backup/imports', { filename, size }),
+    backupImport:       (id)       => request('GET',    `/backup/imports/${id}`),
+    backupImportCancel: (id)       => request('DELETE', `/backup/imports/${id}`),
+    backupImportValidate:(id)      => window.electronAPI.backupApi('POST', `/backup/imports/${id}/validate`),
+    backupImportRun:    (id)       => window.electronAPI.backupApi('POST', `/backup/imports/${id}/run`),
+    backupSafetyPath:   (id)       => `/backup/imports/${id}/safety-download`,
   };
 })();

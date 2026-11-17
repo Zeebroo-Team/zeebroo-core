@@ -26,9 +26,24 @@ class PosExpenseBillApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        return $this->saveBill($request);
+    }
+
+    public function update(Request $request, Bill $bill): JsonResponse
+    {
+        return $this->saveBill($request, $bill);
+    }
+
+    private function saveBill(Request $request, ?Bill $bill = null): JsonResponse
+    {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'fin_bills');
         $user     = $request->user();
+
+        if ($bill !== null && ((int) $bill->business_id !== (int) $business->id
+            || ! $this->service->billForUser($user, $bill))) {
+            return response()->json(['message' => 'Bill not found.'], 404);
+        }
 
         $request->merge([
             'branch_id'                  => $request->filled('branch_id')       ? $request->integer('branch_id')       : null,
@@ -121,6 +136,14 @@ class PosExpenseBillApiController extends Controller
         }
 
         $validated['recurring_cost'] = round((float) ($validated['recurring_cost'] ?? 0), 2);
+
+        if ($bill !== null) {
+            if (! $this->service->updateForUser($user, $bill, $validated)) {
+                return response()->json(['message' => 'Unable to update this bill.'], 403);
+            }
+
+            return response()->json(['message' => 'Bill updated successfully.', 'data' => $this->format($bill->refresh())]);
+        }
 
         $bill = $this->service->create($user, $business, $validated);
 
@@ -356,7 +379,7 @@ class PosExpenseBillApiController extends Controller
             'remind_before_days'         => $bill->remind_before_days,
             'amount_varies_by_usage'     => (bool) $bill->amount_varies_by_usage,
             'allow_split_payment'        => (bool) $bill->allow_split_payment,
-            'assignment_type'            => $bill->assignment_type ?? 'none',
+            'assignment_type'            => $bill->resolvedAssignmentType(),
             'branch_id'                  => $bill->branch_id,
             'department_id'              => $bill->department_id,
             'property_id'                => $bill->property_id,
@@ -367,6 +390,7 @@ class PosExpenseBillApiController extends Controller
             'deduct_account_id'          => $bill->deduct_account_id,
             'description'                => $bill->description,
             'notes'                      => $bill->notes,
+            'created_at'                 => $bill->created_at?->format('Y-m-d'),
         ];
     }
 }

@@ -9,6 +9,7 @@ import '../../dashboard/widgets/stat_tile.dart';
 import '../../inventory/widgets/list_states.dart';
 import '../../inventory/widgets/picker_sheet.dart';
 import 'finance_common.dart';
+import '../../payments/data/payment_manager_repository.dart';
 
 const _kRecurringTypes = [
   ('per_day', 'Per day'),
@@ -24,7 +25,8 @@ class LoansTab extends StatefulWidget {
   State<LoansTab> createState() => _LoansTabState();
 }
 
-class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin {
+class _LoansTabState extends State<LoansTab>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -45,7 +47,10 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
       _error = null;
     });
     try {
-      final res = await ApiClient.instance.get(ApiEndpoints.financeLoans, bypassCache: forceRefresh);
+      final res = await ApiClient.instance.get(
+        ApiEndpoints.financeLoans,
+        bypassCache: forceRefresh,
+      );
       final body = res.data;
       _loans = parseListData(body);
       _summary = body is Map ? Map<String, dynamic>.from(body) : {};
@@ -88,10 +93,16 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
       );
       if (!confirmed) return;
       try {
-        await ApiClient.instance.delete(ApiEndpoints.financeLoan((loan['id'] as num).toInt()));
+        await ApiClient.instance.delete(
+          ApiEndpoints.financeLoan((loan['id'] as num).toInt()),
+        );
         _load();
       } catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(apiErrorMessage(e))));
+        }
       }
     }
   }
@@ -106,7 +117,14 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
           child: Row(
             children: [
               const Expanded(
-                child: Text('Loans', style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w800, color: AppColors.textDark)),
+                child: Text(
+                  'Loans',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
               ),
               AddButton(onTap: _openAdd),
             ],
@@ -119,7 +137,9 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
 
   Widget _buildBody() {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null && _loans.isEmpty) return ErrorState(error: _error!, onRetry: _load);
+    if (_error != null && _loans.isEmpty) {
+      return ErrorState(error: _error!, onRetry: _load);
+    }
     if (_loans.isEmpty) return const EmptyState(message: 'No loans yet.');
 
     return RefreshIndicator(
@@ -129,16 +149,24 @@ class _LoansTabState extends State<LoansTab> with AutomaticKeepAliveClientMixin 
         children: [
           StatGrid(
             tiles: [
-              StatTile(label: 'Active loans', value: '${_summary['active_count'] ?? _loans.length}', icon: Icons.account_balance_outlined),
+              StatTile(
+                label: 'Active loans',
+                value: '${_summary['active_count'] ?? _loans.length}',
+                icon: Icons.account_balance_outlined,
+              ),
               StatTile(
                 label: 'Total principal',
-                value: (_summary['total_principal_fmt'] as String?) ?? formatMoney(_summary['total_principal']),
+                value:
+                    (_summary['total_principal_fmt'] as String?) ??
+                    formatMoney(_summary['total_principal']),
                 icon: Icons.savings_outlined,
                 color: AppColors.primary,
               ),
               StatTile(
                 label: 'Monthly outflow',
-                value: (_summary['total_monthly_fmt'] as String?) ?? formatMoney(_summary['total_monthly_outflow']),
+                value:
+                    (_summary['total_monthly_fmt'] as String?) ??
+                    formatMoney(_summary['total_monthly_outflow']),
                 icon: Icons.calendar_month_outlined,
                 color: AppColors.warning,
               ),
@@ -162,9 +190,12 @@ class _LoanCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final endDate = DateTime.tryParse((loan['loan_ending_date'] as String?) ?? '');
+    final endDate = DateTime.tryParse(
+      (loan['loan_ending_date'] as String?) ?? '',
+    );
     final completed = endDate != null && endDate.isBefore(DateTime.now());
-    final interestLabel = '${loan['interest_rate_type_label'] ?? ''} · ${loan['interest_rate'] ?? ''}%';
+    final interestLabel =
+        '${loan['interest_rate_type_label'] ?? ''} · ${loan['interest_rate'] ?? ''}%';
 
     return FinanceCard(
       onTap: onTap,
@@ -178,10 +209,17 @@ class _LoanCard extends StatelessWidget {
                   (loan['name'] as String?) ?? '',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w700, color: AppColors.textDark),
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
-              FinanceBadge(label: completed ? 'COMPLETED' : 'ACTIVE', color: completed ? AppColors.textMuted : AppColors.success),
+              FinanceBadge(
+                label: completed ? 'COMPLETED' : 'ACTIVE',
+                color: completed ? AppColors.textMuted : AppColors.success,
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -190,8 +228,14 @@ class _LoanCard extends StatelessWidget {
             runSpacing: 6,
             children: [
               if ((loan['bank_name'] as String?)?.isNotEmpty ?? false)
-                FinanceBadge(label: loan['bank_name'] as String, color: AppColors.primary),
-              FinanceBadge(label: (loan['cadence_label'] as String?) ?? '', color: AppColors.textMuted),
+                FinanceBadge(
+                  label: loan['bank_name'] as String,
+                  color: AppColors.primary,
+                ),
+              FinanceBadge(
+                label: (loan['cadence_label'] as String?) ?? '',
+                color: AppColors.textMuted,
+              ),
               FinanceBadge(label: interestLabel, color: AppColors.textMuted),
             ],
           ),
@@ -201,11 +245,18 @@ class _LoanCard extends StatelessWidget {
             children: [
               Text(
                 'Principal ${(loan['borrowed_amount_fmt'] as String?) ?? formatMoney(loan['borrowed_amount'])}',
-                style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                ),
               ),
               Text(
                 '${(loan['payment_formatted'] as String?) ?? ''} / period',
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
               ),
             ],
           ),
@@ -213,7 +264,10 @@ class _LoanCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               'Debited from ${loan['account_name']}',
-              style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              style: const TextStyle(
+                fontSize: 11.5,
+                color: AppColors.textMuted,
+              ),
             ),
           ],
         ],
@@ -223,7 +277,13 @@ class _LoanCard extends StatelessWidget {
 }
 
 class AddLoanSheet extends StatefulWidget {
-  const AddLoanSheet();
+  const AddLoanSheet({
+    super.key,
+    this.record,
+    this.repository = const PaymentManagerRepository(),
+  });
+  final Map<String, dynamic>? record;
+  final PaymentManagerRepository repository;
 
   @override
   State<AddLoanSheet> createState() => AddLoanSheetState();
@@ -254,6 +314,22 @@ class AddLoanSheetState extends State<AddLoanSheet> {
   @override
   void initState() {
     super.initState();
+    final r = widget.record;
+    if (r != null) {
+      _nameCtrl.text = r['name']?.toString() ?? '';
+      _descriptionCtrl.text = r['description']?.toString() ?? '';
+      _borrowedCtrl.text = r['borrowed_amount']?.toString() ?? '';
+      _interestRateCtrl.text = r['interest_rate']?.toString() ?? '';
+      _remindCtrl.text = r['remind_before_days']?.toString() ?? '';
+      _recurringType = r['recurring_type'] ?? 'per_month';
+      _firstInstallmentDate = DateTime.tryParse(
+        r['first_installment_due_date'] ?? '',
+      );
+      _accountId = (r['deduct_account_id'] as num?)?.toInt();
+      _bankId = (r['bank_id'] as num?)?.toInt();
+      _interestRateType = r['interest_rate_type'] ?? 'percentage';
+      _loanEndingDate = DateTime.tryParse(r['loan_ending_date'] ?? '');
+    }
     _loadOptions();
   }
 
@@ -270,11 +346,11 @@ class AddLoanSheetState extends State<AddLoanSheet> {
   Future<void> _loadOptions() async {
     try {
       final results = await Future.wait([
-        ApiClient.instance.get(ApiEndpoints.banks),
-        ApiClient.instance.get(ApiEndpoints.accounts),
+        widget.repository.get(ApiEndpoints.banks),
+        widget.repository.get(ApiEndpoints.accounts),
       ]);
-      _banks = parseListData(results[0].data);
-      _accounts = parseListData(results[1].data);
+      _banks = parseListData(results[0]);
+      _accounts = parseListData(results[1]);
     } catch (e) {
       _error = apiErrorMessage(e);
     } finally {
@@ -284,6 +360,7 @@ class AddLoanSheetState extends State<AddLoanSheet> {
 
   Future<void> _submit() async {
     final formOk = _formKey.currentState?.validate() ?? false;
+    if (_saving) return;
     if (!formOk) return;
     if (_bankId == null) {
       setState(() => _error = 'Pick a bank.');
@@ -295,25 +372,33 @@ class AddLoanSheetState extends State<AddLoanSheet> {
       _error = null;
     });
     try {
-      await ApiClient.instance.post(
-        ApiEndpoints.financeLoans,
-        data: {
-          'name': _nameCtrl.text.trim(),
-          if (_descriptionCtrl.text.trim().isNotEmpty) 'description': _descriptionCtrl.text.trim(),
-          'bank_id': _bankId,
-          'borrowed_amount': double.tryParse(_borrowedCtrl.text.trim()) ?? 0,
-          'interest_rate_type': _interestRateType,
-          'interest_rate': double.tryParse(_interestRateCtrl.text.trim()) ?? 0,
-          'recurring_type': _recurringType,
-          if (_firstInstallmentDate != null) 'first_installment_due_date': toApiDate(_firstInstallmentDate!),
-          if (_loanEndingDate != null) 'loan_ending_date': toApiDate(_loanEndingDate!),
-          if (_accountId != null) 'deduct_account_id': _accountId,
-          if (_remindCtrl.text.trim().isNotEmpty) 'remind_before_days': int.tryParse(_remindCtrl.text.trim()),
+      await widget.repository.save(ApiEndpoints.financeLoans, {
+        if (widget.record != null) ...{
+          'description': null,
+          'first_installment_due_date': null,
+          'loan_ending_date': null,
+          'deduct_account_id': null,
+          'remind_before_days': null,
         },
-      );
+        'name': _nameCtrl.text.trim(),
+        if (_descriptionCtrl.text.trim().isNotEmpty)
+          'description': _descriptionCtrl.text.trim(),
+        'bank_id': _bankId,
+        'borrowed_amount': double.tryParse(_borrowedCtrl.text.trim()) ?? 0,
+        'interest_rate_type': _interestRateType,
+        'interest_rate': double.tryParse(_interestRateCtrl.text.trim()) ?? 0,
+        'recurring_type': _recurringType,
+        if (_firstInstallmentDate != null)
+          'first_installment_due_date': toApiDate(_firstInstallmentDate!),
+        if (_loanEndingDate != null)
+          'loan_ending_date': toApiDate(_loanEndingDate!),
+        if (_accountId != null) 'deduct_account_id': _accountId,
+        if (_remindCtrl.text.trim().isNotEmpty)
+          'remind_before_days': int.tryParse(_remindCtrl.text.trim()),
+      }, id: (widget.record?['id'] as num?)?.toInt());
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      setState(() => _error = apiErrorMessage(e));
+      if (mounted) setState(() => _error = apiErrorMessage(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -321,7 +406,7 @@ class AddLoanSheetState extends State<AddLoanSheet> {
 
   @override
   Widget build(BuildContext context) => FormSheetShell(
-    title: 'Add loan',
+    title: widget.record == null ? 'Add loan' : 'Edit loan',
     loading: _loadingOptions,
     child: Form(
       key: _formKey,
@@ -332,14 +417,25 @@ class AddLoanSheetState extends State<AddLoanSheet> {
           TextFormField(
             controller: _nameCtrl,
             decoration: const InputDecoration(labelText: 'Loan name'),
-            validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+            validator: (v) =>
+                (v == null || v.trim().isEmpty) ? 'Required' : null,
           ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int>(
+            isExpanded: true,
             initialValue: _bankId,
             decoration: const InputDecoration(labelText: 'Bank'),
             items: [
-              for (final b in _banks) DropdownMenuItem(value: (b['id'] as num).toInt(), child: Text(b['name'] as String? ?? '')),
+              if (_bankId != null && !_banks.any((e) => e['id'] == _bankId))
+                DropdownMenuItem(
+                  value: _bankId,
+                  child: const Text('Current bank (unavailable)'),
+                ),
+              for (final b in _banks)
+                DropdownMenuItem(
+                  value: (b['id'] as num).toInt(),
+                  child: Text(b['name'] as String? ?? ''),
+                ),
             ],
             onChanged: (v) => setState(() => _bankId = v),
           ),
@@ -360,7 +456,8 @@ class AddLoanSheetState extends State<AddLoanSheet> {
               ButtonSegment(value: 'flat', label: Text('Flat')),
             ],
             selected: {_interestRateType},
-            onSelectionChanged: (s) => setState(() => _interestRateType = s.first),
+            onSelectionChanged: (s) =>
+                setState(() => _interestRateType = s.first),
           ),
           const SizedBox(height: 14),
           TextFormField(
@@ -376,8 +473,12 @@ class AddLoanSheetState extends State<AddLoanSheet> {
           DropdownButtonFormField<String>(
             initialValue: _recurringType,
             decoration: const InputDecoration(labelText: 'Repayment cadence'),
-            items: [for (final r in _kRecurringTypes) DropdownMenuItem(value: r.$1, child: Text(r.$2))],
-            onChanged: (v) => setState(() => _recurringType = v ?? _recurringType),
+            items: [
+              for (final r in _kRecurringTypes)
+                DropdownMenuItem(value: r.$1, child: Text(r.$2)),
+            ],
+            onChanged: (v) =>
+                setState(() => _recurringType = v ?? _recurringType),
           ),
           const SizedBox(height: 14),
           FinanceDateField(
@@ -386,15 +487,31 @@ class AddLoanSheetState extends State<AddLoanSheet> {
             onPick: (d) => setState(() => _firstInstallmentDate = d),
           ),
           const SizedBox(height: 14),
-          FinanceDateField(label: 'Loan ending date (optional)', value: _loanEndingDate, onPick: (d) => setState(() => _loanEndingDate = d)),
+          FinanceDateField(
+            label: 'Loan ending date (optional)',
+            value: _loanEndingDate,
+            onPick: (d) => setState(() => _loanEndingDate = d),
+          ),
           const SizedBox(height: 14),
           DropdownButtonFormField<int?>(
+            isExpanded: true,
             initialValue: _accountId,
-            decoration: const InputDecoration(labelText: 'Debit account (optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Debit account (optional)',
+            ),
             items: [
+              if (_accountId != null &&
+                  !_accounts.any((e) => e['id'] == _accountId))
+                DropdownMenuItem(
+                  value: _accountId,
+                  child: const Text('Current account (unavailable)'),
+                ),
               const DropdownMenuItem(value: null, child: Text('—')),
               for (final a in _accounts)
-                DropdownMenuItem(value: (a['id'] as num).toInt(), child: Text(a['account_name'] as String? ?? '')),
+                DropdownMenuItem(
+                  value: (a['id'] as num).toInt(),
+                  child: Text(a['account_name'] as String? ?? ''),
+                ),
             ],
             onChanged: (v) => setState(() => _accountId = v),
           ),
@@ -402,11 +519,17 @@ class AddLoanSheetState extends State<AddLoanSheet> {
           TextFormField(
             controller: _remindCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Remind before (days, optional)'),
+            decoration: const InputDecoration(
+              labelText: 'Remind before (days, optional)',
+            ),
           ),
           sheetError(_error),
           const SizedBox(height: 8),
-          SheetSubmitButton(label: 'Add loan', saving: _saving, onPressed: _submit),
+          SheetSubmitButton(
+            label: widget.record == null ? 'Add loan' : 'Save changes',
+            saving: _saving,
+            onPressed: _submit,
+          ),
         ],
       ),
     ),
@@ -487,7 +610,11 @@ class _PayLoanSheetState extends State<_PayLoanSheet> {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        FinanceDateField(label: 'Installment date', value: _dueDate, onPick: (d) => setState(() => _dueDate = d)),
+        FinanceDateField(
+          label: 'Installment date',
+          value: _dueDate,
+          onPick: (d) => setState(() => _dueDate = d),
+        ),
         const SizedBox(height: 14),
         SegmentedButton<String>(
           segments: const [
@@ -504,14 +631,21 @@ class _PayLoanSheetState extends State<_PayLoanSheet> {
             decoration: const InputDecoration(labelText: 'Debit account'),
             items: [
               for (final a in _accounts)
-                DropdownMenuItem(value: (a['id'] as num).toInt(), child: Text(a['account_name'] as String? ?? '')),
+                DropdownMenuItem(
+                  value: (a['id'] as num).toInt(),
+                  child: Text(a['account_name'] as String? ?? ''),
+                ),
             ],
             onChanged: (v) => setState(() => _accountId = v),
           ),
         ],
         sheetError(_error),
         const SizedBox(height: 8),
-        SheetSubmitButton(label: 'Record payment', saving: _saving, onPressed: _submit),
+        SheetSubmitButton(
+          label: 'Record payment',
+          saving: _saving,
+          onPressed: _submit,
+        ),
       ],
     ),
   );

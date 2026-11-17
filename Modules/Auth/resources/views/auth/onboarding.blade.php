@@ -14,6 +14,7 @@ $obFeatures = [
     ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'desc' => 'Design, schedule and track marketing campaigns'],
     ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'desc' => 'Build trigger-based workflows and automated email sequences'],
     ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'desc' => 'API access, webhooks and developer tools for integrations'],
+    ['key' => 'ecommerce',            'label' => 'E-Commerce',           'icon' => 'fa-store',              'desc' => 'Online store website, web orders and delivery tracking', 'requires' => ['product_management']],
 ];
 
 $obSteps = [
@@ -198,9 +199,10 @@ $obSteps = [
 
                     <div class="ob-fields-row">
                         <div class="ob-field">
-                            <label for="obBranchPhone">{{ __('Phone') }} <span class="ob-optional">{{ __('(optional)') }}</span></label>
+                            <label for="obBranchPhone">{{ __('Phone') }} <span class="ob-req" aria-hidden="true">*</span></label>
                             <input id="obBranchPhone" name="branch_phone" type="tel" class="ob-input"
                                 value="{{ old('branch_phone') }}" placeholder="{{ __('+1 555 000 0000') }}" maxlength="40">
+                            <div class="ob-field-error" id="obErrBranchPhone"></div>
                         </div>
                         <div class="ob-field">
                             <label for="obBranchEmail">{{ __('Email') }} <span class="ob-optional">{{ __('(optional)') }}</span></label>
@@ -346,6 +348,8 @@ $obSteps = [
 @push('auth-styles')
 <style>
 /* ─── Break auth layout constraints ─── */
+.auth-page{display:block!important;padding:0!important;}
+.auth-split{max-width:none!important;min-height:100vh!important;padding:0!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:transparent!important;animation:none!important;}
 .auth-split__visual{display:none!important;}
 .auth-split__main{padding:0!important;align-items:stretch!important;background:#f5f5f4!important;}
 .auth-shell{max-width:none!important;width:100%!important;height:100vh!important;display:flex!important;position:relative!important;}
@@ -735,6 +739,13 @@ $obSteps = [
             if (!branchEl.value.trim()) {
                 showError(branchEl, errBranch, '{{ __("Location name is required.") }}');
                 branchEl.focus(); return false;
+            }
+            var phoneEl  = document.getElementById('obBranchPhone');
+            var errPhone = document.getElementById('obErrBranchPhone');
+            clearError(phoneEl, errPhone);
+            if (!phoneEl.value.trim()) {
+                showError(phoneEl, errPhone, '{{ __("Phone number is required.") }}');
+                phoneEl.focus(); return false;
             }
         }
         if (n === 5) {
