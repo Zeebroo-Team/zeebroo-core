@@ -60559,11 +60559,14 @@ async function submitDsCreate() {
   }
 
   function _crmCardActionsHtml(lead) {
+    // Shortcut to the same Assign modal the lead's Overview tab opens
+    const assign = _crmLeadCan(lead, 'assign')
+      ? `<button class="crm-card-btn crm-card-assign" data-lead-id="${lead.id}" title="Assign team"><i class="fa fa-user-plus"></i></button>` : '';
     const edit = _crmLeadCan(lead, 'edit')
       ? `<button class="crm-card-btn crm-card-edit" data-lead-id="${lead.id}" title="Edit"><i class="fa fa-pen"></i></button>` : '';
     const del = _crmLeadCan(lead, 'delete')
       ? `<button class="crm-card-btn crm-card-del" data-lead-id="${lead.id}" title="Delete"><i class="fa fa-trash"></i></button>` : '';
-    return edit || del ? `<div class="crm-card-actions">${edit}${del}</div>` : '';
+    return assign || edit || del ? `<div class="crm-card-actions">${assign}${edit}${del}</div>` : '';
   }
 
   async function _crmDeleteLead(leadId) {
@@ -60647,7 +60650,9 @@ async function submitDsCreate() {
     if (e.target.closest('select')) return;
     const editBtn = e.target.closest('.crm-card-edit');
     const delBtn  = e.target.closest('.crm-card-del');
+    const assignBtn = e.target.closest('.crm-card-assign');
     if (delBtn) { _crmDeleteLead(parseInt(delBtn.dataset.leadId)); return; }
+    if (assignBtn) { const l = _findLead(parseInt(assignBtn.dataset.leadId)); if (l) _crmOpenAssignModal(l); return; }
     const row = e.target.closest('tr[data-lead-id]');
     const id  = parseInt((editBtn || row)?.dataset.leadId);
     const lead = id ? _findLead(id) : null;
@@ -60923,6 +60928,15 @@ async function submitDsCreate() {
         e.stopPropagation();
         const lead = _findLead(parseInt(btn.dataset.leadId));
         if (lead) _openEditLeadModal(lead);
+      });
+    });
+
+    // ── Assign team (shortcut to the Assign modal) ────────────────────────
+    board.querySelectorAll('.crm-card-assign').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const lead = _findLead(parseInt(btn.dataset.leadId));
+        if (lead) _crmOpenAssignModal(lead);
       });
     });
 
