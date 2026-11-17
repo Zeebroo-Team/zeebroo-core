@@ -58,12 +58,13 @@
 .bum-modal-sub{margin:0;font-size:13px;color:var(--muted);}
 .bum-modal-close{width:34px;height:34px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;display:grid;place-items:center;font-size:18px;line-height:1;padding:0;flex-shrink:0;}
 .bum-modal-close:hover{background:color-mix(in srgb,#ef4444 8%,transparent);border-color:color-mix(in srgb,#ef4444 35%,var(--border));}
+.bum-modal-shell > form{display:flex;flex-direction:column;flex:1;min-height:0;}
 .bum-modal-body{padding:20px 22px;overflow-y:auto;flex:1;min-height:0;}
 .bum-modal-foot{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;flex-shrink:0;}
 /* Form fields */
 .bum-field{margin-bottom:16px;}
 .bum-field:last-child{margin-bottom:0;}
-.bum-field label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px;}
+.bum-field > label{display:block;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px;}
 .bum-field input,.bum-field select{width:100%;box-sizing:border-box;padding:10px 13px;border-radius:11px;border:1px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);color:var(--text);font-size:14px;font-family:inherit;}
 .bum-field input:focus,.bum-field select:focus{outline:none;border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 14%,transparent);}
 .bum-field-hint{margin:5px 0 0;font-size:11.5px;color:var(--muted);}
@@ -237,9 +238,11 @@
                 <div class="bum-field">
                     <label for="bumRole">Role</label>
                     <select id="bumRole" name="role" onchange="bumRoleChange(this.value)">
-                        <option value="admin">Admin — full access, can manage members</option>
-                        <option value="manager" selected>Manager — operational access</option>
-                        <option value="staff">Staff — limited access by permissions</option>
+                        @foreach($roles as $slug => $name)
+                            <option value="{{ $slug }}" @selected($slug === 'manager')>
+                                {{ $name }}@if($slug === 'admin') — full access, can manage members @elseif($slug === 'manager') — operational access @elseif($slug === 'staff') — limited access by permissions @endif
+                            </option>
+                        @endforeach
                     </select>
                 </div>
 

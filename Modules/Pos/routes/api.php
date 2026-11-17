@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\Pos\Http\Middleware\EnsureSubscriptionSettled;
+use Modules\Pos\Http\Middleware\PosIdempotency;
 use Modules\Pos\Http\Controllers\Api\PosAuthApiController;
 use Modules\Pos\Http\Controllers\Api\PosPaymentApiController;
 use Modules\Pos\Http\Controllers\Api\PosBusinessesApiController;
@@ -16,6 +17,8 @@ use Modules\Pos\Http\Controllers\Api\PosProductApiController;
 use Modules\Pos\Http\Controllers\Api\PosPurchaseOrderApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleReturnApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleRevertApiController;
+use Modules\Pos\Http\Controllers\Api\PosSaleChequeApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseBillApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpenseBillAssignmentApiController;
 use Modules\Pos\Http\Controllers\Api\PosAccountApiController;
@@ -46,13 +49,17 @@ use Modules\Pos\Http\Controllers\Api\PosProductCategoryApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductUnitApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductDiscountApiController;
 use Modules\Pos\Http\Controllers\Api\PosSaleCampaignApiController;
+use Modules\Pos\Http\Controllers\Api\PosGiftCardApiController;
+use Modules\Pos\Http\Controllers\Api\PosCouponApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
 use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpensesBreakdownApiController;
 use Modules\Pos\Http\Controllers\Api\PosProfitReportApiController;
+use Modules\Pos\Http\Controllers\Api\PosSalesReportApiController;
 use Modules\Pos\Http\Controllers\Api\PosPayrollOverviewApiController;
+use Modules\Pos\Http\Controllers\Api\PosBusinessFlowSummaryApiController;
 use Modules\Pos\Http\Controllers\Api\PosUserManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosBranchManagementApiController;
 use Modules\Pos\Http\Controllers\Api\PosRoleManagementApiController;
@@ -62,10 +69,17 @@ use Modules\Pos\Http\Controllers\Api\PosCashierApiController;
 use Modules\Pos\Http\Controllers\Api\PosNotificationApiController;
 use Modules\Pos\Http\Controllers\Api\PosSubscriptionApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductRentalApiController;
+use Modules\Pos\Http\Controllers\Api\PosOfflineSaleApiController;
+use Modules\Pos\Http\Controllers\Api\PosOfflineRecordApiController;
+use Modules\Pos\Http\Controllers\Api\PosProductSyncApiController;
+use Modules\Pos\Http\Controllers\Api\PosBackupApiController;
 
 Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
+    Route::post('auth/web-handoff',       [PosAuthApiController::class, 'webHandoff'])->middleware('throttle:20,1')->name('auth.web-handoff');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
+    Route::post('auth/password/forgot',   [PosAuthApiController::class, 'forgotPassword'])->middleware('throttle:5,1')->name('auth.password.forgot');
+    Route::post('auth/password/reset',    [PosAuthApiController::class, 'resetPassword'])->middleware('throttle:10,1')->name('auth.password.reset');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
     Route::get ('auth/packages',           [PosAuthApiController::class, 'packages'])->name('auth.packages');
     Route::post('cashier/login',          [PosCashierApiController::class, 'login'])->name('cashier.login');
@@ -80,6 +94,11 @@ Route::prefix('v1/pos')->group(function (): void {
         ->where(['business' => '[0-9]+', 'filename' => '[A-Za-z0-9._-]+'])
         ->name('media.business-logo');
 
+    // User profile photos (My Profile modal) — same CORS rationale as business logos.
+    Route::get('media/user-avatars/{user}/{filename}', [PosMediaApiController::class, 'userAvatar'])
+        ->where(['user' => '[0-9]+', 'filename' => '[A-Za-z0-9._-]+'])
+        ->name('media.user-avatar');
+
     // Generic CORS-safe proxy for any other business-scoped file already stored under the
     // `public` disk (e.g. logos picked via the file manager before the dedicated logo upload
     // endpoint existed) — same rationale as media.business-logo above.
@@ -88,11 +107,17 @@ Route::prefix('v1/pos')->group(function (): void {
         ->name('media.business-file');
 });
 
-Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
+// PosIdempotency only acts on writes sent with an Idempotency-Key header (desktop offline queue).
+Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
     Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post  ('auth/profile/avatar', [PosAuthApiController::class, 'uploadAvatar'])->name('auth.profile.avatar.upload')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::delete('auth/profile/avatar', [PosAuthApiController::class, 'deleteAvatar'])->name('auth.profile.avatar.delete')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/password', [PosAuthApiController::class, 'updatePassword'])->name('auth.password.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/revoke',   [PosAuthApiController::class, 'revoke'])->name('auth.revoke')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    // Sign-up email verification: 6-digit code emailed at registration ("Verify your email" banner)
+    Route::post('auth/email/verify', [PosAuthApiController::class, 'verifyEmail'])->middleware('throttle:10,1')->name('auth.email.verify')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/email/resend', [PosAuthApiController::class, 'resendEmailVerification'])->middleware('throttle:5,1')->name('auth.email.resend')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/payment/checkout-session', [PosPaymentApiController::class, 'checkoutSession'])->name('auth.payment.checkout-session')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/history',          [PosPaymentApiController::class, 'history'])->name('auth.payment.history')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('auth/payment/subscription/cancel', [PosPaymentApiController::class, 'cancelSubscription'])->name('auth.payment.subscription.cancel')->withoutMiddleware(EnsureSubscriptionSettled::class);
@@ -108,6 +133,11 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('online/categories', [PosCatalogApiController::class, 'categories'])->name('online.categories');
     Route::get('online/sale-campaigns/products', [PosSaleCampaignApiController::class, 'products'])->name('online.sale-campaigns.products');
     Route::get('online/products', [PosCatalogApiController::class, 'products'])->name('online.products');
+    Route::get('online/barcodes/products', [\Modules\Pos\Http\Controllers\Api\PosBarcodeApiController::class, 'products'])->name('online.barcodes.products');
+    Route::post('online/barcodes/generate-skus', [\Modules\Pos\Http\Controllers\Api\PosBarcodeApiController::class, 'generateSkus'])->name('online.barcodes.generate-skus');
+    // Mobile app "Offline products" cache sync (read-only, mobile-only)
+    Route::get('online/products/sync-index', [PosProductSyncApiController::class, 'index'])->name('online.products.sync-index');
+    Route::get('online/products/by-ids', [PosProductSyncApiController::class, 'byIds'])->name('online.products.by-ids');
     Route::get('online/products/{id}', [PosCatalogApiController::class, 'show'])->where('id', '[0-9]+')->name('online.products.show');
     Route::get  ('online/products/{id}/stock-history',                       [PosCatalogApiController::class, 'stockHistory'])->where('id', '[0-9]+')->name('online.products.stock-history');
     Route::patch('online/products/{id}/stock-layers/{layerId}/selling-price',   [PosCatalogApiController::class, 'updateLayerSellingPrice'])->where(['id' => '[0-9]+', 'layerId' => '[0-9]+'])->name('online.products.stock-layers.selling-price');
@@ -120,10 +150,16 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
 
     Route::post('online/products',        [PosProductApiController::class, 'store']  )->name('online.products.store');
     Route::post('online/products/import', [PosProductApiController::class, 'import'] )->name('online.products.import');
+    Route::get ('online/products/export', [PosProductApiController::class, 'export'] )->name('online.products.export');
     Route::patch('online/products/{product}', [PosProductApiController::class, 'update'])->name('online.products.update');
+    Route::post('online/products/{product}/quick-setup', [PosProductApiController::class, 'quickSetup'])->name('online.products.quick-setup');
     Route::delete('online/products/{product}', [PosProductApiController::class, 'destroy'])->name('online.products.destroy');
     Route::get('online/file-manager', [PosFileManagerApiController::class, 'browse'])->name('online.file-manager.browse');
     Route::post('online/file-manager/upload', [PosFileManagerApiController::class, 'upload'])->name('online.file-manager.upload');
+    // File Manager modal (profile menu) — folders + delete
+    Route::post  ('online/file-manager/folders',          [PosFileManagerApiController::class, 'storeFolder'])->name('online.file-manager.folders.store');
+    Route::delete('online/file-manager/folders/{folder}', [PosFileManagerApiController::class, 'destroyFolder'])->where('folder', '[0-9]+')->name('online.file-manager.folders.destroy');
+    Route::delete('online/file-manager/{file}',           [PosFileManagerApiController::class, 'destroy'])->where('file', '[0-9]+')->name('online.file-manager.destroy');
     Route::post('online/checkout', [PosCheckoutApiController::class, 'store'])->name('online.checkout');
 
     Route::get('online/features', [PosSettingsApiController::class, 'features'])->name('online.features');
@@ -140,6 +176,19 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::put('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update'])->name('online.invoice-setup.update');
     Route::patch('online/invoice-setup', [PosInvoiceSetupApiController::class, 'update']);
 
+    // Database Backup & Import (profile menu) — export selected sections / full business to a zip,
+    // and restore one through a chunked upload → validate → step-wise run flow with progress.
+    Route::get   ('backup/summary',                          [PosBackupApiController::class, 'summary'])->name('backup.summary');
+    Route::post  ('backup/exports',                          [PosBackupApiController::class, 'export'])->name('backup.exports.store');
+    Route::get   ('backup/exports/{token}/download',         [PosBackupApiController::class, 'download'])->where('token', '[a-z0-9]{40}')->name('backup.exports.download');
+    Route::post  ('backup/imports',                          [PosBackupApiController::class, 'startImport'])->name('backup.imports.store');
+    Route::get   ('backup/imports/{import}',                 [PosBackupApiController::class, 'showImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.show');
+    Route::delete('backup/imports/{import}',                 [PosBackupApiController::class, 'cancelImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.cancel');
+    Route::post  ('backup/imports/{import}/chunk',           [PosBackupApiController::class, 'uploadChunk'])->where('import', '[a-z0-9]{32}')->name('backup.imports.chunk');
+    Route::post  ('backup/imports/{import}/validate',        [PosBackupApiController::class, 'validateImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.validate');
+    Route::post  ('backup/imports/{import}/run',             [PosBackupApiController::class, 'runImport'])->where('import', '[a-z0-9]{32}')->name('backup.imports.run');
+    Route::get   ('backup/imports/{import}/safety-download', [PosBackupApiController::class, 'downloadSafety'])->where('import', '[a-z0-9]{32}')->name('backup.imports.safety');
+
     // Invoices
     Route::get   ('invoices',                          [PosInvoiceApiController::class, 'index']          )->name('invoices.index');
     Route::post  ('invoices',                          [PosInvoiceApiController::class, 'store']          )->name('invoices.store');
@@ -153,6 +202,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::delete('invoices/{invoice}',                [PosInvoiceApiController::class, 'destroy']        )->name('invoices.destroy');
 
     // Quotations
+    Route::get   ('quotation-setup',                   [\Modules\Pos\Http\Controllers\Api\PosQuotationSetupApiController::class, 'show']  )->name('quotation-setup.show');
+    Route::put   ('quotation-setup',                   [\Modules\Pos\Http\Controllers\Api\PosQuotationSetupApiController::class, 'update'])->name('quotation-setup.update');
     Route::get   ('quotations',                        [PosQuotationApiController::class, 'index']        )->name('quotations.index');
     Route::post  ('quotations',                        [PosQuotationApiController::class, 'store']        )->name('quotations.store');
     Route::get   ('quotations/{quotation}',            [PosQuotationApiController::class, 'show']         )->name('quotations.show');
@@ -197,15 +248,34 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get ('expenses/overview',  [PosExpensesOverviewApiController::class, 'show'])->name('expenses.overview');
     Route::get ('expenses/breakdown', [PosExpensesBreakdownApiController::class, 'show'])->name('expenses.breakdown');
     Route::get ('profit-report',      [PosProfitReportApiController::class,     'show'])->name('profit-report');
+    Route::get ('reports/sales',      [PosSalesReportApiController::class,      'show'])->name('reports.sales');
+    Route::get ('reports/sales/products',  [PosSalesReportApiController::class, 'products'])->name('reports.sales.products');
+    Route::get ('reports/sales/customers', [PosSalesReportApiController::class, 'customers'])->name('reports.sales.customers');
     Route::get ('payroll-overview',   [PosPayrollOverviewApiController::class,  'show'])->name('payroll-overview');
+    Route::get ('business-flow/summary', [PosBusinessFlowSummaryApiController::class, 'show'])->name('business-flow.summary');
 
     Route::get  ('sales',                  [PosSaleApiController::class, 'index']          )->name('sales.index');
     Route::post ('sales',                  [PosSaleApiController::class, 'store']          )->name('sales.store');
+    // Mobile app: upload a sale recorded offline (idempotent via client_uuid)
+    Route::post ('sales/offline',          [PosOfflineSaleApiController::class, 'store']   )->name('sales.offline');
+    // Mobile app: upload customers and expenses recorded offline (idempotent via client_uuid)
+    Route::post ('customers/offline',      [PosOfflineRecordApiController::class, 'storeCustomer'])->name('customers.offline');
+    Route::post ('expenses/offline',       [PosOfflineRecordApiController::class, 'storeExpense'] )->name('expenses.offline');
     Route::get  ('sales/history',          [PosSaleApiController::class, 'history']         )->name('sales.history');
     Route::get  ('sales/pending-credits',  [PosSaleApiController::class, 'pendingCredits']  )->name('sales.pending-credits');
     Route::get  ('sales/{sale}',           [PosSaleApiController::class, 'show']            )->name('sales.show');
     Route::post ('sales/{sale}/void',      [PosSaleApiController::class, 'void']            )->name('sales.void');
     Route::post ('sales/{sale}/return',    [PosSaleReturnApiController::class, 'store']     )->name('sales.return');
+    // Revert a bill entered by mistake (voids it, restores stock & money, stores the reason)
+    Route::post ('sales/{sale}/revert',    [PosSaleRevertApiController::class, 'store']     )->name('sales.revert');
+    Route::get  ('sale-reverts',           [PosSaleRevertApiController::class, 'index']     )->name('sale-reverts.index');
+    Route::get  ('sale-reverts/reasons',   [PosSaleRevertApiController::class, 'reasons']   )->name('sale-reverts.reasons');
+    Route::get  ('sale-reverts/{saleRevert}', [PosSaleRevertApiController::class, 'show']   )->name('sale-reverts.show');
+    // Customer cheques taken at checkout — claim deposits the money, bounce records a returned cheque
+    Route::get  ('sale-cheques',                    [PosSaleChequeApiController::class, 'index'] )->name('sale-cheques.index');
+    Route::get  ('sale-cheques/{saleCheque}',       [PosSaleChequeApiController::class, 'show']  )->name('sale-cheques.show');
+    Route::post ('sale-cheques/{saleCheque}/claim', [PosSaleChequeApiController::class, 'claim'] )->name('sale-cheques.claim');
+    Route::post ('sale-cheques/{saleCheque}/bounce',[PosSaleChequeApiController::class, 'bounce'])->name('sale-cheques.bounce');
     Route::get  ('sale-returns',           [PosSaleReturnApiController::class, 'index']     )->name('sale-returns.index');
     Route::get  ('sale-returns/{saleReturn}', [PosSaleReturnApiController::class, 'show']   )->name('sale-returns.show');
     Route::get('online/return-reasons', [PosReturnReasonsApiController::class, 'index'])->name('online.return-reasons');
@@ -236,6 +306,29 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::patch ('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'update']) ->name('sale-campaigns.update');
     Route::delete('sale-campaigns/{campaign}', [PosSaleCampaignApiController::class, 'destroy'])->name('sale-campaigns.destroy');
 
+    // Gift Cards
+    Route::get   ('gift-cards',                [PosGiftCardApiController::class, 'index'])       ->name('gift-cards.index');
+    Route::get   ('gift-cards/generate-code',  [PosGiftCardApiController::class, 'generateCode'])->name('gift-cards.generate-code');
+    Route::get   ('gift-cards/lookup',         [PosGiftCardApiController::class, 'lookup'])      ->name('gift-cards.lookup');
+    Route::post  ('gift-cards',                [PosGiftCardApiController::class, 'store'])       ->name('gift-cards.store');
+    Route::get   ('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'show'])        ->whereNumber('giftCard')->name('gift-cards.show');
+    Route::patch ('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'update'])      ->whereNumber('giftCard')->name('gift-cards.update');
+    Route::delete('gift-cards/{giftCard}',     [PosGiftCardApiController::class, 'destroy'])     ->whereNumber('giftCard')->name('gift-cards.destroy');
+    Route::get   ('gift-card-groups',               [PosGiftCardApiController::class, 'groups'])      ->name('gift-card-groups.index');
+    Route::get   ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'showGroup'])   ->whereNumber('group')->name('gift-card-groups.show');
+    Route::patch ('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'updateGroup']) ->whereNumber('group')->name('gift-card-groups.update');
+    Route::delete('gift-card-groups/{group}',       [PosGiftCardApiController::class, 'destroyGroup'])->whereNumber('group')->name('gift-card-groups.destroy');
+    Route::post  ('gift-card-groups/{group}/cards', [PosGiftCardApiController::class, 'addCards'])    ->whereNumber('group')->name('gift-card-groups.cards.store');
+
+    // Coupons — one shared code per coupon, redeemable `quantity` times
+    Route::get   ('coupons',               [PosCouponApiController::class, 'index'])       ->name('coupons.index');
+    Route::get   ('coupons/generate-code', [PosCouponApiController::class, 'generateCode'])->name('coupons.generate-code');
+    Route::get   ('coupons/lookup',        [PosCouponApiController::class, 'lookup'])      ->name('coupons.lookup');
+    Route::post  ('coupons',               [PosCouponApiController::class, 'store'])       ->name('coupons.store');
+    Route::get   ('coupons/{coupon}',      [PosCouponApiController::class, 'show'])        ->whereNumber('coupon')->name('coupons.show');
+    Route::patch ('coupons/{coupon}',      [PosCouponApiController::class, 'update'])      ->whereNumber('coupon')->name('coupons.update');
+    Route::delete('coupons/{coupon}',      [PosCouponApiController::class, 'destroy'])     ->whereNumber('coupon')->name('coupons.destroy');
+
     // Product Categories
     Route::get ('categories',              [PosProductCategoryApiController::class, 'index'])->name('categories.index');
     Route::get ('categories/parent-options',[PosProductCategoryApiController::class, 'parentOptions'])->name('categories.parent-options');
@@ -262,12 +355,17 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('customers', [PosCustomerApiController::class, 'index'])->name('customers.index');
     Route::post('customers', [PosCustomerApiController::class, 'store'])->name('customers.store');
     Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
+    Route::post('customers/import/preview', [PosCustomerApiController::class, 'importPreview'])->name('customers.import.preview');
+    Route::get('customers/duplicates', [PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
+    // Desktop offline mode: full customer list download (read-only)
+    Route::get('customers/offline-sync', [PosCustomerApiController::class, 'offlineSync'])->name('customers.offline-sync');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
     Route::patch('customers/{customer}', [PosCustomerApiController::class, 'update'])->name('customers.update');
     Route::delete('customers/{customer}', [PosCustomerApiController::class, 'destroy'])->name('customers.destroy');
     Route::get('customers/{customer}/subscriptions', [PosSubscriptionApiController::class, 'forCustomer'])->name('customers.subscriptions.index');
     Route::get('customers/{customer}/warranties', [PosCustomerApiController::class, 'warranties'])->name('customers.warranties.index');
     Route::get('customers/{customer}/credit-sales', [PosCustomerApiController::class, 'creditSales'])->name('customers.credit-sales.index');
+    Route::post('customers/{customer}/credit-payments', [PosCustomerApiController::class, 'creditPayment'])->name('customers.credit-payments.store');
 
     Route::get('customer-categories', [PosCustomerCategoryApiController::class, 'index'])->name('customer-categories.index');
     Route::post('customer-categories', [PosCustomerCategoryApiController::class, 'store'])->name('customer-categories.store');
@@ -295,9 +393,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post('purchase-orders/{purchase}/receive', [PosPurchaseOrderApiController::class, 'receive'])->name('purchase-orders.receive');
     Route::post('purchase-orders/{purchase}/cancel', [PosPurchaseOrderApiController::class, 'cancel'])->name('purchase-orders.cancel');
 
+    Route::post('expenses/bills/scan', \Modules\Pos\Http\Controllers\Api\PosExpenseBillScanApiController::class)
+        ->middleware('throttle:10,1')->name('expenses.bills.scan');
     Route::post('expenses/bills', [PosExpenseBillApiController::class, 'store'])->name('expenses.bills.store');
     Route::get('expenses/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'index'])->name('expenses.bills.index');
     Route::get('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'show'])->name('expenses.bills.show');
+    Route::put('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'update'])->name('expenses.bills.update');
     Route::post('expenses/bills/{bill}/pay', [PosExpenseBillApiController::class, 'pay'])->name('expenses.bills.pay');
     Route::delete('expenses/bills/{bill}', [PosExpenseBillApiController::class, 'destroy'])->name('expenses.bills.destroy');
     Route::get('expenses/bill-assignment-targets', [PosExpenseBillAssignmentApiController::class, 'index'])->name('expenses.bill-assignment-targets');
@@ -305,6 +406,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('expenses/modifications', [PosExpenseModificationApiController::class, 'index'])->name('expenses.modifications.index');
     Route::post('expenses/modifications', [PosExpenseModificationApiController::class, 'store'])->name('expenses.modifications.store');
     Route::get('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'show'])->name('expenses.modifications.show');
+    Route::put('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'update'])->name('expenses.modifications.update');
     Route::delete('expenses/modifications/{modification}', [PosExpenseModificationApiController::class, 'destroy'])->name('expenses.modifications.destroy');
     Route::get('expenses/investments', [PosExpenseInvestmentApiController::class, 'index'])->name('expenses.investments.index');
     Route::post('expenses/investments', [PosExpenseInvestmentApiController::class, 'store'])->name('expenses.investments.store');
@@ -328,9 +430,20 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'index'])->name('hr.employees.index');
     Route::post('hr/employees', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'store'])->name('hr.employees.store');
     Route::get('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'show'])->name('hr.employees.show');
+    Route::patch('hr/employees/{employee}', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeListApiController::class, 'update'])->name('hr.employees.update');
+    Route::get('hr/employees/{employee}/bills', [\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'forEmployee'])->name('hr.employees.bills');
+    Route::get('hr/employees/{employee}/leave',[\Modules\Pos\Http\Controllers\Api\PosHrEmployeeLeaveApiController::class, 'show'])->name('hr.employees.leave');
+    Route::get('hr/employees/{employee}/access', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'show'])->name('hr.employees.access.show');
+    Route::post('hr/employees/{employee}/access', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'store'])->name('hr.employees.access.store');
+    Route::post('hr/employees/{employee}/access/resend', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'resend'])->middleware('throttle:10,1')->name('hr.employees.access.resend');
+    Route::delete('hr/employees/{employee}/access', [\Modules\Pos\Http\Controllers\Api\PosHrEmployeeAccessApiController::class, 'destroy'])->name('hr.employees.access.destroy');
     Route::get('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'index'])->name('hr.departments.index');
     Route::post('hr/departments', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'store'])->name('hr.departments.store');
-    Route::delete('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'destroy'])->name('hr.departments.destroy');
+    Route::get('hr/departments/{department}', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'show'])->name('hr.departments.show');
+    Route::patch('hr/departments/{department}/salary-range', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'updateSalaryRange'])->name('hr.departments.salary-range');
+    Route::patch('hr/departments/{department}/leadership', [\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'updateLeadership'])->name('hr.departments.leadership');
+    Route::get('hr/departments/{department}/bills',[\Modules\Pos\Http\Controllers\Api\PosExpenseBillListApiController::class, 'forDepartment'])->name('hr.departments.bills');
+    Route::delete('hr/departments/{department}',[\Modules\Pos\Http\Controllers\Api\PosHrDepartmentListApiController::class, 'destroy'])->name('hr.departments.destroy');
     Route::get('hr/job-titles', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'index'])->name('hr.job-titles.index');
     Route::post('hr/job-titles', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'store'])->name('hr.job-titles.store');
     Route::put('hr/job-titles/{jobTitle}', [\Modules\Pos\Http\Controllers\Api\PosHrJobTitleListApiController::class, 'update'])->name('hr.job-titles.update');
@@ -338,8 +451,21 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'index'])->name('hr.allowance-types.index');
     Route::post('hr/allowance-types', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'store'])->name('hr.allowance-types.store');
     Route::delete('hr/allowance-types/{allowanceType}', [\Modules\Pos\Http\Controllers\Api\PosHrAllowanceTypeApiController::class, 'destroy'])->name('hr.allowance-types.destroy');
+    Route::get('hr/leave-requests', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'index'])->name('hr.leave-requests.index');
+    Route::post('hr/leave-requests/preview', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'preview'])->name('hr.leave-requests.preview');
+    Route::post('hr/leave-requests', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'store'])->name('hr.leave-requests.store');
+    Route::patch('hr/leave-requests/{leaveRequest}/status', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'updateStatus'])->name('hr.leave-requests.status');
+    Route::delete('hr/leave-requests/{leaveRequest}', [\Modules\Pos\Http\Controllers\Api\PosHrLeaveRequestApiController::class, 'destroy'])->name('hr.leave-requests.destroy');
+    Route::get('hr/leave-policies',[\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'index'])->name('hr.leave-policies.index');
+    Route::post('hr/leave-policies', [\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'store'])->name('hr.leave-policies.store');
+    Route::put('hr/leave-policies/{leavePolicy}', [\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'update'])->name('hr.leave-policies.update');
+    Route::delete('hr/leave-policies/{leavePolicy}', [\Modules\Pos\Http\Controllers\Api\PosHrLeavePolicyApiController::class, 'destroy'])->name('hr.leave-policies.destroy');
+    Route::get('hr/settings',[\Modules\Pos\Http\Controllers\Api\PosHrSettingsApiController::class, 'show'])->name('hr.settings.show');
+    Route::put('hr/settings', [\Modules\Pos\Http\Controllers\Api\PosHrSettingsApiController::class, 'update'])->name('hr.settings.update');
     Route::get('hr/attendance', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'index'])->name('hr.attendance.index');
-    Route::post('hr/attendance/import', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'import'])->name('hr.attendance.import');
+    Route::get('hr/attendance/gaps', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'gaps'])->name('hr.attendance.gaps');
+    Route::post('hr/attendance/gaps/resolve', [\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'resolveGaps'])->name('hr.attendance.gaps.resolve');
+    Route::post('hr/attendance/import',[\Modules\Pos\Http\Controllers\Api\PosHrAttendanceApiController::class, 'import'])->name('hr.attendance.import');
 
     Route::get('hr/payroll/rule-sets',                                     [\Modules\Pos\Http\Controllers\Api\PosHrPayrollRuleSetApiController::class, 'index'])->name('hr.payroll.rule-sets.index');
     Route::post('hr/payroll/rule-sets',                                    [\Modules\Pos\Http\Controllers\Api\PosHrPayrollRuleSetApiController::class, 'store'])->name('hr.payroll.rule-sets.store');
@@ -363,10 +489,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('rentals', [PosRentalApiController::class, 'index'])->name('rentals.index');
     Route::post('rentals', [PosRentalApiController::class, 'store'])->name('rentals.store');
     Route::get('rentals/{rental}', [PosRentalApiController::class, 'show'])->name('rentals.show');
+    Route::put('rentals/{rental}', [PosRentalApiController::class, 'update'])->name('rentals.update');
     Route::post('rentals/{rental}/pay', [PosRentalApiController::class, 'pay'])->name('rentals.pay');
     Route::delete('rentals/{rental}', [PosRentalApiController::class, 'destroy'])->name('rentals.destroy');
 
     Route::get('finance/flow', [PosFinanceFlowApiController::class, 'index'])->name('finance.flow');
+    Route::get('finance/overview', [PosFinanceFlowApiController::class, 'overview'])->name('finance.overview');
 
     // Notifications — kept reachable even while subscription-locked, so the
     // desktop app can still show the overdue-payment notification itself.
@@ -386,6 +514,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('loans', [PosLoanApiController::class, 'index'])->name('loans.index');
     Route::post('loans', [PosLoanApiController::class, 'store'])->name('loans.store');
     Route::get('loans/{loan}', [PosLoanApiController::class, 'show'])->name('loans.show');
+    Route::put('loans/{loan}', [PosLoanApiController::class, 'update'])->name('loans.update');
     Route::post('loans/{loan}/pay', [PosLoanApiController::class, 'pay'])->name('loans.pay');
     Route::delete('loans/{loan}', [PosLoanApiController::class, 'destroy'])->name('loans.destroy');
     Route::get('banks', [\Modules\Pos\Http\Controllers\Api\PosBankApiController::class, 'index'])->name('banks.index');
@@ -443,6 +572,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('users',          [PosUserManagementApiController::class, 'store'])  ->name('users.store');
     Route::put   ('users/{member}', [PosUserManagementApiController::class, 'update']) ->name('users.update');
     Route::delete('users/{member}', [PosUserManagementApiController::class, 'destroy'])->name('users.destroy');
+    Route::post  ('users/invitations/{invitation}/resend', [PosUserManagementApiController::class, 'resendInvitation'])->whereNumber('invitation')->middleware('throttle:10,1')->name('users.invitations.resend');
+    Route::delete('users/invitations/{invitation}',        [PosUserManagementApiController::class, 'cancelInvitation'])->whereNumber('invitation')->name('users.invitations.cancel');
 
     // Role Management
     Route::get   ('roles',        [PosRoleManagementApiController::class, 'index'])  ->name('roles.index');
@@ -477,18 +608,131 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::get('guide/conversations/{conversation}', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'conversationShow'])->whereNumber('conversation')->name('guide.conversations.show');
     Route::delete('guide/conversations/{conversation}', [\Modules\Pos\Http\Controllers\Api\PosGuideChatApiController::class, 'conversationDestroy'])->whereNumber('conversation')->name('guide.conversations.destroy');
 
+    // CRM permissions (per-user function + stage access)
+    Route::get   ('crm/permissions',                   [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'index']) ->name('crm.permissions.index');
+    Route::get   ('crm/permissions/me',                [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'me'])    ->name('crm.permissions.me');
+    Route::put   ('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'update'])->whereNumber('user')->name('crm.permissions.update');
+    Route::delete('crm/permissions/users/{user}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'reset']) ->whereNumber('user')->name('crm.permissions.reset');
+    Route::put   ('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'updateRole'])->whereNumber('role')->name('crm.permissions.roles.update');
+    Route::delete('crm/permissions/roles/{role}',      [\Modules\Pos\Http\Controllers\Api\PosCrmPermissionApiController::class, 'resetRole']) ->whereNumber('role')->name('crm.permissions.roles.reset');
+
+    // CRM org structure (departments → members & heads, divisions, department pipelines, department settings)
+    Route::get   ('crm/org',                                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'index'])          ->name('crm.org.index');
+    Route::post  ('crm/org/departments/{department}/members',   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'storeMember'])    ->whereNumber('department')->name('crm.org.members.store');
+    Route::put   ('crm/org/members/{member}',                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateMember'])   ->whereNumber('member')->name('crm.org.members.update');
+    Route::delete('crm/org/members/{member}',                   [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'destroyMember'])  ->whereNumber('member')->name('crm.org.members.destroy');
+    Route::post  ('crm/org/departments/{department}/divisions', [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'storeDivision'])  ->whereNumber('department')->name('crm.org.divisions.store');
+    Route::put   ('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateDivision']) ->whereNumber('division')->name('crm.org.divisions.update');
+    Route::delete('crm/org/divisions/{division}',               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'destroyDivision'])->whereNumber('division')->name('crm.org.divisions.destroy');
+    Route::put   ('crm/org/departments/{department}/settings',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'updateSettings']) ->whereNumber('department')->name('crm.org.settings.update');
+    Route::post  ('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'linkPipeline'])   ->whereNumber('department')->name('crm.org.pipeline.link');
+    Route::delete('crm/org/departments/{department}/pipeline',  [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'unlinkPipeline']) ->whereNumber('department')->name('crm.org.pipeline.unlink');
+    Route::delete('crm/org/departments/{department}/pipelines/{project}', [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'unlinkPipeline'])->whereNumber(['department', 'project'])->name('crm.org.pipeline.unlink-one');
+
+    Route::get   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'crmSettings'])    ->name('crm.settings.show');
+    Route::put   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'saveCrmSettings'])->name('crm.settings.update');
+
+    // CRM marketing inbox (verify, forward, review flags, merge duplicates)
+    Route::get   ('crm/inbox',                         [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'index'])  ->name('crm.inbox.index');
+    Route::get   ('crm/inbox/leads/{lead}',            [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'show'])   ->whereNumber('lead')->name('crm.inbox.show');
+    Route::put   ('crm/inbox/leads/{lead}',            [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'update']) ->whereNumber('lead')->name('crm.inbox.update');
+    Route::post  ('crm/inbox/leads/{lead}/verify',     [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'verify']) ->whereNumber('lead')->name('crm.inbox.verify');
+    Route::post  ('crm/inbox/leads/{lead}/review',     [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'review']) ->whereNumber('lead')->name('crm.inbox.review');
+    Route::post  ('crm/inbox/leads/{lead}/forward',    [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'forward'])->whereNumber('lead')->name('crm.inbox.forward');
+    Route::post  ('crm/inbox/leads/{lead}/merge',      [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'merge'])  ->whereNumber('lead')->name('crm.inbox.merge');
+
+    // CRM lead bulk upload (CSV / XLSX: our template, Google Forms or Facebook Lead Ads exports)
+    Route::get   ('crm/lead-imports',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'index'])   ->name('crm.lead-imports.index');
+    Route::get   ('crm/lead-imports/template',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'template'])->name('crm.lead-imports.template');
+    Route::post  ('crm/lead-imports',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'store'])   ->name('crm.lead-imports.store');
+    Route::get   ('crm/lead-imports/{import}',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'show'])    ->whereNumber('import')->name('crm.lead-imports.show');
+    Route::post  ('crm/lead-imports/{import}/departments', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'departments'])->whereNumber('import')->name('crm.lead-imports.departments');
+    Route::post  ('crm/lead-imports/{import}/preview',[\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'preview']) ->whereNumber('import')->name('crm.lead-imports.preview');
+    Route::post  ('crm/lead-imports/{import}/run',     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'run'])     ->whereNumber('import')->name('crm.lead-imports.run');
+    Route::get   ('crm/lead-imports/{import}/errors',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'errors'])  ->whereNumber('import')->name('crm.lead-imports.errors');
+    Route::delete('crm/lead-imports/{import}',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadImportApiController::class, 'destroy']) ->whereNumber('import')->name('crm.lead-imports.destroy');
+
+    // CRM lead workspace (assignees + history, unified timeline, internal messages, files, tasks) and the admin audit log
+    Route::get   ('crm/leads/{lead}/workspace',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'show'])              ->whereNumber('lead')->name('crm.leads.workspace');
+    Route::get   ('crm/leads/{lead}/summary',                           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'summary'])           ->whereNumber('lead')->name('crm.leads.summary');
+    Route::post  ('crm/leads/{lead}/notifications/read',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'markNotificationsRead'])->whereNumber('lead')->name('crm.leads.notifications.read');
+    Route::get   ('crm/leads/{lead}/assignees',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'assignees'])         ->whereNumber('lead')->name('crm.leads.assignees.index');
+    Route::put   ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'syncAssignees'])     ->whereNumber('lead')->name('crm.leads.assignees.sync');
+    Route::post  ('crm/leads/{lead}/assignees',                         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'addAssignees'])      ->whereNumber('lead')->name('crm.leads.assignees.store');
+    Route::delete('crm/leads/{lead}/assignees/{user}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'removeAssignee'])    ->whereNumber(['lead', 'user'])->name('crm.leads.assignees.destroy');
+    Route::post  ('crm/leads/{lead}/assignees/{user}/primary',          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'primaryAssignee'])   ->whereNumber(['lead', 'user'])->name('crm.leads.assignees.primary');
+    Route::get   ('crm/leads/{lead}/timeline',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'timeline'])          ->whereNumber('lead')->name('crm.leads.timeline');
+    Route::get   ('crm/leads/{lead}/messages',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'messages'])          ->whereNumber('lead')->name('crm.leads.messages.index');
+    Route::post  ('crm/leads/{lead}/messages',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeMessage'])      ->whereNumber('lead')->name('crm.leads.messages.store');
+    Route::put   ('crm/leads/{lead}/messages/{message}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'updateMessage'])     ->whereNumber(['lead', 'message'])->name('crm.leads.messages.update');
+    Route::delete('crm/leads/{lead}/messages/{message}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'destroyMessage'])    ->whereNumber(['lead', 'message'])->name('crm.leads.messages.destroy');
+    Route::get   ('crm/leads/{lead}/attachments',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'attachments'])       ->whereNumber('lead')->name('crm.leads.attachments.index');
+    Route::post  ('crm/leads/{lead}/attachments',                       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeAttachments'])  ->whereNumber('lead')->name('crm.leads.attachments.store');
+    Route::get   ('crm/leads/{lead}/attachments/{attachment}/download', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'downloadAttachment'])->whereNumber(['lead', 'attachment'])->name('crm.leads.attachments.download');
+    Route::delete('crm/leads/{lead}/attachments/{attachment}',          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'destroyAttachment']) ->whereNumber(['lead', 'attachment'])->name('crm.leads.attachments.destroy');
+    Route::get   ('crm/leads/{lead}/tasks',                             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'tasks'])             ->whereNumber('lead')->name('crm.leads.tasks.index');
+    Route::post  ('crm/leads/{lead}/tasks',                             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeTask'])         ->whereNumber('lead')->name('crm.leads.tasks.store');
+    Route::get   ('crm/audit-logs',                                     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'auditLogs'])         ->name('crm.audit-logs.index');
+
+    // CRM lead quotations (built from inventory, stock-checked) and their approval → PDF → send to the customer
+    Route::get   ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'index'])           ->whereNumber('lead')->name('crm.leads.quotations.index');
+    Route::post  ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'store'])           ->whereNumber('lead')->name('crm.leads.quotations.store');
+    Route::post  ('crm/leads/{lead}/quotations/stock-check',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'stockCheck'])      ->whereNumber('lead')->name('crm.leads.quotations.stock-check');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'show'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.show');
+    Route::put   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'update'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.update');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/revise',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'revise'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.revise');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/responses',      [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'respond'])         ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.responses');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}/versions',       [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'versions'])        ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.versions');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}/diff',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'diff'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.diff');
+    Route::get   ('crm/customers/{customer}/quotations/{quotation}/versions', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'customerVersions'])->whereNumber(['customer', 'quotation'])->name('crm.customers.quotations.versions');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/submit',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'submit'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.submit');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/approve',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'approve'])         ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.approve');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/return',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'returnForChanges'])->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.return');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/reject',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'reject'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.reject');
+    Route::get   ('crm/leads/{lead}/quotations/{quotation}/pdf',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'pdf'])             ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.pdf');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/send',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'send'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.send');
+    Route::get   ('crm/quotation-approvals',                                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'inbox'])           ->name('crm.quotation-approvals.index');
+
+    // CRM closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
+    Route::get   ('crm/leads/{lead}/close-options', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'options'])->whereNumber('lead')->name('crm.leads.close-options');
+    Route::post  ('crm/leads/{lead}/won',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'won'])    ->whereNumber('lead')->name('crm.leads.won');
+    Route::post  ('crm/leads/{lead}/lost',          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'lost'])   ->whereNumber('lead')->name('crm.leads.lost');
+    Route::post  ('crm/leads/{lead}/reopen',        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'reopen']) ->whereNumber('lead')->name('crm.leads.reopen');
+
+    // CRM follow-ups: my / team list, the lead's tab, log one; CRM email preference
+    Route::get   ('crm/follow-ups',                    [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'index'])  ->name('crm.follow-ups.index');
+    Route::post  ('crm/follow-ups/{followUp}/log',     [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'log'])    ->whereNumber('followUp')->name('crm.follow-ups.log');
+    Route::post  ('crm/follow-ups/{followUp}/cancel',  [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'cancel']) ->whereNumber('followUp')->name('crm.follow-ups.cancel');
+    Route::get   ('crm/leads/{lead}/follow-ups',       [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'forLead'])->whereNumber('lead')->name('crm.leads.follow-ups.index');
+    Route::post  ('crm/leads/{lead}/follow-ups',       [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'store'])  ->whereNumber('lead')->name('crm.leads.follow-ups.store');
+    Route::get   ('crm/notification-preferences',      [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'preferences'])      ->name('crm.notification-preferences.show');
+    Route::put   ('crm/notification-preferences',      [\Modules\Pos\Http\Controllers\Api\PosCrmFollowUpApiController::class, 'updatePreferences'])->name('crm.notification-preferences.update');
+
+    // CRM management dashboard (view only): admin, CEO, heads (own departments)
+    Route::get   ('crm/reports/dashboard',       [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'dashboard'])->name('crm.reports.dashboard');
+    Route::get   ('crm/reports/dashboard/pdf',   [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'pdf'])      ->name('crm.reports.dashboard.pdf');
+    Route::get   ('crm/reports/dashboard/excel', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'excel'])    ->name('crm.reports.dashboard.excel');
+    // CRM sales analysis report (ribbon → Report): grouped by department, customer, product… as JSON / PDF / CSV
+    Route::get   ('crm/reports/sales-analysis',     [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysis'])   ->name('crm.reports.sales-analysis');
+    Route::get   ('crm/reports/sales-analysis/pdf', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisPdf'])->name('crm.reports.sales-analysis.pdf');
+    Route::get   ('crm/reports/sales-analysis/csv', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisCsv'])->name('crm.reports.sales-analysis.csv');
+
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
     Route::post  ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createProject'])->name('crm.projects.store');
     Route::delete('crm/projects/{project}',            [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteProject'])->name('crm.projects.destroy');
+    Route::post  ('crm/projects/{project}/force-delete', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'forceDeleteProject'])->name('crm.projects.force-delete');
     Route::get   ('crm/projects/{project}/pipeline',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'pipeline'])    ->name('crm.projects.pipeline');
     Route::get   ('crm/projects/{project}/custom-data-leads', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customDataLeads'])->name('crm.projects.custom-data-leads');
     Route::get   ('crm/projects/{project}/contacts',   [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectContacts'])->name('crm.projects.contacts');
     Route::get   ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stages'])       ->name('crm.projects.stages.index');
     Route::post  ('crm/projects/{project}/stages',     [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createStage'])  ->name('crm.projects.stages.store');
     Route::post  ('crm/projects/{project}/stages/reorder', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'reorderStages'])->name('crm.projects.stages.reorder');
+    Route::post  ('crm/projects/{project}/stages/bulk-delete', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'bulkDeleteStages'])->name('crm.projects.stages.bulk-delete');
+    Route::post  ('crm/projects/{project}/stages/restore-standard', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'restoreStandardStages'])->name('crm.projects.stages.restore-standard');
     Route::put   ('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStage'])  ->name('crm.projects.stages.update');
     Route::delete('crm/projects/{project}/stages/{stage}', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStage'])  ->name('crm.projects.stages.destroy');
+    Route::put   ('crm/projects/{project}/stages/{stage}/behaviours', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateStageBehaviours'])->name('crm.projects.stages.behaviours');
     Route::get   ('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'stageMailTemplate'])      ->name('crm.projects.stages.mail-template.show');
     Route::put   ('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'saveStageMailTemplate'])  ->name('crm.projects.stages.mail-template.save');
     Route::delete('crm/projects/{project}/stages/{stage}/mail-template',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteStageMailTemplate'])->name('crm.projects.stages.mail-template.destroy');
@@ -496,8 +740,26 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     Route::post  ('crm/projects/{project}/leads',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createLead'])  ->name('crm.leads.store');
     Route::put   ('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateLead'])  ->name('crm.leads.update');
     Route::post  ('crm/leads/{lead}/move-stage',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'moveLead'])    ->name('crm.leads.move-stage');
+    Route::post  ('crm/leads/{lead}/hold',             [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'holdLead'])    ->name('crm.leads.hold');
+    Route::post  ('crm/leads/{lead}/resume',           [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'resumeLead'])  ->name('crm.leads.resume');
+    Route::post  ('crm/leads/{lead}/convert',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'convertLead']) ->name('crm.leads.convert');
+    Route::get   ('crm/statuses',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'statuses'])    ->name('crm.statuses.index');
+    Route::post  ('crm/leads/{lead}/checklist', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'setLeadChecklistItem'])->name('crm.leads.checklist');
+    Route::post  ('crm/leads/{lead}/stage-requests/{moveRequest}/approve', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'approveStageMove'])->name('crm.leads.stage-requests.approve');
+    Route::post  ('crm/leads/{lead}/stage-requests/{moveRequest}/reject',  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'rejectStageMove']) ->name('crm.leads.stage-requests.reject');
+    Route::get   ('crm/custom-statuses',              [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customStatuses'])     ->name('crm.custom-statuses.index');
+    Route::post  ('crm/custom-statuses',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createCustomStatus']) ->name('crm.custom-statuses.store');
+    Route::put   ('crm/custom-statuses/{status}',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateCustomStatus']) ->name('crm.custom-statuses.update');
+    Route::delete('crm/custom-statuses/{status}',      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteCustomStatus']) ->name('crm.custom-statuses.destroy');
+    Route::get   ('crm/lost-reasons',                 [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'lostReasons']) ->name('crm.lost-reasons.index');
+    Route::get   ('crm/lead-sources',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadSources']) ->name('crm.lead-sources.index');
     Route::delete('crm/leads/{lead}',                  [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'deleteLead'])  ->name('crm.leads.destroy');
+    Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');
+    Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');
+    Route::get   ('crm/projects/{project}/history/flow', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistoryFlow'])->name('crm.projects.history.flow');
+    Route::get   ('crm/overview',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'overview'])    ->name('crm.overview');
     Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
+    Route::get   ('crm/customers/{customer}',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customer'])    ->whereNumber('customer')->name('crm.customers.show');
     Route::get   ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'tasksList'])   ->name('crm.tasks.index');
     Route::post  ('crm/tasks',                         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createTask'])  ->name('crm.tasks.store');
     Route::post  ('crm/tasks/{task}/complete',         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'completeTask'])->name('crm.tasks.complete');
@@ -506,6 +768,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class])->prefix('v
     // CRM Forms
     Route::get   ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'forms'])          ->name('crm.forms.index');
     Route::post  ('crm/projects/{project}/forms',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'createForm'])      ->name('crm.forms.store');
+    Route::post  ('crm/projects/{project}/forms/manual-entry',         [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'manualEntryForm']) ->name('crm.forms.manual-entry');
     Route::get   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'getForm'])         ->name('crm.forms.show');
     Route::put   ('crm/projects/{project}/forms/{form}',               [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'updateForm'])      ->name('crm.forms.update');
     Route::post  ('crm/projects/{project}/forms/{form}/default',       [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'setDefaultForm'])  ->name('crm.forms.set-default');

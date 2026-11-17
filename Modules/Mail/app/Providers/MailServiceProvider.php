@@ -3,6 +3,7 @@
 namespace Modules\Mail\Providers;
 
 use Illuminate\Console\Scheduling\Schedule;
+use Modules\Mail\Console\SendAutomatedEmails;
 use Modules\Mail\Console\SendScheduledMails;
 use Modules\Mail\Console\SyncMailboxes;
 use Nwidart\Modules\Support\ModuleServiceProvider;
@@ -37,6 +38,7 @@ class MailServiceProvider extends ModuleServiceProvider
     protected array $commands = [
         SyncMailboxes::class,
         SendScheduledMails::class,
+        SendAutomatedEmails::class,
     ];
 
     /**
@@ -50,5 +52,7 @@ class MailServiceProvider extends ModuleServiceProvider
     {
         $schedule->command(SyncMailboxes::class)->everyMinute()->withoutOverlapping();
         $schedule->command(SendScheduledMails::class)->everyMinute()->withoutOverlapping();
+        // Admin "Automated Emails": inactivity reminders + activity reports, each at its configured hour.
+        $schedule->command(SendAutomatedEmails::class)->everyFiveMinutes()->withoutOverlapping();
     }
 }

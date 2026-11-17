@@ -9,8 +9,8 @@
     class="pos-product @if($outOfStock) is-disabled @endif"
     data-pos-product
     data-product-id="{{ $product['id'] }}"
-    data-product-name="{{ e($product['name']) }}"
-    data-product-sku="{{ e($product['sku'] ?? '') }}"
+    data-product-name="{{ $product['name'] }}"
+    data-product-sku="{{ $product['sku'] ?? '' }}"
     data-unit-price="{{ $posCardEffectivePrice !== null ? number_format((float) $posCardEffectivePrice, 2, '.', '') : '0' }}"
     data-stock="{{ $formatQty((float) $product['stock_quantity']) }}"
     data-product-layers='@json($product['layers'] ?? [])'

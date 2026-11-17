@@ -51,6 +51,7 @@
                         <th>Title</th>
                         <th>Priority</th>
                         <th>Due date</th>
+                        <th>Stage</th>
                         <th>Status</th>
                         <th style="text-align:right;">Actions</th>
                     </tr>
@@ -83,12 +84,13 @@
                                     {{ ucfirst(str_replace('_', ' ', $t->status)) }}
                                 </span>
                             </td>
+                            <td>@include('projectmanage::tasks.partials.completion-badge', ['task' => $t])</td>
                             <td style="text-align:right;">
                                 <div style="display:inline-flex;gap:6px;align-items:center;">
                                     <a href="{{ route('pm.tasks.show', $t) }}" class="pcat-link">
                                         <i class="fa fa-eye"></i>
                                     </a>
-                                    @if(!$t->isCompleted())
+                                    @if($t->isOpen())
                                         <form method="POST" action="{{ route('pm.tasks.complete', $t) }}" style="display:inline;">
                                             @csrf
                                             <button type="submit" class="linkbtn" style="padding:3px 8px;font-size:11px;" title="Mark done">

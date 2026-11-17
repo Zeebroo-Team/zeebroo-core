@@ -401,7 +401,7 @@ class SaleController extends Controller
         );
 
         return redirect()
-            ->route('pos.online')
+            ->back(fallback: route('pos.register'))
             ->with('status', "Return {$ret->return_number} processed successfully.");
     }
 
@@ -433,7 +433,7 @@ class SaleController extends Controller
         );
 
         return redirect()
-            ->route('pos.online')
+            ->back(fallback: route('pos.register'))
             ->with('status', "Return {$ret->return_number} processed successfully.");
     }
 

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
+use Modules\Mail\Services\AutomatedEmailService;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -94,6 +95,7 @@ final class GoogleAuthService
                 Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
                 $user->assignRole('user');
                 $isNewUser = true;
+                app(AutomatedEmailService::class)->queueWelcome($user);
             }
         }
 

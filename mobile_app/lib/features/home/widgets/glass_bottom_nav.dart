@@ -5,7 +5,11 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 
 class NavTabData {
-  const NavTabData({required this.label, required this.icon, required this.activeIcon});
+  const NavTabData({
+    required this.label,
+    required this.icon,
+    required this.activeIcon,
+  });
   final String label;
   final IconData icon;
   final IconData activeIcon;
@@ -20,6 +24,7 @@ class GlassBottomNav extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     this.onPosTap,
+    this.onScannerTap,
   });
 
   final List<NavTabData> tabs;
@@ -28,6 +33,7 @@ class GlassBottomNav extends StatelessWidget {
 
   /// When provided, a prominent POS button is inserted in the center of the bar.
   final VoidCallback? onPosTap;
+  final VoidCallback? onScannerTap;
 
   @override
   Widget build(BuildContext context) {
@@ -48,33 +54,64 @@ class GlassBottomNav extends StatelessWidget {
             color: AppColors.glassSurface,
             border: Border(top: BorderSide(color: AppColors.glassHairline)),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              // Left tabs
-              for (var i = 0; i < leftTabs.length; i++)
-                _NavButton(
-                  data: leftTabs[i],
-                  selected: i == currentIndex,
-                  onTap: () => onTap(i),
+          child: showPos && tabs.length == 1
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      child: _NavButton(
+                        data: tabs.first,
+                        selected: currentIndex == 0,
+                        onTap: () => onTap(0),
+                      ),
+                    ),
+                    const Expanded(child: SizedBox()),
+                    _PosCenterButton(onTap: onPosTap!),
+                    const Expanded(child: SizedBox()),
+                    SizedBox(
+                      width: 80,
+                      child: onScannerTap == null
+                          ? null
+                          : _NavButton(
+                              data: const NavTabData(
+                                label: 'Scanner',
+                                icon: Icons.qr_code_scanner_rounded,
+                                activeIcon: Icons.qr_code_scanner_rounded,
+                              ),
+                              selected: false,
+                              foregroundColor: AppColors.primary,
+                              onTap: onScannerTap!,
+                            ),
+                    ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < leftTabs.length; i++)
+                      Expanded(
+                        child: _NavButton(
+                          data: leftTabs[i],
+                          selected: i == currentIndex,
+                          onTap: () => onTap(i),
+                        ),
+                      ),
+                    if (showPos)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: _PosCenterButton(onTap: onPosTap!),
+                      ),
+                    for (var i = 0; i < rightTabs.length; i++)
+                      Expanded(
+                        child: _NavButton(
+                          data: rightTabs[i],
+                          selected: (midPoint + i) == currentIndex,
+                          onTap: () => onTap(midPoint + i),
+                        ),
+                      ),
+                  ],
                 ),
-
-              // Center POS button
-              if (showPos)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: _PosCenterButton(onTap: onPosTap!),
-                ),
-
-              // Right tabs
-              for (var i = 0; i < rightTabs.length; i++)
-                _NavButton(
-                  data: rightTabs[i],
-                  selected: (midPoint + i) == currentIndex,
-                  onTap: () => onTap(midPoint + i),
-                ),
-            ],
-          ),
         ),
       ),
     );
@@ -84,37 +121,46 @@ class GlassBottomNav extends StatelessWidget {
 // ── Regular tab button ───────────────────────────────────────────────────────
 
 class _NavButton extends StatelessWidget {
-  const _NavButton({required this.data, required this.selected, required this.onTap});
+  const _NavButton({
+    required this.data,
+    required this.selected,
+    required this.onTap,
+    this.foregroundColor,
+  });
   final NavTabData data;
   final bool selected;
   final VoidCallback onTap;
+  final Color? foregroundColor;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.primary : AppColors.textHint;
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(selected ? data.activeIcon : data.icon, size: 24, color: color),
-              const SizedBox(height: 3),
-              Text(
-                data.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: color,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                ),
+    final color =
+        foregroundColor ?? (selected ? AppColors.primary : AppColors.textHint);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? data.activeIcon : data.icon,
+              size: 24,
+              color: color,
+            ),
+            const SizedBox(height: 3),
+            Text(
+              data.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                color: color,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

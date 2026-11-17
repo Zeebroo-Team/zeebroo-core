@@ -20,8 +20,20 @@ class Payment extends Model
     public const STATUS_CANCELED = 'canceled';
     public const STATUS_REFUNDED = 'refunded';
 
-    // Days a pending/failed subscription payment may go unsettled before access is locked.
-    public const GRACE_PERIOD_DAYS = 2;
+    /**
+     * Days a pending/failed subscription payment may go unsettled before access
+     * is locked — the business's admin-set override, else config('subscription.grace_period_days').
+     */
+    public static function gracePeriodDaysFor(?Business $business): int
+    {
+        return $business?->paymentGraceDays() ?? (int) config('subscription.grace_period_days', 2);
+    }
+
+    /** Deadline for a payment whose grace period starts now. */
+    public static function dueAtFor(?Business $business): \Illuminate\Support\Carbon
+    {
+        return now()->addDays(self::gracePeriodDaysFor($business));
+    }
 
     protected $fillable = [
         'business_id',

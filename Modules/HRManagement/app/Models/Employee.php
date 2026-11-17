@@ -31,6 +31,7 @@ class Employee extends Model
 
     protected $fillable = [
         'user_id',
+        'profile_complete',
         'full_name',
         'date_of_birth',
         'nic_passport_number',
@@ -60,6 +61,7 @@ class Employee extends Model
     protected function casts(): array
     {
         return [
+            'profile_complete' => 'boolean',
             'date_of_birth' => 'date',
             'date_of_joining' => 'date',
             'basic_salary' => 'decimal:2',
@@ -128,7 +130,7 @@ class Employee extends Model
             self::EMPLOYMENT_FULL_TIME => 'Full-Time',
             self::EMPLOYMENT_PART_TIME => 'Part-Time',
             self::EMPLOYMENT_CONTRACT => 'Contract',
-            default => $this->employment_type,
+            default => (string) $this->employment_type,
         };
     }
 

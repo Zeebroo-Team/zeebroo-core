@@ -24,6 +24,7 @@ final class EnsureWebSubscriptionSettled
     private const EXEMPT_ROUTE_PREFIXES = [
         'payment.',
         'business.platform-choice',
+        'business.get-started.',
         'business.select',
         'account.select',
     ];
@@ -70,7 +71,7 @@ final class EnsureWebSubscriptionSettled
             ], 402);
         }
 
-        return redirect()->route('payment.billing.index')->with(
+        return redirect()->route('business.get-started.billing')->with(
             'status',
             $ended
                 ? 'Your subscription has ended. Renew it below to regain access.'

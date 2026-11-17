@@ -25,6 +25,15 @@ class ApiEndpoints {
   static const String password = '/v1/pos/auth/password';
   static const String revoke = '/v1/pos/auth/revoke';
 
+  // Billing & Payments (same endpoints as the desktop app's billing modal)
+  static const String paymentHistory = '/v1/pos/auth/payment/history';
+  static const String paymentCheckout = '/v1/pos/auth/payment/checkout-session';
+  static const String subscriptionCancel = '/v1/pos/auth/payment/subscription/cancel';
+  static const String subscriptionResume = '/v1/pos/auth/payment/subscription/resume';
+  static String payment(int id) => '/v1/pos/auth/payment/$id';
+  static String paymentStatus(int id) => '/v1/pos/auth/payment/$id/status';
+  static String paymentReceipt(int id) => '/v1/pos/auth/payment/$id/receipt';
+
   // Dashboard
   static const String todaySummary = '/v1/pos/today-summary';
   static const String expensesOverview = '/v1/pos/expenses/overview';
@@ -50,13 +59,22 @@ class ApiEndpoints {
 
   // Catalog — product list + full CRUD (Inventory > Products tab)
   static const String products = '/v1/pos/online/products';
+  // "Offline products" on-device cache sync (mobile-only endpoints)
+  static const String productsSyncIndex = '/v1/pos/online/products/sync-index';
+  static const String productsByIds = '/v1/pos/online/products/by-ids';
+  // Upload a sale recorded offline (idempotent via client_uuid)
+  static const String offlineSales = '/v1/pos/sales/offline';
+  static const String offlineCustomers = '/v1/pos/customers/offline';
+  static const String offlineExpenses = '/v1/pos/expenses/offline';
   static String product(int id) => '/v1/pos/online/products/$id';
-  static String productBySku(String sku) => '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';
+  static String productBySku(String sku) =>
+      '/v1/pos/online/products/sku/${Uri.encodeComponent(sku)}';
   static String productStockLayerBarcode(int productId, int layerId) =>
       '/v1/pos/online/products/$productId/stock-layers/$layerId/barcode';
 
   // Units — dropdown source for the product form
   static const String units = '/v1/pos/units';
+  static String unit(int id) => '/v1/pos/units/$id';
 
   // Categories (Inventory > Categories tab)
   static const String categories = '/v1/pos/categories';
@@ -76,6 +94,8 @@ class ApiEndpoints {
 
   // Suppliers — dropdown source for Purchase Orders / Goods Receive
   static const String suppliers = '/v1/pos/suppliers';
+  static String supplier(int id) => '/v1/pos/suppliers/$id';
+  static const String supplierCategories = '/v1/pos/supplier-categories';
 
   // Purchase Orders (Inventory > Purchase Orders tab)
   static const String purchaseOrders = '/v1/pos/purchase-orders';
@@ -88,8 +108,7 @@ class ApiEndpoints {
       '/v1/pos/purchase-orders/$id/cancel';
   static String purchaseOrderGrnForm(int id) =>
       '/v1/pos/purchase-orders/$id/grn-form';
-  static String purchaseOrderGrns(int id) =>
-      '/v1/pos/purchase-orders/$id/grns';
+  static String purchaseOrderGrns(int id) => '/v1/pos/purchase-orders/$id/grns';
 
   // Goods Receive Notes (Inventory > Goods Receive tab)
   static const String grns = '/v1/pos/grns';
@@ -119,6 +138,7 @@ class ApiEndpoints {
 
   // Bills (Financial > Bills tab)
   static const String financeBills = '/v1/pos/expenses/bills';
+  static const String financeBillScan = '/v1/pos/expenses/bills/scan';
   static String financeBill(int id) => '/v1/pos/expenses/bills/$id';
   static String financeBillPay(int id) => '/v1/pos/expenses/bills/$id/pay';
   static const String financeBillAssignmentTargets =
@@ -153,6 +173,19 @@ class ApiEndpoints {
   // POS — point of sale
   static const String customers = '/v1/pos/customers';
   static String customer(int id) => '/v1/pos/customers/$id';
+  static const String customerCategories = '/v1/pos/customer-categories';
+  static const String couponLookup = '/v1/pos/coupons/lookup';
+  static const String coupons = '/v1/pos/coupons';
+  static const String couponGenerateCode = '/v1/pos/coupons/generate-code';
+  static String coupon(int id) => '/v1/pos/coupons/$id';
+  static const String giftCardLookup = '/v1/pos/gift-cards/lookup';
+  static const String giftCards = '/v1/pos/gift-cards';
+  static const String giftCardGenerateCode = '/v1/pos/gift-cards/generate-code';
+  static const String giftCardGroups = '/v1/pos/gift-card-groups';
+  static String giftCard(int id) => '/v1/pos/gift-cards/$id';
+  static String giftCardGroup(int id) => '/v1/pos/gift-card-groups/$id';
+  static String giftCardGroupCards(int id) =>
+      '/v1/pos/gift-card-groups/$id/cards';
   static const String sales = '/v1/pos/sales';
   static String sale(int id) => '/v1/pos/sales/$id';
   static String saleReceipt(int id) => '/v1/pos/sales/$id/receipt';

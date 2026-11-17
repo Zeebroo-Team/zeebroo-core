@@ -465,7 +465,8 @@
 
         // POS — only visible when Point of Sale feature is enabled.
         $posFeatureOn = $navBusiness && $featureOn('point_of_sale');
-        $showSidebarPosRegisterLink = $navBusiness && Route::has('pos.online') && $posFeatureOn;
+        // Online POS temporarily hidden — the POS register (pos.register) covers the same flow.
+        $showSidebarPosRegisterLink = false;
         $showSidebarPosTerminalLink = $navBusiness && Route::has('pos.register') && $posFeatureOn;
         $showSidebarPosSalesLink = $navBusiness && Route::has('pos.sales.index') && $posFeatureOn;
         $showSidebarPosEodLink = $navBusiness && Route::has('pos.end-of-day') && $posFeatureOn;
@@ -648,6 +649,9 @@
                 <div class="menu-section">Administration</div>
                 <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Dashboard</span></a>
                 <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Management</span></a>
+                <a href="{{ route('admin.payments.index') }}" class="{{ request()->routeIs('admin.payments.*') ? 'active' : '' }}"><i class="fa fa-credit-card"></i><span>Payment History</span></a>
+                <a href="{{ route('admin.email-marketing.index') }}" class="{{ request()->routeIs('admin.email-marketing.*') ? 'active' : '' }}"><i class="fa fa-envelope-open-text"></i><span>Email Marketing</span></a>
+                <a href="{{ route('admin.automated-emails.index') }}" class="{{ request()->routeIs('admin.automated-emails.*') ? 'active' : '' }}"><i class="fa fa-envelope-circle-check"></i><span>Automated Emails</span></a>
                 <a href="{{ route('admin.releases.index') }}" class="{{ request()->routeIs('admin.releases.*') ? 'active' : '' }}"><i class="fa fa-rocket"></i><span>Release Management</span></a>
                 <a href="{{ route('admin.packages.index') }}" class="{{ request()->routeIs('admin.packages.*') ? 'active' : '' }}"><i class="fa fa-box-open"></i><span>Package Management</span></a>
                 <a href="{{ route('admin.industries.index') }}" class="{{ request()->routeIs('admin.industries.*') ? 'active' : '' }}"><i class="fa fa-industry"></i><span>Industry Management</span></a>
@@ -907,6 +911,9 @@
                     <a href="{{ route('pm.projects.index') }}" @class(['active' => request()->routeIs('pm.projects.*') || request()->routeIs('pm.tasks.*')])>
                         <i class="fa fa-diagram-project"></i><span>All Projects</span>
                     </a>
+                    <a href="{{ route('pm.my-projects') }}" @class(['active' => request()->routeIs('pm.my-projects')])>
+                        <i class="fa fa-user-check"></i><span>My Projects</span>
+                    </a>
                     <a href="{{ route('pm.my-tasks') }}" @class(['active' => request()->routeIs('pm.my-tasks')])>
                         <i class="fa fa-list-check"></i><span>My Tasks</span>
                     </a>
@@ -1103,6 +1110,13 @@
                     <a href="{{ route('settings.user') }}" class="{{ request()->routeIs('settings.user') ? 'active' : '' }}"><i class="fa fa-user-gear"></i><span>User Settings</span></a>
                     @if(Route::has('mail.settings.edit'))
                         <a href="{{ route('mail.settings.edit') }}" class="{{ request()->routeIs('mail.settings.*') ? 'active' : '' }}"><i class="fa fa-envelope"></i><span>Mail Settings</span></a>
+                    @endif
+                    @if($posFeatureOn && Route::has('settings.printer'))
+                        <a href="{{ route('settings.printer') }}" class="{{ request()->routeIs('settings.printer*') ? 'active' : '' }}"><i class="fa fa-print"></i><span>Printer</span></a>
+                        <a href="{{ route('settings.receipt') }}" class="{{ request()->routeIs('settings.receipt*') ? 'active' : '' }}"><i class="fa fa-receipt"></i><span>Receipt Setting</span></a>
+                    @endif
+                    @if(($posFeatureOn || $salesFeatureOn) && Route::has('sales.invoice-setup.edit'))
+                        <a href="{{ route('sales.invoice-setup.edit') }}" class="{{ request()->routeIs('sales.invoice-setup.*') ? 'active' : '' }}"><i class="fa fa-file-invoice"></i><span>Invoice Setup</span></a>
                     @endif
                     @if(Route::has('app-connection.index'))
                         <a href="{{ route('app-connection.index') }}" class="{{ request()->routeIs('app-connection.*') ? 'active' : '' }}"><i class="fa fa-plug"></i><span>App connections</span></a>
@@ -1387,6 +1401,22 @@
                             <span><i class="fa fa-box" style="margin-right:6px;"></i>Purchased Package</span>
                             <span class="pkg-badge">{{ $navBusiness?->package?->name ?? 'Free Trial' }}</span>
                         </div>
+                        @php
+                            $__menuUser = auth()->user();
+                            $__menuEmailVerified = $__menuUser?->email_verified_at !== null;
+                            $__menuEmailPending = $__menuUser instanceof \App\Models\User
+                                && app(\Modules\Auth\Services\EmailVerificationService::class)->isPending($__menuUser);
+                        @endphp
+                        @if($__menuEmailVerified || $__menuEmailPending)
+                            <div class="menu-row">
+                                <span><i class="fa fa-envelope" style="margin-right:6px;"></i>Email</span>
+                                @if($__menuEmailVerified)
+                                    <span class="pkg-badge" style="color:#15803d;border-color:color-mix(in srgb,#16a34a 45%,var(--border));background:color-mix(in srgb,#16a34a 10%,var(--card));"><i class="fa fa-circle-check" style="margin-right:4px;"></i>Verified</span>
+                                @else
+                                    <a href="{{ route('verification.notice') }}" class="pkg-badge" style="text-decoration:none;color:#fff;background:#3b82f6;border-color:#3b82f6;font-weight:700;"><i class="fa fa-envelope-circle-check" style="margin-right:4px;"></i>Verify now</a>
+                                @endif
+                            </div>
+                        @endif
                         @if(auth()->check())
                             <div class="menu-row" style="display:block;">
                                 <form method="post" action="{{ route('settings.store') }}" style="margin:0;">
@@ -1859,6 +1889,59 @@
             })();
             </script>
         @endif
+        @php
+            $__evUser = auth()->user();
+            // Only on the dashboard itself, and never over the business onboarding wizard.
+            $__evPending = request()->routeIs('dashboard')
+                && ! $__env->hasSection('hide_email_verify_bar')
+                && $__evUser instanceof \App\Models\User
+                && $__evUser->email_verification_required
+                && $__evUser->email_verified_at === null
+                && app(\Modules\Auth\Services\EmailVerificationService::class)->isPending($__evUser);
+        @endphp
+        @if($__evPending)
+            <style>
+                .ev-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 24px 0;padding:12px 16px;border-radius:14px;background:color-mix(in srgb,#3b82f6 10%,var(--card));border:1px solid color-mix(in srgb,#3b82f6 40%,var(--border));color:var(--text);font-size:13.5px;}
+                .ev-bar__icon{width:30px;height:30px;border-radius:999px;background:#3b82f6;color:#fff;display:grid;place-items:center;flex-shrink:0;}
+                .ev-bar__text{flex:1;min-width:220px;line-height:1.45;}
+                .ev-bar__go{display:inline-flex;align-items:center;gap:7px;padding:8px 16px;border-radius:9px;background:#3b82f6;color:#fff;font-weight:700;font-size:13px;text-decoration:none;}
+                .ev-bar__go:hover{background:#2563eb;}
+                .ev-bar__close{border:0;background:none;color:var(--muted);cursor:pointer;font-size:15px;padding:4px 6px;}
+            </style>
+            <div class="ev-bar" id="evBar" role="status">
+                <span class="ev-bar__icon"><i class="fa fa-envelope" aria-hidden="true"></i></span>
+                <div class="ev-bar__text">
+                    Please verify your email address. We sent a 6-digit code to <b>{{ $__evUser->email }}</b>.
+                </div>
+                <a href="{{ route('verification.notice') }}" class="ev-bar__go"><i class="fa fa-envelope-circle-check" aria-hidden="true"></i> Verify now</a>
+                <button type="button" class="ev-bar__close" id="evBarClose" aria-label="Dismiss"><i class="fa fa-xmark" aria-hidden="true"></i></button>
+            </div>
+            <script>
+            // Dismiss hides it for this page view only — verification stays nagging until done.
+            document.getElementById('evBarClose')?.addEventListener('click', function () {
+                document.getElementById('evBar')?.remove();
+            });
+            </script>
+        @endif
+        @if(session()->has(\Modules\Auth\Services\ImpersonationService::SESSION_KEY))
+            <style>
+                .imp-bar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9999;display:flex;align-items:center;gap:12px;
+                    max-width:calc(100vw - 32px);padding:9px 10px 9px 16px;border-radius:999px;background:#b45309;color:#fff;font-size:13px;
+                    box-shadow:0 8px 24px rgba(0,0,0,.25);}
+                .imp-bar__text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+                .imp-bar form{margin:0;flex-shrink:0;}
+                .imp-bar button{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;border:0;background:#fff;
+                    color:#b45309;font-weight:700;font-size:12.5px;font-family:inherit;cursor:pointer;}
+            </style>
+            <div class="imp-bar" role="status">
+                <i class="fa fa-user-secret" aria-hidden="true"></i>
+                <span class="imp-bar__text">Viewing as <b>{{ auth()->user()?->name }}</b></span>
+                <form method="POST" action="{{ route('impersonate.leave') }}">
+                    @csrf
+                    <button type="submit"><i class="fa fa-arrow-right-from-bracket" aria-hidden="true"></i> Return to admin</button>
+                </form>
+            </div>
+        @endif
         <div class="content-inner{{ $chatWorkspace ? ' content-inner--chat-workspace' : '' }}">
             @yield('content')
         </div>
@@ -2036,11 +2119,11 @@
     $bfmAllowedKeys = $navBusiness->effectiveFeatureKeys();
 
     $bfmDefs = [
-        ['key' => 'account_management', 'category' => 'finance', 'name' => 'Account Management', 'img' => asset('features/account-management.png'), 'color' => '#4e8ef7', 'desc' => 'Financial accounts & bank management', 'locked' => true, 'long' => [
+        ['key' => 'account_management', 'category' => 'finance', 'name' => 'Account Management', 'img' => asset('features/accounting.jpeg'), 'color' => '#4e8ef7', 'desc' => 'Financial accounts & bank management', 'locked' => true, 'long' => [
             'Track ledgers, bank accounts, and financial movements across your business from one place. Every sale, bill, and payroll run posts here automatically, so your books stay current without manual entry.',
             'This module powers the numbers behind every other feature, so it is always included and cannot be turned off.',
         ]],
-        ['key' => 'point_of_sale', 'category' => 'sales', 'name' => 'Point of Sale', 'img' => asset('features/point-of-sale.png'), 'color' => '#4caf7d', 'desc' => 'Cashier checkout interface & quick sales', 'long' => [
+        ['key' => 'point_of_sale', 'category' => 'sales', 'name' => 'Point of Sale', 'img' => asset('features/pos.jpeg'), 'color' => '#4caf7d', 'desc' => 'Cashier checkout interface & quick sales', 'long' => [
             'A fast, touch-friendly checkout screen for ringing up sales, applying discounts, and taking payments. Barcode scanning, quick-add favorites, and split payments are all one tap away.',
             'Every sale reconciles straight into Account Management and Stock Management, so your numbers and inventory stay in sync.',
             'Needs Stock Management and Product Management enabled. Point of Sale and Restaurant cover the same checkout role, so only one of the two can be enabled at a time.',
@@ -2061,7 +2144,7 @@
             'Record bills, loans, and recurring expenses, and track what is due, paid, and overdue at a glance.',
             'Everything posts to your accounts automatically, so your expense picture in Account Management is always up to date.',
         ]],
-        ['key' => 'human_resources', 'category' => 'hr', 'name' => 'Human Resources', 'img' => asset('features/human-resource-management.png'), 'color' => '#f7a54e', 'desc' => 'Employees, departments & payroll', 'long' => [
+        ['key' => 'human_resources', 'category' => 'hr', 'name' => 'Human Resources', 'img' => asset('features/hr-management.jpeg'), 'color' => '#f7a54e', 'desc' => 'Employees, departments & payroll', 'long' => [
             'Manage employees, departments, and attendance, and run payroll without leaving the app.',
             'Employee records, attendance logs, and payroll history stay linked for quick lookups.',
         ]],
@@ -2069,7 +2152,7 @@
             'Sell service-bound products — repairs, installations, consultations — and schedule the jobs that come with them.',
             'Works alongside Point of Sale, so a service can be sold at the counter just like a physical product.',
         ]],
-        ['key' => 'social_media_campaign', 'category' => 'marketing', 'name' => 'Social Media Campaign', 'img' => asset('features/social-media-campaign.png'), 'color' => '#e040fb', 'desc' => 'Design studio & marketing assets', 'long' => [
+        ['key' => 'social_media_campaign', 'category' => 'marketing', 'name' => 'Social Media Campaign', 'img' => asset('features/graphic-design.jpeg'), 'color' => '#e040fb', 'desc' => 'Design studio & marketing assets', 'long' => [
             'A built-in design studio for creating social posts, flyers, and other marketing assets — no separate design software required.',
             'Start from a template or a blank canvas, drop in your logo and product photos, and export the result ready to post or print.',
         ]],
@@ -2100,6 +2183,10 @@
         ['key' => 'event_management', 'category' => 'marketing', 'name' => 'Event Management', 'img' => asset('features/event-management.png'), 'color' => '#0ea5e9', 'desc' => 'Brands, jobs, reporters, officers & salary sheets', 'long' => [
             'Run an event or advertising agency workflow — manage client brands, the jobs booked for them, and the staff assigned to cover each one.',
             "Salary sheets tie the work back to payroll, so agency-specific staffing and pay don't have to be shoehorned into a generic HR setup.",
+        ]],
+        ['key' => 'ecommerce', 'category' => 'sales', 'name' => 'E-Commerce', 'img' => asset('features/ecommerce.webp'), 'color' => '#7c3aed', 'desc' => 'Online store website, web orders & delivery', 'long' => [
+            'Launch your own online store website in minutes — publish products from your catalog, set web prices and sales, and take orders 24/7 with cash on delivery or bank transfer.',
+            'Manage everything from the desktop E-Commerce tab: store branding, shipping rules, online products and the full order lifecycle from pending to delivered.',
         ]],
     ];
 @endphp

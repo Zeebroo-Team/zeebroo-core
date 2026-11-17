@@ -4,6 +4,8 @@ namespace Modules\Auth\Services;
 
 use App\Models\User;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
+use Modules\Payment\Models\Payment;
 
 class UserManagementService
 {
@@ -20,8 +22,14 @@ class UserManagementService
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
         $sort = $filters['sort'] ?? 'newest';
+        $hiddenDomains = config('app.hidden_user_email_domains', []);
 
         return User::query()
+            ->when($hiddenDomains, fn ($q) => $q->where(function ($w) use ($hiddenDomains) {
+                foreach ($hiddenDomains as $domain) {
+                    $w->whereRaw('LOWER(email) NOT LIKE ?', ['%@'.$domain]);
+                }
+            }))
             ->with(['roles', 'businesses.package', 'businesses.featureOverrides', 'businesses.payments' => fn ($q) => $q->latest('created_at')])
             ->withCount(['businesses', 'accounts'])
             ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
@@ -82,16 +90,24 @@ class UserManagementService
 
     /**
      * Returns a reason the user cannot be deleted, or null if deletion is safe.
-     * Businesses/accounts cascade-delete everything they own, so ownership must be cleared first.
+     * Businesses/accounts cascade-delete everything they own, so owners are only deletable
+     * when the admin explicitly opts into $withOwnedData — and never while a Stripe
+     * subscription is still live, since deleting the payment rows would leave it billing.
      */
-    public function undeletableReason(User $user): ?string
+    public function undeletableReason(User $user, bool $withOwnedData = false): ?string
     {
-        if ($user->businesses()->exists() || $user->accounts()->exists()) {
-            return __('Cannot delete a user who owns a business or account. Transfer or remove those first.');
-        }
-
         if ($user->hasRole('admin') && User::role('admin')->count() <= 1) {
             return __('Cannot delete the last remaining admin.');
+        }
+
+        $ownsData = $user->businesses()->exists() || $user->accounts()->exists();
+
+        if ($ownsData && ! $withOwnedData) {
+            return __('This user owns a business or account. Confirm deletion of all their data to continue.');
+        }
+
+        if ($ownsData && $this->hasLiveSubscription($user)) {
+            return __('This user has a live Stripe subscription. Cancel it before deleting the account.');
         }
 
         return null;
@@ -99,7 +115,18 @@ class UserManagementService
 
     public function delete(User $user): void
     {
-        $user->delete();
+        DB::transaction(function () use ($user): void {
+            $user->tokens()->delete();
+            $user->delete();
+        });
+    }
+
+    private function hasLiveSubscription(User $user): bool
+    {
+        return Payment::where('user_id', $user->id)
+            ->whereNotNull('stripe_subscription_id')
+            ->whereIn('stripe_subscription_status', ['active', 'trialing', 'past_due', 'unpaid', 'incomplete'])
+            ->exists();
     }
 
     /**

@@ -5,12 +5,14 @@ import '../widgets/barcodes_tab.dart';
 import '../widgets/brands_tab.dart';
 import '../widgets/categories_tab.dart';
 import '../widgets/cheques_tab.dart';
+import '../widgets/customers_tab.dart';
 import '../widgets/discounts_tab.dart';
 import '../widgets/goods_receive_tab.dart';
 import '../widgets/products_tab.dart';
 import '../widgets/purchase_orders_tab.dart';
 import '../widgets/stock_audits_tab.dart';
 import '../widgets/stock_transfers_tab.dart';
+import '../widgets/suppliers_tab.dart';
 
 // Overview is index 0; all other tabs are shifted by 1.
 const _kTabLabels = [
@@ -24,20 +26,41 @@ const _kTabLabels = [
   'Categories',
   'Discounts',
   'Brands',
+  'Suppliers',
+  'Customers',
   'Barcodes',
 ];
 
+// Only these cards appear on the Inventory overview. The remaining tabs
+// (Products, Categories, Discounts, ...) stay in the TabBarView because other
+// overview screens deep-link into them via `initialTabIndex`.
 const _kOverviewItems = [
-  _OverviewItem('Products',        Icons.inventory_2_rounded,        Color(0xFF6366F1), 1),
-  _OverviewItem('Purchase Orders', Icons.shopping_cart_rounded,       Color(0xFF0EA5E9), 2),
-  _OverviewItem('Goods Receive',   Icons.local_shipping_rounded,      Color(0xFF10B981), 3),
-  _OverviewItem('Cheques',         Icons.receipt_rounded,             Color(0xFFF59E0B), 4),
-  _OverviewItem('Stock Audit',     Icons.fact_check_rounded,          Color(0xFFEF4444), 5),
-  _OverviewItem('Stock Transfer',  Icons.swap_horiz_rounded,          Color(0xFF8B5CF6), 6),
-  _OverviewItem('Categories',      Icons.category_rounded,            Color(0xFF06B6D4), 7),
-  _OverviewItem('Discounts',       Icons.local_offer_rounded,         Color(0xFFEC4899), 8),
-  _OverviewItem('Brands',          Icons.verified_rounded,            Color(0xFF84CC16), 9),
-  _OverviewItem('Barcodes',        Icons.qr_code_scanner_rounded,     Color(0xFF64748B), 10),
+  _OverviewItem(
+    'Purchase Orders',
+    Icons.shopping_cart_rounded,
+    Color(0xFF0EA5E9),
+    2,
+  ),
+  _OverviewItem(
+    'Goods Receive',
+    Icons.local_shipping_rounded,
+    Color(0xFF10B981),
+    3,
+  ),
+  _OverviewItem('Stock Audit', Icons.fact_check_rounded, Color(0xFFEF4444), 5),
+  _OverviewItem(
+    'Stock Transfer',
+    Icons.swap_horiz_rounded,
+    Color(0xFF8B5CF6),
+    6,
+  ),
+  _OverviewItem('Cheques', Icons.receipt_rounded, Color(0xFFF59E0B), 4),
+  _OverviewItem(
+    'Barcodes',
+    Icons.qr_code_scanner_rounded,
+    Color(0xFF64748B),
+    12,
+  ),
 ];
 
 class _OverviewItem {
@@ -48,24 +71,38 @@ class _OverviewItem {
   final int tabIndex;
 }
 
-/// Inventory — full CRUD across the same 10 areas as the Electron desktop
+/// Inventory — full CRUD across the same areas as the Electron desktop
 /// app's "Inventory" ribbon tab (`inv-subnav`): Products, Purchase Orders,
 /// Goods Receive, Cheques, Stock Audit, Stock Transfer, Categories,
-/// Discounts, Brands, Barcodes. There's no backend "inventory" feature key
+/// Discounts, Brands, Suppliers, Barcodes. There's no backend "inventory" feature key
 /// — this is an always-available menu entry (not gated by the business's
 /// enabled plan features), reached from the side drawer.
 class InventoryScreen extends StatefulWidget {
-  const InventoryScreen({super.key});
+  const InventoryScreen({
+    super.key,
+    this.initialTabIndex = 0,
+    this.title = 'Inventory',
+    this.returnToOverviewOnBack = true,
+  });
+
+  final int initialTabIndex;
+  final String title;
+  final bool returnToOverviewOnBack;
 
   @override
   State<InventoryScreen> createState() => _InventoryScreenState();
 }
 
-class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProviderStateMixin {
-  late final TabController _tabController = TabController(length: _kTabLabels.length, vsync: this)
-    ..addListener(() {
-      if (mounted) setState(() {});
-    });
+class _InventoryScreenState extends State<InventoryScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController =
+      TabController(
+        length: _kTabLabels.length,
+        initialIndex: widget.initialTabIndex.clamp(0, _kTabLabels.length - 1),
+        vsync: this,
+      )..addListener(() {
+        if (mounted) setState(() {});
+      });
 
   void _goToTab(int index) => _tabController.animateTo(index);
 
@@ -73,31 +110,6 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  Widget _pill(String label, int index) {
-    final selected = _tabController.index == index;
-    return GestureDetector(
-      onTap: () => _tabController.animateTo(index),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: selected ? AppColors.primary : Colors.transparent, width: 1),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11.5,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-            color: selected ? AppColors.primary : AppColors.textMuted,
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -108,53 +120,37 @@ class _InventoryScreenState extends State<InventoryScreen> with SingleTickerProv
       foregroundColor: AppColors.textDark,
       elevation: 0,
       centerTitle: true,
-      title: const Text(
-        'Inventory',
-        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+      leading: IconButton(
+        onPressed: () {
+          if (widget.returnToOverviewOnBack && _tabController.index != 0) {
+            _tabController.animateTo(0);
+          } else {
+            Navigator.of(context).pop();
+          }
+        },
+        icon: const Icon(Icons.arrow_back_rounded),
+      ),
+      title: Text(
+        widget.title,
+        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
       ),
     ),
-    body: Column(
+    body: TabBarView(
+      controller: _tabController,
       children: [
-        Container(
-          color: AppColors.surface,
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < _kTabLabels.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 4),
-                    _pill(_kTabLabels[i], i),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-        const Divider(height: 1, color: AppColors.border),
-        Expanded(
-          child: TabBarView(
-            controller: _tabController,
-            children: [
-              _InventoryOverview(onNavigate: _goToTab),
-              const ProductsTab(),
-              const PurchaseOrdersTab(),
-              const GoodsReceiveTab(),
-              const ChequesTab(),
-              const StockAuditsTab(),
-              const StockTransfersTab(),
-              const CategoriesTab(),
-              const DiscountsTab(),
-              const BrandsTab(),
-              const BarcodesTab(),
-            ],
-          ),
-        ),
+        _InventoryOverview(onNavigate: _goToTab),
+        const ProductsTab(),
+        const PurchaseOrdersTab(),
+        const GoodsReceiveTab(),
+        const ChequesTab(),
+        const StockAuditsTab(),
+        const StockTransfersTab(),
+        const CategoriesTab(),
+        const DiscountsTab(),
+        const BrandsTab(),
+        const SuppliersTab(),
+        const CustomersTab(),
+        const BarcodesTab(),
       ],
     ),
   );
@@ -236,11 +232,18 @@ class _OverviewBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fade = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: controller, curve: const Interval(0, 0.5, curve: Curves.easeOut)),
+      CurvedAnimation(
+        parent: controller,
+        curve: const Interval(0, 0.5, curve: Curves.easeOut),
+      ),
     );
-    final slide = Tween<Offset>(begin: const Offset(0, -0.2), end: Offset.zero).animate(
-      CurvedAnimation(parent: controller, curve: const Interval(0, 0.5, curve: Curves.easeOut)),
-    );
+    final slide = Tween<Offset>(begin: const Offset(0, -0.2), end: Offset.zero)
+        .animate(
+          CurvedAnimation(
+            parent: controller,
+            curve: const Interval(0, 0.5, curve: Curves.easeOut),
+          ),
+        );
     return FadeTransition(
       opacity: fade,
       child: SlideTransition(
@@ -257,7 +260,7 @@ class _OverviewBanner extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF6366F1).withOpacity(0.35),
+                color: const Color(0xFF6366F1).withValues(alpha: 0.35),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -269,10 +272,14 @@ class _OverviewBanner extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.inventory_2_rounded, color: Colors.white, size: 28),
+                child: const Icon(
+                  Icons.inventory_2_rounded,
+                  color: Colors.white,
+                  size: 28,
+                ),
               ),
               const SizedBox(width: 16),
               const Expanded(
@@ -281,7 +288,11 @@ class _OverviewBanner extends StatelessWidget {
                   children: [
                     Text(
                       'Inventory',
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                     SizedBox(height: 2),
                     Text(
@@ -324,8 +335,10 @@ class _OverviewCardState extends State<_OverviewCard>
     upperBound: 1,
   );
 
-  late final Animation<double> _scale = Tween<double>(begin: 1.0, end: 0.93)
-      .animate(CurvedAnimation(parent: _pressCtrl, curve: Curves.easeInOut));
+  late final Animation<double> _scale = Tween<double>(
+    begin: 1.0,
+    end: 0.93,
+  ).animate(CurvedAnimation(parent: _pressCtrl, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -364,12 +377,12 @@ class _OverviewCardState extends State<_OverviewCard>
               borderRadius: BorderRadius.circular(18),
               boxShadow: [
                 BoxShadow(
-                  color: color.withOpacity(0.18),
+                  color: color.withValues(alpha: 0.18),
                   blurRadius: 16,
                   offset: const Offset(0, 6),
                 ),
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
+                  color: Colors.black.withValues(alpha: 0.05),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -383,14 +396,14 @@ class _OverviewCardState extends State<_OverviewCard>
                   height: 56,
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
-                      colors: [color, color.withOpacity(0.75)],
+                      colors: [color, color.withValues(alpha: 0.75)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: color.withOpacity(0.4),
+                        color: color.withValues(alpha: 0.4),
                         blurRadius: 12,
                         offset: const Offset(0, 4),
                       ),

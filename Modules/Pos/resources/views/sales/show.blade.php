@@ -69,7 +69,7 @@
 
     <div class="pos-receipt-actions">
         <a href="{{ route('pos.sales.index') }}" class="pcat-link" style="font-weight:700;"><i class="fa fa-arrow-left"></i> Sales history</a>
-        <a href="{{ route('pos.online') }}" class="pcat-link" style="font-weight:700;"><i class="fa fa-store"></i> Online POS</a>
+        <a href="{{ route('pos.register') }}" class="pcat-link" style="font-weight:700;"><i class="fa fa-cash-register"></i> POS</a>
         @if($sale->isCompleted())
             <button type="button" class="pos-btn-return" id="openReturnModalBtn">
                 <i class="fa fa-rotate-left"></i> Return items

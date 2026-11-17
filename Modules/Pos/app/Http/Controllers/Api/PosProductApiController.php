@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Services\PosProductExportService;
 use Modules\Pos\Services\PosProductQuickCreateService;
 use Modules\Pos\Services\PosSettingsService;
 use Modules\Product\Models\Product;
@@ -24,6 +25,7 @@ class PosProductApiController extends Controller
         private readonly ProductService $productService,
         private readonly ProductStockLayerService $stockLayers,
         private readonly PosSettingsService $posSettings,
+        private readonly PosProductExportService $exporter,
     ) {
     }
 
@@ -138,6 +140,7 @@ class PosProductApiController extends Controller
                 if ($request->has('item_wise_discount'))     $fill['item_wise_discount']   = $request->boolean('item_wise_discount');
                 if ($request->has('is_dynamic_pricing'))     $fill['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
                 if ($request->has('dynamic_price_qty_linked')) $fill['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
+                if ($request->has('is_changeable_price'))    $fill['is_changeable_price']  = $request->boolean('is_changeable_price');
                 if ($fill) $product->fill($fill)->save();
 
                 if ($request->has('product_category_ids')) {
@@ -231,6 +234,7 @@ class PosProductApiController extends Controller
             'item_wise_discount'        => 'boolean',
             'is_dynamic_pricing'        => 'boolean',
             'dynamic_price_qty_linked'  => 'boolean',
+            'is_changeable_price'       => 'boolean',
             'product_category_ids'      => 'nullable|array',
             'product_category_ids.*'    => 'integer',
             'product_brand_ids'         => 'nullable|array',
@@ -267,12 +271,59 @@ class PosProductApiController extends Controller
         if ($request->has('item_wise_discount'))     $data['item_wise_discount']   = $request->boolean('item_wise_discount');
         if ($request->has('is_dynamic_pricing'))     $data['is_dynamic_pricing']   = $request->boolean('is_dynamic_pricing');
         if ($request->has('dynamic_price_qty_linked')) $data['dynamic_price_qty_linked'] = $request->boolean('dynamic_price_qty_linked');
+        if ($request->has('is_changeable_price'))    $data['is_changeable_price']  = $request->boolean('is_changeable_price');
+
+        $oldPrice = (float) $product->unit_price;
 
         $this->productService->update($product, $data);
 
+        // Only after a price change: products priced per batch on purpose shouldn't prompt on every save.
+        $otherPriced = (float) $product->unit_price !== $oldPrice ? $this->stockLayers->batchesOnOtherPrice($product) : collect();
+
         return response()->json([
             'message' => 'Product updated.',
-            'data'    => ['id' => $product->id, 'name' => $product->fresh()->name],
+            'data'    => [
+                'id'   => $product->id,
+                'name' => $product->fresh()->name,
+                'batches_on_other_price' => $otherPriced->map(fn ($layer) => [
+                    'id'                 => (int) $layer->id,
+                    'batch_sku'          => $layer->batch_sku,
+                    'selling_unit_price' => (float) $layer->selling_unit_price,
+                    'quantity_remaining' => (float) $layer->quantity_remaining,
+                ])->values(),
+            ],
+        ]);
+    }
+
+    /**
+     * Set the selling price and opening stock of an unpriced product from the POS
+     * grid (used for products brought in by the SQL dump import).
+     */
+    public function quickSetup(Request $request, Product $product): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        if (! $this->productService->productForBusiness($business, $product)) {
+            return response()->json(['message' => 'Not found.'], 404);
+        }
+
+        $branchId = $request->input('branch_id') ?? $request->query('branch') ?? $request->header('X-Branch-Id');
+        $input = $request->all();
+        $input['branch_id'] = is_numeric($branchId) ? (int) $branchId : null;
+
+        try {
+            $card = $this->quickCreate->setup($business, $product, $input);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => $e->getMessage() ?: 'Could not set up product.',
+                'errors'  => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'message' => 'Product ready to sell.',
+            'data'    => $card,
         ]);
     }
 
@@ -290,6 +341,46 @@ class PosProductApiController extends Controller
         return response()->json(['message' => 'Product deleted.']);
     }
 
+    /**
+     * Inventory → Export Products: paged, full-detail product rows for CSV / PDF export.
+     * Same filters as the inventory list, plus `ids[]` to export a hand-picked set.
+     */
+    public function export(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        $data = $request->validate([
+            'q'            => ['nullable', 'string', 'max:255'],
+            'category'     => ['nullable', 'integer', 'min:0'],
+            'brand_id'     => ['nullable', 'integer', 'min:0'],
+            'stock_status' => ['nullable', 'in:in_stock,low_stock,out_of_stock'],
+            'sort'         => ['nullable', 'in:name_asc,name_desc,price_asc,price_desc,stock_asc,stock_desc'],
+            'ids'          => ['nullable', 'array', 'max:'.PosProductExportService::MAX_PER_PAGE],
+            'ids.*'        => ['integer'],
+            'page'         => ['nullable', 'integer', 'min:1'],
+            'per_page'     => ['nullable', 'integer', 'min:1', 'max:'.PosProductExportService::MAX_PER_PAGE],
+        ]);
+
+        $branchId = $request->query('branch') ?? $request->header('X-Branch-Id');
+
+        $result = $this->exporter->rows(
+            $business,
+            [
+                'q'            => $data['q'] ?? null,
+                'category_id'  => $data['category'] ?? null,
+                'brand_id'     => $data['brand_id'] ?? null,
+                'stock_status' => $data['stock_status'] ?? null,
+                'sort'         => $data['sort'] ?? 'name_asc',
+                'ids'          => $data['ids'] ?? [],
+            ],
+            (int) ($data['page'] ?? 1),
+            (int) ($data['per_page'] ?? 500),
+            is_numeric($branchId) ? (int) $branchId : null,
+        );
+
+        return response()->json($result);
+    }
+
     public function import(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -304,9 +395,16 @@ class PosProductApiController extends Controller
             'rows.*.category'       => ['nullable', 'string', 'max:255'],
             'rows.*.brand'          => ['nullable', 'string', 'max:255'],
             'rows.*.description'    => ['nullable', 'string', 'max:5000'],
+            // Branches that receive each row's opening stock (the full quantity per branch).
+            'branch_ids'            => ['nullable', 'array'],
+            'branch_ids.*'          => [
+                'integer',
+                \Illuminate\Validation\Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id)),
+            ],
         ]);
 
         $rows       = $request->input('rows');
+        $branchIds  = array_values(array_unique(array_map('intval', (array) $request->input('branch_ids', []))));
         $imported   = 0;
         $skipped    = 0;
         $errors     = [];
@@ -320,6 +418,7 @@ class PosProductApiController extends Controller
                     'sku'            => $row['sku'] ?? null,
                     'unit_price'     => (float) $row['unit_price'],
                     'stock_quantity' => isset($row['stock_quantity']) ? (float) $row['stock_quantity'] : 0,
+                    'branch_ids'     => $branchIds,
                 ]);
 
 

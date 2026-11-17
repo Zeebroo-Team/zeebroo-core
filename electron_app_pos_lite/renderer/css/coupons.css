@@ -1,0 +1,19 @@
+/* Coupons dialog (js/coupons.js). Reuses the .gcm-* / .gcf-* pieces from
+   css/giftcards.css; only coupon-specific (teal) touches live here. */
+
+.cpm-head-icon { background: #ccfbf1 !important; color: #0d9488 !important; }
+.cpm-off { font-weight: 800; color: #0f766e; white-space: nowrap; }
+.cpm-empty i { color: #5eead4; }
+
+.gcm-hero.cpm-hero { background: linear-gradient(135deg, #0d9488 0%, #f59e0b 100%); box-shadow: 0 8px 22px rgba(13, 148, 136, .22); }
+.gcm-hero.cpm-hero.off { background: linear-gradient(135deg, #64748b 0%, #334155 100%); box-shadow: none; }
+.salm-item-list.cpm-uses { max-height: 280px; overflow-y: auto; }
+
+.cpf-type { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.cpf-type button {
+  flex: 1; padding: 9px 10px; border: none; background: #fff; color: var(--muted);
+  font-size: 13px; font-weight: 700; cursor: pointer; text-transform: none; letter-spacing: normal;
+}
+.cpf-type button + button { border-left: 1px solid var(--border); }
+.cpf-type button.active { background: #0d9488; color: #fff; }
+.cpf-hint { color: #0f766e; }

@@ -69,6 +69,10 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>NSCameraUsageDescription</key>
-	<string>The camera is used to scan product barcodes at the point of sale.</string>
+	<string>The camera is used to scan product barcodes and photograph bills you choose to scan.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Select a bill image to extract its details for your review.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Pick a contact to fill in a new customer's name, mobile number, email and address.</string>
 </dict>
 </plist>

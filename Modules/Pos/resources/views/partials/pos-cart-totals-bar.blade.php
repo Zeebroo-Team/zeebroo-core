@@ -8,7 +8,7 @@
 <style>
 .pos-catalog-totals-bar{flex-shrink:0;border-top:1px solid var(--border);padding:10px 12px;background:color-mix(in srgb,var(--card) 98%,transparent);display:grid;gap:6px;}
 .pos-catalog-totals{display:grid;gap:6px;}
-.pos-catalog-totals[hidden]{display:none!important;}
+.pos-catalog-totals[hidden],.pos-catalog-totals__row[hidden]{display:none!important;}
 .pos-catalog-totals__row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;color:var(--muted);}
 .pos-catalog-totals__row strong,.pos-catalog-totals__row span:last-child{color:var(--text);font-weight:700;}
 .pos-catalog-totals__row--grand{font-size:17px;font-weight:800;color:var(--text);padding-top:4px;border-top:1px solid var(--border);margin-top:2px;}

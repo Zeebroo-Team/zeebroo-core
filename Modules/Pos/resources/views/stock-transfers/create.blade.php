@@ -86,8 +86,15 @@
     var list = document.getElementById('st-line-list');
     var search = document.getElementById('st-line-search');
     var suggest = document.getElementById('st-line-suggest');
+    var fromBranch = document.getElementById('st-from-branch');
     var catalog = [];
     try { catalog = JSON.parse(list.getAttribute('data-catalog') || '[]'); } catch (e) { catalog = []; }
+
+    function availableQty(product) {
+        var branchId = fromBranch.value;
+        if (!branchId || !product.stock) return 0;
+        return parseFloat(product.stock[branchId] || 0) || 0;
+    }
 
     function escapeHtml(s) {
         return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -115,9 +122,11 @@
         li.setAttribute('data-line-row', '');
         li.setAttribute('data-product-id', String(product.id));
         var skuHtml = product.sku ? '<span class="muted st-line-row__sku"> (' + escapeHtml(product.sku) + ')</span>' : '';
+        var avail = availableQty(product);
         li.innerHTML =
-            '<div><span class="st-line-row__name">' + escapeHtml(product.name) + '</span>' + skuHtml + '</div>' +
-            '<label class="st-line-row__qty"><span class="muted">Qty</span><input type="number" value="1" min="0.001" step="any" inputmode="decimal" data-line-qty></label>' +
+            '<div><span class="st-line-row__name">' + escapeHtml(product.name) + '</span>' + skuHtml +
+            '<div class="muted st-line-row__sku">Available: <span data-line-avail>' + avail + '</span></div></div>' +
+            '<label class="st-line-row__qty"><span class="muted">Qty</span><input type="number" value="' + Math.min(1, avail) + '" min="0.001" max="' + avail + '" step="any" inputmode="decimal" data-line-qty></label>' +
             '<input type="hidden" value="' + product.id + '" data-line-product-id>' +
             '<button type="button" class="st-line-row__remove" data-line-remove aria-label="Remove">&times;</button>';
         list.appendChild(li);
@@ -126,23 +135,50 @@
 
     function renderSuggest(query) {
         var q = String(query || '').trim().toLowerCase();
-        if (!q) { suggest.hidden = true; suggest.innerHTML = ''; return; }
         var used = existingIds();
+        if (!fromBranch.value) {
+            suggest.innerHTML = '<li><span class="muted" style="display:block;padding:8px 12px;font-size:13px;">Select a From branch first.</span></li>';
+            suggest.hidden = false;
+            return;
+        }
         var matches = catalog.filter(function (p) {
             if (used.indexOf(p.id) !== -1) return false;
+            if (availableQty(p) <= 0) return false;
             var hay = (p.name + ' ' + (p.sku || '')).toLowerCase();
-            return hay.indexOf(q) !== -1;
-        }).slice(0, 12);
-        if (!matches.length) { suggest.hidden = true; suggest.innerHTML = ''; return; }
+            return !q || hay.indexOf(q) !== -1;
+        }).slice(0, 50);
+        if (!matches.length) {
+            suggest.innerHTML = '<li><span class="muted" style="display:block;padding:8px 12px;font-size:13px;">No products with stock in this branch.</span></li>';
+            suggest.hidden = false;
+            return;
+        }
         suggest.innerHTML = matches.map(function (p) {
             var sub = p.sku ? ' <span class="muted">(' + escapeHtml(p.sku) + ')</span>' : '';
-            return '<li><button type="button" data-pick-id="' + p.id + '">' + escapeHtml(p.name) + sub + '</button></li>';
+            var stock = ' <span class="muted" style="float:right;">' + availableQty(p) + ' in stock</span>';
+            return '<li><button type="button" data-pick-id="' + p.id + '">' + escapeHtml(p.name) + sub + stock + '</button></li>';
         }).join('');
         suggest.hidden = false;
     }
 
+    // Changing the source branch: drop lines with no stock there, refresh limits on the rest.
+    fromBranch.addEventListener('change', function () {
+        list.querySelectorAll('[data-line-row]').forEach(function (row) {
+            var id = parseInt(row.getAttribute('data-product-id') || '0', 10);
+            var product = catalog.find(function (p) { return p.id === id; });
+            var avail = product ? availableQty(product) : 0;
+            if (avail <= 0) { row.remove(); return; }
+            var qty = row.querySelector('[data-line-qty]');
+            qty.max = String(avail);
+            if (parseFloat(qty.value) > avail) qty.value = String(avail);
+            row.querySelector('[data-line-avail]').textContent = String(avail);
+        });
+        reindexRows();
+        renderSuggest(search.value);
+    });
+
     search.addEventListener('input', function () { renderSuggest(search.value); });
     search.addEventListener('focus', function () { renderSuggest(search.value); });
+    search.addEventListener('click', function () { renderSuggest(search.value); });
     suggest.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-pick-id]');
         if (!btn) return;

@@ -1,0 +1,275 @@
+<?php
+
+namespace Modules\CRM\Services;
+
+use App\Models\User;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
+use Modules\CRM\Mail\CrmNotificationMail;
+use Modules\CRM\Models\Lead;
+use Modules\CRM\Models\UserPreference;
+use Modules\HRManagement\Models\Department;
+use Modules\HRManagement\Models\Employee;
+use Modules\Pos\Models\PosNotification;
+
+/**
+ * Tells people about the CRM work they must act on. DECISION: the in-app side reuses
+ * pos_notifications (user_id + action_url) rather than Laravel's notifications table, because the
+ * desktop already has the bell, list, read / unread and dismiss built on it — CRM rows simply
+ * show up there and deep-link to the lead from their payload. Each recipient also gets a queued
+ * email unless they turned CRM emails off (crm_user_preferences).
+ *
+ * One row per recipient and record: notifying about the same lead again re-surfaces that row
+ * (unread, on top) instead of stacking duplicates. Recipients outside the lead's business are
+ * dropped, and so is whoever caused the event.
+ */
+class CrmNotifier
+{
+    const TYPE_LEAD_NEW             = 'crm_lead_new';
+    const TYPE_LEAD_FORWARDED       = 'crm_lead_forwarded';
+    const TYPE_LEAD_ASSIGNED        = 'crm_lead_assigned';
+    const TYPE_QUOTATION_SUBMITTED  = 'crm_quotation_submitted';
+    const TYPE_QUOTATION_DECIDED    = 'crm_quotation_decided';
+    const TYPE_FOLLOW_UP_DUE        = 'crm_follow_up_due';
+    const TYPE_FOLLOW_UP_OVERDUE    = 'crm_follow_up_overdue';
+    const TYPE_LEAD_CLOSED          = 'crm_lead_closed';
+    const TYPE_LEAD_STAGE           = 'crm_lead_stage';
+    const TYPE_STAGE_APPROVAL       = 'crm_stage_approval';
+    const TYPE_STAGE_APPROVAL_DECIDED = 'crm_stage_approval_decided';
+
+    public function __construct(private readonly CrmOrgService $org) {}
+
+    /**
+     * @param  int[]  $userIds
+     * @param  array<string, mixed>  $payload  added to the lead / project ids the desktop opens
+     * @return int[] who was notified
+     */
+    public function notify(
+        Lead $lead,
+        array $userIds,
+        string $type,
+        string $title,
+        string $message,
+        ?int $actorId = null,
+        array $payload = [],
+        string $referenceType = 'crm_lead',
+        ?int $referenceId = null,
+    ): array {
+        $business   = $lead->business()->first();
+        $recipients = $this->membersOf($business, array_filter(
+            array_unique(array_map('intval', $userIds)),
+            fn (int $id) => $id > 0 && $id !== (int) $actorId,
+        ));
+
+        foreach ($recipients as $userId) {
+            $notification = PosNotification::query()->updateOrCreate(
+                [
+                    'business_id'    => $business->id,
+                    'user_id'        => $userId,
+                    'type'           => $type,
+                    'reference_type' => $referenceType,
+                    'reference_id'   => $referenceId ?? $lead->id,
+                ],
+                [
+                    'branch_id'    => null,
+                    'title'        => mb_substr($title, 0, 255),
+                    'message'      => $message,
+                    'payload'      => ['lead_id' => (int) $lead->id, 'project_id' => (int) $lead->project_id] + $payload,
+                    'action_url'   => '/crm/leads/' . $lead->id,
+                    'read_at'      => null,
+                    'dismissed_at' => null,
+                ],
+            );
+            if (! $notification->wasRecentlyCreated) {
+                $notification->forceFill(['created_at' => now()])->save();
+            }
+
+            $this->email($business, $userId, $title, $message);
+        }
+
+        return $recipients;
+    }
+
+    /**
+     * The user's unread, not dismissed CRM notifications per pipeline, for the relation cards:
+     * the count and the newest few to preview. Grouped in PHP because the project id lives in
+     * the JSON payload.
+     *
+     * @return array<int, array{count: int, items: array<int, array<string, mixed>>}> project id => unread
+     */
+    public function unreadByProject(Business $business, int $userId, int $preview = 5): array
+    {
+        return PosNotification::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->where('type', 'like', 'crm_%')
+            ->unread()
+            ->notDismissed()
+            ->latest()
+            ->get(['id', 'type', 'title', 'message', 'payload', 'created_at'])
+            ->toBase()
+            ->groupBy(fn (PosNotification $n) => (int) ($n->payload['project_id'] ?? 0))
+            ->except([0])
+            ->map(fn ($rows) => [
+                'count' => $rows->count(),
+                'items' => $rows->take($preview)->map(fn (PosNotification $n) => [
+                    'id'         => $n->id,
+                    'type'       => $n->type,
+                    'title'      => $n->title,
+                    'message'    => $n->message,
+                    'lead_id'    => (int) ($n->payload['lead_id'] ?? 0) ?: null,
+                    'created_at' => $n->created_at?->toIso8601String(),
+                ])->values()->all(),
+            ])
+            ->all();
+    }
+
+    /**
+     * The user's unread, not dismissed CRM notifications per lead, for the board cards.
+     *
+     * @param  int[]  $leadIds
+     * @return array<int, array{count: int, titles: string[], types: array<string, int>}> lead id => unread
+     */
+    public function unreadByLead(Business $business, int $userId, array $leadIds, int $preview = 5): array
+    {
+        if ($leadIds === []) {
+            return [];
+        }
+        $wanted = array_flip($leadIds);
+
+        return $this->unreadForLeads($business, $userId)
+            ->filter(fn ($rows, $leadId) => isset($wanted[$leadId]))
+            ->map(fn ($rows) => [
+                'count'  => $rows->count(),
+                'titles' => $rows->take($preview)->pluck('title')->values()->all(),
+                // Which part of the lead each is about — the lead window dots its tabs from this
+                'types'  => $rows->countBy('type')->all(),
+            ])
+            ->all();
+    }
+
+    /**
+     * Mark the user's unread notifications on one lead as read — all of them, or only the given
+     * types (the lead window clears a tab's notifications when that tab is opened).
+     *
+     * @param  string[]|null  $types
+     * @return int how many were marked
+     */
+    public function markLeadRead(Business $business, int $userId, int $leadId, ?array $types = null): int
+    {
+        $ids = $this->unreadForLeads($business, $userId)
+            ->get($leadId, collect())
+            ->when($types !== null, fn ($rows) => $rows->whereIn('type', $types))
+            ->pluck('id');
+
+        return $ids->isEmpty() ? 0 : PosNotification::query()->whereIn('id', $ids)->update(['read_at' => now()]);
+    }
+
+    /** The user's unread CRM notifications grouped by lead id (it lives in the JSON payload), newest first. */
+    private function unreadForLeads(Business $business, int $userId): \Illuminate\Support\Collection
+    {
+        return PosNotification::query()
+            ->where('business_id', $business->id)
+            ->where('user_id', $userId)
+            ->where('type', 'like', 'crm_%')
+            ->unread()
+            ->notDismissed()
+            ->latest()
+            ->get(['id', 'type', 'title', 'payload'])
+            ->toBase()
+            ->groupBy(fn (PosNotification $n) => (int) ($n->payload['lead_id'] ?? 0));
+    }
+
+    // ── Recipients ───────────────────────────────────────────────────────
+
+    /** Marketing: the crm_marketing role plus the staff of the marketing intake department. @return int[] */
+    public function marketingUserIds(Business $business): array
+    {
+        $ids = BusinessMember::query()
+            ->where('business_id', $business->id)
+            ->where('role', CrmAccess::ROLE_MARKETING)
+            ->where('status', 'active')
+            ->pluck('user_id')
+            ->all();
+
+        $intake = $this->org->marketingIntakeDepartment($business);
+        if ($intake !== null) {
+            $ids = [...$ids, ...$this->org->memberUserIds($intake)];
+        }
+
+        return array_values(array_unique(array_map('intval', $ids)));
+    }
+
+    /** Whoever heads the lead's division, else every head of its department. @return int[] */
+    public function headUserIdsForLead(Lead $lead): array
+    {
+        if ($lead->department_id === null) {
+            return [];
+        }
+        $department = Department::query()->where('business_id', $lead->business_id)->find($lead->department_id);
+
+        return $department === null ? [] : $this->org->headUserIds($department, $lead->division);
+    }
+
+    // ── Email preference ─────────────────────────────────────────────────
+
+    public function emailEnabled(int $businessId, int $userId): bool
+    {
+        return UserPreference::query()
+            ->where('business_id', $businessId)
+            ->where('user_id', $userId)
+            ->value('email_notifications') ?? true;
+    }
+
+    public function setEmailEnabled(int $businessId, int $userId, bool $enabled): void
+    {
+        UserPreference::query()->updateOrCreate(
+            ['business_id' => $businessId, 'user_id' => $userId],
+            ['email_notifications' => $enabled],
+        );
+    }
+
+    /**
+     * Only users who belong to the business: its owner, its members and its HR staff with a login.
+     *
+     * @param  int[]  $userIds
+     * @return int[]
+     */
+    private function membersOf(Business $business, array $userIds): array
+    {
+        if ($userIds === []) {
+            return [];
+        }
+
+        $members = BusinessMember::query()
+            ->where('business_id', $business->id)
+            ->whereIn('user_id', $userIds)
+            ->where('status', 'active')
+            ->pluck('user_id')
+            ->merge(Employee::query()->where('business_id', $business->id)->whereIn('user_id', $userIds)->pluck('user_id'))
+            ->push($business->user_id)
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return array_values(array_intersect($userIds, $members));
+    }
+
+    private function email(Business $business, int $userId, string $title, string $message): void
+    {
+        if (! $this->emailEnabled($business->id, $userId)) {
+            return;
+        }
+        $email = User::query()->whereKey($userId)->value('email');
+        if (blank($email)) {
+            return;
+        }
+
+        try {
+            Mail::to($email)->queue(new CrmNotificationMail($title, $message, (string) $business->name));
+        } catch (\Throwable $e) {
+            Log::warning('CRM notification email could not be queued: ' . $e->getMessage(), ['user_id' => $userId]);
+        }
+    }
+}

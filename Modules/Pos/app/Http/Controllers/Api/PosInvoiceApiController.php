@@ -78,7 +78,7 @@ class PosInvoiceApiController extends Controller
         abort_unless((int) $invoice->business_id === (int) $business->id, 404);
         $this->abortUnlessPerm($request, $business, 'pos_checkout');
 
-        $validated = $this->validateHeader($request, $business);
+        $validated = $this->validateHeader($request, $business, $invoice);
 
         try {
             $invoice = $this->invoices->update($invoice, $validated, $request->input('items', []));
@@ -218,10 +218,16 @@ class PosInvoiceApiController extends Controller
         ];
     }
 
-    private function validateHeader(Request $request, \Modules\Business\Models\Business $business): array
+    private function validateHeader(Request $request, \Modules\Business\Models\Business $business, ?Invoice $invoice = null): array
     {
         return $request->validate([
-            'customer_id'             => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
+            'invoice_number'          => [
+                'nullable', 'string', 'max:40',
+                Rule::unique('invoices', 'invoice_number')
+                    ->where(fn ($q) => $q->where('business_id', $business->id))
+                    ->ignore($invoice?->id),
+            ],
+            'customer_id'           => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'reference'               => ['nullable', 'string', 'max:120'],
             'issue_date'              => ['required', 'date'],
             'due_date'                => ['nullable', 'date'],

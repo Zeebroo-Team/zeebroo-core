@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
-import '../../finance/widgets/bills_tab.dart';
+import '../../inventory/screens/campaign_overview_screen.dart';
+import '../../inventory/screens/contacts_overview_screen.dart';
 import '../../inventory/screens/inventory_screen.dart';
-import '../../pos/screens/pos_screen.dart';
+import '../../inventory/screens/product_overview_screen.dart';
 import '../widgets/account_overview_tab.dart';
 import '../widgets/expenses_tab.dart';
 import '../widgets/profit_tab.dart';
@@ -18,53 +21,91 @@ const _kTrack = Color(0xFFF3F4F6);
 /// actions. The shell owns the header (greeting/avatar) and bottom navigation
 /// chrome.
 class HomeContent extends StatefulWidget {
-  const HomeContent({super.key});
+  const HomeContent({super.key, this.homeTapSignal = 0, this.salesRefreshSignal = 0});
+
+  /// Changes whenever the bottom Home button is tapped. This lets the Home
+  /// page return to Overview even when it is already the selected main tab.
+  final int homeTapSignal;
+
+  /// Changes when the shell returns from a screen that may have recorded a
+  /// sale (POS, scanner), so today's sales and recent transactions reload.
+  final int salesRefreshSignal;
 
   @override
   State<HomeContent> createState() => _HomeContentState();
 }
 
-class _HomeContentState extends State<HomeContent> with SingleTickerProviderStateMixin {
+class _HomeContentState extends State<HomeContent> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   static const _tabs = [
     (label: 'Overview', icon: Icons.dashboard_rounded),
     (label: 'Expenses', icon: Icons.receipt_long_rounded),
     (label: 'Profit', icon: Icons.trending_up_rounded),
   ];
 
+  /// How often the Overview polls for sales made elsewhere (e.g. the desktop app).
+  static const _kSalesPollInterval = Duration(seconds: 30);
+
   late final TabController _tabController = TabController(length: _tabs.length, vsync: this);
   final _todayKey = GlobalKey<TodaySalesOverviewState>();
+  final _overviewKey = GlobalKey<AccountOverviewTabState>();
   final _expensesRefresh = ValueNotifier<int>(0);
+  Timer? _salesPoll;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startSalesPoll();
+  }
+
+  @override
+  void didUpdateWidget(covariant HomeContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.homeTapSignal != oldWidget.homeTapSignal) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _tabController.index != 0) {
+          _tabController.index = 0;
+        }
+      });
+    }
+    if (widget.salesRefreshSignal != oldWidget.salesRefreshSignal) _refreshSales();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshSales();
+      _startSalesPoll();
+    } else if (state == AppLifecycleState.paused) {
+      _salesPoll?.cancel();
+    }
+  }
+
+  void _startSalesPoll() {
+    _salesPoll?.cancel();
+    _salesPoll = Timer.periodic(_kSalesPollInterval, (_) {
+      // Only poll while Home is the visible route (not under POS etc.).
+      if (ModalRoute.of(context)?.isCurrent ?? true) _refreshSales();
+    });
+  }
+
+  void _refreshSales() {
+    _todayKey.currentState?.reload(force: true);
+    _overviewKey.currentState?.reloadRecentSales();
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _salesPoll?.cancel();
     _tabController.dispose();
     _expensesRefresh.dispose();
     super.dispose();
   }
 
-  Future<void> _newSale() async {
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PosScreen()));
-    if (mounted) _todayKey.currentState?.reload();
-  }
+  void _push(Widget screen) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => screen));
 
-  Future<void> _addBill() async {
-    final created = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const AddBillSheet(),
-    );
-    if (created != true || !mounted) return;
-    _expensesRefresh.value++;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text('Bill added'),
-        action: SnackBarAction(label: 'View', onPressed: () => _tabController.animateTo(1)),
-      ),
-    );
-  }
-
-  void _openInventory() => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const InventoryScreen()));
+  void _openInventory() => _push(const InventoryScreen());
 
   @override
   Widget build(BuildContext context) => Column(
@@ -75,6 +116,7 @@ class _HomeContentState extends State<HomeContent> with SingleTickerProviderStat
           controller: _tabController,
           children: [
             AccountOverviewTab(
+              key: _overviewKey,
               onPullRefresh: () => _todayKey.currentState?.reload(force: true),
               belowBalance: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -83,10 +125,10 @@ class _HomeContentState extends State<HomeContent> with SingleTickerProviderStat
                   const SizedBox(height: 20),
                   QuickActionsRow(
                     actions: [
-                      QuickAction(label: 'New sale', icon: Icons.point_of_sale_rounded, color: AppColors.primary, primary: true, onTap: _newSale),
-                      QuickAction(label: 'Add bill', icon: Icons.receipt_long_rounded, color: const Color(0xFF6366F1), onTap: _addBill),
                       QuickAction(label: 'Inventory', icon: Icons.inventory_2_rounded, color: const Color(0xFF10B981), onTap: _openInventory),
-                      QuickAction(label: 'Reports', icon: Icons.bar_chart_rounded, color: AppColors.warning, onTap: () => _tabController.animateTo(2)),
+                      QuickAction(label: 'Product', icon: Icons.category_rounded, color: const Color(0xFF6366F1), onTap: () => _push(const ProductOverviewScreen())),
+                      QuickAction(label: 'Contacts', icon: Icons.contacts_rounded, color: const Color(0xFF0EA5E9), onTap: () => _push(const ContactsOverviewScreen())),
+                      QuickAction(label: 'Campaign', icon: Icons.campaign_rounded, color: AppColors.warning, onTap: () => _push(const CampaignOverviewScreen())),
                     ],
                   ),
                 ],
@@ -122,7 +164,7 @@ class _PillTabBar extends StatelessWidget {
           return AnimatedBuilder(
             animation: controller.animation!,
             builder: (context, _) {
-              final position = controller.animation!.value;
+              final position = controller.index.toDouble();
               return Stack(
                 children: [
                   Positioned(
@@ -145,7 +187,6 @@ class _PillTabBar extends StatelessWidget {
                           child: _PillLabel(
                             label: tabs[i].label,
                             icon: tabs[i].icon,
-                            selectedness: (1 - (position - i).abs()).clamp(0.0, 1.0),
                             selected: controller.index == i,
                             onTap: () => controller.animateTo(i),
                           ),
@@ -166,7 +207,6 @@ class _PillLabel extends StatelessWidget {
   const _PillLabel({
     required this.label,
     required this.icon,
-    required this.selectedness,
     required this.selected,
     required this.onTap,
   });
@@ -175,13 +215,12 @@ class _PillLabel extends StatelessWidget {
   final IconData icon;
 
   /// 0 (fully inactive) → 1 (fully active), interpolated while the thumb slides.
-  final double selectedness;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = Color.lerp(AppColors.textMuted, AppColors.primaryDk, selectedness)!;
+    final color = selected ? AppColors.primaryDk : AppColors.textMuted;
     return Semantics(
       button: true,
       selected: selected,
@@ -201,7 +240,7 @@ class _PillLabel extends StatelessWidget {
                   label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12.5, fontWeight: selectedness > 0.5 ? FontWeight.w700 : FontWeight.w600, color: color),
+                  style: TextStyle(fontSize: 12.5, fontWeight: selected ? FontWeight.w700 : FontWeight.w600, color: color),
                 ),
               ),
             ],

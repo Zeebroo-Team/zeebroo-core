@@ -33,14 +33,14 @@ class EndOfDayController extends Controller
             ->orderByDesc('sold_at')
             ->get();
 
-        $totalUnsettled = $unsettled->sum(fn ($s) => (float) $s->total);
+        $totalUnsettled = $unsettled->sum(fn ($s) => $s->netPaymentAmount());
 
         // Past settled batches grouped by date
         $history = $business->sales()
             ->where('is_settled', true)
             ->whereNotNull('settled_at')
             ->whereIn('payment_method', [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD])
-            ->selectRaw('DATE(settled_at) as settle_date, COUNT(*) as sale_count, SUM(total) as total_amount')
+            ->selectRaw('DATE(settled_at) as settle_date, COUNT(*) as sale_count, SUM(total - gift_card_amount) as total_amount')
             ->groupBy('settle_date')
             ->orderByDesc('settle_date')
             ->limit(14)
@@ -76,14 +76,17 @@ class EndOfDayController extends Controller
 
         foreach ($unsettled as $sale) {
             try {
-                $this->payments->settle(
-                    $sale,
-                    $business,
-                    $request->user(),
-                    (int) $sale->credit_account_id,
-                    (float) $sale->total,
-                    $sale->payment_method,
-                );
+                // A sale paid fully by gift card brings no new money to settle.
+                if ($sale->netPaymentAmount() > 0.005) {
+                    $this->payments->settle(
+                        $sale,
+                        $business,
+                        $request->user(),
+                        (int) $sale->credit_account_id,
+                        $sale->netPaymentAmount(),
+                        $sale->payment_method,
+                    );
+                }
                 $sale->update(['is_settled' => true, 'settled_at' => now()]);
                 $settled++;
             } catch (\Throwable $e) {

@@ -9,10 +9,10 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Modules\Business\Models\Business;
-use Modules\DesignStudio\Models\Design;
 use Modules\Pos\Models\Customer;
 use Modules\Sales\Http\Controllers\Concerns\ResolvesSalesBusiness;
 use Modules\Sales\Models\Quotation;
+use Modules\Sales\Services\QuotationPrintService;
 use Modules\Sales\Services\QuotationService;
 use Modules\Service\Models\ServiceItem;
 
@@ -178,53 +178,7 @@ class QuotationController extends Controller
             return $business;
         }
 
-        $quotation->load(['customer', 'items.product', 'items.serviceItem.products']);
-
-        $currency   = (string) (get_settings('business.currency', '', $business) ?: '');
-        $mainBranch = $business->branches()->first();
-        $lhLinks    = (array) get_settings('design_studio.lh_links', ['po', 'grn', 'hr_payslip', 'hr_salary_sheet', 'sales_quotation'], $business);
-        $letterhead = in_array('sales_quotation', $lhLinks) ? Design::query()
-            ->where('business_id', $business->id)
-            ->where('type', 'letterhead')
-            ->latest('updated_at')
-            ->first() : null;
-
-        $accentColor          = '#3B82F6';
-        $letterheadCanvasJson = null;
-        if ($letterhead) {
-            try {
-                $raw     = (string) $letterhead->canvas_json;
-                $decoded = json_decode($raw, true);
-                if (is_array($decoded)) {
-                    if (isset($decoded['objects'])) {
-                        $letterheadCanvasJson = $raw;
-                        $objs                 = $decoded['objects'];
-                    } elseif (!empty($decoded[0]['json'])) {
-                        $letterheadCanvasJson = $decoded[0]['json'];
-                        $objs                 = json_decode((string) $decoded[0]['json'], true)['objects'] ?? [];
-                    }
-                }
-                foreach ($objs ?? [] as $obj) {
-                    if (($obj['type'] ?? '') === 'rect'
-                        && (float) ($obj['top'] ?? 99) < 4
-                        && (float) ($obj['height'] ?? 99) <= 8
-                        && !empty($obj['fill'])
-                        && preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) $obj['fill'])) {
-                        $accentColor = $obj['fill'];
-                        break;
-                    }
-                }
-            } catch (\Throwable) {}
-        }
-
-        return view('sales::quotations.print', [
-            'business'            => $business,
-            'quotation'           => $quotation,
-            'currency'            => $currency,
-            'mainBranch'          => $mainBranch,
-            'accentColor'         => $accentColor,
-            'letterheadCanvasJson' => $letterheadCanvasJson,
-        ]);
+        return view('sales::quotations.print', app(QuotationPrintService::class)->viewData($business, $quotation));
     }
 
     public function destroy(Request $request, Quotation $quotation): RedirectResponse

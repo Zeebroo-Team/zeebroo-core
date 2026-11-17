@@ -98,14 +98,33 @@
         @endif
     </div>
 
-    {{-- Task stat cards --}}
+    {{-- Task stat cards: completion status, then one card per stage (board column) --}}
+    @php
+        $stageColor  = fn (array $s) => $s['color'] ?: ($taskStatusColor[$s['status']] ?? '#0ea5e9');
+        $stageLabels = collect($stages)->pluck('label', 'status');
+        $orphanCount = collect($stats['stages'])->except($stageLabels->keys()->all())->sum();
+    @endphp
     <div class="pm-stat-grid">
-        @foreach(['todo' => 'To Do', 'in_progress' => 'In Progress', 'review' => 'Review', 'done' => 'Done'] as $key => $label)
-            <div class="pm-stat" style="border-top:3px solid {{ $taskStatusColor[$key] }};">
+        @foreach([['Incomplete', 'incomplete', '#6b7280'], ['Complete', 'complete', '#16a34a'], ['Cancelled', 'cancelled', '#dc2626']] as [$label, $key, $color])
+            <div class="pm-stat" style="border-top:3px solid {{ $color }};">
                 <p class="pm-stat__label">{{ $label }}</p>
-                <p class="pm-stat__value" style="color:{{ $taskStatusColor[$key] }};">{{ $stats[$key] }}</p>
+                <p class="pm-stat__value" style="color:{{ $color }};">{{ $stats[$key] }}</p>
             </div>
         @endforeach
+        <div class="pm-stat" style="border-top:3px solid var(--primary);">
+            <p class="pm-stat__label">Progress</p>
+            <p class="pm-stat__value" style="color:var(--primary);">{{ \Modules\ProjectManage\Models\Project::progressPct($stats) }}%</p>
+        </div>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin:-8px 0 18px;">
+        @foreach($stages as $s)
+            <span class="pcat-badge" style="border-color:{{ $stageColor($s) }};color:{{ $stageColor($s) }};" title="Stage">
+                {{ $s['label'] }} · {{ $stats['stages'][$s['status']] ?? 0 }}
+            </span>
+        @endforeach
+        @if($orphanCount)
+            <span class="pcat-badge" style="border-color:#9ca3af;color:#9ca3af;" title="Tasks whose stage was deleted">Not Defined · {{ $orphanCount }}</span>
+        @endif
     </div>
 
     {{-- Action buttons --}}
@@ -130,29 +149,41 @@
     <section style="margin-bottom:24px;">
         <div class="pm-section-head">
             <h3><i class="fa fa-flag-checkered" style="color:var(--muted);margin-right:5px;"></i> Milestones</h3>
+            <a href="{{ route('pm.projects.tasks.index', ['project' => $project->id, 'tl' => 1]) }}" class="pcat-link"><i class="fa fa-timeline"></i> View timeline</a>
         </div>
         @if($milestones->isNotEmpty())
+            @php
+                $msStateColor = ['completed'=>'#16a34a','overdue'=>'#dc2626','active'=>'#2563eb','upcoming'=>'#7c3aed','open'=>'#6b7280'];
+                $msStateLabel = ['completed'=>'Completed','overdue'=>'Overdue','active'=>'In Progress','upcoming'=>'Upcoming','open'=>'No dates'];
+            @endphp
             <div class="pcat-table-wrap" style="margin-bottom:14px;">
                 <table class="pcat-table">
                     <thead>
                         <tr>
+                            <th style="width:36px;">#</th>
                             <th>Name</th>
-                            <th>Due date</th>
+                            <th>Period</th>
+                            <th>Tasks</th>
                             <th>Status</th>
                             <th style="text-align:right;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach($milestones as $ms)
+                            @php
+                                $msState = $ms->timelineState();
+                                $msTotal = (int) ($ms->tasks_count ?? 0);
+                                $msDone  = (int) ($ms->done_tasks_count ?? 0);
+                            @endphp
                             <tr>
+                                <td style="color:var(--muted);font-weight:700;">{{ $loop->iteration }}</td>
                                 <td style="font-weight:600;color:var(--text);">{{ $ms->name }}</td>
-                                <td>{{ $ms->due_date ? $ms->due_date->format('d M Y') : '—' }}</td>
+                                <td style="font-size:12px;">{{ $ms->periodLabel() }}</td>
+                                <td style="font-size:12px;">{{ $msDone }}/{{ $msTotal }} done</td>
                                 <td>
-                                    @if($ms->isCompleted())
-                                        <span class="pcat-badge pcat-badge--on"><i class="fa fa-check"></i> Completed</span>
-                                    @else
-                                        <span class="pcat-badge pcat-badge--off">Pending</span>
-                                    @endif
+                                    <span class="pcat-badge" style="border-color:{{ $msStateColor[$msState] }};color:{{ $msStateColor[$msState] }};">
+                                        @if($msState === 'completed')<i class="fa fa-check"></i>@endif {{ $msStateLabel[$msState] }}
+                                    </span>
                                 </td>
                                 <td style="text-align:right;">
                                     <div style="display:inline-flex;gap:6px;align-items:center;">
@@ -172,7 +203,7 @@
                                             </form>
                                         @endif
                                         <form method="POST" action="{{ route('pm.projects.milestones.destroy', [$project, $ms]) }}" style="display:inline;"
-                                              onsubmit="return confirm('Delete milestone?');">
+                                              onsubmit="return confirm(@js('Delete milestone "' . $ms->name . '"?' . ($msTotal ? "\nIts {$msTotal} task(s) will be kept without a milestone." : '')));">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="pcat-btn-del" style="padding:4px 8px;font-size:11px;">
@@ -200,9 +231,17 @@
                         <label>Name *</label>
                         <input type="text" name="name" value="{{ old('name') }}" placeholder="Milestone name…" maxlength="150" required>
                     </div>
-                    <div class="pcat-field" style="width:160px;">
-                        <label>Due date</label>
+                    <div class="pcat-field" style="width:150px;">
+                        <label>Start date</label>
+                        <input type="date" name="start_date" value="{{ old('start_date') }}">
+                    </div>
+                    <div class="pcat-field" style="width:150px;">
+                        <label>End date</label>
                         <input type="date" name="due_date" value="{{ old('due_date') }}">
+                    </div>
+                    <div class="pcat-field" style="width:100px;">
+                        <label>Sort no.</label>
+                        <input type="number" name="sort_order" min="0" max="9999" value="{{ old('sort_order') }}" placeholder="Auto">
                     </div>
                     <div style="padding-bottom:1px;">
                         <button type="submit" class="linkbtn" style="padding:9px 16px;font-size:13px;">
@@ -226,6 +265,7 @@
                     <thead>
                         <tr>
                             <th>Title</th>
+                            <th>Stage</th>
                             <th>Status</th>
                             <th>Assigned to</th>
                             <th>Due date</th>
@@ -235,17 +275,19 @@
                     <tbody>
                         @foreach($recentTasks as $t)
                             @php
-                                $sc = $taskStatusColor[$t->status] ?? '#6b7280';
+                                $stage = collect($stages)->firstWhere('status', $t->status);
+                                $sc = $stage ? $stageColor($stage) : '#9ca3af';
                                 $overdue = $t->isOverdue();
                             @endphp
                             <tr>
                                 <td style="font-weight:600;color:var(--text);">{{ $t->title }}</td>
                                 <td>
                                     <span class="pcat-badge" style="border-color:{{ $sc }};color:{{ $sc }};">
-                                        {{ ucfirst(str_replace('_', ' ', $t->status)) }}
+                                        {{ $stage['label'] ?? 'Not Defined' }}
                                     </span>
                                 </td>
-                                <td>{{ $t->assignedTo?->name ?? '—' }}</td>
+                                <td>@include('projectmanage::tasks.partials.completion-badge', ['task' => $t])</td>
+                                <td>{{ $t->assignees->pluck('name')->implode(', ') ?: '—' }}</td>
                                 <td style="{{ $overdue ? 'color:#dc2626;font-weight:700;' : '' }}">
                                     {{ $t->due_date ? $t->due_date->format('d M Y') : '—' }}
                                     @if($overdue)<span style="font-size:10px;"> (overdue)</span>@endif

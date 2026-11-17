@@ -39,7 +39,7 @@
         : null;
 
     $wizFeatureItems = [
-        ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'account-management.png',        'desc' => 'Track bank accounts, income, expenses and ledgers',             'required' => true,
+        ['key' => 'account_management',   'label' => 'Account Management',   'icon' => 'fa-wallet',             'image' => 'accounting.jpeg',               'desc' => 'Track bank accounts, income, expenses and ledgers',             'required' => true,
             'fullDesc'   => 'The financial backbone of your SociBiz workspace. Track all your bank and cash accounts, record income and expenses with full ledger support, monitor loan repayments, manage rental cash flows, and view detailed transaction histories across your entire business.',
             'highlights' => ['Bank and cash account tracking', 'Income and expense ledger', 'Loan and rental management', 'Full transaction history and reports'],
         ],
@@ -47,11 +47,11 @@
             'fullDesc'   => 'Stay on top of every recurring obligation. Track utility bills, subscriptions and service contracts with automated due-date reminders. View upcoming and overdue payments at a glance to keep your cash flow healthy.',
             'highlights' => ['Recurring bill tracking', 'Due date and overdue alerts', 'Bill category organisation', 'Cash flow visibility'],
         ],
-        ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'human-resource-management.png', 'desc' => 'Payroll, leave, attendance and employee management',
+        ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'hr-management.jpeg',            'desc' => 'Payroll, leave, attendance and employee management',
             'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips — all in one place.',
             'highlights' => ['Employee profiles and records', 'Attendance and leave tracking', 'Payroll processing and payslips', 'Department and role management'],
         ],
-        ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.svg',        'desc' => 'Product catalogue, pricing, variants and categories',
+        ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.png',        'desc' => 'Product catalogue, pricing, variants and categories',
             'fullDesc'   => 'Build and maintain a professional product catalogue. Organise products into categories, set pricing and variants, attach images and specifications, manage bundles, and keep your listings consistent across all sales channels.',
             'highlights' => ['Product catalogue and categories', 'Pricing, variants and bundles', 'Product images and specifications', 'Multi-channel listing consistency'],
         ],
@@ -59,7 +59,7 @@
             'fullDesc'   => 'Keep your inventory accurate and up to date. Set reorder thresholds, record stock-in and stock-out movements, track stock across multiple warehouse branches, and get notified before items run out.',
             'highlights' => ['Real-time inventory levels', 'Stock-in and stock-out movements', 'Multi-warehouse tracking', 'Low-stock alerts and reorder points'],
         ],
-        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'point-of-sale.png',             'desc' => 'Counter sales, receipts, daily float and cashier shifts',
+        ['key' => 'point_of_sale',        'label' => 'Point of Sale',         'icon' => 'fa-cash-register',      'image' => 'pos.jpeg',                      'desc' => 'Counter sales, receipts, daily float and cashier shifts',
             'fullDesc'   => 'Run fast, reliable counter sales from any device. Process payments, print or email receipts, manage daily float, track cashier shifts, and keep a complete record of every transaction. Requires Product and Stock Management.',
             'highlights' => ['Counter sales and receipts', 'Multiple payment methods', 'Daily float and cashier shifts', 'Full sales history and void management'],
         ],
@@ -67,17 +67,21 @@
             'fullDesc'   => 'Deliver and track services alongside your products. Build a service catalogue with pricing, manage customer requests from intake to completion, assign staff to jobs, and sell services directly through the POS terminal.',
             'highlights' => ['Service catalogue and pricing', 'Customer request management', 'Staff assignment and job tracking', 'Sell services via POS'],
         ],
-        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'social-media-campaign.png',     'desc' => 'Design, schedule and track marketing campaigns',
+        ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'graphic-design.jpeg',           'desc' => 'Design, schedule and track marketing campaigns',
             'fullDesc'   => 'Plan and execute marketing campaigns without leaving SociBiz. Design campaign briefs, set targets and budgets, schedule content across platforms, and measure performance results to keep refining your strategy.',
             'highlights' => ['Campaign planning and briefs', 'Budget and target setting', 'Content scheduling', 'Performance tracking and analytics'],
         ],
-        ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'image' => 'automation-editor.svg',         'desc' => 'Build trigger-based workflows and automated email sequences',
+        ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'image' => 'automation-flow.png',           'desc' => 'Build trigger-based workflows and automated email sequences',
             'fullDesc'   => 'Design powerful automations without writing code. Create trigger-based workflows that fire when customers act, deals move, or schedules run. Send automated emails, update records, and chain multi-step actions to save hours of manual work every week.',
             'highlights' => ['Visual drag-and-drop workflow builder', 'Trigger on events, schedules or CRM changes', 'Automated email and notification sequences', 'Multi-step conditional action chains'],
         ],
-        ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'image' => 'developers.svg',                'desc' => 'API access, webhooks and developer tools for integrations',
+        ['key' => 'developers',           'label' => 'Developers',           'icon' => 'fa-code',               'image' => 'developer.png',                 'desc' => 'API access, webhooks and developer tools for integrations',
             'fullDesc'   => 'Connect SociBiz to your own systems and third-party apps. Generate API keys with scoped permissions, set up webhooks that push real-time events to any endpoint, browse the interactive API reference, and manage OAuth applications for your team.',
             'highlights' => ['REST API with scoped API keys', 'Webhook delivery for real-time events', 'Interactive API reference and sandbox', 'OAuth application management'],
+        ],
+        ['key' => 'ecommerce',            'label' => 'E-Commerce',           'icon' => 'fa-store',              'image' => 'ecommerce.webp',                'desc' => 'Online store website, web orders and delivery tracking',
+            'fullDesc'   => 'Sell online with your own store website. Publish products straight from your catalogue, set online prices and sale prices, configure shipping and payment options, and manage every web order from pending to delivered — all from the desktop E-Commerce tab.',
+            'highlights' => ['Ready-made online store website', 'Publish catalogue products with web prices', 'Cash on delivery and bank transfer checkout', 'Web order and delivery tracking'],
         ],
     ];
 @endphp
@@ -300,6 +304,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 @endif
 
 @if(!$business)
+    @section('hide_email_verify_bar', '1')
     <script>document.documentElement.classList.add('business-wizard-active');</script>
     <style>
         html.business-wizard-active,html.business-wizard-active body{overflow:hidden;height:100%;}
@@ -586,8 +591,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-card--locked{cursor:default;}
         .wiz-feat-card--locked:hover{box-shadow:0 4px 14px -6px color-mix(in srgb,var(--primary) 28%,transparent);}
         /* Image area */
-        .wiz-feat-img-wrap{position:relative;width:100%;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
-        .wiz-feat-img{width:100%;height:auto;display:block;object-fit:contain;transition:transform .35s ease;}
+        .wiz-feat-img-wrap{position:relative;width:100%;aspect-ratio:16/10;flex-shrink:0;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));}
+        .wiz-feat-img{width:100%;height:100%;display:block;object-fit:cover;object-position:center;transition:transform .35s ease;}
         .wiz-feat-card:hover .wiz-feat-img{transform:scale(1.04);}
         .wiz-feat-img-overlay{position:absolute;inset:0;background:linear-gradient(to bottom,transparent 40%,rgba(0,0,0,.22));}
         /* Check circle */
@@ -605,9 +610,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-feat-badge{flex-shrink:0;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 6px;border-radius:999px;white-space:nowrap;background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--primary);}
         .wiz-feat-card--required .wiz-feat-badge{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
         .wiz-feat-card:not(.wiz-feat-card--on) .wiz-feat-badge{background:color-mix(in srgb,var(--muted) 13%,transparent);color:var(--muted);}
-        .wiz-feat-desc{font-size:10.5px;color:var(--muted);line-height:1.4;margin:0;}
+        .wiz-feat-desc{font-size:10.5px;color:var(--muted);line-height:1.4;margin:0;min-height:2.8em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
         .wiz-feat-detail-btn{
-            display:inline-flex;align-items:center;gap:4px;margin-top:5px;padding:3px 8px;
+            display:inline-flex;align-items:center;gap:4px;margin-top:auto;padding:3px 8px;
             font-size:10px;font-weight:650;border-radius:6px;border:1px solid var(--border);
             background:color-mix(in srgb,var(--card) 90%,transparent);color:var(--muted);
             cursor:pointer;font-family:inherit;line-height:1.2;transition:.15s ease;
@@ -931,7 +936,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             'healthcare'              => ['account_management', 'point_of_sale', 'bill_management', 'human_resources', 'product_management', 'service_management'],
                             'finance'                 => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
                             'creative_media'          => ['account_management', 'social_media_campaign', 'bill_management', 'human_resources', 'service_management'],
-                            'ecommerce'               => ['account_management', 'point_of_sale', 'product_management', 'stock_management', 'social_media_campaign', 'bill_management', 'human_resources'],
+                            'ecommerce'               => ['account_management', 'ecommerce', 'point_of_sale', 'product_management', 'stock_management', 'social_media_campaign', 'bill_management', 'human_resources'],
                             'manufacturing'           => ['account_management', 'product_management', 'stock_management', 'bill_management', 'human_resources', 'point_of_sale'],
                             'real_estate'             => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
                             'nonprofit'               => ['account_management', 'bill_management', 'human_resources', 'social_media_campaign'],
@@ -1000,6 +1005,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     'point_of_sale'         => 'POS',
                                     'service_management'    => 'Services',
                                     'social_media_campaign' => 'Campaigns',
+                                    'ecommerce'             => 'E-Commerce',
                                 ];
                             @endphp
                             <div class="wiz-cat-search-wrap">
@@ -1233,8 +1239,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                         <div style="display:flex;gap:10px;">
                             <div class="wiz-field" style="flex:1;">
-                                <label for="wiz-branch-phone">Phone <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">(optional)</span></label>
-                                <input id="wiz-branch-phone" type="text" name="branch_phone" value="{{ old('branch_phone') }}" maxlength="40" inputmode="tel" placeholder="+94 …" class="wiz-input">
+                                <label for="wiz-branch-phone">Phone</label>
+                                <input id="wiz-branch-phone" type="text" name="branch_phone" value="{{ old('branch_phone') }}" maxlength="40" inputmode="tel" placeholder="+94 …" required class="wiz-input">
+                                <div class="wiz-field-error" id="wizBranchPhoneErr" style="{{ $errors->has('branch_phone') ? '' : 'display:none;' }}">{{ $errors->first('branch_phone') ?: 'Phone number is required.' }}</div>
                             </div>
                             <div class="wiz-field" style="flex:1;">
                                 <label for="wiz-branch-email">Email <span style="font-weight:500;text-transform:none;letter-spacing:0;color:var(--muted);">(optional)</span></label>
@@ -1654,32 +1661,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         @keyframes acnBubblePop{from{opacity:0;transform:scale(.88) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
         @keyframes acnGuideFadeOut{from{opacity:1;transform:translateY(0)}to{opacity:0;transform:translateY(18px)}}
     </style>
+    @if($pendingPayment)
+        @include('partials.payment-attention-bar', [
+            'title' => 'Your subscription payment needs attention.',
+            'message' => 'Complete payment to activate your monthly subscription.',
+            'payment' => $pendingPayment,
+        ])
+    @endif
     <div class="account-notice-shell">
         <div class="account-notice-blob account-notice-blob--a" aria-hidden="true"></div>
         <div class="account-notice-blob account-notice-blob--b" aria-hidden="true"></div>
         <div class="account-notice-card">
-            @if($pendingPayment)
-                <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;text-align:left;">
-                    <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;">
-                        <div style="width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;">!</div>
-                        <div style="flex:1;min-width:0;">
-                            <div style="color:#991b1b;font-weight:700;">Your subscription payment needs attention</div>
-                            <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Complete payment to activate your monthly subscription.</div>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                                <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}">
-                                    @csrf
-                                    <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                        <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                                    </button>
-                                </form>
-                                <a href="{{ route('payment.billing.index') }}" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;border:1.5px solid #fca5a5;color:#991b1b;text-decoration:none;display:inline-flex;align-items:center;">
-                                    View payment history
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            @endif
             <div class="account-notice-icon"><i class="fa fa-building-columns" aria-hidden="true"></i></div>
             <h2 class="account-notice-title">No bank account yet</h2>
             <p class="account-notice-sub">
@@ -1723,28 +1715,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
     </script>
 @else
     @if($errors->has('payment') || $pendingPayment)
-        <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;">
-            <div style="display:flex;gap:12px;align-items:flex-start;padding:14px 16px;border-radius:14px;background:linear-gradient(135deg,#fef2f2,#fee2e2);border:1px solid #fca5a5;">
-                <div style="width:28px;height:28px;border-radius:999px;background:#ef4444;color:#fff;display:grid;place-items:center;font-weight:700;flex-shrink:0;">!</div>
-                <div style="flex:1;min-width:0;">
-                    <div style="color:#991b1b;font-weight:700;">{{ $errors->first('payment') ?: 'Your subscription payment needs attention' }}</div>
-                    @if($pendingPayment)
-                        <div style="color:#b91c1c;font-size:13px;margin-top:2px;">Your business setup is saved — complete payment to activate your monthly subscription.</div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
-                            <form method="post" action="{{ route('payment.checkout.resume', $pendingPayment) }}">
-                                @csrf
-                                <button type="submit" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;background:#ef4444;color:#fff;border:none;cursor:pointer;">
-                                    <i class="fa fa-credit-card" style="margin-right:6px;" aria-hidden="true"></i>Complete payment ({{ $pendingPayment->currencySymbol() }}{{ number_format((float) $pendingPayment->amount, 2) }}/mo)
-                                </button>
-                            </form>
-                            <a href="{{ route('payment.billing.index') }}" style="padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;border:1.5px solid #fca5a5;color:#991b1b;text-decoration:none;display:inline-flex;align-items:center;">
-                                View payment history
-                            </a>
-                        </div>
-                    @endif
-                </div>
-            </div>
-        </div>
+        @include('partials.payment-attention-bar', [
+            'title' => $errors->first('payment') ?: 'Your subscription payment needs attention.',
+            'message' => $pendingPayment ? 'Your business setup is saved — complete payment to activate your monthly subscription.' : null,
+            'payment' => $pendingPayment,
+        ])
     @endif
     @if(session('status'))
         <div class="card" style="margin-bottom:14px;max-width:100%;padding:0;border:none;">
@@ -2377,8 +2352,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     <h2 class="overview-panel-title" data-panel-title="income" style="margin:0 0 8px;">Hows your income?</h2>
                     <p class="muted overview-panel-subtitle" data-panel-subtitle="income" style="margin:0 0 14px;">Monitor your revenue performance and growth metrics in one place.</p>
                     <div id="overview-income-grid" class="overview-panel-grid" data-panel-key="income" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-                        @if(Route::has('pos.online'))
-                        <a class="overview-tile-item" data-tile-id="income-sales" href="{{ route('pos.online') }}" style="border:1px solid var(--border);border-radius:12px;padding:12px;text-decoration:none;color:inherit;display:block;transition:border-color .2s ease;"
+                        @if(Route::has('pos.register'))
+                        <a class="overview-tile-item" data-tile-id="income-sales" href="{{ route('pos.register') }}" style="border:1px solid var(--border);border-radius:12px;padding:12px;text-decoration:none;color:inherit;display:block;transition:border-color .2s ease;"
                             onmouseover="this.style.borderColor='color-mix(in srgb,var(--primary) 45%,var(--border))'" onmouseout="this.style.borderColor='var(--border)'">
                             <div style="font-weight:700;"><i class="fa fa-chart-line" style="margin-right:6px;"></i>Sales</div>
                             <div class="muted" style="font-size:12px;margin-top:4px;">Open the online retail POS terminal and track sales.</div>
@@ -2440,7 +2415,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             <div class="hrp-section">
                 <div class="hrp-section-title"><i class="fa fa-bolt"></i> Quick Actions</div>
                 <div class="hrp-actions">
-                    @if(Route::has('pos.online'))<a href="{{ route('pos.online') }}" class="hrp-action-btn"><i class="fa fa-cart-plus"></i> New Sale</a>@endif
+                    @if(Route::has('pos.register'))<a href="{{ route('pos.register') }}" class="hrp-action-btn"><i class="fa fa-cart-plus"></i> New Sale</a>@endif
                     @if(Route::has('product.index'))<a href="{{ route('product.index') }}" class="hrp-action-btn"><i class="fa fa-plus"></i> Add Product</a>@endif
                     @if(Route::has('account.bills.index'))<a href="{{ route('account.bills.index') }}" class="hrp-action-btn"><i class="fa fa-file-invoice-dollar"></i> New Bill</a>@endif
                     @if(Route::has('purchase.index'))<a href="{{ route('purchase.index') }}" class="hrp-action-btn"><i class="fa fa-file-invoice"></i> Purchase Orders</a>@endif
@@ -2744,6 +2719,16 @@ function openWizStorageAgreementModal(type) {
                 if (branchNameInput && bizNameInput && !branchNameInput.value.trim()) {
                     branchNameInput.value = bizNameInput.value.trim();
                 }
+            }
+            if (target === 6) {
+                const phoneInput = document.getElementById('wiz-branch-phone');
+                const phoneErr = document.getElementById('wizBranchPhoneErr');
+                if (phoneInput && !phoneInput.value.trim()) {
+                    if (phoneErr) phoneErr.style.display = 'block';
+                    phoneInput.focus();
+                    return;
+                }
+                if (phoneErr) phoneErr.style.display = 'none';
             }
             if (target === 7) {
                 const typeInput = document.getElementById('wizDataStorageType');
@@ -3144,7 +3129,7 @@ function openWizStorageAgreementModal(type) {
 
     @if($errors->has('data_storage_type') || $errors->has('data_agreement_accepted') || $errors->has('vault_server_url') || $errors->has('vault_api_token'))
         setWizStep(6, false);
-    @elseif($errors->has('branch_name') || $errors->has('multi_warehouse_branch'))
+    @elseif($errors->has('branch_name') || $errors->has('branch_phone') || $errors->has('multi_warehouse_branch'))
         setWizStep(5, false);
     @elseif($errors->has('package_id'))
         setWizStep(3, false);

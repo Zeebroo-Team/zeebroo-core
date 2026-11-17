@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../api/api_cache.dart';
+import '../bootstrap/dashboard_preloader.dart';
 import 'business_storage.dart';
 
 enum BusinessSelectionStatus { unknown, ready }
@@ -29,6 +31,9 @@ class BusinessState extends ChangeNotifier {
     _businessName = await BusinessStorage.getBusinessName();
     _branchId = await BusinessStorage.getBranchId();
     _branchName = await BusinessStorage.getBranchName();
+    if (_businessId != null) {
+      await DashboardPreloader.warm();
+    }
     _status = BusinessSelectionStatus.ready;
     notifyListeners();
   }
@@ -49,6 +54,8 @@ class BusinessState extends ChangeNotifier {
     _businessName = businessName;
     _branchId = branchId;
     _branchName = branchName;
+    ApiCache.instance.invalidateAll();
+    await DashboardPreloader.warm();
     notifyListeners();
   }
 

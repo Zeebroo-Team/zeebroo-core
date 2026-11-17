@@ -55,10 +55,13 @@ class ProjectController extends Controller
             return $business;
         }
 
+        $access = $this->crmAccess($request, $business);
+
         return view('crm::projects.index', [
             'business'    => $business,
             'hasProjects' => $this->projectService->businessHasProjects($business),
-            'projects'    => $this->projectService->listForBusiness($business),
+            'projects'    => $this->leadPolicy()->visibleProjects($access, $this->projectService->listForBusiness($business)),
+            'canCreate'   => $access->can('relations_create'),
         ]);
     }
 
@@ -69,6 +72,8 @@ class ProjectController extends Controller
             return $business;
         }
 
+        abort_unless($this->crmAccess($request, $business)->can('relations_create'), 403);
+
         $project = $this->projectService->create($business, $this->validated($request, $business));
 
         return redirect()->route('crm.projects.show', $project)->with('status', 'Project "' . $project->name . '" created.');
@@ -76,7 +81,7 @@ class ProjectController extends Controller
 
     public function edit(Request $request, Project $project): View|RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project);
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -89,7 +94,7 @@ class ProjectController extends Controller
 
     public function update(Request $request, Project $project): RedirectResponse
     {
-        $business = $this->requireProject($request, $project);
+        $business = $this->requireManageableProject($request, $project);
         if ($business instanceof RedirectResponse) {
             return $business;
         }
@@ -106,6 +111,8 @@ class ProjectController extends Controller
             return $business;
         }
 
+        abort_unless($this->crmAccess($request, $business)->can('relations_delete'), 403);
+
         $this->projectService->archive($project);
 
         return redirect()->route('crm.projects.index')->with('status', 'Project archived.');
@@ -118,6 +125,8 @@ class ProjectController extends Controller
             return $business;
         }
 
+        abort_unless($this->crmAccess($request, $business)->can('relations_delete'), 403);
+
         $this->projectService->reactivate($project);
 
         return redirect()->route('crm.projects.index')->with('status', 'Project reactivated.');
@@ -129,6 +138,8 @@ class ProjectController extends Controller
         if ($business instanceof RedirectResponse) {
             return $business;
         }
+
+        abort_unless($this->crmAccess($request, $business)->can('relations_delete'), 403);
 
         try {
             $this->projectService->delete($project);

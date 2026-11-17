@@ -5,6 +5,7 @@ import '../../../core/api/api_endpoints.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/date.dart';
 import 'picker_sheet.dart';
+import 'supplier_form_sheet.dart';
 
 class _Line {
   _Line({
@@ -14,8 +15,12 @@ class _Line {
     this.productId,
     double quantity = 0,
     double unitCost = 0,
-  }) : quantityCtrl = TextEditingController(text: quantity == 0 ? '' : '$quantity'),
-       unitCostCtrl = TextEditingController(text: unitCost == 0 ? '' : '$unitCost');
+  }) : quantityCtrl = TextEditingController(
+         text: quantity == 0 ? '' : '$quantity',
+       ),
+       unitCostCtrl = TextEditingController(
+         text: unitCost == 0 ? '' : '$unitCost',
+       );
 
   final String label;
   final String subtitle;
@@ -90,7 +95,11 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
             params: {'q': q, 'status': 'all'},
           );
           return parseListData(res.data)
-              .where((p) => p['status'] == 'ordered' || p['status'] == 'partially_received')
+              .where(
+                (p) =>
+                    p['status'] == 'ordered' ||
+                    p['status'] == 'partially_received',
+              )
               .toList();
         },
       ),
@@ -106,8 +115,12 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
         ApiEndpoints.purchaseOrderGrnForm((picked.first['id'] as num).toInt()),
       );
       final body = res.data;
-      final data = (body is Map ? body['data'] as Map? : null)?.cast<String, dynamic>();
-      final items = (data?['items'] as List? ?? []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      final data = (body is Map ? body['data'] as Map? : null)
+          ?.cast<String, dynamic>();
+      final items = (data?['items'] as List? ?? [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
       _resetLines();
       for (final item in items) {
         final remaining = (item['quantity_remaining'] as num?)?.toDouble() ?? 0;
@@ -137,13 +150,23 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
         title: 'Supplier',
         idOf: (item) => item['id'],
         labelOf: (item) => (item['name'] as String?) ?? '',
+        addLabel: 'Add supplier',
+        onAdd: () async {
+          final supplier = await showSupplierFormSheet(context);
+          return supplier?['is_active'] == true ? supplier : null;
+        },
         fetch: (q) async {
-          final res = await ApiClient.instance.get(ApiEndpoints.suppliers, params: {if (q.isNotEmpty) 'q': q});
+          final res = await ApiClient.instance.get(
+            ApiEndpoints.suppliers,
+            params: {'active': '1', if (q.isNotEmpty) 'q': q},
+          );
           return parseListData(res.data);
         },
       ),
     );
-    if (picked != null && picked.isNotEmpty) setState(() => _supplier = picked.first);
+    if (picked != null && picked.isNotEmpty) {
+      setState(() => _supplier = picked.first);
+    }
   }
 
   Future<void> _addDirectLine() async {
@@ -157,22 +180,27 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
         labelOf: (item) => (item['name'] as String?) ?? '',
         subtitleOf: (item) => item['sku'] as String?,
         fetch: (q) async {
-          final res = await ApiClient.instance.get(ApiEndpoints.products, params: {'q': q, 'per_page': 30});
+          final res = await ApiClient.instance.get(
+            ApiEndpoints.products,
+            params: {'q': q, 'per_page': 30},
+          );
           return parseListData(res.data);
         },
       ),
     );
     if (picked != null && picked.isNotEmpty) {
       final p = picked.first;
-      setState(() => _lines.add(
-        _Line(
-          label: (p['name'] as String?) ?? '',
-          subtitle: (p['sku'] as String?) ?? '',
-          productId: p['id'],
-          quantity: 1,
-          unitCost: (p['cost_price'] as num?)?.toDouble() ?? 0,
+      setState(
+        () => _lines.add(
+          _Line(
+            label: (p['name'] as String?) ?? '',
+            subtitle: (p['sku'] as String?) ?? '',
+            productId: p['id'],
+            quantity: 1,
+            unitCost: (p['cost_price'] as num?)?.toDouble() ?? 0,
+          ),
         ),
-      ));
+      );
     }
   }
 
@@ -184,14 +212,19 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
       builder: (_) => PickerSheet(
         title: 'Deduct from account',
         idOf: (item) => item['id'],
-        labelOf: (item) => (item['account_name'] as String?) ?? (item['name'] as String?) ?? '',
+        labelOf: (item) =>
+            (item['account_name'] as String?) ??
+            (item['name'] as String?) ??
+            '',
         fetch: (q) async {
           final res = await ApiClient.instance.get(ApiEndpoints.accounts);
           return parseListData(res.data);
         },
       ),
     );
-    if (picked != null && picked.isNotEmpty) setState(() => _deductAccount = picked.first);
+    if (picked != null && picked.isNotEmpty) {
+      setState(() => _deductAccount = picked.first);
+    }
   }
 
   Future<void> _submit() async {
@@ -213,10 +246,12 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
     });
     final data = {
       'received_date': toApiDate(_receivedDate),
-      if (_referenceCtrl.text.trim().isNotEmpty) 'reference': _referenceCtrl.text.trim(),
+      if (_referenceCtrl.text.trim().isNotEmpty)
+        'reference': _referenceCtrl.text.trim(),
       if (_notesCtrl.text.trim().isNotEmpty) 'notes': _notesCtrl.text.trim(),
       'payment_method': _paymentMethod,
-      if (_paymentReferenceCtrl.text.trim().isNotEmpty) 'payment_reference': _paymentReferenceCtrl.text.trim(),
+      if (_paymentReferenceCtrl.text.trim().isNotEmpty)
+        'payment_reference': _paymentReferenceCtrl.text.trim(),
       if (_chequeDueDate != null) 'cheque_due_date': toApiDate(_chequeDueDate!),
       'payment_option': _paymentOption,
       if (_paymentOption == 'partial' && _payAmountCtrl.text.trim().isNotEmpty)
@@ -229,7 +264,8 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
             {
               'purchase_item_id': l.purchaseItemId,
               'quantity_received': double.tryParse(l.quantityCtrl.text) ?? 0,
-              if (l.unitCostCtrl.text.trim().isNotEmpty) 'selling_unit_price': double.tryParse(l.unitCostCtrl.text),
+              if (l.unitCostCtrl.text.trim().isNotEmpty)
+                'selling_unit_price': double.tryParse(l.unitCostCtrl.text),
             }
           else
             {
@@ -241,7 +277,10 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
     };
     try {
       if (_fromPo) {
-        await ApiClient.instance.post(ApiEndpoints.purchaseOrderGrns((_purchase!['id'] as num).toInt()), data: data);
+        await ApiClient.instance.post(
+          ApiEndpoints.purchaseOrderGrns((_purchase!['id'] as num).toInt()),
+          data: data,
+        );
       } else {
         await ApiClient.instance.post(ApiEndpoints.grns, data: data);
       }
@@ -257,8 +296,13 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
   Widget build(BuildContext context) => Padding(
     padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
     child: Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.92),
-      decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.92,
+      ),
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       child: SafeArea(
         top: false,
         child: SingleChildScrollView(
@@ -271,19 +315,29 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                 child: Container(
                   width: 40,
                   height: 4,
-                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
               const Text(
                 'New goods receive note',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textDark),
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
               ),
               const SizedBox(height: 14),
               SegmentedButton<bool>(
                 segments: const [
                   ButtonSegment(value: false, label: Text('Direct')),
-                  ButtonSegment(value: true, label: Text('From purchase order')),
+                  ButtonSegment(
+                    value: true,
+                    label: Text('From purchase order'),
+                  ),
                 ],
                 selected: {_fromPo},
                 onSelectionChanged: (s) => setState(() {
@@ -298,10 +352,17 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                   onTap: _pickPurchaseOrder,
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Purchase order'),
+                    decoration: const InputDecoration(
+                      labelText: 'Purchase order',
+                    ),
                     child: Text(
                       (_purchase?['po_number'] as String?) ?? 'Tap to select',
-                      style: TextStyle(fontSize: 14, color: _purchase == null ? AppColors.textHint : AppColors.textDark),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _purchase == null
+                            ? AppColors.textHint
+                            : AppColors.textDark,
+                      ),
                     ),
                   ),
                 )
@@ -310,10 +371,17 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                   onTap: _pickSupplier,
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Supplier (optional)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Supplier (optional)',
+                    ),
                     child: Text(
                       (_supplier?['name'] as String?) ?? 'Tap to select',
-                      style: TextStyle(fontSize: 14, color: _supplier == null ? AppColors.textHint : AppColors.textDark),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _supplier == null
+                            ? AppColors.textHint
+                            : AppColors.textDark,
+                      ),
                     ),
                   ),
                 ),
@@ -323,13 +391,20 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                   Expanded(
                     child: InkWell(
                       onTap: () async {
-                        final d = await pickDate(context, initial: _receivedDate);
+                        final d = await pickDate(
+                          context,
+                          initial: _receivedDate,
+                        );
                         if (d != null) setState(() => _receivedDate = d);
                       },
                       borderRadius: BorderRadius.circular(12),
                       child: InputDecorator(
-                        decoration: const InputDecoration(labelText: 'Received date'),
-                        child: Text(formatDate(_receivedDate.toIso8601String())),
+                        decoration: const InputDecoration(
+                          labelText: 'Received date',
+                        ),
+                        child: Text(
+                          formatDate(_receivedDate.toIso8601String()),
+                        ),
                       ),
                     ),
                   ),
@@ -351,7 +426,8 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                   DropdownMenuItem(value: 'cash', child: Text('Cash')),
                   DropdownMenuItem(value: 'cheque', child: Text('Cheque')),
                 ],
-                onChanged: (v) => setState(() => _paymentMethod = v ?? _paymentMethod),
+                onChanged: (v) =>
+                    setState(() => _paymentMethod = v ?? _paymentMethod),
               ),
               if (_paymentMethod != 'credit') ...[
                 const SizedBox(height: 14),
@@ -359,29 +435,48 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                   onTap: _pickDeductAccount,
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Deduct from account'),
+                    decoration: const InputDecoration(
+                      labelText: 'Deduct from account',
+                    ),
                     child: Text(
-                      (_deductAccount?['account_name'] as String?) ?? (_deductAccount?['name'] as String?) ?? 'Tap to select',
-                      style: TextStyle(fontSize: 14, color: _deductAccount == null ? AppColors.textHint : AppColors.textDark),
+                      (_deductAccount?['account_name'] as String?) ??
+                          (_deductAccount?['name'] as String?) ??
+                          'Tap to select',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: _deductAccount == null
+                            ? AppColors.textHint
+                            : AppColors.textDark,
+                      ),
                     ),
                   ),
                 ),
                 const SizedBox(height: 14),
                 DropdownButtonFormField<String>(
                   initialValue: _paymentOption,
-                  decoration: const InputDecoration(labelText: 'Payment amount'),
+                  decoration: const InputDecoration(
+                    labelText: 'Payment amount',
+                  ),
                   items: const [
                     DropdownMenuItem(value: 'full', child: Text('Pay in full')),
-                    DropdownMenuItem(value: 'partial', child: Text('Pay partially')),
+                    DropdownMenuItem(
+                      value: 'partial',
+                      child: Text('Pay partially'),
+                    ),
                   ],
-                  onChanged: (v) => setState(() => _paymentOption = v ?? _paymentOption),
+                  onChanged: (v) =>
+                      setState(() => _paymentOption = v ?? _paymentOption),
                 ),
                 if (_paymentOption == 'partial') ...[
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _payAmountCtrl,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Amount to pay now'),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    decoration: const InputDecoration(
+                      labelText: 'Amount to pay now',
+                    ),
                   ),
                 ],
               ],
@@ -392,22 +487,35 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                     Expanded(
                       child: TextFormField(
                         controller: _paymentReferenceCtrl,
-                        decoration: const InputDecoration(labelText: 'Cheque number'),
+                        decoration: const InputDecoration(
+                          labelText: 'Cheque number',
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: InkWell(
                         onTap: () async {
-                          final d = await pickDate(context, initial: _chequeDueDate);
+                          final d = await pickDate(
+                            context,
+                            initial: _chequeDueDate,
+                          );
                           if (d != null) setState(() => _chequeDueDate = d);
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: InputDecorator(
-                          decoration: const InputDecoration(labelText: 'Due date'),
+                          decoration: const InputDecoration(
+                            labelText: 'Due date',
+                          ),
                           child: Text(
-                            _chequeDueDate == null ? 'Select' : formatDate(_chequeDueDate!.toIso8601String()),
-                            style: TextStyle(color: _chequeDueDate == null ? AppColors.textHint : AppColors.textDark),
+                            _chequeDueDate == null
+                                ? 'Select'
+                                : formatDate(_chequeDueDate!.toIso8601String()),
+                            style: TextStyle(
+                              color: _chequeDueDate == null
+                                  ? AppColors.textHint
+                                  : AppColors.textDark,
+                            ),
                           ),
                         ),
                       ),
@@ -419,13 +527,21 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
               TextFormField(
                 controller: _notesCtrl,
                 maxLines: 2,
-                decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Notes (optional)',
+                ),
               ),
               const SizedBox(height: 18),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Items', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                  const Text(
+                    'Items',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                    ),
+                  ),
                   if (!_fromPo)
                     TextButton.icon(
                       onPressed: _addDirectLine,
@@ -435,14 +551,20 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                 ],
               ),
               if (_loadingPoForm)
-                const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()))
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Center(child: CircularProgressIndicator()),
+                )
               else
                 for (final line in _lines)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: Container(
                       padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(border: Border.all(color: AppColors.border), borderRadius: BorderRadius.circular(10)),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.border),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                       child: Row(
                         children: [
                           Expanded(
@@ -450,9 +572,23 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(line.label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                Text(
+                                  line.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                                 if (line.subtitle.isNotEmpty)
-                                  Text(line.subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                  Text(
+                                    line.subtitle,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
                               ],
                             ),
                           ),
@@ -461,8 +597,14 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                             flex: 2,
                             child: TextField(
                               controller: line.quantityCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(labelText: 'Qty', isDense: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: const InputDecoration(
+                                labelText: 'Qty',
+                                isDense: true,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -470,8 +612,14 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                             flex: 2,
                             child: TextField(
                               controller: line.unitCostCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: InputDecoration(labelText: _fromPo ? 'Price' : 'Cost', isDense: true),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              decoration: InputDecoration(
+                                labelText: _fromPo ? 'Price' : 'Cost',
+                                isDense: true,
+                              ),
                             ),
                           ),
                         ],
@@ -480,13 +628,26 @@ class _GoodsReceiveFormSheetState extends State<GoodsReceiveFormSheet> {
                   ),
               if (_error != null) ...[
                 const SizedBox(height: 8),
-                Text(_error!, style: const TextStyle(color: AppColors.error, fontSize: 12.5)),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: AppColors.error,
+                    fontSize: 12.5,
+                  ),
+                ),
               ],
               const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _saving ? null : _submit,
                 child: _saving
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Text('Record goods receive'),
               ),
             ],

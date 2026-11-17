@@ -24,9 +24,9 @@
 
     <div class="pcat-toolbar">
         <span class="muted" style="margin:0;font-size:13px;">
-            @if(!$hasProjects) Create your <strong style="color:var(--text);">first project</strong> below. @endif
+            @if(!$hasProjects && $canCreate) Create your <strong style="color:var(--text);">first project</strong> below. @endif
         </span>
-        @if($hasProjects)
+        @if($hasProjects && $canCreate)
             <button type="button" id="pj-modal-open" class="linkbtn"
                     style="padding:8px 16px;font-size:13px;display:inline-flex;align-items:center;gap:6px;">
                 <i class="fa fa-plus"></i> New project
@@ -34,7 +34,7 @@
         @endif
     </div>
 
-    @if(!$hasProjects)
+    @if(!$hasProjects && $canCreate)
         <section class="pcat-inline">
             <h2>New project</h2>
             <p class="pcat-muted">e.g. "Website Redesign" or "Q3 Outbound" — leads, stages, and custom fields all live inside a project.</p>

@@ -62,9 +62,24 @@ class PosRentalApiController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        return $this->saveRental($request);
+    }
+
+    public function update(Request $request, Rental $rental): JsonResponse
+    {
+        return $this->saveRental($request, $rental);
+    }
+
+    private function saveRental(Request $request, ?Rental $rental = null): JsonResponse
+    {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'fin_assets');
         $user     = $request->user();
+
+        if ($rental !== null && ((int) $rental->business_id !== (int) $business->id
+            || ! $this->rentalService->rentalForUser($user, $rental))) {
+            return response()->json(['message' => 'Rental not found.'], 404);
+        }
 
         $request->merge([
             'deduct_account_id'          => $request->filled('deduct_account_id')          ? $request->integer('deduct_account_id')          : null,
@@ -102,26 +117,31 @@ class PosRentalApiController extends Controller
             ], 422);
         }
 
+        $editing = $rental !== null;
         try {
-            $addressBookId = (int) $this->addressBookService->syncLandlord($user, [
-                'name'                 => $validated['owner_name'],
-                'email'                => $validated['owner_email'] ?? null,
-                'phone'                => $validated['owner_phone'] ?? null,
-                'street_address'       => $validated['owner_address'] ?? null,
-                'bank_account_details' => $validated['owner_bank_details'] ?? null,
-                'owner_notes'          => $validated['owner_notes'] ?? null,
-            ])->getKey();
+            $rental = \Illuminate\Support\Facades\DB::transaction(function () use ($user, $business, $validated, $rental) {
+                $addressBookId = (int) $this->addressBookService->syncLandlord($user, [
+                    'name'                 => $validated['owner_name'],
+                    'email'                => $validated['owner_email'] ?? null,
+                    'phone'                => $validated['owner_phone'] ?? null,
+                    'street_address'       => $validated['owner_address'] ?? null,
+                    'bank_account_details' => $validated['owner_bank_details'] ?? null,
+                    'owner_notes'          => $validated['owner_notes'] ?? null,
+                ])->getKey();
+                $payload = Arr::except($validated, ['owner_name', 'owner_email', 'owner_phone', 'owner_address', 'owner_bank_details', 'owner_notes']);
+                $payload['address_book_id'] = $addressBookId;
+                if ($rental !== null) {
+                    $rental->update($payload);
+                    return $rental;
+                }
+                return $this->rentalService->create($user, $business, $payload);
+            });
         } catch (ValidationException $e) {
             return response()->json(['message' => collect($e->errors())->flatten()->first()], 422);
         }
-
-        $payload = Arr::except($validated, ['owner_name', 'owner_email', 'owner_phone', 'owner_address', 'owner_bank_details', 'owner_notes']);
-        $payload['address_book_id'] = $addressBookId;
-
-        $rental = $this->rentalService->create($user, $business, $payload);
         $rental->load(['deductAccount.bank', 'deductAccount.bankType']);
 
-        return response()->json(['message' => 'Rental created successfully.', 'data' => $this->format($rental, false)], 201);
+        return response()->json(['message' => $editing ? 'Rental updated successfully.' : 'Rental created successfully.', 'data' => $this->format($rental, false)], $editing ? 200 : 201);
     }
 
     public function show(Request $request, Rental $rental): JsonResponse
@@ -135,7 +155,7 @@ class PosRentalApiController extends Controller
         $rental->load([
             'deductAccount.bank',
             'deductAccount.bankType',
-            'ledgerTransactions',
+            'ledgerTransactions.deductAccount.bank',
             'externalBillingMarks',
             'bills',
             'landlord',
@@ -145,11 +165,25 @@ class PosRentalApiController extends Controller
         $isOverdue = $this->rentalService->rentalHasOverduePayments($rental);
         $schedule  = $this->rentalService->rentalBillingScheduleWithPaymentStatus($rental);
 
+        // Payment history — same shape as the bill / investment ledger
+        $ledger = $rental->ledgerTransactions->sortByDesc('id')->map(fn ($tx) => [
+            'id'              => $tx->id,
+            'amount'          => (float) $tx->amount,
+            'occurrence_date' => $tx->occurrence_date?->format('Y-m-d'),
+            'account_name'    => $tx->deductAccount?->account_name ?? $tx->deductAccount?->name ?? null,
+            'bank_name'       => $tx->deductAccount?->bank?->name ?? null,
+            'created_at'      => $tx->created_at?->format('Y-m-d H:i'),
+        ])->values();
+
         $billRecurringTypes = \Modules\Account\Models\Bill::recurringTypes();
         $billPaymentModes   = \Modules\Account\Models\Bill::paymentModes();
 
         return response()->json([
             'data' => array_merge($this->format($rental, $isOverdue), [
+                'actual_due_date' => $rental->due_date?->format('Y-m-d'),
+                'first_installment_due_date' => $rental->first_installment_due_date?->format('Y-m-d'),
+                'deduct_account_id' => $rental->deduct_account_id,
+                'remind_before_days' => $rental->remind_before_days,
                 'schedule' => $schedule->map(fn ($row) => [
                     'period'           => $row['period'],
                     'due_ymd'          => $row['due_ymd'],
@@ -179,6 +213,7 @@ class PosRentalApiController extends Controller
                     'notes'                => $rental->landlord->notes,
                 ] : null,
                 'warehouse_name'         => $rental->warehouse?->name,
+                'ledger'                 => $ledger,
             ]),
         ]);
     }

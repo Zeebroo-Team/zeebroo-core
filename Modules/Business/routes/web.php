@@ -4,9 +4,20 @@ use Illuminate\Support\Facades\Route;
 use Modules\Business\Http\Controllers\BranchController;
 use Modules\Business\Http\Controllers\BusinessController;
 use Modules\Business\Http\Controllers\BusinessGoogleBusinessProfileController;
+use Modules\Business\Http\Controllers\BusinessInvitationController;
 use Modules\Business\Http\Controllers\BusinessLogoGenerationController;
 use Modules\Business\Http\Controllers\BusinessRoleController;
 use Modules\Business\Http\Controllers\BusinessUserController;
+use Modules\Business\Http\Controllers\GetStartedController;
+
+// Team invitation link from the email — public: the invitee may not have an account yet.
+Route::get('/invitations/{token}', [BusinessInvitationController::class, 'show'])
+    ->where('token', '[A-Za-z0-9]+')
+    ->name('business.invitations.show');
+Route::post('/invitations/{token}', [BusinessInvitationController::class, 'accept'])
+    ->where('token', '[A-Za-z0-9]+')
+    ->middleware('throttle:10,1')
+    ->name('business.invitations.accept');
 
 Route::middleware(['auth'])->group(function (): void {
     Route::get('/business/map', [BusinessController::class, 'map'])->name('business.map');
@@ -57,6 +68,12 @@ Route::middleware(['auth'])->group(function (): void {
 
     Route::get('/business/get-started', [BusinessController::class, 'platformChoice'])
         ->name('business.platform-choice');
+    Route::get('/business/get-started/community', [GetStartedController::class, 'community'])
+        ->name('business.get-started.community');
+    Route::get('/business/get-started/support', [GetStartedController::class, 'support'])
+        ->name('business.get-started.support');
+    Route::get('/business/get-started/billing', [GetStartedController::class, 'billing'])
+        ->name('business.get-started.billing');
 
     Route::get('/branches', [BranchController::class, 'index'])->name('business.branches.index');
     Route::post('/branches', [BranchController::class, 'store'])->name('business.branches.store');

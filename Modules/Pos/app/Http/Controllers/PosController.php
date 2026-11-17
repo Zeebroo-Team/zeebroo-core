@@ -91,12 +91,9 @@ class PosController extends Controller
             'items.*.custom_requirement_values.*.value' => ['nullable', 'string', 'max:1000'],
             'payment_method' => ['required', 'string', 'in:cash,card,credit'],
             'channel' => ['nullable', 'string', 'in:retail,online'],
-            'credit_account_id' => [
-                'nullable',
-                'integer',
-                'min:1',
-                Rule::requiredIf(in_array($request->input('payment_method'), ['cash', 'card'], true)),
-            ],
+            // Optional: SaleService falls back to the POS default deposit account, and with
+            // none configured the sale still completes without a ledger entry (same as the API).
+            'credit_account_id' => ['nullable', 'integer', 'min:1'],
             'amount_paid' => ['nullable', 'numeric', 'min:0'],
             'amount_tendered' => ['nullable', 'numeric', 'min:0', 'required_if:payment_method,cash'],
             'discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -185,7 +182,7 @@ class PosController extends Controller
             return redirect()->to($redirect);
         }
 
-        return redirect()->route('pos.online');
+        return redirect()->route('pos.register');
     }
 
     public function saveSettings(Request $request): RedirectResponse
@@ -229,7 +226,7 @@ class PosController extends Controller
             return redirect()->to($redirect)->with('status', 'POS settings saved.');
         }
 
-        return redirect()->route('pos.online')->with('status', 'POS settings saved.');
+        return redirect()->route('pos.register')->with('status', 'POS settings saved.');
     }
 
     private function terminal(

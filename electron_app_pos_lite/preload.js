@@ -28,10 +28,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // or render it to a PDF and let the user save it (js/pos.js sale-completed modal).
   printHtml: (html) => ipcRenderer.invoke('print-html', { html }),
   savePdf: (html, suggestedFilename) => ipcRenderer.invoke('save-html-as-pdf', { html, suggestedFilename }),
+  // Stage updates while savePdf runs: 'loading' | 'rendering' | 'saving-dialog' | 'writing'
+  onPdfProgress: (cb) => {
+    const handler = (_e, stage) => cb(stage);
+    ipcRenderer.on('save-html-as-pdf-progress', handler);
+    return () => ipcRenderer.removeListener('save-html-as-pdf-progress', handler);
+  },
+
+  // Thermal printer (Settings → Printer) — stored in local config.json, per device
+  getPrinters: () => ipcRenderer.invoke('get-printers'),
+  getPrinterConfig: () => ipcRenderer.invoke('get-printer-config'),
+  setPrinterConfig: (cfg) => ipcRenderer.invoke('set-printer-config', cfg),
+  printReceiptEscpos: (opts) => ipcRenderer.invoke('print-receipt-escpos', opts),
+  printReceiptSilent: (opts) => ipcRenderer.invoke('print-receipt-silent', opts),
+  previewReceiptPdf: (opts) => ipcRenderer.invoke('preview-receipt-pdf', opts),
 
   // App updates (js/navbar.js "Check for updates") — latest Lite release from
   // /api/releases/latest?app=lite, installer download with % progress.
   platform: process.platform,
+  arch: process.arch, // 'arm64' on Apple Silicon, 'x64' on Intel Macs
   checkForUpdate: () => ipcRenderer.invoke('check-for-update'),
   downloadUpdate: (opts) => ipcRenderer.invoke('download-update', opts),
   onDownloadProgress: (cb) => {

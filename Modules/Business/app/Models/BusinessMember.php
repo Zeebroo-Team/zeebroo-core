@@ -362,6 +362,7 @@ class BusinessMember extends Model
                     ['key' => 'crm_contacts', 'label' => 'Contacts',           'desc' => 'View and manage CRM contact records'],
                     ['key' => 'crm_tasks',    'label' => 'Tasks',              'desc' => 'Create and manage CRM tasks and follow-ups'],
                     ['key' => 'crm_forms',    'label' => 'Lead Capture Forms', 'desc' => 'Design and manage web forms for capturing leads from your website'],
+                    ['key' => 'crm_all_leads', 'label' => 'All Departments',   'desc' => 'Work every pipeline and lead, not only those of your own department'],
                 ],
             ],
             [
@@ -379,7 +380,9 @@ class BusinessMember extends Model
                 'icon'  => 'fa-diagram-project',
                 'color' => '#0891b2',
                 'items' => [
-                    ['key' => 'projects_access', 'label' => 'Access Projects', 'desc' => 'View and manage projects and tasks'],
+                    // Key kept as projects_access so existing role/member grants keep working.
+                    ['key' => 'projects_access',   'label' => 'Manage All Projects',     'desc' => 'Projects → Overview & Projects: view, create and manage every project and task in this business'],
+                    ['key' => 'projects_assigned', 'label' => 'Assigned Project Access', 'desc' => 'Projects → My Projects: today/upcoming work, my tasks and a kanban board for tasks assigned to you'],
                 ],
             ],
             [
@@ -389,6 +392,15 @@ class BusinessMember extends Model
                 'color' => '#d946ef',
                 'items' => [
                     ['key' => 'event_access', 'label' => 'Access Event Management', 'desc' => 'View and manage event bookings and schedules'],
+                ],
+            ],
+            [
+                'key'   => 'ecommerce',
+                'label' => 'E-Commerce',
+                'icon'  => 'fa-store',
+                'color' => '#7c3aed',
+                'items' => [
+                    ['key' => 'ecom_access', 'label' => 'Manage Online Store', 'desc' => 'E-Commerce tab: website settings, online products and web orders'],
                 ],
             ],
         ];

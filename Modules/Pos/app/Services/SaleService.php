@@ -8,7 +8,9 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\Pos\Models\Customer;
 use Modules\Pos\Models\Sale;
+use Modules\Pos\Models\SaleCheque;
 use Modules\Pos\Models\SaleItem;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductStockLayer;
@@ -32,6 +34,9 @@ class SaleService
         private readonly PosNotificationService $notifications,
         private readonly CustomerSubscriptionService $subscriptions,
         private readonly ProductRentalService $rentals,
+        private readonly GiftCardService $giftCards,
+        private readonly CouponService $coupons,
+        private readonly CustomerCreditService $customerCredit,
     ) {
     }
 
@@ -41,14 +46,26 @@ class SaleService
     public function listForBusiness(Business $business, ?string $search = null, ?int $limit = null): Collection
     {
         $query = $business->sales()
-            ->with(['user', 'creditAccount', 'branch', 'customer'])
-            ->withCount('items');
+            ->with(['user', 'creditAccount', 'branch', 'customer', 'cheque:id,pos_sale_id,status'])
+            ->withCount('items')
+            // Cost of goods per sale (items with no unit_cost count as zero
+            // and are flagged via items_missing_cost) for list-level profit.
+            ->addSelect([
+                'items_cost' => SaleItem::query()
+                    ->selectRaw('COALESCE(SUM(unit_cost * quantity), 0)')
+                    ->whereColumn('pos_sale_items.pos_sale_id', 'pos_sales.id'),
+                'items_missing_cost' => SaleItem::query()
+                    ->selectRaw('COUNT(*)')
+                    ->whereColumn('pos_sale_items.pos_sale_id', 'pos_sales.id')
+                    ->whereNull('unit_cost'),
+            ]);
 
         $term = trim((string) $search);
         if ($term !== '') {
             $like = '%'.addcslashes($term, '%_\\').'%';
             $query->where(function ($builder) use ($like) {
                 $builder->where('sale_number', 'like', $like)
+                    ->orWhere('offline_ref', 'like', $like)
                     ->orWhere('notes', 'like', $like);
             });
         }
@@ -113,7 +130,7 @@ class SaleService
     public function indexForBusiness(Business $business, array $filters = []): LengthAwarePaginator
     {
         $query = $business->sales()
-            ->with(['user', 'branch', 'customer'])
+            ->with(['user', 'branch', 'customer', 'cheque:id,pos_sale_id,status'])
             ->withCount('items');
 
         $this->applyIndexFilters($query, $filters);
@@ -156,6 +173,7 @@ class SaleService
             $like = '%'.addcslashes($term, '%_\\').'%';
             $query->where(function ($b) use ($like) {
                 $b->where('sale_number', 'like', $like)
+                  ->orWhere('offline_ref', 'like', $like)
                   ->orWhere('notes', 'like', $like)
                   ->orWhereHas('customer', fn ($q) => $q->where('name', 'like', $like));
             });
@@ -231,6 +249,17 @@ class SaleService
         ?int $posCounterId = null,
         ?string $creditDueDate = null,
         ?float $discountFlat = null,
+        ?string $giftCardCode = null,
+        ?float $giftCardAmount = null,
+        ?string $couponCode = null,
+        // Mobile offline sales only (POST sales/offline). Left at their defaults
+        // every other caller behaves exactly as before.
+        ?\Carbon\CarbonInterface $soldAt = null,
+        bool $honourClientPrices = false,
+        ?string $clientUuid = null,
+        ?string $offlineRef = null,
+        // Cheque sales only: {cheque_number, cheque_date, bank_name?}
+        ?array $cheque = null,
     ): Sale {
         $rawProductItems = array_values(array_filter(
             $items,
@@ -241,7 +270,7 @@ class SaleService
             fn ($i) => ($i['item_type'] ?? '') === 'service' && !empty($i['service_item_id']),
         ));
 
-        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems) : [];
+        $productLines = $rawProductItems !== [] ? $this->normalizeCartItems($business, $rawProductItems, $honourClientPrices, $soldAt) : [];
         $serviceLines = $this->normalizeServiceCartItems($business, $rawServiceItems);
 
         if ($productLines === [] && $serviceLines === []) {
@@ -250,6 +279,12 @@ class SaleService
 
         $paymentMethod = $this->normalizePaymentMethod($paymentMethod);
         $channel       = $this->normalizeChannel($channel);
+
+        if ($paymentMethod === Sale::PAYMENT_CHEQUE) {
+            $cheque = $this->normalizeCheque($business, $customerId, $cheque);
+            // The money only lands in an account when the cheque is claimed
+            $deferSettlement = true;
+        }
 
         $posSettings = $this->posSettings->forBusiness($business);
         $branchStockSeparate = (bool) ($posSettings['branch_stock_separate'] ?? false);
@@ -264,12 +299,14 @@ class SaleService
         $activeDiscounts = $this->discountService->activeForProducts($business, $cartProductIds)
             ->concat($this->campaignService->activeForProducts($business, $cartProductIds));
 
-        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate) {
+        $sale = DB::transaction(function () use ($business, $user, $productLines, $serviceLines, $paymentMethod, $creditAccountId, $amountPaid, $notes, $channel, $discountPercent, $discountFlat, $amountTendered, $customerId, $deferSettlement, $branchId, $branchStockSeparate, $activeDiscounts, $scheduledAt, $posCounterId, $creditDueDate, $giftCardCode, $giftCardAmount, $couponCode, $soldAt, $clientUuid, $offlineRef, $cheque) {
             $sale = $business->sales()->create([
                 'branch_id'       => $branchId,
                 'pos_counter_id'  => $posCounterId,
                 'user_id' => $user->id,
                 'sale_number' => $this->nextSaleNumber($business),
+                'client_uuid' => $clientUuid,
+                'offline_ref' => $offlineRef,
                 'status' => Sale::STATUS_COMPLETED,
                 'payment_method' => $paymentMethod,
                 'channel' => $channel,
@@ -282,7 +319,7 @@ class SaleService
                 'total' => 0,
                 'amount_paid' => 0,
                 'notes' => filled($notes) ? trim((string) $notes) : null,
-                'sold_at' => now(),
+                'sold_at' => $soldAt ?? now(),
                 'is_settled' => !$deferSettlement,
                 'settled_at' => $deferSettlement ? null : now(),
             ]);
@@ -299,12 +336,14 @@ class SaleService
                     : $this->stockConsumption->consumeFifo($product, $line['quantity'], $branchId, $branchStockSeparate);
 
                 $isRentalLine = (bool) $product->is_rental;
+                // An offline sale replayed later rents from the day it was sold.
+                $rentFrom = \Carbon\Carbon::instance($soldAt ?? now())->startOfDay();
                 $rentalReturnDate = $isRentalLine
-                    ? ($line['rental_return_date'] ?? now()->addDays((int) $product->rental_max_days)->toDateString())
+                    ? ($line['rental_return_date'] ?? $rentFrom->copy()->addDays((int) $product->rental_max_days)->toDateString())
                     : null;
                 // Rentals are billed as daily_rate × days, never for less than one day.
                 $rentalDays = $isRentalLine
-                    ? max(1, (int) now()->startOfDay()->diffInDays(\Carbon\Carbon::parse($rentalReturnDate)->startOfDay()))
+                    ? max(1, (int) $rentFrom->diffInDays(\Carbon\Carbon::parse($rentalReturnDate)->startOfDay()))
                     : null;
 
                 // Resolve the applicable discount for this line — when multiple
@@ -419,6 +458,7 @@ class SaleService
                         (float) $product->rental_daily_rate,
                         $rentalQty,
                         $rentalReturnDate,
+                        $rentFrom->toDateString(),
                     );
                 }
             }
@@ -497,41 +537,95 @@ class SaleService
                     ? round($subtotal * ($discountPercentValue / 100), 2)
                     : 0.0;
             }
-            $total = round(max(0, $subtotal - $discountAmount), 2);
+            // Coupon is taken off what's left after the order discount; the server
+            // works the amount out itself so the client can't inflate it.
+            $coupon = null;
+            $couponDiscount = 0.0;
+            if (filled($couponCode)) {
+                [$coupon, $couponDiscount] = $this->coupons->redeemForSale(
+                    $business,
+                    (string) $couponCode,
+                    max(0, $subtotal - $discountAmount),
+                    $sale,
+                    $user,
+                    $soldAt,
+                );
+            }
+
+            $total = round(max(0, $subtotal - $discountAmount - $couponDiscount), 2);
             $tendered = null;
             $change = null;
+
+            // Gift card covers part (or all) of the total; payment_method pays the rest.
+            // Clamped to the total so a card is never charged more than the sale costs.
+            $giftApplied = 0.0;
+            $giftCard = null;
+            if (filled($giftCardCode) && $giftCardAmount !== null && $giftCardAmount > self::MONEY_TOLERANCE) {
+                $giftApplied = round(min($giftCardAmount, $total), 2);
+                if ($giftApplied > self::MONEY_TOLERANCE) {
+                    $giftCard = $this->giftCards->redeemForSale($business, (string) $giftCardCode, $giftApplied, $sale, $user, $soldAt);
+                } else {
+                    $giftApplied = 0.0;
+                }
+            }
+            $due = round(max(0, $total - $giftApplied), 2);
+
+            // The unpaid part of a credit sale counts against the customer's credit limit.
+            // Offline sales being replayed ($soldAt set) already happened, so they're not blocked.
+            if ($paymentMethod === Sale::PAYMENT_CREDIT && $customerId !== null && $soldAt === null && $due > self::MONEY_TOLERANCE) {
+                $this->customerCredit->assertWithinLimit($business, $customerId, $due);
+            }
 
             if ($paymentMethod === Sale::PAYMENT_CASH) {
                 $tendered = $amountTendered !== null
                     ? round((float) $amountTendered, 2)
-                    : ($amountPaid !== null ? round((float) $amountPaid, 2) : $total);
+                    : ($amountPaid !== null ? round((float) $amountPaid, 2) : $due);
 
-                if ($tendered + self::MONEY_TOLERANCE < $total) {
+                if ($tendered + self::MONEY_TOLERANCE < $due) {
                     throw ValidationException::withMessages([
-                        'amount_tendered' => 'Amount received must be at least the sale total.',
+                        'amount_tendered' => 'Amount received must be at least the amount due.',
                     ]);
                 }
 
-                $change = round(max(0, $tendered - $total), 2);
+                $change = round(max(0, $tendered - $due), 2);
             }
 
             $paid = match ($paymentMethod) {
-                Sale::PAYMENT_CASH, Sale::PAYMENT_CARD => $total,
-                default => 0.0,
+                Sale::PAYMENT_CASH, Sale::PAYMENT_CARD, Sale::PAYMENT_CHEQUE => $total,
+                default => $giftApplied,
             };
 
             $sale->update([
                 'subtotal' => $subtotal,
                 'discount_percent' => $discountPercentValue,
                 'discount_amount' => $discountAmount,
+                'coupon_discount' => $couponDiscount,
+                'pos_coupon_id' => $coupon?->id,
                 'total' => $total,
                 'amount_paid' => $paid,
+                'gift_card_amount' => $giftApplied,
+                'pos_gift_card_id' => $giftCard?->id,
                 'amount_tendered' => $tendered,
                 'change_amount' => $change,
             ]);
 
-            if (!$deferSettlement && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
-                $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $total, $paymentMethod);
+            // Only the non-gift-card portion is new money into the deposit account.
+            if (!$deferSettlement && $due > self::MONEY_TOLERANCE && in_array($paymentMethod, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD], true)) {
+                $this->payments->settle($sale, $business, $user, (int) $creditAccountId, $due, $paymentMethod);
+            }
+
+            // The cheque covers what the gift card didn't
+            if ($paymentMethod === Sale::PAYMENT_CHEQUE && $due > self::MONEY_TOLERANCE) {
+                $sale->cheque()->create([
+                    'business_id'     => $business->id,
+                    'pos_customer_id' => $customerId,
+                    'user_id'         => $user->id,
+                    'cheque_number'   => $cheque['cheque_number'],
+                    'bank_name'       => $cheque['bank_name'],
+                    'cheque_date'     => $cheque['cheque_date'],
+                    'amount'          => $due,
+                    'status'          => SaleCheque::STATUS_PENDING,
+                ]);
             }
 
             return $sale->refresh()->load(['items.product', 'items.serviceItem.products', 'creditAccount', 'user']);
@@ -595,6 +689,14 @@ class SaleService
                 }
             }
 
+            $this->giftCards->refundForSale($sale);
+            $this->coupons->reverseForSale($sale);
+
+            // An unclaimed cheque is simply handed back
+            $sale->cheque()
+                ->whereIn('status', [SaleCheque::STATUS_PENDING, SaleCheque::STATUS_BOUNCED])
+                ->update(['status' => SaleCheque::STATUS_CANCELLED]);
+
             $sale->update(['status' => Sale::STATUS_VOID]);
 
             return $sale->refresh();
@@ -627,7 +729,7 @@ class SaleService
      * @param  list<array{product_id: int, quantity: float|string, product_stock_layer_id?: int|null, product_selling_unit_id?: int|null, selling_unit_label?: ?string, selling_unit_factor?: float|null, warranty_type?: ?string, warranty_days?: ?int}>  $items
      * @return list<array{product: Product, quantity: float, product_stock_layer_id: ?int, product_selling_unit_id: ?int, selling_unit_label: ?string, selling_unit_factor: ?float, warranty_type: ?string, warranty_days: ?int}>
      */
-    private function normalizeCartItems(Business $business, array $items): array
+    private function normalizeCartItems(Business $business, array $items, bool $honourClientPrices = false, ?\Carbon\CarbonInterface $soldAt = null): array
     {
         if ($items === []) {
             throw ValidationException::withMessages([
@@ -710,7 +812,7 @@ class SaleService
             }
 
             if ($product->is_rental && !empty($row['rental_return_date'])) {
-                $maxDate = now()->addDays((int) $product->rental_max_days)->toDateString();
+                $maxDate = \Carbon\Carbon::instance($soldAt ?? now())->addDays((int) $product->rental_max_days)->toDateString();
                 if ($row['rental_return_date'] > $maxDate) {
                     throw ValidationException::withMessages([
                         'items' => 'Return date for '.$product->name.' exceeds the maximum rental period.',
@@ -726,6 +828,14 @@ class SaleService
                 $customUnitPrice = $product->dynamic_price_qty_linked
                     ? 1.0
                     : ($row['custom_unit_price'] ?? null);
+            } elseif ($product->is_changeable_price && ! $product->is_rental && $row['custom_unit_price'] !== null) {
+                // Changeable-price products: the cashier confirmed / edited the
+                // selling price at the POS before adding the item to the cart.
+                $customUnitPrice = $row['custom_unit_price'];
+            } elseif ($honourClientPrices && ! $product->is_rental && $row['custom_unit_price'] !== null) {
+                // Offline sale: keep the (already discounted) price the customer
+                // paid on the phone, even if the catalog price changed since.
+                $customUnitPrice = $row['custom_unit_price'];
             }
 
             $layerId = $row['product_stock_layer_id'];
@@ -858,13 +968,52 @@ class SaleService
     private function normalizePaymentMethod(string $method): string
     {
         $method = strtolower(trim($method));
-        if (! in_array($method, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD, Sale::PAYMENT_CREDIT], true)) {
+        if (! in_array($method, [Sale::PAYMENT_CASH, Sale::PAYMENT_CARD, Sale::PAYMENT_CREDIT, Sale::PAYMENT_CHEQUE], true)) {
             throw ValidationException::withMessages([
                 'payment_method' => 'Choose a valid payment method.',
             ]);
         }
 
         return $method;
+    }
+
+    /**
+     * A cheque sale needs a customer (so the cheque can be chased if it bounces),
+     * a cheque number and the date written on the cheque.
+     *
+     * @return array{cheque_number: string, cheque_date: string, bank_name: ?string}
+     */
+    private function normalizeCheque(Business $business, ?int $customerId, ?array $cheque): array
+    {
+        if ($customerId === null) {
+            throw ValidationException::withMessages([
+                'pos_customer_id' => 'A customer must be assigned for cheque payment.',
+            ]);
+        }
+
+        if (! Customer::query()->whereKey($customerId)->where('business_id', $business->id)->exists()) {
+            throw ValidationException::withMessages([
+                'pos_customer_id' => 'Choose a valid customer for this cheque.',
+            ]);
+        }
+
+        $number = trim((string) ($cheque['cheque_number'] ?? ''));
+        if ($number === '') {
+            throw ValidationException::withMessages(['cheque_number' => 'Enter the cheque number.']);
+        }
+
+        $date = trim((string) ($cheque['cheque_date'] ?? ''));
+        if ($date === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || strtotime($date) === false) {
+            throw ValidationException::withMessages(['cheque_date' => 'Enter the date written on the cheque.']);
+        }
+
+        $bank = trim((string) ($cheque['bank_name'] ?? ''));
+
+        return [
+            'cheque_number' => mb_substr($number, 0, 60),
+            'cheque_date'   => $date,
+            'bank_name'     => $bank !== '' ? mb_substr($bank, 0, 120) : null,
+        ];
     }
 
     private function normalizeChannel(string $channel): string

@@ -14,7 +14,9 @@ use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Modules\Auth\Services\UserManagementService;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessInvitation;
 use Modules\Business\Models\BusinessMember;
+use Modules\Business\Models\BusinessRole;
 use Modules\CRM\Models\Project as CrmProject;
 use Modules\FileManager\Models\FileManagerFile;
 use Modules\Package\Models\Package;
@@ -37,6 +39,7 @@ class AdminUserController extends Controller
             'roles' => Role::orderBy('name')->pluck('name'),
             'packages' => Package::where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
             'featureCatalog' => config('features.list', []),
+            'defaultGraceDays' => (int) config('subscription.grace_period_days', 2),
         ]);
     }
 
@@ -46,6 +49,8 @@ class AdminUserController extends Controller
             'roles',
             'businesses' => fn ($query) => $query->orderByDesc('created_at'),
             'businesses.branches',
+            'businesses.members' => fn ($query) => $query->orderBy('created_at'),
+            'businesses.members.user',
             'businesses.payments' => fn ($query) => $query->orderByDesc('created_at'),
             'businesses.payments.package',
             'accounts' => fn ($query) => $query->orderByDesc('created_at'),
@@ -100,8 +105,24 @@ class AdminUserController extends Controller
             $lastActiveByPlatform[UserActivityLog::PLATFORM_WEB] = Carbon::createFromTimestamp($lastSeenAt);
         }
 
+        // Who else uses each business: members (joined) + invitations not accepted yet.
+        $businessIds = $user->businesses->pluck('id');
+        $pendingInvites = BusinessInvitation::query()
+            ->whereIn('business_id', $businessIds)
+            ->where('status', BusinessInvitation::STATUS_PENDING)
+            ->latest()
+            ->get()
+            ->groupBy('business_id');
+        $roleNames = BusinessRole::query()
+            ->whereIn('business_id', $businessIds)
+            ->get(['business_id', 'slug', 'name'])
+            ->groupBy('business_id')
+            ->map(fn ($roles) => $roles->pluck('name', 'slug'));
+
         return view('auth::admin.users.show', [
             'user' => $user,
+            'pendingInvites' => $pendingInvites,
+            'roleNames' => $roleNames,
             'businessStats' => $businessStats,
             'recentActivity' => $this->recentActivity($user, $businessStats),
             'lastSeenAt' => $lastSeenAt ? Carbon::createFromTimestamp($lastSeenAt) : null,
@@ -288,8 +309,7 @@ class AdminUserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
             'password' => ['nullable', 'string', 'min:8', 'confirmed'],
-            'role' => ['required', 'string', Rule::exists('roles', 'name')],
-        ]);
+            'role' => ['required', 'string', Rule::exists('roles', 'name')],        ]);
 
         if ((int) $user->id === (int) $request->user()->id && $validated['role'] !== 'admin') {
             return redirect()->route('admin.users.index')->withErrors([
@@ -316,7 +336,18 @@ class AdminUserController extends Controller
             ]);
         }
 
-        if ($reason = $this->users->undeletableReason($user)) {
+        // Owners' businesses/accounts cascade away with them, so that path needs the admin
+        // to retype the user's email — a plain click is not enough for that much data.
+        $withOwnedData = $request->boolean('with_owned_data')
+            && strcasecmp(trim((string) $request->input('confirm_email')), (string) $user->email) === 0;
+
+        if ($request->boolean('with_owned_data') && ! $withOwnedData) {
+            return redirect()->route('admin.users.index')->withErrors([
+                'delete' => __('The email you typed did not match. Nothing was deleted.'),
+            ]);
+        }
+
+        if ($reason = $this->users->undeletableReason($user, $withOwnedData)) {
             return redirect()->route('admin.users.index')->withErrors(['delete' => $reason]);
         }
 

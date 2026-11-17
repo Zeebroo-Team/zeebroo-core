@@ -15,7 +15,7 @@ return new class extends Migration
             $table->foreignId('assigned_to')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->unique(['business_id', 'counterpart_email']);
+            $table->unique(['business_id', 'counterpart_email'], 'mail_conversation_business_email_unique');
         });
     }
 

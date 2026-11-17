@@ -7,6 +7,10 @@
        @class(['is-active' => request()->routeIs('pm.projects.*') || request()->routeIs('pm.tasks.*')])>
         <i class="fa fa-folder-open"></i> Projects
     </a>
+    <a href="{{ route('pm.my-projects') }}"
+       @class(['is-active' => request()->routeIs('pm.my-projects')])>
+        <i class="fa fa-user-check"></i> My Projects
+    </a>
     <a href="{{ route('pm.my-tasks') }}"
        @class(['is-active' => request()->routeIs('pm.my-tasks')])>
         <i class="fa fa-list-check"></i> My Tasks

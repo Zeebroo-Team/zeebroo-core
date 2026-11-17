@@ -279,6 +279,10 @@ final class PayrollComputationService
         if ((int) $employee->business_id !== (int) $cycle->business_id) {
             return false;
         }
+        // Profiles added from Settings → Users have no salary or bank details until HR completes them
+        if ($employee->profile_complete === false) {
+            return false;
+        }
         $join = $employee->date_of_joining;
         if ($join === null) {
             return true;
@@ -288,7 +292,7 @@ final class PayrollComputationService
     }
 
     /**
-     * Employees with a joining date after the payroll period ends are excluded.
+     * Employees with a joining date after the payroll period ends, and incomplete profiles, are excluded.
      *
      * @return HasMany<\Modules\HRManagement\Models\Employee, \Modules\Business\Models\Business>
      */
@@ -299,6 +303,7 @@ final class PayrollComputationService
         return $cycle->business
             ->employees()
             ->with(['employeeAllowances'])
+            ->where('profile_complete', true)
             ->where(static function ($q) use ($periodEndDate): void {
                 $q->whereNull('date_of_joining')
                     ->orWhereDate('date_of_joining', '<=', $periodEndDate);

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Business\Models\Business;
+use Modules\HRManagement\Models\Department;
 
 class Project extends Model
 {
@@ -16,6 +17,7 @@ class Project extends Model
 
     protected $fillable = [
         'business_id',
+        'department_id',
         'name',
         'description',
         'status',
@@ -24,6 +26,11 @@ class Project extends Model
     public function business(): BelongsTo
     {
         return $this->belongsTo(Business::class);
+    }
+
+    public function department(): BelongsTo
+    {
+        return $this->belongsTo(Department::class);
     }
 
     public function leads(): HasMany

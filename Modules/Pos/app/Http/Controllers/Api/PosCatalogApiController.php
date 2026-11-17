@@ -198,6 +198,7 @@ class PosCatalogApiController extends Controller
                 'item_wise_discount' => (bool) $product->item_wise_discount,
                 'is_dynamic_pricing'       => (bool) $product->is_dynamic_pricing,
                 'dynamic_price_qty_linked' => (bool) $product->dynamic_price_qty_linked,
+                'is_changeable_price'      => (bool) $product->is_changeable_price,
                 'unit_price'   => (float) $product->unit_price,
                 'cost_price'   => $product->cost_price !== null
                     ? (float) $product->cost_price

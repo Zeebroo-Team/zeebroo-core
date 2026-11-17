@@ -78,7 +78,7 @@
         <section class="pcat-inline" style="margin-top:8px;">
             <h2>Get started</h2>
             <p class="pcat-muted">Use the point of sale register to sell products. Stock is deducted using FIFO batch pricing from goods receipts.</p>
-            <a href="{{ route('pos.online') }}" class="linkbtn" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;"><i class="fa fa-store"></i> Open online POS</a>
+            <a href="{{ route('pos.register') }}" class="linkbtn" style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;"><i class="fa fa-cash-register"></i> Open POS</a>
         </section>
     @else
 
@@ -141,7 +141,7 @@
             @endif
         </div>
 
-        <a href="{{ route('pos.online') }}" class="linkbtn" style="padding:7px 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px;margin-left:auto;"><i class="fa fa-store"></i> Open POS</a>
+        <a href="{{ route('pos.register') }}" class="linkbtn" style="padding:7px 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px;margin-left:auto;"><i class="fa fa-cash-register"></i> Open POS</a>
     </form>
 
     {{-- ── table ── --}}

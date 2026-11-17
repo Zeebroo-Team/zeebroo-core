@@ -2,9 +2,17 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../api/api_endpoints.dart';
+import '../offline/offline_products.dart';
 import 'auth_storage.dart';
 
 enum AuthStatus { unknown, authenticated, unauthenticated }
+
+class RegisteredBusiness {
+  const RegisteredBusiness({required this.id, required this.name});
+
+  final int id;
+  final String name;
+}
 
 class AuthState extends ChangeNotifier {
   AuthStatus _status = AuthStatus.unknown;
@@ -57,12 +65,13 @@ class AuthState extends ChangeNotifier {
   // flagged mobile-only on the server is looked up here and auto-attached —
   // if none exists yet, registration proceeds without one (no payment step
   // either way; see Modules/Payment/app/Services/PaymentProvisioningService).
-  Future<void> registerAndFinish({
+  Future<RegisteredBusiness> registerAndFinish({
     required String name,
     required String email,
     required String password,
     required String businessName,
     required String businessCategory,
+    bool deferNavigation = false,
   }) async {
     int? packageId;
     try {
@@ -83,13 +92,25 @@ class AuthState extends ChangeNotifier {
         'password_confirmation': password,
         'business_name': businessName,
         'business_category': businessCategory,
-        if (packageId != null) 'package_id': packageId,
+        'package_id': ?packageId,
         'platform': 'mobile',
         'device_name': 'zeebroo-mobile',
       },
     );
-    await _applyAuthResponse(res.data);
+    final body = res.data;
+    final business = body is Map ? body['business'] : null;
+    if (business is! Map || business['id'] is! num) {
+      throw Exception('The created business was missing from the response.');
+    }
+
+    await _applyAuthResponse(body, notify: !deferNavigation);
+    return RegisteredBusiness(
+      id: (business['id'] as num).toInt(),
+      name: business['name'] as String? ?? businessName,
+    );
   }
+
+  void finishDeferredNavigation() => notifyListeners();
 
   Future<Map<String, dynamic>?> _findMobileOnlyPackage() async {
     final res = await ApiClient.instance.get(
@@ -143,13 +164,15 @@ class AuthState extends ChangeNotifier {
       /* Token may already be invalid server-side — clear local state regardless. */
     }
     await AuthStorage.clear();
+    // Don't leave this account's saved catalog for the next user.
+    await OfflineProducts.instance.onLogout().catchError((_) {});
     _user = null;
     _status = AuthStatus.unauthenticated;
     notifyListeners();
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
-  Future<void> _applyAuthResponse(dynamic body) async {
+  Future<void> _applyAuthResponse(dynamic body, {bool notify = true}) async {
     if (body is! Map) throw Exception('Unexpected response from server.');
     final token = body['access_token'] as String?;
     if (token == null) throw Exception('No access token in response.');
@@ -157,7 +180,7 @@ class AuthState extends ChangeNotifier {
 
     _user = _extractUser(body);
     _status = AuthStatus.authenticated;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 
   static Map<String, dynamic> _extractUser(dynamic body) {

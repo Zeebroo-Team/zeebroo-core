@@ -1,6 +1,10 @@
 <?php
 
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\EnsureWebSubscriptionSettled;
+use App\Http\Middleware\RedirectHrPortalOnlyUsers;
 use Illuminate\Support\Facades\Route;
+use Modules\Pos\Http\Controllers\Admin\PosSettingsAdminController;
 use Modules\Pos\Http\Controllers\BrandMgmtAgencyController;
 use Modules\Pos\Http\Controllers\BrandMgmtBrandController;
 use Modules\Pos\Http\Controllers\BrandMgmtCoordinatorController;
@@ -14,14 +18,35 @@ use Modules\Pos\Http\Controllers\CustomerController;
 use Modules\Pos\Http\Controllers\EndOfDayController;
 use Modules\Pos\Http\Controllers\NotificationController;
 use Modules\Pos\Http\Controllers\PosController;
+use Modules\Pos\Http\Controllers\PosPrintSettingsController;
 use Modules\Pos\Http\Controllers\PosProductController;
+use Modules\Pos\Http\Controllers\PosWebAppController;
+use Modules\Pos\Http\Controllers\ProductRentalController;
+use Modules\Pos\Http\Controllers\RegisterSessionController;
+use Modules\Pos\Http\Controllers\RegisterSettingsController;
 use Modules\Pos\Http\Controllers\SaleController;
 use Modules\Pos\Http\Controllers\StockAuditController;
 use Modules\Pos\Http\Controllers\StockTransferController;
 use Modules\Pos\Http\Controllers\SubscriptionController;
-use Modules\Pos\Http\Controllers\ProductRentalController;
-use Modules\Pos\Http\Controllers\RegisterSessionController;
-use Modules\Pos\Http\Controllers\RegisterSettingsController;
+
+// "Continue to Dashboard" on Get Started — hands the web session over to the
+// POS web app (one-time code → Bearer token, see PosWebAppHandoffService).
+// Registered before the catch-all below so "launch" is not served as a file.
+Route::get('/pos-app/launch', [PosWebAppController::class, 'launch'])
+    ->middleware(['auth', 'verified'])
+    ->name('pos.web-app.launch');
+
+// Desktop POS app in a web browser — serves electron_app/renderer with the
+// browser shim injected. Sign-in happens inside the app (Bearer token against
+// /api/v1/pos), so the web session middlewares don't apply here.
+Route::get('/pos-app/{path?}', [PosWebAppController::class, 'show'])
+    ->where('path', '.*')
+    ->withoutMiddleware([
+        EnsureAccountIsActive::class,
+        RedirectHrPortalOnlyUsers::class,
+        EnsureWebSubscriptionSettled::class,
+    ])
+    ->name('pos.web-app');
 
 Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos', [PosController::class, 'index'])->name('pos.index');
@@ -29,10 +54,16 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::get('/pos/register', [PosController::class, 'register'])->name('pos.register');
     Route::post('/pos/walking-customer', [PosController::class, 'toggleWalkingCustomer'])->name('pos.walking-customer.toggle');
     Route::post('/pos/settings', [PosController::class, 'saveSettings'])->name('pos.settings.save');
+    // Settings → Printer / Receipt Setting (same POS settings as POS Lite's Settings window)
+    Route::get('/settings/printer', [PosPrintSettingsController::class, 'printer'])->name('settings.printer');
+    Route::post('/settings/printer', [PosPrintSettingsController::class, 'updatePrinter'])->name('settings.printer.update');
+    Route::get('/settings/receipt', [PosPrintSettingsController::class, 'receipt'])->name('settings.receipt');
+    Route::post('/settings/receipt', [PosPrintSettingsController::class, 'updateReceipt'])->name('settings.receipt.update');
     Route::post('/pos/checkout', [PosController::class, 'checkout'])->name('pos.checkout');
     Route::post('/pos/products', [PosProductController::class, 'store'])->name('pos.products.store');
 
     Route::get('/pos/customers/search', [CustomerController::class, 'search'])->name('pos.customers.search');
+    Route::get('/pos/customers/duplicates', [CustomerController::class, 'duplicates'])->name('pos.customers.duplicates');
     Route::get('/pos/customers', [CustomerController::class, 'index'])->name('pos.customers.index');
     Route::post('/pos/customers', [CustomerController::class, 'store'])->name('pos.customers.store');
     Route::put('/pos/customers/{customer}', [CustomerController::class, 'update'])->name('pos.customers.update');
@@ -159,3 +190,13 @@ Route::middleware(['auth', 'verified'])->group(function (): void {
     Route::post('/pos/brand-mgmt/salary-sheets/{salarySheet}/status', [BrandMgmtSalarySheetController::class, 'transitionStatus'])->name('pos.brand-mgmt.salary-sheets.transition');
     Route::delete('/pos/brand-mgmt/salary-sheets/{salarySheet}', [BrandMgmtSalarySheetController::class, 'destroy'])->name('pos.brand-mgmt.salary-sheets.destroy');
 });
+
+// Admin → User → POS Settings tab. Setting names can be raw keys such as tax.rate.
+Route::middleware(['auth', 'role:admin'])
+    ->prefix('admin/businesses/{business}/pos-settings')
+    ->name('admin.businesses.pos-settings.')
+    ->group(function (): void {
+        Route::get('/', [PosSettingsAdminController::class, 'index'])->name('index');
+        Route::put('/{setting}', [PosSettingsAdminController::class, 'update'])->where('setting', '[A-Za-z0-9_.]+')->name('update');
+        Route::delete('/{setting}', [PosSettingsAdminController::class, 'destroy'])->where('setting', '[A-Za-z0-9_.]+')->name('destroy');
+    });

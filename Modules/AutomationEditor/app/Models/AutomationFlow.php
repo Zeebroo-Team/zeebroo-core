@@ -71,6 +71,8 @@ class AutomationFlow extends Model
                 'customer.created'        => 'Customer Created',
                 'crm.lead.created'        => 'Lead Created (in Relation)',
                 'crm.lead.stage_changed'  => 'Lead Stage Changed (in Relation)',
+                'crm.quotation.sent'      => 'Lead Quotation Sent',
+                'crm.followup.overdue'    => 'Lead Follow-up Overdue',
             ],
             'Cash & End of Day' => [
                 'eod.withdraw' => 'Cash Withdrawal',

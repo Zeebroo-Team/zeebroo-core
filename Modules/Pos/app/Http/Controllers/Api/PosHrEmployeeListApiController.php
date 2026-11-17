@@ -3,17 +3,21 @@
 namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Modules\HRManagement\Models\Department;
 use Modules\HRManagement\Models\Employee;
 use Modules\HRManagement\Models\JobTitle;
 use Modules\HRManagement\Services\DepartmentService;
 use Modules\HRManagement\Services\EmployeeService;
+use Modules\HRManagement\Services\EmployeeSystemAccessService;
+use Modules\HRManagement\Services\HrWorkSettingsService;
 use Modules\HRManagement\Services\JobTitleService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 
@@ -25,7 +29,18 @@ class PosHrEmployeeListApiController extends Controller
         private readonly EmployeeService $employeeService,
         private readonly DepartmentService $departmentService,
         private readonly JobTitleService $jobTitleService,
+        private readonly HrWorkSettingsService $hrWorkSettings,
+        private readonly EmployeeSystemAccessService $systemAccess,
     ) {}
+
+    /** @var array{days: int, minutes: int}|null */
+    private ?array $weeklyTotals = null;
+
+    /** @var array{member_user_ids: array<int, true>, invited_emails: array<string, true>}|null */
+    private ?array $accessLookup = null;
+
+    /** @var array<int, list<array<string, mixed>>>|null Departments each employee heads / co-heads */
+    private ?array $leadershipLookup = null;
 
     public function index(Request $request): JsonResponse
     {
@@ -46,6 +61,10 @@ class PosHrEmployeeListApiController extends Controller
             ->orderBy('full_name')
             ->get();
 
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+        $this->accessLookup = $this->systemAccess->accessLookup($business);
+        $this->leadershipLookup = $this->departmentService->leadershipLookup($business);
+
         return response()->json([
             'data'            => $employees->map(fn (Employee $e) => $this->format($e))->values(),
             'total_count'     => $employees->count(),
@@ -63,7 +82,9 @@ class PosHrEmployeeListApiController extends Controller
             return response()->json(['message' => 'Employee not found.'], 404);
         }
 
-        $employee->load(['department', 'jobTitle']);
+        $employee->load(['department', 'jobTitle', 'bank', 'user']);
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+        $this->leadershipLookup = $this->departmentService->leadershipLookup($business);
 
         return response()->json(['data' => $this->format($employee, detailed: true)]);
     }
@@ -114,6 +135,8 @@ class PosHrEmployeeListApiController extends Controller
             'epf_number'                      => ['nullable', 'string', 'max:80'],
             'etf_number'                      => ['nullable', 'string', 'max:80'],
             'tax_tin'                         => ['nullable', 'string', 'max:80'],
+            'grant_access'                    => ['nullable', 'boolean'],
+            'access_role'                     => ['nullable', 'required_if:grant_access,true,1', 'string', Rule::in($this->systemAccess->roleSlugs($business))],
         ]);
 
         $validator->after(function ($v) use ($business, $data): void {
@@ -154,7 +177,15 @@ class PosHrEmployeeListApiController extends Controller
             return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
         }
 
-        $validated = $validator->validated();
+        $validated   = $validator->validated();
+        $grantAccess = (bool) ($validated['grant_access'] ?? false);
+        $accessRole  = $validated['access_role'] ?? null;
+        unset($validated['grant_access'], $validated['access_role']);
+
+        $user = $request->user();
+        if ($grantAccess && ! ($user instanceof User && $this->systemAccess->canManageAccess($business, $user))) {
+            return response()->json(['message' => 'Only the business owner or an admin can give system access.'], 403);
+        }
 
         $employee = DB::transaction(function () use ($business, $validated): Employee {
             $payload = $validated;
@@ -176,9 +207,77 @@ class PosHrEmployeeListApiController extends Controller
             return $this->employeeService->create($business, $payload);
         });
 
-        $employee->load(['department', 'jobTitle']);
+        // The employee is saved either way; an invite problem is reported alongside, not as a failure.
+        $access = null;
+        if ($grantAccess) {
+            try {
+                $result = $this->systemAccess->grant($employee, $business, $accessRole, $user);
+                $access = [
+                    'ok'      => true,
+                    'message' => $result['email_sent']
+                        ? "Invitation sent to {$this->systemAccess->accessEmail($employee)}."
+                        : 'Access saved, but the invitation email could not be sent. Resend it from the employee page.',
+                ];
+            } catch (ValidationException $e) {
+                $access = ['ok' => false, 'message' => collect($e->errors())->flatten()->first()];
+            }
+        }
 
-        return response()->json(['data' => $this->format($employee, detailed: true)], 201);
+        $employee->load(['department', 'jobTitle']);
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+
+        return response()->json(['data' => $this->format($employee, detailed: true), 'access' => $access], 201);
+    }
+
+    /** Edit one profile field — same fields and rules as the web employee page. */
+    public function update(Request $request, Employee $employee): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessPerm($request, $business, 'hr_employees');
+
+        if ((int) $employee->business_id !== (int) $business->id) {
+            return response()->json(['message' => 'Employee not found.'], 404);
+        }
+
+        $field = (string) $request->input('field');
+        if (! in_array($field, $this->employeeService->patchableFields(), true)) {
+            return response()->json(['message' => 'That field cannot be edited.'], 422);
+        }
+
+        $validator = Validator::make($request->all(), $this->employeeService->patchFieldRules($business, $employee, $field));
+        if ($validator->fails()) {
+            return response()->json(['message' => $validator->errors()->first(), 'errors' => $validator->errors()], 422);
+        }
+
+        $validated = $validator->validated();
+
+        // An email change carries over to the employee's team login / pending invitation
+        try {
+            $synced = DB::transaction(function () use ($business, $employee, $field, $validated, $request): ?string {
+                $synced = $field === 'personal_email'
+                    ? $this->systemAccess->syncEmailChange($employee, $business, (string) $validated['personal_email'], $request->user())
+                    : null;
+                $this->employeeService->updateField($employee, $field, $validated);
+
+                return $synced;
+            });
+        } catch (ValidationException $e) {
+            return response()->json(['message' => collect($e->errors())->flatten()->first(), 'errors' => $e->errors()], 422);
+        }
+
+        $employee = $employee->fresh(['department', 'jobTitle', 'bank', 'user']);
+        $this->weeklyTotals = $this->hrWorkSettings->weeklyTotals($business);
+        $this->leadershipLookup = $this->departmentService->leadershipLookup($business);
+
+        return response()->json([
+            'data'    => $this->format($employee, detailed: true),
+            'synced'  => $synced,
+            'message' => match ($synced) {
+                'login'      => 'Email updated. Their login email was changed too.',
+                'invitation' => 'Email updated. The system access invitation was sent to the new address.',
+                default      => 'Updated.',
+            },
+        ]);
     }
 
     private function format(Employee $employee, bool $detailed = false): array
@@ -206,13 +305,57 @@ class PosHrEmployeeListApiController extends Controller
                 : null,
             'date_of_joining'  => $employee->date_of_joining?->format('Y-m-d'),
             'phone_number'     => $employee->phone_number,
+            'profile_complete' => (bool) ($employee->profile_complete ?? true),
         ];
+
+        if ($this->accessLookup !== null) {
+            $base['system_access'] = $this->systemAccess->quickStatus($employee, $this->accessLookup);
+        }
+
+        if ($this->leadershipLookup !== null) {
+            $base['leadership'] = $this->leadershipLookup[(int) $employee->id] ?? [];
+        }
+
+        if ($this->weeklyTotals !== null) {
+            $rates = $this->hrWorkSettings->salaryRates(
+                $this->weeklyTotals,
+                $employee->basic_salary !== null ? (float) $employee->basic_salary : null,
+            );
+            $base['working_days_per_week']    = $rates['working_days_per_week'];
+            $base['working_minutes_per_week'] = $rates['working_minutes_per_week'];
+            $base['daily_rate']      = $rates['daily_rate'];
+            $base['daily_rate_fmt']  = $rates['daily_rate'] !== null ? number_format($rates['daily_rate'], 2, '.', ',') : null;
+            $base['hourly_rate']     = $rates['hourly_rate'];
+            $base['hourly_rate_fmt'] = $rates['hourly_rate'] !== null ? number_format($rates['hourly_rate'], 2, '.', ',') : null;
+        }
 
         if ($detailed) {
             $base['personal_email']    = $employee->personal_email ?? null;
+            // Linked team account's sign-in email (null when the employee has no login)
+            $base['login_email']       = $employee->user_id !== null ? $employee->user?->email : null;
             $base['permanent_address'] = $employee->permanent_address ?? null;
             $base['epf_number']        = $employee->epf_number ?? null;
             $base['etf_number']        = $employee->etf_number ?? null;
+            $base['tax_tin']           = $employee->tax_tin ?? null;
+            $base['date_of_birth']     = $employee->date_of_birth?->format('Y-m-d');
+            $base['nic_passport_number'] = $employee->nic_passport_number ?? null;
+            $base['current_address']   = $employee->current_address ?? null;
+            $base['salary']            = $employee->salary !== null ? (float) $employee->salary : null;
+            $base['salary_fmt']        = $employee->salary !== null ? number_format((float) $employee->salary, 2, '.', ',') : null;
+            $base['emergency_contact'] = [
+                'name'         => $employee->emergency_contact_name,
+                'relationship' => $employee->emergency_contact_relationship,
+                'phone'        => $employee->emergency_contact_phone,
+            ];
+            $account = (string) ($employee->bank_account_number ?? '');
+            $base['bank'] = [
+                'id'             => $employee->bank_id,
+                'name'           => $employee->bank?->name,
+                'branch'         => $employee->bank_branch,
+                'holder'         => $employee->bank_account_holder_name,
+                // Only the last 4 digits leave the server
+                'account_masked' => $account !== '' ? '•••• '.substr($account, -4) : null,
+            ];
         }
 
         return $base;

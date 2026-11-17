@@ -1,6 +1,6 @@
 {
   "name": "zeebroo-pos-desktop",
-  "version": "5.8.1",
+  "version": "6.27.0",
   "description": "Zeebroo POS Desktop — Electron ribbon interface",
   "author": {
     "name": "Zeebroo",
@@ -22,7 +22,7 @@
     "playwright-core": "^1.61.0"
   },
   "devDependencies": {
-    "electron": "40.10.6",
+    "electron": "41.10.6",
     "electron-builder": "^26.15.3"
   },
   "build": {
@@ -37,6 +37,7 @@
     "files": [
       "main.js",
       "config.js",
+      "offline.js",
       "preload.js",
       "renderer/**/*",
       "node_modules/**/*",
@@ -103,7 +104,7 @@
     }
   },
   "overrides": {
-    "fast-uri": "^3.1.4",
+    "fast-uri": "^3.1.8",
     "brace-expansion": "^5.0.8",
     "tar": "^7.5.21"
   }

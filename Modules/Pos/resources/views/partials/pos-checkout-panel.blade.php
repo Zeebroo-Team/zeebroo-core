@@ -43,7 +43,7 @@
             </div>
             @endif
 
-            @include('pos::partials.pos-payment-field', ['defaultDepositAccountId' => $defaultDepositAccountId])
+            @include('pos::partials.pos-payment-field', ['defaultDepositAccountId' => $defaultDepositAccountId, 'customerPickerExternal' => $customerPickerExternal ?? false])
             <div class="pos-online__field">
                 <label for="pos-notes">Notes</label>
                 <textarea name="notes" id="pos-notes" maxlength="2000" placeholder="Optional">{{ old('notes') }}</textarea>

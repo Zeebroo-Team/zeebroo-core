@@ -207,8 +207,14 @@
         [t('F2'), t('Focus product search')],
         [t('F5'), t('Refresh products')],
         [t('F8'), t('Clear cart')],
+        [t('F9'), t('Return / Refund')],
         [t('F10'), t('Select customer')],
         [t('F12'), t('Checkout')],
+        ['Ctrl+G', t('Check gift card balance')],
+        ['Ctrl+K', t('Check coupon')],
+        ['Alt+1', t('Switch to Products')],
+        ['Alt+2', t('Switch to Rental')],
+        ['Alt+3', t('Switch to Dynamic')],
       ],
     },
   ];
@@ -234,20 +240,42 @@
           <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <div class="bm-body">
+          <div class="sck-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input type="text" id="sck-search-input" placeholder="${esc(t('Search shortcuts…'))}" autocomplete="off">
+          </div>
           ${SHORTCUT_GROUPS().map((group) => `
             <div class="sck-group">
               <div class="sm-section-label">${esc(group.title)}</div>
               <div class="sck-list">
                 ${group.rows.map(([key, label]) => `
-                  <div class="sck-row">
+                  <div class="sck-row" data-search="${esc((key + ' ' + label).toLowerCase())}">
                     <span class="sck-label">${esc(label)}</span>
                     <span class="sck-key">${esc(key)}</span>
                   </div>`).join('')}
               </div>
             </div>`).join('')}
+          <div class="sck-empty" hidden>${esc(t('No shortcuts match your search'))}</div>
         </div>
       </div>`;
     document.body.appendChild(el);
+
+    const searchInput = el.querySelector('#sck-search-input');
+    searchInput.addEventListener('input', () => {
+      const q = searchInput.value.trim().toLowerCase();
+      let total = 0;
+      el.querySelectorAll('.sck-group').forEach((group) => {
+        let shown = 0;
+        group.querySelectorAll('.sck-row').forEach((row) => {
+          const match = !q || row.dataset.search.includes(q);
+          row.hidden = !match;
+          if (match) shown++;
+        });
+        group.hidden = shown === 0;
+        total += shown;
+      });
+      el.querySelector('.sck-empty').hidden = total > 0;
+    });
 
     function close() {
       document.removeEventListener('keydown', onKey, true);
@@ -264,7 +292,7 @@
     el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
     document.addEventListener('keydown', onKey, true);
 
-    requestAnimationFrame(() => el.classList.add('open'));
+    requestAnimationFrame(() => { el.classList.add('open'); searchInput.focus(); });
   }
 
   window.openShortcutsWindow = openShortcutsWindow;
@@ -301,7 +329,9 @@
 
   function releaseDownloadUrl(release) {
     const p = window.electronAPI.platform;
-    return p === 'win32' ? release.windows_url : p === 'darwin' ? release.macos_url : release.linux_url;
+    // macos_url is the Apple Silicon build; Intel Macs need macos_intel_url (older releases only have macos_url)
+    const mac = window.electronAPI.arch === 'x64' ? release.macos_intel_url || release.macos_url : release.macos_url;
+    return p === 'win32' ? release.windows_url : p === 'darwin' ? mac : release.linux_url;
   }
 
   async function fetchLatestRelease() {
@@ -906,7 +936,7 @@
   }
 
   // ── Grace-period warning bar ────────────────────────────────────────────
-  // Before the lock kicks in (Payment::GRACE_PERIOD_DAYS after the payment
+  // Before the lock kicks in (the business's grace days — Payment::gracePeriodDaysFor() — after the payment
   // was created), the server reports the unpaid payment as `payment_due`.
   // Fixed to the bottom so it never pushes the full-height screens around;
   // dismissible for the rest of this session.
@@ -979,6 +1009,191 @@
 
   window.applySubscriptionLock = applySubscriptionLock;
 
+  // ── Email not verified bar + verify window ──────────────────────────────
+  // New sign-ups get a 6-digit code by email (PosAuthApiController verifyEmail /
+  // resendEmailVerification). Until it's entered, /auth/me reports
+  // email_verification_required and this bar sits at the bottom like the
+  // payment-due bar. Dismissible for the rest of this session.
+  const EV_DISMISS_KEY = 'emailVerifyDismissed';
+
+  async function checkEmailVerify() {
+    try {
+      const cfg = await window.electronAPI.getConfig();
+      if (cfg.is_cashier) return;
+      const res = await API.me();
+      if (res.status !== 200) return;
+      const user = res.body?.data;
+      renderEmailVerifyStatus(user);
+      let dismissed = false;
+      try { dismissed = !!sessionStorage.getItem(EV_DISMISS_KEY); } catch (e) {}
+      if (user?.email_verification_required && !dismissed) applyEmailVerifyBar(user);
+      else $('ev-bar')?.remove();
+    } catch (e) {
+      console.error('[email-verify] check failed', e);
+    }
+  }
+
+  // "Email" row in the user menu: a Verified badge, or a Verify Now button while the
+  // sign-up code is pending. Hidden for older accounts that were never asked to verify.
+  function renderEmailVerifyStatus(user) {
+    const row = $('um-ev-row');
+    if (!row) return;
+    const verified = !!user?.email_verified_at;
+    const pending = !!user?.email_verification_required;
+    if (!verified && !pending) { row.style.display = 'none'; return; }
+    row.innerHTML = `
+      <i class="fa-solid fa-envelope"></i>
+      <div><small>${t('Email')}</small><span>${verified ? t('Verified') : t('Not verified')}</span></div>
+      ${verified
+        ? `<span class="um-ev-badge"><i class="fa-solid fa-circle-check"></i> ${t('Verified')}</span>`
+        : `<button class="um-ev-btn" id="um-ev-open" type="button"><i class="fa-solid fa-envelope-circle-check"></i> ${t('Verify Now')}</button>`}`;
+    row.style.display = '';
+    $('um-ev-open')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      $('user-menu')?.classList.remove('open');
+      openEmailVerifyWindow(user);
+    });
+  }
+
+  function applyEmailVerifyBar(user) {
+    const el = $('ev-bar') || document.createElement('div');
+    el.className = 'sdb-bar ev-bar';
+    el.id = 'ev-bar';
+    el.setAttribute('role', 'status');
+    el.innerHTML = `
+      <span class="sdb-icon"><i class="fa-solid fa-envelope"></i></span>
+      <div class="sdb-text">${t('Please verify your email address. We sent a 6-digit code to {email}.', { email: `<b>${esc(user.email)}</b>` })}</div>
+      <button class="sdb-pay" id="ev-open" type="button"><i class="fa-solid fa-envelope-circle-check"></i> ${t('Verify Now')}</button>
+      <button class="sdb-close" id="ev-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>`;
+    if (!el.isConnected) document.body.appendChild(el);
+
+    $('ev-open').addEventListener('click', () => openEmailVerifyWindow(user));
+    $('ev-close').addEventListener('click', () => {
+      el.remove();
+      try { sessionStorage.setItem(EV_DISMISS_KEY, '1'); } catch (e) {}
+    });
+  }
+
+  function openEmailVerifyWindow(user) {
+    if ($('ev-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'ev-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'ev-title');
+    el.innerHTML = `
+      <div class="bm-card" style="width:420px">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-envelope-circle-check"></i></span>
+          <div class="bm-head-text">
+            <h2 id="ev-title">${t('Verify Your Email')}</h2>
+            <p>${t('Enter the 6-digit code we emailed to {email}. Codes expire after {n} minutes.', { email: esc(user.email), n: user.email_verification_minutes || 15 })}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="ev-alert" class="bm-alert" style="display:none"></div>
+        <div id="ev-success" class="pf-success" style="display:none"></div>
+        <div class="sm-body" style="padding:0 22px 4px;display:block">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="ev-otp">${t('6-digit code')}</label>
+            <input type="text" id="ev-otp" class="sm-input ev-otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="••••••">
+          </div>
+          <p class="ev-resend-line">${t("Didn't get it?")} <a id="ev-resend">${t('Send a new code')}</a></p>
+        </div>
+        <div class="sm-foot">
+          <button class="bm-btn bm-btn-outline" id="ev-cancel" type="button">${t('Later')}</button>
+          <button class="bm-btn bm-btn-primary" id="ev-submit" type="button"><i class="fa-solid fa-check"></i> ${t('Verify Email')}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    const otpInput = $('ev-otp');
+    const alertBox = $('ev-alert');
+    const successBox = $('ev-success');
+    const submitBtn = $('ev-submit');
+
+    function showMessage(box, message) {
+      alertBox.style.display = 'none';
+      successBox.style.display = 'none';
+      if (!message) return;
+      box.textContent = message;
+      box.style.display = box === successBox ? 'flex' : '';
+    }
+
+    function apiMessage(res, fallback) {
+      if (res?.status === 0) return t("Can't reach the server. Check your internet connection and try again.");
+      const errors = res?.body?.errors;
+      const first = errors ? [].concat(errors[Object.keys(errors)[0]])[0] : null;
+      return t(first || res?.body?.message || fallback);
+    }
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    }
+
+    async function submit() {
+      const otp = otpInput.value.trim();
+      if (!/^\d{6}$/.test(otp)) {
+        showMessage(alertBox, t('Enter the 6-digit code from the email.'));
+        otpInput.focus();
+        return;
+      }
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Verifying…')}`;
+      showMessage(null);
+      const res = await API.verifyEmail(otp);
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Verify Email')}`;
+      if (res.status !== 200) {
+        showMessage(alertBox, res.status === 429 ? t('Too many attempts. Please wait a minute and try again.') : apiMessage(res, 'Something went wrong. Please try again.'));
+        return;
+      }
+      close();
+      renderEmailVerifyStatus(res.body?.user || { email_verified_at: new Date().toISOString() });
+      // Turn the bar into a short confirmation, then let it go.
+      const bar = $('ev-bar');
+      if (bar) {
+        bar.classList.add('ev-bar--done');
+        bar.innerHTML = `<span class="sdb-icon"><i class="fa-solid fa-circle-check"></i></span><div class="sdb-text">${t('Your email has been verified.')}</div>`;
+        setTimeout(() => bar.remove(), 4000);
+      }
+    }
+
+    async function resend() {
+      showMessage(null);
+      const res = await API.resendEmailVerification();
+      if (res.status !== 200) {
+        showMessage(alertBox, apiMessage(res, 'Could not send the code. Please try again.'));
+        return;
+      }
+      showMessage(successBox, t('A new code has been sent to your email.'));
+      otpInput.focus();
+    }
+
+    otpInput.addEventListener('input', () => { otpInput.value = otpInput.value.replace(/\D/g, '').slice(0, 6); });
+    otpInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+    submitBtn.addEventListener('click', submit);
+    $('ev-resend').addEventListener('click', resend);
+    $('ev-cancel').addEventListener('click', close);
+    el.querySelector('.bm-close').addEventListener('click', close);
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+
+    requestAnimationFrame(() => { el.classList.add('open'); otpInput.focus(); });
+  }
+
+  if ($('user-menu')) window.addEventListener('DOMContentLoaded', checkEmailVerify);
+
   // Reactive: any gated call returning 402 locks immediately (see api.js).
   window.addEventListener('api-payment-overdue', (e) => {
     const body = e.detail || {};
@@ -1041,6 +1256,7 @@
             <button class="sm-nav-item" type="button" data-sm-tab="branches"><i class="fa-solid fa-code-branch"></i><span>${t('Branches')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="receipt"><i class="fa-solid fa-receipt"></i><span>${t('Receipt Setting')}</span></button>
             <button class="sm-nav-item" type="button" data-sm-tab="invoice-setup"><i class="fa-solid fa-file-invoice"></i><span>${t('Invoice Setup')}</span></button>
+            <button class="sm-nav-item" type="button" data-sm-tab="printer"><i class="fa-solid fa-print"></i><span>${t('Printer')}</span></button>
           </nav>
           <div class="sm-content">
             <div class="sm-panel" id="sm-tab-business">
@@ -1191,6 +1407,56 @@
                 </div>
               </div>
             </div>
+            <div class="sm-panel" id="sm-tab-printer" style="display:none">
+              <div class="sm-section">
+                <div class="sm-section-label"><i class="fa-solid fa-print"></i> ${t('Thermal Printer')}</div>
+                <div class="sm-field-row">
+                  <label class="sm-field-label" for="sm-printer-name">${t('Printer')}</label>
+                  <div style="display:flex;gap:8px">
+                    <select id="sm-printer-name" class="sm-select" style="flex:1"></select>
+                    <button class="bm-btn bm-btn-outline" id="sm-printer-refresh" type="button" title="${t('Refresh printers')}"><i class="fa-solid fa-rotate"></i></button>
+                  </div>
+                  <span class="sm-hint">${t('Select your XP-80T or other thermal printer. It must be installed as a system printer first.')}</span>
+                </div>
+                <div class="sm-field-row">
+                  <label class="sm-field-label" for="sm-printer-mode">${t('Print Mode')}</label>
+                  <select id="sm-printer-mode" class="sm-select">
+                    <option value="escpos">${t('ESC/POS Direct — recommended for XP-80T & all thermal printers')}</option>
+                    <option value="html">${t('HTML Window — for document / laser printers')}</option>
+                  </select>
+                  <span class="sm-hint" id="sm-printer-mode-hint">${t('ESC/POS sends raw commands directly — no Windows driver rendering conflicts')}</span>
+                </div>
+                <div class="sm-field-row">
+                  <label class="sm-field-label" for="sm-printer-paper">${t('Paper Width')}</label>
+                  <select id="sm-printer-paper" class="sm-select">
+                    <option value="80">${t('80 mm — standard thermal roll (XP-80T)')}</option>
+                    <option value="58">${t('58 mm — small thermal roll')}</option>
+                  </select>
+                  <span class="sm-hint">${t('Must match the paper roll loaded in your printer')}</span>
+                </div>
+                <div class="sm-toggle-row">
+                  <div class="sm-toggle-info">
+                    <span class="sm-toggle-name">${t('Silent print')}</span>
+                    <span class="sm-toggle-desc">${t('Applies in HTML Window mode — ESC/POS always prints silently')}</span>
+                  </div>
+                  <label class="sm-switch"><input type="checkbox" id="sm-printer-silent" checked><span class="sm-switch-track"></span></label>
+                </div>
+                <div class="sm-toggle-row">
+                  <div class="sm-toggle-info">
+                    <span class="sm-toggle-name">${t('Show receipt preview after sale')}</span>
+                    <span class="sm-toggle-desc">${t('Turn off to print the bill automatically when a sale is completed (no preview popup). With no printer selected it goes to the Windows default printer.')}</span>
+                  </div>
+                  <label class="sm-switch"><input type="checkbox" id="sm-printer-preview" checked><span class="sm-switch-track"></span></label>
+                </div>
+              </div>
+              <div class="sm-section">
+                <div class="sm-section-label"><i class="fa-solid fa-circle-check"></i> ${t('Test Print')}</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <button class="bm-btn bm-btn-outline" id="sm-printer-test" type="button"><i class="fa-solid fa-print"></i> ${t('Test Print')}</button>
+                </div>
+                <span class="sm-hint" id="sm-printer-status" style="display:block;margin-top:8px">${t('Prints a sample receipt with dummy products at the selected paper width.')}</span>
+              </div>
+            </div>
           </div>
         </div>
         <div class="sm-foot">
@@ -1232,7 +1498,130 @@
       el.querySelectorAll('.sm-panel').forEach((p) => { p.style.display = 'none'; });
       $(`sm-tab-${btn.dataset.smTab}`).style.display = '';
       if (btn.dataset.smTab === 'branches' && !brm.loaded) loadBranches();
+      if (btn.dataset.smTab === 'printer' && !prn.loaded) loadPrinterSettings();
     }));
+
+    // ── Printer tab — local (per device) config via main.js, not the server ──
+    const prn = { loaded: false };
+    const RP = window.ReceiptPrinter;
+
+    async function loadPrinterSettings() {
+      const statusEl = $('sm-printer-status');
+      statusEl.textContent = t('Loading printers…');
+      const [printers, cfg] = await Promise.all([
+        window.electronAPI.getPrinters(),
+        window.electronAPI.getPrinterConfig(),
+      ]).catch(() => [[], { name: '', silent: true, paperWidth: 80, mode: 'escpos', showPreview: true }]);
+
+      const sel = $('sm-printer-name');
+      sel.innerHTML = `<option value="">${esc(t('— No printer selected (preview before printing) —'))}</option>` +
+        printers.map((p) => `<option value="${esc(p.name)}"${p.name === cfg.name ? ' selected' : ''}>${esc(p.displayName)}${p.isDefault ? ` (${esc(t('default'))})` : ''}</option>`).join('');
+      if (!printers.length) sel.innerHTML += `<option disabled>${esc(t('No printers found — install your printer driver first'))}</option>`;
+      $('sm-printer-mode').value = cfg.mode === 'html' ? 'html' : 'escpos';
+      updateModeHint();
+      $('sm-printer-paper').value = String(cfg.paperWidth === 58 ? 58 : 80);
+      $('sm-printer-silent').checked = cfg.silent !== false;
+      $('sm-printer-preview').checked = cfg.showPreview !== false;
+      prn.loaded = true;
+      statusEl.textContent = printers.length
+        ? t('{count} printer(s) found', { count: printers.length })
+        : t('No printers found — install your XP-80T driver and reconnect USB');
+    }
+
+    function printerFormCfg() {
+      return {
+        name: $('sm-printer-name').value || '',
+        mode: $('sm-printer-mode').value || 'escpos',
+        silent: $('sm-printer-silent').checked,
+        paperWidth: Number($('sm-printer-paper').value) === 58 ? 58 : 80,
+        showPreview: $('sm-printer-preview').checked,
+      };
+    }
+
+    // Only once the tab was opened — otherwise the empty fields would wipe the saved printer
+    async function savePrinterSettings() {
+      if (!prn.loaded) return;
+      await window.electronAPI.setPrinterConfig(printerFormCfg());
+    }
+
+    function updateModeHint() {
+      $('sm-printer-mode-hint').textContent = $('sm-printer-mode').value === 'html'
+        ? t('HTML Window prints through the Windows printer driver — uses the paper size set in the driver')
+        : t('ESC/POS sends raw commands directly — no Windows driver rendering conflicts');
+    }
+
+    $('sm-printer-mode').addEventListener('change', updateModeHint);
+    $('sm-printer-refresh').addEventListener('click', loadPrinterSettings);
+    $('sm-printer-name').addEventListener('change', (e) => {
+      if (RP.isVirtual(e.target.value)) {
+        $('sm-printer-status').textContent = t('"{name}" is a virtual printer — it saves a file and always asks for a file name. Receipts will use HTML mode for it. Select your XP-80T for real, automatic printing.', { name: e.target.value });
+      }
+    });
+
+    // Test Print — a sample receipt with dummy products at the chosen width,
+    // using the form's current (even unsaved) printer choices.
+    $('sm-printer-test').addEventListener('click', async () => {
+      const cfg = printerFormCfg();
+      const cur = ($('sm-currency').value || 'LKR').trim().toUpperCase() || 'LKR';
+      const before = $('sm-currpos-before').checked;
+      const fmt = (n) => { const a = Number(n).toFixed(2); return before ? `${cur} ${a}` : `${a} ${cur}`; };
+      const biz = $('sm-biz-name').value.trim() || 'Zeebroo POS Lite';
+      const items = [
+        { name: 'Wireless Mouse', qty: 2, price: 1250, total: 2500, discount: 0 },
+        { name: 'USB-C Charging Cable 1m (Braided)', qty: 1, price: 850, total: 850, discount: 0 },
+        { name: 'A4 Paper Ream 500 Sheets', qty: 3, price: 1650, total: 4950, discount: 0 },
+        { name: 'Notebook A5 Ruled', qty: 4, price: 500, total: 1500, discount: 500 },
+        { name: 'Ballpoint Pen Blue', qty: 10, price: 45, total: 450, discount: 0 },
+      ];
+      const subtotal = 10250, discount = 250, total = 10000, tendered = 10500, change = 500;
+      const now = new Date().toLocaleString();
+      const note = `${t('Test print')} · ${cfg.name || t('No printer (preview)')} · ${cfg.paperWidth}mm`;
+
+      const rows = items.map((it) => `<tr>
+          <td><div class="rd-item-name">${esc(it.name)}</div></td>
+          <td class="rd-center-col">${it.qty}</td>
+          <td class="rd-right rd-col-price">${esc(fmt(it.price))}</td>
+          <td class="rd-center-col rd-col-disc${it.discount ? ' rd-discount' : ''}">${it.discount ? '25%' : '—'}</td>
+          <td class="rd-right"><strong>${esc(fmt(it.total))}</strong></td>
+        </tr>`).join('');
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TEST-0001</title><style>${RP.docStyles(cfg.paperWidth)}</style></head><body>
+        <div class="rd-center"><div class="rd-business">${esc(biz)}</div><div class="rd-meta" style="font-style:italic">${esc(t('TEST PRINT'))}</div></div>
+        <hr>
+        <div class="rd-row"><span>${t('Receipt #')}</span><strong>TEST-0001</strong></div>
+        <div class="rd-row"><span>${t('Date & Time')}</span><strong>${esc(now)}</strong></div>
+        <div class="rd-row"><span>${t('Payment')}</span><strong>${t('Cash')}</strong></div>
+        <div class="rd-row"><span>${t('Customer')}</span><strong>${t('Walk-in Customer')}</strong></div>
+        <hr>
+        <table>
+          <thead><tr><th>${t('Item')}</th><th class="rd-center-col">${t('Qty')}</th><th class="rd-right rd-col-price">${t('Price')}</th><th class="rd-center-col rd-col-disc">${t('Disc')}</th><th class="rd-right">${t('Amount')}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <hr>
+        <div class="rd-row"><span>${tReceipt('Subtotal')}</span><span>${esc(fmt(subtotal))}</span></div>
+        <div class="rd-row"><span>${tReceipt('Discount')}</span><span>&minus;${esc(fmt(discount))}</span></div>
+        <div class="rd-row rd-total"><span>${tReceipt('Total')}</span><span>${esc(fmt(total))}</span></div>
+        <div class="rd-row"><span>${t('Cash Received')}</span><span>${esc(fmt(tendered))}</span></div>
+        <div class="rd-row"><span>${t('Change')}</span><span>${esc(fmt(change))}</span></div>
+        <hr><div class="rd-note">${esc(note)}</div>
+        <hr><div class="rd-footer">${t('Thank you for your purchase!')}</div>
+      </body></html>`;
+
+      const escpos = {
+        businessName: biz, header: 'TEST PRINT', footer: 'Thank you for your purchase!',
+        currency: cur, currencyPosition: before ? 'before' : 'after',
+        saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
+        items, subtotal, discount, total, tendered, change, paymentMethod: 'Cash', notes: note,
+      };
+
+      const btn = $('sm-printer-test');
+      btn.disabled = true;
+      const res = await RP.print({ html, escpos, cfg });
+      btn.disabled = false;
+      if (res.cancelled) return;
+      $('sm-printer-status').textContent = res.ok
+        ? (cfg.name ? t('Test page sent to "{name}"', { name: cfg.name }) : t('Preview opened — use its Print button'))
+        : res.message;
+    });
 
     function brmFmtDate(str) {
       if (!str) return '—';
@@ -1430,6 +1819,9 @@
       btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
       $('sm-alert').style.display = 'none';
 
+      // Printer config is local to this device — saved independently of the server settings
+      await savePrinterSettings().catch(() => showAlert(t('Could not save printer settings.')));
+
       const payload = {
         business_name: $('sm-biz-name').value.trim(),
         currency: $('sm-currency').value.trim(),
@@ -1617,14 +2009,55 @@
     { code: 'ta', label: 'தமிழ்' },
   ];
 
-  // Fixed receipt labels per print language, so switching the Print Language
-  // buttons visibly re-renders the preview (business text the user typed —
-  // header/footer/address — is left as-is; only the receipt's own chrome changes).
-  const RECEIPT_PREVIEW_STRINGS = {
-    en: { receiptNo: 'Receipt #', date: 'Date', customer: 'Customer', cashier: 'Cashier', walkIn: 'Walk-in Customer', item: 'ITEM', qty: 'QTY', price: 'PRICE', total: 'TOTAL', paid: 'Paid (Cash)' },
-    si: { receiptNo: 'රිසිට් #', date: 'දිනය', customer: 'පාරිභෝගිකයා', cashier: 'මුදල් අයකැමි', walkIn: 'සාමාන්‍ය පාරිභෝගිකයා', item: 'අයිතමය', qty: 'ගණන', price: 'මිල', total: 'එකතුව', paid: 'ගෙවූ මුදල' },
-    ta: { receiptNo: 'ரசீது #', date: 'தேதி', customer: 'வாடிக்கையாளர்', cashier: 'காசாளர்', walkIn: 'பொது வாடிக்கையாளர்', item: 'பொருள்', qty: 'எண்', price: 'விலை', total: 'மொத்தம்', paid: 'செலுத்தியது' },
+  // Printed-receipt labels per print language (POS setting `receipt_language`),
+  // independent of the app UI language. English text is the key, so English needs
+  // no table. Shared by the layout editor preview and the real sale bill (js/pos.js)
+  // so both always match. Business text the user typed — header/footer/address —
+  // is left as-is; only the receipt's own chrome changes.
+  const RECEIPT_STRINGS = {
+    si: {
+      'Receipt #': 'රිසිට් #', 'Date & Time': 'දිනය සහ වේලාව', 'Payment': 'ගෙවීම',
+      'Customer': 'පාරිභෝගිකයා', 'Cashier': 'මුදල් අයකැමි', 'Walk-in Customer': 'සාමාන්‍ය පාරිභෝගිකයා',
+      'Item': 'අයිතමය', 'Qty': 'ගණන', 'Price': 'මිල', 'Disc': 'වට්.', 'Amount': 'එකතුව',
+      'Subtotal': 'එකතුව', 'Discount': 'ඔබට ලැබුණු වාසිය', 'Coupon': 'කූපනය', 'Total': 'මුළු එකතුව',
+      'Gift card': 'තෑගි කාඩ්පත', 'Gift card balance': 'තෑගි කාඩ්පත් ශේෂය',
+      'Cash Received': 'ලැබුණු මුදල', 'Paid': 'ගෙවූ මුදල', 'Change': 'ඉතිරි මුදල', 'Notes': 'සටහන්',
+      'Thank you for your purchase!': 'ඔබේ මිලදී ගැනීමට ස්තුතියි!',
+      'Lifetime warranty': 'ජීවිත කාල වගකීම', 'Warranty until {date}': '{date} දක්වා වගකීම', 'Warranty': 'වගකීම',
+      'Return {date}': 'ආපසු {date}', 'Daily {rate}': 'දෛනික {rate}', 'Late {mult}× rate/day': 'ප්‍රමාද {mult}× ගාස්තුව/දිනට',
+      'Cash': 'මුදල්', 'Card': 'කාඩ්පත', 'Credit': 'ණය', 'Bank Transfer': 'බැංකු මාරුව',
+    },
+    ta: {
+      'Receipt #': 'ரசீது #', 'Date & Time': 'தேதி & நேரம்', 'Payment': 'கட்டணம்',
+      'Customer': 'வாடிக்கையாளர்', 'Cashier': 'காசாளர்', 'Walk-in Customer': 'பொது வாடிக்கையாளர்',
+      'Item': 'பொருள்', 'Qty': 'எண்', 'Price': 'விலை', 'Disc': 'தள்.', 'Amount': 'தொகை',
+      'Subtotal': 'கூட்டுத்தொகை', 'Discount': 'தள்ளுபடி', 'Coupon': 'கூப்பன்', 'Total': 'மொத்தம்',
+      'Gift card': 'பரிசு அட்டை', 'Gift card balance': 'பரிசு அட்டை மீதி',
+      'Cash Received': 'பெற்ற தொகை', 'Paid': 'செலுத்தியது', 'Change': 'மீதி', 'Notes': 'குறிப்புகள்',
+      'Thank you for your purchase!': 'உங்கள் கொள்முதலுக்கு நன்றி!',
+      'Lifetime warranty': 'வாழ்நாள் உத்தரவாதம்', 'Warranty until {date}': '{date} வரை உத்தரவாதம்', 'Warranty': 'உத்தரவாதம்',
+      'Return {date}': 'திருப்பித் தருதல் {date}', 'Daily {rate}': 'நாளொன்றுக்கு {rate}', 'Late {mult}× rate/day': 'தாமதம் {mult}× கட்டணம்/நாள்',
+      'Cash': 'ரொக்கம்', 'Card': 'அட்டை', 'Credit': 'கடன்', 'Bank Transfer': 'வங்கி பரிமாற்றம்',
+    },
   };
+
+  function receiptLangFrom(settings) {
+    const l = settings && settings.receipt_language;
+    return RECEIPT_PRINT_LANGUAGES.some((p) => p.code === l) ? l : 'en';
+  }
+
+  // receiptLabels('si')('Subtotal') -> 'එකතුව'; unknown keys print as given
+  function receiptLabels(lang) {
+    const dict = RECEIPT_STRINGS[lang] || {};
+    return (key, params) => {
+      let s = Object.prototype.hasOwnProperty.call(dict, key) ? dict[key] : key;
+      if (params) s = s.replace(/\{(\w+)\}/g, (m, k) => (k in params ? params[k] : m));
+      return s;
+    };
+  }
+
+  // Sample bill figures shared by the layout editor's preview and its Test print
+  const RECEIPT_SAMPLE = { subtotal: 155, discountPct: 3, discount: 5, total: 150, paid: 160, change: 10 };
 
   function openReceiptLayoutWindow() {
     if ($('rle-backdrop')) return;
@@ -1667,6 +2100,15 @@
                   <button class="bm-btn bm-btn-outline sm-logo-remove" id="rle-logo-remove" type="button" title="${t('Remove logo')}" style="display:none"><i class="fa-solid fa-trash"></i></button>
                 </div>
               </div>
+              <div class="rle-logo-gap">
+                <label for="rle-logo-size">${t('Logo size')}</label>
+                <span class="rle-mg-field"><input type="number" id="rle-logo-size" min="50" max="300" step="10" value="100"><em>%</em></span>
+              </div>
+              <input type="range" id="rle-logo-size-range" class="rle-logo-range" min="50" max="300" step="5" value="100" aria-label="${t('Logo size')}">
+              <label class="rle-logo-gap" for="rle-logo-gap">
+                <span>${t('Gap below logo')}</span>
+                <span class="rle-mg-field"><input type="number" id="rle-logo-gap" min="0" max="20" step="0.5" value="2"><em>mm</em></span>
+              </label>
             </div>
 
             <div class="sm-section-label"><i class="fa-solid fa-building"></i> ${t('Business Info')}</div>
@@ -1705,6 +2147,18 @@
               <label class="sm-switch"><input type="checkbox" id="rle-show-payment"><span class="sm-switch-track"></span></label>
             </div>
 
+            <div class="sm-section-label"><i class="fa-solid fa-expand"></i> ${t('Print margins (mm)')}</div>
+            <div class="rle-mg-hint">${t('Increase a side if your printer cuts it off or the bill prints off-centre.')}</div>
+            <div class="rle-margins">
+              ${[['top', 'Top'], ['left', 'Left'], ['right', 'Right'], ['bottom', 'Bottom']].map(([side, label]) => `
+              <label class="rle-margin rle-margin--${side}">
+                <span>${t(label)}</span>
+                <span class="rle-mg-field"><input type="number" id="rle-mg-${side}" min="0" max="20" step="0.5" value="0"><em>mm</em></span>
+              </label>`).join('')}
+              <div class="rle-mg-paper" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+            </div>
+            <button class="bm-btn bm-btn-outline rle-mg-reset" id="rle-mg-reset" type="button"><i class="fa-solid fa-rotate-left"></i> ${t('Reset margins')}</button>
+
             <div class="sm-section-label"><i class="fa-solid fa-language"></i> ${t('Print Language')}</div>
             <div class="rle-lang-row" id="rle-lang-row">
               ${RECEIPT_PRINT_LANGUAGES.map((l) => `<button class="rle-lang-btn" type="button" data-lang="${l.code}">${esc(l.label)}</button>`).join('')}
@@ -1717,6 +2171,7 @@
           </div>
         </div>
         <div class="rle-foot">
+          <button class="bm-btn bm-btn-outline rle-test" id="rle-test" type="button" title="${t('Print a sample bill with the current settings (not saved)')}"><i class="fa-solid fa-print"></i> ${t('Test print')}</button>
           <button class="bm-btn bm-btn-outline" id="rle-cancel" type="button">${t('Cancel')}</button>
           <button class="bm-btn bm-btn-primary" id="rle-save" type="button"><i class="fa-solid fa-floppy-disk"></i> ${t('Save layout')}</button>
         </div>
@@ -1808,7 +2263,7 @@
       const header = $('rle-header').value.trim();
       const footer = $('rle-footer').value.trim();
       const showPayment = $('rle-show-payment').checked;
-      const L = RECEIPT_PREVIEW_STRINGS[state.lang] || RECEIPT_PREVIEW_STRINGS.en;
+      const L = receiptLabels(state.lang);
       const dateLocale = { en: 'en-US', si: 'si-LK', ta: 'ta-LK' }[state.lang] || undefined;
 
       const rows = [
@@ -1816,7 +2271,7 @@
         ['Product Two', 1, 75, 75],
         ['Product Three', 3, 10, 30],
       ];
-      const subtotal = rows.reduce((sum, r) => sum + r[3], 0);
+      const S = RECEIPT_SAMPLE;
 
       const itemsHtml = rows.map(([name, qty, price, total]) => `
         <div class="rle-item-row">
@@ -1827,29 +2282,144 @@
         </div>`).join('');
 
       $('rle-paper').innerHTML = `
-        ${state.logoUrl ? `<div class="rle-paper-logo"><img src="${esc(state.logoUrl)}" alt=""></div>` : ''}
+        ${state.logoUrl ? `<div class="rle-paper-logo" style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt="" style="${window.ReceiptPrinter.logoImgStyle(currentLogoSize())}"></div>` : ''}
         ${showBiz ? `<div class="rle-paper-biz">${esc(state.businessName || t('Your Business'))}</div>` : ''}
         ${showAddr && address ? `<div class="rle-paper-addr">${esc(address)}</div>` : ''}
         ${header ? `<div class="rle-paper-header">${esc(header)}</div>` : ''}
         <div class="rle-paper-rule"></div>
-        <div class="rle-kv"><span>${esc(L.receiptNo)}</span><span>INV-0001</span></div>
-        <div class="rle-kv"><span>${esc(L.date)}</span><span>${new Date().toLocaleString(dateLocale, { dateStyle: 'short', timeStyle: 'short' })}</span></div>
-        <div class="rle-kv"><span>${esc(L.customer)}</span><span>${esc(L.walkIn)}</span></div>
-        <div class="rle-kv"><span>${esc(L.cashier)}</span><span>${esc(L.cashier)}</span></div>
+        <div class="rle-kv"><span>${esc(L('Receipt #'))}</span><span>INV-0001</span></div>
+        <div class="rle-kv"><span>${esc(L('Date & Time'))}</span><span>${new Date().toLocaleString(dateLocale, { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+        <div class="rle-kv"><span>${esc(L('Customer'))}</span><span>${esc(L('Walk-in Customer'))}</span></div>
+        <div class="rle-kv"><span>${esc(L('Cashier'))}</span><span>${esc(L('Cashier'))}</span></div>
         <div class="rle-paper-rule"></div>
         <div class="rle-item-row rle-item-head">
-          <span class="rle-item-name">${esc(L.item)}</span><span>${esc(L.qty)}</span><span>${esc(L.price)}</span><span>${esc(L.total)}</span>
+          <span class="rle-item-name">${esc(L('Item'))}</span><span>${esc(L('Qty'))}</span><span>${esc(L('Price'))}</span><span>${esc(L('Amount'))}</span>
         </div>
         ${itemsHtml}
         <div class="rle-paper-rule"></div>
-        <div class="rle-kv rle-kv-total"><span>${esc(L.total)}</span><span>${money(subtotal)}</span></div>
-        ${showPayment ? `<div class="rle-kv"><span>${esc(L.paid)}</span><span>${money(subtotal)}</span></div>` : ''}
+        <div class="rle-kv"><span>${esc(L('Subtotal'))}</span><span>${money(S.subtotal)}</span></div>
+        <div class="rle-kv"><span>${esc(L('Discount'))} (${S.discountPct}%)</span><span>-${money(S.discount)}</span></div>
+        <div class="rle-paper-rule rle-paper-rule-solid"></div>
+        <div class="rle-kv rle-kv-total"><span>${esc(L('Total'))}</span><span>${money(S.total)}</span></div>
+        ${showPayment ? `<div class="rle-kv"><span>${esc(L('Cash Received'))}</span><span>${money(S.paid)}</span></div>
+        <div class="rle-kv rle-kv-change"><span>${esc(L('Change'))}</span><span>${money(S.change)}</span></div>` : ''}
         ${footer ? `<div class="rle-paper-footer">${esc(footer)}</div>` : ''}
       `;
+      // Show the print margins on the sample paper (CSS adds them to the base padding)
+      const mg = currentMargins();
+      MARGIN_SIDES.forEach((side) => $('rle-paper').style.setProperty('--rle-mg-' + side, mg[side] + 'mm'));
     }
 
-    ['rle-address', 'rle-header', 'rle-footer'].forEach((id) => $(id).addEventListener('input', renderPreview));
+    const MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+    function currentMargins() {
+      return window.ReceiptPrinter.marginsFrom(Object.fromEntries(MARGIN_SIDES.map((side) => ['receipt_margin_' + side, $('rle-mg-' + side).value])));
+    }
+
+    function currentLogoGap() {
+      return window.ReceiptPrinter.logoGapFrom({ receipt_logo_gap: $('rle-logo-gap').value });
+    }
+
+    function currentLogoSize() {
+      return window.ReceiptPrinter.logoSizeFrom({ receipt_logo_size: $('rle-logo-size').value });
+    }
+
+    // Logo size: slider and % box mirror each other
+    $('rle-logo-size-range').addEventListener('input', (e) => {
+      $('rle-logo-size').value = e.target.value;
+      renderPreview();
+    });
+    $('rle-logo-size').addEventListener('input', (e) => {
+      const v = parseFloat(e.target.value);
+      if (Number.isFinite(v)) $('rle-logo-size-range').value = v;
+      renderPreview();
+    });
+    $('rle-logo-size').addEventListener('change', (e) => {
+      e.target.value = $('rle-logo-size-range').value = currentLogoSize();
+      renderPreview();
+    });
+
+    ['rle-address', 'rle-header', 'rle-footer', 'rle-logo-gap', ...MARGIN_SIDES.map((side) => 'rle-mg-' + side)].forEach((id) => $(id).addEventListener('input', renderPreview));
     ['rle-show-biz', 'rle-show-addr', 'rle-show-payment'].forEach((id) => $(id).addEventListener('change', renderPreview));
+    $('rle-mg-reset').addEventListener('click', () => {
+      MARGIN_SIDES.forEach((side) => { $('rle-mg-' + side).value = 0; });
+      renderPreview();
+    });
+
+    // Test print: a sample bill with the editor's current (unsaved) layout and margins,
+    // sent to the Settings → Printer printer — or the true-size PDF preview when none is set.
+    async function testPrint() {
+      const RP = window.ReceiptPrinter;
+      const btn = $('rle-test');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Printing…')}`;
+      try {
+        const cfg = await window.electronAPI.getPrinterConfig().catch(() => null) || {};
+        const L = receiptLabels(state.lang);
+        const biz = $('rle-show-biz').checked ? (state.businessName || t('Your Business')) : '';
+        const address = $('rle-show-addr').checked ? $('rle-address').value.trim() : '';
+        const header = $('rle-header').value.trim();
+        const footer = $('rle-footer').value.trim();
+        const showPayment = $('rle-show-payment').checked;
+        const now = new Date().toLocaleString();
+        const items = [
+          { name: 'Product One', qty: 2, price: 25, total: 50, discount: 0 },
+          { name: 'Product Two', qty: 1, price: 75, total: 75, discount: 0 },
+          { name: 'Product Three', qty: 3, price: 10, total: 30, discount: 0 },
+        ];
+        const S = RECEIPT_SAMPLE;
+
+        const rows = items.map((it) => `<tr>
+            <td><div class="rd-item-name">${esc(it.name)}</div></td>
+            <td class="rd-center-col">${it.qty}</td>
+            <td class="rd-right rd-col-price">${esc(money(it.price))}</td>
+            <td class="rd-center-col rd-col-disc">—</td>
+            <td class="rd-right"><strong>${esc(money(it.total))}</strong></td>
+          </tr>`).join('');
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TEST-0001</title><style>${RP.docStyles(cfg.paperWidth === 58 ? 58 : 80)}</style></head><body>
+          <div class="rd-center">
+            ${state.logoUrl ? `<div style="margin-bottom:${currentLogoGap()}mm"><img src="${esc(state.logoUrl)}" alt="" style="${RP.logoImgStyle(currentLogoSize())};display:block;margin:0 auto"></div>` : ''}
+            ${biz ? `<div class="rd-business">${esc(biz)}</div>` : ''}
+            ${address ? `<div class="rd-meta">${esc(address)}</div>` : ''}
+            ${header ? `<div class="rd-meta" style="font-style:italic">${esc(header)}</div>` : ''}
+          </div>
+          <hr>
+          <div class="rd-row"><span>${esc(L('Receipt #'))}</span><strong>TEST-0001</strong></div>
+          <div class="rd-row"><span>${esc(L('Date & Time'))}</span><strong>${esc(now)}</strong></div>
+          <div class="rd-row"><span>${esc(L('Customer'))}</span><strong>${esc(L('Walk-in Customer'))}</strong></div>
+          <hr>
+          <table>
+            <thead><tr><th>${esc(L('Item'))}</th><th class="rd-center-col">${esc(L('Qty'))}</th><th class="rd-right rd-col-price">${esc(L('Price'))}</th><th class="rd-center-col rd-col-disc">${esc(L('Disc'))}</th><th class="rd-right">${esc(L('Amount'))}</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+          <hr>
+          <div class="rd-row"><span>${esc(L('Subtotal'))}</span><span>${esc(money(S.subtotal))}</span></div>
+          <div class="rd-row"><span>${esc(L('Discount'))} (${S.discountPct}%)</span><span>&minus;${esc(money(S.discount))}</span></div>
+          <div class="rd-row rd-total"><span>${esc(L('Total'))}</span><span>${esc(money(S.total))}</span></div>
+          ${showPayment ? `<div class="rd-row"><span>${esc(L('Cash Received'))}</span><span>${esc(money(S.paid))}</span></div>
+          <div class="rd-row"><span>${esc(L('Change'))}</span><span>${esc(money(S.change))}</span></div>` : ''}
+          ${footer ? `<hr><div class="rd-footer">${esc(footer)}</div>` : ''}
+        </body></html>`;
+
+        const escpos = {
+          logoUrl: state.logoUrl, logoGap: currentLogoGap(), logoSize: currentLogoSize(),
+          businessName: biz, address, header, footer,
+          currency: state.currency, currencyPosition: state.currencyPosition,
+          saleNumber: 'TEST-0001', date: now, customer: 'Walk-in Customer', cashier: '',
+          items, subtotal: S.subtotal, discount: S.discount, discountPct: S.discountPct, total: S.total,
+          paid: showPayment ? S.paid : S.total, change: showPayment ? S.change : 0, paymentMethod: 'Cash',
+          lang: state.lang,
+        };
+
+        const res = await RP.print({ html, escpos, cfg, margins: currentMargins() });
+        if (res.ok) showAlert(cfg.name ? t('Test bill sent to "{name}"', { name: cfg.name }) : t('Preview opened — use its Print button'), 'success');
+        else if (!res.cancelled) showAlert(res.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+      }
+    }
+    $('rle-test').addEventListener('click', testPrint);
 
     async function load() {
       const res = await API.settingsGet();
@@ -1859,6 +2429,8 @@
       }
       const d = res.body?.data || {};
       state.logoUrl = d.receipt_logo_url || '';
+      $('rle-logo-gap').value = window.ReceiptPrinter.logoGapFrom(d);
+      $('rle-logo-size').value = $('rle-logo-size-range').value = window.ReceiptPrinter.logoSizeFrom(d);
       state.businessName = d.business_name || '';
       state.currency = (d.currency || 'LKR').toUpperCase();
       state.currencyPosition = d.currency_position === 'before' ? 'before' : 'after';
@@ -1870,6 +2442,8 @@
       $('rle-header').value = d.receipt_header || '';
       $('rle-footer').value = d.receipt_footer || '';
       $('rle-show-payment').checked = d.show_account_info !== false;
+      const mg = window.ReceiptPrinter.marginsFrom(d);
+      MARGIN_SIDES.forEach((side) => { $('rle-mg-' + side).value = mg[side]; });
       setLang(['en', 'si', 'ta'].includes(d.receipt_language) ? d.receipt_language : 'en');
     }
 
@@ -1882,6 +2456,8 @@
 
       const payload = {
         receipt_logo_url: state.logoUrl || '',
+        receipt_logo_gap: currentLogoGap(),
+        receipt_logo_size: currentLogoSize(),
         show_business_name: $('rle-show-biz').checked,
         show_business_address: $('rle-show-addr').checked,
         receipt_address_line: $('rle-address').value.trim(),
@@ -1890,6 +2466,8 @@
         show_account_info: $('rle-show-payment').checked,
         receipt_language: state.lang,
       };
+      const mg = currentMargins();
+      MARGIN_SIDES.forEach((side) => { payload['receipt_margin_' + side] = mg[side]; });
 
       const res = await API.settingsUpdate(payload);
       btn.disabled = false;
@@ -1899,6 +2477,9 @@
         showAlert(res.body?.message || t('Could not save the receipt layout.'));
         return;
       }
+      window.ReceiptPrinter.setSavedMargins(res.body?.data || payload);
+      // Let an open page (js/pos.js) use the new layout/print language without a reload
+      window.dispatchEvent(new CustomEvent('receipt-layout-saved', { detail: { ...payload, ...(res.body?.data || {}) } }));
       showAlert(t('Receipt layout saved.'), 'success');
     }
 
@@ -1909,6 +2490,7 @@
   }
 
   window.openReceiptLayoutWindow = openReceiptLayoutWindow;
+  window.ReceiptLabels = { forLang: receiptLabels, langFrom: receiptLangFrom };
 
   // ── Invoice Setup window ────────────────────────────────────────────────
   // Mirrors the full desktop app's Invoice Setup screen (electron_app
@@ -2848,7 +3430,9 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
         <i class="fa-solid fa-store"></i>
         <div><small>${t('Business')}</small><span id="um-biz-name">—</span></div>
       </div>
+      <div class="um-biz-row um-ev-row" id="um-ev-row" data-owner-only style="display:none"></div>
       <div class="um-sep"></div>
+      <button class="um-item" id="um-profile" type="button" role="menuitem" data-owner-only><i class="fa-solid fa-user-pen"></i> ${t('My Profile')}</button>
       <button class="um-item" id="um-language" type="button" role="menuitem">
         <i class="fa-solid fa-language"></i> <span>${t('Language')}</span>
         <span class="um-item-value">${i18n.current().native}</span>
@@ -2894,6 +3478,7 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     }
   });
 
+  $('um-profile').addEventListener('click', () => { setOpen(false); openProfileWindow(); });
   $('um-language').addEventListener('click', () => { setOpen(false); openLanguageWindow(); });
   $('um-billing').addEventListener('click', () => { setOpen(false); openBillingWindow(); });
   $('um-settings').addEventListener('click', () => { setOpen(false); openSettingsWindow(); });
@@ -2932,7 +3517,243 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     return letters.toUpperCase();
   }
 
-  (async () => {
+  // ── My Profile window ───────────────────────────────────────────────────
+  // Owner/staff account details (name, email) + password change, backed by
+  // Modules/Pos auth/me, auth/profile and auth/password (Modules/Pos/routes/api.php).
+  // Cashier sessions never see this — their accounts are managed under Cashiers.
+  function openProfileWindow() {
+    if ($('pf-backdrop')) return;
+
+    const returnFocusTo = document.activeElement;
+    let tab = 'details';
+
+    const el = document.createElement('div');
+    el.className = 'bm-backdrop';
+    el.id = 'pf-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'pf-title');
+    el.innerHTML = `
+      <div class="bm-card pf-card">
+        <div class="bm-head">
+          <span class="bm-head-icon"><i class="fa-solid fa-user-pen"></i></span>
+          <div class="bm-head-text">
+            <h2 id="pf-title">${t('My Profile')}</h2>
+            <p>${t('Update your account details and password.')}</p>
+          </div>
+          <button class="bm-close" type="button" aria-label="${t('Close')}"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="pf-identity">
+          <span class="um-avatar lg" id="pf-avatar"><i class="fa-solid fa-user"></i></span>
+          <div class="pf-identity-text">
+            <div class="pf-identity-name" id="pf-identity-name">—</div>
+            <div class="pf-identity-email" id="pf-identity-email"></div>
+          </div>
+        </div>
+        <div class="pm-tabs pf-tabs" role="tablist">
+          <button class="pm-tab active" type="button" role="tab" data-pf-tab="details"><i class="fa-solid fa-id-card"></i> ${t('Details')}</button>
+          <button class="pm-tab" type="button" role="tab" data-pf-tab="password"><i class="fa-solid fa-key"></i> ${t('Password')}</button>
+        </div>
+        <div id="pf-alert" class="bm-alert" style="display:none"></div>
+        <div id="pf-success" class="pf-success" style="display:none"></div>
+        <form class="pf-body" id="pf-details" autocomplete="off">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-name">${t('Full Name')} *</label>
+            <input type="text" id="pf-name" class="sm-input" maxlength="255" required>
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-email">${t('Email')} *</label>
+            <input type="email" id="pf-email" class="sm-input" maxlength="255" required>
+            <span class="sm-hint">${t('You use this email to sign in.')}</span>
+          </div>
+        </form>
+        <form class="pf-body" id="pf-password" autocomplete="off" style="display:none">
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-current">${t('Current Password')} *</label>
+            <input type="password" id="pf-current" class="sm-input" autocomplete="current-password">
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-new">${t('New Password')} *</label>
+            <input type="password" id="pf-new" class="sm-input" autocomplete="new-password">
+            <span class="sm-hint">${t('At least 8 characters.')}</span>
+          </div>
+          <div class="sm-field-row">
+            <label class="sm-field-label" for="pf-confirm">${t('Confirm New Password')} *</label>
+            <input type="password" id="pf-confirm" class="sm-input" autocomplete="new-password">
+          </div>
+        </form>
+        <div class="sm-foot">
+          <button class="bm-btn bm-btn-outline" id="pf-cancel" type="button">${t('Close')}</button>
+          <button class="bm-btn bm-btn-primary" id="pf-save" type="button"><i class="fa-solid fa-check"></i> <span id="pf-save-label">${t('Save Changes')}</span></button>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+
+    const original = { name: '', email: '' };
+
+    function close() {
+      document.removeEventListener('keydown', onKey, true);
+      el.classList.remove('open');
+      setTimeout(() => el.remove(), 200);
+      if (returnFocusTo && returnFocusTo.focus) returnFocusTo.focus();
+    }
+
+    function onKey(e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+      if (e.key === 'Enter' && el.contains(e.target) && e.target.classList.contains('sm-input')) { e.preventDefault(); save(); }
+    }
+
+    function showAlert(msg) {
+      $('pf-success').style.display = 'none';
+      $('pf-alert').textContent = msg;
+      $('pf-alert').style.display = 'block';
+    }
+    function showSuccess(msg) {
+      $('pf-alert').style.display = 'none';
+      $('pf-success').innerHTML = `<i class="fa-solid fa-circle-check"></i> ${esc(msg)}`;
+      $('pf-success').style.display = 'flex';
+    }
+    function clearMessages() {
+      $('pf-alert').style.display = 'none';
+      $('pf-success').style.display = 'none';
+    }
+
+    // Laravel 422 → { message, errors: { field: [msg] } } — show the first field error
+    function errorMessage(res, fallback) {
+      const errors = res.body?.errors;
+      if (errors) {
+        const first = Object.values(errors)[0];
+        if (Array.isArray(first) && first[0]) return first[0];
+      }
+      return res.body?.message || fallback;
+    }
+
+    function renderIdentityHeader(name, email) {
+      const letters = initials(name, email);
+      if (letters) $('pf-avatar').textContent = letters;
+      $('pf-identity-name').textContent = name || email || '—';
+      $('pf-identity-email').textContent = name ? email : '';
+    }
+
+    function setTab(next) {
+      tab = next;
+      el.querySelectorAll('[data-pf-tab]').forEach((b) => {
+        const on = b.dataset.pfTab === tab;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', String(on));
+      });
+      $('pf-details').style.display = tab === 'details' ? '' : 'none';
+      $('pf-password').style.display = tab === 'password' ? '' : 'none';
+      $('pf-save-label').textContent = tab === 'details' ? t('Save Changes') : t('Update Password');
+      clearMessages();
+      (tab === 'details' ? $('pf-name') : $('pf-current')).focus();
+    }
+
+    async function load() {
+      const cfg = await window.electronAPI.getConfig();
+      original.name = cfg.user?.name || '';
+      original.email = cfg.user?.email || '';
+      $('pf-name').value = original.name;
+      $('pf-email').value = original.email;
+      renderIdentityHeader(original.name, original.email);
+
+      // Refresh from the server — the cached config may be stale if the
+      // profile was changed elsewhere (web dashboard, desktop app).
+      try {
+        const res = await API.me();
+        if (res.status === 200 && res.body?.data) {
+          const d = res.body.data;
+          original.name = d.name || '';
+          original.email = d.email || '';
+          // only overwrite fields the user hasn't started editing
+          if ($('pf-name').value === (cfg.user?.name || '')) $('pf-name').value = original.name;
+          if ($('pf-email').value === (cfg.user?.email || '')) $('pf-email').value = original.email;
+          renderIdentityHeader(original.name, original.email);
+        }
+      } catch (e) {
+        console.error('[profile] load failed', e);
+      }
+    }
+
+    async function saveDetails() {
+      const name = $('pf-name').value.trim();
+      const email = $('pf-email').value.trim();
+      if (!name) { showAlert(t('Name is required.')); $('pf-name').focus(); return false; }
+      if (!email || !$('pf-email').checkValidity()) { showAlert(t('Enter a valid email address.')); $('pf-email').focus(); return false; }
+      if (name === original.name && email === original.email) { showSuccess(t('No changes to save.')); return false; }
+
+      const res = await API.updateProfile({ name, email });
+      if (res.status !== 200) { showAlert(errorMessage(res, t('Could not update your profile.'))); return false; }
+
+      const d = res.body?.data || { name, email };
+      original.name = d.name;
+      original.email = d.email;
+      const cfg = await window.electronAPI.getConfig();
+      await window.electronAPI.setConfig({ user: { ...(cfg.user || {}), name: d.name, email: d.email } });
+      renderIdentityHeader(d.name, d.email);
+      await renderIdentity();
+      showSuccess(t('Your profile has been updated.'));
+      return true;
+    }
+
+    async function savePassword() {
+      const current = $('pf-current').value;
+      const next = $('pf-new').value;
+      const confirm = $('pf-confirm').value;
+      if (!current) { showAlert(t('Enter your current password.')); $('pf-current').focus(); return false; }
+      if (next.length < 8) { showAlert(t('New password must be at least 8 characters.')); $('pf-new').focus(); return false; }
+      if (next !== confirm) { showAlert(t('New passwords do not match.')); $('pf-confirm').focus(); return false; }
+
+      const res = await API.updatePassword({ current_password: current, password: next, password_confirmation: confirm });
+      if (res.status !== 200) { showAlert(errorMessage(res, t('Could not update your password.'))); return false; }
+
+      $('pf-current').value = '';
+      $('pf-new').value = '';
+      $('pf-confirm').value = '';
+      showSuccess(t('Your password has been updated.'));
+      return true;
+    }
+
+    let saving = false;
+    async function save() {
+      if (saving) return;
+      saving = true;
+      const btn = $('pf-save');
+      const originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
+      try {
+        if (tab === 'details') await saveDetails();
+        else await savePassword();
+      } catch (e) {
+        showAlert(t('Something went wrong. Please try again.'));
+        console.error('[profile] save failed', e);
+      } finally {
+        saving = false;
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        $('pf-save-label').textContent = tab === 'details' ? t('Save Changes') : t('Update Password');
+      }
+    }
+
+    el.querySelector('.bm-close').addEventListener('click', close);
+    $('pf-cancel').addEventListener('click', close);
+    $('pf-save').addEventListener('click', save);
+    el.querySelectorAll('form').forEach((f) => f.addEventListener('submit', (e) => { e.preventDefault(); save(); }));
+    el.querySelectorAll('[data-pf-tab]').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.pfTab)));
+    el.addEventListener('mousedown', (e) => { if (e.target === el) close(); });
+    document.addEventListener('keydown', onKey, true);
+
+    load();
+    requestAnimationFrame(() => {
+      el.classList.add('open');
+      $('pf-name').focus();
+    });
+  }
+
+  window.openProfileWindow = () => openProfileWindow();
+
+  async function renderIdentity() {
     const cfg = await window.electronAPI.getConfig();
     const name = cfg.user?.name || '';
     // Cashier sessions (POS-only, see role-guard.js) have no email and no
@@ -2955,5 +3776,172 @@ ${ctx.hdrCss}</style></head><body><div class="pg">
     $('um-head-email').title = email; // full address on hover when it's truncated
     $('um-biz-name').textContent = business || '—';
     if (cfg.app_version) $('um-version').textContent = `v${cfg.app_version}`;
-  })();
+  }
+
+  renderIdentity();
+})();
+
+// ── Receipt printer (Settings → Printer) ──────────────────────────────────
+// Shared by the Settings → Printer tab (Test Print) and the POS sale-completed
+// receipt (js/pos.js). Mirrors the full desktop app's printer flow
+// (electron_app/renderer/js/app.js): ESC/POS raw bytes for thermal printers,
+// silent HTML print otherwise, and a true-size PDF preview when no printer is
+// selected. The printer config is per device (local config.json via main.js).
+(function () {
+  // Virtual "printers" (Print to PDF, XPS, OneNote, Fax) can't interpret raw
+  // ESC/POS bytes — they'd save an empty/corrupt file — and always pop a
+  // Windows save dialog, so they must go through the HTML path.
+  function isVirtual(name) {
+    return /pdf|xps|onenote|fax/i.test(String(name || ''));
+  }
+
+  // Thermal receipt document CSS. The body is the printable width (paper minus
+  // the 4mm @page margins each side) — a body as wide as the paper overflows.
+  function docStyles(paperWidth) {
+    const widthMm = paperWidth === 58 ? 58 : 80;
+    const narrow = widthMm === 58;
+    return `
+    @page { size: ${widthMm}mm auto; margin: 4mm; }
+    * { box-sizing: border-box; }
+    body { font-family: 'Courier New', 'Nirmala UI', 'Iskoola Pota', 'Latha', 'Noto Sans Sinhala', 'Noto Sans Tamil', monospace; font-size: ${narrow ? 10 : 12}px; line-height: 1.5; color:#000; background:#fff; margin:0; padding:0; width:${widthMm - 8}mm; }
+    .rd-center { text-align:center; }
+    .rd-business { font-weight:bold; font-size:${narrow ? 12 : 13}px; }
+    .rd-meta { font-size:10px; margin:1px 0; }
+    hr { border:none; border-top:1px dashed #000; margin:8px 0; }
+    table { width:100%; border-collapse:collapse; font-size:${narrow ? 9 : 10}px; margin:6px 0; }
+    th { text-align:left; font-size:9px; padding:2px 2px 4px; border-bottom:1px solid #000; }
+    td { padding:3px 2px; vertical-align:top; }
+    .rd-item-name { font-weight:bold; font-size:${narrow ? 10 : 11}px; word-break:break-word; }
+    .rd-item-sub { font-size:9px; color:#555; margin-top:1px; }
+    .rd-right { text-align:right; }
+    .rd-center-col { text-align:center; }
+    .rd-row { display:flex; justify-content:space-between; margin:2px 0; font-size:${narrow ? 10 : 11}px; }
+    .rd-total { font-weight:bold; font-size:${narrow ? 12 : 13}px; border-top:1px solid #000; padding-top:4px; margin-top:4px; }
+    .rd-footer { text-align:center; font-size:10px; margin-top:6px; }
+    .rd-note { font-size:9px; padding:1px 0 4px; }
+    .rd-warranty { color:#0369a1; }
+    .rd-rental { color:#0f766e; }
+    .rd-discount { color:#b45309; }
+    ${narrow ? '.rd-col-price, .rd-col-disc { display:none; }' : ''}
+  `;
+  }
+
+  // On-screen preview width for the receipt modal (≈ mm at 96dpi)
+  function previewWidthPx(paperWidth) {
+    return paperWidth === 58 ? 219 : 302;
+  }
+
+  // Print margins (mm, 0–20 per side) from the Receipt Layout Editor, stored in
+  // POS settings as receipt_margin_{top,right,bottom,left}. They only apply to
+  // printed output — on-screen receipt previews stay unpadded.
+  const MARGIN_SIDES = ['top', 'right', 'bottom', 'left'];
+  function clampMargins(m = {}) {
+    const out = {};
+    MARGIN_SIDES.forEach((side) => { out[side] = Math.min(20, Math.max(0, parseFloat(m[side]) || 0)); });
+    return out;
+  }
+  function marginsFrom(settings = {}) {
+    return clampMargins(Object.fromEntries(MARGIN_SIDES.map((side) => [side, settings['receipt_margin_' + side]])));
+  }
+
+  // Gap (mm, 0–20, default 2) between the receipt logo and the business name — receipt_logo_gap
+  function logoGapFrom(settings = {}) {
+    const v = parseFloat(settings.receipt_logo_gap);
+    return Number.isFinite(v) ? Math.min(20, Math.max(0, v)) : 2;
+  }
+
+  // Logo size (% of the default 64px logo, 50–300, default 100) — receipt_logo_size
+  const LOGO_BASE_PX = 64;
+  function logoSizeFrom(settings = {}) {
+    const v = parseFloat(settings.receipt_logo_size);
+    return Number.isFinite(v) ? Math.round(Math.min(300, Math.max(50, v))) : 100;
+  }
+  // Inline max-size style for the receipt logo <img>; never wider than the paper
+  function logoImgStyle(sizePct) {
+    const px = Math.round(LOGO_BASE_PX * logoSizeFrom({ receipt_logo_size: sizePct }) / 100);
+    return `max-width:min(100%, ${px}px);max-height:${px}px`;
+  }
+
+  let marginsCache = null;
+  async function savedMargins() {
+    if (!marginsCache) {
+      const res = await API.settingsGet().catch(() => null);
+      if (res?.status === 200) marginsCache = marginsFrom(res.body?.data || {});
+    }
+    return marginsCache || marginsFrom({});
+  }
+  // Called by the layout editor after a save so later prints use the new values.
+  function setSavedMargins(settings) { marginsCache = marginsFrom(settings); }
+
+  // Pad the receipt body by the margins (body has a fixed width + border-box).
+  //   preview (PDF) — every side pads inside the fixed width, so the receipt stays on the page.
+  //   direct (printer) — the left margin shifts the receipt (the body widens by it) and the
+  //     right margin narrows it. Thermal drivers' "Paper Reduction" trims blank paper at the
+  //     top / bottom of the page, which would swallow a blank top/bottom margin, so those are
+  //     spacers ending in a centred 0.5 mm dot: the driver sees printed content and keeps the feed.
+  function withMargins(html, mg, { direct = false, paperWidth = 80 } = {}) {
+    if (!MARGIN_SIDES.some((side) => mg[side] > 0)) return html;
+    if (!direct) {
+      const css = `<style>body{padding:${mg.top}mm ${mg.right}mm ${mg.bottom}mm ${mg.left}mm !important;}</style>`;
+      return html.includes('</head>') ? html.replace('</head>', css + '</head>') : css + html;
+    }
+    const bodyMm = (paperWidth === 58 ? 58 : 80) - 8 + mg.left;  // docStyles body width + left shift
+    const css = `<style>body{padding:0 ${mg.right}mm 0 ${mg.left}mm !important;width:${bodyMm}mm !important;}
+      .rd-mg-spacer{position:relative;}
+      .rd-mg-spacer::after{content:'';position:absolute;left:50%;width:0.5mm;height:0;border-top:0.5mm solid #000;}
+      .rd-mg-spacer.top::after{top:0;} .rd-mg-spacer.bottom::after{bottom:0;}</style>`;
+    const top    = mg.top    ? `<div class="rd-mg-spacer top" style="height:${mg.top}mm"></div>` : '';
+    const bottom = mg.bottom ? `<div class="rd-mg-spacer bottom" style="height:${mg.bottom}mm"></div>` : '';
+    html = html.includes('</head>') ? html.replace('</head>', css + '</head>') : css + html;
+    html = /<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, (m) => m + top) : top + html;
+    return html.includes('</body>') ? html.replace('</body>', bottom + '</body>') : html + bottom;
+  }
+
+  // Print a receipt with the configured printer.
+  //   html    — complete HTML document (thermal layout)
+  //   escpos  — flat receipt data for ESC/POS (optional; falls back to html)
+  //   auto    — no-preview checkout print: never open a window; with no printer
+  //             selected go silently to the Windows default printer.
+  //   margins — { top, right, bottom, left } mm; defaults to the saved layout's margins
+  // Returns { ok, cancelled?, message? } — the caller shows the message (not when cancelled).
+  async function print({ html, escpos, cfg, auto = false, margins = null }) {
+    cfg = cfg || await window.electronAPI.getPrinterConfig().catch(() => null) || {};
+    const paperWidth = cfg.paperWidth === 58 ? 58 : 80;
+    const mg = margins ? clampMargins(margins) : await savedMargins();
+    const previewHtml = withMargins(html, mg);
+    html = withMargins(html, mg, { direct: true, paperWidth });
+
+    if (!cfg.name) {
+      if (!auto) {
+        const res = await window.electronAPI.previewReceiptPdf({ html: previewHtml, paperWidth });
+        return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Could not open print preview') };
+      }
+      const printers = await window.electronAPI.getPrinters().catch(() => []);
+      const def = printers.find((p) => p.isDefault);
+      if (!def || isVirtual(def.name)) {
+        return {
+          ok: false,
+          message: def
+            ? t('Bill not printed — default printer "{name}" is not a real printer. Select your receipt printer in Settings → Printer.', { name: def.displayName })
+            : t('Bill not printed — no default printer. Select your receipt printer in Settings → Printer.'),
+        };
+      }
+      const res = await window.electronAPI.printReceiptSilent({ html, name: '', silent: true });
+      return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
+    }
+
+    // ESC/POS text mode only prints ASCII (Sinhala/Tamil would come out as '?'), so
+    // non-English receipts go through the printer's Windows driver as HTML instead.
+    const asciiOnly = !escpos?.lang || escpos.lang === 'en';
+    if (cfg.mode !== 'html' && escpos && asciiOnly && !isVirtual(cfg.name)) {
+      const res = await window.electronAPI.printReceiptEscpos({ receipt: escpos, name: cfg.name, paperWidth, margins: mg });
+      return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
+    }
+
+    const res = await window.electronAPI.printReceiptSilent({ html, name: cfg.name, silent: cfg.silent !== false });
+    if (res?.cancelled) return { ok: false, cancelled: true, message: '' };
+    return res?.success ? { ok: true } : { ok: false, message: res?.error || t('Print failed') };
+  }
+
+  window.ReceiptPrinter = { isVirtual, docStyles, previewWidthPx, print, marginsFrom, logoGapFrom, logoSizeFrom, logoImgStyle, setSavedMargins };
 })();

@@ -12,6 +12,10 @@ class ApiClient {
 
   late final Dio _dio = _build();
 
+  /// Tests: answer requests with a fake adapter instead of the network.
+  @visibleForTesting
+  set httpClientAdapter(HttpClientAdapter adapter) => _dio.httpClientAdapter = adapter;
+
   Dio _build() {
     final dio = Dio(
       BaseOptions(
@@ -76,14 +80,26 @@ class ApiClient {
   }) => _dio.get(
     path,
     queryParameters: params,
-    options: Options(
-      headers: headers,
-      extra: {'bypass_cache': bypassCache},
-    ),
+    options: Options(headers: headers, extra: {'bypass_cache': bypassCache}),
   );
 
-  Future<Response> post(String path, {dynamic data}) =>
-      _dio.post(path, data: data);
+  /// Downloads a binary file (e.g. a PDF receipt). Never cached.
+  Future<List<int>> getBytes(String path) async {
+    final res = await _dio.get<List<int>>(
+      path,
+      options: Options(
+        responseType: ResponseType.bytes,
+        headers: {'Accept': 'application/pdf, application/json'},
+        extra: {'bypass_cache': true},
+      ),
+    );
+    return res.data ?? const [];
+  }
+
+  /// [headers] set here win over the stored business/branch (e.g. uploading an
+  /// offline sale to the business it was made in).
+  Future<Response> post(String path, {dynamic data, Map<String, dynamic>? headers}) =>
+      _dio.post(path, data: data, options: headers == null ? null : Options(headers: headers));
 
   Future<Response> put(String path, {dynamic data}) =>
       _dio.put(path, data: data);
@@ -94,10 +110,17 @@ class ApiClient {
   Future<Response> delete(String path, {dynamic data}) =>
       _dio.delete(path, data: data);
 
-  Future<Response> postMultipart(String path, FormData data) => _dio.post(
+  Future<Response> postMultipart(
+    String path,
+    FormData data, {
+    Duration? receiveTimeout,
+  }) => _dio.post(
     path,
     data: data,
-    options: Options(contentType: 'multipart/form-data'),
+    options: Options(
+      contentType: 'multipart/form-data',
+      receiveTimeout: receiveTimeout,
+    ),
   );
 }
 
@@ -106,9 +129,18 @@ class ApiClient {
 /// `token` the auth endpoint returns.
 @visibleForTesting
 String redactSecrets(String line) => line
-    .replaceAllMapped(RegExp(r'(password\w*\s*[:=]\s*)[^,}\n]+', caseSensitive: false), (m) => '${m[1]}***')
-    .replaceAllMapped(RegExp(r'(Bearer\s+)[^\s"]+', caseSensitive: false), (m) => '${m[1]}***')
-    .replaceAllMapped(RegExp(r'("?token"?\s*[:=]\s*"?)[^",}\s]+', caseSensitive: false), (m) => '${m[1]}***');
+    .replaceAllMapped(
+      RegExp(r'(password\w*\s*[:=]\s*)[^,}\n]+', caseSensitive: false),
+      (m) => '${m[1]}***',
+    )
+    .replaceAllMapped(
+      RegExp(r'(Bearer\s+)[^\s"]+', caseSensitive: false),
+      (m) => '${m[1]}***',
+    )
+    .replaceAllMapped(
+      RegExp(r'("?token"?\s*[:=]\s*"?)[^",}\s]+', caseSensitive: false),
+      (m) => '${m[1]}***',
+    );
 
 String apiErrorMessage(Object err) {
   if (err is DioException) {

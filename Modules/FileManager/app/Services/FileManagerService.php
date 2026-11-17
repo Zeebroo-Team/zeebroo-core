@@ -114,12 +114,18 @@ class FileManagerService
         ]);
     }
 
+    /**
+     * @param  string       $disk       where to store it; anything but "public" has no public URL
+     * @param  string|null  $managedBy  the module that serves and deletes the file itself (e.g. "crm")
+     */
     public function storeFile(
         Business $business,
         UploadedFile $file,
         ?int $folderId,
         ?int $uploadedByUserId,
         ?string $notes = null,
+        string $disk = 'public',
+        ?string $managedBy = null,
     ): FileManagerFile {
         if ($folderId !== null) {
             abort_unless($this->folderForBusiness($business, $folderId) instanceof FileManagerFolder, 404);
@@ -132,7 +138,7 @@ class FileManagerService
         }
         $ext = $file->getClientOriginalExtension();
         $filename = $safeBase.'-'.Str::lower(Str::random(8)).($ext !== '' ? '.'.$ext : '');
-        $storedPath = $file->storeAs($dir, $filename, 'public');
+        $storedPath = $file->storeAs($dir, $filename, $disk);
 
         return FileManagerFile::query()->create([
             'business_id' => $business->id,
@@ -143,15 +149,34 @@ class FileManagerService
             'mime_type' => $file->getClientMimeType(),
             'size_bytes' => $file->getSize() ?: null,
             'notes' => filled($notes) ? trim($notes) : null,
-        ]);
+        ] + ($disk !== 'public' ? ['disk' => $disk] : []) + ($managedBy !== null ? ['managed_by' => $managedBy] : []));
     }
 
     public function deleteFile(FileManagerFile $file): void
     {
-        if ($file->stored_path !== '' && Storage::disk('public')->exists($file->stored_path)) {
-            Storage::disk('public')->delete($file->stored_path);
+        $disk = Storage::disk($file->diskName());
+        if ($file->stored_path !== '' && $disk->exists($file->stored_path)) {
+            $disk->delete($file->stored_path);
         }
         $file->delete();
+    }
+
+    /** The folder at this path under the root (e.g. ["CRM", "Leads", "12"]), created as needed. */
+    public function ensureFolderPath(Business $business, array $names): ?FileManagerFolder
+    {
+        $folder = null;
+        foreach ($names as $name) {
+            $name = trim((string) $name);
+            $existing = FileManagerFolder::query()
+                ->where('business_id', $business->id)
+                ->where('parent_id', $folder?->id)
+                ->where('name', $name)
+                ->first();
+
+            $folder = $existing ?? $this->createFolder($business, $folder?->id, $name);
+        }
+
+        return $folder;
     }
 
     public function deleteFolder(FileManagerFolder $folder): void

@@ -14,6 +14,7 @@ use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Modules\Account\Models\Bank;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessRole;
 use Modules\HRManagement\Mail\EmployeePortalWelcomeMail;
 use Modules\HRManagement\Models\Department;
 use Modules\HRManagement\Models\Employee;
@@ -27,6 +28,7 @@ use Modules\HRManagement\Services\EmployeeOverviewMetricsService;
 use Modules\HRManagement\Services\EmployeePortalProvisioningService;
 use Modules\HRManagement\Services\EmployeeProfilePhotoService;
 use Modules\HRManagement\Services\EmployeeService;
+use Modules\HRManagement\Services\EmployeeSystemAccessService;
 use Modules\HRManagement\Services\HrPayrollSettingsService;
 use Modules\HRManagement\Services\JobTitleService;
 use Modules\Mail\Services\BusinessMailerService;
@@ -43,6 +45,7 @@ class HrEmployeeController extends Controller
         private readonly EmployeeProfilePhotoService $employeeProfilePhoto,
         private readonly EmployeeDocumentService $employeeDocumentService,
         private readonly EmployeePortalProvisioningService $employeePortalProvisioning,
+        private readonly EmployeeSystemAccessService $employeeSystemAccess,
         private readonly BusinessMailerService $businessMailer,
     ) {}
 
@@ -241,6 +244,14 @@ class HrEmployeeController extends Controller
             'banks' => Bank::query()->orderBy('name')->get(),
             'hrEditDepartments' => $business->departments()->orderBy('name')->get(),
             'hrEditJobTitles' => $business->jobTitles()->orderBy('name')->get(),
+            'systemAccess' => $this->employeeSystemAccess->status($employee),
+            'canManageAccess' => $this->employeeSystemAccess->canManageAccess($business, $request->user()),
+            'accessRoles' => BusinessRole::query()
+                ->where('business_id', $business->id)
+                ->whereIn('slug', $this->employeeSystemAccess->roleSlugs($business))
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(),
             'employmentTypeLabels' => [
                 Employee::EMPLOYMENT_FULL_TIME => __('Full-Time'),
                 Employee::EMPLOYMENT_PART_TIME => __('Part-Time'),
@@ -361,7 +372,7 @@ class HrEmployeeController extends Controller
         abort_if((int) $employee->business_id !== (int) $business->id, 404);
 
         $request->validate([
-            'field' => ['required', 'string', Rule::in($this->patchableFieldKeys())],
+            'field' => ['required', 'string', Rule::in($this->employeeService->patchableFields())],
             '_panel' => ['nullable', 'string', 'max:40'],
         ]);
 
@@ -369,136 +380,24 @@ class HrEmployeeController extends Controller
         $panel = (string) ($request->input('_panel') ?: 'overview');
         $panel = preg_match('/^[a-z0-9_-]{1,40}$/', $panel) ? $panel : 'overview';
 
-        $validated = $request->validate($this->patchFieldValidationRules($business, $employee, $field));
+        $validated = $request->validate($this->employeeService->patchFieldRules($business, $employee, $field));
 
-        if ($field === 'employee_allowance') {
-            $this->employeeService->updateAllowanceAmount(
-                $employee,
-                (int) $validated['employee_allowance_id'],
-                (float) $validated['allowance_amount'],
-            );
+        // An email change carries over to the employee's team login / pending invitation
+        $synced = DB::transaction(function () use ($business, $employee, $field, $validated, $request): ?string {
+            $synced = $field === 'personal_email'
+                ? $this->employeeSystemAccess->syncEmailChange($employee, $business, (string) $validated['personal_email'], $request->user())
+                : null;
+            $this->employeeService->updateField($employee, $field, $validated);
 
-            return $this->redirectToEmployeeShowPanel($employee, $panel, __('Allowance updated.'));
-        }
+            return $synced;
+        });
 
-        $payload = [];
-        foreach ($validated as $key => $value) {
-            if (in_array($key, ['epf_number', 'etf_number', 'tax_tin'], true)) {
-                $payload[$key] = ($value === '' || $value === null) ? null : $value;
-
-                continue;
-            }
-            if ($key === 'bank_id' || $key === 'job_title_id' || $key === 'department_id') {
-                $payload[$key] = (int) $value;
-
-                continue;
-            }
-            if ($key === 'basic_salary') {
-                $payload[$key] = round((float) $value, 2);
-
-                continue;
-            }
-            $payload[$key] = $value;
-        }
-
-        $employee->fill($payload);
-        $employee->save();
-
-        if ($field === 'basic_salary') {
-            $this->employeeService->recalculateMonthlyGross($employee->fresh());
-        }
-
-        return $this->redirectToEmployeeShowPanel($employee, $panel, __('Updated.'));
-    }
-
-    /** @return list<string> */
-    private function patchableFieldKeys(): array
-    {
-        return [
-            'full_name',
-            'date_of_birth',
-            'nic_passport_number',
-            'permanent_address',
-            'current_address',
-            'phone_number',
-            'personal_email',
-            'employee_id',
-            'job_title_id',
-            'department_id',
-            'date_of_joining',
-            'employment_type',
-            'emergency_contact_name',
-            'emergency_contact_relationship',
-            'emergency_contact_phone',
-            'bank_account_holder_name',
-            'bank_id',
-            'bank_branch',
-            'bank_account_number',
-            'epf_number',
-            'etf_number',
-            'tax_tin',
-            'basic_salary',
-            'employee_allowance',
-        ];
-    }
-
-    /** @return array<string, mixed> */
-    private function patchFieldValidationRules(Business $business, Employee $employee, string $field): array
-    {
-        $nicUnique = Rule::unique('hr_employees', 'nic_passport_number')
-            ->where(fn ($query) => $query->where('business_id', $business->id))
-            ->ignore($employee->id);
-
-        $employeeCodeUnique = Rule::unique('hr_employees', 'employee_id')
-            ->where(fn ($query) => $query->where('business_id', $business->id))
-            ->ignore($employee->id);
-
-        return match ($field) {
-            'full_name' => ['full_name' => ['required', 'string', 'max:255']],
-            'date_of_birth' => ['date_of_birth' => ['required', 'date', 'before:today']],
-            'nic_passport_number' => ['nic_passport_number' => ['required', 'string', 'max:64', $nicUnique]],
-            'permanent_address' => ['permanent_address' => ['required', 'string', 'max:5000']],
-            'current_address' => ['current_address' => ['required', 'string', 'max:5000']],
-            'phone_number' => ['phone_number' => ['required', 'string', 'max:40']],
-            'personal_email' => ['personal_email' => ['required', 'email', 'max:255']],
-            'employee_id' => ['employee_id' => ['required', 'string', 'max:64', $employeeCodeUnique]],
-            'job_title_id' => [
-                'job_title_id' => [
-                    'required',
-                    'integer',
-                    Rule::exists('hr_job_titles', 'id')->where(fn ($query) => $query->where('business_id', $business->id)),
-                ],
-            ],
-            'department_id' => [
-                'department_id' => [
-                    'required',
-                    'integer',
-                    Rule::exists('hr_departments', 'id')->where(fn ($query) => $query->where('business_id', $business->id)),
-                ],
-            ],
-            'date_of_joining' => ['date_of_joining' => ['required', 'date']],
-            'employment_type' => ['employment_type' => ['required', 'string', Rule::in(Employee::EMPLOYMENT_TYPES)]],
-            'emergency_contact_name' => ['emergency_contact_name' => ['required', 'string', 'max:255']],
-            'emergency_contact_relationship' => ['emergency_contact_relationship' => ['required', 'string', 'max:120']],
-            'emergency_contact_phone' => ['emergency_contact_phone' => ['required', 'string', 'max:40']],
-            'bank_account_holder_name' => ['bank_account_holder_name' => ['required', 'string', 'max:255']],
-            'bank_id' => ['bank_id' => ['required', 'integer', 'exists:banks,id']],
-            'bank_branch' => ['bank_branch' => ['required', 'string', 'max:255']],
-            'bank_account_number' => ['bank_account_number' => ['required', 'string', 'max:64']],
-            'epf_number' => ['epf_number' => ['nullable', 'string', 'max:80']],
-            'etf_number' => ['etf_number' => ['nullable', 'string', 'max:80']],
-            'tax_tin' => ['tax_tin' => ['nullable', 'string', 'max:80']],
-            'basic_salary' => ['basic_salary' => ['required', 'numeric', 'min:0', 'max:999999999.99']],
-            'employee_allowance' => [
-                'employee_allowance_id' => [
-                    'required',
-                    'integer',
-                    Rule::exists('hr_employee_allowances', 'id')->where(fn ($query) => $query->where('employee_id', $employee->id)),
-                ],
-                'allowance_amount' => ['required', 'numeric', 'min:0', 'max:999999999.99'],
-            ],
-            default => abort(422, 'Unsupported field.'),
-        };
+        return $this->redirectToEmployeeShowPanel($employee, $panel, match (true) {
+            $field === 'employee_allowance' => __('Allowance updated.'),
+            $synced === 'login'             => __('Email updated. Their login email was changed too.'),
+            $synced === 'invitation'        => __('Email updated. The system access invitation was sent to the new address.'),
+            default                         => __('Updated.'),
+        });
     }
 
     private function redirectToEmployeeShowPanel(Employee $employee, string $panel, string $status): RedirectResponse

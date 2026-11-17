@@ -201,7 +201,7 @@ function openCustAdd() {
   custEditingId = null;
   document.getElementById('cust-modal-title').textContent = t('Add Customer');
   custSaveBtn.textContent = t('Save Customer');
-  ['cf-name', 'cf-phone', 'cf-email', 'cf-address', 'cf-notes'].forEach((id) => { document.getElementById(id).value = ''; });
+  ['cf-name', 'cf-phone', 'cf-email', 'cf-address', 'cf-notes', 'cf-credit-limit'].forEach((id) => { document.getElementById(id).value = ''; });
   document.getElementById('cf-type').value = 'retail';
   document.getElementById('cf-category').value = '';
   custError.classList.remove('show');
@@ -217,6 +217,7 @@ function fillCustForm(c) {
   document.getElementById('cf-notes').value = c.notes || '';
   document.getElementById('cf-type').value = c.customer_type || 'retail';
   document.getElementById('cf-category').value = c.customer_category_id || '';
+  document.getElementById('cf-credit-limit').value = c.credit_limit != null ? Number(c.credit_limit).toFixed(2) : '';
 }
 
 async function openCustEdit(id) {
@@ -244,8 +245,19 @@ custSaveBtn.addEventListener('click', async () => {
     return;
   }
 
+  // Empty = no limit (the customer can take any amount on credit)
+  const limitRaw = document.getElementById('cf-credit-limit').value.trim();
+  const creditLimit = limitRaw === '' ? null : Number(limitRaw);
+  if (creditLimit !== null && (!Number.isFinite(creditLimit) || creditLimit < 0)) {
+    custError.textContent = t('Credit limit must be a positive amount, or empty for no limit.');
+    custError.classList.add('show');
+    document.getElementById('cf-credit-limit').focus();
+    return;
+  }
+
   const payload = {
     name,
+    credit_limit: creditLimit,
     phone: document.getElementById('cf-phone').value.trim() || null,
     email: document.getElementById('cf-email').value.trim() || null,
     address: document.getElementById('cf-address').value.trim() || null,
@@ -275,43 +287,319 @@ custSaveBtn.addEventListener('click', async () => {
   }
 });
 
-// ── View customer ───────────────────────────────────────────────────────
+// ── View customer (header + field grid + tabbed history, like the main app) ──
 let custViewingId = null;
+let custViewTabLoaded = {};
+
+const cvFieldsEl = document.getElementById('cust-view-fields');
+const cvPanel = (tab) => document.querySelector(`#cust-view-panels [data-cv-panel="${tab}"]`);
+const cvEmpty = (icon, text) => `<div class="cv-empty"><i class="fa-solid ${icon}"></i>${t(text)}</div>`;
+
+// Date-only strings ("2026-10-28") are parsed as local midnight so they don't shift a day
+function fmtDate(s) {
+  if (!s) return '';
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? `${s}T00:00:00` : s);
+  return Number.isNaN(d.getTime()) ? s : d.toLocaleDateString(i18n.locale);
+}
 
 async function openCustView(id) {
   custViewingId = id;
+  custViewTabLoaded = {};
   document.getElementById('cust-view-name').textContent = t('Loading…');
-  document.getElementById('cust-view-body').innerHTML = `<div class="loading-state">${t('Loading…')}</div>`;
+  document.getElementById('cust-view-avatar').textContent = '?';
+  document.getElementById('cust-view-sales-badge').textContent = '';
+  cvFieldsEl.innerHTML = '';
+  cvRenderRentalAlert(0);
+  cvPanel('sales').innerHTML = cvEmpty('fa-spinner fa-spin', 'Loading…');
+  cvSwitchTab('sales');
   openModal('cust-view-modal');
 
   const res = await API.customer(id);
+  if (custViewingId !== id) return;
   if (res.status !== 200) {
-    document.getElementById('cust-view-body').innerHTML = `<div class="empty-state">${t('Could not load customer ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
+    cvPanel('sales').innerHTML = `<div class="cv-empty">${t('Could not load customer ({reason}).', { reason: t(res.body?.message) || res.status })}</div>`;
     return;
   }
 
   const c = res.body.data;
+  const salesCount = c.sales_count ?? 0;
   document.getElementById('cust-view-name').textContent = c.name;
+  document.getElementById('cust-view-avatar').textContent = (c.name || '?')[0].toUpperCase();
+  document.getElementById('cust-view-sales-badge').textContent = t(salesCount === 1 ? '{n} sale' : '{n} sales', { n: salesCount });
+  cvRenderRentalAlert(Number(c.overdue_rentals_count) || 0);
 
-  const salesRows = (c.recent_sales || []).map((s) => `
-    <div class="mini-list-item">
-      <span>${esc(s.sale_number)} <span class="muted">· ${s.sold_at ? new Date(s.sold_at).toLocaleDateString(i18n.locale) : ''}</span></span>
-      <span>${money(s.total)}</span>
-    </div>`).join('') || `<div class="mini-list-item"><span class="muted">${t('No sales yet.')}</span></div>`;
+  const fields = [
+    { label: 'Type', val: typeLabel(c.customer_type) },
+    { label: 'Category', val: esc(c.category_name) },
+    { label: 'Phone', val: esc(c.phone) },
+    { label: 'Email', val: esc(c.email) },
+    { label: 'Address', val: esc(c.address) },
+    { label: 'Notes', val: esc(c.notes) },
+    { label: 'Credit Limit', val: cvCreditLimitHtml(c) },
+  ];
+  cvFieldsEl.innerHTML = fields.map((f) => `
+    <div>
+      <div class="cv-field-label">${t(f.label)}</div>
+      <div class="cv-field-val${f.val ? '' : ' empty'}">${f.val || '—'}</div>
+    </div>`).join('');
 
-  document.getElementById('cust-view-body').innerHTML = `
-    <div class="view-row"><span>${t('Phone')}</span><span>${esc(c.phone) || '—'}</span></div>
-    <div class="view-row"><span>${t('Email')}</span><span>${esc(c.email) || '—'}</span></div>
-    <div class="view-row"><span>${t('Address')}</span><span>${esc(c.address) || '—'}</span></div>
-    <div class="view-row"><span>${t('Type')}</span><span>${typeLabel(c.customer_type)}</span></div>
-    <div class="view-row"><span>${t('Category')}</span><span>${esc(c.category_name) || '—'}</span></div>
-    <div class="view-row"><span>${t('Total sales')}</span><span>${c.sales_count ?? 0}</span></div>
-    ${c.notes ? `<div class="view-row"><span>${t('Notes')}</span><span>${esc(c.notes)}</span></div>` : ''}
-    <div style="margin-top:6px;">
-      <label style="font-size:12px;font-weight:600;color:var(--muted);">${t('Recent sales')}</label>
-      <div class="mini-list">${salesRows}</div>
-    </div>
-  `;
+  const pmLabel = { cash: 'Cash', card: 'Card', credit: 'Credit', cheque: 'Cheque' };
+  cvPanel('sales').innerHTML = (c.recent_sales || []).length
+    ? c.recent_sales.map((s) => {
+      const pm = (s.payment_method || '').toLowerCase();
+      return `
+      <div class="cv-row">
+        <span class="cv-row-main">${esc(s.sale_number || `#${s.id}`)}</span>
+        <span class="cv-spacer"></span>
+        ${pm ? `<span class="cv-pill ${esc(pm)}">${t(pmLabel[pm] || s.payment_method)}</span>` : ''}
+        <span class="cv-row-date">${fmtDate(s.sold_at)}</span>
+        <span class="cv-row-amt">${money(s.total)}</span>
+      </div>`;
+    }).join('')
+    : cvEmpty('fa-receipt', 'No sales yet.');
+}
+
+// "1,000.00 LKR · 400.00 LKR available" — or "No limit · owes 250.00 LKR" when the customer has no cap
+function cvCreditLimitHtml(c) {
+  const owed = Number(c.credit_outstanding) || 0;
+  if (c.credit_limit == null) {
+    return `<span style="color:var(--muted)">${t('No limit')}${owed > 0 ? ` · ${t('owes {amount}', { amount: money(owed) })}` : ''}</span>`;
+  }
+  const avail = Number(c.credit_available) || 0;
+  return `${money(c.credit_limit)} <span class="cv-credit-avail${avail <= 0 ? ' is-empty' : ''}">· ${t('{amount} available', { amount: money(avail) })}</span>`;
+}
+
+function cvRenderRentalAlert(overdue) {
+  const el = document.getElementById('cust-view-rental-alert');
+  const count = document.getElementById('cust-view-rentals-count');
+  count.textContent = overdue;
+  count.style.display = overdue ? '' : 'none';
+  if (!overdue) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>
+    <span>${t(overdue === 1 ? 'This customer has {n} overdue rental not yet returned.' : 'This customer has {n} overdue rentals not yet returned.', { n: overdue })}</span>
+    <button type="button">${t('View Rentals')}</button>`;
+  el.style.display = '';
+  el.querySelector('button').addEventListener('click', () => cvSwitchTab('rentals'));
+}
+
+function cvSwitchTab(tab) {
+  document.querySelectorAll('#cust-view-tabs .cv-tab').forEach((b) => b.classList.toggle('active', b.dataset.cvTab === tab));
+  document.querySelectorAll('#cust-view-panels .cv-panel').forEach((p) => { p.style.display = p.dataset.cvPanel === tab ? '' : 'none'; });
+  if (tab !== 'sales' && !custViewTabLoaded[tab]) cvLoadTab(tab);
+}
+
+document.querySelectorAll('#cust-view-tabs .cv-tab').forEach((b) => {
+  b.addEventListener('click', () => cvSwitchTab(b.dataset.cvTab));
+});
+
+// The customer's cheques and where each stands — claiming happens in Sales → Cheques
+const CHEQUE_STATUS = {
+  pending: { label: 'Not claimed', cls: 'pending' },
+  cleared: { label: 'Claimed', cls: 'cleared' },
+  bounced: { label: 'Bounced', cls: 'bounced' },
+  cancelled: { label: 'Cancelled', cls: 'cancelled' },
+};
+
+async function cvLoadTab(tab) {
+  const id = custViewingId;
+  if (id === null) return;
+  custViewTabLoaded[tab] = true;
+  const panel = cvPanel(tab);
+  panel.innerHTML = cvEmpty('fa-spinner fa-spin', 'Loading…');
+
+  if (tab === 'subs') {
+    const res = await API.customerSubscriptions(id);
+    if (custViewingId !== id) return;
+    const list = res.status === 200 ? (res.body?.data || []) : [];
+    panel.innerHTML = list.length ? list.map((s) => `
+      <div class="cv-row">
+        <span class="cv-row-main">${esc(s.product_name || '—')}</span>
+        <span class="cv-row-meta">${esc(s.recurring_period || '')} · ${t('Qty')} ${Number(s.quantity || 0)}</span>
+        <span class="cv-pill ${esc(s.status)}">${t(s.status_label || s.status)}</span>
+        <span class="cv-row-amt">${money(s.price)}</span>
+      </div>`).join('') : cvEmpty('fa-rotate', 'No subscription products purchased');
+
+  } else if (tab === 'warranty') {
+    const res = await API.customerWarranties(id);
+    if (custViewingId !== id) return;
+    const list = res.status === 200 ? (res.body?.data || []) : [];
+    panel.innerHTML = list.length ? list.map((w) => {
+      const lifetime = w.warranty_type === 'lifetime';
+      const expiry = lifetime ? t('Lifetime warranty') : (w.warranty_expires_at ? t('Expires {date}', { date: fmtDate(w.warranty_expires_at) }) : '—');
+      return `
+      <div class="cv-row">
+        <span class="cv-row-main">${esc(w.product_name || '—')}</span>
+        <span class="cv-row-meta">${esc(w.sale_number || '')} · ${esc(expiry)}</span>
+        ${lifetime ? '' : `<span class="cv-pill ${w.is_expired ? 'expired' : 'active'}">${t(w.is_expired ? 'Expired' : 'Active')}</span>`}
+      </div>`;
+    }).join('') : cvEmpty('fa-shield-halved', 'No warranty products purchased');
+
+  } else if (tab === 'credit') {
+    const res = await API.customerCreditSales(id);
+    if (custViewingId !== id) return;
+    const list = res.status === 200 ? (res.body?.data || []) : [];
+    const meta = res.status === 200 ? (res.body?.meta || {}) : {};
+    const totalDue = Number(meta.credit_outstanding ?? meta.total_due ?? 0);
+    const hasLimit = meta.credit_limit != null;
+    const usedPct = hasLimit && Number(meta.credit_limit) > 0
+      ? Math.min(100, Math.max(0, (totalDue / Number(meta.credit_limit)) * 100)) : 0;
+    const currency = (posSettings.currency || 'LKR').toUpperCase();
+
+    const summary = `
+      <div class="cv-kpis">
+        <div class="cv-kpi"><span>${t('Credit Limit')}</span><strong>${hasLimit ? money(meta.credit_limit) : t('No limit')}</strong></div>
+        <div class="cv-kpi is-due"><span>${t('Outstanding')}</span><strong>${money(totalDue)}</strong></div>
+        <div class="cv-kpi is-avail${hasLimit && Number(meta.credit_available) <= 0 ? ' is-empty' : ''}"><span>${t('Available')}</span><strong>${hasLimit ? money(meta.credit_available) : '—'}</strong></div>
+      </div>
+      ${hasLimit ? `
+      <div class="cv-usage${usedPct >= 90 ? ' is-high' : ''}">
+        <div class="cv-usage-bar"><span style="width:${usedPct.toFixed(1)}%"></span></div>
+        <small>${t('{n}% of credit limit used', { n: usedPct.toFixed(0) })}</small>
+      </div>` : ''}
+      ${totalDue > 0.005 ? `
+      <div class="cv-pay">
+        <div class="cv-pay-title"><i class="fa-solid fa-hand-holding-dollar"></i>${t('Receive a payment')}</div>
+        <div class="cv-pay-row">
+          <div class="cv-pay-amt">
+            <span>${esc(currency)}</span>
+            <input type="text" inputmode="decimal" id="cv-pay-amt" placeholder="0.00" autocomplete="off">
+            <button type="button" id="cv-pay-full">${t('Pay full')}</button>
+          </div>
+          <button type="button" class="cv-pay-method is-active" data-method="cash"><i class="fa-solid fa-money-bill-wave"></i> ${t('Cash')}</button>
+          <button type="button" class="cv-pay-method" data-method="card"><i class="fa-solid fa-credit-card"></i> ${t('Card')}</button>
+          <button type="button" class="primary-btn" id="cv-pay-btn"><i class="fa-solid fa-check"></i> ${t('Receive Payment')}</button>
+        </div>
+      </div>` : ''}`;
+
+    if (!list.length) {
+      panel.innerHTML = summary + cvEmpty('fa-hand-holding-dollar', 'No credit or due payments');
+      return;
+    }
+    panel.innerHTML = summary + list.map((s) => {
+      const state = s.is_paid ? 'paid' : (s.is_overdue ? 'overdue' : 'due');
+      const parts = [fmtDate(s.sold_at)];
+      if (s.credit_due_date) parts.push(t('Due {date}', { date: fmtDate(s.credit_due_date) }));
+      parts.push(Number(s.amount_paid) > 0
+        ? t('Paid {paid} of {total}', { paid: money(s.amount_paid), total: money(s.total) })
+        : t('Total {total}', { total: money(s.total) }));
+      return `
+      <div class="cv-row${s.is_overdue ? ' is-overdue' : ''}">
+        <span class="cv-row-main">${esc(s.sale_number || `#${s.id}`)}</span>
+        <span class="cv-row-meta">${esc(parts.filter(Boolean).join(' · '))}</span>
+        <span class="cv-pill ${state}">${t(state === 'paid' ? 'Paid' : state === 'overdue' ? 'Overdue' : 'Due')}</span>
+        <span class="cv-row-amt">${money(s.due_amount)}</span>
+      </div>`;
+    }).join('') + cvCreditPaymentsHtml(res.body?.payments || []);
+    cvWireCreditPayment(id, totalDue);
+
+  } else if (tab === 'rentals') {
+    const res = await API.customerRentals(id);
+    if (custViewingId !== id) return;
+    const list = res.status === 200 ? (res.body?.data || []) : [];
+    if (!list.length) { panel.innerHTML = cvEmpty('fa-calendar-days', 'No rentals'); return; }
+    const order = { overdue: 0, active: 1, returned: 2, cancelled: 3 };
+    list.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+    panel.innerHTML = list.map((r) => {
+      const meta = r.status === 'overdue'
+        ? `${t('Due {date}', { date: fmtDate(r.due_at) || '—' })} · ${t('{n}d late', { n: r.days_late ?? 0 })}`
+        : (r.returned_at ? t('Returned {date}', { date: fmtDate(r.returned_at) }) : t('Due {date}', { date: fmtDate(r.due_at) || '—' }));
+      return `
+      <div class="cv-row${r.status === 'overdue' ? ' is-overdue' : ''}">
+        <span class="cv-row-main">${esc(r.product_name || '—')}${Number(r.quantity) > 1 ? ` × ${esc(String(r.quantity))}` : ''}</span>
+        <span class="cv-row-meta">${esc(meta)}</span>
+        <span class="cv-pill ${esc(r.status)}">${t(r.status_label || r.status)}</span>
+        <span class="cv-row-amt">${money(r.total_amount)}</span>
+      </div>`;
+    }).join('');
+
+  } else if (tab === 'cheques') {
+    const res = await API.saleCheques({ customerId: id, perPage: 100 });
+    if (custViewingId !== id) return;
+    const list = res.status === 200 ? (res.body?.data || []) : [];
+    const sum = res.body?.summary || {};
+    if (!list.length) { panel.innerHTML = cvEmpty('fa-money-check', 'No cheques from this customer.'); return; }
+    const kpis = `
+      <div class="cv-kpis">
+        <div class="cv-kpi is-due"><span>${t('Not claimed')} (${sum.pending_count || 0})</span><strong>${money(sum.pending_total)}</strong></div>
+        <div class="cv-kpi is-avail"><span>${t('Claimed')} (${sum.cleared_count || 0})</span><strong>${money(sum.cleared_total)}</strong></div>
+        <div class="cv-kpi"><span>${t('Bounced')} (${sum.bounced_count || 0})</span><strong>${money(sum.bounced_total)}</strong></div>
+      </div>`;
+    panel.innerHTML = kpis + list.map((c) => {
+      const st = CHEQUE_STATUS[c.status] || { label: c.status, cls: 'cancelled' };
+      const isDue = c.status === 'pending' && c.is_due;
+      const meta = [c.sale_number, c.cheque_date ? fmtDate(c.cheque_date) : '', c.bank_name,
+        c.status === 'bounced' && c.bounce_reason ? `${t('Bounced')}: ${c.bounce_reason}` : '']
+        .filter(Boolean).map(esc).join(' · ');
+      return `
+      <div class="cv-row">
+        <span class="cv-row-main">#${esc(c.cheque_number)}</span>
+        <span class="cv-row-meta">${meta}</span>
+        <span class="chq-pill ${st.cls}${isDue ? ' due' : ''}">${isDue ? t('Due to claim') : t(st.label)}</span>
+        <span class="cv-row-amt">${money(c.amount)}</span>
+      </div>`;
+    }).join('');
+  }
+}
+
+function cvCreditPaymentsHtml(payments) {
+  if (!payments.length) return '';
+  return `<div class="cv-section-title" style="margin-top:14px">${t('Payment History')}</div>` +
+    payments.map((p) => {
+      const when = p.paid_at ? new Date(p.paid_at).toLocaleString(i18n.locale, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+      const bills = (p.sales || []).map((x) => x.sale_number).filter(Boolean).join(', ');
+      const meta = [(p.payment_method || '').toUpperCase(), bills, p.received_by].filter(Boolean).join(' · ');
+      return `
+      <div class="cv-row">
+        <span class="cv-row-main">${esc(when)}</span>
+        <span class="cv-row-meta">${esc(meta)}</span>
+        <span class="cv-pill paid">${t('Received')}</span>
+        <span class="cv-row-amt is-in">${money(p.amount)}</span>
+      </div>`;
+    }).join('');
+}
+
+// Receive a payment against the customer's credit dues; the server applies it oldest sale first,
+// which frees the same amount of their credit limit for new credit sales.
+function cvWireCreditPayment(id, totalDue) {
+  const amtEl = document.getElementById('cv-pay-amt');
+  const btn = document.getElementById('cv-pay-btn');
+  if (!amtEl || !btn) return;
+  let method = 'cash';
+
+  document.getElementById('cv-pay-full').addEventListener('click', () => { amtEl.value = totalDue.toFixed(2); amtEl.focus(); });
+  document.querySelectorAll('.cv-pay-method').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.cv-pay-method').forEach((x) => x.classList.toggle('is-active', x === b));
+    method = b.dataset.method;
+  }));
+
+  const submit = async () => {
+    const amount = Number(amtEl.value.trim());
+    if (!Number.isFinite(amount) || amount <= 0) { showToast(t('Enter a payment amount'), 'error'); amtEl.focus(); return; }
+    if (amount > totalDue + 0.005) {
+      showToast(t('Payment is more than the outstanding due ({amount})', { amount: money(totalDue) }), 'error');
+      amtEl.focus();
+      return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${t('Saving…')}`;
+    const res = await API.customerCreditPayment(id, { amount, payment_method: method });
+    btn.disabled = false;
+    btn.innerHTML = `<i class="fa-solid fa-check"></i> ${t('Receive Payment')}`;
+
+    if (res.status !== 200) {
+      showToast(t(res.body?.errors?.amount?.[0] || res.body?.message || 'Could not record the payment.'), 'error');
+      return;
+    }
+    showToast(t(res.body?.message || 'Payment received'), 'success');
+    if (custViewingId !== id) return;
+    // Refresh the header (available credit) and the credit list
+    await openCustView(id);
+    cvSwitchTab('credit');
+  };
+
+  btn.addEventListener('click', submit);
+  amtEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
 }
 
 document.getElementById('cust-view-edit-btn').addEventListener('click', () => {

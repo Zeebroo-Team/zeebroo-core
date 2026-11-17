@@ -26,8 +26,9 @@ class AppReleaseApiController extends Controller
             'notes'        => ['nullable', 'array'],
             'notes.*'      => ['string'],
             'windows_url'  => ['nullable', 'url'],
-            'macos_url'    => ['nullable', 'url'],
-            'linux_url'    => ['nullable', 'url'],
+            'macos_url'       => ['nullable', 'url'],
+            'macos_intel_url' => ['nullable', 'url'],
+            'linux_url'       => ['nullable', 'url'],
         ]);
         $data['app'] = $data['app'] ?? AppRelease::APP_MAIN;
 

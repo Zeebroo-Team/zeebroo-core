@@ -16,7 +16,7 @@ return new class extends Migration
                 $table->foreignId('service_category_id')->constrained('service_categories')->cascadeOnDelete();
                 $table->timestamps();
 
-                $table->unique(['service_item_id', 'service_category_id']);
+                $table->unique(['service_item_id', 'service_category_id'], 'service_item_category_unique');
                 $table->index('service_category_id');
             });
         }
