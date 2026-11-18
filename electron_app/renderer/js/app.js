@@ -63799,6 +63799,151 @@ async function submitDsCreate() {
     return `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
   }
 
+  // ── Brand → Model picker (GET …/quotations/catalog/brands, …/catalog/models?brand_id=) ──
+  // The catalog is cached per lead workspace; s.pick holds what is chosen so a re-render keeps it.
+  function _crmQtPickHtml(s) {
+    const cat = _crmWs.qtCatalog;
+    if (!cat || cat.brands === null) return '<div class="crm-qtx-pick crm-ws-muted" style="font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading brands…</div>';
+    if (!cat.brands.length) return ''; // no brands set up — the inventory search below still works
+    const p = (s.pick ||= { brandId: '', modelId: '', qty: 1, open: null });
+    const brand = cat.brands.find(b => String(b.id) === p.brandId);
+    const models = p.brandId ? cat.models[p.brandId] : null;
+    const model = Array.isArray(models) ? models.find(m => String(m.id) === p.modelId) : null;
+    const onQuote = model ? s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +model.id) : null;
+
+    const brandCombo = _crmQtComboHtml('brand', {
+      value: brand?.name, placeholder: 'Choose a brand', searchPh: `Search ${cat.brands.length} brands`, open: p.open === 'brand',
+      items: cat.brands.map(b => ({ id: b.id, title: b.name, right: `${b.product_count}`, search: b.name, sel: String(b.id) === p.brandId })),
+    });
+    const modelCombo = _crmQtComboHtml('model', {
+      value: model ? model.label : '', placeholder: p.brandId ? 'Choose a model' : 'Choose a brand first', disabled: !p.brandId,
+      searchPh: Array.isArray(models) ? `Search ${models.length} models — name, model no. or SKU` : 'Search', open: p.open === 'model',
+      loading: models === 'loading' || (p.brandId && models === undefined),
+      empty: models === 'error' ? 'Could not load the models — pick the brand again.' : 'No products for this brand.',
+      items: Array.isArray(models) ? models.map(m => ({
+        id: m.id, title: m.label, sub: [m.model_no && m.name !== m.label ? m.name : '', m.sku].filter(Boolean).join(' · '),
+        right: `${_crmQtMoney(m.unit_sell_price)}${m.stock_quantity != null && m.stock_quantity <= 0 ? ' · <span class="crm-qtc-out">Out</span>' : ''}`,
+        search: [m.label, m.name, m.sku, m.model_no].filter(Boolean).join(' '), sel: String(m.id) === p.modelId,
+      })) : [],
+    });
+
+    const stock = model?.stock_quantity;
+    const val = (v, none) => v ? escHtml(v) : `<span class="crm-qtc-none">${none}</span>`;
+    const card = model ? `<div class="crm-qtx-pick-card">
+        <div class="crm-qtx-pick-title">
+          <span class="crm-qtx-pick-name"><b>${escHtml(model.name)}</b><small>${[model.model_no && `Model ${escHtml(model.model_no)}`, model.sku && `SKU ${escHtml(model.sku)}`].filter(Boolean).join(' · ')}</small></span>
+          ${stock != null ? `<span class="crm-qtx-dot${stock > 0 ? '' : ' crm-qtx-dot--out'}">${stock > 0 ? `${_crmQtQty(stock)} in stock` : 'Out of stock'}</span>` : ''}
+        </div>
+        <dl class="crm-qtx-pick-info">
+          <div><dt>Warranty</dt><dd>${val(model.warranty, 'None')}</dd></div>
+          <div><dt>Delivery</dt><dd>${val(model.delivery, 'Not offered')}</dd></div>
+          <div><dt>Unit price</dt><dd>${_crmQtMoney(model.unit_sell_price)}</dd></div>
+        </dl>
+        ${onQuote ? `<div class="crm-qtx-pick-dup">Already on this quotation (qty ${_crmQtQty(_crmQtNum(onQuote.quantity))}) — adding increases that line.</div>` : ''}
+      </div>` : '';
+
+    return `<div class="crm-qtx-pick">
+        <div class="crm-qtx-pick-row">
+          <div class="crm-qtx-pick-f"><span>Brand</span>${brandCombo}</div>
+          <div class="crm-qtx-pick-f"><span>Model</span>${modelCombo}</div>
+          <div class="crm-qtx-pick-f"><span>Qty</span><input class="po-field-input crm-qt-numin" type="number" min="1" step="any" data-qt-pick-qty value="${escHtml(String(p.qty ?? 1))}"${model ? '' : ' disabled'} data-wheel-blur></div>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-pick-add${model ? '' : ' disabled'} title="${model ? 'Add to the quotation (Enter)' : 'Choose a brand and a model first'}">${onQuote ? 'Add more' : 'Add'}</button>
+        </div>
+        ${card}
+        <div class="crm-qtx-pick-or">or search all inventory</div>
+      </div>`;
+  }
+
+  /** macOS pop-up button with a searchable menu (shares .mac-popup / .mac-combo-* with the rest of the app). */
+  function _crmQtComboHtml(kind, o) {
+    const items = o.items || [];
+    const list = o.loading ? '<div class="mac-combo-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>'
+      : !items.length ? `<div class="mac-combo-empty">${o.empty || 'Nothing to choose.'}</div>`
+      : items.map(it => `<button type="button" class="mac-combo-item crm-qtc-item${it.sel ? ' sel' : ''}" data-qt-combo-opt="${kind}" data-v="${it.id}" data-s="${escHtml(String(it.search || it.title).toLowerCase())}">
+          <span class="crm-qtc-t"><span>${escHtml(it.title)}</span>${it.sub ? `<em>${escHtml(it.sub)}</em>` : ''}</span>${it.right ? `<span class="crm-qtc-r">${it.right}</span>` : ''}</button>`).join('')
+        + '<div class="mac-combo-empty crm-qtc-hide" data-qt-combo-none>No matches.</div>';
+    return `<div class="mac-combo crm-qtc${o.open ? ' open' : ''}" data-qt-combo="${kind}">
+        <button type="button" class="mac-popup crm-qtc-btn" data-qt-combo-toggle="${kind}"${o.disabled ? ' disabled' : ''}>${o.value ? escHtml(o.value) : `<span class="crm-qtc-ph">${escHtml(o.placeholder)}</span>`}</button>
+        ${o.open ? `<div class="mac-combo-pop crm-qtc-pop">
+          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" data-qt-combo-q="${kind}" placeholder="${escHtml(o.searchPh || 'Search')}" autocomplete="off" spellcheck="false"></div>
+          <div class="mac-combo-list crm-qtc-list">${list}</div>
+        </div>` : ''}
+      </div>`;
+  }
+
+  function _crmQtRenderPick() {
+    const el = $('#crm-qt-pick');
+    const s = _crmWs.qt;
+    if (!el || s?.view !== 'edit') return;
+    const prevQ = el.querySelector('[data-qt-combo-q]'); // keep what was typed while the models were loading
+    const typed = prevQ && prevQ.dataset.qtComboQ === s.pick?.open ? prevQ.value : '';
+    el.innerHTML = _crmQtPickHtml(s);
+    const q = el.querySelector('[data-qt-combo-q]');
+    if (q) {
+      q.focus();
+      if (typed) { q.value = typed; _crmQtComboFilter(q); }
+      else _crmQtComboHl(el.querySelector('.crm-qtc-item.sel') || el.querySelector('.crm-qtc-item'));
+    }
+  }
+
+  /** Highlight one menu item (keyboard / hover) and keep it in view. */
+  function _crmQtComboHl(item, scroll = true) {
+    const list = item?.closest('.crm-qtc-list') || $('#crm-qt-pick .crm-qtc-list');
+    list?.querySelectorAll('.crm-qtc-item.hl').forEach(x => x.classList.remove('hl'));
+    if (item) { item.classList.add('hl'); if (scroll) item.scrollIntoView({ block: 'nearest' }); }
+  }
+
+  /** Filter the open menu in place — every word must match (name, model no., SKU). */
+  function _crmQtComboFilter(input) {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const list = input.closest('.crm-qtc-pop')?.querySelector('.crm-qtc-list');
+    if (!list) return;
+    let first = null;
+    list.querySelectorAll('.crm-qtc-item').forEach(it => {
+      const show = words.every(w => it.dataset.s.includes(w));
+      it.classList.toggle('crm-qtc-hide', !show);
+      if (show && !first) first = it;
+    });
+    list.querySelector('[data-qt-combo-none]')?.classList.toggle('crm-qtc-hide', !!first);
+    _crmQtComboHl(first);
+  }
+
+  function _crmQtComboPick(kind, value) {
+    const lead = _crmViewLead;
+    const s = _crmWs.qt;
+    if (!lead || !s?.pick) return;
+    if (kind === 'brand') {
+      // Straight on to the model menu of that brand
+      s.pick = { brandId: value, modelId: '', qty: 1, open: 'model' };
+      _crmQtRenderPick();
+      _crmQtLoadModels(lead, value);
+    } else {
+      s.pick = { ...s.pick, modelId: value, qty: 1, open: null };
+      _crmQtRenderPick();
+      $('#crm-qt-pick [data-qt-pick-qty]')?.select();
+    }
+  }
+
+  async function _crmQtLoadBrands(lead) {
+    if (_crmWs.qtCatalog && !_crmWs.qtCatalog.failed) return;
+    const cat = _crmWs.qtCatalog = { brands: null, models: {} };
+    const res = await API.crmQuotationBrands(lead.id).catch(() => ({ status: 0 }));
+    if (_crmWs.qtCatalog !== cat) return;
+    cat.brands = res.status === 200 ? (res.body?.data || []) : [];
+    cat.failed = res.status !== 200; // hide the picker; try again next time the editor opens
+    _crmQtRenderPick();
+  }
+
+  async function _crmQtLoadModels(lead, brandId) {
+    const cat = _crmWs.qtCatalog;
+    if (!cat || Array.isArray(cat.models[brandId]) || cat.models[brandId] === 'loading') return;
+    cat.models[brandId] = 'loading';
+    const res = await API.crmQuotationModels(lead.id, brandId).catch(() => ({ status: 0 }));
+    if (_crmWs.qtCatalog !== cat) return;
+    cat.models[brandId] = res.status === 200 ? (res.body?.data || []) : 'error'; // 'error' is retried on the next brand pick
+    _crmQtRenderPick();
+  }
+
   function _crmQtFormHtml(s) {
     const f = s.form;
     const t = _crmQtTotals(f);
@@ -63806,17 +63951,20 @@ async function submitDsCreate() {
       ? `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-rotate-left"></i> Returned: ${escHtml(s.detail.approval_comment)}</div>` : '';
     const rows = f.lines.map((l, i) => `
       <tr data-qt-line="${i}">
-        <td>
-          <input class="po-field-input" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="What are you quoting? e.g. Installation, delivery…">
-          ${l.item_type === 'product' && l.product_id ? `<div class="crm-ws-muted crm-qt-sub"><i class="fa fa-box"></i> ${escHtml(l.sku || 'Product')}</div>` : ''}
+        <td><div class="crm-qt-item">
+          <span class="crm-qt-item-ic${l.item_type === 'product' && l.product_id ? '' : ' crm-qt-item-ic--custom'}"><i class="fa ${l.item_type === 'product' && l.product_id ? 'fa-box' : 'fa-pen'}"></i></span>
+          <div class="crm-qt-item-main">
+          <input class="po-field-input crm-qt-item-name" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="What are you quoting? e.g. Installation, delivery…">
           <div class="crm-qt-note${l.notes || l._noteOpen ? ' open' : ''}">
-            <button type="button" class="crm-qt-note-add" data-qt-note-open="${i}"><i class="fa fa-plus"></i> Add note</button>
+            ${l.item_type === 'product' && l.product_id ? `<span class="crm-qt-sku">${escHtml(l.sku || 'Product')}</span>` : '<span class="crm-qt-sku">Custom line</span>'}
+            <button type="button" class="crm-qt-note-add" data-qt-note-open="${i}"><i class="fa fa-plus"></i> Note</button>
             <div class="crm-qt-note-box">
               <i class="fa fa-note-sticky"></i>
               <textarea rows="${Math.min(6, Math.max(1, String(l.notes || '').split('\n').length))}" maxlength="1000" data-qt-f="notes" data-qt-i="${i}" placeholder="e.g. colour, size, delivery or warranty remark — printed under this item">${escHtml(l.notes || '')}</textarea>
               <button type="button" class="crm-qt-note-clear" data-qt-note-clear="${i}" title="Remove note"><i class="fa fa-xmark"></i></button>
             </div>
           </div>
+          </div></div>
         </td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" data-wheel-blur></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" data-wheel-blur></td>
@@ -63824,7 +63972,7 @@ async function submitDsCreate() {
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" data-wheel-blur></td>
         <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
         <td data-qt-stock="${i}">${_crmQtStockCellHtml(s, i)}</td>
-        <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-minus"></i></button></td>
+        <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-xmark"></i></button></td>
       </tr>`).join('');
 
     const n = f.lines.length;
@@ -63851,6 +63999,7 @@ async function submitDsCreate() {
           <tbody>${rows || `<tr><td colspan="8"><div class="crm-qtx-noitems"><i class="fa fa-box-open"></i> No lines yet — search inventory below or add a custom line.</div></td></tr>`}</tbody>
         </table></div>
         <div id="crm-qt-stock-warn" class="crm-qtx-pad">${_crmQtStockWarnHtml(s.stock)}</div>
+        <div id="crm-qt-pick">${_crmQtPickHtml(s)}</div>
         <div class="crm-qt-add crm-qtx-add">
           <div class="crm-qtx-search">
             <i class="fa fa-magnifying-glass"></i>
@@ -63930,9 +64079,82 @@ async function submitDsCreate() {
 
   function _crmQtEdit(lead, form) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'edit', form, stock: null });
+    Object.assign(s, { view: 'edit', form, stock: null, pick: { brandId: '', modelId: '', qty: 1, open: null } });
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
+    _crmQtLoadBrands(lead);
+  }
+
+  // Brand → Model menus: open / pick / search / keyboard; picking a brand loads (once) its models and opens the model menu
+  $('#crm-qt-edit-modal')?.addEventListener('click', e => {
+    const s = _crmWs.qt;
+    if (!s?.pick || s.view !== 'edit') return;
+    const opt = e.target.closest('[data-qt-combo-opt]');
+    if (opt) { _crmQtComboPick(opt.dataset.qtComboOpt, opt.dataset.v); return; }
+    const tog = e.target.closest('[data-qt-combo-toggle]');
+    if (tog && !tog.disabled) {
+      s.pick.open = s.pick.open === tog.dataset.qtComboToggle ? null : tog.dataset.qtComboToggle;
+      _crmQtRenderPick();
+      if (!s.pick.open) tog.focus();
+    }
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('mousedown', e => {
+    // A click anywhere outside the open menu closes it
+    const s = _crmWs.qt;
+    // (drop just the menu — re-rendering here would swallow a click on e.g. the Add button)
+    if (s?.pick?.open && !e.target.closest('.crm-qtc')) {
+      s.pick.open = null;
+      $$('#crm-qt-pick .crm-qtc-pop').forEach(x => x.remove());
+      $$('#crm-qt-pick .crm-qtc.open').forEach(x => x.classList.remove('open'));
+    }
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('mouseover', e => {
+    const it = e.target.closest('.crm-qtc-item');
+    if (it && !it.classList.contains('hl')) _crmQtComboHl(it, false);
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('input', e => {
+    if (e.target.matches('[data-qt-pick-qty]') && _crmWs.qt?.pick) _crmWs.qt.pick.qty = e.target.value;
+    else if (e.target.matches('[data-qt-combo-q]')) _crmQtComboFilter(e.target);
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('keydown', e => {
+    const el = e.target;
+    if (e.key === 'Enter' && el.matches('[data-qt-pick-qty]')) { e.preventDefault(); $('#crm-qt-pick [data-qt-pick-add]')?.click(); return; }
+    // Space / ↓ on a closed pop-up button opens its menu, like macOS
+    if (el.matches('[data-qt-combo-toggle]') && (e.key === 'ArrowDown' || e.key === ' ')) { e.preventDefault(); el.click(); return; }
+    if (!el.matches('[data-qt-combo-q]')) return;
+    const items = [...el.closest('.crm-qtc-pop').querySelectorAll('.crm-qtc-item:not(.crm-qtc-hide)')];
+    const at = items.findIndex(x => x.classList.contains('hl'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = e.key === 'ArrowDown' ? Math.min(items.length - 1, at + 1) : Math.max(0, at - 1);
+      _crmQtComboHl(items[next]);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      items[at]?.click();
+    } else if (e.key === 'Escape' || e.key === 'Tab') {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } // close the menu, not the window
+      const kind = el.dataset.qtComboQ;
+      _crmWs.qt.pick.open = null;
+      _crmQtRenderPick();
+      $(`#crm-qt-pick [data-qt-combo-toggle="${kind}"]`)?.focus();
+    }
+  });
+
+  /** Add the picked model — or bump the quantity when it is already on the quotation. */
+  function _crmQtAddPicked(lead, s) {
+    const models = _crmWs.qtCatalog?.models[s.pick?.brandId];
+    const m = Array.isArray(models) ? models.find(x => String(x.id) === s.pick.modelId) : null;
+    if (!m) return;
+    const qty = Math.max(0.001, _crmQtNum(s.pick.qty) || 1);
+    const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
+    if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
+    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '',
+      quantity: qty, unit_price: m.unit_sell_price ?? 0, discount_amount: 0, tax_rate: 0 });
+    s.pick = { ...s.pick, modelId: '', qty: 1, open: null }; // keep the brand for the next model
+    _crmRenderWsTab();
+    _crmQtScheduleStock(lead);
+    toast(existing ? `${m.name} — quantity now ${_crmQtQty(existing.quantity)}` : `Added ${m.name}`, 'success');
+    $('#crm-qt-pick [data-qt-combo-toggle="model"]')?.focus();
   }
 
   async function _crmQtSave(lead, btn) {
@@ -64309,6 +64531,8 @@ async function submitDsCreate() {
     }
     const t = e.target.closest('button');
     if (!t) return;
+
+    if (t.matches('[data-qt-pick-add]') && s.form) { _crmQtAddPicked(lead, s); return; }
 
     if (t.matches('[data-qt-new]')) {
       _crmQtEdit(lead, _crmQtNewForm());

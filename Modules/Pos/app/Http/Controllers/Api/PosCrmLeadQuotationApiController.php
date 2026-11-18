@@ -20,6 +20,7 @@ use Modules\CRM\Services\QuotationApprovalService;
 use Modules\CRM\Services\QuotationDispatch\QuotationDispatcher;
 use Modules\CRM\Services\QuotationNegotiationService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
+use Modules\Pos\Services\CrmQuotationCatalogService;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
 use Modules\Sales\Models\QuotationCustomerResponse;
@@ -103,6 +104,27 @@ class PosCrmLeadQuotationApiController extends Controller
         ]);
 
         return response()->json(['data' => $this->leadQuotations->stockCheck($business, $data['items'], $data['branch_id'] ?? null)]);
+    }
+
+    /** GET crm/leads/{lead}/quotations/catalog/brands — brands for the editor's Brand → Model picker. */
+    public function catalogBrands(Request $request, int $leadId, CrmQuotationCatalogService $catalog): JsonResponse
+    {
+        [$business] = $this->context($request, $leadId);
+
+        return response()->json(['data' => $catalog->brands($business)]);
+    }
+
+    /** GET crm/leads/{lead}/quotations/catalog/models?brand_id= — the brand's products with warranty / delivery info. */
+    public function catalogModels(Request $request, int $leadId, CrmQuotationCatalogService $catalog): JsonResponse
+    {
+        [$business] = $this->context($request, $leadId);
+
+        $data = $request->validate(['brand_id' => ['required', 'integer', 'min:1']]);
+        $branchId = $request->header('X-Branch-Id');
+
+        return response()->json([
+            'data' => $catalog->models($business, (int) $data['brand_id'], is_numeric($branchId) ? (int) $branchId : null),
+        ]);
     }
 
     /** GET crm/leads/{lead}/quotations/{quotation} */

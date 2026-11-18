@@ -742,6 +742,8 @@ const API = (() => {
     crmCreateLeadQuotation:   (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations`, body),
     crmUpdateLeadQuotation:   (leadId, id, body)       => request('PUT',    `/crm/leads/${leadId}/quotations/${id}`, body),
     crmLeadQuotationStock:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations/stock-check`, body),
+    crmQuotationBrands:       (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations/catalog/brands`),
+    crmQuotationModels:       (leadId, brandId)        => request('GET',    `/crm/leads/${leadId}/quotations/catalog/models?brand_id=${encodeURIComponent(brandId)}`),
     crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
     // action: submit | approve | return | reject — body { comment }
     crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),

@@ -27,7 +27,8 @@ class ProductController extends Controller
      * Mirrors the delivery partner keys/labels configured under POS Settings → Delivery
      * (see Modules\Pos\Services\PosSettingsService::DELIVERY_METHOD_KEYS).
      */
-    private const DELIVERY_PARTNER_LABELS = [
+    /** Also read by the CRM quotation product picker (CrmQuotationCatalogService). */
+    public const DELIVERY_PARTNER_LABELS = [
         'dhl' => 'DHL Express',
         'fedex' => 'FedEx',
         'uber' => 'Uber',
