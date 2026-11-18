@@ -127,6 +127,17 @@ class PosCrmLeadQuotationApiController extends Controller
         ]);
     }
 
+    /** GET crm/leads/{lead}/quotations/catalog/products/{product} — model no. / warranty / delivery for a line's note. */
+    public function catalogProduct(Request $request, int $leadId, int $productId, CrmQuotationCatalogService $catalog): JsonResponse
+    {
+        [$business] = $this->context($request, $leadId);
+
+        $info = $catalog->productInfo($business, $productId);
+        abort_if($info === null, 404);
+
+        return response()->json(['data' => $info]);
+    }
+
     /** GET crm/leads/{lead}/quotations/{quotation} */
     public function show(Request $request, int $leadId, int $quotationId): JsonResponse
     {

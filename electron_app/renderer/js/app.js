@@ -63839,7 +63839,8 @@ async function submitDsCreate() {
           <div><dt>Delivery</dt><dd>${val(model.delivery, 'Not offered')}</dd></div>
           <div><dt>Unit price</dt><dd>${_crmQtMoney(model.unit_sell_price)}</dd></div>
         </dl>
-        ${onQuote ? `<div class="crm-qtx-pick-dup">Already on this quotation (qty ${_crmQtQty(_crmQtNum(onQuote.quantity))}) — adding increases that line.</div>` : ''}
+        ${onQuote ? `<div class="crm-qtx-pick-dup">Already on this quotation (qty ${_crmQtQty(_crmQtNum(onQuote.quantity))}) — adding increases that line.</div>`
+          : _crmQtInfoNote(model) ? '<div class="crm-qtx-pick-note"><i class="fa fa-note-sticky"></i> Model, warranty and delivery go into the item\'s note — edit it there if needed.</div>' : ''}
       </div>` : '';
 
     return `<div class="crm-qtx-pick">
@@ -64083,6 +64084,8 @@ async function submitDsCreate() {
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
     _crmQtLoadBrands(lead);
+    // A new quotation starts with the lead's products of interest — give them their warranty / delivery note too
+    if (!form.id) form.lines.filter(l => l.product_id && !(l.notes || '').trim()).forEach(l => _crmQtFillNote(lead, l));
   }
 
   // Brand → Model menus: open / pick / search / keyboard; picking a brand loads (once) its models and opens the model menu
@@ -64140,6 +64143,33 @@ async function submitDsCreate() {
     }
   });
 
+  /** The line note a product brings with it — printed under the item on the quotation. */
+  function _crmQtInfoNote(info) {
+    if (!info) return '';
+    return [
+      info.model_no && `Model: ${info.model_no}`,
+      info.warranty && `Warranty: ${info.warranty === 'Yes' ? 'Included' : info.warranty}`,
+      info.delivery && `Delivery: ${info.delivery}`,
+    ].filter(Boolean).join('\n');
+  }
+
+  /** Lines added from the inventory search: fetch the product's info and fill the note (unless one was typed meanwhile). */
+  async function _crmQtFillNote(lead, line) {
+    const res = await API.crmQuotationProductInfo(lead.id, line.product_id).catch(() => ({ status: 0 }));
+    const s = _crmWs.qt;
+    const note = res.status === 200 ? _crmQtInfoNote(res.body?.data) : '';
+    const i = s?.form ? s.form.lines.indexOf(line) : -1;
+    if (!note || i < 0 || (line.notes || '').trim()) return;
+    line.notes = note;
+    // Update just that row's note box — keeps focus wherever the user is typing
+    const wrap = $(`#crm-qt-edit-body [data-qt-line="${i}"] .crm-qt-note`);
+    const box = wrap?.querySelector('textarea');
+    if (!box) return;
+    box.value = note;
+    box.rows = Math.min(6, note.split('\n').length);
+    wrap.classList.add('open');
+  }
+
   /** Add the picked model — or bump the quantity when it is already on the quotation. */
   function _crmQtAddPicked(lead, s) {
     const models = _crmWs.qtCatalog?.models[s.pick?.brandId];
@@ -64148,7 +64178,7 @@ async function submitDsCreate() {
     const qty = Math.max(0.001, _crmQtNum(s.pick.qty) || 1);
     const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
     if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
-    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '',
+    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
       quantity: qty, unit_price: m.unit_sell_price ?? 0, discount_amount: 0, tax_rate: 0 });
     s.pick = { ...s.pick, modelId: '', qty: 1, open: null }; // keep the brand for the next model
     _crmRenderWsTab();
@@ -64522,10 +64552,12 @@ async function submitDsCreate() {
     const s = _crmQtState();
     const pick = e.target.closest('[data-qt-pick]');
     if (pick && s.form) {
-      s.form.lines.push({ item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
-        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0 });
+      const line = { item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
+        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0 };
+      s.form.lines.push(line);
       _crmRenderWsTab();
       _crmQtScheduleStock(lead);
+      _crmQtFillNote(lead, line);
       $('#crm-qt-product-search')?.focus();
       return;
     }

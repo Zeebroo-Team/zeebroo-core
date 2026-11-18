@@ -105,6 +105,29 @@ class CrmQuotationCatalogService
         return $models;
     }
 
+    /**
+     * One product's quotation info (for lines added from the inventory search) — null when not this business's.
+     *
+     * @return array{id: int, model_no: ?string, warranty: ?string, delivery: ?string}|null
+     */
+    public function productInfo(Business $business, int $productId): ?array
+    {
+        $p = Product::query()
+            ->where('business_id', $business->id)
+            ->find($productId, ['id', 'model_no', 'has_warranty', 'warranty_duration', 'courier_delivery', 'delivery_methods']);
+        if (! $p) {
+            return null;
+        }
+        $modelNo = trim((string) $p->model_no);
+
+        return [
+            'id'       => (int) $p->id,
+            'model_no' => $modelNo !== '' ? $modelNo : null,
+            'warranty' => $this->warranty($p),
+            'delivery' => $this->delivery($p),
+        ];
+    }
+
     private function warranty(?Product $p): ?string
     {
         if (! $p?->has_warranty) {
