@@ -19,6 +19,7 @@ use Modules\CRM\Services\QuotationApprovalMailer;
 use Modules\CRM\Services\QuotationApprovalService;
 use Modules\CRM\Services\QuotationDispatch\QuotationDispatcher;
 use Modules\CRM\Services\QuotationNegotiationService;
+use Modules\CRM\Services\QuotationRevisionService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Services\CrmQuotationCatalogService;
 use Modules\Sales\Models\Quotation;
@@ -26,6 +27,7 @@ use Modules\Sales\Models\QuotationApproval;
 use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
 use Modules\Sales\Models\QuotationItem;
+use Modules\Sales\Models\QuotationRevisionRequest;
 use Modules\Sales\Services\QuotationPrintService;
 use Modules\Sales\Services\QuotationService;
 use Modules\Sales\Services\QuotationVersionService;
@@ -55,6 +57,7 @@ class PosCrmLeadQuotationApiController extends Controller
         private readonly QuotationNegotiationService $negotiation,
         private readonly QuotationVersionService $versions,
         private readonly LeadAssignmentService $assignments,
+        private readonly QuotationRevisionService $revisions,
     ) {}
 
     /** GET crm/leads/{lead}/quotations — the lead's quotations, newest first. */
@@ -170,7 +173,7 @@ class PosCrmLeadQuotationApiController extends Controller
         return response()->json(['data' => $this->presentDetail($business, $access, $lead, $quotation)]);
     }
 
-    /** PUT crm/leads/{lead}/quotations/{quotation} — while draft or returned. */
+    /** PUT crm/leads/{lead}/quotations/{quotation} — while draft or returned; an issued one needs a revision request. */
     public function update(Request $request, int $leadId, int $quotationId): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
@@ -179,7 +182,7 @@ class PosCrmLeadQuotationApiController extends Controller
 
         $data      = $this->validated($request, $business);
         $items     = $this->priced($request, $business, $access, $lead, $data['items']);
-        $quotation = $this->leadQuotations->update($lead, $quotation, $data, $items);
+        $quotation = $this->leadQuotations->update($lead, $quotation, $data, $items, $request->user()?->id);
 
         return response()->json(['message' => 'Quotation saved.', 'data' => $this->presentDetail($business, $access, $lead, $quotation)]);
     }
@@ -251,19 +254,110 @@ class PosCrmLeadQuotationApiController extends Controller
         return response()->json(['data' => $this->versions->diff($against, $quotation)]);
     }
 
-    /** POST …/{quotation}/revise — a new draft version of an approved, sent or rejected quotation; the old one is superseded. */
+    /**
+     * POST …/{quotation}/revise — { reason? }: a head (or admin) makes a new draft version of an
+     * approved, sent or rejected quotation straight away, recorded as a revision request they
+     * approved themselves. Staff send a revision request instead (requestRevision).
+     */
     public function revise(Request $request, int $leadId, int $quotationId): JsonResponse
     {
         [$business, $access, $lead] = $this->context($request, $leadId);
-        $this->abortUnlessAllowed($this->policy->canQuote($access, $lead));
+        if (! $this->policy->canApproveQuotation($access, $lead)) {
+            throw new HttpResponseException(response()->json([
+                'message' => 'An issued quotation cannot be changed directly — send a revision request to the department head.',
+            ], 403));
+        }
         $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
 
-        $revision = $this->leadQuotations->revise($lead, $quotation, $request->user()?->id);
+        $data     = $request->validate(['reason' => ['nullable', 'string', 'max:2000']]);
+        $revision = $this->revisions->request($lead, $quotation, (int) $request->user()->id, $data['reason'] ?? 'New version made by the head.', approveNow: true);
 
         return response()->json([
             'message' => 'Version ' . $revision->version . ' (' . $revision->quote_number . ') created.',
             'data'    => $this->presentDetail($business, $access, $lead, $revision),
         ], 201);
+    }
+
+    /**
+     * POST …/{quotation}/revision-requests — { reason }: ask the head to allow changing an issued
+     * quotation. A head / admin asking is approved at once: "data" is then the new version.
+     */
+    public function requestRevision(Request $request, int $leadId, int $quotationId): JsonResponse
+    {
+        [$business, $access, $lead] = $this->context($request, $leadId);
+        $canApprove = $this->policy->canApproveQuotation($access, $lead);
+        $this->abortUnlessAllowed($canApprove || $this->policy->canQuote($access, $lead));
+        $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
+
+        $data   = $request->validate(['reason' => ['required', 'string', 'max:2000']]);
+        $result = $this->revisions->request($lead, $quotation, (int) $request->user()->id, $data['reason'], approveNow: $canApprove);
+
+        if ($result instanceof Quotation) {
+            return response()->json([
+                'message'  => 'Version ' . $result->version . ' (' . $result->quote_number . ') created — make the changes and submit it.',
+                'approved' => true,
+                'data'     => $this->presentDetail($business, $access, $lead->fresh(), $result),
+            ], 201);
+        }
+
+        return response()->json([
+            'message'  => 'Revision request sent to the department head.',
+            'approved' => false,
+            'data'     => $this->presentDetail($business, $access, $lead, $quotation->fresh()),
+        ], 201);
+    }
+
+    /** POST …/{quotation}/revision-requests/{request}/approve — { comment? }: the head; the new draft version is returned. */
+    public function approveRevision(Request $request, int $leadId, int $quotationId, int $requestId): JsonResponse
+    {
+        [$business, $access, $lead, $quotation, $revisionRequest] = $this->revisionContext($request, $leadId, $quotationId, $requestId);
+        $this->abortUnlessAllowed($this->policy->canApproveQuotation($access, $lead));
+
+        $data     = $request->validate(['comment' => ['nullable', 'string', 'max:2000']]);
+        $revision = $this->revisions->approve($lead, $revisionRequest, (int) $request->user()->id, $data['comment'] ?? null);
+
+        return response()->json([
+            'message' => 'Revision approved — version ' . $revision->version . ' (' . $revision->quote_number . ') created.',
+            'data'    => $this->presentDetail($business, $access, $lead->fresh(), $revision),
+        ]);
+    }
+
+    /** POST …/{quotation}/revision-requests/{request}/reject — { comment }: the head; the quotation stays as it is. */
+    public function rejectRevision(Request $request, int $leadId, int $quotationId, int $requestId): JsonResponse
+    {
+        [$business, $access, $lead, $quotation, $revisionRequest] = $this->revisionContext($request, $leadId, $quotationId, $requestId);
+        $this->abortUnlessAllowed($this->policy->canApproveQuotation($access, $lead));
+
+        $data = $request->validate(['comment' => ['required', 'string', 'max:2000']]);
+        $this->revisions->reject($lead, $revisionRequest, (int) $request->user()->id, $data['comment']);
+
+        return response()->json(['message' => 'Revision request rejected.', 'data' => $this->presentDetail($business, $access, $lead, $quotation->fresh())]);
+    }
+
+    /** POST …/{quotation}/revision-requests/{request}/cancel — whoever asked, or a head. */
+    public function cancelRevision(Request $request, int $leadId, int $quotationId, int $requestId): JsonResponse
+    {
+        [$business, $access, $lead, $quotation, $revisionRequest] = $this->revisionContext($request, $leadId, $quotationId, $requestId);
+        $userId = (int) $request->user()->id;
+        $this->abortUnlessAllowed((int) $revisionRequest->requested_by === $userId || $this->policy->canApproveQuotation($access, $lead));
+
+        $this->revisions->cancel($revisionRequest, $userId);
+
+        return response()->json(['message' => 'Revision request cancelled.', 'data' => $this->presentDetail($business, $access, $lead, $quotation->fresh())]);
+    }
+
+    /** GET crm/quotation-revision-requests — revision requests waiting for this user's decision. */
+    public function revisionInbox(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $access   = $this->access($request, $business);
+
+        $rows = $this->revisions->inbox($business, $access)->map(fn (QuotationRevisionRequest $r) => $this->presentRevisionRequest($r) + [
+            'quotation' => $this->presentListItem($r->quotation),
+            'lead'      => $this->presentLead($r->quotation->lead),
+        ])->values();
+
+        return response()->json(['data' => $rows]);
     }
 
     /**
@@ -480,13 +574,51 @@ class PosCrmLeadQuotationApiController extends Controller
             'sent_via'         => $q->sent_via,
             'has_pdf'          => $q->pdf_path !== null,
             'updated_at'       => $q->updated_at?->toIso8601String(),
+            // A revision request waiting for the head (only when loaded — the lead's list loads it)
+            'pending_revision' => $q->relationLoaded('pendingRevisionRequest') && $q->pendingRevisionRequest
+                ? $this->presentRevisionRequest($q->pendingRevisionRequest)
+                : null,
         ];
+    }
+
+    /** One revision request: who asked and why, who decided, the version it made and who changed it. */
+    private function presentRevisionRequest(QuotationRevisionRequest $r): array
+    {
+        $r->loadMissing(['requestedBy:id,name', 'decidedBy:id,name', 'revisedBy:id,name', 'revision:id,quote_number,version']);
+        $user = fn ($u) => $u ? ['id' => (int) $u->id, 'name' => $u->name] : null;
+
+        return [
+            'id'               => (int) $r->id,
+            'quotation_id'     => (int) $r->quotation_id,
+            'version'          => (int) $r->version,
+            'status'           => $r->status,
+            'label'            => $r->label(),
+            'reason'           => $r->reason,
+            'requested_by'     => $user($r->requestedBy),
+            'requested_at'     => $r->created_at?->toIso8601String(),
+            'decided_by'       => $user($r->decidedBy),
+            'decided_at'       => $r->decided_at?->toIso8601String(),
+            'decision_comment' => $r->decision_comment,
+            'revision'         => $r->revision ? ['id' => (int) $r->revision->id, 'quote_number' => $r->revision->quote_number, 'version' => (int) $r->revision->version] : null,
+            'revised_by'       => $user($r->revisedBy),
+            'revised_at'       => $r->revised_at?->toIso8601String(),
+        ];
+    }
+
+    /** @return array{0: Business, 1: CrmAccess, 2: Lead, 3: Quotation, 4: QuotationRevisionRequest} */
+    private function revisionContext(Request $request, int $leadId, int $quotationId, int $requestId): array
+    {
+        [$business, $access, $lead] = $this->context($request, $leadId);
+        $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
+
+        return [$business, $access, $lead, $quotation, $this->revisions->requestForQuotation($quotation, $requestId)];
     }
 
     private function presentDetail(Business $business, CrmAccess $access, Lead $lead, Quotation $q): array
     {
         $q->setRelation('lead', $lead);
-        $q->load(['customer', 'items.product:id,name,sku', 'approvals.byUser:id,name', 'dispatches.sentBy:id,name', 'customerResponses.recordedBy:id,name', 'submittedBy:id,name', 'approvedBy:id,name']);
+        $q->load(['customer', 'items.product:id,name,sku', 'approvals.byUser:id,name', 'dispatches.sentBy:id,name', 'customerResponses.recordedBy:id,name', 'submittedBy:id,name', 'approvedBy:id,name',
+            'revisionRequests', 'pendingRevisionRequest', 'revisionSource']);
 
         $items = $q->items->map(fn (QuotationItem $i) => [
             'id'              => (int) $i->id,
@@ -515,6 +647,10 @@ class PosCrmLeadQuotationApiController extends Controller
         $newer      = $q->isSuperseded()
             ? Quotation::query()->where('business_id', $q->business_id)->where('parent_quotation_id', $q->id)->first(['id', 'quote_number', 'version'])
             : null;
+        // Revision control: an issued quotation changes only through a request the head approves
+        $pendingRevision = $q->pendingRevisionRequest;
+        $revisable       = $this->revisions->blocker($q) === null;
+        $myId            = (int) $access->userId;
 
         return $this->presentListItem($q) + [
             'reference'     => $q->reference,
@@ -541,6 +677,15 @@ class PosCrmLeadQuotationApiController extends Controller
             // The heads the submit form offers to email for approval
             'approvers'     => $canSubmit && $this->approvals->approvalCheck($lead, $q)['required'] ? $this->approvals->approvers($lead) : [],
             'superseded_by' => $newer ? ['id' => (int) $newer->id, 'quote_number' => $newer->quote_number, 'version' => (int) $newer->version] : null,
+            // Locked: issued, so changing it needs an approved revision request
+            'is_locked'          => ! $q->isEditable(),
+            'pending_revision'   => $pendingRevision ? $this->presentRevisionRequest($pendingRevision) : null,
+            // Every revision request made on this version (approved, rejected, cancelled, pending)
+            'revision_requests'  => $q->revisionRequests->map(fn (QuotationRevisionRequest $r) => $this->presentRevisionRequest($r))->values(),
+            // The approved request this version was made from: who asked, who approved, who changed it
+            'revision_of'        => $q->revisionSource ? $this->presentRevisionRequest($q->revisionSource) : null,
+            // true → asking makes the new version at once (the user may approve it themselves)
+            'revision_auto_approve' => $canApprove,
             'responses'     => $q->customerResponses->map(fn (QuotationCustomerResponse $r) => $this->presentResponse($r))->values(),
             'approvals'     => $q->approvals->map(fn (QuotationApproval $a) => [
                 'id'      => (int) $a->id,
@@ -570,9 +715,14 @@ class PosCrmLeadQuotationApiController extends Controller
                 'approve' => $canApprove && $pending,
                 'return'  => $canApprove && $pending,
                 'reject'  => $canApprove && $pending,
-                'revise'  => $canQuote && ! $q->isEditable() && ! in_array($q->status, [Quotation::STATUS_PENDING_APPROVAL, Quotation::STATUS_ACCEPTED, Quotation::STATUS_SUPERSEDED], true),
+                // A head / admin making a new version directly (recorded as a self-approved request)
+                'revise'  => $canApprove && $revisable,
                 'send'    => $canSend,
                 'respond' => $canQuote && $q->status === Quotation::STATUS_SENT,
+                'request_revision' => ($canQuote || $canApprove) && $revisable,
+                'approve_revision' => $canApprove && $pendingRevision !== null,
+                'reject_revision'  => $canApprove && $pendingRevision !== null,
+                'cancel_revision'  => $pendingRevision !== null && ($canApprove || (int) $pendingRevision->requested_by === $myId),
             ],
             'channels'      => $canSend ? $this->dispatcher->channels() : [],
             'send_defaults' => $canSend ? $this->dispatcher->defaults($lead, $q) + ['cc_options' => $this->ccOptions($lead, $q)] : null,
@@ -619,7 +769,7 @@ class PosCrmLeadQuotationApiController extends Controller
     /** Every version, oldest first, with its discount, the customer's responses and the diff from the version before. */
     private function presentVersions(Quotation $quotation): array
     {
-        $versions = $this->versions->versions($quotation);
+        $versions = $this->versions->versions($quotation)->load('revisionSource');
         $previous = null;
         $rows     = [];
         foreach ($versions as $v) {
@@ -630,6 +780,8 @@ class PosCrmLeadQuotationApiController extends Controller
                 'items_count'      => $v->items->count(),
                 'is_current'       => (int) $v->id === (int) $quotation->id,
                 'responses'        => $v->customerResponses->map(fn (QuotationCustomerResponse $r) => $this->presentResponse($r))->values(),
+                // The approved revision request this version came from: requested / approved / revised by
+                'revision'         => $v->revisionSource ? $this->presentRevisionRequest($v->revisionSource) : null,
                 'diff'             => $previous ? $this->versions->diff($previous, $v) : null,
             ];
             $previous = $v;

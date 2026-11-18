@@ -34,6 +34,7 @@ use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
 use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
+use Modules\Sales\Models\QuotationRevisionRequest;
 use Modules\Sales\Services\QuotationPrintService;
 use Modules\Sales\Services\QuotationService;
 use Modules\Sales\Services\QuotationTemplateService;
@@ -689,7 +690,7 @@ test('rejected â†’ locked; a new version carries the lines over', function 
         ->and(crmQuoteStatus(fn () => crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody())))->toBe(422)
         ->and(crmQuoteStatus(fn () => crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST')))->toBe(422);
 
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
 
     expect($v2->quote_number)->toBe('QT-0001-v2')
         ->and($v2->version)->toBe(2)
@@ -998,7 +999,7 @@ test('the customer accepting wins the lead; rejecting loses it with a lost reaso
     expect($q->fresh()->status)->toBe('accepted')
         ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_WON)
         ->and(crmQuoteStatus(fn () => crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'reject'])))->toBe(422)
-        ->and(crmQuoteStatus(fn () => crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')))->toBe(422);
+        ->and(crmQuoteStatus(fn () => crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')))->toBe(422);
 
     // A second lead whose customer says no
     $this->lead = app(LeadAssignmentService::class)->sync(app(LeadService::class)->create($this->sales, ['name' => 'Ruwan', 'email' => 'ruwan@example.com'], 1), [3], null, 2);
@@ -1031,7 +1032,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
     $q = crmQuoteSent();
     crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'discount_request', 'requested_discount' => 10]);
 
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     expect($v2->quote_number)->toBe('QT-0001-v2')
         ->and($v2->version)->toBe(2)
         ->and($v2->parent_quotation_id)->toBe($q->id)
@@ -1042,7 +1043,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
     // v2 â†’ v3 carries on the numbering from the first version
     crmQuote('submit', 3, [$this->lead->id, $v2->id], 'POST');
     crmQuote('approve', 2, [$this->lead->id, $v2->id], 'POST');
-    $v3 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $v2->id], 'POST')->getData(true)['data']['id']);
+    $v3 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $v2->id], 'POST')->getData(true)['data']['id']);
 
     expect($v3->quote_number)->toBe('QT-0001-v3')
         ->and($v3->version)->toBe(3)
@@ -1059,7 +1060,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
 
 test('a superseded version is read-only', function () {
     $q  = crmQuoteSent();
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     $q  = $q->fresh();
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
 
@@ -1073,7 +1074,7 @@ test('a superseded version is read-only', function () {
         ->and(crmQuoteStatus(fn () => crmQuote('approve', 2, [$this->lead->id, $q->id], 'POST')))->toBe(422)
         ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', $send)))->toBe(422)
         ->and(crmQuoteStatus(fn () => crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'accept'])))->toBe(422)
-        ->and(crmQuoteStatus(fn () => crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')))->toBe(422)
+        ->and(crmQuoteStatus(fn () => crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')))->toBe(422)
         ->and(fn () => app(QuotationService::class)->delete($q))->toThrow(ValidationException::class)
         ->and(app(QuotationService::class)->markAccepted($q)->fresh()->status)->toBe('superseded')
         ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(2)
@@ -1086,7 +1087,7 @@ test('the diff between versions lists added, removed and changed lines and the t
         ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 100],
         ['item_type' => 'custom', 'description' => 'Install', 'quantity' => 1, 'unit_price' => 50],
     ]);
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody([
         ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 100, 'discount_amount' => 20],
         ['item_type' => 'custom', 'description' => 'Cable', 'quantity' => 1, 'unit_price' => 10],
@@ -1207,7 +1208,7 @@ test('a revised version needs approval again', function () {
     crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'discount_request', 'requested_discount' => 20]);
 
     // The customer wants 20%; the staff give 20% in v2 â†’ over the 10% limit
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody(null, ['discount_amount' => 40]));
 
     expect(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $v2->id], 'POST', $send)))->toBe(422)
@@ -1218,7 +1219,7 @@ test('a revised version needs approval again', function () {
 test('the customer window shows every version of a quotation', function () {
     $customerId = DB::table('pos_customers')->insertGetId(['business_id' => 7, 'name' => 'Kasun']);
     $q  = crmQuoteSent(null, ['customer_id' => $customerId]);
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
 
     $versions = crmQuote('customerVersions', 3, [$customerId, $q->id])->getData(true)['data'];
     expect(array_column($versions, 'id'))->toBe([$q->id, $v2->id])
@@ -1311,4 +1312,128 @@ it('keeps the standard price when a quotation is revised', function () {
 
     expect((float) $revision->items()->first()->list_price)->toBe(150.0)
         ->and($revision->items()->first()->isPriceChanged())->toBeTrue();
+});
+
+// ── Revision control ─────────────────────────────────────────────────────
+
+test('staff cannot change an issued quotation directly — only through a revision request', function () {
+    $q = crmQuoteSent();
+
+    expect(crmQuoteStatus(fn () => crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody())))->toBe(422)
+        ->and(crmQuoteStatus(fn () => crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')))->toBe(403)
+        ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(1);
+
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['is_locked'])->toBeTrue()
+        ->and($detail['can']['edit'])->toBeFalse()
+        ->and($detail['can']['revise'])->toBeFalse()
+        ->and($detail['can']['request_revision'])->toBeTrue()
+        ->and($detail['revision_auto_approve'])->toBeFalse();
+});
+
+test('a revision request waits for the head, who approves it into a new version', function () {
+    $q = crmQuoteSent();
+
+    $res = crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Customer wants 2 more panels']);
+    $req = QuotationRevisionRequest::sole();
+    expect($res->getStatusCode())->toBe(201)
+        ->and($res->getData(true)['approved'])->toBeFalse()
+        ->and($req->status)->toBe('pending')
+        ->and($req->requested_by)->toBe(3)
+        ->and($req->version)->toBe(1)
+        ->and($q->fresh()->status)->toBe('sent')             // untouched until the head decides
+        ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(1)
+        ->and($res->getData(true)['data']['pending_revision']['reason'])->toBe('Customer wants 2 more panels')
+        ->and($res->getData(true)['data']['can']['request_revision'])->toBeFalse()   // one at a time
+        ->and(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Again'])))->toBe(422)
+        // Staff cannot decide their own request
+        ->and(crmQuoteStatus(fn () => crmQuote('approveRevision', 3, [$this->lead->id, $q->id, $req->id], 'POST')))->toBe(403);
+
+    // The head sees it in the inbox; the staff do not
+    expect(array_column(crmQuote('revisionInbox', 2)->getData(true)['data'], 'id'))->toBe([$req->id])
+        ->and(crmQuote('revisionInbox', 3)->getData(true)['data'])->toBe([]);
+
+    $res = crmQuote('approveRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST', ['comment' => 'OK, keep the discount']);
+    $v2  = Quotation::findOrFail($res->getData(true)['data']['id']);
+    $req = $req->fresh();
+
+    expect($v2->quote_number)->toBe('QT-0001-v2')
+        ->and($v2->status)->toBe('draft')
+        ->and($v2->parent_quotation_id)->toBe($q->id)
+        ->and($q->fresh()->status)->toBe('superseded')        // the original is kept, read-only
+        ->and($req->status)->toBe('approved')
+        ->and($req->decided_by)->toBe(2)
+        ->and($req->decision_comment)->toBe('OK, keep the discount')
+        ->and($req->revision_id)->toBe($v2->id)
+        ->and($req->revised_by)->toBeNull()
+        ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_QUOTATION_PREPARING)
+        ->and(crmQuote('revisionInbox', 2)->getData(true)['data'])->toBe([]);
+
+    // Whoever makes the changes in the new version is recorded
+    crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 4, 'unit_price' => 100],
+    ]));
+    expect($req->fresh()->revised_by)->toBe(3)
+        ->and($req->fresh()->revised_at)->not->toBeNull();
+
+    // The version history says who asked, who approved and who changed each revision
+    $versions = crmQuote('versions', 3, [$this->lead->id, $v2->id])->getData(true)['data'];
+    expect($versions[0]['revision'])->toBeNull()
+        ->and($versions[1]['revision']['requested_by']['id'])->toBe(3)
+        ->and($versions[1]['revision']['decided_by']['id'])->toBe(2)
+        ->and($versions[1]['revision']['revised_by']['id'])->toBe(3)
+        ->and($versions[1]['revision']['reason'])->toBe('Customer wants 2 more panels');
+
+    $detail = crmQuote('show', 3, [$this->lead->id, $v2->id])->getData(true)['data'];
+    expect($detail['revision_of']['id'])->toBe($req->id)
+        ->and(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['revision_requests'][0]['status'])->toBe('approved');
+});
+
+test('the head can reject a revision request with a reason; the quotation stays as it is', function () {
+    $q   = crmQuoteSent();
+    crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Lower the price']);
+    $req = QuotationRevisionRequest::sole();
+
+    expect(crmQuoteStatus(fn () => crmQuote('rejectRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST')))->toBe(422);
+
+    crmQuote('rejectRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST', ['comment' => 'Price is already at the floor']);
+
+    expect($req->fresh()->status)->toBe('rejected')
+        ->and($req->fresh()->decided_by)->toBe(2)
+        ->and($q->fresh()->status)->toBe('sent')
+        ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(1)
+        // Decided once only
+        ->and(crmQuoteStatus(fn () => crmQuote('approveRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST')))->toBe(422)
+        // …and a new request can be made after a rejection
+        ->and(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Customer insists'])))->toBe(201);
+});
+
+test('a revision request needs a reason, an issued quotation and can be withdrawn by the requester', function () {
+    $draft = crmQuoteCreate();
+    expect(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $draft->id], 'POST', ['reason' => 'x'])))->toBe(422);
+
+    $q = crmQuoteSent();
+    expect(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => '  '])))->toBe(422)
+        ->and(QuotationRevisionRequest::count())->toBe(0);
+
+    crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Wrong model']);
+    $req = QuotationRevisionRequest::sole();
+    crmQuote('cancelRevision', 3, [$this->lead->id, $q->id, $req->id], 'POST');
+
+    expect($req->fresh()->status)->toBe('cancelled')
+        ->and($q->fresh()->status)->toBe('sent');
+});
+
+test('a head asking for a revision gets the new version at once, recorded as approved by them', function () {
+    $q   = crmQuoteSent();
+    $res = crmQuote('requestRevision', 2, [$this->lead->id, $q->id], 'POST', ['reason' => 'Add installation']);
+    $req = QuotationRevisionRequest::sole();
+
+    expect($res->getStatusCode())->toBe(201)
+        ->and($res->getData(true)['approved'])->toBeTrue()
+        ->and($res->getData(true)['data']['quote_number'])->toBe('QT-0001-v2')
+        ->and($req->status)->toBe('approved')
+        ->and($req->requested_by)->toBe(2)
+        ->and($req->decided_by)->toBe(2)
+        ->and($q->fresh()->status)->toBe('superseded');
 });

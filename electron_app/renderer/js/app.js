@@ -9955,7 +9955,9 @@ const _notifIconMap = {
   crm_lead_assigned:              { icon: 'fa-user-check',            cls: 'info'    },
   crm_quotation_submitted:        { icon: 'fa-file-signature',        cls: 'warning' },
   crm_quotation_decided:          { icon: 'fa-file-circle-check',     cls: 'info'    },
-  crm_follow_up_due:              { icon: 'fa-phone-volume',          cls: 'warning' },
+  crm_quotation_revision_requested: { icon: 'fa-code-pull-request',   cls: 'warning' },
+  crm_quotation_revision_decided:   { icon: 'fa-code-branch',         cls: 'info'    },
+  crm_follow_up_due:             { icon: 'fa-phone-volume',          cls: 'warning' },
   crm_follow_up_overdue:          { icon: 'fa-phone-slash',           cls: 'danger'  },
   crm_lead_closed:                { icon: 'fa-flag-checkered',        cls: 'success' },
   crm_lead_stage:                 { icon: 'fa-bolt',                  cls: 'info'    },
@@ -62208,7 +62210,7 @@ async function submitDsCreate() {
   const _CRM_TAB_NOTIF_TYPES = {
     overview:   ['crm_lead_new', 'crm_lead_forwarded', 'crm_lead_assigned', 'crm_stage_approval'],
     timeline:   ['crm_lead_stage', 'crm_stage_approval_decided', 'crm_lead_closed'],
-    quotations: ['crm_quotation_submitted', 'crm_quotation_decided'],
+    quotations: ['crm_quotation_submitted', 'crm_quotation_decided', 'crm_quotation_revision_requested', 'crm_quotation_revision_decided'],
     followups:  ['crm_follow_up_due', 'crm_follow_up_overdue'],
   };
   function _crmTabUnread(key) {
@@ -63835,9 +63837,11 @@ async function submitDsCreate() {
         <span class="crm-qtl-ic"><i class="fa ${_CRM_QT_ICONS[q.status] || 'fa-file-lines'}"></i></span>
         <span class="crm-qtl-main">
           <span class="crm-qtl-title"><b>${escHtml(q.quote_number)}</b>${q.version > 1 ? `<span class="crm-qtl-ver">v${q.version}</span>` : ''}
-            <span class="crm-qtl-status"><i></i>${escHtml(q.status_label)}</span>${old ? '' : expiry(q)}</span>
+            <span class="crm-qtl-status"><i></i>${escHtml(q.status_label)}</span>${old ? '' : expiry(q)}
+            ${q.pending_revision ? '<span class="crm-qtl-warn"><i class="fa fa-code-pull-request"></i> Revision requested</span>' : ''}</span>
           <span class="crm-qtl-meta">${meta2(q)}</span>
-          ${!old && NEXT[q.status] ? `<span class="crm-qtl-next"><i class="fa ${NEXT[q.status][0]}"></i> ${NEXT[q.status][1]}</span>` : ''}
+          ${!old && q.pending_revision ? `<span class="crm-qtl-next"><i class="fa fa-hourglass-half"></i> Revision waiting for the department head — ${escHtml(q.pending_revision.requested_by?.name || 'staff')}: ${escHtml(q.pending_revision.reason)}</span>`
+            : !old && NEXT[q.status] ? `<span class="crm-qtl-next"><i class="fa ${NEXT[q.status][0]}"></i> ${NEXT[q.status][1]}</span>` : ''}
         </span>
         <span class="crm-qtl-amt">${_crmQtMoney(q.total)}</span>
         <i class="fa fa-chevron-right crm-qtl-chev"></i>
@@ -64527,6 +64531,14 @@ async function submitDsCreate() {
     if (q.status === 'pending_approval') banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-hourglass-half"></i> Waiting for the department head's approval${q.submitted_by ? ` — submitted by ${escHtml(q.submitted_by.name)}` : ''}.</div>`);
     if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
     if (q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-lock"></i> This version was replaced${q.superseded_by ? ` by <button type="button" class="crm-ws-link" data-qt-open="${q.superseded_by.id}">${escHtml(q.superseded_by.quote_number)}</button>` : ''} — it is kept read-only as history.</div>`);
+    // Revision control: issued quotations are locked; a change needs a revision request the head approves
+    const pr = q.pending_revision;
+    if (pr) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-code-pull-request"></i> <span>Revision requested by <b>${escHtml(pr.requested_by?.name || '—')}</b>${pr.requested_at ? ` on ${escHtml(_crmFmtDateTime(pr.requested_at))}` : ''} — waiting for the department head's decision.<br>Reason: ${escHtml(pr.reason)}</span></div>`);
+    const lastRev = [...(q.revision_requests || [])].pop();
+    if (!pr && lastRev?.status === 'rejected' && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--red"><i class="fa fa-ban"></i> Revision request rejected${lastRev.decided_by ? ` by ${escHtml(lastRev.decided_by.name)}` : ''}${lastRev.decision_comment ? `: ${escHtml(lastRev.decision_comment)}` : ''}.</div>`);
+    const ro = q.revision_of;
+    if (ro) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-code-branch"></i> <span>Revision of v${ro.version} — requested by <b>${escHtml(ro.requested_by?.name || '—')}</b>, approved by <b>${escHtml(ro.decided_by?.name || '—')}</b>${ro.decided_at ? ` on ${escHtml(_crmFmtDateTime(ro.decided_at))}` : ''}${ro.revised_by ? `, changes by <b>${escHtml(ro.revised_by.name)}</b>` : ''}.<br>Reason: ${escHtml(ro.reason)}</span></div>`);
+    if (q.is_locked && !q.is_superseded && !pr && can.request_revision) banners.push(`<div class="crm-qt-banner"><i class="fa fa-lock"></i> This quotation has been issued and can no longer be edited. ${q.revision_auto_approve ? 'Make a new version to change it.' : 'To change it, request a revision — the department head must approve it first.'}</div>`);
     if (q.within_limits) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Issued without approval — within the department's discount and value limits${q.approved_at ? ` (${escHtml(_crmFmtDateTime(q.approved_at))})` : ''}.</div>`);
     if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
     const val = q.approval?.value;
@@ -64537,7 +64549,7 @@ async function submitDsCreate() {
     if (pc.length && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-tag"></i> <span>${pc.length} ${pc.length === 1 ? 'price was' : 'prices were'} changed from the standard price${q.status === 'pending_approval' ? ' — check before approving' : ''}:
       ${pc.map(c => `<br>${escHtml(c.description)}: ${_crmQtMoney(c.list_price)} → <b>${_crmQtMoney(c.unit_price)}</b>${c.change_percent != null ? ` (${c.change_percent > 0 ? '+' : ''}${_crmQtQty(c.change_percent)}%)` : ''}`).join('')}</span></div>`);
     const lastAsk = [...(q.responses || [])].reverse().find(r => r.response === 'discount_request');
-    if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Make a new version with the revised price.</div>`);
+    if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Request a revision to change the price.</div>`);
     if (stock.has_shortage) banners.push(_crmQtStockWarnHtml(stock));
 
     const btn = (cond, attr, icon, label, kind = '') => cond ? `<button type="button" class="crm-qtx-btn${kind ? ` crm-qtx-btn--${kind}` : ''}" ${attr}><i class="fa ${icon}"></i> ${label}</button>` : '';
@@ -64550,10 +64562,13 @@ async function submitDsCreate() {
       btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'danger'),
       btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : 'Send to customer', 'primary'),
       btn(can.respond && !s.respond, 'data-qt-respond-open', 'fa-comments', 'Record customer response', 'primary'),
+      btn(can.approve_revision, 'data-qt-rev-act="approve"', 'fa-code-branch', 'Approve revision', 'primary'),
+      btn(can.reject_revision, 'data-qt-rev-act="reject"', 'fa-ban', 'Reject revision', 'danger'),
+      btn(can.cancel_revision && !can.approve_revision, 'data-qt-rev-act="cancel"', 'fa-xmark', 'Cancel revision request'),
     ].join('');
     const tools = [
       btn(can.edit, 'data-qt-edit', 'fa-pen', 'Edit'),
-      btn(can.revise, 'data-qt-revise', 'fa-code-branch', 'New version'),
+      btn(can.request_revision, 'data-qt-revise', 'fa-code-branch', q.revision_auto_approve ? 'New version' : 'Request revision'),
       btn((q.items || []).length > 0, 'data-qt-print', 'fa-print', 'Print'),
       btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
     ].join('');
@@ -64609,7 +64624,7 @@ async function submitDsCreate() {
           <label style="grid-column:1/-1">Notes<textarea class="po-field-input" id="crm-qt-resp-notes" rows="3" maxlength="2000" style="resize:vertical" placeholder="What exactly did they say?">${escHtml(r.notes || '')}</textarea></label>
         </div>
         <div class="crm-ws-muted" id="crm-qt-resp-hint">${{
-          discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount and submit it for approval.',
+          discount_request: 'The lead moves to Negotiation. Then request a revision (the department head approves it) and make the new version with the revised discount.',
           accept: 'The quotation is marked accepted and the lead is won.',
           reject: 'The quotation is marked rejected and the lead is lost.',
         }[r.response]}</div>
@@ -64628,6 +64643,16 @@ async function submitDsCreate() {
         title: `${x.label}${x.requested_discount != null ? ` — ${_crmQtQty(x.requested_discount)}%` : ''}`, by: x.by?.name, body: x.notes })),
       ...(q.dispatches || []).map(d => ({ at: d.sent_at || d.at, icon: d.status === 'failed' ? 'fa-triangle-exclamation' : 'fa-envelope-circle-check', color: d.status === 'failed' ? '#ff3b30' : '#0a84ff',
         title: `${d.status === 'sent' ? 'Sent' : d.status === 'failed' ? 'Could not send' : 'Queued'} by ${d.channel} to ${d.to}${d.cc?.length ? ` (cc ${d.cc.join(', ')})` : ''}`, by: d.by?.name, body: d.status === 'failed' ? d.error : d.subject })),
+      // Revision requests on this version: asked (who, why) and the decision (who, comment)
+      ...(q.revision_requests || []).flatMap(r => [
+        { at: r.requested_at, icon: 'fa-code-pull-request', color: '#af52de', title: 'Revision requested', by: r.requested_by?.name, body: r.reason },
+        ...(r.status !== 'pending' && r.decided_at ? [{
+          at: r.decided_at,
+          icon: { approved: 'fa-code-branch', rejected: 'fa-ban', cancelled: 'fa-xmark' }[r.status] || 'fa-circle',
+          color: { approved: '#30b0c7', rejected: '#ff3b30', cancelled: '#8e8e93' }[r.status] || '#8e8e93',
+          title: `${r.label}${r.revision ? ` → ${r.revision.quote_number}` : ''}`, by: r.decided_by?.name, body: r.decision_comment,
+        }] : []),
+      ]),
     ].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
     // Same grouped panel as the Timeline tab
     const historyHtml = history.length ? `<div class="crm-qtx-h">Activity<small>${history.length}</small></div><div class="crm-tlf-group">${history.map(h => `
@@ -64754,6 +64779,11 @@ async function submitDsCreate() {
           <span class="crm-ws-muted">${_crmQtDate(v.quote_date)}${v.discount_percent ? ` · ${_crmQtQty(v.discount_percent)}% off` : ''}</span>
           <span class="crm-qt-amt" style="margin-left:auto">${_crmQtMoney(v.total)}</span>
         </div>
+        ${v.revision ? `<div class="crm-ws-muted" style="margin-top:3px"><i class="fa fa-code-branch"></i> ${[
+          `Requested by ${escHtml(v.revision.requested_by?.name || '—')}${v.revision.requested_at ? ` (${escHtml(_crmFmtDateTime(v.revision.requested_at))})` : ''}`,
+          `approved by ${escHtml(v.revision.decided_by?.name || '—')}${v.revision.decided_at ? ` (${escHtml(_crmFmtDateTime(v.revision.decided_at))})` : ''}`,
+          v.revision.revised_by ? `changes by ${escHtml(v.revision.revised_by.name)}${v.revision.revised_at ? ` (${escHtml(_crmFmtDateTime(v.revision.revised_at))})` : ''}` : 'not changed yet',
+        ].join(' · ')}<div style="margin-left:16px">Reason: ${escHtml(v.revision.reason)}</div></div>` : ''}
         ${(v.responses || []).map(x => `<div class="crm-ws-muted" style="margin-top:3px"><i class="fa fa-comments"></i> ${escHtml(x.label)}${x.requested_discount != null ? ` — ${_crmQtQty(x.requested_discount)}%` : ''}${x.notes ? `: ${escHtml(x.notes)}` : ''}</div>`).join('')}
         ${v.diff ? `<details${v.is_current ? ' open' : ''}><summary>What changed from v${v.diff.from.version}${v.diff.changed ? '' : ' — nothing'}</summary>${diffHtml(v.diff)}</details>` : ''}
       </div>`).join('')}</div>`;
@@ -64997,18 +65027,47 @@ async function submitDsCreate() {
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the response.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
     } else if (t.matches('[data-qt-revise]') && s.detail) {
+      // Revision control: the issued quotation stays as it is; the head approves a new version first
+      // (a head / admin asking is approved at once and gets the new draft straight away)
+      const auto = !!s.detail.revision_auto_approve;
       const ask = [...(s.detail.responses || [])].reverse().find(r => r.response === 'discount_request');
-      const limit = s.detail.discount?.limit;
-      if (!await appConfirm({
-        title: `New version of ${s.detail.quote_number}?`,
-        message: `It starts as a draft with the same lines; ${s.detail.quote_number} becomes read-only.`
-          + (ask ? ` The customer asked for ${_crmQtQty(ask.requested_discount)}% discount.` : '')
-          + (limit != null ? ` Up to ${_crmQtQty(limit)}% discount it can be sent without approval; above that the department head must approve it.` : ' It needs the department head\'s approval before it is sent.'),
-        confirmText: '<i class="fa fa-code-branch"></i> Make new version',
-        icon: 'fa-file-invoice',
-      })) return;
-      const res = await API.crmReviseLeadQuotation(lead.id, s.detail.id);
-      if (res.status !== 201) { toast(_crmWsError(res, 'Could not make a new version.'), 'error'); return; }
+      const asked = _crmAskReason({
+        title: `${auto ? 'New version of' : 'Request a revision of'} ${s.detail.quote_number}`,
+        reasonRequired: true,
+        submitLabel: auto ? 'Make new version' : 'Send request',
+      });
+      $('#crm-move-reason-text-label').textContent = 'What needs to change, and why? *';
+      if (ask) $('#crm-move-reason-text').value = `Customer asked for ${_crmQtQty(ask.requested_discount)}% discount${ask.notes ? ` — ${ask.notes}` : ''}`;
+      const extra = await asked;
+      if (extra === null) return;
+      t.disabled = true;
+      const res = await API.crmRequestQuotationRevision(lead.id, s.detail.id, extra.reason);
+      t.disabled = false;
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not request the revision.'), 'error'); return; }
+      _crmQtAfterChange(lead, res);
+    } else if (t.dataset.qtRevAct && s.detail?.pending_revision) {
+      const action = t.dataset.qtRevAct;
+      const pr = s.detail.pending_revision;
+      let body = {};
+      if (action === 'cancel') {
+        if (!await appConfirm({ title: 'Cancel the revision request?', message: `${s.detail.quote_number} stays as it is.`, confirmText: '<i class="fa fa-xmark"></i> Cancel request', cancelText: 'Keep it', icon: 'fa-code-pull-request', danger: true })) return;
+      } else {
+        const asked = _crmAskReason({
+          title: `${action === 'approve' ? 'Approve' : 'Reject'} revision of ${s.detail.quote_number}`,
+          reasonRequired: action === 'reject',
+          submitLabel: action === 'approve' ? 'Approve' : 'Reject',
+        });
+        $('#crm-move-reason-text-label').textContent = action === 'approve'
+          ? `Comment (optional) — ${pr.requested_by?.name || 'Staff'} asked: “${pr.reason}”`
+          : 'Why is it rejected? *';
+        const extra = await asked;
+        if (extra === null) return;
+        body = { comment: extra.reason };
+      }
+      t.disabled = true;
+      const res = await API.crmQuotationRevisionAction(lead.id, s.detail.id, pr.id, action, body);
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not update the revision request.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
     } else if (t.matches('[data-qt-print]') && s.detail) {
       // Prints through Quotation Setup, same as Sales → Quotations. CRM lines carry
@@ -65120,7 +65179,7 @@ async function submitDsCreate() {
     $$('#crm-qt-respond [data-qt-resp-for]').forEach(el => { el.style.display = el.dataset.qtRespFor === e.target.value ? '' : 'none'; });
     const hint = $('#crm-qt-resp-hint');
     if (hint) hint.textContent = {
-      discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount.',
+      discount_request: 'The lead moves to Negotiation. Then request a revision (the department head approves it) and make the new version with the revised discount.',
       accept: 'The quotation is marked accepted and the lead is won.',
       reject: 'The quotation is marked rejected and the lead is lost.',
     }[e.target.value];
@@ -65166,12 +65225,48 @@ async function submitDsCreate() {
   async function _crmLoadApprovals() {
     const body = $('#crm-approvals-rows');
     body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
-    const res = await API.crmQuotationApprovals().catch(() => ({ status: 0 }));
+    const [res, revRes] = await Promise.all([
+      API.crmQuotationApprovals().catch(() => ({ status: 0 })),
+      API.crmQuotationRevisionInbox().catch(() => ({ status: 0 })),
+    ]);
     if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
     const rows = res.body.data || [];
-    $('#crm-approvals-count').textContent = rows.length ? `${rows.length} waiting` : '';
-    body.innerHTML = rows.length ? rows.map(_crmApprovalCardHtml).join('')
+    // Revision requests: staff asking to change an issued quotation (a server without them just shows none)
+    const revs = revRes.status === 200 ? (revRes.body.data || []) : [];
+    const total = rows.length + revs.length;
+    $('#crm-approvals-count').textContent = total ? `${total} waiting` : '';
+    body.innerHTML = total
+      ? rows.map(_crmApprovalCardHtml).join('')
+        + (revs.length ? `<div class="crm-qtx-h" style="margin:14px 2px 8px">Revision requests<small>${revs.length}</small></div>${revs.map(_crmRevisionCardHtml).join('')}` : '')
       : _crmWsPanelHtml('<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing is waiting for your approval.');
+  }
+
+  // One revision request: who asked to change which issued quotation, and why
+  function _crmRevisionCardHtml(r) {
+    const q = r.quotation || {};
+    return `
+      <div class="crm-appr-card">
+        <div class="crm-appr-head">
+          <i class="fa fa-code-pull-request"></i>
+          <span class="crm-appr-num">${escHtml(q.quote_number || '')}</span>
+          ${q.version > 1 ? `<span class="crm-appr-ver">v${q.version}</span>` : ''}
+          <span class="crm-appr-status">Revision requested</span>
+          <div class="crm-appr-lead">
+            <strong>${escHtml(r.lead?.company || r.lead?.name || '—')}</strong>
+            <span class="crm-ws-muted">${escHtml(r.lead?.project_name || '')}</span>
+          </div>
+        </div>
+        <div class="crm-appr-note" style="margin-top:12px"><i class="fa fa-comment-dots"></i> <b>${escHtml(r.requested_by?.name || 'Staff')}</b>${r.requested_at ? ` <span class="crm-ws-muted">· ${escHtml(_crmFmtDateTime(r.requested_at))}</span>` : ''}: ${escHtml(r.reason)}</div>
+        <div class="crm-appr-foot">
+          <div class="crm-appr-fig">Status<b>${escHtml(q.status_label || '—')}</b></div>
+          <div class="crm-appr-fig crm-appr-fig--total">Total<b>${_crmQtMoney(q.total)}</b></div>
+          <div class="crm-appr-actions">
+            <button type="button" class="po-btn-ghost" data-appr-open="${q.id}" data-lead="${r.lead?.id}" data-project="${r.lead?.project_id}"><i class="fa fa-up-right-from-square"></i> Review</button>
+            <button type="button" class="po-btn-ghost" data-rev-reject="${r.id}" data-quotation="${q.id}" data-lead="${r.lead?.id}"><i class="fa fa-ban"></i> Reject</button>
+            <button type="button" class="po-btn-primary" data-rev-approve="${r.id}" data-quotation="${q.id}" data-lead="${r.lead?.id}"><i class="fa fa-code-branch"></i> Approve</button>
+          </div>
+        </div>
+      </div>`;
   }
 
   // One pending quotation: sender (with department) → approver (with department), figures, actions
@@ -65241,6 +65336,22 @@ async function submitDsCreate() {
       const res = await API.crmLeadQuotationAction(+approve.dataset.lead, +approve.dataset.apprApprove, 'approve', {});
       if (res.status !== 200) { approve.disabled = false; toast(_crmWsError(res, 'Could not approve.'), 'error'); return; }
       toast(res.body.message || 'Quotation approved.', 'success');
+      _crmLoadApprovals();
+      if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
+      return;
+    }
+    // Revision requests: approving makes the new draft version; rejecting needs a reason
+    const rev = e.target.closest('[data-rev-approve],[data-rev-reject]');
+    if (rev) {
+      const approving = rev.dataset.revApprove !== undefined;
+      const asked = _crmAskReason({ title: approving ? 'Approve this revision?' : 'Reject this revision?', reasonRequired: !approving, submitLabel: approving ? 'Approve' : 'Reject' });
+      $('#crm-move-reason-text-label').textContent = approving ? 'Comment (optional)' : 'Why is it rejected? *';
+      const extra = await asked;
+      if (extra === null) return;
+      rev.disabled = true;
+      const res = await API.crmQuotationRevisionAction(+rev.dataset.lead, +rev.dataset.quotation, +(rev.dataset.revApprove || rev.dataset.revReject), approving ? 'approve' : 'reject', { comment: extra.reason });
+      if (res.status !== 200) { rev.disabled = false; toast(_crmWsError(res, 'Could not update the revision request.'), 'error'); return; }
+      toast(res.body.message || 'Done.', 'success');
       _crmLoadApprovals();
       if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
     }

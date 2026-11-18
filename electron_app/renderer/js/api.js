@@ -758,6 +758,11 @@ const API = (() => {
     crmLeadQuotationDiff:     (leadId, id, againstId)  => request('GET',    `/crm/leads/${leadId}/quotations/${id}/diff${againstId ? `?against=${againstId}` : ''}`),
     crmCustomerQuotationVersions: (customerId, id)     => request('GET',    `/crm/customers/${customerId}/quotations/${id}/versions`),
     crmQuotationApprovals:    ()                       => request('GET',    '/crm/quotation-approvals'),
+    // Revision control: an issued quotation changes only through a request the head approves
+    crmRequestQuotationRevision: (leadId, id, reason)  => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revision-requests`, { reason }),
+    // action: approve | reject | cancel — body { comment }
+    crmQuotationRevisionAction: (leadId, id, requestId, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/revision-requests/${requestId}/${action}`, body || {}),
+    crmQuotationRevisionInbox:  ()                     => request('GET',    '/crm/quotation-revision-requests'),
     // Closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
     crmLeadCloseOptions:      (leadId)                 => request('GET',    `/crm/leads/${leadId}/close-options`),
     crmLeadWon:               (leadId, body)           => request('POST',   `/crm/leads/${leadId}/won`, body),

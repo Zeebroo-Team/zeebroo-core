@@ -180,16 +180,8 @@ class QuotationService
      */
     public function revise(Quotation $quotation): Quotation
     {
-        if ($quotation->isEditable()) {
-            throw ValidationException::withMessages(['quotation' => 'This quotation can still be edited — no new version is needed.']);
-        }
-        if ($quotation->isSuperseded()) {
-            throw ValidationException::withMessages(['quotation' => 'This version has been replaced — revise the latest version instead.']);
-        }
-        if (in_array($quotation->status, [Quotation::STATUS_PENDING_APPROVAL, Quotation::STATUS_ACCEPTED], true)) {
-            throw ValidationException::withMessages(['quotation' => $quotation->status === Quotation::STATUS_ACCEPTED
-                ? 'The customer accepted this quotation — it cannot be revised.'
-                : 'This quotation is waiting for approval — wait for the decision before revising it.']);
+        if (($blocker = $this->reviseBlocker($quotation)) !== null) {
+            throw ValidationException::withMessages(['quotation' => $blocker]);
         }
 
         return DB::transaction(function () use ($quotation) {
@@ -198,6 +190,18 @@ class QuotationService
 
             return $revision;
         });
+    }
+
+    /** Why this quotation cannot get a new version, or null when it can. */
+    public function reviseBlocker(Quotation $quotation): ?string
+    {
+        return match (true) {
+            $quotation->isEditable()   => 'This quotation can still be edited — no new version is needed.',
+            $quotation->isSuperseded() => 'This version has been replaced — revise the latest version instead.',
+            $quotation->status === Quotation::STATUS_ACCEPTED         => 'The customer accepted this quotation — it cannot be revised.',
+            $quotation->status === Quotation::STATUS_PENDING_APPROVAL => 'This quotation is waiting for approval — wait for the decision before revising it.',
+            default => null,
+        };
     }
 
     private function copyAsNextVersion(Quotation $quotation): Quotation

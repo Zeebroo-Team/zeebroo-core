@@ -5,6 +5,7 @@ namespace Modules\Sales\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Business\Models\Business;
 use Modules\CRM\Models\Lead;
 use Modules\DesignStudio\Models\Design;
@@ -127,6 +128,24 @@ class Quotation extends Model
         return $this->hasMany(QuotationApproval::class)->orderBy('created_at')->orderBy('id');
     }
 
+    /** Requests to change this version, oldest first. */
+    public function revisionRequests(): HasMany
+    {
+        return $this->hasMany(QuotationRevisionRequest::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /** The request waiting for the head's decision, if any. */
+    public function pendingRevisionRequest(): HasOne
+    {
+        return $this->hasOne(QuotationRevisionRequest::class)->where('status', QuotationRevisionRequest::STATUS_PENDING)->latest('id');
+    }
+
+    /** The approved request this version was made from (none for a first version). */
+    public function revisionSource(): HasOne
+    {
+        return $this->hasOne(QuotationRevisionRequest::class, 'revision_id');
+    }
+
     public function dispatches(): HasMany
     {
         return $this->hasMany(QuotationDispatch::class)->orderByDesc('created_at')->orderByDesc('id');
@@ -160,8 +179,9 @@ class Quotation extends Model
 
     /**
      * Sales / POS quotations stay editable while draft or sent. A lead quotation goes through
-     * approval, so only a draft or one the head returned can change; after that a new version
-     * is made instead (QuotationService::revise).
+     * approval, so only a draft or one the head returned can change; once issued it is locked
+     * and a change needs a revision request the head approves (QuotationRevisionService in the
+     * CRM), which makes a new version.
      */
     public function isEditable(): bool
     {

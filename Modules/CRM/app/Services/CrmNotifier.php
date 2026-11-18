@@ -32,6 +32,8 @@ class CrmNotifier
     const TYPE_LEAD_ASSIGNED        = 'crm_lead_assigned';
     const TYPE_QUOTATION_SUBMITTED  = 'crm_quotation_submitted';
     const TYPE_QUOTATION_DECIDED    = 'crm_quotation_decided';
+    const TYPE_QUOTATION_REVISION_REQUESTED = 'crm_quotation_revision_requested';
+    const TYPE_QUOTATION_REVISION_DECIDED   = 'crm_quotation_revision_decided';
     const TYPE_FOLLOW_UP_DUE        = 'crm_follow_up_due';
     const TYPE_FOLLOW_UP_OVERDUE    = 'crm_follow_up_overdue';
     const TYPE_LEAD_CLOSED          = 'crm_lead_closed';

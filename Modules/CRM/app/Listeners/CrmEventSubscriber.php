@@ -13,6 +13,8 @@ use Modules\CRM\Events\LeadEnteredInbox;
 use Modules\CRM\Events\LeadEnteredStage;
 use Modules\CRM\Events\LeadForwarded;
 use Modules\CRM\Events\QuotationDecided;
+use Modules\CRM\Events\QuotationRevisionDecided;
+use Modules\CRM\Events\QuotationRevisionRequested;
 use Modules\CRM\Events\QuotationSent;
 use Modules\CRM\Events\QuotationSubmitted;
 use Modules\CRM\Models\FollowUp;
@@ -34,6 +36,8 @@ use Modules\Sales\Models\QuotationApproval;
  *   assigned / re-assigned       → the staff added (and the new primary)
  *   quotation submitted          → the head ("discount approval needed" when over the limit)
  *   approved / returned/rejected → whoever submitted it
+ *   revision requested           → the head
+ *   revision approved / rejected → whoever asked for it
  *   follow-up due                → its assignee
  *   follow-up overdue            → its assignee and the head
  *   won / lost                   → the head
@@ -54,6 +58,8 @@ class CrmEventSubscriber
             LeadAssigned::class       => 'onLeadAssigned',
             QuotationSubmitted::class => 'onQuotationSubmitted',
             QuotationDecided::class   => 'onQuotationDecided',
+            QuotationRevisionRequested::class => 'onQuotationRevisionRequested',
+            QuotationRevisionDecided::class   => 'onQuotationRevisionDecided',
             QuotationSent::class      => 'onQuotationSent',
             FollowUpDue::class        => 'onFollowUpDue',
             FollowUpOverdue::class    => 'onFollowUpOverdue',
@@ -146,6 +152,35 @@ class CrmEventSubscriber
                     . ($e->comment ? "\n“" . $e->comment . '”' : '')
                     . ($e->action === QuotationApproval::ACTION_APPROVED ? ' It can be sent to the customer now.' : ''),
                 $e->byUserId, ['quotation_id' => (int) $q->id, 'decision' => $e->action], 'crm_quotation', (int) $q->id);
+        });
+    }
+
+    public function onQuotationRevisionRequested(QuotationRevisionRequested $e): void
+    {
+        $this->guard(function () use ($e) {
+            $q = $e->request->quotation;
+            $this->notifier->notify($e->lead, $this->notifier->headUserIdsForLead($e->lead), CrmNotifier::TYPE_QUOTATION_REVISION_REQUESTED,
+                'Quotation revision requested',
+                $this->actor($e->byUserId, 'Staff') . ' asked to revise ' . $q->quote_number . ' for ' . $this->leadName($e->lead) . '.'
+                    . "\nReason: " . $e->request->reason,
+                $e->byUserId, ['quotation_id' => (int) $q->id, 'revision_request_id' => (int) $e->request->id], 'crm_quotation', (int) $q->id);
+        });
+    }
+
+    public function onQuotationRevisionDecided(QuotationRevisionDecided $e): void
+    {
+        $this->guard(function () use ($e) {
+            $r        = $e->request;
+            $q        = $r->quotation;
+            $approved = $r->status === \Modules\Sales\Models\QuotationRevisionRequest::STATUS_APPROVED;
+            $this->notifier->notify($e->lead, [(int) $r->requested_by], CrmNotifier::TYPE_QUOTATION_REVISION_DECIDED,
+                'Revision ' . ($approved ? 'approved' : 'rejected'),
+                $this->actor($e->byUserId, 'The head') . ' ' . ($approved ? 'approved' : 'rejected') . ' your revision of ' . $q->quote_number . ' for ' . $this->leadName($e->lead) . '.'
+                    . ($r->decision_comment ? "\n“" . $r->decision_comment . '”' : '')
+                    . ($approved && $r->revision ? ' Make the changes in ' . $r->revision->quote_number . ' and submit it.' : ''),
+                $e->byUserId,
+                ['quotation_id' => (int) ($approved && $r->revision_id ? $r->revision_id : $q->id), 'revision_request_id' => (int) $r->id],
+                'crm_quotation', (int) $q->id);
         });
     }
 

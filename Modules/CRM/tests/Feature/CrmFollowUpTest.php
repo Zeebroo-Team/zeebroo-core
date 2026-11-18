@@ -49,7 +49,7 @@ test('re-sending the same version adds nothing; a new version sent replaces the 
     expect(FollowUp::count())->toBe(2);
 
     Carbon::setTestNow('2026-11-11 10:00:00');
-    $v2 = Modules\Sales\Models\Quotation::findOrFail(crmwf(CrmwfQuoteApi::class, 'revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Modules\Sales\Models\Quotation::findOrFail(crmwf(CrmwfQuoteApi::class, 'revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmwf(CrmwfQuoteApi::class, 'submit', 3, [$this->lead->id, $v2->id], 'POST');
     crmwf(CrmwfQuoteApi::class, 'approve', 2, [$this->lead->id, $v2->id], 'POST');
     crmwf(CrmwfQuoteApi::class, 'send', 3, [$this->lead->id, $v2->id], 'POST', ['to' => 'kasun@example.com', 'subject' => 'v2', 'message' => 'Hi']);

@@ -37,7 +37,7 @@ class LeadQuotationService
         return Quotation::query()
             ->where('business_id', $lead->business_id)
             ->where('lead_id', $lead->id)
-            ->with(['submittedBy:id,name', 'approvedBy:id,name'])
+            ->with(['submittedBy:id,name', 'approvedBy:id,name', 'pendingRevisionRequest.requestedBy:id,name'])
             ->orderByDesc('id')
             ->get();
     }
@@ -118,16 +118,21 @@ class LeadQuotationService
         return $quotation;
     }
 
-    public function update(Lead $lead, Quotation $quotation, array $data, array $items): Quotation
+    /** Only while draft or returned (Quotation::isEditable); an issued one needs a revision request. */
+    public function update(Lead $lead, Quotation $quotation, array $data, array $items, ?int $userId = null): Quotation
     {
         $this->guardStock($lead->business()->firstOrFail(), $items, $data['branch_id'] ?? $quotation->branch_id);
 
-        return DB::transaction(function () use ($lead, $quotation, $data, $items) {
+        return DB::transaction(function () use ($lead, $quotation, $data, $items, $userId) {
             $customerId = $this->saveCustomer($lead, $data)
                 ?? (array_key_exists('customer_id', $data) ? $data['customer_id'] : $quotation->customer_id);
             unset($data['customer']);
 
-            return $this->quotations->update($quotation, [...$data, 'customer_id' => $customerId], $items);
+            $saved = $this->quotations->update($quotation, [...$data, 'customer_id' => $customerId], $items);
+            // A version made from a revision request: remember who made the changes
+            QuotationRevisionService::markRevised($saved, $userId);
+
+            return $saved;
         });
     }
 
@@ -257,7 +262,8 @@ class LeadQuotationService
 
     /**
      * A new draft version of an approved / sent / rejected quotation (the old one becomes
-     * superseded); the lead goes back to preparing.
+     * superseded); the lead goes back to preparing. Called once a revision request is approved
+     * (QuotationRevisionService) — never straight from the staff.
      */
     public function revise(Lead $lead, Quotation $quotation, ?int $userId = null): Quotation
     {
