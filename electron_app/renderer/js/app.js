@@ -63865,10 +63865,11 @@ async function submitDsCreate() {
   }
 
   // ── Editor ──
+  const CRM_QT_DEFAULT_TAX = 18; // default Tax % applied to every new quotation line
   function _crmQtNewForm() {
     const lead = _crmViewLead;
     const fromInterest = (lead?.product_items || []).map(p => ({
-      item_type: 'product', product_id: p.id, description: p.name, sku: p.sku || '', quantity: p.quantity || 1, unit_price: p.unit_price ?? 0, discount_amount: 0, tax_rate: 0,
+      item_type: 'product', product_id: p.id, description: p.name, sku: p.sku || '', quantity: p.quantity || 1, unit_price: p.unit_price ?? 0, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX,
       _autoPrice: true, // replaced by the standard price once the stock check returns it
     }));
     return {
@@ -64406,7 +64407,7 @@ async function submitDsCreate() {
     const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
     if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
     else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
-      quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: 0 });
+      quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
     s.pick = { ...s.pick, modelId: '', qty: 1, open: null }; // keep the brand for the next model
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
@@ -64832,7 +64833,7 @@ async function submitDsCreate() {
     const pick = e.target.closest('[data-qt-pick]');
     if (pick && s.form) {
       const line = { item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
-        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0, _autoPrice: true };
+        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX, _autoPrice: true };
       s.form.lines.push(line);
       _crmRenderWsTab();
       _crmQtScheduleStock(lead);
@@ -64876,7 +64877,7 @@ async function submitDsCreate() {
       const box = $('#crm-qt-edit-body [data-qt-h="customer_address"]');
       if (box) box.value = s.form.customer_address;
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
-      s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
+      s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
       _crmRenderWsTab();
       $$('#crm-qt-edit-body [data-qt-f="description"]').pop()?.focus();
     } else if (t.dataset.qtPriceReset !== undefined && s.form) {
