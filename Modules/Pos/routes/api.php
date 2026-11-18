@@ -356,7 +356,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::post('customers', [PosCustomerApiController::class, 'store'])->name('customers.store');
     Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
     Route::post('customers/import/preview', [PosCustomerApiController::class, 'importPreview'])->name('customers.import.preview');
-    Route::get('customers/duplicates', [PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
+    Route::get('customers/industries', [PosCustomerApiController::class, 'industries'])->name('customers.industries');
+    Route::get('customers/duplicates',[PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
     // Desktop offline mode: full customer list download (read-only)
     Route::get('customers/offline-sync', [PosCustomerApiController::class, 'offlineSync'])->name('customers.offline-sync');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
@@ -678,7 +679,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'index'])           ->whereNumber('lead')->name('crm.leads.quotations.index');
     Route::post  ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'store'])           ->whereNumber('lead')->name('crm.leads.quotations.store');
     Route::post  ('crm/leads/{lead}/quotations/stock-check',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'stockCheck'])      ->whereNumber('lead')->name('crm.leads.quotations.stock-check');
-    Route::get   ('crm/leads/{lead}/quotations/catalog/brands',             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogBrands'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.brands');
+    Route::get   ('crm/leads/{lead}/quotations/customers',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'customers'])       ->whereNumber('lead')->name('crm.leads.quotations.customers');
+    Route::get   ('crm/leads/{lead}/quotations/catalog/brands',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogBrands'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.brands');
     Route::get   ('crm/leads/{lead}/quotations/catalog/models',             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogModels'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.models');
     Route::get   ('crm/leads/{lead}/quotations/catalog/products/{product}', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogProduct'])  ->whereNumber(['lead', 'product'])->name('crm.leads.quotations.catalog.product');
     Route::get   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'show'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.show');

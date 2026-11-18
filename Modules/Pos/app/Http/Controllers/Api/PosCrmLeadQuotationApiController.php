@@ -106,6 +106,16 @@ class PosCrmLeadQuotationApiController extends Controller
         return response()->json(['data' => $this->leadQuotations->stockCheck($business, $data['items'], $data['branch_id'] ?? null)]);
     }
 
+    /** GET crm/leads/{lead}/quotations/customers?q= — saved customers for the editor's customer auto-suggest. */
+    public function customers(Request $request, int $leadId): JsonResponse
+    {
+        [$business] = $this->context($request, $leadId);
+
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
+
+        return response()->json(['data' => $this->leadQuotations->searchCustomers((int) $business->id, (string) ($data['q'] ?? ''))]);
+    }
+
     /** GET crm/leads/{lead}/quotations/catalog/brands — brands for the editor's Brand → Model picker. */
     public function catalogBrands(Request $request, int $leadId, CrmQuotationCatalogService $catalog): JsonResponse
     {
@@ -372,7 +382,14 @@ class PosCrmLeadQuotationApiController extends Controller
             'branch_id'               => ['nullable', 'integer', Rule::exists('branches', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'customer_id'             => ['nullable', 'integer', Rule::exists('pos_customers', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
             'customer_address'        => ['nullable', 'string', 'max:1000'],
-            'reference'               => ['nullable', 'string', 'max:120'],
+            // Saved to the customer master: updates customer_id's record, else finds / creates one
+            'customer'                => ['nullable', 'array'],
+            'customer.name'           => ['nullable', 'string', 'max:120'],
+            'customer.phone'          => ['nullable', 'string', 'max:40'],
+            'customer.email'          => ['nullable', 'email', 'max:160'],
+            'customer.address'        => ['nullable', 'string', 'max:255'],
+            'customer.industry'       => ['nullable', 'string', 'max:120'],
+            'reference'              => ['nullable', 'string', 'max:120'],
             'quote_date'              => ['required', 'date'],
             'expiry_date'             => ['nullable', 'date', 'after_or_equal:quote_date'],
             'notes'                   => ['nullable', 'string', 'max:5000'],
@@ -455,6 +472,7 @@ class PosCrmLeadQuotationApiController extends Controller
             'reference'     => $q->reference,
             'notes'         => $q->notes,
             'customer_id'   => $q->customer_id,
+            'customer'      => $this->leadQuotations->presentCustomer($q->customer),
             'customer_address' => $q->customer_address,
             // Who the printed quotation is addressed to — the customer, else the lead
             'bill_to'       => $q->billTo(),
@@ -581,7 +599,9 @@ class PosCrmLeadQuotationApiController extends Controller
             'customer_id'  => $lead->customer_id,
             // What a new quotation's address is filled with
             'customer_address' => $this->leadQuotations->customerAddress($lead),
-            'project_id'   => (int) $lead->project_id,
+            // What a new quotation's customer section is filled with
+            'customer_defaults' => $this->leadQuotations->customerDefaults($lead),
+            'project_id'  => (int) $lead->project_id,
             'project_name' => $lead->project?->name,
             'status_key'   => $lead->statusKey(),
             'stage_name'   => $lead->stageLabel(),

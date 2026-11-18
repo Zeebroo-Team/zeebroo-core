@@ -1706,6 +1706,30 @@ body.dark .crm-qtx .crm-qt-stock--short{color:#ff6961}
 .crm-qtx-search .crm-qt-results{top:calc(100% + 6px);padding:4px;border:0;border-radius:10px;background:var(--mac-menu,rgba(248,248,250,.97));backdrop-filter:blur(24px) saturate(1.6);
   box-shadow:0 0 0 .5px rgba(0,0,0,.14),0 10px 30px rgba(0,0,0,.18)}
 body.dark .crm-qtx-search .crm-qt-results{background:rgba(44,44,48,.97);box-shadow:0 0 0 .5px rgba(255,255,255,.12),0 10px 30px rgba(0,0,0,.5)}
+/* Industry picker (input[data-industry], see _indOpen in app.js) */
+input[data-industry]{padding-right:30px!important;background-repeat:no-repeat;background-position:right 11px center;background-size:10px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%239ca3af' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")}
+.ind-pop{position:fixed;z-index:10050;overflow-y:auto;overscroll-behavior:contain;padding:4px;border:1px solid var(--border-light);border-radius:10px;
+  background:var(--surface);color:var(--text);box-shadow:0 12px 32px rgba(0,0,0,.18);font-size:13px}
+.ind-pop::-webkit-scrollbar{width:8px}
+.ind-pop::-webkit-scrollbar-thumb{background:var(--border);border-radius:8px;border:2px solid var(--surface)}
+.ind-head{padding:6px 10px 4px;font-size:11px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--text-muted)}
+.ind-opt{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:7px;cursor:pointer;line-height:1.3}
+.ind-opt>i{flex:none;width:24px;height:24px;display:grid;place-items:center;border-radius:6px;font-size:11px;
+  background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.ind-opt>span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ind-opt mark{background:none;color:var(--accent);font-weight:700}
+.ind-opt small{font-size:10.5px;color:var(--text-muted);padding:1px 6px;border-radius:999px;background:var(--surface3)}
+.ind-opt>b{color:var(--accent);font-size:12px}
+.ind-opt:hover{background:var(--surface2)}
+.ind-opt.hl{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.ind-opt.sel>span{font-weight:600}
+/* Customer card: name auto-suggest + saved / new chip */
+.crm-qt-cust-name{position:relative}
+.crm-qt-cust-name .crm-qt-results{top:calc(100% + 4px);z-index:20}
+.crm-qt-cust-badge{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11.5px;font-weight:500;
+  background:color-mix(in srgb,var(--mac-accent,#007aff) 12%,transparent);color:var(--mac-accent,#007aff)}
+.crm-qt-cust-badge--saved{background:color-mix(in srgb,#16a34a 14%,transparent);color:#16a34a}
 /* Brand → Model picker */
 .crm-qtx-pick{padding:14px 16px 0;border-top:1px solid var(--mac-line,var(--border))}
 .crm-qtx-pick-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.6fr) 72px auto;gap:10px;align-items:end}
@@ -21412,6 +21436,8 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <input type="email" id="cm-f-email"  class="cm-input" placeholder="john@example.com">
             <label class="cm-label">Address <span id="cm-req-address" style="color:#ef4444;display:none">*</span></label>
             <input type="text" id="cm-f-address" class="cm-input" placeholder="Street, City">
+            <label class="cm-label">Industry <span style="font-weight:400;opacity:.7">(optional)</span></label>
+            <input type="text" id="cm-f-industry" class="cm-input" maxlength="120" autocomplete="off" data-industry placeholder="Search or type an industry…">
             <label class="cm-label" style="margin-top:4px">Category</label>
             <div class="cat-combo">
               <input type="text" id="cm-f-category-input" class="cm-input" placeholder="No category" autocomplete="off">

@@ -27563,6 +27563,7 @@ async function _cmSelectCustomer(id) {
     { label: 'Phone',    val: c.phone },
     { label: 'Email',    val: c.email },
     { label: 'Address',  val: c.address },
+    { label: 'Industry', val: c.industry },
     { label: 'Notes',    val: c.notes },
     { label: 'Credit Limit', val: _cmCreditLimitHtml(c), raw: true },
   ];
@@ -27847,6 +27848,137 @@ function _cmWireCreditPayment(id, totalDue) {
   amtEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
 }
 
+// ── Industry picker ──────────────────────────────────────────────────────────
+// Any <input data-industry> (POS customer form, CRM quotation customer card…) gets a searchable,
+// scrollable list: common industries + the ones already saved on customers. Free text still works.
+const INDUSTRY_PRESETS = [
+  ['Agriculture', 'fa-tractor'], ['Automotive', 'fa-car'], ['Banking & Finance', 'fa-building-columns'],
+  ['Construction', 'fa-helmet-safety'], ['Education', 'fa-graduation-cap'], ['Energy & Utilities', 'fa-bolt'],
+  ['Government', 'fa-landmark'], ['Healthcare', 'fa-heart-pulse'], ['Hospitality & Tourism', 'fa-hotel'],
+  ['IT & Software', 'fa-laptop-code'], ['Logistics & Transport', 'fa-truck-fast'], ['Manufacturing', 'fa-industry'],
+  ['Media & Advertising', 'fa-bullhorn'], ['Real Estate', 'fa-house'], ['Retail', 'fa-store'],
+  ['Telecommunications', 'fa-tower-cell'], ['Textile & Apparel', 'fa-shirt'], ['Wholesale & Distribution', 'fa-boxes-stacked'],
+].map(([name, icon]) => ({ name, icon }));
+
+const _ind = { input: null, pop: null, opts: [], hl: -1, saved: [], savedAt: 0 };
+
+function _indLoadSaved() {
+  if (Date.now() - _ind.savedAt < 60000) return; // refreshed at most once a minute
+  _ind.savedAt = Date.now();
+  API.customerIndustries().then(r => {
+    if (r.status !== 200) return;
+    _ind.saved = (r.body?.data || []).filter(Boolean);
+    if (_ind.input) _indRender();
+  }).catch(() => {});
+}
+
+function _indOptions(q) {
+  const lc = q.trim().toLowerCase();
+  const presets = new Set(INDUSTRY_PRESETS.map(p => p.name.toLowerCase()));
+  const all = [
+    ...INDUSTRY_PRESETS,
+    ..._ind.saved.filter(s => !presets.has(s.toLowerCase())).map(name => ({ name, icon: 'fa-tag', saved: true })),
+  ];
+  const list = lc ? all.filter(o => o.name.toLowerCase().includes(lc)) : all;
+  // Names starting with the text first
+  if (lc) list.sort((a, b) => (b.name.toLowerCase().startsWith(lc) - a.name.toLowerCase().startsWith(lc)) || a.name.localeCompare(b.name));
+  if (lc && !all.some(o => o.name.toLowerCase() === lc)) list.push({ name: q.trim(), icon: 'fa-plus', custom: true });
+  return list;
+}
+
+function _indMark(name, q) {
+  const i = q ? name.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i < 0) return escHtml(name);
+  return escHtml(name.slice(0, i)) + '<mark>' + escHtml(name.slice(i, i + q.length)) + '</mark>' + escHtml(name.slice(i + q.length));
+}
+
+function _indRender() {
+  const input = _ind.input;
+  if (!input || !document.contains(input)) return _indClose();
+  const q = input.value.trim();
+  const current = q.toLowerCase();
+  _ind.opts = _indOptions(input.value);
+  if (_ind.hl >= _ind.opts.length) _ind.hl = _ind.opts.length - 1;
+  const pop = _ind.pop || (_ind.pop = Object.assign(document.createElement('div'), { className: 'ind-pop' }));
+  if (!pop.isConnected) document.body.appendChild(pop);
+  pop.innerHTML = _ind.opts.length
+    ? `<div class="ind-head">${q ? `${_ind.opts.filter(o => !o.custom).length} match${_ind.opts.filter(o => !o.custom).length === 1 ? '' : 'es'}` : 'Choose an industry or type your own'}</div>`
+      + _ind.opts.map((o, i) => `<div class="ind-opt${i === _ind.hl ? ' hl' : ''}${!o.custom && o.name.toLowerCase() === current ? ' sel' : ''}" data-ind-i="${i}">
+          <i class="fa ${o.icon}"></i>
+          <span>${o.custom ? `Use “${escHtml(o.name)}”` : _indMark(o.name, q)}</span>
+          ${o.saved ? '<small>saved</small>' : ''}${!o.custom && o.name.toLowerCase() === current ? '<b class="fa fa-check"></b>' : ''}
+        </div>`).join('')
+    : '<div class="ind-head">No industries</div>';
+  _indPlace();
+  pop.querySelector('.ind-opt.hl')?.scrollIntoView({ block: 'nearest' });
+}
+
+function _indPlace() {
+  const { input, pop } = _ind;
+  if (!input || !pop) return;
+  const r = input.getBoundingClientRect();
+  const below = window.innerHeight - r.bottom - 12;
+  const above = r.top - 12;
+  const up = below < 220 && above > below;
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Math.max(r.width, 260) - 8)) + 'px';
+  pop.style.width = Math.max(r.width, 260) + 'px';
+  pop.style.maxHeight = Math.min(300, up ? above : below) + 'px';
+  pop.style.top = up ? '' : (r.bottom + 4) + 'px';
+  pop.style.bottom = up ? (window.innerHeight - r.top + 4) + 'px' : '';
+}
+
+function _indOpen(input) {
+  _ind.input = input;
+  _ind.hl = -1;
+  _indLoadSaved();
+  _indRender();
+}
+
+function _indClose() {
+  _ind.pop?.remove();
+  _ind.input = null;
+  _ind.hl = -1;
+}
+
+function _indPick(i) {
+  const o = _ind.opts[i];
+  const input = _ind.input;
+  if (!o || !input) return;
+  input.value = o.name;
+  // Let the form's own input handler keep its state (e.g. the CRM quotation editor)
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  _indClose();
+}
+
+document.addEventListener('focusin', e => { if (e.target.matches?.('input[data-industry]')) _indOpen(e.target); });
+document.addEventListener('click', e => { if (e.target.matches?.('input[data-industry]') && _ind.input !== e.target) _indOpen(e.target); });
+document.addEventListener('input', e => { if (e.target === _ind.input) { _ind.hl = e.target.value.trim() ? 0 : -1; _indRender(); } });
+document.addEventListener('focusout', e => { if (e.target === _ind.input) setTimeout(() => { if (document.activeElement !== _ind.input) _indClose(); }, 120); });
+// Capture phase: Enter / Escape belong to the open list, not the form (save / close modal)
+document.addEventListener('keydown', e => {
+  if (!_ind.input || e.target !== _ind.input || !_ind.pop?.isConnected) return;
+  const n = _ind.opts.length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (n) { _ind.hl = (_ind.hl + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; _indRender(); }
+  } else if (e.key === 'Enter' && _ind.hl >= 0) {
+    e.preventDefault(); e.stopPropagation(); _indPick(_ind.hl);
+  } else if (e.key === 'Escape') {
+    e.preventDefault(); e.stopPropagation(); _indClose();
+  } else if (e.key === 'Tab') {
+    _indClose();
+  }
+}, true);
+// Keep the focus in the input while choosing
+document.addEventListener('mousedown', e => {
+  if (!_ind.pop?.contains(e.target)) return;
+  e.preventDefault();
+  const opt = e.target.closest('[data-ind-i]');
+  if (opt) _indPick(+opt.dataset.indI);
+});
+window.addEventListener('resize', () => _ind.input && _indPlace());
+document.addEventListener('scroll', e => { if (_ind.input && !_ind.pop?.contains(e.target)) _indPlace(); }, true);
+
 function _cmShowDetail(show) {
   $('#cm-detail-empty').style.display = show ? 'none' : '';
   $('#cm-detail-view').style.display  = show ? 'flex' : 'none';
@@ -27864,6 +27996,7 @@ function _cmShowForm(show, customer = null) {
     $('#cm-f-phone').value   = customer?.phone   ?? '';
     $('#cm-f-email').value   = customer?.email   ?? '';
     $('#cm-f-address').value = customer?.address ?? '';
+    $('#cm-f-industry').value = customer?.industry ?? '';
     $('#cm-f-notes').value   = customer?.notes   ?? '';
     const custType = customer?.customer_type ?? 'retail';
     const typeRadio = $(`input[name="cm-customer-type"][value="${custType}"]`);
@@ -27881,6 +28014,7 @@ async function _cmSave() {
   const phone         = $('#cm-f-phone').value.trim() || null;
   const email         = $('#cm-f-email').value.trim() || null;
   const address       = $('#cm-f-address').value.trim() || null;
+  const industry      = $('#cm-f-industry').value.trim() || null;
   const notes         = $('#cm-f-notes').value.trim() || null;
   const customer_type = $('input[name="cm-customer-type"]:checked')?.value || 'retail';
   const customer_category_id = $('#cm-f-category')?.value || null;
@@ -27907,7 +28041,7 @@ async function _cmSave() {
     }
   }
 
-  const payload = { name, phone, email, address, notes, customer_type, customer_category_id, credit_limit };
+  const payload = { name, phone, email, address, industry, notes, customer_type, customer_category_id, credit_limit };
   let res;
   if (_cm.editingId) {
     res = await API.updateCustomer(_cm.editingId, payload);
@@ -28017,7 +28151,7 @@ $('#cm-category-filter')?.addEventListener('change', e => {
   _cmLoadList();
 });
 
-['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes','#cm-f-credit-limit'].forEach(sel => {
+['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-industry','#cm-f-notes','#cm-f-credit-limit'].forEach(sel => {
   $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter' && sel !== '#cm-f-notes') _cmSave(); if (e.key === 'Escape') $('#cm-form-cancel')?.click(); });
 });
 
@@ -63609,6 +63743,8 @@ async function submitDsCreate() {
   const _crmQtR2    = v => Math.round((v + Number.EPSILON) * 100) / 100;
   let _crmQtStockTimer = null;
   let _crmQtSearchTimer = null;
+  let _crmQtCustTimer = null;
+  let _crmQtCustResults = []; // the customer suggestions on show, picked by index
 
   function _crmQtState() { return (_crmWs.qt ||= { view: 'list' }); }
 
@@ -63738,7 +63874,9 @@ async function submitDsCreate() {
       id: null, number: null,
       quote_date: new Date().toISOString().slice(0, 10), expiry_date: '', reference: '', notes: '',
       // Billed to the linked customer's address on file (meta.lead from GET …/quotations)
-      customer_address: _crmQtCustomerAddress(),
+      customer_address: _crmQtCustomerAddress() || _crmWs.quotations?.meta?.lead?.customer_defaults?.address || '',
+      // The lead's customer, else the lead's own contact details — saved as a customer on save
+      customer: _crmQtCustomerForm(_crmWs.quotations?.meta?.lead?.customer_defaults),
       discount_amount: 0, tax_amount: 0,
       lines: fromInterest,
     };
@@ -63746,11 +63884,48 @@ async function submitDsCreate() {
 
   function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
 
+  /** "Saved customer" / "New customer" chip beside the customer card's heading. */
+  function _crmQtCustomerBadgeHtml(c) {
+    return c?.id
+      ? `<span class="crm-qt-cust-badge crm-qt-cust-badge--saved"><i class="fa fa-circle-check"></i> Saved customer</span>
+         <button type="button" class="crm-ws-link" data-qt-cust-clear style="font-size:12px"><i class="fa fa-user-plus"></i> Use a new customer</button>`
+      : `<span class="crm-qt-cust-badge"><i class="fa fa-user-plus"></i> New customer — saved with the quotation</span>`;
+  }
+
+  /** Customer card: name with auto-suggest of saved customers, contact details, industry and the billing address. */
+  function _crmQtCustomerCardHtml(f) {
+    const c = f.customer || _crmQtCustomerForm(null);
+    return `<section class="crm-qtx-card">
+        <div class="crm-qtx-card-h"><i class="fa fa-user"></i> Customer<span id="crm-qt-cust-badge" style="margin-left:auto;display:flex;align-items:center;gap:10px;font-weight:400">${_crmQtCustomerBadgeHtml(c)}</span></div>
+        <div class="crm-qt-grid crm-qtx-fields">
+          <div class="crm-qt-field crm-qt-cust-name" style="grid-column:span 2"><label for="crm-qt-cust-name" style="display:block">Customer name <span style="color:var(--danger,#dc2626)">*</span></label>
+            <input id="crm-qt-cust-name" class="po-field-input" maxlength="120" autocomplete="off" data-qt-c="name" value="${escHtml(c.name)}" placeholder="Start typing to find a saved customer…">
+            <div id="crm-qt-cust-results" class="crm-lead-product-results crm-qt-results" style="display:none"></div></div>
+          <label>Phone<input class="po-field-input" maxlength="40" data-qt-c="phone" value="${escHtml(c.phone)}" placeholder="07X XXX XXXX"></label>
+          <label>Email<input class="po-field-input" type="email" maxlength="160" data-qt-c="email" value="${escHtml(c.email)}" placeholder="name@company.com"></label>
+          <label>Industry <input class="po-field-input" maxlength="120" autocomplete="off" data-industry data-qt-c="industry" value="${escHtml(c.industry)}" placeholder="Search or type an industry…"></label>
+          <div class="crm-qt-field" style="grid-column:span 3"><span style="display:flex;align-items:center;gap:8px"><label for="crm-qt-addr">Customer address</label>
+            ${c.saved_address ? `<button type="button" class="crm-ws-link" data-qt-addr-fill style="margin-left:auto;font-size:12px;padding:0" title="${escHtml(c.saved_address)}"><i class="fa fa-rotate"></i> Use customer's address</button>` : ''}</span>
+            <textarea id="crm-qt-addr" class="po-field-input" rows="${Math.min(4, Math.max(1, String(f.customer_address || '').split('\n').length))}" maxlength="255" data-qt-h="customer_address" style="resize:vertical;min-height:32px" placeholder="${c.id ? 'No address on file for this customer — type one' : 'Street, city — printed on the quotation'}">${escHtml(f.customer_address || '')}</textarea></div>
+        </div>
+      </section>`;
+  }
+
+  /** The editor's customer fields; saved_address is the selected customer's address on file. */
+  function _crmQtCustomerForm(c) {
+    return {
+      id: c?.id || null, name: c?.name || '', phone: c?.phone || '', email: c?.email || '', industry: c?.industry || '',
+      saved_address: c?.id ? (c.address || '') : '',
+    };
+  }
+
   function _crmQtFormFromDetail(q) {
     return {
       id: q.id, number: q.quote_number,
       quote_date: q.quote_date || new Date().toISOString().slice(0, 10), expiry_date: q.expiry_date || '', reference: q.reference || '', notes: q.notes || '',
       customer_address: q.customer_address || '',
+      // Quotations billed to a lead not saved as a customer yet start from the lead's details
+      customer: _crmQtCustomerForm(q.customer || _crmWs.quotations?.meta?.lead?.customer_defaults),
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
@@ -63981,15 +64156,14 @@ async function submitDsCreate() {
       ${returned}
       <div id="crm-qt-alert" class="svc-form-alert" style="display:none"></div>
 
+      ${_crmQtCustomerCardHtml(f)}
+
       <section class="crm-qtx-card">
         <div class="crm-qtx-card-h"><i class="fa fa-circle-info"></i> Details</div>
         <div class="crm-qt-grid crm-qtx-fields">
           <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
           <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
           <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
-          <div class="crm-qt-field" style="grid-column:1/-1"><span style="display:flex;align-items:center;gap:8px"><label for="crm-qt-addr">Customer address</label>
-            ${_crmQtCustomerAddress() ? `<button type="button" class="crm-ws-link" data-qt-addr-fill style="margin-left:auto;font-size:12px" title="${escHtml(_crmQtCustomerAddress())}"><i class="fa fa-rotate"></i> Use customer's address</button>` : ''}</span>
-            <textarea id="crm-qt-addr" class="po-field-input" rows="2" maxlength="1000" data-qt-h="customer_address" style="resize:vertical" placeholder="${_crmWs.quotations?.meta?.lead?.customer_id ? 'No address on file for this customer — type one' : 'Street, city — printed on the quotation'}">${escHtml(f.customer_address || '')}</textarea></div>
         </div>
       </section>
 
@@ -64203,12 +64377,21 @@ async function submitDsCreate() {
         description: (l.description || '').trim(), notes: (l.notes || '').trim() || null, quantity: _crmQtNum(l.quantity), unit_price: _crmQtNum(l.unit_price),
         discount_amount: _crmQtNum(l.discount_amount), tax_rate: _crmQtNum(l.tax_rate),
       }));
+    const cust = f.customer || _crmQtCustomerForm(null);
+    if (!cust.name.trim()) { $('#crm-qt-cust-name')?.focus(); return fail('Enter the customer name — pick a saved customer or type a new one.'); }
     if (!items.length) return fail('Add at least one line.');
     if (items.some(i => i.quantity <= 0)) return fail('Every line needs a quantity.');
 
+    const address = (f.customer_address || '').trim();
     const body = {
       quote_date: f.quote_date, expiry_date: f.expiry_date || null, reference: f.reference.trim() || null, notes: f.notes.trim() || null,
-      customer_address: (f.customer_address || '').trim() || null,
+      customer_address: address || null,
+      // Saved to the customer master: updates the picked customer, else finds (same phone / email) or creates one
+      customer_id: cust.id || null,
+      customer: {
+        name: cust.name.trim(), phone: cust.phone.trim() || null, email: cust.email.trim() || null,
+        industry: cust.industry.trim() || null, address: address.slice(0, 255) || null,
+      },
       discount_amount: _crmQtNum(f.discount_amount), tax_amount: _crmQtNum(f.tax_amount), items,
     };
     btn.disabled = true;
@@ -64525,7 +64708,36 @@ async function submitDsCreate() {
       if (el.dataset.qtF === 'quantity') _crmQtScheduleStock(lead);
     } else if (el.dataset.qtH !== undefined) {
       s.form[el.dataset.qtH] = el.value;
+      // The address box grows with its lines (up to 4, then scrolls)
+      if (el.id === 'crm-qt-addr') el.rows = Math.min(4, Math.max(1, el.value.split('\n').length));
       _crmQtRefreshTotals();
+    } else if (el.dataset.qtC !== undefined) {
+      const c = (s.form.customer ||= _crmQtCustomerForm(null));
+      c[el.dataset.qtC] = el.value;
+      if (el.dataset.qtC !== 'name') return;
+      // Renaming a picked customer makes it a new one (the server still matches it by phone / email)
+      if (c.id) {
+        Object.assign(c, { id: null, saved_address: '' });
+        const badge = $('#crm-qt-cust-badge');
+        if (badge) badge.innerHTML = _crmQtCustomerBadgeHtml(c);
+        $('#crm-qt-edit-body [data-qt-addr-fill]')?.remove();
+      }
+      clearTimeout(_crmQtCustTimer);
+      const q = el.value.trim();
+      const results = $('#crm-qt-cust-results');
+      if (!results) return;
+      if (q.length < 2) { results.style.display = 'none'; return; }
+      _crmQtCustTimer = setTimeout(async () => {
+        const res = await API.crmLeadQuotationCustomers(lead.id, q).catch(() => ({ body: {} }));
+        if ($('#crm-qt-cust-name')?.value.trim() !== q) return; // typed on since
+        const rows = _crmQtCustResults = res.body?.data || [];
+        results.innerHTML = rows.length ? rows.map((r, i) => `<div class="qt-suggest-item" data-qt-cust-pick="${i}" style="padding:6px 10px;cursor:pointer;display:flex;gap:8px;align-items:center">
+            <i class="fa fa-user" style="opacity:.45;font-size:11px"></i>
+            <span style="flex:1;min-width:0">${escHtml(r.name)}${r.industry ? `<span class="qt-suggest-sku">${escHtml(r.industry)}</span>` : ''}</span>
+            <span class="crm-ws-muted" style="font-size:12px">${escHtml([r.phone, r.email].filter(Boolean).join(' · '))}</span></div>`).join('')
+          : `<div style="padding:8px 10px;font-size:12px;color:var(--text-muted)"><i class="fa fa-user-plus"></i> No saved customer matches — “${escHtml(q)}” will be saved as a new customer.</div>`;
+        results.style.display = '';
+      }, 220);
     } else if (el.id === 'crm-qt-product-search') {
       clearTimeout(_crmQtSearchTimer);
       const q = el.value.trim();
@@ -64550,6 +64762,16 @@ async function submitDsCreate() {
     const lead = _crmViewLead;
     if (!lead || _crmLeadTab !== 'quotations') return;
     const s = _crmQtState();
+    const custPick = e.target.closest('[data-qt-cust-pick]');
+    if (custPick && s.form) {
+      // A saved customer: fill its details and bill to its address on file
+      const r = _crmQtCustResults[+custPick.dataset.qtCustPick];
+      if (!r) return;
+      s.form.customer = _crmQtCustomerForm(r);
+      if (r.address) s.form.customer_address = r.address;
+      _crmRenderWsTab();
+      return;
+    }
     const pick = e.target.closest('[data-qt-pick]');
     if (pick && s.form) {
       const line = { item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
@@ -64586,8 +64808,14 @@ async function submitDsCreate() {
       _crmRenderWsTab();
     } else if (t.matches('[data-qt-edit]') && s.detail) {
       _crmQtEdit(lead, _crmQtFormFromDetail(s.detail));
+    } else if (t.matches('[data-qt-cust-clear]') && s.form) {
+      // Start over with an empty, new customer
+      s.form.customer = _crmQtCustomerForm(null);
+      s.form.customer_address = '';
+      _crmRenderWsTab();
+      $('#crm-qt-cust-name')?.focus();
     } else if (t.matches('[data-qt-addr-fill]') && s.form) {
-      s.form.customer_address = _crmQtCustomerAddress();
+      s.form.customer_address = s.form.customer?.saved_address || _crmQtCustomerAddress();
       const box = $('#crm-qt-edit-body [data-qt-h="customer_address"]');
       if (box) box.value = s.form.customer_address;
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
@@ -64815,6 +65043,7 @@ async function submitDsCreate() {
   // Close the product results when clicking elsewhere in the editor
   ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('focusout', e => {
     if (e.target.id === 'crm-qt-product-search') setTimeout(() => { const r = $('#crm-qt-product-results'); if (r) r.style.display = 'none'; }, 200);
+    if (e.target.id === 'crm-qt-cust-name') setTimeout(() => { const r = $('#crm-qt-cust-results'); if (r) r.style.display = 'none'; }, 200);
   }));
 
   /**

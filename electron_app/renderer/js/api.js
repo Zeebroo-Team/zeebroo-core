@@ -397,6 +397,7 @@ const API = (() => {
     customers:      (q, page, categoryId) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
+    customerIndustries: () => request('GET', '/customers/industries'),
     // opts: { duplicates: 'skip'|'update' } — duplicates of existing customers are skipped by default
     importCustomers:(rows, opts = {}) => request('POST', '/customers/import', { rows, ...opts }),
     previewCustomerImport: (rows, opts = {}) => request('POST', '/customers/import/preview', { rows, ...opts }),
@@ -742,6 +743,7 @@ const API = (() => {
     crmCreateLeadQuotation:   (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations`, body),
     crmUpdateLeadQuotation:   (leadId, id, body)       => request('PUT',    `/crm/leads/${leadId}/quotations/${id}`, body),
     crmLeadQuotationStock:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations/stock-check`, body),
+    crmLeadQuotationCustomers:(leadId, q)              => request('GET',    `/crm/leads/${leadId}/quotations/customers?q=${encodeURIComponent(q)}`),
     crmQuotationBrands:       (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations/catalog/brands`),
     crmQuotationModels:       (leadId, brandId)        => request('GET',    `/crm/leads/${leadId}/quotations/catalog/models?brand_id=${encodeURIComponent(brandId)}`),
     crmQuotationProductInfo:  (leadId, productId)      => request('GET',    `/crm/leads/${leadId}/quotations/catalog/products/${productId}`),
