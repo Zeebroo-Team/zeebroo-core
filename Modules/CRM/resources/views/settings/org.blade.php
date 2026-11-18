@@ -122,7 +122,17 @@
                         <div class="crm-org-row">
                             <label style="min-width:170px;">Discount approval limit (%)</label>
                             <input type="number" name="discount_approval_limit_percent" min="0" max="100" step="0.01" style="width:100px;"
-                                   value="{{ $d['settings']['discount_approval_limit_percent'] }}" placeholder="No limit">
+                                   value="{{ $d['settings']['discount_approval_limit_percent'] }}" placeholder="Not set">
+                        </div>
+                        <div class="crm-org-row">
+                            <label style="min-width:170px;">Quotation value limit</label>
+                            <input type="number" name="quotation_value_approval_limit" min="0" step="0.01" style="width:140px;"
+                                   value="{{ $d['settings']['quotation_value_approval_limit'] }}" placeholder="Not set">
+                        </div>
+                        <div class="crm-org-row" style="font-size:12px;color:#64748b;">
+                            A quotation with a discount up to the limit % and a total up to the value limit is issued
+                            without approval; anything over either goes to the head. Leave a limit empty and every
+                            quotation needs the head's approval.
                         </div>
                         <div class="crm-org-row">
                             <label style="min-width:170px;">Follow-up days</label>

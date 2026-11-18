@@ -72,6 +72,8 @@ class PosCrmLeadQuotationApiController extends Controller
                 'stock_mode'  => $this->leadQuotations->stockCheck($business, [])['mode'],
                 // So the editor can warn live when the discount goes over it (null = no limit set)
                 'discount_limit' => $this->approvals->discountLimit($lead),
+                // …and when the total goes over the value limit (null = no limit set → always approval)
+                'value_limit'    => $this->approvals->valueLimit($lead),
                 'lead'        => $this->presentLead($lead),
             ],
         ]);
@@ -280,9 +282,20 @@ class PosCrmLeadQuotationApiController extends Controller
             'approver_ids'   => ['nullable', 'array', 'max:10'],
             'approver_ids.*' => ['integer'],
         ]);
-        $approvers = $this->approvals->pickApprovers($lead, $request->has('approver_ids') ? ($data['approver_ids'] ?? []) : null);
+        // Within the department's discount and value limits it is issued straight away — no head to email
+        $required  = $this->approvals->approvalCheck($lead, $quotation)['required'];
+        $approvers = $required ? $this->approvals->pickApprovers($lead, $request->has('approver_ids') ? ($data['approver_ids'] ?? []) : null) : [];
         $quotation = $this->approvals->submit($lead, $quotation, (int) $request->user()->id, $data['comment'] ?? null);
-        $mail      = $this->approvalMail->send($lead, $quotation, $approvers);
+
+        if ($quotation->status === Quotation::STATUS_APPROVED) {
+            return response()->json([
+                'message' => 'Within the approval limits — no approval needed. Ready to send to the customer.',
+                'emailed' => ['sent' => [], 'failed' => []],
+                'data'    => $this->presentDetail($business, $access, $lead->fresh(), $quotation),
+            ]);
+        }
+
+        $mail = $this->approvalMail->send($lead, $quotation, $approvers);
 
         $message = 'Submitted for approval.'
             . ($mail['sent'] ? ' Emailed ' . implode(', ', $mail['sent']) . '.' : '')
@@ -359,6 +372,7 @@ class PosCrmLeadQuotationApiController extends Controller
         $rows = $this->approvals->inbox($business, $access)->map(fn (Quotation $q) => $this->presentListItem($q) + [
             'lead'     => $this->presentLead($q->lead),
             'discount' => $this->approvals->discountSummary($q->lead, $q),
+            'value'    => $this->approvals->approvalCheck($q->lead, $q)['value'],
             'price_changes' => $this->approvals->priceChanges($q),
             'routing'  => $this->approvals->routing($q),
             'subtotal' => round((float) $q->subtotal, 2),
@@ -518,10 +532,14 @@ class PosCrmLeadQuotationApiController extends Controller
             'items'         => $items,
             'stock'         => $this->leadQuotations->stockCheck($business, $items, $q->branch_id),
             'discount'      => $this->approvals->discountSummary($lead, $q),
+            // Whether submitting needs the head (over a limit / none set) or issues it straight away
+            'approval'      => $this->approvals->approvalCheck($lead, $q),
+            // Issued without the head because it was within the department's limits
+            'within_limits' => $q->approved_at !== null && $q->approved_by === null && in_array($q->status, [Quotation::STATUS_APPROVED, Quotation::STATUS_SENT, Quotation::STATUS_ACCEPTED], true),
             // Product lines quoted away from their standard price — shown to the approver
             'price_changes' => $this->approvals->priceChanges($q),
             // The heads the submit form offers to email for approval
-            'approvers'     => $canSubmit ? $this->approvals->approvers($lead) : [],
+            'approvers'     => $canSubmit && $this->approvals->approvalCheck($lead, $q)['required'] ? $this->approvals->approvers($lead) : [],
             'superseded_by' => $newer ? ['id' => (int) $newer->id, 'quote_number' => $newer->quote_number, 'version' => (int) $newer->version] : null,
             'responses'     => $q->customerResponses->map(fn (QuotationCustomerResponse $r) => $this->presentResponse($r))->values(),
             'approvals'     => $q->approvals->map(fn (QuotationApproval $a) => [

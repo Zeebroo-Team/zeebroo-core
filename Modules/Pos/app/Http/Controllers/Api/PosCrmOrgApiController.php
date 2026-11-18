@@ -166,6 +166,7 @@ class PosCrmOrgApiController extends Controller
         $validated = $request->validate([
             'is_marketing_intake'             => ['boolean'],
             'discount_approval_limit_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'quotation_value_approval_limit'  => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'followup_days'                   => ['nullable', 'array', 'max:10'],
             'followup_days.*'                 => ['integer', 'min:1', 'max:365'],
         ]);
@@ -178,6 +179,7 @@ class PosCrmOrgApiController extends Controller
                 'department_id'                   => $department->id,
                 'is_marketing_intake'             => $setting->is_marketing_intake,
                 'discount_approval_limit_percent' => $setting->discount_approval_limit_percent !== null ? (float) $setting->discount_approval_limit_percent : null,
+                'quotation_value_approval_limit'  => $setting->quotation_value_approval_limit !== null ? (float) $setting->quotation_value_approval_limit : null,
                 'followup_days'                   => $setting->followupDays(),
             ],
         ]);

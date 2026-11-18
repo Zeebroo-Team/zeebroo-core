@@ -101,6 +101,7 @@ class CrmOrgController extends Controller
         $validated = $request->validate([
             'is_marketing_intake'             => ['nullable', 'boolean'],
             'discount_approval_limit_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'quotation_value_approval_limit'  => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             // Comma-separated in the form, e.g. "2, 5"
             'followup_days'                   => ['nullable', 'string', 'max:100', 'regex:/^[\d\s,]*$/'],
         ]);

@@ -951,10 +951,13 @@ test('the Sales quotation API keeps a lead quotation\'s approval history: no del
 
 // â”€â”€ Negotiation: customer responses, versions, discount limit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/** Set the Sales department's discount approval limit (null = none set). */
-function crmQuoteSetLimit(?float $percent): void
+/** Set the Sales department's discount (%) and quotation value approval limits (null = none set). */
+function crmQuoteSetLimit(?float $percent, ?float $value = null): void
 {
-    app(CrmOrgService::class)->saveSettings(test()->business, Department::find(10), ['discount_approval_limit_percent' => $percent]);
+    app(CrmOrgService::class)->saveSettings(test()->business, Department::find(10), [
+        'discount_approval_limit_percent' => $percent,
+        'quotation_value_approval_limit'  => $value,
+    ]);
 }
 
 /** A quotation on the test lead taken through approval and sent (the job runs synchronously). */
@@ -1108,7 +1111,7 @@ test('the diff between versions lists added, removed and changed lines and the t
         ->and(crmQuoteStatus(fn () => crmQuote('diff', 3, [$this->lead->id, $q->id])))->toBe(422);
 });
 
-test('every quotation needs the head\'s approval, whatever the discount', function () {
+test('with no value limit set, every quotation needs the head\'s approval, whatever the discount', function () {
     Queue::fake();
     crmQuoteSetLimit(10);
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
@@ -1133,6 +1136,59 @@ test('every quotation needs the head\'s approval, whatever the discount', functi
     crmQuote('submit', 3, [$this->lead->id, $within->id], 'POST');
     crmQuote('approve', 2, [$this->lead->id, $within->id], 'POST');
     expect(crmQuote('send', 3, [$this->lead->id, $within->id], 'POST', $send)->getStatusCode())->toBe(200);
+});
+
+test('within both limits a quotation is issued without the head and can be sent', function () {
+    Queue::fake();
+    Mail::fake();
+    crmQuoteSetLimit(10, 100000);
+    $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
+
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['value_limit'])->toEqual(100000.0);
+
+    // 5% off, a small total
+    $q      = crmQuoteCreate(null, ['discount_amount' => 10]);
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['approval']['required'])->toBeFalse()
+        ->and($detail['approval']['reasons'])->toBe([])
+        ->and($detail['approvers'])->toBe([]);
+
+    // No approver ticked — none is needed
+    $res = crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST', ['approver_ids' => []]);
+    expect($res->getStatusCode())->toBe(200)
+        ->and($res->getData(true)['data']['within_limits'])->toBeTrue()
+        ->and($q->fresh()->status)->toBe('approved')
+        ->and($q->fresh()->approved_by)->toBeNull()
+        ->and(QuotationApproval::where('quotation_id', $q->id)->pluck('action')->all())->toBe([QuotationApproval::ACTION_WITHIN_LIMIT])
+        ->and(crmQuoteLeadStatus())->not->toBe(LeadStage::STATUS_PENDING_APPROVAL);
+    Mail::assertNothingQueued();
+    Mail::assertNothingSent();
+
+    expect(crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', $send)->getStatusCode())->toBe(200);
+});
+
+test('a total over the value limit needs the head\'s approval', function () {
+    Queue::fake();
+    crmQuoteSetLimit(10, 100);   // the 2 × 100 quotation is over 100
+
+    $q      = crmQuoteCreate();
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['approval']['required'])->toBeTrue()
+        ->and($detail['approval']['value']['over_limit'])->toBeTrue()
+        ->and($detail['approval']['reasons'][0])->toContain('over the 100.00 limit');
+
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    expect($q->fresh()->status)->toBe('pending_approval')
+        ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_PENDING_APPROVAL);
+});
+
+test('a discount over the limit needs the head\'s approval even under the value limit', function () {
+    Queue::fake();
+    crmQuoteSetLimit(10, 100000);
+
+    $q = crmQuoteCreate(null, ['discount_amount' => 30]);   // 15%
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    expect($q->fresh()->status)->toBe('pending_approval');
 });
 
 test('a revised version needs approval again', function () {

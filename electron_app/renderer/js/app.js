@@ -64014,12 +64014,16 @@ async function submitDsCreate() {
     _crmQtRefreshTotals();
   }
 
-  /** Live version of the detail view's discount banner: the overall discount % against the department's limit (QuotationApprovalService::discountSummary). */
+  /** Live version of the detail view's limit banners: discount % and total against the department's limits (QuotationApprovalService::approvalCheck). */
   function _crmQtDiscountWarnHtml(t) {
     const limit = _crmWs.quotations?.meta?.discount_limit;
+    const valueLimit = _crmWs.quotations?.meta?.value_limit;
     const percent = t.subtotal > 0 ? _crmQtR2(t.discount / t.subtotal * 100) : 0;
-    if (limit == null || percent <= limit) return '';
-    return `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+    const total = _crmQtR2(t.total);
+    let html = '';
+    if (limit != null && percent > limit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+    if (valueLimit != null && total > valueLimit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-sack-dollar"></i> Total ${_crmQtMoney(total)} is over the department's limit of ${_crmQtMoney(valueLimit)} — it must be approved by the department head before it is sent.</div>`;
+    return html;
   }
 
   // ── Brand → Model picker (GET …/quotations/catalog/brands, …/catalog/models?brand_id=) ──
@@ -64523,7 +64527,12 @@ async function submitDsCreate() {
     if (q.status === 'pending_approval') banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-hourglass-half"></i> Waiting for the department head's approval${q.submitted_by ? ` — submitted by ${escHtml(q.submitted_by.name)}` : ''}.</div>`);
     if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
     if (q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-lock"></i> This version was replaced${q.superseded_by ? ` by <button type="button" class="crm-ws-link" data-qt-open="${q.superseded_by.id}">${escHtml(q.superseded_by.quote_number)}</button>` : ''} — it is kept read-only as history.</div>`);
+    if (q.within_limits) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Issued without approval — within the department's discount and value limits${q.approved_at ? ` (${escHtml(_crmFmtDateTime(q.approved_at))})` : ''}.</div>`);
     if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
+    const val = q.approval?.value;
+    if (val?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-sack-dollar"></i> Total ${_crmQtMoney(val.total)} is over the department's limit of ${_crmQtMoney(val.limit)}${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
+    const noApproval = q.approval && !q.approval.required;
+    if (noApproval && can.submit) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Within the department's limits (discount ≤ ${_crmQtQty(q.approval.discount.limit)}%, total ≤ ${_crmQtMoney(val.limit)}) — no approval needed. Issue it and it is ready to send.</div>`);
     const pc = q.price_changes || [];
     if (pc.length && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-tag"></i> <span>${pc.length} ${pc.length === 1 ? 'price was' : 'prices were'} changed from the standard price${q.status === 'pending_approval' ? ' — check before approving' : ''}:
       ${pc.map(c => `<br>${escHtml(c.description)}: ${_crmQtMoney(c.list_price)} → <b>${_crmQtMoney(c.unit_price)}</b>${c.change_percent != null ? ` (${c.change_percent > 0 ? '+' : ''}${_crmQtQty(c.change_percent)}%)` : ''}`).join('')}</span></div>`);
@@ -64534,7 +64543,8 @@ async function submitDsCreate() {
     const btn = (cond, attr, icon, label, kind = '') => cond ? `<button type="button" class="crm-qtx-btn${kind ? ` crm-qtx-btn--${kind}` : ''}" ${attr}><i class="fa ${icon}"></i> ${label}</button>` : '';
     // Workflow steps on the left, document actions on the right (a macOS window toolbar)
     const steps = [
-      btn(can.submit && !s.submit, 'data-qt-submit-open', 'fa-paper-plane', 'Submit for approval', 'primary'),
+      btn(can.submit && !s.submit && !noApproval, 'data-qt-submit-open', 'fa-paper-plane', 'Submit for approval', 'primary'),
+      btn(can.submit && noApproval, 'data-qt-issue', 'fa-circle-check', 'Issue quotation', 'primary'),
       btn(can.approve, 'data-qt-act="approve"', 'fa-circle-check', 'Approve', 'primary'),
       btn(can.return, 'data-qt-act="return"', 'fa-rotate-left', 'Return with comments', 'warn'),
       btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'danger'),
@@ -64916,6 +64926,15 @@ async function submitDsCreate() {
       s.send = s.respond = null;
       _crmRenderWsTab();
       $('#crm-qt-submit')?.scrollIntoView({ block: 'nearest' });
+    } else if (t.matches('[data-qt-issue]') && s.detail) {
+      // Within the department's limits: the server issues it straight away (no head to email)
+      t.disabled = true;
+      t.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Issuing…';
+      const res = await API.crmLeadQuotationAction(lead.id, s.detail.id, 'submit', {});
+      t.disabled = false;
+      t.innerHTML = '<i class="fa fa-circle-check"></i> Issue quotation';
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not issue the quotation.'), 'error'); return; }
+      _crmQtAfterChange(lead, res);
     } else if (t.matches('[data-qt-submit-cancel]')) {
       s.submit = null;
       _crmRenderWsTab();
@@ -65193,7 +65212,7 @@ async function submitDsCreate() {
           ${q.subtotal != null ? `<div class="crm-appr-fig">Subtotal<b>${_crmQtMoney(q.subtotal)}</b></div>` : ''}
           <div class="crm-appr-fig">Discount<b class="${d.over_limit ? 'crm-qt-stock--short' : ''}">${d.percent ? `${_crmQtQty(d.percent)}%` : '—'}</b>${d.limit != null ? `limit ${_crmQtQty(d.limit)}%` : ''}</div>
           ${q.price_changes?.length ? `<div class="crm-appr-fig" title="${escHtml(q.price_changes.map(c => `${c.description}: ${_crmQtMoney(c.list_price)} → ${_crmQtMoney(c.unit_price)}`).join('\n'))}">Price changes<b class="crm-qt-stock--short">${q.price_changes.length}</b>from standard</div>` : ''}
-          <div class="crm-appr-fig crm-appr-fig--total">Total<b>${_crmQtMoney(q.total)}</b></div>
+          <div class="crm-appr-fig crm-appr-fig--total">Total<b class="${q.value?.over_limit ? 'crm-qt-stock--short' : ''}">${_crmQtMoney(q.total)}</b>${q.value?.limit != null ? `limit ${_crmQtMoney(q.value.limit)}` : ''}</div>
           <div class="crm-appr-actions">
             <button type="button" class="po-btn-ghost" data-appr-open="${q.id}" data-lead="${q.lead?.id}" data-project="${q.lead?.project_id}"><i class="fa fa-up-right-from-square"></i> Review</button>
             <button type="button" class="po-btn-primary" data-appr-approve="${q.id}" data-lead="${q.lead?.id}"><i class="fa fa-circle-check"></i> Approve</button>
@@ -67461,8 +67480,12 @@ async function submitDsCreate() {
             <input type="checkbox" class="mac-switch" id="crm-org-intake"${s.is_marketing_intake ? ' checked' : ''}>
           </div>
           <div class="mac-row">
-            <div class="mac-row-label">Discount approval limit<small>Percent — leave empty for no limit</small></div>
-            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:110px" placeholder="No limit" value="${s.discount_approval_limit_percent ?? ''}"> %</div>
+            <div class="mac-row-label">Discount approval limit<small>Quotations with a discount up to this % need no approval — over it, the head approves</small></div>
+            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:110px" placeholder="Not set" value="${s.discount_approval_limit_percent ?? ''}"> %</div>
+          </div>
+          <div class="mac-row">
+            <div class="mac-row-label">Quotation value limit<small>Quotations with a total up to this need no approval — over it, the head approves. Leave either limit empty and every quotation needs approval</small></div>
+            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-value-limit" min="0" step="0.01" style="width:140px" placeholder="Not set" value="${s.quotation_value_approval_limit ?? ''}"></div>
           </div>
           <div class="mac-row">
             <div class="mac-row-label">Follow-up days<small>Comma separated, e.g. 2, 5</small></div>
@@ -67558,9 +67581,11 @@ async function submitDsCreate() {
       msg = 'Pipeline unlinked.';
     } else if (t.matches('[data-org-save-settings]')) {
       const discount = $('#crm-org-discount').value;
+      const valueLimit = $('#crm-org-value-limit').value;
       const body = {
         is_marketing_intake: $('#crm-org-intake').checked,
         discount_approval_limit_percent: discount === '' ? null : Number(discount),
+        quotation_value_approval_limit: valueLimit === '' ? null : Number(valueLimit),
         followup_days: $('#crm-org-followups').value.split(/[\s,]+/).filter(Boolean).map(Number),
       };
       call = () => API.crmSaveDepartmentSettings(deptId, body);
