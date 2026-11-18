@@ -33,6 +33,15 @@ class DashboardController extends Controller
             return $redirect;
         }
 
+        // The web dashboard is now the POS web app (/pos-app). A signed-in user
+        // who comes back to "/" or "/dashboard" (e.g. closed the tab without
+        // signing out) goes straight into it — signed in via the one-time
+        // handoff code — instead of the legacy web dashboard. A flashed error
+        // (payment error/cancel) still renders here so it is not lost.
+        if (! $request->session()->has('errors')) {
+            return redirect()->route('pos.web-app.launch');
+        }
+
         $loanOverviewTooltip = app(LoanOverviewTooltipService::class)->forUser($request->user());
         $needsWarehouseBranchIntro = $this->needsWarehouseBranchIntro($request->user());
 
