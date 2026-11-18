@@ -63999,18 +63999,25 @@ async function submitDsCreate() {
 
   /** The server's formula (QuotationService): line net = qty × price − discount; tax on the net; header discount / tax on top. */
   function _crmQtTotals(form) {
-    let subtotal = 0, discount = 0, tax = 0;
+    let subtotal = 0, discount = 0, tax = 0, priceCut = 0;
     const lines = form.lines.map(l => {
-      const gross = _crmQtR2(Math.max(0, _crmQtNum(l.quantity)) * Math.max(0, _crmQtNum(l.unit_price)));
+      const qty   = Math.max(0, _crmQtNum(l.quantity));
+      const gross = _crmQtR2(qty * Math.max(0, _crmQtNum(l.unit_price)));
       const disc  = Math.min(gross, _crmQtR2(Math.max(0, _crmQtNum(l.discount_amount))));
       const net   = _crmQtR2(gross - disc);
       const t     = _crmQtR2(net * Math.min(100, Math.max(0, _crmQtNum(l.tax_rate))) / 100);
+      // Quoted below the standard price: counts toward the discount limit (Quotation::priceCutAmount)
+      if (_crmQtHasStd(l)) {
+        const cut = _crmQtNum(l.list_price) - _crmQtNum(l.unit_price);
+        if (cut > 0) priceCut += _crmQtR2(cut * qty);
+      }
       subtotal += gross; discount += disc; tax += t;
       return { net, tax: t };
     });
     discount += Math.max(0, _crmQtNum(form.discount_amount));
     tax      += Math.max(0, _crmQtNum(form.tax_amount));
-    return { lines, subtotal, discount, tax, total: Math.max(0, subtotal - discount + tax) };
+    priceCut  = _crmQtR2(priceCut);
+    return { lines, subtotal, discount, tax, priceCut, total: Math.max(0, subtotal - discount + tax) };
   }
 
   function _crmQtStockCellHtml(s, index) {
@@ -64035,6 +64042,12 @@ async function submitDsCreate() {
   function _crmQtCanChangePrice() { return _crmWs.quotations?.meta?.can_change_price !== false; }
   function _crmQtHasStd(l) { return l.item_type === 'product' && !!l.product_id && l.list_price != null; }
   function _crmQtPriceLocked(l) { return _crmQtHasStd(l) && !_crmQtCanChangePrice(); }
+  /** A line's Total cell: the amount without tax, and with tax under it. */
+  function _crmQtLineTotalHtml(l) {
+    return `<div class="crm-qt-lt-net" title="Without tax">${_crmQtMoney(l.net)}</div>`
+      + `<div class="crm-qt-lt-gross" title="With tax">${_crmQtMoney(_crmQtR2(l.net + l.tax))} <span>incl. tax</span></div>`;
+  }
+
   function _crmQtPriceChanged(l) { return _crmQtHasStd(l) && Math.abs(_crmQtNum(l.unit_price) - _crmQtNum(l.list_price)) >= 0.005; }
 
   /** Under a line's price box: locked, or changed from the standard price with a reset button. */
@@ -64079,10 +64092,12 @@ async function submitDsCreate() {
   function _crmQtDiscountWarnHtml(t) {
     const limit = _crmWs.quotations?.meta?.discount_limit;
     const valueLimit = _crmWs.quotations?.meta?.value_limit;
-    const percent = t.subtotal > 0 ? _crmQtR2(t.discount / t.subtotal * 100) : 0;
+    // Discount + price cuts against the value at standard prices (Quotation::effectiveDiscountPercent)
+    const base = t.subtotal + t.priceCut;
+    const percent = base > 0 ? _crmQtR2((t.discount + t.priceCut) / base * 100) : 0;
     const total = _crmQtR2(t.total);
     let html = '';
-    if (limit != null && percent > limit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+    if (limit != null && percent > limit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}%${t.priceCut > 0 ? ` off the standard prices (including ${_crmQtMoney(t.priceCut)} in prices lowered below the catalog price)` : ''} is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
     if (valueLimit != null && total > valueLimit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-sack-dollar"></i> Total ${_crmQtMoney(total)} is over the department's limit of ${_crmQtMoney(valueLimit)} — it must be approved by the department head before it is sent.</div>`;
     return html;
   }
@@ -64260,7 +64275,7 @@ async function submitDsCreate() {
           <div class="crm-qt-std" data-qt-std="${i}">${_crmQtStdHtml(l, i)}</div></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="discount_amount" data-qt-i="${i}" value="${l.discount_amount ? escHtml(String(l.discount_amount)) : ''}" placeholder="0" data-wheel-blur></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" data-wheel-blur></td>
-        <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
+        <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtLineTotalHtml(t.lines[i])}</td>
         <td data-qt-stock="${i}">${_crmQtStockCellHtml(s, i)}</td>
         <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-xmark"></i></button></td>
       </tr>`).join('');
@@ -64343,7 +64358,7 @@ async function submitDsCreate() {
     const s = _crmQtState();
     if (!s.form) return;
     const t = _crmQtTotals(s.form);
-    t.lines.forEach((l, i) => { const el = $(`#crm-qt-edit-body [data-qt-lt="${i}"]`); if (el) el.textContent = _crmQtMoney(l.net); });
+    t.lines.forEach((l, i) => { const el = $(`#crm-qt-edit-body [data-qt-lt="${i}"]`); if (el) el.innerHTML = _crmQtLineTotalHtml(l); });
     const set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
     set('#crm-qt-t-sub', _crmQtMoney(t.subtotal));
     set('#crm-qt-t-disc', '−' + _crmQtMoney(t.discount));
@@ -64585,7 +64600,7 @@ async function submitDsCreate() {
         <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}${i.price_changed ? `<div class="crm-qt-std crm-qt-std--changed" title="Changed from the standard price">Std ${escHtml(_crmQtMoney(i.list_price))}</div>` : ''}</td>
         ${lineDisc ? `<td class="crm-qt-right">${i.discount_amount > 0 ? '−' + _crmQtMoney(i.discount_amount) : '—'}</td>` : ''}
         ${lineTax ? `<td class="crm-qt-right">${i.tax_amount > 0 ? `${_crmQtMoney(i.tax_amount)} <span class="crm-ws-muted">(${_crmQtQty(i.tax_rate)}%)</span>` : '—'}</td>` : ''}
-        <td class="crm-qt-right"><strong>${_crmQtMoney(i.line_total)}</strong></td>
+        <td class="crm-qt-right">${_crmQtLineTotalHtml({ net: _crmQtNum(i.line_total), tax: _crmQtNum(i.tax_amount) })}</td>
         ${stock.mode !== 'off' ? `<td>${stockOf(idx)}</td>` : ''}
       </tr>`).join('');
 
@@ -64604,7 +64619,7 @@ async function submitDsCreate() {
     if (ro) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-code-branch"></i> <span>Revision of v${ro.version} — requested by <b>${escHtml(ro.requested_by?.name || '—')}</b>, approved by <b>${escHtml(ro.decided_by?.name || '—')}</b>${ro.decided_at ? ` on ${escHtml(_crmFmtDateTime(ro.decided_at))}` : ''}${ro.revised_by ? `, changes by <b>${escHtml(ro.revised_by.name)}</b>` : ''}.<br>Reason: ${escHtml(ro.reason)}</span></div>`);
     if (q.is_locked && !q.is_superseded && !pr && can.request_revision) banners.push(`<div class="crm-qt-banner"><i class="fa fa-lock"></i> This quotation has been issued and can no longer be edited. ${q.revision_auto_approve ? 'Make a new version to change it.' : 'To change it, request a revision — the department head must approve it first.'}</div>`);
     if (q.within_limits) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Issued without approval — within the department's discount and value limits${q.approved_at ? ` (${escHtml(_crmFmtDateTime(q.approved_at))})` : ''}.</div>`);
-    if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
+    if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.effective_percent ?? q.discount.percent)}%${q.discount.price_cut > 0 ? ` off the standard prices (including ${_crmQtMoney(q.discount.price_cut)} in prices lowered below the catalog price)` : ''} is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
     const val = q.approval?.value;
     if (val?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-sack-dollar"></i> Total ${_crmQtMoney(val.total)} is over the department's limit of ${_crmQtMoney(val.limit)}${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
     const noApproval = q.approval && !q.approval.required;
@@ -65372,7 +65387,7 @@ async function submitDsCreate() {
         <div class="crm-appr-foot">
           ${q.items_count != null ? `<div class="crm-appr-fig">Items<b>${q.items_count}</b></div>` : ''}
           ${q.subtotal != null ? `<div class="crm-appr-fig">Subtotal<b>${_crmQtMoney(q.subtotal)}</b></div>` : ''}
-          <div class="crm-appr-fig">Discount<b class="${d.over_limit ? 'crm-qt-stock--short' : ''}">${d.percent ? `${_crmQtQty(d.percent)}%` : '—'}</b>${d.limit != null ? `limit ${_crmQtQty(d.limit)}%` : ''}</div>
+          <div class="crm-appr-fig">Discount<b class="${d.over_limit ? 'crm-qt-stock--short' : ''}">${(d.effective_percent ?? d.percent) ? `${_crmQtQty(d.effective_percent ?? d.percent)}%` : '—'}</b>${d.price_cut > 0 ? 'incl. price cuts · ' : ''}${d.limit != null ? `limit ${_crmQtQty(d.limit)}%` : ''}</div>
           ${q.price_changes?.length ? `<div class="crm-appr-fig" title="${escHtml(q.price_changes.map(c => `${c.description}: ${_crmQtMoney(c.list_price)} → ${_crmQtMoney(c.unit_price)}`).join('\n'))}">Price changes<b class="crm-qt-stock--short">${q.price_changes.length}</b>from standard</div>` : ''}
           <div class="crm-appr-fig crm-appr-fig--total">Total<b class="${q.value?.over_limit ? 'crm-qt-stock--short' : ''}">${_crmQtMoney(q.total)}</b>${q.value?.limit != null ? `limit ${_crmQtMoney(q.value.limit)}` : ''}</div>
           <div class="crm-appr-actions">

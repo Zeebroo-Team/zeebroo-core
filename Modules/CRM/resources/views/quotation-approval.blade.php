@@ -226,8 +226,8 @@
             <div class="card"><div class="kpis">
                 <div class="kpi"><div class="kpi-l">Total</div><div class="kpi-v {{ ! empty($value['over_limit']) ? 'red' : '' }}">{{ $money($q->total) }}</div><div class="kpi-s">{{ $q->items->count() }} line{{ $q->items->count() === 1 ? '' : 's' }}@if(($value['limit'] ?? null) !== null) · limit {{ $money($value['limit']) }}@endif</div></div>
                 <div class="kpi"><div class="kpi-l">Discount</div>
-                    <div class="kpi-v {{ $discount['over_limit'] ? 'red' : '' }}">{{ (float) $q->discount_amount > 0 ? $num($discount['percent']) . '%' : 'None' }}</div>
-                    <div class="kpi-s">@if($discount['limit'] !== null)Limit {{ $num($discount['limit']) }}%@else No limit set @endif</div></div>
+                    <div class="kpi-v {{ $discount['over_limit'] ? 'red' : '' }}">{{ ((float) $q->discount_amount > 0 || ($discount['price_cut'] ?? 0) > 0) ? $num($discount['effective_percent'] ?? $discount['percent']) . '%' : 'None' }}</div>
+                    <div class="kpi-s">@if(($discount['price_cut'] ?? 0) > 0)Incl. price cuts · @endif @if($discount['limit'] !== null)Limit {{ $num($discount['limit']) }}%@else No limit set @endif</div></div>
                 <div class="kpi"><div class="kpi-l">Valid until</div>
                     <div class="kpi-v {{ $daysLeft !== null && $daysLeft < 0 ? 'red' : '' }}">{{ $expires?->format('d M Y') ?? '—' }}</div>
                     <div class="kpi-s">@if($daysLeft !== null){{ $daysLeft >= 0 ? $daysLeft . ' day' . ($daysLeft === 1 ? '' : 's') . ' left' : 'Expired' }}@endif</div></div>
@@ -236,7 +236,13 @@
 
             @if($discount['over_limit'])
                 <div class="callout bad"><i class="fa fa-triangle-exclamation"></i>
-                    <div><strong>Discount exceeds the department limit.</strong> This quotation gives {{ $num($discount['percent']) }}% ({{ $money($q->discount_amount) }}) off; the limit is {{ $num($discount['limit']) }}%.</div></div>
+                    <div><strong>Discount exceeds the department limit.</strong>
+                        @if(($discount['price_cut'] ?? 0) > 0)
+                            This quotation gives {{ $num($discount['effective_percent']) }}% off the standard prices — {{ $money($q->discount_amount) }} in discounts plus {{ $money($discount['price_cut']) }} in prices lowered below the catalog price; the limit is {{ $num($discount['limit']) }}%.
+                        @else
+                            This quotation gives {{ $num($discount['percent']) }}% ({{ $money($q->discount_amount) }}) off; the limit is {{ $num($discount['limit']) }}%.
+                        @endif
+                    </div></div>
             @endif
 
             @if(! empty($value['over_limit']))
@@ -426,7 +432,7 @@
                     <div class="v">{{ $money($q->total) }}</div>
                     <div class="facts">
                         <div><span>Customer</span><strong>{{ $lead->name }}</strong></div>
-                        <div><span>Discount</span><strong style="{{ $discount['over_limit'] ? 'color:var(--bad)' : '' }}">{{ (float) $q->discount_amount > 0 ? $num($discount['percent']) . '%' : 'None' }}</strong></div>
+                        <div><span>Discount</span><strong style="{{ $discount['over_limit'] ? 'color:var(--bad)' : '' }}">{{ ((float) $q->discount_amount > 0 || ($discount['price_cut'] ?? 0) > 0) ? $num($discount['effective_percent'] ?? $discount['percent']) . '%' : 'None' }}</strong></div>
                     </div>
                 </div>
 

@@ -232,6 +232,36 @@ class Quotation extends Model
         return (float) $this->subtotal > 0 ? round((float) $this->discount_amount / (float) $this->subtotal * 100, 2) : 0.0;
     }
 
+    /**
+     * How much the product lines were quoted below their standard (catalog) price:
+     * Σ qty × (list_price − unit_price) over the lines priced lower. A line priced higher does
+     * not offset a cut on another line.
+     */
+    public function priceCutAmount(): float
+    {
+        return round((float) $this->items->sum(function (QuotationItem $i) {
+            if ($i->list_price === null) {
+                return 0.0;
+            }
+            $cut = (float) $i->list_price - (float) $i->unit_price;
+
+            return $cut > 0 ? round($cut * (float) $i->quantity, 2) : 0.0;
+        }), 2);
+    }
+
+    /**
+     * What the customer gets off the catalog value: the discount (lines + header) plus the
+     * price cuts, as a % of the subtotal at standard prices. This is what the department's
+     * discount approval limit is checked against, so lowering a price is not a way round it.
+     */
+    public function effectiveDiscountPercent(): float
+    {
+        $cut  = $this->priceCutAmount();
+        $base = (float) $this->subtotal + $cut;
+
+        return $base > 0 ? round(((float) $this->discount_amount + $cut) / $base * 100, 2) : 0.0;
+    }
+
     public function isExpired(): bool
     {
         return $this->expiry_date && $this->expiry_date->isPast()

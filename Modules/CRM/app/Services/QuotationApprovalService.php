@@ -181,18 +181,29 @@ class QuotationApprovalService
     }
 
     /**
-     * The overall discount as a % of the subtotal, against the department's approval limit
-     * (crm_department_settings.discount_approval_limit_percent) — shown to the head so a large
-     * discount stands out. Every version is approved by the head either way.
+     * The discount against the department's approval limit
+     * (crm_department_settings.discount_approval_limit_percent):
+     *   percent            the discount (lines + header) as a % of the subtotal — what prints
+     *   price_cut          how much product lines were quoted below their standard price
+     *   effective_percent  discount + price cuts as a % of the value at standard prices
+     * The limit is checked against effective_percent, so quoting a product below its catalog
+     * price counts the same as giving a discount on it.
      *
-     * @return array{percent: float, limit: ?float, over_limit: bool}
+     * @return array{percent: float, price_cut: float, effective_percent: float, limit: ?float, over_limit: bool}
      */
     public function discountSummary(Lead $lead, Quotation $quotation): array
     {
-        $percent = $quotation->discountPercent();
-        $limit   = $this->discountLimit($lead);
+        $percent   = $quotation->discountPercent();
+        $effective = $quotation->effectiveDiscountPercent();
+        $limit     = $this->discountLimit($lead);
 
-        return ['percent' => $percent, 'limit' => $limit, 'over_limit' => $limit !== null && $percent > $limit];
+        return [
+            'percent'           => $percent,
+            'price_cut'         => $quotation->priceCutAmount(),
+            'effective_percent' => $effective,
+            'limit'             => $limit,
+            'over_limit'        => $limit !== null && $effective > $limit,
+        ];
     }
 
     /**
@@ -240,7 +251,10 @@ class QuotationApprovalService
 
         $reasons = [];
         if ($discount['over_limit']) {
-            $reasons[] = 'Discount ' . $this->num($discount['percent']) . '% is over the ' . $this->num($discount['limit']) . '% limit.';
+            $reasons[] = $discount['price_cut'] > 0
+                ? 'Discount ' . $this->num($discount['effective_percent']) . '% off the standard prices (including '
+                    . number_format($discount['price_cut'], 2) . ' in prices lowered below the catalog price) is over the ' . $this->num($discount['limit']) . '% limit.'
+                : 'Discount ' . $this->num($discount['percent']) . '% is over the ' . $this->num($discount['limit']) . '% limit.';
         }
         if ($value['over_limit']) {
             $reasons[] = 'Total ' . number_format($total, 2) . ' is over the ' . number_format($valueLimit, 2) . ' limit.';
@@ -293,7 +307,9 @@ class QuotationApprovalService
                 'approval_comment' => null,
             ]);
             $this->record($quotation, QuotationApproval::ACTION_WITHIN_LIMIT, $userId,
-                'Discount ' . $this->num($check['discount']['percent']) . '% (limit ' . $this->num($check['discount']['limit']) . '%), '
+                'Discount ' . $this->num($check['discount']['effective_percent']) . '%'
+                . ($check['discount']['price_cut'] > 0 ? ' incl. price cuts of ' . number_format($check['discount']['price_cut'], 2) : '')
+                . ' (limit ' . $this->num($check['discount']['limit']) . '%), '
                 . 'total ' . number_format($check['value']['total'], 2) . ' (limit ' . number_format($check['value']['limit'], 2) . ')');
         });
 
