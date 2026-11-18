@@ -8,6 +8,7 @@ use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
 use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
+use Modules\Sales\Models\QuotationRevisionRequest;
 
 /** The lead's quotations: each one made, every approval step and every send to the customer. */
 final class QuotationTimelineSource implements TimelineSource
@@ -30,8 +31,28 @@ final class QuotationTimelineSource implements TimelineSource
                 Schema::hasTable('quotation_customer_responses') ? ['customerResponses.recordedBy:id,name'] : []))
             ->get();
 
+        $withRevisions = Schema::hasTable('quotation_revision_requests');
+        if ($withRevisions) {
+            $quotations->load(['revisionRequests.requestedBy:id,name', 'revisionRequests.decidedBy:id,name', 'revisionRequests.revision:id,quote_number']);
+        }
+
         foreach ($quotations as $q) {
             $meta = ['quotation_id' => $q->id, 'quote_number' => $q->quote_number, 'version' => $q->version];
+
+            // Revision control: asked (who, why), then approved / rejected / cancelled (who)
+            foreach ($withRevisions ? $q->revisionRequests : [] as $r) {
+                [, $icon, $color] = QuotationRevisionRequest::STATUSES[QuotationRevisionRequest::STATUS_PENDING];
+                yield new TimelineEntry('quotation', 'rr' . $r->id, $r->created_at,
+                    $q->quote_number . ': revision requested', $r->reason, $r->requested_by, $r->requestedBy?->name,
+                    $icon, $color, $meta + ['revision_request_id' => $r->id]);
+
+                if (! $r->isPending() && $r->decided_at !== null) {
+                    [$label, $icon, $color] = QuotationRevisionRequest::STATUSES[$r->status] ?? [$r->label(), 'fa-circle', '#64748b'];
+                    $title = $q->quote_number . ': ' . strtolower($label) . ($r->revision ? ' → ' . $r->revision->quote_number : '');
+                    yield new TimelineEntry('quotation', 'rd' . $r->id, $r->decided_at, $title,
+                        $r->decision_comment, $r->decided_by, $r->decidedBy?->name, $icon, $color, $meta + ['revision_request_id' => $r->id, 'status' => $r->status]);
+                }
+            }
 
             yield new TimelineEntry('quotation', 'q' . $q->id, $q->created_at,
                 ($q->version > 1 ? 'Version ' . $q->version . ' of quotation ' : 'Quotation ') . $q->quote_number . ' created',

@@ -19,6 +19,7 @@ class DepartmentSetting extends Model
         'department_id',
         'is_marketing_intake',
         'discount_approval_limit_percent',
+        'quotation_value_approval_limit',
         'followup_days',
     ];
 
@@ -27,7 +28,8 @@ class DepartmentSetting extends Model
         return [
             'is_marketing_intake'             => 'boolean',
             'discount_approval_limit_percent' => 'decimal:2',
-            'followup_days'                   => 'array',
+            'quotation_value_approval_limit'  => 'decimal:2',
+            'followup_days'                 => 'array',
         ];
     }
 

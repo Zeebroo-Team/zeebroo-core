@@ -3904,6 +3904,8 @@ function _qtToPrintDoc(q) {
     customer_address: b.address || q.customer_address,
     customer_phone:  b.phone || q.customer_phone,
     customer_email:  b.email || q.customer_email,
+    // { name, designation, phone } — printed as "Prepared By"
+    prepared_by:     q.prepared_by || null,
     reference:       q.reference,
     status:          q.status,
     status_label:    q.status_label,
@@ -9955,7 +9957,9 @@ const _notifIconMap = {
   crm_lead_assigned:              { icon: 'fa-user-check',            cls: 'info'    },
   crm_quotation_submitted:        { icon: 'fa-file-signature',        cls: 'warning' },
   crm_quotation_decided:          { icon: 'fa-file-circle-check',     cls: 'info'    },
-  crm_follow_up_due:              { icon: 'fa-phone-volume',          cls: 'warning' },
+  crm_quotation_revision_requested: { icon: 'fa-code-pull-request',   cls: 'warning' },
+  crm_quotation_revision_decided:   { icon: 'fa-code-branch',         cls: 'info'    },
+  crm_follow_up_due:             { icon: 'fa-phone-volume',          cls: 'warning' },
   crm_follow_up_overdue:          { icon: 'fa-phone-slash',           cls: 'danger'  },
   crm_lead_closed:                { icon: 'fa-flag-checkered',        cls: 'success' },
   crm_lead_stage:                 { icon: 'fa-bolt',                  cls: 'info'    },
@@ -10128,6 +10132,12 @@ function _notifNavigate(n) {
       else window.switchMpView?.('tasks', { refresh: true });
       break;
     default:
+      // CRM daily inquiry report ready / sent: open it in Daily Inquiries
+      if (n.type === 'crm_inquiry_report') {
+        if (_activeTab() !== 'crm') activateTab('crm');
+        window.openCrmInquiriesModal?.('reports', { reportId: payload.report_id || null });
+        break;
+      }
       // CRM: deep-link to the lead (its quotation / follow-ups tab when the notification is about one)
       if (String(n.type).startsWith('crm_') && payload.lead_id && payload.project_id) {
         const tab = n.type.startsWith('crm_follow_up') ? 'followups' : null;
@@ -27563,6 +27573,7 @@ async function _cmSelectCustomer(id) {
     { label: 'Phone',    val: c.phone },
     { label: 'Email',    val: c.email },
     { label: 'Address',  val: c.address },
+    { label: 'Industry', val: c.industry },
     { label: 'Notes',    val: c.notes },
     { label: 'Credit Limit', val: _cmCreditLimitHtml(c), raw: true },
   ];
@@ -27847,6 +27858,137 @@ function _cmWireCreditPayment(id, totalDue) {
   amtEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
 }
 
+// ── Industry picker ──────────────────────────────────────────────────────────
+// Any <input data-industry> (POS customer form, CRM quotation customer card…) gets a searchable,
+// scrollable list: common industries + the ones already saved on customers. Free text still works.
+const INDUSTRY_PRESETS = [
+  ['Agriculture', 'fa-tractor'], ['Automotive', 'fa-car'], ['Banking & Finance', 'fa-building-columns'],
+  ['Construction', 'fa-helmet-safety'], ['Education', 'fa-graduation-cap'], ['Energy & Utilities', 'fa-bolt'],
+  ['Government', 'fa-landmark'], ['Healthcare', 'fa-heart-pulse'], ['Hospitality & Tourism', 'fa-hotel'],
+  ['IT & Software', 'fa-laptop-code'], ['Logistics & Transport', 'fa-truck-fast'], ['Manufacturing', 'fa-industry'],
+  ['Media & Advertising', 'fa-bullhorn'], ['Real Estate', 'fa-house'], ['Retail', 'fa-store'],
+  ['Telecommunications', 'fa-tower-cell'], ['Textile & Apparel', 'fa-shirt'], ['Wholesale & Distribution', 'fa-boxes-stacked'],
+].map(([name, icon]) => ({ name, icon }));
+
+const _ind = { input: null, pop: null, opts: [], hl: -1, saved: [], savedAt: 0 };
+
+function _indLoadSaved() {
+  if (Date.now() - _ind.savedAt < 60000) return; // refreshed at most once a minute
+  _ind.savedAt = Date.now();
+  API.customerIndustries().then(r => {
+    if (r.status !== 200) return;
+    _ind.saved = (r.body?.data || []).filter(Boolean);
+    if (_ind.input) _indRender();
+  }).catch(() => {});
+}
+
+function _indOptions(q) {
+  const lc = q.trim().toLowerCase();
+  const presets = new Set(INDUSTRY_PRESETS.map(p => p.name.toLowerCase()));
+  const all = [
+    ...INDUSTRY_PRESETS,
+    ..._ind.saved.filter(s => !presets.has(s.toLowerCase())).map(name => ({ name, icon: 'fa-tag', saved: true })),
+  ];
+  const list = lc ? all.filter(o => o.name.toLowerCase().includes(lc)) : all;
+  // Names starting with the text first
+  if (lc) list.sort((a, b) => (b.name.toLowerCase().startsWith(lc) - a.name.toLowerCase().startsWith(lc)) || a.name.localeCompare(b.name));
+  if (lc && !all.some(o => o.name.toLowerCase() === lc)) list.push({ name: q.trim(), icon: 'fa-plus', custom: true });
+  return list;
+}
+
+function _indMark(name, q) {
+  const i = q ? name.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i < 0) return escHtml(name);
+  return escHtml(name.slice(0, i)) + '<mark>' + escHtml(name.slice(i, i + q.length)) + '</mark>' + escHtml(name.slice(i + q.length));
+}
+
+function _indRender() {
+  const input = _ind.input;
+  if (!input || !document.contains(input)) return _indClose();
+  const q = input.value.trim();
+  const current = q.toLowerCase();
+  _ind.opts = _indOptions(input.value);
+  if (_ind.hl >= _ind.opts.length) _ind.hl = _ind.opts.length - 1;
+  const pop = _ind.pop || (_ind.pop = Object.assign(document.createElement('div'), { className: 'ind-pop' }));
+  if (!pop.isConnected) document.body.appendChild(pop);
+  pop.innerHTML = _ind.opts.length
+    ? `<div class="ind-head">${q ? `${_ind.opts.filter(o => !o.custom).length} match${_ind.opts.filter(o => !o.custom).length === 1 ? '' : 'es'}` : 'Choose an industry or type your own'}</div>`
+      + _ind.opts.map((o, i) => `<div class="ind-opt${i === _ind.hl ? ' hl' : ''}${!o.custom && o.name.toLowerCase() === current ? ' sel' : ''}" data-ind-i="${i}">
+          <i class="fa ${o.icon}"></i>
+          <span>${o.custom ? `Use “${escHtml(o.name)}”` : _indMark(o.name, q)}</span>
+          ${o.saved ? '<small>saved</small>' : ''}${!o.custom && o.name.toLowerCase() === current ? '<b class="fa fa-check"></b>' : ''}
+        </div>`).join('')
+    : '<div class="ind-head">No industries</div>';
+  _indPlace();
+  pop.querySelector('.ind-opt.hl')?.scrollIntoView({ block: 'nearest' });
+}
+
+function _indPlace() {
+  const { input, pop } = _ind;
+  if (!input || !pop) return;
+  const r = input.getBoundingClientRect();
+  const below = window.innerHeight - r.bottom - 12;
+  const above = r.top - 12;
+  const up = below < 220 && above > below;
+  pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Math.max(r.width, 260) - 8)) + 'px';
+  pop.style.width = Math.max(r.width, 260) + 'px';
+  pop.style.maxHeight = Math.min(300, up ? above : below) + 'px';
+  pop.style.top = up ? '' : (r.bottom + 4) + 'px';
+  pop.style.bottom = up ? (window.innerHeight - r.top + 4) + 'px' : '';
+}
+
+function _indOpen(input) {
+  _ind.input = input;
+  _ind.hl = -1;
+  _indLoadSaved();
+  _indRender();
+}
+
+function _indClose() {
+  _ind.pop?.remove();
+  _ind.input = null;
+  _ind.hl = -1;
+}
+
+function _indPick(i) {
+  const o = _ind.opts[i];
+  const input = _ind.input;
+  if (!o || !input) return;
+  input.value = o.name;
+  // Let the form's own input handler keep its state (e.g. the CRM quotation editor)
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  _indClose();
+}
+
+document.addEventListener('focusin', e => { if (e.target.matches?.('input[data-industry]')) _indOpen(e.target); });
+document.addEventListener('click', e => { if (e.target.matches?.('input[data-industry]') && _ind.input !== e.target) _indOpen(e.target); });
+document.addEventListener('input', e => { if (e.target === _ind.input) { _ind.hl = e.target.value.trim() ? 0 : -1; _indRender(); } });
+document.addEventListener('focusout', e => { if (e.target === _ind.input) setTimeout(() => { if (document.activeElement !== _ind.input) _indClose(); }, 120); });
+// Capture phase: Enter / Escape belong to the open list, not the form (save / close modal)
+document.addEventListener('keydown', e => {
+  if (!_ind.input || e.target !== _ind.input || !_ind.pop?.isConnected) return;
+  const n = _ind.opts.length;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (n) { _ind.hl = (_ind.hl + (e.key === 'ArrowDown' ? 1 : -1) + n) % n; _indRender(); }
+  } else if (e.key === 'Enter' && _ind.hl >= 0) {
+    e.preventDefault(); e.stopPropagation(); _indPick(_ind.hl);
+  } else if (e.key === 'Escape') {
+    e.preventDefault(); e.stopPropagation(); _indClose();
+  } else if (e.key === 'Tab') {
+    _indClose();
+  }
+}, true);
+// Keep the focus in the input while choosing
+document.addEventListener('mousedown', e => {
+  if (!_ind.pop?.contains(e.target)) return;
+  e.preventDefault();
+  const opt = e.target.closest('[data-ind-i]');
+  if (opt) _indPick(+opt.dataset.indI);
+});
+window.addEventListener('resize', () => _ind.input && _indPlace());
+document.addEventListener('scroll', e => { if (_ind.input && !_ind.pop?.contains(e.target)) _indPlace(); }, true);
+
 function _cmShowDetail(show) {
   $('#cm-detail-empty').style.display = show ? 'none' : '';
   $('#cm-detail-view').style.display  = show ? 'flex' : 'none';
@@ -27864,6 +28006,7 @@ function _cmShowForm(show, customer = null) {
     $('#cm-f-phone').value   = customer?.phone   ?? '';
     $('#cm-f-email').value   = customer?.email   ?? '';
     $('#cm-f-address').value = customer?.address ?? '';
+    $('#cm-f-industry').value = customer?.industry ?? '';
     $('#cm-f-notes').value   = customer?.notes   ?? '';
     const custType = customer?.customer_type ?? 'retail';
     const typeRadio = $(`input[name="cm-customer-type"][value="${custType}"]`);
@@ -27881,6 +28024,7 @@ async function _cmSave() {
   const phone         = $('#cm-f-phone').value.trim() || null;
   const email         = $('#cm-f-email').value.trim() || null;
   const address       = $('#cm-f-address').value.trim() || null;
+  const industry      = $('#cm-f-industry').value.trim() || null;
   const notes         = $('#cm-f-notes').value.trim() || null;
   const customer_type = $('input[name="cm-customer-type"]:checked')?.value || 'retail';
   const customer_category_id = $('#cm-f-category')?.value || null;
@@ -27907,7 +28051,7 @@ async function _cmSave() {
     }
   }
 
-  const payload = { name, phone, email, address, notes, customer_type, customer_category_id, credit_limit };
+  const payload = { name, phone, email, address, industry, notes, customer_type, customer_category_id, credit_limit };
   let res;
   if (_cm.editingId) {
     res = await API.updateCustomer(_cm.editingId, payload);
@@ -28017,7 +28161,7 @@ $('#cm-category-filter')?.addEventListener('change', e => {
   _cmLoadList();
 });
 
-['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-notes','#cm-f-credit-limit'].forEach(sel => {
+['#cm-f-name','#cm-f-phone','#cm-f-email','#cm-f-address','#cm-f-industry','#cm-f-notes','#cm-f-credit-limit'].forEach(sel => {
   $(sel)?.addEventListener('keydown', e => { if (e.key === 'Enter' && sel !== '#cm-f-notes') _cmSave(); if (e.key === 'Escape') $('#cm-form-cancel')?.click(); });
 });
 
@@ -30847,6 +30991,14 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const lblTotal  = escHtml(L.total    || 'Total Due');
   const lblAmtDue = escHtml(L.amtDue   || 'Amount Due');
   const notesText = escHtml(inv.notes || 'Thank you for your business!');
+  // "Prepared By" (quotations): name, designation, contact number — inline styles so every template can drop it in
+  const pb   = inv.prepared_by?.name ? inv.prepared_by : null;
+  const prep = pb ? `<div style="margin-top:20px;page-break-inside:avoid;break-inside:avoid">
+  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px">Prepared By</div>
+  <div style="font-size:12px;font-weight:700;color:#0f172a">${escHtml(pb.name)}</div>
+  ${pb.designation ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escHtml(pb.designation)}</div>` : ''}
+  ${pb.phone ? `<div style="font-size:11px;color:#64748b;margin-top:2px">Tel: ${escHtml(pb.phone)}</div>` : ''}
+</div>` : '';
   const sub  = fmt(inv.subtotal);
   const disc = parseFloat(inv.discount_amount || 0);
   const tax  = parseFloat(inv.tax_amount      || 0);
@@ -31036,6 +31188,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
   </div></div>
+  ${prep}
 </div></div></body></html>`;
   }
 
@@ -31087,6 +31240,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
     </div>
   </div>
+  ${prep}
 </div></div></body></html>`;
   }
 
@@ -31144,6 +31298,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
+${prep}
 <div class="ft">${lblDoc} ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
 </div></body></html>`;
   }
@@ -31200,6 +31355,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
+${prep}
 <div class="ft"><span>${invNum} · ${biz}</span><span>${issDate}</span></div>
 </div></body></html>`;
   }
@@ -31266,6 +31422,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
     </div>
   </div>
+  ${prep}
   <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
 </div></div></body></html>`;
   }
@@ -31324,6 +31481,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
+${prep}
 <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
 </div></body></html>`;
 }
@@ -31678,6 +31836,9 @@ const QTPL_FIELDS = [
   { group: 'Customer', items: [
     ['customer_name', 'Name'], ['customer_contact', 'Contact person'], ['customer_address', 'Address'], ['customer_phone', 'Phone'], ['customer_email', 'Email'],
   ] },
+  { group: 'Prepared by — wrap in {{#has_prepared_by}}', items: [
+    ['prepared_by_name', 'Name'], ['prepared_by_designation', 'Designation'], ['prepared_by_phone', 'Contact number'],
+  ] },
   { group: 'Business', items: [
     ['business_name', 'Business name'], ['business_address', 'Address'], ['logo_url', 'Logo image URL'], ['accent', 'Accent colour'],
   ] },
@@ -31826,6 +31987,11 @@ function _qtplData(inv, ic, cur) {
     customer_address: inv.customer_address || '',
     customer_phone:   inv.customer_phone || '',
     customer_email:   inv.customer_email || '',
+    // "Prepared by" — quotations only (the server's QuotationTemplateService sends the same)
+    has_prepared_by:         !!inv.prepared_by?.name,
+    prepared_by_name:        inv.prepared_by?.name || '',
+    prepared_by_designation: inv.prepared_by?.designation || '',
+    prepared_by_phone:       inv.prepared_by?.phone || '',
     business_name:    s.business_name || state._bizName || 'Your Business',
     business_address: s.receipt_address_line || '',
     logo_url:         s.business_logo_url || s.receipt_logo_url || '',
@@ -31885,6 +32051,7 @@ function _qtplSampleInv() {
     customer_address: 'No. 45, Commerce Drive\nColombo 03',
     customer_phone:   '011-2000000',
     customer_email:   'purchasing@acme.example',
+    prepared_by:      isQt ? { name: 'Nimal Perera', designation: 'Sales Executive', phone: '077 123 4567' } : null,
     notes:            '',
     items,
     subtotal:         sub,
@@ -58745,6 +58912,8 @@ async function submitDsCreate() {
   function switchCrmView(view, opts = {}) {
     // Re-read access whenever the CRM tab opens, so changes and business switches apply
     if (view === 'overview' || !_crmAccess) loadCrmAccess();
+    // The daily inquiry status pops up once a day when CRM opens
+    if (view === 'overview') setTimeout(() => window._crmInqMaybeAutoShow?.(), 600);
     _crmView = view;
     $('#crm-overview-view').style.display = view === 'overview' ? 'flex' : 'none';
     $('#crm-relation-view').style.display = view === 'relation' ? 'flex' : 'none';
@@ -62074,7 +62243,7 @@ async function submitDsCreate() {
   const _CRM_TAB_NOTIF_TYPES = {
     overview:   ['crm_lead_new', 'crm_lead_forwarded', 'crm_lead_assigned', 'crm_stage_approval'],
     timeline:   ['crm_lead_stage', 'crm_stage_approval_decided', 'crm_lead_closed'],
-    quotations: ['crm_quotation_submitted', 'crm_quotation_decided'],
+    quotations: ['crm_quotation_submitted', 'crm_quotation_decided', 'crm_quotation_revision_requested', 'crm_quotation_revision_decided'],
     followups:  ['crm_follow_up_due', 'crm_follow_up_overdue'],
   };
   function _crmTabUnread(key) {
@@ -63609,6 +63778,8 @@ async function submitDsCreate() {
   const _crmQtR2    = v => Math.round((v + Number.EPSILON) * 100) / 100;
   let _crmQtStockTimer = null;
   let _crmQtSearchTimer = null;
+  let _crmQtCustTimer = null;
+  let _crmQtCustResults = []; // the customer suggestions on show, picked by index
 
   function _crmQtState() { return (_crmWs.qt ||= { view: 'list' }); }
 
@@ -63699,9 +63870,11 @@ async function submitDsCreate() {
         <span class="crm-qtl-ic"><i class="fa ${_CRM_QT_ICONS[q.status] || 'fa-file-lines'}"></i></span>
         <span class="crm-qtl-main">
           <span class="crm-qtl-title"><b>${escHtml(q.quote_number)}</b>${q.version > 1 ? `<span class="crm-qtl-ver">v${q.version}</span>` : ''}
-            <span class="crm-qtl-status"><i></i>${escHtml(q.status_label)}</span>${old ? '' : expiry(q)}</span>
+            <span class="crm-qtl-status"><i></i>${escHtml(q.status_label)}</span>${old ? '' : expiry(q)}
+            ${q.pending_revision ? '<span class="crm-qtl-warn"><i class="fa fa-code-pull-request"></i> Revision requested</span>' : ''}</span>
           <span class="crm-qtl-meta">${meta2(q)}</span>
-          ${!old && NEXT[q.status] ? `<span class="crm-qtl-next"><i class="fa ${NEXT[q.status][0]}"></i> ${NEXT[q.status][1]}</span>` : ''}
+          ${!old && q.pending_revision ? `<span class="crm-qtl-next"><i class="fa fa-hourglass-half"></i> Revision waiting for the department head — ${escHtml(q.pending_revision.requested_by?.name || 'staff')}: ${escHtml(q.pending_revision.reason)}</span>`
+            : !old && NEXT[q.status] ? `<span class="crm-qtl-next"><i class="fa ${NEXT[q.status][0]}"></i> ${NEXT[q.status][1]}</span>` : ''}
         </span>
         <span class="crm-qtl-amt">${_crmQtMoney(q.total)}</span>
         <i class="fa fa-chevron-right crm-qtl-chev"></i>
@@ -63729,32 +63902,97 @@ async function submitDsCreate() {
   }
 
   // ── Editor ──
+  const CRM_QT_DEFAULT_TAX = 18; // default Tax % applied to every new quotation line
   function _crmQtNewForm() {
     const lead = _crmViewLead;
     const fromInterest = (lead?.product_items || []).map(p => ({
-      item_type: 'product', product_id: p.id, description: p.name, sku: p.sku || '', quantity: p.quantity || 1, unit_price: p.unit_price ?? 0, discount_amount: 0, tax_rate: 0,
+      item_type: 'product', product_id: p.id, description: p.name, sku: p.sku || '', quantity: p.quantity || 1, unit_price: p.unit_price ?? 0, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX,
+      _autoPrice: true, // replaced by the standard price once the stock check returns it
     }));
     return {
       id: null, number: null,
       quote_date: new Date().toISOString().slice(0, 10), expiry_date: '', reference: '', notes: '',
       // Billed to the linked customer's address on file (meta.lead from GET …/quotations)
-      customer_address: _crmQtCustomerAddress(),
+      customer_address: _crmQtCustomerAddress() || _crmWs.quotations?.meta?.lead?.customer_defaults?.address || '',
+      // The lead's customer, else the lead's own contact details — saved as a customer on save
+      customer: _crmQtCustomerForm(_crmWs.quotations?.meta?.lead?.customer_defaults),
       discount_amount: 0, tax_amount: 0,
+      // "Prepared by" from the signed-in user's CRM profile (meta.prepared_by from GET …/quotations)
+      ..._crmQtPreparedByForm(_crmWs.quotations?.meta?.prepared_by),
       lines: fromInterest,
     };
   }
 
+  function _crmQtPreparedByForm(p) {
+    return {
+      prepared_by_name: p?.name || '', prepared_by_designation: p?.designation || '', prepared_by_phone: p?.phone || '',
+      remember_prepared_by: false,
+    };
+  }
+
+  /** "Prepared by" card: name, designation and contact number printed on the quotation. */
+  function _crmQtPreparedByCardHtml(f) {
+    return `<section class="crm-qtx-card">
+        <div class="crm-qtx-card-h"><i class="fa fa-id-badge"></i> Prepared by<small style="font-weight:400">Printed on the quotation</small></div>
+        <div class="crm-qt-grid crm-qtx-fields">
+          <label>Name<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_name" value="${escHtml(f.prepared_by_name || '')}" placeholder="Your name"></label>
+          <label>Designation<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_designation" value="${escHtml(f.prepared_by_designation || '')}" placeholder="e.g. Sales Executive"></label>
+          <label>Contact number<input class="po-field-input" maxlength="40" data-qt-h="prepared_by_phone" value="${escHtml(f.prepared_by_phone || '')}" placeholder="07X XXX XXXX"></label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;align-self:end;padding-bottom:6px"><input type="checkbox" data-qt-remember${f.remember_prepared_by ? ' checked' : ''}> Save as my CRM profile</label>
+        </div>
+      </section>`;
+  }
+
   function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
+
+  /** "Saved customer" / "New customer" chip beside the customer card's heading. */
+  function _crmQtCustomerBadgeHtml(c) {
+    return c?.id
+      ? `<span class="crm-qt-cust-badge crm-qt-cust-badge--saved"><i class="fa fa-circle-check"></i> Saved customer</span>
+         <button type="button" class="crm-ws-link" data-qt-cust-clear style="font-size:12px"><i class="fa fa-user-plus"></i> Use a new customer</button>`
+      : `<span class="crm-qt-cust-badge"><i class="fa fa-user-plus"></i> New customer — saved with the quotation</span>`;
+  }
+
+  /** Customer card: name with auto-suggest of saved customers, contact details, industry and the billing address. */
+  function _crmQtCustomerCardHtml(f) {
+    const c = f.customer || _crmQtCustomerForm(null);
+    return `<section class="crm-qtx-card">
+        <div class="crm-qtx-card-h"><i class="fa fa-user"></i> Customer<span id="crm-qt-cust-badge" style="margin-left:auto;display:flex;align-items:center;gap:10px;font-weight:400">${_crmQtCustomerBadgeHtml(c)}</span></div>
+        <div class="crm-qt-grid crm-qtx-fields">
+          <div class="crm-qt-field crm-qt-cust-name" style="grid-column:span 2"><label for="crm-qt-cust-name" style="display:block">Customer name <span style="color:var(--danger,#dc2626)">*</span></label>
+            <input id="crm-qt-cust-name" class="po-field-input" maxlength="120" autocomplete="off" data-qt-c="name" value="${escHtml(c.name)}" placeholder="Start typing to find a saved customer…">
+            <div id="crm-qt-cust-results" class="crm-lead-product-results crm-qt-results" style="display:none"></div></div>
+          <label>Phone<input class="po-field-input" maxlength="40" data-qt-c="phone" value="${escHtml(c.phone)}" placeholder="07X XXX XXXX"></label>
+          <label>Email<input class="po-field-input" type="email" maxlength="160" data-qt-c="email" value="${escHtml(c.email)}" placeholder="name@company.com"></label>
+          <label>Industry <input class="po-field-input" maxlength="120" autocomplete="off" data-industry data-qt-c="industry" value="${escHtml(c.industry)}" placeholder="Search or type an industry…"></label>
+          <div class="crm-qt-field" style="grid-column:span 3"><span style="display:flex;align-items:center;gap:8px"><label for="crm-qt-addr">Customer address</label>
+            ${c.saved_address ? `<button type="button" class="crm-ws-link" data-qt-addr-fill style="margin-left:auto;font-size:12px;padding:0" title="${escHtml(c.saved_address)}"><i class="fa fa-rotate"></i> Use customer's address</button>` : ''}</span>
+            <textarea id="crm-qt-addr" class="po-field-input" rows="${Math.min(4, Math.max(1, String(f.customer_address || '').split('\n').length))}" maxlength="255" data-qt-h="customer_address" style="resize:vertical;min-height:32px" placeholder="${c.id ? 'No address on file for this customer — type one' : 'Street, city — printed on the quotation'}">${escHtml(f.customer_address || '')}</textarea></div>
+        </div>
+      </section>`;
+  }
+
+  /** The editor's customer fields; saved_address is the selected customer's address on file. */
+  function _crmQtCustomerForm(c) {
+    return {
+      id: c?.id || null, name: c?.name || '', phone: c?.phone || '', email: c?.email || '', industry: c?.industry || '',
+      saved_address: c?.id ? (c.address || '') : '',
+    };
+  }
 
   function _crmQtFormFromDetail(q) {
     return {
       id: q.id, number: q.quote_number,
       quote_date: q.quote_date || new Date().toISOString().slice(0, 10), expiry_date: q.expiry_date || '', reference: q.reference || '', notes: q.notes || '',
       customer_address: q.customer_address || '',
+      // Quotations billed to a lead not saved as a customer yet start from the lead's details
+      customer: _crmQtCustomerForm(q.customer || _crmWs.quotations?.meta?.lead?.customer_defaults),
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
+      // Made before "Prepared by" existed → start from the user's CRM profile
+      ..._crmQtPreparedByForm(q.prepared_by || _crmWs.quotations?.meta?.prepared_by),
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
-        notes: i.notes || '', sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
+        notes: i.notes || '', sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, list_price: i.list_price ?? null, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
       })),
     };
   }
@@ -63791,12 +64029,208 @@ async function submitDsCreate() {
       : '<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> Some lines ask for more than is in stock.</div>';
   }
 
-  /** Live version of the detail view's discount banner: the overall discount % against the department's limit (QuotationApprovalService::discountSummary). */
+  // ── Automatic pricing: product lines carry their standard (catalog) price as list_price ──
+  // Without "Change standard prices" (meta.can_change_price) the price is filled in and locked;
+  // with it, any change is flagged here and to the approver (QuotationApprovalService::priceChanges).
+  function _crmQtCanChangePrice() { return _crmWs.quotations?.meta?.can_change_price !== false; }
+  function _crmQtHasStd(l) { return l.item_type === 'product' && !!l.product_id && l.list_price != null; }
+  function _crmQtPriceLocked(l) { return _crmQtHasStd(l) && !_crmQtCanChangePrice(); }
+  function _crmQtPriceChanged(l) { return _crmQtHasStd(l) && Math.abs(_crmQtNum(l.unit_price) - _crmQtNum(l.list_price)) >= 0.005; }
+
+  /** Under a line's price box: locked, or changed from the standard price with a reset button. */
+  function _crmQtStdHtml(l, i) {
+    if (_crmQtPriceLocked(l)) return '<span title="Standard price from the catalog"><i class="fa fa-lock"></i> Standard</span>';
+    if (!_crmQtPriceChanged(l)) return '';
+    const up = _crmQtNum(l.unit_price) > _crmQtNum(l.list_price);
+    return `<span class="crm-qt-std--changed" title="Standard price ${escHtml(_crmQtMoney(l.list_price))} — the approver will see this change">
+        <i class="fa fa-arrow-${up ? 'up' : 'down'}"></i> Std ${escHtml(_crmQtMoney(l.list_price))}</span>
+      <button type="button" class="crm-ws-link" data-qt-price-reset="${i}" title="Use the standard price"><i class="fa fa-rotate-left"></i></button>`;
+  }
+
+  function _crmQtPriceWarnHtml(form) {
+    const n = (form?.lines || []).filter(_crmQtPriceChanged).length;
+    return n ? `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-tag"></i> ${n} ${n === 1 ? 'price differs' : 'prices differ'} from the standard price — the approver will see ${n === 1 ? 'this change' : 'these changes'}.</div>` : '';
+  }
+
+  /** Standard prices from the stock check (product id → price): set list_price, and the price itself when locked or not changed by hand. */
+  function _crmQtApplyPrices(s, prices) {
+    if (!prices || !s.form) return;
+    s.form.lines.forEach((l, i) => {
+      if (l.item_type !== 'product' || !l.product_id) return;
+      const p = prices[l.product_id];
+      if (p == null) return;
+      const followed = l._autoPrice || (l.list_price != null && !_crmQtPriceChanged(l)) || _crmQtNum(l.unit_price) <= 0;
+      l.list_price = p;
+      delete l._autoPrice;
+      const box = $(`#crm-qt-edit-body [data-qt-f="unit_price"][data-qt-i="${i}"]`);
+      if (followed || !_crmQtCanChangePrice()) {
+        l.unit_price = p;
+        if (box && document.activeElement !== box) box.value = String(p);
+      }
+      if (box) {
+        box.readOnly = _crmQtPriceLocked(l);
+        box.classList.toggle('crm-qt-numin--locked', box.readOnly);
+      }
+    });
+    _crmQtRefreshTotals();
+  }
+
+  /** Live version of the detail view's limit banners: discount % and total against the department's limits (QuotationApprovalService::approvalCheck). */
   function _crmQtDiscountWarnHtml(t) {
     const limit = _crmWs.quotations?.meta?.discount_limit;
+    const valueLimit = _crmWs.quotations?.meta?.value_limit;
     const percent = t.subtotal > 0 ? _crmQtR2(t.discount / t.subtotal * 100) : 0;
-    if (limit == null || percent <= limit) return '';
-    return `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+    const total = _crmQtR2(t.total);
+    let html = '';
+    if (limit != null && percent > limit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(percent)}% is over the department's limit of ${_crmQtQty(limit)}% — it must be approved by the department head before it is sent.</div>`;
+    if (valueLimit != null && total > valueLimit) html += `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-sack-dollar"></i> Total ${_crmQtMoney(total)} is over the department's limit of ${_crmQtMoney(valueLimit)} — it must be approved by the department head before it is sent.</div>`;
+    return html;
+  }
+
+  // ── Brand → Model picker (GET …/quotations/catalog/brands, …/catalog/models?brand_id=) ──
+  // The catalog is cached per lead workspace; s.pick holds what is chosen so a re-render keeps it.
+  function _crmQtPickHtml(s) {
+    const cat = _crmWs.qtCatalog;
+    if (!cat || cat.brands === null) return '<div class="crm-qtx-pick crm-ws-muted" style="font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading brands…</div>';
+    if (!cat.brands.length) return ''; // no brands set up — the inventory search below still works
+    const p = (s.pick ||= { brandId: '', modelId: '', qty: 1, open: null });
+    const brand = cat.brands.find(b => String(b.id) === p.brandId);
+    const models = p.brandId ? cat.models[p.brandId] : null;
+    const model = Array.isArray(models) ? models.find(m => String(m.id) === p.modelId) : null;
+    const onQuote = model ? s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +model.id) : null;
+
+    const brandCombo = _crmQtComboHtml('brand', {
+      value: brand?.name, placeholder: 'Choose a brand', searchPh: `Search ${cat.brands.length} brands`, open: p.open === 'brand',
+      items: cat.brands.map(b => ({ id: b.id, title: b.name, right: `${b.product_count}`, search: b.name, sel: String(b.id) === p.brandId })),
+    });
+    const modelCombo = _crmQtComboHtml('model', {
+      value: model ? model.label : '', placeholder: p.brandId ? 'Choose a model' : 'Choose a brand first', disabled: !p.brandId,
+      searchPh: Array.isArray(models) ? `Search ${models.length} models — name, model no. or SKU` : 'Search', open: p.open === 'model',
+      loading: models === 'loading' || (p.brandId && models === undefined),
+      empty: models === 'error' ? 'Could not load the models — pick the brand again.' : 'No products for this brand.',
+      items: Array.isArray(models) ? models.map(m => ({
+        id: m.id, title: m.label, sub: [m.model_no && m.name !== m.label ? m.name : '', m.sku].filter(Boolean).join(' · '),
+        right: `${_crmQtMoney(m.unit_sell_price)}${m.stock_quantity != null && m.stock_quantity <= 0 ? ' · <span class="crm-qtc-out">Out</span>' : ''}`,
+        search: [m.label, m.name, m.sku, m.model_no].filter(Boolean).join(' '), sel: String(m.id) === p.modelId,
+      })) : [],
+    });
+
+    const stock = model?.stock_quantity;
+    const val = (v, none) => v ? escHtml(v) : `<span class="crm-qtc-none">${none}</span>`;
+    const card = model ? `<div class="crm-qtx-pick-card">
+        <div class="crm-qtx-pick-title">
+          <span class="crm-qtx-pick-name"><b>${escHtml(model.name)}</b><small>${[model.model_no && `Model ${escHtml(model.model_no)}`, model.sku && `SKU ${escHtml(model.sku)}`].filter(Boolean).join(' · ')}</small></span>
+          ${stock != null ? `<span class="crm-qtx-dot${stock > 0 ? '' : ' crm-qtx-dot--out'}">${stock > 0 ? `${_crmQtQty(stock)} in stock` : 'Out of stock'}</span>` : ''}
+        </div>
+        <dl class="crm-qtx-pick-info">
+          <div><dt>Warranty</dt><dd>${val(model.warranty, 'None')}</dd></div>
+          <div><dt>Delivery</dt><dd>${val(model.delivery, 'Not offered')}</dd></div>
+          <div><dt>Unit price</dt><dd>${_crmQtMoney(model.unit_sell_price)}</dd></div>
+        </dl>
+        ${onQuote ? `<div class="crm-qtx-pick-dup">Already on this quotation (qty ${_crmQtQty(_crmQtNum(onQuote.quantity))}) — adding increases that line.</div>`
+          : _crmQtInfoNote(model) ? '<div class="crm-qtx-pick-note"><i class="fa fa-note-sticky"></i> Model, warranty and delivery go into the item\'s note — edit it there if needed.</div>' : ''}
+      </div>` : '';
+
+    return `<div class="crm-qtx-pick">
+        <div class="crm-qtx-pick-row">
+          <div class="crm-qtx-pick-f"><span>Brand</span>${brandCombo}</div>
+          <div class="crm-qtx-pick-f"><span>Model</span>${modelCombo}</div>
+          <div class="crm-qtx-pick-f"><span>Qty</span><input class="po-field-input crm-qt-numin" type="number" min="1" step="any" data-qt-pick-qty value="${escHtml(String(p.qty ?? 1))}"${model ? '' : ' disabled'} data-wheel-blur></div>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-pick-add${model ? '' : ' disabled'} title="${model ? 'Add to the quotation (Enter)' : 'Choose a brand and a model first'}">${onQuote ? 'Add more' : 'Add'}</button>
+        </div>
+        ${card}
+        <div class="crm-qtx-pick-or">or search all inventory</div>
+      </div>`;
+  }
+
+  /** macOS pop-up button with a searchable menu (shares .mac-popup / .mac-combo-* with the rest of the app). */
+  function _crmQtComboHtml(kind, o) {
+    const items = o.items || [];
+    const list = o.loading ? '<div class="mac-combo-empty"><i class="fa fa-spinner fa-spin"></i> Loading…</div>'
+      : !items.length ? `<div class="mac-combo-empty">${o.empty || 'Nothing to choose.'}</div>`
+      : items.map(it => `<button type="button" class="mac-combo-item crm-qtc-item${it.sel ? ' sel' : ''}" data-qt-combo-opt="${kind}" data-v="${it.id}" data-s="${escHtml(String(it.search || it.title).toLowerCase())}">
+          <span class="crm-qtc-t"><span>${escHtml(it.title)}</span>${it.sub ? `<em>${escHtml(it.sub)}</em>` : ''}</span>${it.right ? `<span class="crm-qtc-r">${it.right}</span>` : ''}</button>`).join('')
+        + '<div class="mac-combo-empty crm-qtc-hide" data-qt-combo-none>No matches.</div>';
+    return `<div class="mac-combo crm-qtc${o.open ? ' open' : ''}" data-qt-combo="${kind}">
+        <button type="button" class="mac-popup crm-qtc-btn" data-qt-combo-toggle="${kind}"${o.disabled ? ' disabled' : ''}>${o.value ? escHtml(o.value) : `<span class="crm-qtc-ph">${escHtml(o.placeholder)}</span>`}</button>
+        ${o.open ? `<div class="mac-combo-pop crm-qtc-pop">
+          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" data-qt-combo-q="${kind}" placeholder="${escHtml(o.searchPh || 'Search')}" autocomplete="off" spellcheck="false"></div>
+          <div class="mac-combo-list crm-qtc-list">${list}</div>
+        </div>` : ''}
+      </div>`;
+  }
+
+  function _crmQtRenderPick() {
+    const el = $('#crm-qt-pick');
+    const s = _crmWs.qt;
+    if (!el || s?.view !== 'edit') return;
+    const prevQ = el.querySelector('[data-qt-combo-q]'); // keep what was typed while the models were loading
+    const typed = prevQ && prevQ.dataset.qtComboQ === s.pick?.open ? prevQ.value : '';
+    el.innerHTML = _crmQtPickHtml(s);
+    const q = el.querySelector('[data-qt-combo-q]');
+    if (q) {
+      q.focus();
+      if (typed) { q.value = typed; _crmQtComboFilter(q); }
+      else _crmQtComboHl(el.querySelector('.crm-qtc-item.sel') || el.querySelector('.crm-qtc-item'));
+    }
+  }
+
+  /** Highlight one menu item (keyboard / hover) and keep it in view. */
+  function _crmQtComboHl(item, scroll = true) {
+    const list = item?.closest('.crm-qtc-list') || $('#crm-qt-pick .crm-qtc-list');
+    list?.querySelectorAll('.crm-qtc-item.hl').forEach(x => x.classList.remove('hl'));
+    if (item) { item.classList.add('hl'); if (scroll) item.scrollIntoView({ block: 'nearest' }); }
+  }
+
+  /** Filter the open menu in place — every word must match (name, model no., SKU). */
+  function _crmQtComboFilter(input) {
+    const words = input.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const list = input.closest('.crm-qtc-pop')?.querySelector('.crm-qtc-list');
+    if (!list) return;
+    let first = null;
+    list.querySelectorAll('.crm-qtc-item').forEach(it => {
+      const show = words.every(w => it.dataset.s.includes(w));
+      it.classList.toggle('crm-qtc-hide', !show);
+      if (show && !first) first = it;
+    });
+    list.querySelector('[data-qt-combo-none]')?.classList.toggle('crm-qtc-hide', !!first);
+    _crmQtComboHl(first);
+  }
+
+  function _crmQtComboPick(kind, value) {
+    const lead = _crmViewLead;
+    const s = _crmWs.qt;
+    if (!lead || !s?.pick) return;
+    if (kind === 'brand') {
+      // Straight on to the model menu of that brand
+      s.pick = { brandId: value, modelId: '', qty: 1, open: 'model' };
+      _crmQtRenderPick();
+      _crmQtLoadModels(lead, value);
+    } else {
+      s.pick = { ...s.pick, modelId: value, qty: 1, open: null };
+      _crmQtRenderPick();
+      $('#crm-qt-pick [data-qt-pick-qty]')?.select();
+    }
+  }
+
+  async function _crmQtLoadBrands(lead) {
+    if (_crmWs.qtCatalog && !_crmWs.qtCatalog.failed) return;
+    const cat = _crmWs.qtCatalog = { brands: null, models: {} };
+    const res = await API.crmQuotationBrands(lead.id).catch(() => ({ status: 0 }));
+    if (_crmWs.qtCatalog !== cat) return;
+    cat.brands = res.status === 200 ? (res.body?.data || []) : [];
+    cat.failed = res.status !== 200; // hide the picker; try again next time the editor opens
+    _crmQtRenderPick();
+  }
+
+  async function _crmQtLoadModels(lead, brandId) {
+    const cat = _crmWs.qtCatalog;
+    if (!cat || Array.isArray(cat.models[brandId]) || cat.models[brandId] === 'loading') return;
+    cat.models[brandId] = 'loading';
+    const res = await API.crmQuotationModels(lead.id, brandId).catch(() => ({ status: 0 }));
+    if (_crmWs.qtCatalog !== cat) return;
+    cat.models[brandId] = res.status === 200 ? (res.body?.data || []) : 'error'; // 'error' is retried on the next brand pick
+    _crmQtRenderPick();
   }
 
   function _crmQtFormHtml(s) {
@@ -63806,25 +64240,29 @@ async function submitDsCreate() {
       ? `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-rotate-left"></i> Returned: ${escHtml(s.detail.approval_comment)}</div>` : '';
     const rows = f.lines.map((l, i) => `
       <tr data-qt-line="${i}">
-        <td>
-          <input class="po-field-input" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="What are you quoting? e.g. Installation, delivery…">
-          ${l.item_type === 'product' && l.product_id ? `<div class="crm-ws-muted crm-qt-sub"><i class="fa fa-box"></i> ${escHtml(l.sku || 'Product')}</div>` : ''}
+        <td><div class="crm-qt-item">
+          <span class="crm-qt-item-ic${l.item_type === 'product' && l.product_id ? '' : ' crm-qt-item-ic--custom'}"><i class="fa ${l.item_type === 'product' && l.product_id ? 'fa-box' : 'fa-pen'}"></i></span>
+          <div class="crm-qt-item-main">
+          <input class="po-field-input crm-qt-item-name" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="What are you quoting? e.g. Installation, delivery…">
           <div class="crm-qt-note${l.notes || l._noteOpen ? ' open' : ''}">
-            <button type="button" class="crm-qt-note-add" data-qt-note-open="${i}"><i class="fa fa-plus"></i> Add note</button>
+            ${l.item_type === 'product' && l.product_id ? `<span class="crm-qt-sku">${escHtml(l.sku || 'Product')}</span>` : '<span class="crm-qt-sku">Custom line</span>'}
+            <button type="button" class="crm-qt-note-add" data-qt-note-open="${i}"><i class="fa fa-plus"></i> Note</button>
             <div class="crm-qt-note-box">
               <i class="fa fa-note-sticky"></i>
               <textarea rows="${Math.min(6, Math.max(1, String(l.notes || '').split('\n').length))}" maxlength="1000" data-qt-f="notes" data-qt-i="${i}" placeholder="e.g. colour, size, delivery or warranty remark — printed under this item">${escHtml(l.notes || '')}</textarea>
               <button type="button" class="crm-qt-note-clear" data-qt-note-clear="${i}" title="Remove note"><i class="fa fa-xmark"></i></button>
             </div>
           </div>
+          </div></div>
         </td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" data-wheel-blur></td>
-        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" data-wheel-blur></td>
+        <td><input class="po-field-input crm-qt-numin${_crmQtPriceLocked(l) ? ' crm-qt-numin--locked' : ''}" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}"${_crmQtPriceLocked(l) ? ' readonly' : ''} data-wheel-blur>
+          <div class="crm-qt-std" data-qt-std="${i}">${_crmQtStdHtml(l, i)}</div></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="discount_amount" data-qt-i="${i}" value="${l.discount_amount ? escHtml(String(l.discount_amount)) : ''}" placeholder="0" data-wheel-blur></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" data-wheel-blur></td>
         <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
         <td data-qt-stock="${i}">${_crmQtStockCellHtml(s, i)}</td>
-        <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-minus"></i></button></td>
+        <td><button type="button" class="crm-qtx-del" data-qt-line-del="${i}" title="Remove line"><i class="fa fa-xmark"></i></button></td>
       </tr>`).join('');
 
     const n = f.lines.length;
@@ -63832,17 +64270,18 @@ async function submitDsCreate() {
       ${returned}
       <div id="crm-qt-alert" class="svc-form-alert" style="display:none"></div>
 
+      ${_crmQtCustomerCardHtml(f)}
+
       <section class="crm-qtx-card">
         <div class="crm-qtx-card-h"><i class="fa fa-circle-info"></i> Details</div>
         <div class="crm-qt-grid crm-qtx-fields">
           <label>Quote date<input class="po-field-input" type="date" data-qt-h="quote_date" value="${escHtml(f.quote_date)}"></label>
           <label>Valid until<input class="po-field-input" type="date" data-qt-h="expiry_date" value="${escHtml(f.expiry_date)}"></label>
           <label style="grid-column:span 2">Reference<input class="po-field-input" maxlength="120" data-qt-h="reference" value="${escHtml(f.reference)}" placeholder="Defaults to the lead's name"></label>
-          <div class="crm-qt-field" style="grid-column:1/-1"><span style="display:flex;align-items:center;gap:8px"><label for="crm-qt-addr">Customer address</label>
-            ${_crmQtCustomerAddress() ? `<button type="button" class="crm-ws-link" data-qt-addr-fill style="margin-left:auto;font-size:12px" title="${escHtml(_crmQtCustomerAddress())}"><i class="fa fa-rotate"></i> Use customer's address</button>` : ''}</span>
-            <textarea id="crm-qt-addr" class="po-field-input" rows="2" maxlength="1000" data-qt-h="customer_address" style="resize:vertical" placeholder="${_crmWs.quotations?.meta?.lead?.customer_id ? 'No address on file for this customer — type one' : 'Street, city — printed on the quotation'}">${escHtml(f.customer_address || '')}</textarea></div>
         </div>
       </section>
+
+      ${_crmQtPreparedByCardHtml(f)}
 
       <section class="crm-qtx-card crm-qtx-card--flush">
         <div class="crm-qtx-card-h"><i class="fa fa-list"></i> Items<small>${n}</small></div>
@@ -63851,6 +64290,7 @@ async function submitDsCreate() {
           <tbody>${rows || `<tr><td colspan="8"><div class="crm-qtx-noitems"><i class="fa fa-box-open"></i> No lines yet — search inventory below or add a custom line.</div></td></tr>`}</tbody>
         </table></div>
         <div id="crm-qt-stock-warn" class="crm-qtx-pad">${_crmQtStockWarnHtml(s.stock)}</div>
+        <div id="crm-qt-pick">${_crmQtPickHtml(s)}</div>
         <div class="crm-qt-add crm-qtx-add">
           <div class="crm-qtx-search">
             <i class="fa fa-magnifying-glass"></i>
@@ -63861,6 +64301,7 @@ async function submitDsCreate() {
         </div>
       </section>
 
+      <div id="crm-qt-price-warn">${_crmQtPriceWarnHtml(f)}</div>
       <div id="crm-qt-disc-warn">${_crmQtDiscountWarnHtml(t)}</div>
 
       <div class="crm-qtx-foot">
@@ -63911,6 +64352,9 @@ async function submitDsCreate() {
     set('#crm-qt-t-total-dock', _crmQtMoney(t.total));
     const warn = $('#crm-qt-disc-warn');
     if (warn) warn.innerHTML = _crmQtDiscountWarnHtml(t);
+    s.form.lines.forEach((l, i) => { const el = $(`#crm-qt-edit-body [data-qt-std="${i}"]`); if (el) el.innerHTML = _crmQtStdHtml(l, i); });
+    const pw = $('#crm-qt-price-warn');
+    if (pw) pw.innerHTML = _crmQtPriceWarnHtml(s.form);
   }
 
   function _crmQtScheduleStock(lead) {
@@ -63922,6 +64366,7 @@ async function submitDsCreate() {
       const res = await API.crmLeadQuotationStock(lead.id, { items }).catch(() => ({ status: 0 }));
       if (_crmViewLead?.id !== lead.id || s.view !== 'edit' || res.status !== 200) return;
       s.stock = res.body.data;
+      _crmQtApplyPrices(s, s.stock?.prices);
       s.form.lines.forEach((_, i) => { const el = $(`#crm-qt-edit-body [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
       const warn = $('#crm-qt-stock-warn');
       if (warn) warn.innerHTML = _crmQtStockWarnHtml(s.stock);
@@ -63930,9 +64375,111 @@ async function submitDsCreate() {
 
   function _crmQtEdit(lead, form) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'edit', form, stock: null });
+    Object.assign(s, { view: 'edit', form, stock: null, pick: { brandId: '', modelId: '', qty: 1, open: null } });
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
+    _crmQtLoadBrands(lead);
+    // A new quotation starts with the lead's products of interest — give them their warranty / delivery note too
+    if (!form.id) form.lines.filter(l => l.product_id && !(l.notes || '').trim()).forEach(l => _crmQtFillNote(lead, l));
+  }
+
+  // Brand → Model menus: open / pick / search / keyboard; picking a brand loads (once) its models and opens the model menu
+  $('#crm-qt-edit-modal')?.addEventListener('click', e => {
+    const s = _crmWs.qt;
+    if (!s?.pick || s.view !== 'edit') return;
+    const opt = e.target.closest('[data-qt-combo-opt]');
+    if (opt) { _crmQtComboPick(opt.dataset.qtComboOpt, opt.dataset.v); return; }
+    const tog = e.target.closest('[data-qt-combo-toggle]');
+    if (tog && !tog.disabled) {
+      s.pick.open = s.pick.open === tog.dataset.qtComboToggle ? null : tog.dataset.qtComboToggle;
+      _crmQtRenderPick();
+      if (!s.pick.open) tog.focus();
+    }
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('mousedown', e => {
+    // A click anywhere outside the open menu closes it
+    const s = _crmWs.qt;
+    // (drop just the menu — re-rendering here would swallow a click on e.g. the Add button)
+    if (s?.pick?.open && !e.target.closest('.crm-qtc')) {
+      s.pick.open = null;
+      $$('#crm-qt-pick .crm-qtc-pop').forEach(x => x.remove());
+      $$('#crm-qt-pick .crm-qtc.open').forEach(x => x.classList.remove('open'));
+    }
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('mouseover', e => {
+    const it = e.target.closest('.crm-qtc-item');
+    if (it && !it.classList.contains('hl')) _crmQtComboHl(it, false);
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('input', e => {
+    if (e.target.matches('[data-qt-pick-qty]') && _crmWs.qt?.pick) _crmWs.qt.pick.qty = e.target.value;
+    else if (e.target.matches('[data-qt-combo-q]')) _crmQtComboFilter(e.target);
+  });
+  $('#crm-qt-edit-modal')?.addEventListener('keydown', e => {
+    const el = e.target;
+    if (e.key === 'Enter' && el.matches('[data-qt-pick-qty]')) { e.preventDefault(); $('#crm-qt-pick [data-qt-pick-add]')?.click(); return; }
+    // Space / ↓ on a closed pop-up button opens its menu, like macOS
+    if (el.matches('[data-qt-combo-toggle]') && (e.key === 'ArrowDown' || e.key === ' ')) { e.preventDefault(); el.click(); return; }
+    if (!el.matches('[data-qt-combo-q]')) return;
+    const items = [...el.closest('.crm-qtc-pop').querySelectorAll('.crm-qtc-item:not(.crm-qtc-hide)')];
+    const at = items.findIndex(x => x.classList.contains('hl'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const next = e.key === 'ArrowDown' ? Math.min(items.length - 1, at + 1) : Math.max(0, at - 1);
+      _crmQtComboHl(items[next]);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      items[at]?.click();
+    } else if (e.key === 'Escape' || e.key === 'Tab') {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } // close the menu, not the window
+      const kind = el.dataset.qtComboQ;
+      _crmWs.qt.pick.open = null;
+      _crmQtRenderPick();
+      $(`#crm-qt-pick [data-qt-combo-toggle="${kind}"]`)?.focus();
+    }
+  });
+
+  /** The line note a product brings with it — printed under the item on the quotation. */
+  function _crmQtInfoNote(info) {
+    if (!info) return '';
+    return [
+      info.model_no && `Model: ${info.model_no}`,
+      info.warranty && `Warranty: ${info.warranty === 'Yes' ? 'Included' : info.warranty}`,
+      info.delivery && `Delivery: ${info.delivery}`,
+    ].filter(Boolean).join('\n');
+  }
+
+  /** Lines added from the inventory search: fetch the product's info and fill the note (unless one was typed meanwhile). */
+  async function _crmQtFillNote(lead, line) {
+    const res = await API.crmQuotationProductInfo(lead.id, line.product_id).catch(() => ({ status: 0 }));
+    const s = _crmWs.qt;
+    const note = res.status === 200 ? _crmQtInfoNote(res.body?.data) : '';
+    const i = s?.form ? s.form.lines.indexOf(line) : -1;
+    if (!note || i < 0 || (line.notes || '').trim()) return;
+    line.notes = note;
+    // Update just that row's note box — keeps focus wherever the user is typing
+    const wrap = $(`#crm-qt-edit-body [data-qt-line="${i}"] .crm-qt-note`);
+    const box = wrap?.querySelector('textarea');
+    if (!box) return;
+    box.value = note;
+    box.rows = Math.min(6, note.split('\n').length);
+    wrap.classList.add('open');
+  }
+
+  /** Add the picked model — or bump the quantity when it is already on the quotation. */
+  function _crmQtAddPicked(lead, s) {
+    const models = _crmWs.qtCatalog?.models[s.pick?.brandId];
+    const m = Array.isArray(models) ? models.find(x => String(x.id) === s.pick.modelId) : null;
+    if (!m) return;
+    const qty = Math.max(0.001, _crmQtNum(s.pick.qty) || 1);
+    const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
+    if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
+    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
+      quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
+    s.pick = { ...s.pick, modelId: '', qty: 1, open: null }; // keep the brand for the next model
+    _crmRenderWsTab();
+    _crmQtScheduleStock(lead);
+    toast(existing ? `${m.name} — quantity now ${_crmQtQty(existing.quantity)}` : `Added ${m.name}`, 'success');
+    $('#crm-qt-pick [data-qt-combo-toggle="model"]')?.focus();
   }
 
   async function _crmQtSave(lead, btn) {
@@ -63951,13 +64498,27 @@ async function submitDsCreate() {
         description: (l.description || '').trim(), notes: (l.notes || '').trim() || null, quantity: _crmQtNum(l.quantity), unit_price: _crmQtNum(l.unit_price),
         discount_amount: _crmQtNum(l.discount_amount), tax_rate: _crmQtNum(l.tax_rate),
       }));
+    const cust = f.customer || _crmQtCustomerForm(null);
+    if (!cust.name.trim()) { $('#crm-qt-cust-name')?.focus(); return fail('Enter the customer name — pick a saved customer or type a new one.'); }
     if (!items.length) return fail('Add at least one line.');
     if (items.some(i => i.quantity <= 0)) return fail('Every line needs a quantity.');
 
+    const address = (f.customer_address || '').trim();
     const body = {
       quote_date: f.quote_date, expiry_date: f.expiry_date || null, reference: f.reference.trim() || null, notes: f.notes.trim() || null,
-      customer_address: (f.customer_address || '').trim() || null,
+      customer_address: address || null,
+      // Saved to the customer master: updates the picked customer, else finds (same phone / email) or creates one
+      customer_id: cust.id || null,
+      customer: {
+        name: cust.name.trim(), phone: cust.phone.trim() || null, email: cust.email.trim() || null,
+        industry: cust.industry.trim() || null, address: address.slice(0, 255) || null,
+      },
       discount_amount: _crmQtNum(f.discount_amount), tax_amount: _crmQtNum(f.tax_amount), items,
+      // "Prepared by" — an empty name falls back to the preparer's CRM profile on the server
+      prepared_by_name: (f.prepared_by_name || '').trim() || null,
+      prepared_by_designation: (f.prepared_by_designation || '').trim() || null,
+      prepared_by_phone: (f.prepared_by_phone || '').trim() || null,
+      remember_prepared_by: !!f.remember_prepared_by,
     };
     btn.disabled = true;
     btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
@@ -64021,7 +64582,7 @@ async function submitDsCreate() {
         <td>${idx + 1}</td>
         <td>${escHtml(i.description || i.product_name || '—')}${i.sku ? `<div class="crm-ws-muted crm-qt-sub">${escHtml(i.sku)}</div>` : ''}${i.notes ? `<div class="crm-ws-muted crm-qt-sub crm-qt-note-view"><i class="fa fa-note-sticky"></i> ${escHtml(i.notes)}</div>` : ''}</td>
         <td class="crm-qt-right">${_crmQtQty(i.quantity)}</td>
-        <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}</td>
+        <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}${i.price_changed ? `<div class="crm-qt-std crm-qt-std--changed" title="Changed from the standard price">Std ${escHtml(_crmQtMoney(i.list_price))}</div>` : ''}</td>
         ${lineDisc ? `<td class="crm-qt-right">${i.discount_amount > 0 ? '−' + _crmQtMoney(i.discount_amount) : '—'}</td>` : ''}
         ${lineTax ? `<td class="crm-qt-right">${i.tax_amount > 0 ? `${_crmQtMoney(i.tax_amount)} <span class="crm-ws-muted">(${_crmQtQty(i.tax_rate)}%)</span>` : '—'}</td>` : ''}
         <td class="crm-qt-right"><strong>${_crmQtMoney(i.line_total)}</strong></td>
@@ -64034,24 +64595,44 @@ async function submitDsCreate() {
     if (q.status === 'pending_approval') banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-hourglass-half"></i> Waiting for the department head's approval${q.submitted_by ? ` — submitted by ${escHtml(q.submitted_by.name)}` : ''}.</div>`);
     if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
     if (q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-lock"></i> This version was replaced${q.superseded_by ? ` by <button type="button" class="crm-ws-link" data-qt-open="${q.superseded_by.id}">${escHtml(q.superseded_by.quote_number)}</button>` : ''} — it is kept read-only as history.</div>`);
+    // Revision control: issued quotations are locked; a change needs a revision request the head approves
+    const pr = q.pending_revision;
+    if (pr) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-code-pull-request"></i> <span>Revision requested by <b>${escHtml(pr.requested_by?.name || '—')}</b>${pr.requested_at ? ` on ${escHtml(_crmFmtDateTime(pr.requested_at))}` : ''} — waiting for the department head's decision.<br>Reason: ${escHtml(pr.reason)}</span></div>`);
+    const lastRev = [...(q.revision_requests || [])].pop();
+    if (!pr && lastRev?.status === 'rejected' && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--red"><i class="fa fa-ban"></i> Revision request rejected${lastRev.decided_by ? ` by ${escHtml(lastRev.decided_by.name)}` : ''}${lastRev.decision_comment ? `: ${escHtml(lastRev.decision_comment)}` : ''}.</div>`);
+    const ro = q.revision_of;
+    if (ro) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-code-branch"></i> <span>Revision of v${ro.version} — requested by <b>${escHtml(ro.requested_by?.name || '—')}</b>, approved by <b>${escHtml(ro.decided_by?.name || '—')}</b>${ro.decided_at ? ` on ${escHtml(_crmFmtDateTime(ro.decided_at))}` : ''}${ro.revised_by ? `, changes by <b>${escHtml(ro.revised_by.name)}</b>` : ''}.<br>Reason: ${escHtml(ro.reason)}</span></div>`);
+    if (q.is_locked && !q.is_superseded && !pr && can.request_revision) banners.push(`<div class="crm-qt-banner"><i class="fa fa-lock"></i> This quotation has been issued and can no longer be edited. ${q.revision_auto_approve ? 'Make a new version to change it.' : 'To change it, request a revision — the department head must approve it first.'}</div>`);
+    if (q.within_limits) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Issued without approval — within the department's discount and value limits${q.approved_at ? ` (${escHtml(_crmFmtDateTime(q.approved_at))})` : ''}.</div>`);
     if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
+    const val = q.approval?.value;
+    if (val?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-sack-dollar"></i> Total ${_crmQtMoney(val.total)} is over the department's limit of ${_crmQtMoney(val.limit)}${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
+    const noApproval = q.approval && !q.approval.required;
+    if (noApproval && can.submit) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Within the department's limits (discount ≤ ${_crmQtQty(q.approval.discount.limit)}%, total ≤ ${_crmQtMoney(val.limit)}) — no approval needed. Issue it and it is ready to send.</div>`);
+    const pc = q.price_changes || [];
+    if (pc.length && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-tag"></i> <span>${pc.length} ${pc.length === 1 ? 'price was' : 'prices were'} changed from the standard price${q.status === 'pending_approval' ? ' — check before approving' : ''}:
+      ${pc.map(c => `<br>${escHtml(c.description)}: ${_crmQtMoney(c.list_price)} → <b>${_crmQtMoney(c.unit_price)}</b>${c.change_percent != null ? ` (${c.change_percent > 0 ? '+' : ''}${_crmQtQty(c.change_percent)}%)` : ''}`).join('')}</span></div>`);
     const lastAsk = [...(q.responses || [])].reverse().find(r => r.response === 'discount_request');
-    if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Make a new version with the revised price.</div>`);
+    if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Request a revision to change the price.</div>`);
     if (stock.has_shortage) banners.push(_crmQtStockWarnHtml(stock));
 
     const btn = (cond, attr, icon, label, kind = '') => cond ? `<button type="button" class="crm-qtx-btn${kind ? ` crm-qtx-btn--${kind}` : ''}" ${attr}><i class="fa ${icon}"></i> ${label}</button>` : '';
     // Workflow steps on the left, document actions on the right (a macOS window toolbar)
     const steps = [
-      btn(can.submit && !s.submit, 'data-qt-submit-open', 'fa-paper-plane', 'Submit for approval', 'primary'),
+      btn(can.submit && !s.submit && !noApproval, 'data-qt-submit-open', 'fa-paper-plane', 'Submit for approval', 'primary'),
+      btn(can.submit && noApproval, 'data-qt-issue', 'fa-circle-check', 'Issue quotation', 'primary'),
       btn(can.approve, 'data-qt-act="approve"', 'fa-circle-check', 'Approve', 'primary'),
       btn(can.return, 'data-qt-act="return"', 'fa-rotate-left', 'Return with comments', 'warn'),
       btn(can.reject, 'data-qt-act="reject"', 'fa-circle-xmark', 'Reject', 'danger'),
       btn(can.send && !s.send, 'data-qt-send-open', 'fa-envelope', q.status === 'sent' ? 'Send again' : 'Send to customer', 'primary'),
       btn(can.respond && !s.respond, 'data-qt-respond-open', 'fa-comments', 'Record customer response', 'primary'),
+      btn(can.approve_revision, 'data-qt-rev-act="approve"', 'fa-code-branch', 'Approve revision', 'primary'),
+      btn(can.reject_revision, 'data-qt-rev-act="reject"', 'fa-ban', 'Reject revision', 'danger'),
+      btn(can.cancel_revision && !can.approve_revision, 'data-qt-rev-act="cancel"', 'fa-xmark', 'Cancel revision request'),
     ].join('');
     const tools = [
       btn(can.edit, 'data-qt-edit', 'fa-pen', 'Edit'),
-      btn(can.revise, 'data-qt-revise', 'fa-code-branch', 'New version'),
+      btn(can.request_revision, 'data-qt-revise', 'fa-code-branch', q.revision_auto_approve ? 'New version' : 'Request revision'),
       btn((q.items || []).length > 0, 'data-qt-print', 'fa-print', 'Print'),
       btn((q.items || []).length > 0, 'data-qt-pdf', 'fa-file-pdf', 'Download PDF'),
     ].join('');
@@ -64107,7 +64688,7 @@ async function submitDsCreate() {
           <label style="grid-column:1/-1">Notes<textarea class="po-field-input" id="crm-qt-resp-notes" rows="3" maxlength="2000" style="resize:vertical" placeholder="What exactly did they say?">${escHtml(r.notes || '')}</textarea></label>
         </div>
         <div class="crm-ws-muted" id="crm-qt-resp-hint">${{
-          discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount and submit it for approval.',
+          discount_request: 'The lead moves to Negotiation. Then request a revision (the department head approves it) and make the new version with the revised discount.',
           accept: 'The quotation is marked accepted and the lead is won.',
           reject: 'The quotation is marked rejected and the lead is lost.',
         }[r.response]}</div>
@@ -64126,6 +64707,16 @@ async function submitDsCreate() {
         title: `${x.label}${x.requested_discount != null ? ` — ${_crmQtQty(x.requested_discount)}%` : ''}`, by: x.by?.name, body: x.notes })),
       ...(q.dispatches || []).map(d => ({ at: d.sent_at || d.at, icon: d.status === 'failed' ? 'fa-triangle-exclamation' : 'fa-envelope-circle-check', color: d.status === 'failed' ? '#ff3b30' : '#0a84ff',
         title: `${d.status === 'sent' ? 'Sent' : d.status === 'failed' ? 'Could not send' : 'Queued'} by ${d.channel} to ${d.to}${d.cc?.length ? ` (cc ${d.cc.join(', ')})` : ''}`, by: d.by?.name, body: d.status === 'failed' ? d.error : d.subject })),
+      // Revision requests on this version: asked (who, why) and the decision (who, comment)
+      ...(q.revision_requests || []).flatMap(r => [
+        { at: r.requested_at, icon: 'fa-code-pull-request', color: '#af52de', title: 'Revision requested', by: r.requested_by?.name, body: r.reason },
+        ...(r.status !== 'pending' && r.decided_at ? [{
+          at: r.decided_at,
+          icon: { approved: 'fa-code-branch', rejected: 'fa-ban', cancelled: 'fa-xmark' }[r.status] || 'fa-circle',
+          color: { approved: '#30b0c7', rejected: '#ff3b30', cancelled: '#8e8e93' }[r.status] || '#8e8e93',
+          title: `${r.label}${r.revision ? ` → ${r.revision.quote_number}` : ''}`, by: r.decided_by?.name, body: r.decision_comment,
+        }] : []),
+      ]),
     ].sort((a, b) => (b.at || '').localeCompare(a.at || ''));
     // Same grouped panel as the Timeline tab
     const historyHtml = history.length ? `<div class="crm-qtx-h">Activity<small>${history.length}</small></div><div class="crm-tlf-group">${history.map(h => `
@@ -64143,6 +64734,7 @@ async function submitDsCreate() {
       q.expiry_date ? `<span><i class="fa fa-hourglass-end"></i> Valid until ${_crmQtDate(q.expiry_date)}</span>` : '',
       q.reference ? `<span><i class="fa fa-tag"></i> ${escHtml(q.reference)}</span>` : '',
       q.customer_name ? `<span><i class="fa fa-user"></i> ${escHtml(q.customer_name)}</span>` : '',
+      q.prepared_by?.name ? `<span title="Prepared by — printed on the quotation"><i class="fa fa-id-badge"></i> ${escHtml([q.prepared_by.name, q.prepared_by.designation, q.prepared_by.phone].filter(Boolean).join(' · '))}</span>` : '',
     ].join('');
 
     return `<div class="crm-qtx">
@@ -64252,6 +64844,11 @@ async function submitDsCreate() {
           <span class="crm-ws-muted">${_crmQtDate(v.quote_date)}${v.discount_percent ? ` · ${_crmQtQty(v.discount_percent)}% off` : ''}</span>
           <span class="crm-qt-amt" style="margin-left:auto">${_crmQtMoney(v.total)}</span>
         </div>
+        ${v.revision ? `<div class="crm-ws-muted" style="margin-top:3px"><i class="fa fa-code-branch"></i> ${[
+          `Requested by ${escHtml(v.revision.requested_by?.name || '—')}${v.revision.requested_at ? ` (${escHtml(_crmFmtDateTime(v.revision.requested_at))})` : ''}`,
+          `approved by ${escHtml(v.revision.decided_by?.name || '—')}${v.revision.decided_at ? ` (${escHtml(_crmFmtDateTime(v.revision.decided_at))})` : ''}`,
+          v.revision.revised_by ? `changes by ${escHtml(v.revision.revised_by.name)}${v.revision.revised_at ? ` (${escHtml(_crmFmtDateTime(v.revision.revised_at))})` : ''}` : 'not changed yet',
+        ].join(' · ')}<div style="margin-left:16px">Reason: ${escHtml(v.revision.reason)}</div></div>` : ''}
         ${(v.responses || []).map(x => `<div class="crm-ws-muted" style="margin-top:3px"><i class="fa fa-comments"></i> ${escHtml(x.label)}${x.requested_discount != null ? ` — ${_crmQtQty(x.requested_discount)}%` : ''}${x.notes ? `: ${escHtml(x.notes)}` : ''}</div>`).join('')}
         ${v.diff ? `<details${v.is_current ? ' open' : ''}><summary>What changed from v${v.diff.from.version}${v.diff.changed ? '' : ' — nothing'}</summary>${diffHtml(v.diff)}</details>` : ''}
       </div>`).join('')}</div>`;
@@ -64263,17 +64860,49 @@ async function submitDsCreate() {
     const s = _crmWs.qt;
     if (!lead || !s?.form || s.view !== 'edit') return;
     const el = e.target;
-    if (el.dataset.qtF !== undefined) {
+    if (el.dataset.qtRemember !== undefined) {
+      s.form.remember_prepared_by = el.checked;
+    } else if (el.dataset.qtF !== undefined) {
       const line = s.form.lines[+el.dataset.qtI];
       if (!line) return;
       line[el.dataset.qtF] = el.value;
+      if (el.dataset.qtF === 'unit_price') delete line._autoPrice; // typed by hand — the standard price no longer replaces it
       el.closest('tr')?.classList.remove('crm-qt-line--error');
       if (el.dataset.qtF === 'notes') { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; return; }
       _crmQtRefreshTotals();
       if (el.dataset.qtF === 'quantity') _crmQtScheduleStock(lead);
     } else if (el.dataset.qtH !== undefined) {
       s.form[el.dataset.qtH] = el.value;
+      // The address box grows with its lines (up to 4, then scrolls)
+      if (el.id === 'crm-qt-addr') el.rows = Math.min(4, Math.max(1, el.value.split('\n').length));
       _crmQtRefreshTotals();
+    } else if (el.dataset.qtC !== undefined) {
+      const c = (s.form.customer ||= _crmQtCustomerForm(null));
+      c[el.dataset.qtC] = el.value;
+      if (el.dataset.qtC !== 'name') return;
+      // Renaming a picked customer makes it a new one (the server still matches it by phone / email)
+      if (c.id) {
+        Object.assign(c, { id: null, saved_address: '' });
+        const badge = $('#crm-qt-cust-badge');
+        if (badge) badge.innerHTML = _crmQtCustomerBadgeHtml(c);
+        $('#crm-qt-edit-body [data-qt-addr-fill]')?.remove();
+      }
+      clearTimeout(_crmQtCustTimer);
+      const q = el.value.trim();
+      const results = $('#crm-qt-cust-results');
+      if (!results) return;
+      if (q.length < 2) { results.style.display = 'none'; return; }
+      _crmQtCustTimer = setTimeout(async () => {
+        const res = await API.crmLeadQuotationCustomers(lead.id, q).catch(() => ({ body: {} }));
+        if ($('#crm-qt-cust-name')?.value.trim() !== q) return; // typed on since
+        const rows = _crmQtCustResults = res.body?.data || [];
+        results.innerHTML = rows.length ? rows.map((r, i) => `<div class="qt-suggest-item" data-qt-cust-pick="${i}" style="padding:6px 10px;cursor:pointer;display:flex;gap:8px;align-items:center">
+            <i class="fa fa-user" style="opacity:.45;font-size:11px"></i>
+            <span style="flex:1;min-width:0">${escHtml(r.name)}${r.industry ? `<span class="qt-suggest-sku">${escHtml(r.industry)}</span>` : ''}</span>
+            <span class="crm-ws-muted" style="font-size:12px">${escHtml([r.phone, r.email].filter(Boolean).join(' · '))}</span></div>`).join('')
+          : `<div style="padding:8px 10px;font-size:12px;color:var(--text-muted)"><i class="fa fa-user-plus"></i> No saved customer matches — “${escHtml(q)}” will be saved as a new customer.</div>`;
+        results.style.display = '';
+      }, 220);
     } else if (el.id === 'crm-qt-product-search') {
       clearTimeout(_crmQtSearchTimer);
       const q = el.value.trim();
@@ -64298,17 +64927,31 @@ async function submitDsCreate() {
     const lead = _crmViewLead;
     if (!lead || _crmLeadTab !== 'quotations') return;
     const s = _crmQtState();
+    const custPick = e.target.closest('[data-qt-cust-pick]');
+    if (custPick && s.form) {
+      // A saved customer: fill its details and bill to its address on file
+      const r = _crmQtCustResults[+custPick.dataset.qtCustPick];
+      if (!r) return;
+      s.form.customer = _crmQtCustomerForm(r);
+      if (r.address) s.form.customer_address = r.address;
+      _crmRenderWsTab();
+      return;
+    }
     const pick = e.target.closest('[data-qt-pick]');
     if (pick && s.form) {
-      s.form.lines.push({ item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
-        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0 });
+      const line = { item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
+        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX, _autoPrice: true };
+      s.form.lines.push(line);
       _crmRenderWsTab();
       _crmQtScheduleStock(lead);
+      _crmQtFillNote(lead, line);
       $('#crm-qt-product-search')?.focus();
       return;
     }
     const t = e.target.closest('button');
     if (!t) return;
+
+    if (t.matches('[data-qt-pick-add]') && s.form) { _crmQtAddPicked(lead, s); return; }
 
     if (t.matches('[data-qt-new]')) {
       _crmQtEdit(lead, _crmQtNewForm());
@@ -64330,14 +64973,29 @@ async function submitDsCreate() {
       _crmRenderWsTab();
     } else if (t.matches('[data-qt-edit]') && s.detail) {
       _crmQtEdit(lead, _crmQtFormFromDetail(s.detail));
+    } else if (t.matches('[data-qt-cust-clear]') && s.form) {
+      // Start over with an empty, new customer
+      s.form.customer = _crmQtCustomerForm(null);
+      s.form.customer_address = '';
+      _crmRenderWsTab();
+      $('#crm-qt-cust-name')?.focus();
     } else if (t.matches('[data-qt-addr-fill]') && s.form) {
-      s.form.customer_address = _crmQtCustomerAddress();
+      s.form.customer_address = s.form.customer?.saved_address || _crmQtCustomerAddress();
       const box = $('#crm-qt-edit-body [data-qt-h="customer_address"]');
       if (box) box.value = s.form.customer_address;
     } else if (t.matches('[data-qt-add-custom]') && s.form) {
-      s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
+      s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
       _crmRenderWsTab();
       $$('#crm-qt-edit-body [data-qt-f="description"]').pop()?.focus();
+    } else if (t.dataset.qtPriceReset !== undefined && s.form) {
+      // Back to the product's standard price
+      const i = +t.dataset.qtPriceReset;
+      const line = s.form.lines[i];
+      if (!line || line.list_price == null) return;
+      line.unit_price = line.list_price;
+      const box = $(`#crm-qt-edit-body [data-qt-f="unit_price"][data-qt-i="${i}"]`);
+      if (box) box.value = String(line.list_price);
+      _crmQtRefreshTotals();
     } else if (t.dataset.qtNoteOpen !== undefined && s.form) {
       // Open the line's note field in place — no re-render, so other fields keep their state
       const line = s.form.lines[+t.dataset.qtNoteOpen];
@@ -64365,6 +65023,15 @@ async function submitDsCreate() {
       s.send = s.respond = null;
       _crmRenderWsTab();
       $('#crm-qt-submit')?.scrollIntoView({ block: 'nearest' });
+    } else if (t.matches('[data-qt-issue]') && s.detail) {
+      // Within the department's limits: the server issues it straight away (no head to email)
+      t.disabled = true;
+      t.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Issuing…';
+      const res = await API.crmLeadQuotationAction(lead.id, s.detail.id, 'submit', {});
+      t.disabled = false;
+      t.innerHTML = '<i class="fa fa-circle-check"></i> Issue quotation';
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not issue the quotation.'), 'error'); return; }
+      _crmQtAfterChange(lead, res);
     } else if (t.matches('[data-qt-submit-cancel]')) {
       s.submit = null;
       _crmRenderWsTab();
@@ -64427,18 +65094,47 @@ async function submitDsCreate() {
       if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the response.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
     } else if (t.matches('[data-qt-revise]') && s.detail) {
+      // Revision control: the issued quotation stays as it is; the head approves a new version first
+      // (a head / admin asking is approved at once and gets the new draft straight away)
+      const auto = !!s.detail.revision_auto_approve;
       const ask = [...(s.detail.responses || [])].reverse().find(r => r.response === 'discount_request');
-      const limit = s.detail.discount?.limit;
-      if (!await appConfirm({
-        title: `New version of ${s.detail.quote_number}?`,
-        message: `It starts as a draft with the same lines; ${s.detail.quote_number} becomes read-only.`
-          + (ask ? ` The customer asked for ${_crmQtQty(ask.requested_discount)}% discount.` : '')
-          + (limit != null ? ` Up to ${_crmQtQty(limit)}% discount it can be sent without approval; above that the department head must approve it.` : ' It needs the department head\'s approval before it is sent.'),
-        confirmText: '<i class="fa fa-code-branch"></i> Make new version',
-        icon: 'fa-file-invoice',
-      })) return;
-      const res = await API.crmReviseLeadQuotation(lead.id, s.detail.id);
-      if (res.status !== 201) { toast(_crmWsError(res, 'Could not make a new version.'), 'error'); return; }
+      const asked = _crmAskReason({
+        title: `${auto ? 'New version of' : 'Request a revision of'} ${s.detail.quote_number}`,
+        reasonRequired: true,
+        submitLabel: auto ? 'Make new version' : 'Send request',
+      });
+      $('#crm-move-reason-text-label').textContent = 'What needs to change, and why? *';
+      if (ask) $('#crm-move-reason-text').value = `Customer asked for ${_crmQtQty(ask.requested_discount)}% discount${ask.notes ? ` — ${ask.notes}` : ''}`;
+      const extra = await asked;
+      if (extra === null) return;
+      t.disabled = true;
+      const res = await API.crmRequestQuotationRevision(lead.id, s.detail.id, extra.reason);
+      t.disabled = false;
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not request the revision.'), 'error'); return; }
+      _crmQtAfterChange(lead, res);
+    } else if (t.dataset.qtRevAct && s.detail?.pending_revision) {
+      const action = t.dataset.qtRevAct;
+      const pr = s.detail.pending_revision;
+      let body = {};
+      if (action === 'cancel') {
+        if (!await appConfirm({ title: 'Cancel the revision request?', message: `${s.detail.quote_number} stays as it is.`, confirmText: '<i class="fa fa-xmark"></i> Cancel request', cancelText: 'Keep it', icon: 'fa-code-pull-request', danger: true })) return;
+      } else {
+        const asked = _crmAskReason({
+          title: `${action === 'approve' ? 'Approve' : 'Reject'} revision of ${s.detail.quote_number}`,
+          reasonRequired: action === 'reject',
+          submitLabel: action === 'approve' ? 'Approve' : 'Reject',
+        });
+        $('#crm-move-reason-text-label').textContent = action === 'approve'
+          ? `Comment (optional) — ${pr.requested_by?.name || 'Staff'} asked: “${pr.reason}”`
+          : 'Why is it rejected? *';
+        const extra = await asked;
+        if (extra === null) return;
+        body = { comment: extra.reason };
+      }
+      t.disabled = true;
+      const res = await API.crmQuotationRevisionAction(lead.id, s.detail.id, pr.id, action, body);
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not update the revision request.'), 'error'); return; }
       _crmQtAfterChange(lead, res);
     } else if (t.matches('[data-qt-print]') && s.detail) {
       // Prints through Quotation Setup, same as Sales → Quotations. CRM lines carry
@@ -64550,7 +65246,7 @@ async function submitDsCreate() {
     $$('#crm-qt-respond [data-qt-resp-for]').forEach(el => { el.style.display = el.dataset.qtRespFor === e.target.value ? '' : 'none'; });
     const hint = $('#crm-qt-resp-hint');
     if (hint) hint.textContent = {
-      discount_request: 'The lead moves to Negotiation. Then make a new version with the revised discount.',
+      discount_request: 'The lead moves to Negotiation. Then request a revision (the department head approves it) and make the new version with the revised discount.',
       accept: 'The quotation is marked accepted and the lead is won.',
       reject: 'The quotation is marked rejected and the lead is lost.',
     }[e.target.value];
@@ -64559,6 +65255,7 @@ async function submitDsCreate() {
   // Close the product results when clicking elsewhere in the editor
   ['#crm-lead-view-body', '#crm-qt-edit-modal'].forEach(sel => $(sel)?.addEventListener('focusout', e => {
     if (e.target.id === 'crm-qt-product-search') setTimeout(() => { const r = $('#crm-qt-product-results'); if (r) r.style.display = 'none'; }, 200);
+    if (e.target.id === 'crm-qt-cust-name') setTimeout(() => { const r = $('#crm-qt-cust-results'); if (r) r.style.display = 'none'; }, 200);
   }));
 
   /**
@@ -64595,12 +65292,48 @@ async function submitDsCreate() {
   async function _crmLoadApprovals() {
     const body = $('#crm-approvals-rows');
     body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
-    const res = await API.crmQuotationApprovals().catch(() => ({ status: 0 }));
+    const [res, revRes] = await Promise.all([
+      API.crmQuotationApprovals().catch(() => ({ status: 0 })),
+      API.crmQuotationRevisionInbox().catch(() => ({ status: 0 })),
+    ]);
     if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
     const rows = res.body.data || [];
-    $('#crm-approvals-count').textContent = rows.length ? `${rows.length} waiting` : '';
-    body.innerHTML = rows.length ? rows.map(_crmApprovalCardHtml).join('')
+    // Revision requests: staff asking to change an issued quotation (a server without them just shows none)
+    const revs = revRes.status === 200 ? (revRes.body.data || []) : [];
+    const total = rows.length + revs.length;
+    $('#crm-approvals-count').textContent = total ? `${total} waiting` : '';
+    body.innerHTML = total
+      ? rows.map(_crmApprovalCardHtml).join('')
+        + (revs.length ? `<div class="crm-qtx-h" style="margin:14px 2px 8px">Revision requests<small>${revs.length}</small></div>${revs.map(_crmRevisionCardHtml).join('')}` : '')
       : _crmWsPanelHtml('<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing is waiting for your approval.');
+  }
+
+  // One revision request: who asked to change which issued quotation, and why
+  function _crmRevisionCardHtml(r) {
+    const q = r.quotation || {};
+    return `
+      <div class="crm-appr-card">
+        <div class="crm-appr-head">
+          <i class="fa fa-code-pull-request"></i>
+          <span class="crm-appr-num">${escHtml(q.quote_number || '')}</span>
+          ${q.version > 1 ? `<span class="crm-appr-ver">v${q.version}</span>` : ''}
+          <span class="crm-appr-status">Revision requested</span>
+          <div class="crm-appr-lead">
+            <strong>${escHtml(r.lead?.company || r.lead?.name || '—')}</strong>
+            <span class="crm-ws-muted">${escHtml(r.lead?.project_name || '')}</span>
+          </div>
+        </div>
+        <div class="crm-appr-note" style="margin-top:12px"><i class="fa fa-comment-dots"></i> <b>${escHtml(r.requested_by?.name || 'Staff')}</b>${r.requested_at ? ` <span class="crm-ws-muted">· ${escHtml(_crmFmtDateTime(r.requested_at))}</span>` : ''}: ${escHtml(r.reason)}</div>
+        <div class="crm-appr-foot">
+          <div class="crm-appr-fig">Status<b>${escHtml(q.status_label || '—')}</b></div>
+          <div class="crm-appr-fig crm-appr-fig--total">Total<b>${_crmQtMoney(q.total)}</b></div>
+          <div class="crm-appr-actions">
+            <button type="button" class="po-btn-ghost" data-appr-open="${q.id}" data-lead="${r.lead?.id}" data-project="${r.lead?.project_id}"><i class="fa fa-up-right-from-square"></i> Review</button>
+            <button type="button" class="po-btn-ghost" data-rev-reject="${r.id}" data-quotation="${q.id}" data-lead="${r.lead?.id}"><i class="fa fa-ban"></i> Reject</button>
+            <button type="button" class="po-btn-primary" data-rev-approve="${r.id}" data-quotation="${q.id}" data-lead="${r.lead?.id}"><i class="fa fa-code-branch"></i> Approve</button>
+          </div>
+        </div>
+      </div>`;
   }
 
   // One pending quotation: sender (with department) → approver (with department), figures, actions
@@ -64640,7 +65373,8 @@ async function submitDsCreate() {
           ${q.items_count != null ? `<div class="crm-appr-fig">Items<b>${q.items_count}</b></div>` : ''}
           ${q.subtotal != null ? `<div class="crm-appr-fig">Subtotal<b>${_crmQtMoney(q.subtotal)}</b></div>` : ''}
           <div class="crm-appr-fig">Discount<b class="${d.over_limit ? 'crm-qt-stock--short' : ''}">${d.percent ? `${_crmQtQty(d.percent)}%` : '—'}</b>${d.limit != null ? `limit ${_crmQtQty(d.limit)}%` : ''}</div>
-          <div class="crm-appr-fig crm-appr-fig--total">Total<b>${_crmQtMoney(q.total)}</b></div>
+          ${q.price_changes?.length ? `<div class="crm-appr-fig" title="${escHtml(q.price_changes.map(c => `${c.description}: ${_crmQtMoney(c.list_price)} → ${_crmQtMoney(c.unit_price)}`).join('\n'))}">Price changes<b class="crm-qt-stock--short">${q.price_changes.length}</b>from standard</div>` : ''}
+          <div class="crm-appr-fig crm-appr-fig--total">Total<b class="${q.value?.over_limit ? 'crm-qt-stock--short' : ''}">${_crmQtMoney(q.total)}</b>${q.value?.limit != null ? `limit ${_crmQtMoney(q.value.limit)}` : ''}</div>
           <div class="crm-appr-actions">
             <button type="button" class="po-btn-ghost" data-appr-open="${q.id}" data-lead="${q.lead?.id}" data-project="${q.lead?.project_id}"><i class="fa fa-up-right-from-square"></i> Review</button>
             <button type="button" class="po-btn-primary" data-appr-approve="${q.id}" data-lead="${q.lead?.id}"><i class="fa fa-circle-check"></i> Approve</button>
@@ -64669,6 +65403,22 @@ async function submitDsCreate() {
       const res = await API.crmLeadQuotationAction(+approve.dataset.lead, +approve.dataset.apprApprove, 'approve', {});
       if (res.status !== 200) { approve.disabled = false; toast(_crmWsError(res, 'Could not approve.'), 'error'); return; }
       toast(res.body.message || 'Quotation approved.', 'success');
+      _crmLoadApprovals();
+      if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
+      return;
+    }
+    // Revision requests: approving makes the new draft version; rejecting needs a reason
+    const rev = e.target.closest('[data-rev-approve],[data-rev-reject]');
+    if (rev) {
+      const approving = rev.dataset.revApprove !== undefined;
+      const asked = _crmAskReason({ title: approving ? 'Approve this revision?' : 'Reject this revision?', reasonRequired: !approving, submitLabel: approving ? 'Approve' : 'Reject' });
+      $('#crm-move-reason-text-label').textContent = approving ? 'Comment (optional)' : 'Why is it rejected? *';
+      const extra = await asked;
+      if (extra === null) return;
+      rev.disabled = true;
+      const res = await API.crmQuotationRevisionAction(+rev.dataset.lead, +rev.dataset.quotation, +(rev.dataset.revApprove || rev.dataset.revReject), approving ? 'approve' : 'reject', { comment: extra.reason });
+      if (res.status !== 200) { rev.disabled = false; toast(_crmWsError(res, 'Could not update the revision request.'), 'error'); return; }
+      toast(res.body.message || 'Done.', 'success');
       _crmLoadApprovals();
       if (_crmProjectId) loadCrmPipeline(_crmProjectId, { silent: true });
     }
@@ -64751,6 +65501,415 @@ async function submitDsCreate() {
     toast(res.body.message, 'success');
   });
   $('#rb-crm-followups')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmFollowUpsModal(); });
+
+  // ── Daily inquiries: the daily status pop-up (own day; the team for heads), the allocation
+  // record, the daily limit's exceptions (admins), the daily report heads review and send to
+  // management, and the settings (admins). Opens by itself once a day when CRM opens.
+  let _crmInq = { tab: 'mine', date: null, status: null, meta: {}, exceptions: [], excUser: null, reportId: null };
+  const _CRM_INQ_AUTOSHOW_KEY = 'crm-inq-autoshow';
+  function _crmInqLsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+  function _crmInqLsSet(key, value) { try { localStorage.setItem(key, value); } catch { /* private / blocked storage */ } }
+
+  async function openCrmInquiriesModal(tab = 'mine', opts = {}) {
+    _crmInq.tab = tab;
+    _crmInq.date = opts.date || _crmInq.date || null;
+    _crmInq.reportId = opts.reportId || null;
+    // Off unless this person switched it on
+    $('#crm-inq-autoshow').checked = _crmInqLsGet(_CRM_INQ_AUTOSHOW_KEY) === '1';
+    _macShow($('#crm-inq-modal'));
+    await _crmInqLoad();
+  }
+  window.openCrmInquiriesModal = openCrmInquiriesModal;
+  window._crmInqMaybeAutoShow = () => _crmInqMaybeAutoShow();
+
+  /** Once a day per user, when CRM opens: show the day's status if there is anything to see. */
+  async function _crmInqMaybeAutoShow() {
+    if (_crmInqLsGet(_CRM_INQ_AUTOSHOW_KEY) !== '1' || $('#crm-inq-modal')?.style.display === 'flex') return;
+    const res = await API.crmInquiryStatus().catch(() => ({ status: 0 }));
+    if (res.status !== 200) return;
+    const d = res.body.data;
+    const key = `crm-inq-shown:${_crmAccess?.user_id || 'me'}:${d.today}`;
+    if (_crmInqLsGet(key)) return;
+    const hasTeam = (d.team || []).some(t => t.totals.total > 0 || t.users.length);
+    if (!d.mine.counts.total && !hasTeam) return;
+    _crmInqLsSet(key, '1');
+    _crmInq.status = d;
+    _crmInq.meta = res.body.meta || {};
+    _crmInq.date = d.date;
+    // Heads land on their team, everyone else on their own day
+    openCrmInquiriesModal(_crmInq.meta.can_team && !d.mine.counts.total ? 'team' : 'mine', { date: d.date });
+  }
+
+  function _crmInqTabs() {
+    const m = _crmInq.meta || {};
+    const tabs = [
+      ['mine', '<i class="fa fa-user"></i> My day'],
+      m.can_team && ['team', '<i class="fa fa-users"></i> Team'],
+      ['allocations', '<i class="fa fa-clipboard-list"></i> Allocation record'],
+      m.can_view_reports && ['reports', '<i class="fa fa-envelope-open-text"></i> Daily report'],
+      m.can_edit_settings && ['settings', '<i class="fa fa-sliders"></i> Settings'],
+    ].filter(Boolean);
+    $('#crm-inq-tabs').innerHTML = tabs.map(([k, label]) => `<button type="button" class="crm-inbox-tab${_crmInq.tab === k ? ' active' : ''}" data-inq-tab="${k}">${label}</button>`).join('');
+    $('#crm-inq-date-wrap').style.visibility = _crmInq.tab === 'settings' || _crmInq.tab === 'reports' ? 'hidden' : '';
+  }
+
+  async function _crmInqLoad() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryStatus(_crmInq.date).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { _crmInqTabs(); body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    _crmInq.status = res.body.data;
+    _crmInq.meta = res.body.meta || {};
+    _crmInq.date = _crmInq.status.date;
+    $('#crm-inq-date').value = _crmInq.date;
+    $('#crm-inq-date').max = _crmInq.status.today;
+    const isToday = _crmInq.date === _crmInq.status.today;
+    $('#crm-inq-sub').textContent = `${isToday ? 'Today' : _crmInqFmtDay(_crmInq.date)} · daily limit ${_crmInq.status.limit} inquiries per person`;
+    if (!['mine', 'team', 'allocations', 'reports', 'settings'].includes(_crmInq.tab)
+      || (_crmInq.tab === 'team' && !_crmInq.meta.can_team)
+      || (_crmInq.tab === 'reports' && !_crmInq.meta.can_view_reports)
+      || (_crmInq.tab === 'settings' && !_crmInq.meta.can_edit_settings)) _crmInq.tab = 'mine';
+    _crmInqTabs();
+    await _crmInqRender();
+  }
+
+  async function _crmInqRender() {
+    _crmInqTabs();
+    const t = _crmInq.tab;
+    if (t === 'mine') _crmInqRenderMine();
+    else if (t === 'team') await _crmInqRenderTeam();
+    else if (t === 'allocations') await _crmInqRenderAllocations();
+    else if (t === 'reports') await (_crmInq.reportId ? _crmInqRenderReport(_crmInq.reportId) : _crmInqRenderReports());
+    else if (t === 'settings') await _crmInqRenderSettings();
+  }
+
+  function _crmInqFmtDay(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function _crmInqCat(key) {
+    return (_crmInq.status?.categories || []).find(c => c.key === key) || { key, label: key, color: '#94a3b8', icon: 'fa-circle' };
+  }
+
+  function _crmInqTilesHtml(counts) {
+    const cats = _crmInq.status?.categories || [];
+    const total = counts.total || 0;
+    const share = n => total ? Math.round(100 * n / total) : 0;
+    return `<div class="crm-inq-tiles">
+      <div class="crm-inq-tile crm-inq-tile--total">
+        <span class="crm-inq-tile-lbl">Total assigned</span>
+        <b>${total}</b>
+        <div class="crm-inq-bar" title="Progress of the day's inquiries">${cats.map(c => counts[c.key] ? `<i style="--c:${c.color};width:${(100 * counts[c.key] / total).toFixed(2)}%" title="${escHtml(c.label)}: ${counts[c.key]}"></i>` : '').join('')}</div>
+      </div>
+      <div class="crm-inq-metrics">
+        ${cats.map(c => {
+          const n = counts[c.key] || 0;
+          return `<div class="crm-inq-tile${n ? '' : ' is-zero'}" style="--c:${c.color}">
+            <span class="crm-inq-tile-lbl"><i class="fa ${c.icon}"></i>${escHtml(c.label)}</span>
+            <b>${n}</b>
+            <small>${total ? `${share(n)}%` : '—'}</small>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  function _crmInqLoadHtml(cap) {
+    if (!cap) return '';
+    const full = cap.remaining < 1;
+    return `<span class="crm-inq-load${full ? ' crm-inq-load--full' : ''}" title="Given today / allowed today${cap.extra ? ` (limit ${cap.limit} + ${cap.extra} extra)` : ''}">${cap.used} / ${cap.allowed}${cap.extra ? ' <i class="fa fa-plus-circle" style="color:#f59e0b"></i>' : ''}</span>`;
+  }
+
+  function _crmInqRenderMine() {
+    const mine = _crmInq.status.mine;
+    const cap = mine.capacity;
+    const rows = mine.leads.map(l => {
+      const c = _crmInqCat(l.category);
+      return `<tr>
+        <td><button type="button" class="crm-inq-link" data-inq-open-lead="${l.id}" data-project="${l.project_id}">${escHtml(l.name || 'Lead')}</button>${l.company ? `<div class="crm-inq-muted">${escHtml(l.company)}</div>` : ''}</td>
+        <td class="crm-inq-muted">${escHtml(l.phone || '')}</td>
+        <td><span class="crm-inq-stage" style="--c:${escHtml(l.stage_color || '#94a3b8')}">${escHtml(l.stage || '—')}</span></td>
+        <td><span class="crm-inq-cat" style="--c:${c.color}"><i class="fa ${c.icon}"></i> ${escHtml(c.label)}</span></td>
+        <td class="crm-inq-muted">${escHtml(l.assigned_by || 'System')}${l.assigned_at ? ` · ${escHtml(new Date(l.assigned_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}` : ''}</td>
+      </tr>`;
+    }).join('');
+    $('#crm-inq-body').innerHTML = `
+      ${_crmInqTilesHtml(mine.counts)}
+      <div class="crm-inq-cap${cap.remaining < 1 ? ' is-full' : ''}">
+        <span class="crm-inq-cap-ico"><i class="fa fa-gauge-high"></i></span>
+        <div class="crm-inq-cap-text">
+          <b>Daily quota</b>
+          <span>You were given ${cap.used} of ${cap.allowed} inquiries${_crmInq.date === _crmInq.status.today ? ' today' : ' that day'}${cap.extra ? ` (limit ${cap.limit} + ${cap.extra} extra)` : ''}</span>
+        </div>
+        <div class="crm-inq-bar"><i style="--c:${cap.remaining < 1 ? '#ff3b30' : '#0071e3'};width:${Math.min(100, cap.allowed ? 100 * cap.used / cap.allowed : 0)}%"></i></div>
+        <span class="crm-inq-cap-left">${cap.remaining < 1 ? 'Limit reached' : `${cap.remaining} left`}</span>
+      </div>
+      <div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-list-check"></i> My inquiries <small>· each one counted once, at the furthest step it has reached</small></p>
+        ${rows ? `<table class="crm-inq-table"><thead><tr><th>Lead</th><th>Phone</th><th>Stage</th><th>Progress</th><th>Assigned by</th></tr></thead><tbody>${rows}</tbody></table>`
+               : _crmWsPanelHtml('No inquiries were assigned to you on this day.')}
+      </div>`;
+  }
+
+  async function _crmInqRenderTeam() {
+    const team = _crmInq.status.team || [];
+    const canGrant = !!_crmInq.meta.can_grant_exceptions;
+    const exRes = await API.crmInquiryExceptions(_crmInq.date).catch(() => ({ status: 0 }));
+    _crmInq.exceptions = exRes.status === 200 ? exRes.body.data : [];
+    const cats = _crmInq.status.categories;
+    const isFuture = _crmInq.date >= _crmInq.status.today;
+    const deptHtml = d => {
+      const rows = d.users.map(u => `
+        <tr>
+          <td>${escHtml(u.user.name)}${u.over_limit ? ` <span class="crm-inq-badge crm-inq-badge--over" title="Given beyond the daily limit under an exception">${u.over_limit} over limit</span>` : ''}</td>
+          <td>${_crmInqLoadHtml(u.capacity)}</td>
+          <td class="num"><b>${u.counts.total}</b></td>
+          ${cats.map(c => `<td class="num" style="${u.counts[c.key] ? `color:${c.color};font-weight:600` : 'color:var(--mac-muted)'}">${u.counts[c.key]}</td>`).join('')}
+          <td class="num">${u.counts.conversion_rate}%</td>
+          ${canGrant ? `<td>${isFuture ? `<button type="button" class="po-btn-ghost" style="padding:2px 8px;font-size:11.5px" data-inq-exc-user="${u.user.id}" data-inq-exc-name="${escHtml(u.user.name)}"><i class="fa fa-plus"></i> Exception</button>` : ''}</td>` : ''}
+        </tr>
+        ${_crmInq.excUser === u.user.id ? `<tr><td colspan="${cats.length + 5}">
+          <div class="crm-inq-form" style="padding:6px 0">
+            <label>Extra inquiries for ${escHtml(u.user.name)}<input type="number" min="1" max="200" value="2" class="po-field-input" id="crm-inq-exc-extra"></label>
+            <label style="grid-column:span 2">Reason *<input type="text" maxlength="500" class="po-field-input" id="crm-inq-exc-reason" placeholder="e.g. Exhibition leads must be called today"></label>
+            <div style="display:flex;gap:6px"><button type="button" class="po-btn-primary" data-inq-exc-save="${u.user.id}"><i class="fa fa-check"></i> Grant</button><button type="button" class="po-btn-ghost" data-inq-exc-cancel><i class="fa fa-xmark"></i></button></div>
+          </div></td></tr>` : ''}`).join('');
+      return `<div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-building"></i> ${escHtml(d.department.name)} <small>· ${d.totals.total} inquir${d.totals.total === 1 ? 'y' : 'ies'} · ${d.totals.conversion_rate}% to sale</small></p>
+        ${_crmInqTilesHtml(d.totals)}
+        ${d.users.length ? `<table class="crm-inq-table"><thead><tr><th>Staff</th><th>Load</th><th class="num">Assigned</th>${cats.map(c => `<th class="num">${escHtml(c.label)}</th>`).join('')}<th class="num">Conv.</th>${canGrant ? '<th></th>' : ''}</tr></thead>
+          <tbody>${rows}</tbody></table>` : _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet.')}
+      </div>`;
+    };
+    const exHtml = _crmInq.exceptions.length ? `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-unlock-keyhole"></i> Exceptions to the daily limit <small>· ${escHtml(_crmInqFmtDay(_crmInq.date))}</small></p>
+      <table class="crm-inq-table"><thead><tr><th>Staff</th><th class="num">Extra</th><th>Reason</th><th>Granted by</th>${canGrant ? '<th></th>' : ''}</tr></thead><tbody>
+      ${_crmInq.exceptions.map(e => `<tr><td>${escHtml(e.user.name)}</td><td class="num">+${e.extra_allowed}</td><td>${escHtml(e.reason || '')}</td><td class="crm-inq-muted">${escHtml(e.granted_by?.name || '')}</td>
+        ${canGrant ? `<td><button type="button" class="po-btn-ghost" style="padding:2px 8px;font-size:11.5px" data-inq-exc-revoke="${e.id}"><i class="fa fa-trash"></i></button></td>` : ''}</tr>`).join('')}
+      </tbody></table></div>` : '';
+    $('#crm-inq-body').innerHTML = (team.length ? team.map(deptHtml).join('') : _crmWsPanelHtml('No departments to show.')) + exHtml
+      + `<div class="crm-inq-muted"><i class="fa fa-circle-info"></i> Only heads of department assign inquiries, at most ${_crmInq.status.limit} per person per day. ${canGrant ? 'You can allow someone more for a day with <b>Exception</b>.' : 'An administrator can allow someone more for a day.'}</div>`;
+  }
+
+  async function _crmInqRenderAllocations() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryAllocations({ from: _crmInq.date, to: _crmInq.date }).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const rows = res.body.data;
+    body.innerHTML = `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-clipboard-list"></i> Inquiries handed out on ${escHtml(_crmInqFmtDay(_crmInq.date))} <small>· ${rows.filter(r => !r.released_at).length} active${rows.some(r => r.released_at) ? `, ${rows.filter(r => r.released_at).length} taken back the same day` : ''}</small></p>
+      ${rows.length ? `<table class="crm-inq-table"><thead><tr><th>Time</th><th>Staff</th><th>Lead</th><th>Department</th><th>Assigned by</th><th></th></tr></thead><tbody>
+        ${rows.map(a => `<tr style="${a.released_at ? 'opacity:.55' : ''}">
+          <td class="crm-inq-muted">${a.created_at ? escHtml(new Date(a.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) : ''}</td>
+          <td>${escHtml(a.user.name)}</td>
+          <td>${a.lead ? `<button type="button" class="crm-inq-link" data-inq-open-lead="${a.lead.id}" data-project="${a.lead.project_id}">${escHtml(a.lead.name || 'Lead')}</button> <span class="crm-inq-stage" style="--c:${escHtml(a.lead.color || '#94a3b8')}">${escHtml(a.lead.stage || '')}</span>` : '<span class="crm-inq-muted">Deleted lead</span>'}</td>
+          <td class="crm-inq-muted">${escHtml(a.department?.name || '—')}</td>
+          <td class="crm-inq-muted">${escHtml(a.assigned_by?.name || 'System')}</td>
+          <td>${a.released_at ? '<span class="crm-inq-badge" style="background:var(--mac-fill)">Taken back</span>' : a.over_limit ? '<span class="crm-inq-badge crm-inq-badge--over">Over limit</span>' : ''}</td>
+        </tr>`).join('')}</tbody></table>` : _crmWsPanelHtml('Nothing was handed out on this day.')}
+    </div>`;
+  }
+
+  async function _crmInqRenderReports() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryReports().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const { data, meta } = res.body;
+    const s = meta.settings || {};
+    const how = !s.enabled
+      ? 'The automatic daily report is <b>off</b>' + (meta.can_edit_settings ? ' — turn it on under Settings.' : ' — an administrator can turn it on.')
+      : s.review
+        ? `Made every day at <b>${escHtml(s.time)}</b> and kept as a draft until the head of department reviews and sends it.`
+        : `Made and emailed every day at <b>${escHtml(s.time)}</b>; heads can review it and add a note afterwards.`;
+    body.innerHTML = `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-envelope-open-text"></i> Daily inquiry status reports
+        ${meta.can_manage_reports ? `<button type="button" class="po-btn-ghost" data-inq-generate><i class="fa fa-wand-magic-sparkles"></i> Make today's report now</button>` : ''}</p>
+      <div class="crm-inq-muted">${how} Goes to: ${meta.recipients?.length ? escHtml(meta.recipients.join(', ')) : '<b>nobody yet</b>'}.${meta.can_edit_settings ? ` <button type="button" class="crm-inq-link" data-inq-goto-settings><i class="fa fa-pen"></i> Change</button>` : ''}</div>
+      ${data.length ? `<table class="crm-inq-table"><thead><tr><th>Day</th><th>Department</th><th>Status</th><th class="num">Assigned</th><th class="num">Quotation</th><th class="num">Sale</th><th class="num">Pending</th><th>Reviewed</th><th>Sent</th><th></th></tr></thead><tbody>
+        ${data.map(r => `<tr>
+          <td>${escHtml(_crmInqFmtDay(r.report_date))}</td>
+          <td>${escHtml(r.department?.name || '')}</td>
+          <td><span class="crm-inq-badge crm-inq-badge--${r.status}">${r.status === 'draft' ? 'Waiting for review' : r.status === 'sent' ? 'Sent' : 'Not sent'}</span></td>
+          <td class="num"><b>${r.totals.total ?? 0}</b></td><td class="num">${r.totals.quotation ?? 0}</td><td class="num">${r.totals.sale ?? 0}</td><td class="num">${r.totals.pending ?? 0}</td>
+          <td class="crm-inq-muted">${r.reviewed_by ? escHtml(r.reviewed_by.name) : '—'}</td>
+          <td class="crm-inq-muted">${r.sent_at ? escHtml(new Date(r.sent_at).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) : '—'}</td>
+          <td><button type="button" class="po-btn-ghost" style="padding:2px 10px;font-size:11.5px" data-inq-report="${r.id}">${r.can_manage && r.status !== 'sent' ? 'Review' : 'Open'}</button></td>
+        </tr>`).join('')}</tbody></table>` : _crmWsPanelHtml('No reports in the last two weeks.')}
+    </div>`;
+  }
+
+  async function _crmInqRenderReport(id) {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryReport(id).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const r = res.body.data;
+    const d = r.data || {};
+    const cats = _crmInq.status.categories;
+    const totals = d.totals || {};
+    body.innerHTML = `
+      <div><button type="button" class="crm-inq-link" data-inq-reports-back><i class="fa fa-chevron-left"></i> All reports</button></div>
+      <div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-building"></i> ${escHtml(r.department?.name || '')} · ${escHtml(_crmInqFmtDay(r.report_date))}
+          <span class="crm-inq-badge crm-inq-badge--${r.status}">${r.status === 'draft' ? 'Waiting for review' : r.status === 'sent' ? 'Sent' : 'Not sent'}</span></p>
+        ${_crmInqTilesHtml(totals)}
+        <table class="crm-inq-table"><thead><tr><th>Staff member</th><th class="num">Assigned</th>${cats.map(c => `<th class="num">${escHtml(c.label)}</th>`).join('')}<th class="num">Conv.</th></tr></thead><tbody>
+          ${(d.users || []).map(u => `<tr><td>${escHtml(u.user.name)}${u.over_limit ? ` <span class="crm-inq-badge crm-inq-badge--over">${u.over_limit} over limit</span>` : ''}</td><td class="num"><b>${u.counts.total}</b></td>${cats.map(c => `<td class="num">${u.counts[c.key]}</td>`).join('')}<td class="num">${u.counts.conversion_rate}%</td></tr>`).join('')}
+        </tbody><tfoot><tr><td>Department</td><td class="num">${totals.total ?? 0}</td>${cats.map(c => `<td class="num">${totals[c.key] ?? 0}</td>`).join('')}<td class="num">${totals.conversion_rate ?? 0}%</td></tr></tfoot></table>
+        <div class="crm-inq-muted">Figures as of ${r.generated_at ? escHtml(new Date(r.generated_at).toLocaleString()) : '—'}${r.sent_at ? ` · sent ${escHtml(new Date(r.sent_at).toLocaleString())}${r.sent_by ? ` by ${escHtml(r.sent_by.name)}` : ' automatically'} to ${escHtml((r.recipients || []).join(', '))}` : ''}${r.error ? ` · <span style="color:#dc2626">${escHtml(r.error)}</span>` : ''}</div>
+      </div>
+      <div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-user-check"></i> Head of department's review ${r.reviewed_by ? `<small>· ${escHtml(r.reviewed_by.name)}, ${escHtml(new Date(r.reviewed_at).toLocaleString())}</small>` : ''}</p>
+        ${r.can_manage ? `
+          <textarea class="po-field-input crm-inq-note" id="crm-inq-review-note" maxlength="5000" placeholder="Optional note for management — it is added to the email">${escHtml(r.review_note || '')}</textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="po-btn-ghost" data-inq-review="${r.id}"><i class="fa fa-floppy-disk"></i> Save review</button>
+            ${r.status !== 'sent' ? `<button type="button" class="po-btn-ghost" data-inq-refresh-report="${r.id}"><i class="fa fa-rotate"></i> Refresh figures</button>` : ''}
+            <button type="button" class="po-btn-primary" data-inq-send="${r.id}"><i class="fa fa-paper-plane"></i> ${r.status === 'sent' ? 'Send again' : 'Mark reviewed & send to management'}</button>
+          </div>`
+          : `<div>${r.review_note ? escHtml(r.review_note).replace(/\n/g, '<br>') : '<span class="crm-inq-muted">No review note.</span>'}</div>`}
+      </div>`;
+  }
+
+  async function _crmInqRenderSettings() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmSettings().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const s = res.body.data;
+    body.innerHTML = `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-scale-balanced"></i> Daily allocation</p>
+      <div class="crm-inq-form">
+        <label>Inquiries per person per day<input type="number" min="1" max="500" class="po-field-input" id="crm-inq-set-limit" value="${s.daily_inquiry_limit}">
+          <small>Heads cannot assign more unless you grant an exception for that day.</small></label>
+      </div>
+    </div>
+    <div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-envelope-open-text"></i> Daily report to management</p>
+      <div class="crm-inq-form">
+        <label class="mac-switch-label" style="flex-direction:row;align-items:center"><input type="checkbox" class="mac-switch" id="crm-inq-set-enabled"${s.inquiry_report_enabled ? ' checked' : ''}> Make the report every day</label>
+        <label>At (business time)<input type="time" class="po-field-input" id="crm-inq-set-time" value="${escHtml(s.inquiry_report_time)}"></label>
+        <label>When it is made
+          <select class="po-field-input" id="crm-inq-set-review">
+            <option value="0"${!s.inquiry_report_review ? ' selected' : ''}>Email it straight away (heads review after)</option>
+            <option value="1"${s.inquiry_report_review ? ' selected' : ''}>Wait for the head to review and send it</option>
+          </select></label>
+        <label class="wide">Management email addresses<textarea class="po-field-input crm-inq-note" id="crm-inq-set-recipients" placeholder="ceo@company.com, gm@company.com">${escHtml((s.inquiry_report_recipients || []).join(', '))}</textarea>
+          <small>Separate with commas. Left empty, the report goes to the business owner.</small></label>
+      </div>
+      <div><button type="button" class="po-btn-primary" data-inq-save-settings><i class="fa fa-floppy-disk"></i> Save settings</button></div>
+    </div>`;
+  }
+
+  $('#crm-inq-modal')?.addEventListener('click', async e => {
+    if (e.target === e.currentTarget) { _macHide($('#crm-inq-modal')); return; }
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.id === 'crm-inq-close' || t.id === 'crm-inq-close-btn') { _macHide($('#crm-inq-modal')); return; }
+    if (t.id === 'crm-inq-refresh') { _crmInqLoad(); return; }
+    if (t.dataset.inqTab) { _crmInq.tab = t.dataset.inqTab; _crmInq.reportId = null; _crmInq.excUser = null; _crmInqRender(); return; }
+    if (t.dataset.inqOpenLead) {
+      _macHide($('#crm-inq-modal'));
+      crmOpenLead(+t.dataset.project, +t.dataset.inqOpenLead);
+      return;
+    }
+    // Exceptions (admins)
+    if (t.dataset.inqExcUser) { _crmInq.excUser = +t.dataset.inqExcUser; await _crmInqRenderTeam(); $('#crm-inq-exc-reason')?.focus(); return; }
+    if (t.matches('[data-inq-exc-cancel]')) { _crmInq.excUser = null; _crmInqRenderTeam(); return; }
+    if (t.dataset.inqExcSave) {
+      const reason = $('#crm-inq-exc-reason').value.trim();
+      if (!reason) { toast('Give a reason for the exception.', 'error'); return; }
+      t.disabled = true;
+      const res = await API.crmGrantInquiryException({ user_id: +t.dataset.inqExcSave, date: _crmInq.date, extra_allowed: +$('#crm-inq-exc-extra').value || 1, reason });
+      t.disabled = false;
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not grant the exception.'), 'error'); return; }
+      toast(res.body.message, 'success');
+      _crmInq.excUser = null;
+      _crmInqLoad();
+      return;
+    }
+    if (t.dataset.inqExcRevoke) {
+      if (!await appConfirm({ title: 'Remove this exception?', message: 'Inquiries already given stay; no more can be given beyond the limit.', confirmText: '<i class="fa fa-trash"></i> Remove', icon: 'fa-unlock-keyhole', danger: true })) return;
+      const res = await API.crmRevokeInquiryException(+t.dataset.inqExcRevoke);
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not remove it.'), 'error'); return; }
+      _crmInqLoad();
+      return;
+    }
+    // Reports
+    if (t.dataset.inqReport) { _crmInq.reportId = +t.dataset.inqReport; _crmInqRenderReport(_crmInq.reportId); return; }
+    if (t.matches('[data-inq-reports-back]')) { _crmInq.reportId = null; _crmInqRenderReports(); return; }
+    // Admins: jump from the report's "Goes to" line straight to the recipients box
+    if (t.matches('[data-inq-goto-settings]')) {
+      _crmInq.tab = 'settings';
+      _crmInq.reportId = null;
+      await _crmInqRender();
+      const box = $('#crm-inq-set-recipients');
+      box?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      box?.focus();
+      return;
+    }
+    if (t.matches('[data-inq-generate]')) {
+      t.disabled = true;
+      const res = await API.crmGenerateInquiryReports({}).catch(() => ({ status: 0 }));
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not make the report.'), 'error'); return; }
+      toast(res.body.message, 'success');
+      _crmInqRenderReports();
+      return;
+    }
+    if (t.dataset.inqRefreshReport) {
+      t.disabled = true;
+      const report = await API.crmInquiryReport(+t.dataset.inqRefreshReport);
+      const res = report.status === 200 ? await API.crmGenerateInquiryReports({ date: report.body.data.report_date, department_id: report.body.data.department?.id }) : report;
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not refresh the figures.'), 'error'); return; }
+      _crmInqRenderReport(+t.dataset.inqRefreshReport);
+      return;
+    }
+    if (t.dataset.inqReview || t.dataset.inqSend) {
+      const id = +(t.dataset.inqReview || t.dataset.inqSend);
+      const note = $('#crm-inq-review-note')?.value.trim() || null;
+      if (t.dataset.inqSend && !await appConfirm({ title: 'Send this report to management?', message: 'Your note is included in the email.', confirmText: '<i class="fa fa-paper-plane"></i> Send', icon: 'fa-envelope-open-text' })) return;
+      t.disabled = true;
+      let res = await API.crmReviewInquiryReport(id, note);
+      if (res.status === 200 && t.dataset.inqSend) res = await API.crmSendInquiryReport(id);
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save.'), 'error'); return; }
+      toast(res.body.message, 'success');
+      _crmInqRenderReport(id);
+      return;
+    }
+    // Settings (admins)
+    if (t.matches('[data-inq-save-settings]')) {
+      t.disabled = true;
+      const res = await API.crmSaveSettings({
+        daily_inquiry_limit:       +$('#crm-inq-set-limit').value,
+        inquiry_report_enabled:    $('#crm-inq-set-enabled').checked,
+        inquiry_report_time:       $('#crm-inq-set-time').value,
+        inquiry_report_review:     $('#crm-inq-set-review').value === '1',
+        inquiry_report_recipients: $('#crm-inq-set-recipients').value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean),
+      }).catch(() => ({ status: 0 }));
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the settings.'), 'error'); return; }
+      toast('Daily inquiry settings saved.', 'success');
+      _crmInqLoad();
+    }
+  });
+
+  $('#crm-inq-date')?.addEventListener('change', e => {
+    if (!e.target.value) return;
+    _crmInq.date = e.target.value;
+    _crmInq.excUser = null;
+    _crmInqLoad();
+  });
+  $('#crm-inq-autoshow')?.addEventListener('change', e => {
+    _crmInqLsSet(_CRM_INQ_AUTOSHOW_KEY, e.target.checked ? '1' : '0');
+  });
+  $('#rb-crm-inquiries')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmInquiriesModal(_crmInq.tab || 'mine'); });
 
   // ── Management dashboard (view only): admin, CEO, heads (their departments) ──
   let _crmDash = { filters: null, data: null, range: '30', loadedAt: null };
@@ -64948,6 +66107,7 @@ async function submitDsCreate() {
       'Open deals by status': 'fa-layer-group', 'Expected to close': 'fa-calendar-check', 'Largest open deals': 'fa-sack-dollar',
       'Where this period’s leads are now': 'fa-filter', 'Biggest wins in the period': 'fa-trophy', 'Why deals are lost': 'fa-circle-xmark',
       'Lead sources': 'fa-bullseye', 'Departments': 'fa-sitemap', 'Team leaderboard': 'fa-ranking-star',
+      'Inquiry handling': 'fa-inbox', 'Inquiry → sale': 'fa-filter-circle-dollar',
     };
     const card = (title, sub, body, cls = '', id = '') => `
       <div class="crm-dash-card${cls ? ' ' + cls : ''}"${id ? ` id="${id}"` : ''}>
@@ -65062,6 +66222,31 @@ async function submitDsCreate() {
       ${noDate / fcTotal > 0.5 ? '<div class="crm-dash-tip-hint"><i class="fa fa-lightbulb"></i> Most open deals have no expected close date. Set one on each lead to make this forecast useful.</div>' : ''}`
       : _crmWsPanelHtml('No open deals.');
 
+    // Inquiry-handling KPIs (admin reporting): times, follow-ups, quotations, conversion, pending / overdue
+    const q = d.inquiry_kpis;
+    const inquiryHtml = q ? `<div class="crm-dash-metrics">
+        ${metric('Inquiries received', _crmDashNum(q.inquiries), `${(+q.per_day).toLocaleString()} per day`, '', 'Leads created in the period')}
+        ${metric('Avg response', hours(q.avg_response_hours), 'received → first worked on', '', 'From the inquiry arriving to the first message, follow-up, quotation or activity on it')}
+        ${metric('Avg first contact', hours(q.avg_contact_hours), 'received → customer contacted', '', 'From the inquiry arriving to the first call, email or meeting with the customer, follow-up done or quotation sent')}
+        ${metric('Follow-ups done', _crmDashNum(q.follow_ups_done), 'logged in the period', '', 'Follow-ups logged as done in the period')}
+        ${metric('Quotations made', _crmDashNum(q.quotations), q.quotation_value ? `${_crmDashMoney(q.quotation_value, { compact: true })} quoted` : 'none', '', 'Quotations made in the period; a revised quotation counts once')}
+        ${metric('Converted to sales', _crmDashNum(q.converted), q.converted_value ? `${_crmDashMoney(q.converted_value, { compact: true })} accepted` : 'none yet', '', 'Of the quotations made in the period, those the customer accepted')}
+        ${metric('Inquiry → quotation', _crmDashPct(q.inquiry_quote_rate), `${_crmDashNum(q.quoted_inquiries)} of ${_crmDashNum(q.inquiries)} quoted`, '', 'Inquiries received in the period that got a quotation')}
+        ${metric('Quotation → sale', _crmDashPct(q.quote_sale_rate), `${_crmDashNum(q.converted)} of ${_crmDashNum(q.quotations)} accepted`, '', 'Quotations made in the period that the customer accepted')}
+        ${metric('Pending inquiries', _crmDashNum(q.pending), 'received in the period, still open', q.pending ? 'crm-dash-metric--warn' : '', 'Inquiries received in the period that are neither won nor lost')}
+        ${metric('Overdue inquiries', _crmDashNum(q.overdue), q.overdue ? 'need action now' : 'none', q.overdue ? 'crm-dash-metric--bad' : '', 'Pending inquiries with an overdue follow-up, past the expected close date, or not worked on since before today')}
+      </div>` : '';
+    const inquiryFunnel = q ? `${_crmDashBarsHtml([
+        { label: 'Inquiries received', leads: q.inquiries },
+        { label: 'Got a quotation', leads: q.quoted_inquiries },
+        { label: 'Won', leads: q.won },
+      ], { extra: r => _crmDashPct(r.leads / Math.max(1, q.inquiries) * 100), empty: 'No inquiries in this period.' })}
+      <div class="crm-dash-sub-head" style="margin:14px 0 6px">Quotations made in the period</div>
+      ${_crmDashBarsHtml([
+        { label: 'Quotations made', leads: q.quotations },
+        { label: 'Converted to sales', leads: q.converted },
+      ], { color: 'var(--crm-dash-c2)', extra: r => _crmDashPct(r.leads / Math.max(1, q.quotations) * 100), empty: 'No quotations in this period.' })}` : '';
+
     const mode = _crmDash.trendMode || 'revenue';
     const insights = _crmDashInsights(d);
     const jump = (id, label, badge = 0) => `<button type="button" data-dash-jump="${id}"${id === 'crm-dash-s-attention' ? ' class="active"' : ''}>${label}${badge ? `<b>${badge}</b>` : ''}</button>`;
@@ -65079,7 +66264,7 @@ async function submitDsCreate() {
       </div>
 
       <div class="crm-dash-jump">
-        ${jump('crm-dash-s-attention', 'Needs attention', urgent)}${jump('crm-dash-s-trend', 'Trend')}${jump('crm-dash-s-pipeline', 'Pipeline')}${jump('crm-dash-s-channels', 'Channels &amp; teams')}${jump('crm-dash-s-team', 'Team')}
+        ${jump('crm-dash-s-attention', 'Needs attention', urgent)}${q ? jump('crm-dash-s-inquiries', 'Inquiry KPIs', q.overdue) : ''}${jump('crm-dash-s-trend', 'Trend')}${jump('crm-dash-s-pipeline', 'Pipeline')}${jump('crm-dash-s-channels', 'Channels &amp; teams')}${jump('crm-dash-s-team', 'Team')}
       </div>
 
       <div class="crm-dash-heroes">
@@ -65114,6 +66299,12 @@ async function submitDsCreate() {
           ${metric('Sales cycle', k.avg_close_days == null ? '—' : `${k.avg_close_days} d`, 'created → won / lost', '', 'Average days from lead creation to won or lost, for deals closed in the period')}
           ${metric('Past-due deals', _crmDashNum(k.past_due_deals), k.past_due_deals ? `${_crmDashMoney(k.past_due_deals_value, { compact: true })} at risk` : 'None', k.past_due_deals ? 'crm-dash-metric--bad' : '', 'Live: open deals past their expected close date')}
         </div>`)}
+
+      ${q ? `<div class="crm-dash-section" id="crm-dash-s-inquiries">Inquiry KPIs</div>
+      <div class="crm-dash-split">
+        ${card('Inquiry → sale', 'conversion at each step', inquiryFunnel)}
+        ${card('Inquiry handling', 'hover a figure for its meaning', inquiryHtml)}
+      </div>` : ''}
 
       <div class="crm-dash-card" id="crm-dash-s-trend">
         <div class="crm-dash-card-head">
@@ -65301,9 +66492,13 @@ async function submitDsCreate() {
     $('#crm-assign-sub').textContent = lead.name || '';
     $('#crm-assign-note').value = '';
     $('#crm-assign-body').innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
-    const res = await API.crmLeadAssignees(lead.id).catch(() => ({ status: 0 }));
+    // Today's inquiry load of each person, beside their name (a missing count just isn't shown)
+    const [res, capRes] = await Promise.all([
+      API.crmLeadAssignees(lead.id).catch(() => ({ status: 0 })),
+      API.crmLeadInquiryCapacity(lead.id).catch(() => ({ status: 0 })),
+    ]);
     if (res.status !== 200) { $('#crm-assign-body').innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
-    _crmAssign = { lead, data: res.body.data };
+    _crmAssign = { lead, data: res.body.data, capacity: capRes.status === 200 ? capRes.body.data : {}, limit: capRes.body?.meta?.limit };
     _crmRenderAssignModal();
   }
 
@@ -65333,11 +66528,13 @@ async function submitDsCreate() {
     const row = u => {
       const sub = [u.division_name ? `Heads ${u.division_name}` : '', u.job_title, u.email].filter(Boolean).map(escHtml).join(' · ');
       const search = [u.name, u.email, u.job_title, u.department_name, u.division_name].filter(Boolean).join(' ').toLowerCase();
+      const cap = _crmAssign.capacity?.[u.id];
+      const load = cap ? `<span class="crm-inq-load crm-assign-load${cap.remaining < 1 && !current.includes(u.id) ? ' crm-inq-load--full' : ''}" title="Inquiries given today / allowed today${cap.extra ? ` (limit ${cap.limit} + ${cap.extra} extra)` : ''}">${cap.used}/${cap.allowed} today</span>` : '';
       return `<div class="crm-assign-row" data-assign-search="${escHtml(search)}">
         <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}>
           <span class="crm-assign-av">${escHtml(_crmInitials(u.name || '?'))}</span>
           <span class="crm-assign-who"><span class="crm-assign-name">${escHtml(u.name)}</span>${sub ? `<span class="crm-assign-sub">${sub}</span>` : ''}</span></label>
-        <label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
+        ${load}<label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
       </div>`;
     };
     const rows = [...groups.keys()].sort().map(k => groups.get(k)).map(g => `
@@ -65355,7 +66552,7 @@ async function submitDsCreate() {
         </div>
       </div>`).join('');
     $('#crm-assign-body').innerHTML = `
-      <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.</div>
+      <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.${_crmAssign.limit ? ` Each person can be given at most ${_crmAssign.limit} inquiries a day.` : ''}</div>
       ${pickable.length ? `<div class="crm-assign-tools">
         <div class="crm-assign-search"><i class="fa fa-magnifying-glass"></i>
           <input type="text" id="crm-assign-search" autocomplete="off" placeholder="Search name, email, department or job title…"></div>
@@ -65419,7 +66616,26 @@ async function submitDsCreate() {
       note:            $('#crm-assign-note').value.trim() || null,
     });
     btn.disabled = false;
-    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the assignees.'), 'error'); return; }
+    if (res.status !== 200) {
+      // Daily limit reached: an administrator may allow the full people one more for today and save again
+      if (res.status === 422 && res.body?.errors?.daily_limit && _crmAccess?.unrestricted) {
+        const full = userIds.filter(id => !_crmAssign.data.assignees.some(a => a.id === id) && (_crmAssign.capacity?.[id]?.remaining ?? 1) < 1);
+        if (full.length) {
+          const asked = await _crmAskReason({ title: 'Daily limit reached — grant an exception?', reasonRequired: true, submitLabel: 'Grant 1 extra & save' });
+          if (asked === null) return;
+          for (const id of full) {
+            const cap = _crmAssign.capacity[id];
+            const g = await API.crmGrantInquiryException({ user_id: id, extra_allowed: (cap?.extra || 0) + 1, reason: asked.reason });
+            if (g.status !== 201) { toast(_crmWsError(g, 'Could not grant the exception.'), 'error'); return; }
+            if (cap) { cap.extra += 1; cap.allowed += 1; cap.remaining += 1; }
+          }
+          $('#crm-assign-save').click();
+          return;
+        }
+      }
+      toast(_crmWsError(res, 'Could not save the assignees.'), 'error');
+      return;
+    }
     toast('Assignees saved.', 'success');
     _crmCloseAssignModal();
     if (_crmViewLead?.id === lead.id) {
@@ -65484,23 +66700,52 @@ async function submitDsCreate() {
   $('#crm-audit-next')?.addEventListener('click', () => { _crmAuditPage++; _crmLoadAudit(); });
   $('#crm-audit-close')?.addEventListener('click', () => { $('#crm-audit-modal').style.display = 'none'; });
 
-  // ── CRM sales analysis report (ribbon → Report): leads grouped by department, customer,
-  //    product…, previewed here and saved as PDF or CSV for sales analysis ──
-  const _crmRep = { group: 'department', data: null, optionsReady: false, seq: 0 };
-
-  // Sidebar entry per report type: icon, one-line hint, label until the server's list arrives
-  const _crmRepGroupMeta = {
-    department:       ['fa-building-user',   'Leads & revenue per department', 'Department'],
-    division:         ['fa-sitemap',         'Leads & revenue per division',   'Division'],
-    customer:         ['fa-user-tie',        'Each company’s deals',           'Customer'],
-    staff:            ['fa-id-badge',        'Performance per salesperson',    'Staff'],
-    source:           ['fa-bullhorn',        'Where leads come from',          'Source'],
-    product:          ['fa-box-open',        'What gets quoted & won',         'Product / service'],
-    customer_product: ['fa-heart',           'What each company prefers',      'Customer preferences'],
+  // ── CRM reports (ribbon → Report): leads grouped by department, staff, customer, industry,
+  //    period, product, price…, as sales figures or inquiry KPIs; previewed here with summary
+  //    tiles and a chart, saved as Excel / PDF / CSV, and a customer row opens that customer's history ──
+  const _CRM_REP_PREFS = 'crm-report-prefs';
+  const _crmRep = { group: 'department', view: 'sales', period: '', range: '30', data: null, optionsReady: false, seq: 0, chart: true, history: null, sort: null, searchTimer: null };
+  try { Object.assign(_crmRep, JSON.parse(localStorage.getItem(_CRM_REP_PREFS) || '{}')); } catch { /* storage blocked or bad JSON */ }
+  const _crmReportSavePrefs = () => {
+    try { localStorage.setItem(_CRM_REP_PREFS, JSON.stringify({ group: _crmRep.group, view: _crmRep.view, chart: _crmRep.chart })); } catch { /* storage blocked */ }
   };
 
+  // Report types: icon, one-line hint, label, and what one row is ("per …")
+  const _crmRepGroupMeta = {
+    staff:            ['fa-id-badge',        'Each salesperson’s KPIs & sales', 'Staff',                'salesperson'],
+    department:       ['fa-building-user',   'Inquiries, KPIs & revenue',       'Department',           'department'],
+    division:         ['fa-sitemap',         'Leads & revenue per division',    'Division',             'division'],
+    period:           ['fa-calendar-days',   'Daily, weekly, monthly, yearly',  'Period',               'period'],
+    customer:         ['fa-user-tie',        'Each customer’s history',         'Customer',             'customer'],
+    industry:         ['fa-industry',        'Inquiries & sales per industry',  'Industry',             'industry'],
+    source:           ['fa-bullhorn',        'Where leads come from',           'Source',               'lead source'],
+    product:          ['fa-box-open',        'Inquired, quoted & won',          'Product / service',    'product'],
+    customer_product: ['fa-heart',           'What each customer buys',         'Customer preferences', 'customer and item'],
+    price:            ['fa-percent',         'Discounts, approvals & values',   'Price & discount',     'discount band'],
+  };
+  const _crmRepSections = [
+    ['People & performance', ['staff', 'department', 'division', 'period']],
+    ['Customers & markets',  ['customer', 'industry', 'source']],
+    ['Products & pricing',   ['product', 'customer_product', 'price']],
+  ];
+  const _crmRepLeadGroups = ['department', 'division', 'customer', 'staff', 'source', 'industry', 'period'];
+  const _crmRepViews   = [['sales', 'Sales'], ['kpi', 'KPIs']];
+  const _crmRepPeriods = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
+  // Filter dropdowns: [element, chip label, options key, value of, label of]
+  const _crmRepFilterDefs = [
+    ['#crm-report-department', 'Department',  'departments', x => x.id,  x => x.name],
+    ['#crm-report-division',   'Division',    'divisions',   x => x.id,  x => x.name],
+    ['#crm-report-user',       'Salesperson', 'staff',       x => x.id,  x => x.name],
+    ['#crm-report-source',     'Source',      'sources',     x => x.key, x => x.label],
+    ['#crm-report-status',     'Status',      'statuses',    x => x.key, x => x.label],
+    ['#crm-report-industry',   'Industry',    'industries',  x => x,     x => x],
+    ['#crm-report-product',    'Product',     'products',    x => x.id,  x => x.name],
+  ];
+
   function openCrmReportModal() {
-    if (!_crmRep.optionsReady) _crmReportGroups(Object.entries(_crmRepGroupMeta).map(([key, m]) => ({ key, label: m[2] })));
+    if (!_crmRepGroupMeta[_crmRep.group]) _crmRep.group = 'department';
+    _crmReportGroups();
+    _crmReportShowHistory(false);
     _macShow($('#crm-report-modal'));
     // Fetch now, but hold the result until the window has zoomed in (macWinIn, .38s):
     // redrawing the table mid-animation is what made the open stutter
@@ -65509,50 +66754,218 @@ async function submitDsCreate() {
 
   function _crmReportParams() {
     const val = id => $(id)?.value || '';
+    const leadGroup = _crmRepLeadGroups.includes(_crmRep.group);
     return {
-      group_by: _crmRep.group, from: val('#crm-report-from'), to: val('#crm-report-to'),
+      group_by: _crmRep.group, view: leadGroup ? _crmRep.view : '', period: _crmRep.group === 'period' ? _crmRep.period : '',
+      from: val('#crm-report-from'), to: val('#crm-report-to'),
       department_id: val('#crm-report-department'), division_id: val('#crm-report-division'),
       user_id: val('#crm-report-user'), source: val('#crm-report-source'),
-      status: val('#crm-report-status'), search: val('#crm-report-search').trim(),
+      status: val('#crm-report-status'), industry: val('#crm-report-industry'), product_id: val('#crm-report-product'),
+      search: val('#crm-report-search').trim(),
     };
   }
 
   function _crmReportCell(type, v) {
-    if (v == null || v === '') return type === 'text' ? '' : '—';
+    if (v == null || v === '') return type === 'text' ? '' : '<span class="crm-rep-zero">—</span>';
+    if (type !== 'text' && Number(v) === 0) return '<span class="crm-rep-zero">0</span>';
     if (type === 'money') return escHtml(_crmDashMoney(v));
     if (type === 'pct')   return `${v}%`;
+    if (type === 'hours') return v < 48 ? `${v} h` : `${(v / 24).toFixed(1)} days`;
+    if (type === 'num')   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
     if (type === 'qty')   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 3 });
     if (type === 'int')   return Number(v).toLocaleString();
     return escHtml(String(v));
   }
 
   function _crmReportOptions(o) {
-    const fill = (id, list, all, keyOf, labelOf) => {
-      const el = $(id), cur = el.value;
-      el.innerHTML = `<option value="">${all}</option>` + list.map(x => `<option value="${escHtml(String(keyOf(x)))}">${escHtml(labelOf(x))}</option>`).join('');
+    _crmRepFilterDefs.forEach(([id, , key, valueOf, labelOf]) => {
+      const el = $(id), cur = el.value, all = el.options[0]?.textContent || 'All';
+      el.innerHTML = `<option value="">${escHtml(all)}</option>` + (o[key] || []).map(x => `<option value="${escHtml(String(valueOf(x)))}">${escHtml(labelOf(x))}</option>`).join('');
       el.value = cur;
-    };
-    fill('#crm-report-department', o.departments, 'All departments', x => x.id, x => x.name);
-    fill('#crm-report-division',   o.divisions,   'All divisions',   x => x.id, x => x.name);
-    fill('#crm-report-user',       o.staff,       'All staff',       x => x.id, x => x.name);
-    fill('#crm-report-source',     o.sources,     'All sources',     x => x.key, x => x.label);
-    fill('#crm-report-status',     o.statuses,    'Any status',      x => x.key, x => x.label);
-    _crmReportGroups(o.groups);
+    });
   }
 
-  function _crmReportGroups(groups) {
-    $('#crm-report-groups').innerHTML = groups.map(g => {
-      const [icon, hint] = _crmRepGroupMeta[g.key] || ['fa-table', ''];
-      return `<button type="button" class="crm-rep-group-btn${g.key === _crmRep.group ? ' active' : ''}" data-rep-group="${g.key}">
-        <i class="fa ${icon}"></i><span>${escHtml(g.label)}<small>${escHtml(hint)}</small></span></button>`;
+  /** The report list in the sidebar, in sections. */
+  function _crmReportGroups() {
+    $('#crm-report-groups').innerHTML = _crmRepSections.map(([title, keys]) => `<div class="crm-rep-section">${title}</div>` + keys.map(key => {
+      const [icon, hint, label] = _crmRepGroupMeta[key];
+      return `<button type="button" class="crm-rep-group-btn${key === _crmRep.group ? ' active' : ''}" data-rep-group="${key}">
+        <i class="fa ${icon}"></i><span>${escHtml(label)}<small>${escHtml(hint)}</small></span></button>`;
+    }).join('')).join('');
+  }
+
+  /** Active filters as removable chips, and their count on the Filters button. */
+  function _crmReportChips() {
+    const o = _crmRep.data?.options || {};
+    const chips = [];
+    const search = $('#crm-report-search').value.trim();
+    if (search) chips.push(['#crm-report-search', 'Customer', search]);
+    _crmRepFilterDefs.forEach(([id, label, key, valueOf, labelOf]) => {
+      const v = $(id).value;
+      if (!v) return;
+      const item = (o[key] || []).find(x => String(valueOf(x)) === v);
+      chips.push([id, label, item ? labelOf(item) : v]);
+    });
+    $('#crm-report-chips').innerHTML = chips.map(([id, label, value]) =>
+      `<button type="button" class="crm-rep-chip" data-rep-clear="${id}" title="Remove this filter"><span>${escHtml(label)}:</span> ${escHtml(value)} <i class="fa fa-xmark"></i></button>`).join('')
+      + (chips.length > 1 ? '<button type="button" class="crm-rep-chip" data-rep-clear="all" title="Remove every filter">Clear all <i class="fa fa-xmark"></i></button>' : '');
+    $('#crm-report-more-count').textContent = _crmRepFilterDefs.filter(([id]) => $(id).value).length || '';
+    return chips.length;
+  }
+
+  /** Title and a plain-language line on what the report shows. */
+  function _crmReportHeader(d) {
+    const [, , label, per] = _crmRepGroupMeta[d.group_by] || ['', '', d.group_label, 'row'];
+    const periodName = (_crmRepPeriods.find(p => p[0] === d.period)?.[1] || '');
+    const row = d.group_by === 'period' ? { day: 'day', week: 'week', month: 'month', year: 'year' }[d.period] : per;
+    const title = d.group_by === 'period' ? `${periodName} report` : label;
+    const desc = {
+      kpi:              `How quickly and how well inquiries are handled — one row per ${row}. Inquiries are counted when they arrive; follow-ups and quotations when they are done.`,
+      sales:            `Leads received in the period and what came of them — one row per ${row}.`,
+      product:          'How often each product was asked for, quoted and sold.',
+      customer_product: 'What each customer was quoted, item by item, and each item’s share of their quotes.',
+      price:            'Quotations made in the period by how much discount they give, whether the discount was approved, and how many were sold.',
+    }[d.view || d.group_by] || '';
+    $('#crm-report-title').textContent = d.view ? `${title} · ${d.view === 'kpi' ? 'KPIs' : 'Sales'}` : title;
+    $('#crm-report-desc').textContent = desc + (d.group_by === 'customer' ? ' Click a customer to see their full history.' : '');
+  }
+
+  /** The four to six figures that matter most for this report, from its totals. */
+  function _crmReportTiles(d) {
+    const t = d.totals || {};
+    const tile = (value, label, sub = '', tone = '') => `<div class="crm-rep-tile${tone ? ` crm-rep-tile--${tone}` : ''}"><b>${value}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    const money = v => escHtml(_crmDashMoney(v || 0, { compact: true }));
+    const num = v => _crmDashNum(v || 0);
+    const hours = v => v == null ? '—' : v < 48 ? `${v} h` : `${(v / 24).toFixed(1)} days`;
+    let tiles = [];
+    if (d.view === 'kpi') {
+      tiles = [
+        tile(num(t.inquiries), 'Inquiries received', `${(+t.per_day || 0).toLocaleString()} per day`),
+        tile(hours(t.avg_contact_hours), 'Avg time to first contact', `first response ${hours(t.avg_response_hours)}`),
+        tile(num(t.follow_ups_done), 'Follow-ups done'),
+        tile(num(t.quotations), 'Quotations made', `${_crmDashPct(t.inquiry_quote_rate)} of inquiries quoted`),
+        tile(_crmDashPct(t.quote_sale_rate), 'Quotation → sale', `${num(t.converted)} converted`, t.quote_sale_rate >= 30 ? 'good' : ''),
+        tile(num(t.overdue), 'Overdue inquiries', `${num(t.pending)} still pending`, t.overdue ? 'bad' : 'good'),
+        tile(money(t.won_value), 'Sales value', `${num(t.won)} won`),
+      ];
+    } else if (d.view === 'sales') {
+      tiles = [
+        tile(num(t.leads), 'Leads received', `${num(t.open)} still open`),
+        tile(num(t.won), 'Won', `${_crmDashPct(t.conversion_rate)} converted`, t.won ? 'good' : ''),
+        tile(num(t.lost), 'Lost'),
+        tile(money(t.won_value), 'Won value', t.avg_deal_value ? `avg ${escHtml(_crmDashMoney(t.avg_deal_value, { compact: true }))}` : ''),
+        tile(money(t.quoted_value), 'Quoted value', `${num(t.quotations)} quotations sent`),
+        tile(money(t.pipeline_value), 'Pipeline value', 'estimated'),
+      ];
+    } else if (d.group_by === 'price') {
+      tiles = [
+        tile(num(t.quotations), 'Quotations made', t.avg_value ? `avg ${escHtml(_crmDashMoney(t.avg_value, { compact: true }))}` : ''),
+        tile(money(t.discount), 'Discount given', `${_crmDashPct(t.discount_percent)} on average`),
+        tile(num(t.approved), 'Discounts approved', `${num(t.within_limit)} needed no approval`, 'good'),
+        tile(num(t.rejected), 'Discounts rejected', `${num(t.pending)} awaiting approval`, t.rejected ? 'bad' : ''),
+        tile(money(t.sales_value), 'Sales value', `${num(t.sold)} sold · ${_crmDashPct(t.sale_rate)}`),
+      ];
+    } else {
+      tiles = [
+        tile(num(d.rows.length), d.group_by === 'product' ? 'Products' : 'Customer & item pairs'),
+        tile(money(t.quoted_value), 'Quoted value', t.qty ? `${Number(t.qty).toLocaleString()} units` : ''),
+        tile(money(t.won_value), 'Won value', `${_crmDashPct(t.win_share)} of quoted`, t.won_value ? 'good' : ''),
+      ];
+    }
+    $('#crm-report-tiles').innerHTML = d.rows.length ? tiles.join('') : '';
+  }
+
+  /** The Sales / KPIs and Daily … Yearly switches, for the reports that have them. */
+  function _crmReportToolbar(d) {
+    const seg = (list, cur, attr) => list.map(([key, label]) => `<button type="button" ${attr}="${key}" class="${key === cur ? 'active' : ''}">${label}</button>`).join('');
+    $('#crm-report-views').innerHTML   = d.view ? seg(_crmRepViews, d.view, 'data-rep-view') : '';
+    $('#crm-report-periods').innerHTML = d.period ? seg(_crmRepPeriods, d.period, 'data-rep-period') : '';
+    $('#crm-report-chart-toggle').classList.toggle('active', _crmRep.chart);
+    $('#crm-report-chart-toggle').innerHTML = `<i class="fa fa-chart-bar"></i> ${_crmRep.chart ? 'Hide chart' : 'Show chart'}`;
+    $('#crm-report-hint').innerHTML = d.columns.some(c => c.hint)
+      ? '<i class="fa fa-circle-info"></i> Hover a column heading to see what it counts. Click a heading to sort.'
+      : 'Click a column heading to sort.';
+  }
+
+  /** Bars for the main figure of the report: the top rows, or every period in order. */
+  function _crmReportChart(d) {
+    const box = $('#crm-report-chart');
+    if (!_crmRep.chart || !d.rows.length || d.group_by === 'customer_product') { box.innerHTML = ''; return; }
+    const [key, title] = d.group_by === 'price' ? ['quotations', 'Quotations per discount band']
+      : d.group_by === 'product' ? ['quoted_value', 'Quoted value per product']
+      : d.view === 'kpi' ? ['inquiries', 'Inquiries received']
+      : d.rows.some(r => r.won_value) ? ['won_value', 'Won value'] : ['leads', 'Leads received'];
+    const col = d.columns.find(c => c.key === key);
+    const ordered = d.group_by === 'period' || d.group_by === 'price';
+    const rows = (ordered ? d.rows : [...d.rows].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10))
+      .map(r => ({ label: r.label, value: Number(r[key]) || 0 }));
+    if (rows.every(r => !r.value)) { box.innerHTML = ''; return; }
+    const max = Math.max(1, ...rows.map(r => r.value));
+    const by = ordered ? '' : ` — top ${rows.length}`;
+    box.innerHTML = `<div class="crm-rep-chart-title">${escHtml(title)}${escHtml(by)}</div><div class="crm-dash-bars">${rows.map(r => `
+      <div class="crm-dash-bar-row" title="${escHtml(r.label)}">
+        <span class="crm-dash-bar-label">${escHtml(r.label)}</span>
+        <span class="crm-dash-bar-track"><span class="crm-dash-bar" style="width:${Math.max(r.value ? 2 : 0, r.value / max * 100)}%;background:var(--accent)"></span></span>
+        <span class="crm-dash-bar-value">${_crmReportCell(col?.type || 'int', r.value)}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  /** The table, sorted by the clicked heading (customer preferences keep their customer blocks). */
+  function _crmReportTable(d) {
+    const right = c => c.type === 'text' ? '' : ' r';
+    const sortable = d.group_by !== 'customer_product';
+    const sort = sortable && _crmRep.sort && d.columns.some(c => c.key === _crmRep.sort.key) ? _crmRep.sort : null;
+    $('#crm-report-head').innerHTML = `<tr>${d.columns.map(c => {
+      const on = sort?.key === c.key;
+      const arrow = sortable ? `<i class="fa ${on ? (sort.dir === 'asc' ? 'fa-arrow-up' : 'fa-arrow-down') : 'fa-sort'} crm-rep-sort"></i>` : '';
+      return `<th class="${right(c)}${on ? ' sorted' : ''}"${sortable ? ` data-rep-sort="${c.key}"` : ''}${c.hint ? ` title="${escHtml(c.hint)}"` : ''}>${escHtml(c.label)}${arrow}</th>`;
+    }).join('')}</tr>`;
+
+    if (!d.rows.length) {
+      const filtered = _crmReportChips() > 0;
+      $('#crm-report-rows').innerHTML = `<tr><td colspan="${d.columns.length}"><div class="crm-rep-empty">
+        <i class="fa fa-magnifying-glass-chart"></i><b>Nothing to show for this period</b>
+        ${filtered ? 'Try removing a filter, or pick a longer period.' : 'Try a longer period.'}
+        <div class="crm-rep-empty-actions">
+          <button type="button" class="po-btn-ghost" data-rep-range="year"><i class="fa fa-calendar"></i> Show this year</button>
+          ${filtered ? '<button type="button" class="po-btn-ghost" data-rep-clear="all"><i class="fa fa-eraser"></i> Clear filters</button>' : ''}
+        </div></div></td></tr>`;
+      $('#crm-report-foot').innerHTML = '';
+      return;
+    }
+
+    let rows = d.rows;
+    if (sort) {
+      const col = d.columns.find(c => c.key === sort.key);
+      const val = r => r[sort.key];
+      rows = [...rows].sort((a, b) => {
+        const [x, y] = [val(a), val(b)];
+        if (x == null || x === '') return 1;
+        if (y == null || y === '') return -1;
+        const cmp = col.type === 'text' ? String(x).localeCompare(String(y), undefined, { numeric: true }) : x - y;
+        return sort.dir === 'asc' ? cmp : -cmp;
+      });
+    }
+    const drill = d.group_by === 'customer';
+    let prevCustomer = null;
+    $('#crm-report-rows').innerHTML = rows.map(row => {
+      // Customer preferences: name each customer once, at the top of their block
+      const first = 'customer' in row && row.customer !== prevCustomer;
+      prevCustomer = row.customer ?? null;
+      const cls = [first ? 'crm-rep-group' : '', drill ? 'crm-rep-link' : ''].filter(Boolean).join(' ');
+      return `<tr${cls ? ` class="${cls}"` : ''}${drill ? ` data-rep-customer="${escHtml(row.label)}" title="Show ${escHtml(row.label)}’s history"` : ''}>${d.columns.map(c =>
+        `<td class="${right(c)}">${c.key === 'customer' && !first ? '' : (c.key === 'customer' ? `<strong>${_crmReportCell(c.type, row[c.key])}</strong>` : _crmReportCell(c.type, row[c.key]))}</td>`).join('')}</tr>`;
     }).join('');
+    $('#crm-report-foot').innerHTML = `<tr>${d.columns.map((c, i) => `<td class="${right(c)}">${i === 0 ? 'Total' : (c.key in d.totals ? _crmReportCell(c.type, d.totals[c.key]) : '')}</td>`).join('')}</tr>`;
   }
 
   // settled: hold the redraw until this resolves (the window's open animation)
   async function _crmLoadReport(settled) {
     const seq  = ++_crmRep.seq;
-    const card = $('#crm-report-modal .crm-rep-card');
+    const card = $('#crm-report-main .crm-rep-card');
     const cols = _crmRep.data?.columns.length || 6;
+    _crmReportShowHistory(false);
+    _crmReportChips();
     // Keep the last report up, dimmed, so the table doesn't collapse to a spinner and jump back
     if (_crmRep.data) card.classList.add('loading');
     else $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
@@ -65562,38 +66975,96 @@ async function submitDsCreate() {
     if (res.status !== 200) {
       $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the report.')))}</td></tr>`;
       $('#crm-report-foot').innerHTML = '';
+      $('#crm-report-chart').innerHTML = '';
+      $('#crm-report-tiles').innerHTML = '';
       return;
     }
     const d = _crmRep.data = res.body.data;
     if (!_crmRep.optionsReady) {
       _crmReportOptions(d.options);
       _crmRep.optionsReady = true;
-    } else {
-      $('#crm-report-groups').querySelectorAll('[data-rep-group]').forEach(b => b.classList.toggle('active', b.dataset.repGroup === d.group_by));
     }
-    // Show the range actually used (the server fills in the last 30 days when left empty)
+    $('#crm-report-groups').querySelectorAll('[data-rep-group]').forEach(b => b.classList.toggle('active', b.dataset.repGroup === d.group_by));
+    // Show what was actually used (the server fills in the last 30 days and the period when left empty)
     $('#crm-report-from').value = d.filters.from;
     $('#crm-report-to').value   = d.filters.to;
+    if (d.view) _crmRep.view = d.view;
+    if (d.period) _crmRep.period = d.period;
+    $$('#crm-report-ranges [data-rep-range]').forEach(b => b.classList.toggle('active', b.dataset.repRange === _crmRep.range));
 
-    const r = c => c.type === 'text' ? '' : ' class="r"';
-    $('#crm-report-head').innerHTML = `<tr>${d.columns.map(c => `<th${r(c)}>${escHtml(c.label)}</th>`).join('')}</tr>`;
-    let prevCustomer = null;
-    $('#crm-report-rows').innerHTML = d.rows.length ? d.rows.map(row => {
-      // Customer preferences: name each customer once, at the top of their block
-      const first = 'customer' in row && row.customer !== prevCustomer;
-      prevCustomer = row.customer ?? null;
-      return `<tr${first ? ' class="crm-rep-group"' : ''}>${d.columns.map(c =>
-        `<td${r(c)}>${c.key === 'customer' && !first ? '' : (c.key === 'customer' ? `<strong>${_crmReportCell(c.type, row[c.key])}</strong>` : _crmReportCell(c.type, row[c.key]))}</td>`).join('')}</tr>`;
-    }).join('') : `<tr><td colspan="${d.columns.length}">${_crmWsPanelHtml('Nothing matches these filters.')}</td></tr>`;
-    $('#crm-report-foot').innerHTML = d.rows.length
-      ? `<tr>${d.columns.map((c, i) => `<td${r(c)}>${i === 0 ? 'Total' : (c.key in d.totals ? _crmReportCell(c.type, d.totals[c.key]) : '')}</td>`).join('')}</tr>`
-      : '';
-    $('#crm-report-summary').textContent = `${d.rows.length} ${d.rows.length === 1 ? 'row' : 'rows'} · by ${d.group_label.toLowerCase()} · leads created ${d.filters.from} → ${d.filters.to}`;
+    _crmReportChips();
+    _crmReportHeader(d);
+    _crmReportToolbar(d);
+    _crmReportTiles(d);
+    _crmReportChart(d);
+    _crmReportTable(d);
+    const span = `${_crmDashDay(d.filters.from)} – ${_crmDashDay(d.filters.to)}`;
+    $('#crm-report-summary').textContent = span;
+    $('#crm-report-foot-note').textContent = `${d.rows.length} ${d.rows.length === 1 ? 'row' : 'rows'} · ${span}`;
   }
 
-  async function _crmReportDownload(format, btn) {
+  // ── Customer history (drill-down from a customer row) ──
+  function _crmReportShowHistory(on) {
+    $('#crm-report-main').style.display    = on ? 'none' : '';
+    $('#crm-report-history').style.display = on ? '' : 'none';
+    $('.crm-rep-filterbar').style.display  = on ? 'none' : '';
+    if (!on) _crmRep.history = null;
+  }
+
+  async function _crmReportOpenHistory(customer) {
+    _crmReportShowHistory(true);
+    _crmRep.history = customer;
+    const box = $('#crm-report-history');
+    box.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const p = _crmReportParams();
-    const name = `crm-sales-by-${p.group_by.replace('_', '-')}-${p.from || 'last-30-days'}${p.to ? `-to-${p.to}` : ''}.${format}`;
+    const res = await API.crmCustomerHistory({ customer, department_id: p.department_id, division_id: p.division_id, user_id: p.user_id, source: p.source })
+      .catch(() => ({ status: 0 }));
+    if (_crmRep.history !== customer) return;
+    if (res.status !== 200) { box.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the customer history.'))); return; }
+    const h = res.body.data, s = h.summary;
+    const day = v => v ? escHtml(_crmDashDay(v)) : '—';
+    const pill = (label, color) => `<span class="crm-rep-pill" style="--pill:${escHtml(color || '#94a3b8')}">${escHtml(label)}</span>`;
+    const table = (title, head, rows, empty) => `<div class="crm-rep-history-title">${title}</div>
+      <div class="crm-rep-card"><table class="crm-audit-table crm-rep-table">
+        <thead><tr>${head.map(([label, right]) => `<th${right ? ' class="r"' : ''}>${label}</th>`).join('')}</tr></thead>
+        <tbody>${rows.length ? rows.join('') : `<tr><td colspan="${head.length}">${_crmWsPanelHtml(empty)}</td></tr>`}</tbody>
+      </table></div>`;
+    const tile = (value, label) => `<div class="crm-rep-tile"><b>${value}</b><span>${label}</span></div>`;
+
+    box.innerHTML = `
+      <div class="crm-rep-history-head">
+        <button type="button" class="po-btn-ghost" data-rep-history-back><i class="fa fa-arrow-left"></i> Back to the report</button>
+        <h3>${escHtml(h.customer)}</h3>
+        <span class="crm-rep-hint">${[s.industry, s.phone, s.email].filter(Boolean).map(escHtml).join(' · ')}${s.first_inquiry ? ` · customer since ${day(s.first_inquiry)}` : ''}</span>
+      </div>
+      <div class="crm-rep-tiles">
+        ${tile(_crmDashNum(s.inquiries), `inquiries · ${_crmDashNum(s.open)} open`)}
+        ${tile(_crmDashNum(s.quotations), 'quotations')}
+        ${tile(escHtml(_crmDashMoney(s.quoted_value, { compact: true })), 'quoted value')}
+        ${tile(_crmDashNum(s.sales), 'sales')}
+        ${tile(escHtml(_crmDashMoney(s.sales_value, { compact: true })), 'sales value')}
+      </div>
+      ${table('Inquiry history', [['Date'], ['Contact'], ['Source'], ['Department'], ['Owner'], ['Status'], ['Estimated value', true]],
+        h.inquiries.map(i => `<tr><td>${day(i.date)}</td><td>${escHtml(i.contact || '—')}</td><td>${escHtml(i.source || '—')}</td>
+          <td>${escHtml(i.department || '—')}</td><td>${escHtml(i.owner || 'Unassigned')}</td><td>${pill(i.stage, i.stage_color)}</td>
+          <td class="r">${_crmReportCell('money', i.value || null)}</td></tr>`), 'No inquiries.')}
+      ${table('Quotation history', [['Number'], ['Date'], ['Sent'], ['Status'], ['Discount', true], ['Total', true]],
+        h.quotations.map(q => `<tr><td><strong>${escHtml(q.number || '#' + q.id)}</strong>${q.version > 1 ? ` <span class="crm-ws-muted">v${q.version}</span>` : ''}</td>
+          <td>${day(q.date)}</td><td>${day(q.sent_at)}</td><td>${pill(q.status, q.status_color)}</td>
+          <td class="r">${q.discount_percent ? `${q.discount_percent}%` : '—'}</td><td class="r">${_crmReportCell('money', q.total)}</td></tr>`), 'No quotations.')}
+      ${table('Sales history', [['Closed'], ['Quotation'], ['Won by'], ['Value', true]],
+        h.sales.map(x => `<tr><td>${day(x.closed_at)}</td><td>${escHtml(x.quotation || '—')}</td><td>${escHtml(x.owner || '—')}</td>
+          <td class="r"><strong>${_crmReportCell('money', x.value)}</strong></td></tr>`), 'No sales yet.')}`;
+    $('#crm-report-summary').textContent = `Customer history · ${h.customer}`;
+  }
+
+  async function _crmReportDownload(format) {
+    const p = _crmReportParams();
+    const ext = format === 'excel' ? 'xlsx' : format;
+    const what = p.view === 'kpi' ? 'kpis' : 'sales';
+    const by = (p.group_by === 'period' && p.period ? p.period : p.group_by).replace('_', '-');
+    const name = `crm-${what}-by-${by}-${p.from || 'last-30-days'}${p.to ? `-to-${p.to}` : ''}.${ext}`;
+    const btn = $('#crm-report-download');
     btn.disabled = true;
     const res = await window.electronAPI.downloadFile(API.crmSalesAnalysisExportPath(format, p), name);
     btn.disabled = false;
@@ -65602,23 +67073,124 @@ async function submitDsCreate() {
     toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
   }
 
+  function _crmReportDlMenu(open) {
+    $('#crm-report-dl-menu').hidden = !open;
+    $('#crm-report-download').setAttribute('aria-expanded', String(open));
+  }
+
+  /** Quick ranges: today, this week (from Monday), this month, the last 30 days, this year. */
+  function _crmReportRange(key) {
+    const now = new Date();
+    const to = _crmIsoDay(now);
+    const from = key === 'today' ? to
+      : key === 'week' ? _crmIsoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)))
+      : key === 'month' ? _crmIsoDay(new Date(now.getFullYear(), now.getMonth(), 1))
+      : key === '30' ? _crmIsoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29))
+      : _crmIsoDay(new Date(now.getFullYear(), 0, 1));
+    return { from, to };
+  }
+
+  function _crmReportApplyRange(key) {
+    const { from, to } = _crmReportRange(key);
+    $('#crm-report-from').value = from;
+    $('#crm-report-to').value = to;
+    _crmRep.range = key;
+    _crmRep.period = ''; // let the server pick days / weeks / months for the new length
+    _crmLoadReport();
+  }
+
+  function _crmReportClear(target) {
+    if (target === 'all') {
+      $('#crm-report-search').value = '';
+      _crmRepFilterDefs.forEach(([id]) => { $(id).value = ''; });
+    } else {
+      $(target).value = '';
+    }
+    _crmLoadReport();
+  }
+
   $('#crm-report-groups')?.addEventListener('click', e => {
     const b = e.target.closest('[data-rep-group]');
-    if (!b || b.dataset.repGroup === _crmRep.group) return;
+    if (!b || (b.dataset.repGroup === _crmRep.group && !_crmRep.history)) return;
     _crmRep.group = b.dataset.repGroup;
+    _crmRep.sort = null;
+    _crmReportSavePrefs();
     _crmLoadReport();
   });
-  $('#crm-report-run')?.addEventListener('click', () => _crmLoadReport());
-  // Dropdowns and dates apply straight away; the search waits for Enter / Generate
-  $('#crm-report-modal .crm-rep-filters')?.addEventListener('change', () => _crmLoadReport());
-  $('#crm-report-reset')?.addEventListener('click', () => {
-    $('#crm-report-modal').querySelectorAll('.crm-rep-filters .po-field-input, #crm-report-search').forEach(el => { el.value = ''; });
-    _crmLoadReport();
+  $('#crm-report-ranges')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep-range]');
+    if (b) _crmReportApplyRange(b.dataset.repRange);
   });
-  $('#crm-report-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') _crmLoadReport(); });
-  $('#crm-report-pdf')?.addEventListener('click', e => _crmReportDownload('pdf', e.currentTarget));
-  $('#crm-report-csv')?.addEventListener('click', e => _crmReportDownload('csv', e.currentTarget));
-  $('#crm-report-refresh')?.addEventListener('click', () => _crmLoadReport());
+  $('#crm-report-more')?.addEventListener('click', e => {
+    const panel = $('#crm-report-filters');
+    panel.hidden = !panel.hidden;
+    e.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+  });
+  $('#crm-report-chips')?.addEventListener('click', e => {
+    const c = e.target.closest('[data-rep-clear]');
+    if (c) _crmReportClear(c.dataset.repClear);
+  });
+  $('#crm-report-main')?.addEventListener('click', e => {
+    const v = e.target.closest('[data-rep-view]');
+    if (v) { _crmRep.view = v.dataset.repView; _crmRep.sort = null; _crmReportSavePrefs(); _crmLoadReport(); return; }
+    const p = e.target.closest('[data-rep-period]');
+    if (p) { _crmRep.period = p.dataset.repPeriod; _crmLoadReport(); return; }
+    if (e.target.closest('#crm-report-chart-toggle')) {
+      _crmRep.chart = !_crmRep.chart;
+      _crmReportSavePrefs();
+      if (_crmRep.data) { _crmReportToolbar(_crmRep.data); _crmReportChart(_crmRep.data); }
+      return;
+    }
+    const th = e.target.closest('[data-rep-sort]');
+    if (th && _crmRep.data) {
+      // Click: highest first → lowest first → back to the report's own order
+      const key = th.dataset.repSort, cur = _crmRep.sort;
+      const first = _crmRep.data.columns.find(c => c.key === key)?.type === 'text' ? 'asc' : 'desc';
+      _crmRep.sort = cur?.key !== key ? { key, dir: first }
+        : cur.dir === first ? { key, dir: first === 'asc' ? 'desc' : 'asc' } : null;
+      _crmReportTable(_crmRep.data);
+      return;
+    }
+    const range = e.target.closest('[data-rep-range]');
+    if (range) { _crmReportApplyRange(range.dataset.repRange); return; }
+    const clear = e.target.closest('[data-rep-clear]');
+    if (clear) { _crmReportClear(clear.dataset.repClear); return; }
+    const c = e.target.closest('[data-rep-customer]');
+    if (c) _crmReportOpenHistory(c.dataset.repCustomer);
+  });
+  $('#crm-report-history')?.addEventListener('click', e => {
+    if (e.target.closest('[data-rep-history-back]')) {
+      _crmReportShowHistory(false);
+      if (_crmRep.data) _crmLoadReport();
+    }
+  });
+  // Dropdowns and dates apply straight away; typing in the search waits a moment
+  $('#crm-report-filters')?.addEventListener('change', () => _crmLoadReport());
+  ['#crm-report-from', '#crm-report-to'].forEach(id => $(id)?.addEventListener('change', () => {
+    if (!$('#crm-report-from').value || !$('#crm-report-to').value) return;
+    _crmRep.range = '';
+    _crmRep.period = '';
+    _crmLoadReport();
+  }));
+  $('#crm-report-search')?.addEventListener('input', () => {
+    clearTimeout(_crmRep.searchTimer);
+    _crmRep.searchTimer = setTimeout(() => _crmLoadReport(), 400);
+  });
+  $('#crm-report-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(_crmRep.searchTimer); _crmLoadReport(); } });
+  $('#crm-report-reset')?.addEventListener('click', () => _crmReportClear('all'));
+  $('#crm-report-download')?.addEventListener('click', e => { e.stopPropagation(); _crmReportDlMenu($('#crm-report-dl-menu').hidden); });
+  $('#crm-report-dl-menu')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep-dl]');
+    if (!b) return;
+    _crmReportDlMenu(false);
+    _crmReportDownload(b.dataset.repDl);
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.crm-rep-dl')) _crmReportDlMenu(false); });
+  document.addEventListener('keydown', e => {
+    const menu = $('#crm-report-dl-menu');
+    if (e.key === 'Escape' && menu && !menu.hidden) { e.stopPropagation(); _crmReportDlMenu(false); }
+  }, true);
+  $('#crm-report-refresh')?.addEventListener('click', () => _crmRep.history ? _crmReportOpenHistory(_crmRep.history) : _crmLoadReport());
   ['#crm-report-close', '#crm-report-close-btn'].forEach(id => $(id)?.addEventListener('click', () => _macHide($('#crm-report-modal'))));
 
   // macOS-style open/close: the window zooms out of the point that opened it (the clicked
@@ -66908,8 +68480,12 @@ async function submitDsCreate() {
             <input type="checkbox" class="mac-switch" id="crm-org-intake"${s.is_marketing_intake ? ' checked' : ''}>
           </div>
           <div class="mac-row">
-            <div class="mac-row-label">Discount approval limit<small>Percent — leave empty for no limit</small></div>
-            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:110px" placeholder="No limit" value="${s.discount_approval_limit_percent ?? ''}"> %</div>
+            <div class="mac-row-label">Discount approval limit<small>Quotations with a discount up to this % need no approval — over it, the head approves</small></div>
+            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-discount" min="0" max="100" step="0.01" style="width:110px" placeholder="Not set" value="${s.discount_approval_limit_percent ?? ''}"> %</div>
+          </div>
+          <div class="mac-row">
+            <div class="mac-row-label">Quotation value limit<small>Quotations with a total up to this need no approval — over it, the head approves. Leave either limit empty and every quotation needs approval</small></div>
+            <div class="mac-inline"><input type="number" class="po-field-input" id="crm-org-value-limit" min="0" step="0.01" style="width:140px" placeholder="Not set" value="${s.quotation_value_approval_limit ?? ''}"></div>
           </div>
           <div class="mac-row">
             <div class="mac-row-label">Follow-up days<small>Comma separated, e.g. 2, 5</small></div>
@@ -67005,9 +68581,11 @@ async function submitDsCreate() {
       msg = 'Pipeline unlinked.';
     } else if (t.matches('[data-org-save-settings]')) {
       const discount = $('#crm-org-discount').value;
+      const valueLimit = $('#crm-org-value-limit').value;
       const body = {
         is_marketing_intake: $('#crm-org-intake').checked,
         discount_approval_limit_percent: discount === '' ? null : Number(discount),
+        quotation_value_approval_limit: valueLimit === '' ? null : Number(valueLimit),
         followup_days: $('#crm-org-followups').value.split(/[\s,]+/).filter(Boolean).map(Number),
       };
       call = () => API.crmSaveDepartmentSettings(deptId, body);

@@ -356,7 +356,8 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::post('customers', [PosCustomerApiController::class, 'store'])->name('customers.store');
     Route::post('customers/import', [PosCustomerApiController::class, 'import'])->name('customers.import');
     Route::post('customers/import/preview', [PosCustomerApiController::class, 'importPreview'])->name('customers.import.preview');
-    Route::get('customers/duplicates', [PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
+    Route::get('customers/industries', [PosCustomerApiController::class, 'industries'])->name('customers.industries');
+    Route::get('customers/duplicates',[PosCustomerApiController::class, 'duplicates'])->name('customers.duplicates');
     // Desktop offline mode: full customer list download (read-only)
     Route::get('customers/offline-sync', [PosCustomerApiController::class, 'offlineSync'])->name('customers.offline-sync');
     Route::get('customers/{customer}', [PosCustomerApiController::class, 'show'])->name('customers.show');
@@ -678,6 +679,10 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'index'])           ->whereNumber('lead')->name('crm.leads.quotations.index');
     Route::post  ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'store'])           ->whereNumber('lead')->name('crm.leads.quotations.store');
     Route::post  ('crm/leads/{lead}/quotations/stock-check',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'stockCheck'])      ->whereNumber('lead')->name('crm.leads.quotations.stock-check');
+    Route::get   ('crm/leads/{lead}/quotations/customers',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'customers'])       ->whereNumber('lead')->name('crm.leads.quotations.customers');
+    Route::get   ('crm/leads/{lead}/quotations/catalog/brands',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogBrands'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.brands');
+    Route::get   ('crm/leads/{lead}/quotations/catalog/models',             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogModels'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.models');
+    Route::get   ('crm/leads/{lead}/quotations/catalog/products/{product}', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogProduct'])  ->whereNumber(['lead', 'product'])->name('crm.leads.quotations.catalog.product');
     Route::get   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'show'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.show');
     Route::put   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'update'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.update');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/revise',         [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'revise'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.revise');
@@ -692,6 +697,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/leads/{lead}/quotations/{quotation}/pdf',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'pdf'])             ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.pdf');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/send',           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'send'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.send');
     Route::get   ('crm/quotation-approvals',                                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'inbox'])           ->name('crm.quotation-approvals.index');
+    // Revision control: an issued quotation changes only through a revision request the head approves
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/revision-requests',                   [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'requestRevision']) ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.revision-requests.store');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/revision-requests/{revisionRequest}/approve', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'approveRevision']) ->whereNumber(['lead', 'quotation', 'revisionRequest'])->name('crm.leads.quotations.revision-requests.approve');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/revision-requests/{revisionRequest}/reject',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'rejectRevision'])  ->whereNumber(['lead', 'quotation', 'revisionRequest'])->name('crm.leads.quotations.revision-requests.reject');
+    Route::post  ('crm/leads/{lead}/quotations/{quotation}/revision-requests/{revisionRequest}/cancel',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'cancelRevision'])  ->whereNumber(['lead', 'quotation', 'revisionRequest'])->name('crm.leads.quotations.revision-requests.cancel');
+    Route::get   ('crm/quotation-revision-requests',                        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'revisionInbox'])   ->name('crm.quotation-revision-requests.index');
 
     // CRM closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
     Route::get   ('crm/leads/{lead}/close-options', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'options'])->whereNumber('lead')->name('crm.leads.close-options');
@@ -716,6 +727,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/reports/sales-analysis',     [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysis'])   ->name('crm.reports.sales-analysis');
     Route::get   ('crm/reports/sales-analysis/pdf', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisPdf'])->name('crm.reports.sales-analysis.pdf');
     Route::get   ('crm/reports/sales-analysis/csv', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisCsv'])->name('crm.reports.sales-analysis.csv');
+    Route::get   ('crm/reports/sales-analysis/excel', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisExcel'])->name('crm.reports.sales-analysis.excel');
+    // CRM customer history (drill-down from a customer row of the report): inquiries, quotations, sales
+    Route::get   ('crm/reports/customer-history',   [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'customerHistory'])->name('crm.reports.customer-history');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');
@@ -757,6 +771,19 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');
     Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');
     Route::get   ('crm/projects/{project}/history/flow', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistoryFlow'])->name('crm.projects.history.flow');
+    // CRM daily inquiry management: status pop-up, allocation record, limit exceptions, daily reports
+    Route::get   ('crm/inquiries/status',                     [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'status'])         ->name('crm.inquiries.status');
+    Route::get   ('crm/inquiries/allocations',                [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'allocations'])    ->name('crm.inquiries.allocations');
+    Route::get   ('crm/inquiries/exceptions',                 [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'exceptions'])     ->name('crm.inquiries.exceptions.index');
+    Route::post  ('crm/inquiries/exceptions',                 [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'grantException']) ->name('crm.inquiries.exceptions.store');
+    Route::delete('crm/inquiries/exceptions/{exception}',     [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'revokeException'])->whereNumber('exception')->name('crm.inquiries.exceptions.destroy');
+    Route::get   ('crm/inquiries/reports',                    [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'reports'])        ->name('crm.inquiries.reports.index');
+    Route::post  ('crm/inquiries/reports/generate',           [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'generate'])       ->name('crm.inquiries.reports.generate');
+    Route::get   ('crm/inquiries/reports/{report}',           [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'report'])         ->whereNumber('report')->name('crm.inquiries.reports.show');
+    Route::post  ('crm/inquiries/reports/{report}/review',    [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'review'])         ->whereNumber('report')->name('crm.inquiries.reports.review');
+    Route::post  ('crm/inquiries/reports/{report}/send',      [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'send'])           ->whereNumber('report')->name('crm.inquiries.reports.send');
+    Route::get   ('crm/leads/{lead}/inquiry-capacity',        [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'leadCapacity'])   ->whereNumber('lead')->name('crm.leads.inquiry-capacity');
+
     Route::get   ('crm/overview',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'overview'])    ->name('crm.overview');
     Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
     Route::get   ('crm/customers/{customer}',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customer'])    ->whereNumber('customer')->name('crm.customers.show');

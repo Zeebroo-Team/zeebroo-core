@@ -34,6 +34,7 @@ use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
 use Modules\Sales\Models\QuotationCustomerResponse;
 use Modules\Sales\Models\QuotationDispatch;
+use Modules\Sales\Models\QuotationRevisionRequest;
 use Modules\Sales\Services\QuotationPrintService;
 use Modules\Sales\Services\QuotationService;
 use Modules\Sales\Services\QuotationTemplateService;
@@ -387,7 +388,8 @@ test('the stock check can be switched off', function () {
 
     $res = crmQuote('stockCheck', 3, [$this->lead->id], 'POST', ['items' => [['item_type' => 'product', 'product_id' => 1, 'quantity' => 99]]]);
 
-    expect($res->getData(true)['data'])->toBe(['mode' => 'off', 'has_shortage' => false, 'lines' => []]);
+    // (prices: the standard prices for automatic pricing — none set in this catalog)
+    expect($res->getData(true)['data'])->toBe(['mode' => 'off', 'has_shortage' => false, 'lines' => [], 'prices' => []]);
 });
 
 test('in branch mode the stock is that of the quotation\'s branch', function () {
@@ -688,7 +690,7 @@ test('rejected â†’ locked; a new version carries the lines over', function 
         ->and(crmQuoteStatus(fn () => crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody())))->toBe(422)
         ->and(crmQuoteStatus(fn () => crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST')))->toBe(422);
 
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
 
     expect($v2->quote_number)->toBe('QT-0001-v2')
         ->and($v2->version)->toBe(2)
@@ -950,10 +952,13 @@ test('the Sales quotation API keeps a lead quotation\'s approval history: no del
 
 // â”€â”€ Negotiation: customer responses, versions, discount limit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-/** Set the Sales department's discount approval limit (null = none set). */
-function crmQuoteSetLimit(?float $percent): void
+/** Set the Sales department's discount (%) and quotation value approval limits (null = none set). */
+function crmQuoteSetLimit(?float $percent, ?float $value = null): void
 {
-    app(CrmOrgService::class)->saveSettings(test()->business, Department::find(10), ['discount_approval_limit_percent' => $percent]);
+    app(CrmOrgService::class)->saveSettings(test()->business, Department::find(10), [
+        'discount_approval_limit_percent' => $percent,
+        'quotation_value_approval_limit'  => $value,
+    ]);
 }
 
 /** A quotation on the test lead taken through approval and sent (the job runs synchronously). */
@@ -994,7 +999,7 @@ test('the customer accepting wins the lead; rejecting loses it with a lost reaso
     expect($q->fresh()->status)->toBe('accepted')
         ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_WON)
         ->and(crmQuoteStatus(fn () => crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'reject'])))->toBe(422)
-        ->and(crmQuoteStatus(fn () => crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')))->toBe(422);
+        ->and(crmQuoteStatus(fn () => crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')))->toBe(422);
 
     // A second lead whose customer says no
     $this->lead = app(LeadAssignmentService::class)->sync(app(LeadService::class)->create($this->sales, ['name' => 'Ruwan', 'email' => 'ruwan@example.com'], 1), [3], null, 2);
@@ -1027,7 +1032,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
     $q = crmQuoteSent();
     crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'discount_request', 'requested_discount' => 10]);
 
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     expect($v2->quote_number)->toBe('QT-0001-v2')
         ->and($v2->version)->toBe(2)
         ->and($v2->parent_quotation_id)->toBe($q->id)
@@ -1038,7 +1043,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
     // v2 â†’ v3 carries on the numbering from the first version
     crmQuote('submit', 3, [$this->lead->id, $v2->id], 'POST');
     crmQuote('approve', 2, [$this->lead->id, $v2->id], 'POST');
-    $v3 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $v2->id], 'POST')->getData(true)['data']['id']);
+    $v3 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $v2->id], 'POST')->getData(true)['data']['id']);
 
     expect($v3->quote_number)->toBe('QT-0001-v3')
         ->and($v3->version)->toBe(3)
@@ -1055,7 +1060,7 @@ test('a revised version is n+1, numbered with a suffix, and the old one is super
 
 test('a superseded version is read-only', function () {
     $q  = crmQuoteSent();
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     $q  = $q->fresh();
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
 
@@ -1069,7 +1074,7 @@ test('a superseded version is read-only', function () {
         ->and(crmQuoteStatus(fn () => crmQuote('approve', 2, [$this->lead->id, $q->id], 'POST')))->toBe(422)
         ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', $send)))->toBe(422)
         ->and(crmQuoteStatus(fn () => crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'accept'])))->toBe(422)
-        ->and(crmQuoteStatus(fn () => crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')))->toBe(422)
+        ->and(crmQuoteStatus(fn () => crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')))->toBe(422)
         ->and(fn () => app(QuotationService::class)->delete($q))->toThrow(ValidationException::class)
         ->and(app(QuotationService::class)->markAccepted($q)->fresh()->status)->toBe('superseded')
         ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(2)
@@ -1082,7 +1087,7 @@ test('the diff between versions lists added, removed and changed lines and the t
         ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 100],
         ['item_type' => 'custom', 'description' => 'Install', 'quantity' => 1, 'unit_price' => 50],
     ]);
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody([
         ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 100, 'discount_amount' => 20],
         ['item_type' => 'custom', 'description' => 'Cable', 'quantity' => 1, 'unit_price' => 10],
@@ -1107,7 +1112,7 @@ test('the diff between versions lists added, removed and changed lines and the t
         ->and(crmQuoteStatus(fn () => crmQuote('diff', 3, [$this->lead->id, $q->id])))->toBe(422);
 });
 
-test('every quotation needs the head\'s approval, whatever the discount', function () {
+test('with no value limit set, every quotation needs the head\'s approval, whatever the discount', function () {
     Queue::fake();
     crmQuoteSetLimit(10);
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
@@ -1134,6 +1139,59 @@ test('every quotation needs the head\'s approval, whatever the discount', functi
     expect(crmQuote('send', 3, [$this->lead->id, $within->id], 'POST', $send)->getStatusCode())->toBe(200);
 });
 
+test('within both limits a quotation is issued without the head and can be sent', function () {
+    Queue::fake();
+    Mail::fake();
+    crmQuoteSetLimit(10, 100000);
+    $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
+
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['value_limit'])->toEqual(100000.0);
+
+    // 5% off, a small total
+    $q      = crmQuoteCreate(null, ['discount_amount' => 10]);
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['approval']['required'])->toBeFalse()
+        ->and($detail['approval']['reasons'])->toBe([])
+        ->and($detail['approvers'])->toBe([]);
+
+    // No approver ticked — none is needed
+    $res = crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST', ['approver_ids' => []]);
+    expect($res->getStatusCode())->toBe(200)
+        ->and($res->getData(true)['data']['within_limits'])->toBeTrue()
+        ->and($q->fresh()->status)->toBe('approved')
+        ->and($q->fresh()->approved_by)->toBeNull()
+        ->and(QuotationApproval::where('quotation_id', $q->id)->pluck('action')->all())->toBe([QuotationApproval::ACTION_WITHIN_LIMIT])
+        ->and(crmQuoteLeadStatus())->not->toBe(LeadStage::STATUS_PENDING_APPROVAL);
+    Mail::assertNothingQueued();
+    Mail::assertNothingSent();
+
+    expect(crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', $send)->getStatusCode())->toBe(200);
+});
+
+test('a total over the value limit needs the head\'s approval', function () {
+    Queue::fake();
+    crmQuoteSetLimit(10, 100);   // the 2 × 100 quotation is over 100
+
+    $q      = crmQuoteCreate();
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['approval']['required'])->toBeTrue()
+        ->and($detail['approval']['value']['over_limit'])->toBeTrue()
+        ->and($detail['approval']['reasons'][0])->toContain('over the 100.00 limit');
+
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    expect($q->fresh()->status)->toBe('pending_approval')
+        ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_PENDING_APPROVAL);
+});
+
+test('a discount over the limit needs the head\'s approval even under the value limit', function () {
+    Queue::fake();
+    crmQuoteSetLimit(10, 100000);
+
+    $q = crmQuoteCreate(null, ['discount_amount' => 30]);   // 15%
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    expect($q->fresh()->status)->toBe('pending_approval');
+});
+
 test('a revised version needs approval again', function () {
     Queue::fake();
     $send = ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'];
@@ -1150,7 +1208,7 @@ test('a revised version needs approval again', function () {
     crmQuote('respond', 3, [$this->lead->id, $q->id], 'POST', ['response' => 'discount_request', 'requested_discount' => 20]);
 
     // The customer wants 20%; the staff give 20% in v2 â†’ over the 10% limit
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody(null, ['discount_amount' => 40]));
 
     expect(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $v2->id], 'POST', $send)))->toBe(422)
@@ -1161,7 +1219,7 @@ test('a revised version needs approval again', function () {
 test('the customer window shows every version of a quotation', function () {
     $customerId = DB::table('pos_customers')->insertGetId(['business_id' => 7, 'name' => 'Kasun']);
     $q  = crmQuoteSent(null, ['customer_id' => $customerId]);
-    $v2 = Quotation::findOrFail(crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Quotation::findOrFail(crmQuote('revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
 
     $versions = crmQuote('customerVersions', 3, [$customerId, $q->id])->getData(true)['data'];
     expect(array_column($versions, 'id'))->toBe([$q->id, $v2->id])
@@ -1183,4 +1241,251 @@ test('the customer responses migration rolls back and runs again', function () {
     expect(Schema::hasTable('quotation_customer_responses'))->toBeFalse();
     (require $file)->up();
     expect(Schema::hasColumns('quotation_customer_responses', ['quotation_id', 'version', 'response', 'requested_discount', 'notes', 'recorded_by']))->toBeTrue();
+});
+
+// ── Automatic pricing ────────────────────────────────────────────────────
+
+/** The catalog's standard price for the Solar panel (1) is 150; the Inverter (2) has none. */
+function crmQuoteStubStandardPrices(): void
+{
+    app()->instance(\Modules\Pos\Services\CrmQuotationCatalogService::class, new class(app(\Modules\Pos\Services\PosCatalogService::class)) extends \Modules\Pos\Services\CrmQuotationCatalogService {
+        public function standardPrices(Business $business, array $productIds, ?int $branchId = null): array
+        {
+            return array_intersect_key([1 => 150.0], array_flip(array_map('intval', $productIds)));
+        }
+    });
+}
+
+it('saves the standard price with each product line and shows a changed price to the approver', function () {
+    crmQuoteStubStandardPrices();
+    $q = crmQuoteCreate([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 120],
+        ['item_type' => 'product', 'product_id' => 2, 'description' => 'Inverter',    'quantity' => 1, 'unit_price' => 80],
+        ['item_type' => 'custom',  'description' => 'Installation', 'quantity' => 1, 'unit_price' => 50],
+    ]);
+
+    $items = $q->items()->orderBy('sort_order')->get();
+    expect((float) $items[0]->unit_price)->toBe(120.0)
+        ->and((float) $items[0]->list_price)->toBe(150.0)
+        ->and($items[1]->list_price)->toBeNull()   // no standard price → typed in, not a change
+        ->and($items[2]->list_price)->toBeNull();
+
+    $detail = crmQuote('show', 2, [test()->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['items'][0]['price_changed'])->toBeTrue()
+        ->and($detail['price_changes'])->toHaveCount(1)
+        ->and($detail['price_changes'][0]['list_price'])->toEqual(150)
+        ->and($detail['price_changes'][0]['unit_price'])->toEqual(120)
+        ->and($detail['price_changes'][0]['change_percent'])->toEqual(-20);
+});
+
+it('fills in and locks the standard price for users who may not change prices', function () {
+    crmQuoteStubStandardPrices();
+    app(\Modules\CRM\Services\CrmPermissionService::class)->saveForUser($this->business, 3, ['quotations_price_edit' => false], []);
+
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['can_change_price'])->toBeFalse()
+        ->and(crmQuote('index', 2, [$this->lead->id])->getData(true)['meta']['can_change_price'])->toBeTrue();
+
+    $q = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 1]]);
+    $item = $q->items()->first();
+
+    expect((float) $item->unit_price)->toBe(150.0)
+        ->and((float) $q->fresh()->total)->toBe(300.0)
+        ->and($item->isPriceChanged())->toBeFalse();
+});
+
+it('returns the standard prices with the stock check', function () {
+    crmQuoteStubStandardPrices();
+    $data = crmQuote('stockCheck', 3, [$this->lead->id], 'POST', ['items' => [
+        ['item_type' => 'product', 'product_id' => 1, 'quantity' => 1],
+        ['item_type' => 'product', 'product_id' => 2, 'quantity' => 1],
+    ]])->getData(true)['data'];
+
+    expect($data['prices'])->toBe(['1' => 150]);
+});
+
+it('keeps the standard price when a quotation is revised', function () {
+    crmQuoteStubStandardPrices();
+    $q = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 140]]);
+    $q->update(['status' => Quotation::STATUS_APPROVED]);
+
+    $revision = app(QuotationService::class)->revise($q->fresh());
+
+    expect((float) $revision->items()->first()->list_price)->toBe(150.0)
+        ->and($revision->items()->first()->isPriceChanged())->toBeTrue();
+});
+
+// ── Revision control ─────────────────────────────────────────────────────
+
+test('staff cannot change an issued quotation directly — only through a revision request', function () {
+    $q = crmQuoteSent();
+
+    expect(crmQuoteStatus(fn () => crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody())))->toBe(422)
+        ->and(crmQuoteStatus(fn () => crmQuote('revise', 3, [$this->lead->id, $q->id], 'POST')))->toBe(403)
+        ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(1);
+
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['is_locked'])->toBeTrue()
+        ->and($detail['can']['edit'])->toBeFalse()
+        ->and($detail['can']['revise'])->toBeFalse()
+        ->and($detail['can']['request_revision'])->toBeTrue()
+        ->and($detail['revision_auto_approve'])->toBeFalse();
+});
+
+test('a revision request waits for the head, who approves it into a new version', function () {
+    $q = crmQuoteSent();
+
+    $res = crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Customer wants 2 more panels']);
+    $req = QuotationRevisionRequest::sole();
+    expect($res->getStatusCode())->toBe(201)
+        ->and($res->getData(true)['approved'])->toBeFalse()
+        ->and($req->status)->toBe('pending')
+        ->and($req->requested_by)->toBe(3)
+        ->and($req->version)->toBe(1)
+        ->and($q->fresh()->status)->toBe('sent')             // untouched until the head decides
+        ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(1)
+        ->and($res->getData(true)['data']['pending_revision']['reason'])->toBe('Customer wants 2 more panels')
+        ->and($res->getData(true)['data']['can']['request_revision'])->toBeFalse()   // one at a time
+        ->and(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Again'])))->toBe(422)
+        // Staff cannot decide their own request
+        ->and(crmQuoteStatus(fn () => crmQuote('approveRevision', 3, [$this->lead->id, $q->id, $req->id], 'POST')))->toBe(403);
+
+    // The head sees it in the inbox; the staff do not
+    expect(array_column(crmQuote('revisionInbox', 2)->getData(true)['data'], 'id'))->toBe([$req->id])
+        ->and(crmQuote('revisionInbox', 3)->getData(true)['data'])->toBe([]);
+
+    $res = crmQuote('approveRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST', ['comment' => 'OK, keep the discount']);
+    $v2  = Quotation::findOrFail($res->getData(true)['data']['id']);
+    $req = $req->fresh();
+
+    expect($v2->quote_number)->toBe('QT-0001-v2')
+        ->and($v2->status)->toBe('draft')
+        ->and($v2->parent_quotation_id)->toBe($q->id)
+        ->and($q->fresh()->status)->toBe('superseded')        // the original is kept, read-only
+        ->and($req->status)->toBe('approved')
+        ->and($req->decided_by)->toBe(2)
+        ->and($req->decision_comment)->toBe('OK, keep the discount')
+        ->and($req->revision_id)->toBe($v2->id)
+        ->and($req->revised_by)->toBeNull()
+        ->and(crmQuoteLeadStatus())->toBe(LeadStage::STATUS_QUOTATION_PREPARING)
+        ->and(crmQuote('revisionInbox', 2)->getData(true)['data'])->toBe([]);
+
+    // Whoever makes the changes in the new version is recorded
+    crmQuote('update', 3, [$this->lead->id, $v2->id], 'PUT', crmQuoteBody([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 4, 'unit_price' => 100],
+    ]));
+    expect($req->fresh()->revised_by)->toBe(3)
+        ->and($req->fresh()->revised_at)->not->toBeNull();
+
+    // The version history says who asked, who approved and who changed each revision
+    $versions = crmQuote('versions', 3, [$this->lead->id, $v2->id])->getData(true)['data'];
+    expect($versions[0]['revision'])->toBeNull()
+        ->and($versions[1]['revision']['requested_by']['id'])->toBe(3)
+        ->and($versions[1]['revision']['decided_by']['id'])->toBe(2)
+        ->and($versions[1]['revision']['revised_by']['id'])->toBe(3)
+        ->and($versions[1]['revision']['reason'])->toBe('Customer wants 2 more panels');
+
+    $detail = crmQuote('show', 3, [$this->lead->id, $v2->id])->getData(true)['data'];
+    expect($detail['revision_of']['id'])->toBe($req->id)
+        ->and(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['revision_requests'][0]['status'])->toBe('approved');
+});
+
+test('the head can reject a revision request with a reason; the quotation stays as it is', function () {
+    $q   = crmQuoteSent();
+    crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Lower the price']);
+    $req = QuotationRevisionRequest::sole();
+
+    expect(crmQuoteStatus(fn () => crmQuote('rejectRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST')))->toBe(422);
+
+    crmQuote('rejectRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST', ['comment' => 'Price is already at the floor']);
+
+    expect($req->fresh()->status)->toBe('rejected')
+        ->and($req->fresh()->decided_by)->toBe(2)
+        ->and($q->fresh()->status)->toBe('sent')
+        ->and(Quotation::where('lead_id', $this->lead->id)->count())->toBe(1)
+        // Decided once only
+        ->and(crmQuoteStatus(fn () => crmQuote('approveRevision', 2, [$this->lead->id, $q->id, $req->id], 'POST')))->toBe(422)
+        // …and a new request can be made after a rejection
+        ->and(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Customer insists'])))->toBe(201);
+});
+
+test('a revision request needs a reason, an issued quotation and can be withdrawn by the requester', function () {
+    $draft = crmQuoteCreate();
+    expect(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $draft->id], 'POST', ['reason' => 'x'])))->toBe(422);
+
+    $q = crmQuoteSent();
+    expect(crmQuoteStatus(fn () => crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => '  '])))->toBe(422)
+        ->and(QuotationRevisionRequest::count())->toBe(0);
+
+    crmQuote('requestRevision', 3, [$this->lead->id, $q->id], 'POST', ['reason' => 'Wrong model']);
+    $req = QuotationRevisionRequest::sole();
+    crmQuote('cancelRevision', 3, [$this->lead->id, $q->id, $req->id], 'POST');
+
+    expect($req->fresh()->status)->toBe('cancelled')
+        ->and($q->fresh()->status)->toBe('sent');
+});
+
+test('a head asking for a revision gets the new version at once, recorded as approved by them', function () {
+    $q   = crmQuoteSent();
+    $res = crmQuote('requestRevision', 2, [$this->lead->id, $q->id], 'POST', ['reason' => 'Add installation']);
+    $req = QuotationRevisionRequest::sole();
+
+    expect($res->getStatusCode())->toBe(201)
+        ->and($res->getData(true)['approved'])->toBeTrue()
+        ->and($res->getData(true)['data']['quote_number'])->toBe('QT-0001-v2')
+        ->and($req->status)->toBe('approved')
+        ->and($req->requested_by)->toBe(2)
+        ->and($req->decided_by)->toBe(2)
+        ->and($q->fresh()->status)->toBe('superseded');
+});
+// ── Prepared by ───────────────────────────────────────────────────────────
+
+test('a new quotation is prepared by the signed-in user, from their CRM profile', function () {
+    // Nothing saved: the HR record's full name (no job title / phone on file)
+    DB::table('hr_employees')->where('business_id', $this->business->id)->where('user_id', 3)->update(['full_name' => 'Sunil Fernando']);
+    $res = crmQuote('index', 3, [$this->lead->id]);
+    expect($res->getData(true)['meta']['prepared_by'])->toBe(['name' => 'Sunil Fernando', 'designation' => null, 'phone' => null]);
+
+    // Their own CRM profile wins
+    app(\Modules\CRM\Services\CrmProfileService::class)->save($this->business->id, 3, ['designation' => 'Sales Executive', 'phone' => '077 123 4567']);
+    $q = crmQuoteCreate();
+
+    expect($q->prepared_by)->toBe(3)
+        ->and($q->preparedByDetails())->toBe(['name' => 'Sunil Fernando', 'designation' => 'Sales Executive', 'phone' => '077 123 4567'])
+        ->and(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['prepared_by'])
+        ->toBe(['name' => 'Sunil Fernando', 'designation' => 'Sales Executive', 'phone' => '077 123 4567']);
+
+    // A later profile change does not rewrite the quotation
+    app(\Modules\CRM\Services\CrmProfileService::class)->save($this->business->id, 3, ['designation' => 'Sales Manager']);
+    expect($q->fresh()->prepared_by_designation)->toBe('Sales Executive');
+});
+
+test('the editor can change "Prepared by" and keep it as the CRM profile', function () {
+    $q = crmQuoteCreate(null, ['prepared_by_name' => 'S. Fernando', 'prepared_by_designation' => 'Engineer', 'prepared_by_phone' => '011 222 3333']);
+    expect($q->preparedByDetails())->toBe(['name' => 'S. Fernando', 'designation' => 'Engineer', 'phone' => '011 222 3333']);
+
+    // Not remembered: the profile is unchanged
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['prepared_by']['designation'])->toBeNull();
+
+    // Saving without the fields keeps them; an empty name falls back to the preparer's profile
+    crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody());
+    expect($q->fresh()->prepared_by_designation)->toBe('Engineer');
+    crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody(null, ['prepared_by_name' => '', 'prepared_by_designation' => 'Lead Engineer', 'remember_prepared_by' => true]));
+    expect($q->fresh()->prepared_by_name)->toBe('Sunil Silva')
+        ->and(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['prepared_by'])
+        ->toBe(['name' => 'Sunil Silva', 'designation' => 'Lead Engineer', 'phone' => null]);
+});
+
+test('"Prepared by" prints on the PDF and in custom HTML templates', function () {
+    $q = crmQuoteCreate(null, ['prepared_by_designation' => 'Sales Executive', 'prepared_by_phone' => '077 123 4567']);
+
+    $html = view('sales::quotations.print', app(QuotationPrintService::class)->viewData($this->business, $q->fresh()) + ['pdf' => true, 'logoSrc' => null])->render();
+    expect($html)->toContain('Prepared By')->toContain('Sunil')->toContain('Sales Executive')->toContain('Tel: 077 123 4567');
+
+    crmQuoteSetupSave(['template' => 'custom', 'custom_html' => '{{#has_prepared_by}}<p>{{prepared_by_name}}|{{prepared_by_designation}}|{{prepared_by_phone}}</p>{{/has_prepared_by}}']);
+    expect(app(QuotationTemplateService::class)->render($this->business, $q->fresh()))->toContain('<p>Sunil Silva|Sales Executive|077 123 4567</p>');
+
+    // A new version keeps who prepared it
+    $q->update(['status' => Quotation::STATUS_APPROVED]);
+    $v2 = app(QuotationService::class)->revise($q->fresh());
+    expect($v2->preparedByDetails())->toBe(['name' => 'Sunil Silva', 'designation' => 'Sales Executive', 'phone' => '077 123 4567']);
 });

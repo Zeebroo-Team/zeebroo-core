@@ -3,7 +3,7 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>CRM sales analysis</title>
+<title>{{ $title }}</title>
 <style>
     body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #1e293b; }
     h1 { font-size: 16px; margin: 0 0 2px; }
@@ -14,10 +14,15 @@
     td.r, th.r { text-align: right; }
     tr.total td { font-weight: bold; border-top: 2px solid #cbd5e1; background: #f8fafc; }
     tr.group td { padding-top: 8px; }
+    {{-- The KPI view is wide: smaller type so it fits a landscape page --}}
+    @if (count($report['columns']) > 12)
+        body { font-size: 7.5px; }
+        th, td { padding: 3px 3px; }
+    @endif
 </style>
 </head>
 <body>
-    <h1>{{ $business->name }} — Sales analysis by {{ strtolower($report['group_label']) }}</h1>
+    <h1>{{ $business->name }} — {{ $title }}</h1>
     <div class="muted">{{ $filters }} · {{ count($report['rows']) }} {{ count($report['rows']) === 1 ? 'row' : 'rows' }} · generated {{ now()->format('M j, Y g:i A') }}</div>
 
     <table>

@@ -21,6 +21,11 @@ use Modules\CRM\Models\Project;
  *
  * Whether the caller may assign at all is LeadPolicy::canAssign (department head / admin) and
  * is checked by the controllers; this service only lets people of the lead's department in.
+ *
+ * Every person added counts toward their daily inquiry allocation (InquiryAllocationService):
+ * a change made by a person is refused once someone added would pass today's limit, and every
+ * addition is written to the allocation record. Stage automations and system moves (no acting
+ * user) are recorded but not limited.
  */
 class LeadAssignmentService
 {
@@ -29,6 +34,7 @@ class LeadAssignmentService
         private readonly LeadService $leads,
         private readonly LeadAuditService $audit,
         private readonly LeadStageService $stages,
+        private readonly InquiryAllocationService $allocations,
     ) {}
 
     /** Users the lead may be assigned to: its department's staff with a login plus the head. */
@@ -102,10 +108,13 @@ class LeadAssignmentService
         return $this->apply($lead, $ids, $byUserId, $note);
     }
 
-    /** Add people to the lead, keeping who is already on it (and the primary). */
-    public function add(Lead $lead, array $userIds, ?int $byUserId, ?string $note = null): Lead
+    /**
+     * Add people to the lead, keeping who is already on it (and the primary). Stage automations
+     * pass $enforceDailyLimit false: the lead still counts toward the day, but is never refused.
+     */
+    public function add(Lead $lead, array $userIds, ?int $byUserId, ?string $note = null, bool $enforceDailyLimit = true): Lead
     {
-        return $this->apply($lead, [...$this->assigneeIds($lead), ...array_map('intval', $userIds)], $byUserId, $note);
+        return $this->apply($lead, [...$this->assigneeIds($lead), ...array_map('intval', $userIds)], $byUserId, $note, $enforceDailyLimit);
     }
 
     /** Take one person off the lead; the next one becomes primary if they were. */
@@ -149,6 +158,7 @@ class LeadAssignmentService
     public function clear(Lead $lead): void
     {
         DB::transaction(function () use ($lead) {
+            $this->allocations->release($lead, $this->assigneeIds($lead));
             $lead->assignees()->get()->each->delete();
             if ($lead->assigned_to !== null) {
                 $lead->update(['assigned_to' => null]);
@@ -159,7 +169,7 @@ class LeadAssignmentService
     /**
      * @param  int[]  $ids  the assignees after the change, primary first
      */
-    private function apply(Lead $lead, array $ids, ?int $byUserId, ?string $note): Lead
+    private function apply(Lead $lead, array $ids, ?int $byUserId, ?string $note, bool $enforceDailyLimit = true): Lead
     {
         $ids    = array_values(array_unique(array_map('intval', $ids)));
         $before = $this->assigneeIds($lead);
@@ -170,10 +180,18 @@ class LeadAssignmentService
         // People already on the lead may stay even if they left the department since
         $this->assertAssignable($lead, array_diff($ids, $before));
 
+        // Nobody is handed more than their daily share of inquiries by a person
+        if ($enforceDailyLimit && $byUserId !== null) {
+            $this->allocations->assertWithinLimit($lead, array_values(array_diff($ids, $before)));
+        }
+
         $note   = filled($note) ? mb_substr(trim($note), 0, 2000) : null;
         $action = $this->action($before, $ids);
 
         DB::transaction(function () use ($lead, $ids, $before, $byUserId, $note, $action) {
+            $this->allocations->record($lead, array_values(array_diff($ids, $before)), $byUserId);
+            $this->allocations->release($lead, array_values(array_diff($before, $ids)));
+
             $lead->assignees()->whereNotIn('user_id', $ids ?: [0])->get()->each->delete();
 
             $existing = $lead->assignees()->get()->keyBy('user_id');

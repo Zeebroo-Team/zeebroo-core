@@ -49,7 +49,7 @@ test('re-sending the same version adds nothing; a new version sent replaces the 
     expect(FollowUp::count())->toBe(2);
 
     Carbon::setTestNow('2026-11-11 10:00:00');
-    $v2 = Modules\Sales\Models\Quotation::findOrFail(crmwf(CrmwfQuoteApi::class, 'revise', 3, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
+    $v2 = Modules\Sales\Models\Quotation::findOrFail(crmwf(CrmwfQuoteApi::class, 'revise', 2, [$this->lead->id, $q->id], 'POST')->getData(true)['data']['id']);
     crmwf(CrmwfQuoteApi::class, 'submit', 3, [$this->lead->id, $v2->id], 'POST');
     crmwf(CrmwfQuoteApi::class, 'approve', 2, [$this->lead->id, $v2->id], 'POST');
     crmwf(CrmwfQuoteApi::class, 'send', 3, [$this->lead->id, $v2->id], 'POST', ['to' => 'kasun@example.com', 'subject' => 'v2', 'message' => 'Hi']);
@@ -128,6 +128,9 @@ test('overdue means still pending after the day it was due', function () {
 
 test('today and overdue follow the business\'s own timezone, not the server\'s', function () {
     $this->business->setSetting('business.timezone', 'Asia/Colombo'); // UTC+5:30
+    // CrmSettingsService caches the timezone per request, and the fixture's assignment (dated
+    // on the business calendar for the daily allocation record) already read it — a new request
+    app()->forgetScopedInstances();
     crmwfSentQuotation();
     $f = FollowUp::query()->orderBy('due_at')->firstOrFail(); // due 2026-11-12 09:00 UTC = 14:30 in Colombo
     Event::fake([FollowUpDue::class, FollowUpOverdue::class]);

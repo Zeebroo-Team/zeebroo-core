@@ -29,6 +29,7 @@ function crmOrgMigrations(): array
         $dir . '2026_10_31_100200_create_crm_department_settings_table.php',
         $dir . '2026_11_08_100000_allow_many_pipelines_per_crm_department.php',
         $dir . '2026_11_12_100000_create_crm_department_members_table.php',
+        $dir . '2026_11_18_100000_add_quotation_value_approval_limit_to_crm_department_settings_table.php',
     ];
 }
 
@@ -309,16 +310,19 @@ test('only one department per business can be the marketing intake', function ()
 test('settings keep a discount limit and clean follow-up days, defaulting to 2 and 5', function () {
     $setting = $this->org->saveSettings($this->business, $this->sales, [
         'discount_approval_limit_percent' => '12.5',
+        'quotation_value_approval_limit'  => '3000000',
         'followup_days'                   => '7, 3,3, 0',
     ]);
 
     expect((float) $setting->discount_approval_limit_percent)->toBe(12.5)
+        ->and((float) $setting->quotation_value_approval_limit)->toBe(3000000.0)
         ->and($setting->followupDays())->toBe([3, 7]);
 
     $setting = $this->org->saveSettings($this->business, $this->sales, ['followup_days' => []]);
     expect($setting->followup_days)->toBeNull()
         ->and($setting->followupDays())->toBe([2, 5])
-        ->and($setting->discount_approval_limit_percent)->toBeNull();
+        ->and($setting->discount_approval_limit_percent)->toBeNull()
+        ->and($setting->quotation_value_approval_limit)->toBeNull();
 });
 
 test('linking with no pipeline creates one named after the department', function () {

@@ -33,7 +33,7 @@ class StageEntryActionService
         // The picked people join the lead; its owner stays, or the first picked becomes it
         if (array_diff($rules['assign_user_ids'], $this->assignments->assigneeIds($lead)) !== []) {
             $steps[] = fn () => $this->assignments->add($lead->fresh(), $rules['assign_user_ids'], $byUserId,
-                'Added when the lead entered "' . $stage->name . '".');
+                'Added when the lead entered "' . $stage->name . '".', enforceDailyLimit: false);
         }
         if ($followUpAt !== null) {
             $steps[] = fn () => $this->followUps->create($lead->fresh(), [

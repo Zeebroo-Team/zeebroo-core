@@ -540,7 +540,8 @@ class CrmOrgService
                     ->update(['is_marketing_intake' => false]);
             }
 
-            $limit = $data['discount_approval_limit_percent'] ?? null;
+            $limit      = $data['discount_approval_limit_percent'] ?? null;
+            $valueLimit = $data['quotation_value_approval_limit'] ?? null;
 
             return DepartmentSetting::updateOrCreate(
                 ['department_id' => $department->id],
@@ -548,6 +549,7 @@ class CrmOrgService
                     'business_id'                     => $business->id,
                     'is_marketing_intake'             => $isIntake,
                     'discount_approval_limit_percent' => $limit === null || $limit === '' ? null : round((float) $limit, 2),
+                    'quotation_value_approval_limit'  => $valueLimit === null || $valueLimit === '' ? null : round((float) $valueLimit, 2),
                     'followup_days'                   => $this->cleanFollowupDays($data['followup_days'] ?? null),
                 ],
             );
@@ -616,6 +618,9 @@ class CrmOrgService
             'is_marketing_intake'             => (bool) $setting?->is_marketing_intake,
             'discount_approval_limit_percent' => $setting?->discount_approval_limit_percent !== null
                 ? (float) $setting->discount_approval_limit_percent
+                : null,
+            'quotation_value_approval_limit'  => $setting?->quotation_value_approval_limit !== null
+                ? (float) $setting->quotation_value_approval_limit
                 : null,
             'followup_days'                   => $setting?->followupDays() ?? DepartmentSetting::DEFAULT_FOLLOWUP_DAYS,
         ];

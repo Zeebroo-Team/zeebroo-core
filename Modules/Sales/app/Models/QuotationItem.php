@@ -17,6 +17,7 @@ class QuotationItem extends Model
         'notes',
         'quantity',
         'unit_price',
+        'list_price',
         'discount_amount',
         'tax_rate',
         'tax_amount',
@@ -27,11 +28,18 @@ class QuotationItem extends Model
     protected $casts = [
         'quantity'        => 'decimal:3',
         'unit_price'      => 'decimal:2',
+        'list_price'      => 'decimal:2',
         'discount_amount' => 'decimal:2',
         'tax_rate'        => 'decimal:3',
         'tax_amount'      => 'decimal:2',
         'line_total'      => 'decimal:2',
     ];
+
+    /** The quoted price differs from the product's standard price saved with the line. */
+    public function isPriceChanged(): bool
+    {
+        return $this->list_price !== null && abs((float) $this->unit_price - (float) $this->list_price) >= 0.005;
+    }
 
     public function quotation(): BelongsTo
     {

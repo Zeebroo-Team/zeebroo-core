@@ -89,6 +89,24 @@ class PosCustomerApiController extends Controller
         ]);
     }
 
+    /** GET customers/industries — industries already given to this business's customers, for the industry picker. */
+    public function industries(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        return response()->json([
+            'data' => Customer::query()
+                ->where('business_id', $business->id)
+                ->whereNotNull('industry')
+                ->where('industry', '<>', '')
+                ->distinct()
+                ->orderBy('industry')
+                ->limit(200)
+                ->pluck('industry')
+                ->values(),
+        ]);
+    }
+
     public function show(Request $request, Customer $customer): JsonResponse
     {
         $business = $this->businessOrAbort($request);
@@ -359,8 +377,9 @@ class PosCustomerApiController extends Controller
             'phone'                => [!empty($settings['customer_require_phone']) ? 'required' : 'nullable', 'string', 'max:50'],
             'email'                => [!empty($settings['customer_require_email']) ? 'required' : 'nullable', 'email', 'max:255'],
             'address'              => [!empty($settings['customer_require_address']) ? 'required' : 'nullable', 'string', 'max:500'],
+            'industry'             => ['nullable', 'string', 'max:120'],
             'notes'                => ['nullable', 'string', 'max:1000'],
-            'customer_type'        => ['nullable', 'string', 'in:retail,wholesale'],
+            'customer_type'       => ['nullable', 'string', 'in:retail,wholesale'],
             'credit_limit'         => ['nullable', 'numeric', 'min:0', 'max:9999999999'],
             'customer_category_id' => [
                 'nullable', 'integer',
@@ -377,6 +396,7 @@ class PosCustomerApiController extends Controller
             'phone'                => $c->phone,
             'email'                => $c->email,
             'address'              => $c->address,
+            'industry'             => $c->industry,
             'notes'                => $c->notes,
             'customer_type'        => $c->customer_type ?? 'retail',
             'customer_category_id' => $c->customer_category_id,

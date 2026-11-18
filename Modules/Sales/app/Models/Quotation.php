@@ -5,6 +5,7 @@ namespace Modules\Sales\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Modules\Business\Models\Business;
 use Modules\CRM\Models\Lead;
 use Modules\DesignStudio\Models\Design;
@@ -44,6 +45,10 @@ class Quotation extends Model
         'discount_amount',
         'tax_amount',
         'total',
+        'prepared_by',
+        'prepared_by_name',
+        'prepared_by_designation',
+        'prepared_by_phone',
         'submitted_by',
         'approved_by',
         'approved_at',
@@ -127,6 +132,24 @@ class Quotation extends Model
         return $this->hasMany(QuotationApproval::class)->orderBy('created_at')->orderBy('id');
     }
 
+    /** Requests to change this version, oldest first. */
+    public function revisionRequests(): HasMany
+    {
+        return $this->hasMany(QuotationRevisionRequest::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /** The request waiting for the head's decision, if any. */
+    public function pendingRevisionRequest(): HasOne
+    {
+        return $this->hasOne(QuotationRevisionRequest::class)->where('status', QuotationRevisionRequest::STATUS_PENDING)->latest('id');
+    }
+
+    /** The approved request this version was made from (none for a first version). */
+    public function revisionSource(): HasOne
+    {
+        return $this->hasOne(QuotationRevisionRequest::class, 'revision_id');
+    }
+
     public function dispatches(): HasMany
     {
         return $this->hasMany(QuotationDispatch::class)->orderByDesc('created_at')->orderByDesc('id');
@@ -136,6 +159,31 @@ class Quotation extends Model
     public function customerResponses(): HasMany
     {
         return $this->hasMany(QuotationCustomerResponse::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /** The staff member who prepared it (the "Prepared by" details are kept on the quotation itself). */
+    public function preparer(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'prepared_by');
+    }
+
+    /**
+     * The "Prepared by" block of the printed quotation, or null when nobody is on file.
+     *
+     * @return array{name: string, designation: string, phone: string}|null
+     */
+    public function preparedByDetails(): ?array
+    {
+        $name = trim((string) $this->prepared_by_name);
+        if ($name === '') {
+            return null;
+        }
+
+        return [
+            'name'        => $name,
+            'designation' => trim((string) $this->prepared_by_designation),
+            'phone'       => trim((string) $this->prepared_by_phone),
+        ];
     }
 
     public function submittedBy(): BelongsTo
@@ -160,8 +208,9 @@ class Quotation extends Model
 
     /**
      * Sales / POS quotations stay editable while draft or sent. A lead quotation goes through
-     * approval, so only a draft or one the head returned can change; after that a new version
-     * is made instead (QuotationService::revise).
+     * approval, so only a draft or one the head returned can change; once issued it is locked
+     * and a change needs a revision request the head approves (QuotationRevisionService in the
+     * CRM), which makes a new version.
      */
     public function isEditable(): bool
     {

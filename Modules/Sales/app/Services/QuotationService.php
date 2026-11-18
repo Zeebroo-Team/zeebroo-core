@@ -69,6 +69,7 @@ class QuotationService
                 'expiry_date'     => filled($data['expiry_date'] ?? '') ? $data['expiry_date'] : null,
                 'status'          => Quotation::STATUS_DRAFT,
                 'notes'           => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                ...$this->preparedByFields($data),
                 'subtotal'        => 0,
                 'discount_amount' => 0,
                 'tax_amount'      => 0,
@@ -103,6 +104,8 @@ class QuotationService
                 'quote_date'  => $data['quote_date'],
                 'expiry_date' => filled($data['expiry_date'] ?? '') ? $data['expiry_date'] : null,
                 'notes'       => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                // Editors that don't send "Prepared by" keep the one on file
+                ...$this->preparedByFields($data),
             ]);
 
             $this->syncItems($quotation, $items);
@@ -180,16 +183,8 @@ class QuotationService
      */
     public function revise(Quotation $quotation): Quotation
     {
-        if ($quotation->isEditable()) {
-            throw ValidationException::withMessages(['quotation' => 'This quotation can still be edited — no new version is needed.']);
-        }
-        if ($quotation->isSuperseded()) {
-            throw ValidationException::withMessages(['quotation' => 'This version has been replaced — revise the latest version instead.']);
-        }
-        if (in_array($quotation->status, [Quotation::STATUS_PENDING_APPROVAL, Quotation::STATUS_ACCEPTED], true)) {
-            throw ValidationException::withMessages(['quotation' => $quotation->status === Quotation::STATUS_ACCEPTED
-                ? 'The customer accepted this quotation — it cannot be revised.'
-                : 'This quotation is waiting for approval — wait for the decision before revising it.']);
+        if (($blocker = $this->reviseBlocker($quotation)) !== null) {
+            throw ValidationException::withMessages(['quotation' => $blocker]);
         }
 
         return DB::transaction(function () use ($quotation) {
@@ -198,6 +193,18 @@ class QuotationService
 
             return $revision;
         });
+    }
+
+    /** Why this quotation cannot get a new version, or null when it can. */
+    public function reviseBlocker(Quotation $quotation): ?string
+    {
+        return match (true) {
+            $quotation->isEditable()   => 'This quotation can still be edited — no new version is needed.',
+            $quotation->isSuperseded() => 'This version has been replaced — revise the latest version instead.',
+            $quotation->status === Quotation::STATUS_ACCEPTED         => 'The customer accepted this quotation — it cannot be revised.',
+            $quotation->status === Quotation::STATUS_PENDING_APPROVAL => 'This quotation is waiting for approval — wait for the decision before revising it.',
+            default => null,
+        };
     }
 
     private function copyAsNextVersion(Quotation $quotation): Quotation
@@ -218,6 +225,7 @@ class QuotationService
             'notes'           => $i->notes,
             'quantity'        => (float) $i->quantity,
             'unit_price'      => (float) $i->unit_price,
+            'list_price'      => $i->list_price !== null ? (float) $i->list_price : null,
             'discount_amount' => (float) $i->discount_amount,
             'tax_rate'        => (float) $i->tax_rate,
         ])->all();
@@ -234,6 +242,11 @@ class QuotationService
             'quote_date'          => now()->toDateString(),
             'expiry_date'         => $quotation->expiry_date?->toDateString(),
             'notes'               => $quotation->notes,
+            // The new version keeps who prepared it (its editor can change it)
+            'prepared_by'             => $quotation->prepared_by,
+            'prepared_by_name'        => $quotation->prepared_by_name,
+            'prepared_by_designation' => $quotation->prepared_by_designation,
+            'prepared_by_phone'       => $quotation->prepared_by_phone,
             ...$this->headerAdjustments($quotation),
         ], $items);
     }
@@ -292,6 +305,7 @@ class QuotationService
                 'notes'           => $item['notes'],
                 'quantity'        => $item['quantity'],
                 'unit_price'      => $item['unit_price'],
+                'list_price'      => $item['list_price'],
                 'discount_amount' => $item['discount_amount'],
                 'tax_rate'        => $item['tax_rate'],
                 'tax_amount'      => $item['tax_amount'],
@@ -320,13 +334,17 @@ class QuotationService
             $discount = min($gross, round(max(0, (float) ($item['discount_amount'] ?? 0)), 2));
             $taxRate  = min(100, max(0, (float) ($item['tax_rate'] ?? 0)));
             $net      = round($gross - $discount, 2);
+            $productId = $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null;
             $normalized[] = [
-                'product_id'      => $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null,
+                'product_id'      => $productId,
                 'service_item_id' => $type === 'service' ? $this->nullableInt($item['service_item_id'] ?? null) : null,
                 'description'     => trim((string) ($item['description'] ?? '')),
                 'notes'           => trim((string) ($item['notes'] ?? '')) ?: null,
                 'quantity'        => $qty,
                 'unit_price'      => $price,
+                // The product's standard price (set by the CRM editor) — only product lines have one
+                'list_price'      => $productId !== null && isset($item['list_price']) && is_numeric($item['list_price'])
+                    ? round(max(0, (float) $item['list_price']), 2) : null,
                 'discount_amount' => $discount,
                 'tax_rate'        => $taxRate,
                 'tax_amount'      => round($net * $taxRate / 100, 2),
@@ -358,6 +376,28 @@ class QuotationService
             'tax_amount'      => round($taxAmount, 2),
             'total'           => round($total, 2),
         ]);
+    }
+
+    /**
+     * The "Prepared by" columns present in $data (the caller fills them from the user's CRM
+     * profile); keys left out are not touched.
+     *
+     * @return array<string, mixed>
+     */
+    private function preparedByFields(array $data): array
+    {
+        $out = [];
+        if (array_key_exists('prepared_by', $data)) {
+            $out['prepared_by'] = $this->nullableInt($data['prepared_by']);
+        }
+        foreach (['prepared_by_name' => 120, 'prepared_by_designation' => 120, 'prepared_by_phone' => 40] as $key => $max) {
+            if (array_key_exists($key, $data)) {
+                $v         = trim((string) ($data[$key] ?? ''));
+                $out[$key] = $v === '' ? null : mb_substr($v, 0, $max);
+            }
+        }
+
+        return $out;
     }
 
     private function nullableInt(mixed $value): ?int

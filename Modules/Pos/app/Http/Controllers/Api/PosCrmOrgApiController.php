@@ -67,6 +67,13 @@ class PosCrmOrgApiController extends Controller
         $validated = $request->validate([
             'phone_country_code'    => ['sometimes', 'nullable', 'string', 'max:6', 'regex:/^\+?\d{0,4}$/'],
             'quotation_stock_check' => ['sometimes', 'required', 'in:' . implode(',', \Modules\CRM\Models\CrmSetting::STOCK_CHECKS)],
+            // Daily inquiry allocation and the daily report to management
+            'daily_inquiry_limit'         => ['sometimes', 'required', 'integer', 'min:1', 'max:500'],
+            'inquiry_report_enabled'      => ['sometimes', 'boolean'],
+            'inquiry_report_time'         => ['sometimes', 'required', 'string', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+            'inquiry_report_review'       => ['sometimes', 'boolean'],
+            'inquiry_report_recipients'   => ['sometimes', 'nullable', 'array', 'max:30'],
+            'inquiry_report_recipients.*' => ['email'],
         ]);
         $this->settings->save($business, $validated);
 
@@ -166,6 +173,7 @@ class PosCrmOrgApiController extends Controller
         $validated = $request->validate([
             'is_marketing_intake'             => ['boolean'],
             'discount_approval_limit_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'quotation_value_approval_limit'  => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
             'followup_days'                   => ['nullable', 'array', 'max:10'],
             'followup_days.*'                 => ['integer', 'min:1', 'max:365'],
         ]);
@@ -178,6 +186,7 @@ class PosCrmOrgApiController extends Controller
                 'department_id'                   => $department->id,
                 'is_marketing_intake'             => $setting->is_marketing_intake,
                 'discount_approval_limit_percent' => $setting->discount_approval_limit_percent !== null ? (float) $setting->discount_approval_limit_percent : null,
+                'quotation_value_approval_limit'  => $setting->quotation_value_approval_limit !== null ? (float) $setting->quotation_value_approval_limit : null,
                 'followup_days'                   => $setting->followupDays(),
             ],
         ]);

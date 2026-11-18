@@ -49,6 +49,8 @@ class QuotationApprovalBrief
             'chain'      => $this->chain($q, $lead, $approverId, $emailedIds),
             'leadInfo'   => $this->leadInfo($lead, $money),
             'discount'   => $this->approvals->discountSummary($lead, $q),
+            'value'      => $this->approvals->approvalCheck($lead, $q)['value'],
+            'priceChanges' => $this->approvals->priceChanges($q),
             'history'    => $this->history($q, $submission),
             'money'      => $money,
             'num'        => fn ($v, int $dp = 2) => rtrim(rtrim(number_format((float) $v, $dp, '.', ''), '0'), '.'),

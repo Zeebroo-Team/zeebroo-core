@@ -18,6 +18,7 @@ use Modules\CRM\Policies\LeadPolicy;
 use Modules\HRManagement\Models\Employee;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
+use Modules\Sales\Models\QuotationItem;
 use Modules\Sales\Services\QuotationPrintService;
 
 /**
@@ -29,8 +30,12 @@ use Modules\Sales\Services\QuotationPrintService;
  *   pending_approval ──approve─▶ approved (+ PDF)       lead stays Pending Approval until sent
  *   pending_approval ──return──▶ returned               lead → Quotation Preparing
  *   pending_approval ──reject──▶ rejected               lead → Quotation Preparing
+ *   draft / returned ──submit──▶ approved (+ PDF)       within the department's limits: no head
+ *                                                        needed, recorded as "within_limit"
  *
- * Every quotation needs a head's approval. On submit the staff tick which heads to email
+ * A quotation is issued without approval only when the department has both limits set and it
+ * is within both: discount ≤ discount_approval_limit_percent and total ≤
+ * quotation_value_approval_limit (approvalCheck()). Otherwise the staff tick which heads to email
  * (approvers()); each gets signed approve / reject links (QuotationApprovalMailer), so they can
  * decide without signing in — the first decision wins.
  *
@@ -49,6 +54,11 @@ class QuotationApprovalService
         $this->requireStatus($quotation, [Quotation::STATUS_DRAFT, Quotation::STATUS_RETURNED], 'Only a draft or returned quotation can be submitted.');
         if ($quotation->items()->count() === 0) {
             throw ValidationException::withMessages(['quotation' => 'Add at least one line before submitting.']);
+        }
+
+        $check = $this->approvalCheck($lead, $quotation);
+        if (! $check['required']) {
+            return $this->releaseWithinLimits($quotation, $userId, $check);
         }
 
         return DB::transaction(function () use ($lead, $quotation, $userId, $comment) {
@@ -185,15 +195,122 @@ class QuotationApprovalService
         return ['percent' => $percent, 'limit' => $limit, 'over_limit' => $limit !== null && $percent > $limit];
     }
 
+    /**
+     * Product lines quoted at a price other than their standard (catalog) price, for the
+     * approver — "change_percent" is negative when the price was lowered.
+     *
+     * @return list<array{description: string, sku: ?string, list_price: float, unit_price: float, change: float, change_percent: ?float}>
+     */
+    public function priceChanges(Quotation $quotation): array
+    {
+        $quotation->loadMissing('items.product:id,name,sku');
+
+        return $quotation->items
+            ->filter(fn (QuotationItem $i) => $i->isPriceChanged())
+            ->map(function (QuotationItem $i) {
+                $list = (float) $i->list_price;
+                $unit = (float) $i->unit_price;
+
+                return [
+                    'description'    => $i->description ?: ($i->product?->name ?? 'Item'),
+                    'sku'            => $i->product?->sku,
+                    'list_price'     => round($list, 2),
+                    'unit_price'     => round($unit, 2),
+                    'change'         => round($unit - $list, 2),
+                    'change_percent' => $list > 0 ? round(($unit - $list) / $list * 100, 2) : null,
+                ];
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Whether this version needs the head's approval: it does when either department limit is
+     * not set, the discount is over the % limit, or the total is over the value limit. "reasons"
+     * says why, for the staff and the head.
+     *
+     * @return array{required: bool, reasons: list<string>, discount: array, value: array{total: float, limit: ?float, over_limit: bool}}
+     */
+    public function approvalCheck(Lead $lead, Quotation $quotation): array
+    {
+        $discount   = $this->discountSummary($lead, $quotation);
+        $total      = round((float) $quotation->total, 2);
+        $valueLimit = $this->valueLimit($lead);
+        $value      = ['total' => $total, 'limit' => $valueLimit, 'over_limit' => $valueLimit !== null && $total > $valueLimit];
+
+        $reasons = [];
+        if ($discount['over_limit']) {
+            $reasons[] = 'Discount ' . $this->num($discount['percent']) . '% is over the ' . $this->num($discount['limit']) . '% limit.';
+        }
+        if ($value['over_limit']) {
+            $reasons[] = 'Total ' . number_format($total, 2) . ' is over the ' . number_format($valueLimit, 2) . ' limit.';
+        }
+        if ($discount['limit'] === null || $valueLimit === null) {
+            $reasons[] = 'The department has no ' . ($discount['limit'] === null && $valueLimit === null ? 'discount or value' : ($discount['limit'] === null ? 'discount' : 'value'))
+                . ' approval limit set, so every quotation needs approval.';
+        }
+
+        return ['required' => $reasons !== [], 'reasons' => $reasons, 'discount' => $discount, 'value' => $value];
+    }
+
     /** The lead's department discount approval limit (%), or null when none is set. */
     public function discountLimit(Lead $lead): ?float
     {
-        $limit = $lead->department_id === null ? null : DepartmentSetting::query()
-            ->where('business_id', $lead->business_id)
-            ->where('department_id', $lead->department_id)
-            ->value('discount_approval_limit_percent');
+        $limit = $this->departmentSetting($lead)?->discount_approval_limit_percent;
 
         return $limit !== null ? (float) $limit : null;
+    }
+
+    /** The lead's department quotation value approval limit (total), or null when none is set. */
+    public function valueLimit(Lead $lead): ?float
+    {
+        $limit = $this->departmentSetting($lead)?->quotation_value_approval_limit;
+
+        return $limit !== null ? (float) $limit : null;
+    }
+
+    private function departmentSetting(Lead $lead): ?DepartmentSetting
+    {
+        return $lead->department_id === null ? null : DepartmentSetting::query()
+            ->where('business_id', $lead->business_id)
+            ->where('department_id', $lead->department_id)
+            ->first();
+    }
+
+    /**
+     * A draft / returned version within both department limits, issued without the head:
+     * approved (no approver), recorded as "within_limit", PDF made. The lead stays where it is
+     * until the quotation is sent.
+     */
+    private function releaseWithinLimits(Quotation $quotation, int $userId, array $check): Quotation
+    {
+        DB::transaction(function () use ($quotation, $userId, $check) {
+            $quotation->update([
+                'status'           => Quotation::STATUS_APPROVED,
+                'submitted_by'     => $userId,
+                'approved_by'      => null,
+                'approved_at'      => now(),
+                'approval_comment' => null,
+            ]);
+            $this->record($quotation, QuotationApproval::ACTION_WITHIN_LIMIT, $userId,
+                'Discount ' . $this->num($check['discount']['percent']) . '% (limit ' . $this->num($check['discount']['limit']) . '%), '
+                . 'total ' . number_format($check['value']['total'], 2) . ' (limit ' . number_format($check['value']['limit'], 2) . ')');
+        });
+
+        // Always a fresh PDF: the draft may have been printed before its last edit; if rendering
+        // fails it is made again when sending
+        try {
+            $this->print->generatePdf($quotation);
+        } catch (\Throwable $e) {
+            Log::warning('Quotation PDF could not be generated on release: ' . $e->getMessage(), ['quotation_id' => $quotation->id]);
+        }
+
+        return $quotation->fresh();
+    }
+
+    private function num(float $n): string
+    {
+        return rtrim(rtrim(number_format($n, 2, '.', ''), '0'), '.');
     }
 
     /**

@@ -80,6 +80,26 @@ class PosCrmReportApiController extends Controller
         return $this->exports->salesAnalysisCsv($this->salesAnalysis->report($business, $access, $this->salesFilters($request)));
     }
 
+    /** GET crm/reports/sales-analysis/excel */
+    public function salesAnalysisExcel(Request $request): Response
+    {
+        [$business, $access] = $this->context($request, 'reports_sales');
+
+        return $this->exports->salesAnalysisExcel($this->salesAnalysis->report($business, $access, $this->salesFilters($request)));
+    }
+
+    /** GET crm/reports/customer-history — one customer's inquiries, quotations and sales (drill-down from a customer row) */
+    public function customerHistory(Request $request): JsonResponse
+    {
+        [$business, $access] = $this->context($request, 'reports_sales');
+        $input = [
+            ...$this->filters($request),
+            ...$request->validate(['customer' => ['required', 'string', 'max:255']]),
+        ];
+
+        return response()->json(['data' => $this->salesAnalysis->customerHistory($business, $access, $input)]);
+    }
+
     private function filters(Request $request): array
     {
         return $request->validate([
@@ -97,9 +117,13 @@ class PosCrmReportApiController extends Controller
         return [
             ...$this->filters($request),
             ...$request->validate([
-                'group_by' => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::GROUPS))],
-                'status'   => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::STATUSES))],
-                'search'   => ['nullable', 'string', 'max:100'],
+                'group_by'   => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::GROUPS))],
+                'view'       => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::VIEWS))],
+                'period'     => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::PERIODS))],
+                'status'     => ['nullable', Rule::in(array_keys(CrmSalesAnalysisService::STATUSES))],
+                'search'     => ['nullable', 'string', 'max:100'],
+                'industry'   => ['nullable', 'string', 'max:120'],
+                'product_id' => ['nullable', 'integer'],
             ]),
         ];
     }

@@ -239,6 +239,15 @@ class LeadPolicy
         return $access->can('quotations_manage') && $this->canWork($access, $lead);
     }
 
+    /**
+     * Quoting a product at a price other than its standard (catalog) price. Without it the price
+     * is filled in automatically and locked; with it every change is flagged to the approver.
+     */
+    public function canChangeQuotationPrice(CrmAccess $access, Lead $lead): bool
+    {
+        return $access->can('quotations_price_edit') && $this->canQuote($access, $lead);
+    }
+
     /** Approving, returning or rejecting a quotation: canApprove, unless "Approve quotations" is blocked. */
     public function canApproveQuotation(CrmAccess $access, Lead $lead): bool
     {

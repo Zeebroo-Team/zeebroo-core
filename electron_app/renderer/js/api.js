@@ -397,6 +397,7 @@ const API = (() => {
     customers:      (q, page, categoryId) => request('GET',  `/customers?q=${encodeURIComponent(q || '')}&page=${page || 1}${categoryId ? `&category_id=${encodeURIComponent(categoryId)}` : ''}`),
     customer:       (id)   => request('GET',  `/customers/${id}`),
     createCustomer: (body) => request('POST', '/customers', body),
+    customerIndustries: () => request('GET', '/customers/industries'),
     // opts: { duplicates: 'skip'|'update' } — duplicates of existing customers are skipped by default
     importCustomers:(rows, opts = {}) => request('POST', '/customers/import', { rows, ...opts }),
     previewCustomerImport: (rows, opts = {}) => request('POST', '/customers/import/preview', { rows, ...opts }),
@@ -742,6 +743,10 @@ const API = (() => {
     crmCreateLeadQuotation:   (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations`, body),
     crmUpdateLeadQuotation:   (leadId, id, body)       => request('PUT',    `/crm/leads/${leadId}/quotations/${id}`, body),
     crmLeadQuotationStock:    (leadId, body)           => request('POST',   `/crm/leads/${leadId}/quotations/stock-check`, body),
+    crmLeadQuotationCustomers:(leadId, q)              => request('GET',    `/crm/leads/${leadId}/quotations/customers?q=${encodeURIComponent(q)}`),
+    crmQuotationBrands:       (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations/catalog/brands`),
+    crmQuotationModels:       (leadId, brandId)        => request('GET',    `/crm/leads/${leadId}/quotations/catalog/models?brand_id=${encodeURIComponent(brandId)}`),
+    crmQuotationProductInfo:  (leadId, productId)      => request('GET',    `/crm/leads/${leadId}/quotations/catalog/products/${productId}`),
     crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
     // action: submit | approve | return | reject — body { comment }
     crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),
@@ -753,6 +758,11 @@ const API = (() => {
     crmLeadQuotationDiff:     (leadId, id, againstId)  => request('GET',    `/crm/leads/${leadId}/quotations/${id}/diff${againstId ? `?against=${againstId}` : ''}`),
     crmCustomerQuotationVersions: (customerId, id)     => request('GET',    `/crm/customers/${customerId}/quotations/${id}/versions`),
     crmQuotationApprovals:    ()                       => request('GET',    '/crm/quotation-approvals'),
+    // Revision control: an issued quotation changes only through a request the head approves
+    crmRequestQuotationRevision: (leadId, id, reason)  => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revision-requests`, { reason }),
+    // action: approve | reject | cancel — body { comment }
+    crmQuotationRevisionAction: (leadId, id, requestId, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/revision-requests/${requestId}/${action}`, body || {}),
+    crmQuotationRevisionInbox:  ()                     => request('GET',    '/crm/quotation-revision-requests'),
     // Closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
     crmLeadCloseOptions:      (leadId)                 => request('GET',    `/crm/leads/${leadId}/close-options`),
     crmLeadWon:               (leadId, body)           => request('POST',   `/crm/leads/${leadId}/won`, body),
@@ -766,12 +776,25 @@ const API = (() => {
     crmCancelFollowUp:        (id)                     => request('POST',   `/crm/follow-ups/${id}/cancel`),
     crmNotificationPrefs:     ()                       => request('GET',    '/crm/notification-preferences'),
     crmSaveNotificationPrefs: (body)                   => request('PUT',    '/crm/notification-preferences', body),
+    // Daily inquiry management: status pop-up, allocation record, limit exceptions, daily reports
+    crmInquiryStatus:         (date)                   => request('GET',    `/crm/inquiries/status${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+    crmInquiryAllocations:    (params = {})            => request('GET',    `/crm/inquiries/allocations?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmInquiryExceptions:     (date)                   => request('GET',    `/crm/inquiries/exceptions${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+    crmGrantInquiryException: (body)                   => request('POST',   '/crm/inquiries/exceptions', body),
+    crmRevokeInquiryException:(id)                     => request('DELETE', `/crm/inquiries/exceptions/${id}`),
+    crmInquiryReports:        (params = {})            => request('GET',    `/crm/inquiries/reports?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmInquiryReport:         (id)                     => request('GET',    `/crm/inquiries/reports/${id}`),
+    crmGenerateInquiryReports:(body)                   => request('POST',   '/crm/inquiries/reports/generate', body),
+    crmReviewInquiryReport:   (id, note)               => request('POST',   `/crm/inquiries/reports/${id}/review`, { note }),
+    crmSendInquiryReport:     (id, refresh = false)    => request('POST',   `/crm/inquiries/reports/${id}/send`, { refresh }),
+    crmLeadInquiryCapacity:   (leadId)                 => request('GET',    `/crm/leads/${leadId}/inquiry-capacity`),
     // Management dashboard (admin, CEO, heads) — params: from, to, department_id, division_id, user_id, source
     crmDashboard:             (params = {})            => request('GET',    `/crm/reports/dashboard?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmDashboardExportPath:   (format, params = {})    => `/crm/reports/dashboard/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
     // Sales analysis report (ribbon → Report) — dashboard params plus group_by, status, search; format: pdf | csv
     crmSalesAnalysis:         (params = {})            => request('GET',    `/crm/reports/sales-analysis?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmSalesAnalysisExportPath: (format, params = {})  => `/crm/reports/sales-analysis/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
+    crmCustomerHistory:       (params = {})            => request('GET',    `/crm/reports/customer-history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     // Row-level CRM audit log — admins only
     crmAuditLogs:             (params = {})            => request('GET',    `/crm/audit-logs?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmProjectHistory: (projectId, params = {}) => request('GET', `/crm/projects/${projectId}/history?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),

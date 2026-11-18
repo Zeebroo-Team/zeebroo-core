@@ -94,6 +94,28 @@
             </tr></table>
         @endif
 
+        @if(! empty($value['over_limit']))
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
+                <td style="width:4px;background:#dc2626;"></td>
+                <td style="background:#fef2f2;padding:11px 14px;font-size:13px;color:#7f1d1d;">
+                    <strong>Quotation value exceeds the department limit.</strong>
+                    The total is {{ $money($value['total']) }}; the {{ $chain['department'] ?? 'department' }} limit is {{ $money($value['limit']) }}.
+                </td>
+            </tr></table>
+        @endif
+
+        @if(! empty($priceChanges))
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
+                <td style="width:4px;background:#d97706;"></td>
+                <td style="background:#fffbeb;padding:11px 14px;font-size:13px;color:#78350f;">
+                    <strong>{{ count($priceChanges) }} {{ count($priceChanges) === 1 ? 'price was' : 'prices were' }} changed from the standard price.</strong>
+                    @foreach($priceChanges as $pc)
+                        <div style="margin-top:4px;">{{ $pc['description'] }}: {{ $money($pc['list_price']) }} → <strong>{{ $money($pc['unit_price']) }}</strong>@if($pc['change_percent'] !== null) ({{ $pc['change_percent'] > 0 ? '+' : '' }}{{ $num($pc['change_percent']) }}%)@endif</div>
+                    @endforeach
+                </td>
+            </tr></table>
+        @endif
+
         @if($submission->comment)
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 16px;"><tr>
                 <td style="width:4px;background:{{ $accent }};"></td>

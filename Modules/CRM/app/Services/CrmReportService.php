@@ -39,6 +39,8 @@ use Modules\Sales\Models\Quotation;
  */
 class CrmReportService
 {
+    public function __construct(private readonly CrmKpiService $kpis) {}
+
     /** @param  string  $permission  reports_view for the dashboard, reports_sales for the sales analysis report */
     public function canView(CrmAccess $access, string $permission = 'reports_view'): bool
     {
@@ -115,6 +117,7 @@ class CrmReportService
             'funnel'       => $this->funnel($created()),
             'staff'        => $this->withStaffWorkload($business, $access, $filters, $this->staffRanking($created()), $created()),
             'lost_reasons' => $this->lostReasons($closed()),
+            'inquiry_kpis' => $this->inquiryKpis($business, $access, $filters),
             'options'      => $this->options($business, $access),
         ];
     }
@@ -184,6 +187,16 @@ class CrmReportService
     }
 
     // ── Metrics ──────────────────────────────────────────────────────────
+
+    /** The inquiry-handling KPIs for the whole filtered scope (CrmKpiService). */
+    private function inquiryKpis(Business $business, CrmAccess $access, array $filters): array
+    {
+        $scoped = fn () => $this->leads($business, $access, $filters)->leftJoin('crm_lead_stages as s', 's.id', '=', 'crm_leads.stage_id');
+        $raw    = $this->kpis->raw($business->id, $scoped, $filters['from'], $filters['to'], fn () => null);
+        $days   = (int) round($filters['from']->copy()->startOfDay()->diffInDays($filters['to']->copy()->startOfDay())) + 1;
+
+        return $this->kpis->present($this->kpis->sum($raw), $days);
+    }
 
     /** Adds wq.won_total: the lead's accepted quotation total. */
     private function withWonValue(Builder $query): Builder
