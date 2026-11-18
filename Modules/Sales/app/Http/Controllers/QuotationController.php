@@ -59,7 +59,9 @@ class QuotationController extends Controller
         try {
             $quotation = $this->quotationService->create(
                 $business,
-                $this->validatedHeader($request, $business),
+                // "Prepared by": the signed-in user's CRM profile
+                $this->validatedHeader($request, $business)
+                    + ($request->user() ? app(\Modules\CRM\Services\CrmProfileService::class)->quotationFields((int) $business->id, (int) $request->user()->id) : []),
                 $request->input('items', []),
             );
         } catch (ValidationException $e) {

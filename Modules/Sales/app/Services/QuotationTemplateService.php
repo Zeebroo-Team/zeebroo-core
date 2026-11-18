@@ -159,6 +159,7 @@ class QuotationTemplateService
         $tax  = (float) $q->tax_amount;
         [$wMm, $hMm] = $this->paper($business);
         $bill = $q->billTo();
+        $prep = $q->preparedByDetails();
 
         return [
             'doc_title'        => 'Quotation',
@@ -177,6 +178,11 @@ class QuotationTemplateService
             'customer_address' => $bill['address'],
             'customer_phone'   => $bill['phone'],
             'customer_email'   => $bill['email'],
+            // "Prepared by" — the staff member's CRM profile when the quotation was made
+            'has_prepared_by'         => $prep !== null,
+            'prepared_by_name'        => $prep['name'] ?? '',
+            'prepared_by_designation' => $prep['designation'] ?? '',
+            'prepared_by_phone'       => $prep['phone'] ?? '',
             'business_name'    => (string) $business->name,
             'business_address' => (string) ($business->getSetting('pos.receipt_address', '') ?: ''),
             'logo_url'         => $this->logoSrc($business),

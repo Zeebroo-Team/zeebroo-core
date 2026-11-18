@@ -45,6 +45,10 @@ class Quotation extends Model
         'discount_amount',
         'tax_amount',
         'total',
+        'prepared_by',
+        'prepared_by_name',
+        'prepared_by_designation',
+        'prepared_by_phone',
         'submitted_by',
         'approved_by',
         'approved_at',
@@ -155,6 +159,31 @@ class Quotation extends Model
     public function customerResponses(): HasMany
     {
         return $this->hasMany(QuotationCustomerResponse::class)->orderBy('created_at')->orderBy('id');
+    }
+
+    /** The staff member who prepared it (the "Prepared by" details are kept on the quotation itself). */
+    public function preparer(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\User::class, 'prepared_by');
+    }
+
+    /**
+     * The "Prepared by" block of the printed quotation, or null when nobody is on file.
+     *
+     * @return array{name: string, designation: string, phone: string}|null
+     */
+    public function preparedByDetails(): ?array
+    {
+        $name = trim((string) $this->prepared_by_name);
+        if ($name === '') {
+            return null;
+        }
+
+        return [
+            'name'        => $name,
+            'designation' => trim((string) $this->prepared_by_designation),
+            'phone'       => trim((string) $this->prepared_by_phone),
+        ];
     }
 
     public function submittedBy(): BelongsTo

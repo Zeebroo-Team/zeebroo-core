@@ -3904,6 +3904,8 @@ function _qtToPrintDoc(q) {
     customer_address: b.address || q.customer_address,
     customer_phone:  b.phone || q.customer_phone,
     customer_email:  b.email || q.customer_email,
+    // { name, designation, phone } — printed as "Prepared By"
+    prepared_by:     q.prepared_by || null,
     reference:       q.reference,
     status:          q.status,
     status_label:    q.status_label,
@@ -30983,6 +30985,14 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const lblTotal  = escHtml(L.total    || 'Total Due');
   const lblAmtDue = escHtml(L.amtDue   || 'Amount Due');
   const notesText = escHtml(inv.notes || 'Thank you for your business!');
+  // "Prepared By" (quotations): name, designation, contact number — inline styles so every template can drop it in
+  const pb   = inv.prepared_by?.name ? inv.prepared_by : null;
+  const prep = pb ? `<div style="margin-top:20px;page-break-inside:avoid;break-inside:avoid">
+  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px">Prepared By</div>
+  <div style="font-size:12px;font-weight:700;color:#0f172a">${escHtml(pb.name)}</div>
+  ${pb.designation ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escHtml(pb.designation)}</div>` : ''}
+  ${pb.phone ? `<div style="font-size:11px;color:#64748b;margin-top:2px">Tel: ${escHtml(pb.phone)}</div>` : ''}
+</div>` : '';
   const sub  = fmt(inv.subtotal);
   const disc = parseFloat(inv.discount_amount || 0);
   const tax  = parseFloat(inv.tax_amount      || 0);
@@ -31172,6 +31182,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     <div class="tr gr"><span>${lblTotal}</span><span>${money(tot)}</span></div>
     ${payRows}
   </div></div>
+  ${prep}
 </div></div></body></html>`;
   }
 
@@ -31223,6 +31234,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
     </div>
   </div>
+  ${prep}
 </div></div></body></html>`;
   }
 
@@ -31280,6 +31292,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
+${prep}
 <div class="ft">${lblDoc} ${invNum} &nbsp;·&nbsp; ${biz} &nbsp;·&nbsp; ${issDate}</div>
 </div></body></html>`;
   }
@@ -31336,6 +31349,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
+${prep}
 <div class="ft"><span>${invNum} · ${biz}</span><span>${issDate}</span></div>
 </div></body></html>`;
   }
@@ -31402,6 +31416,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
     </div>
   </div>
+  ${prep}
   <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
 </div></div></body></html>`;
   }
@@ -31460,6 +31475,7 @@ ${hdrCss}</style></head><body>${lhLayer}<div class="pg">${lhCorner}
     ${payRows}
   </div>
 </div>
+${prep}
 <div class="ft"><span>${invNum} · ${biz}</span><span>${biz}</span></div>
 </div></body></html>`;
 }
@@ -31814,6 +31830,9 @@ const QTPL_FIELDS = [
   { group: 'Customer', items: [
     ['customer_name', 'Name'], ['customer_contact', 'Contact person'], ['customer_address', 'Address'], ['customer_phone', 'Phone'], ['customer_email', 'Email'],
   ] },
+  { group: 'Prepared by — wrap in {{#has_prepared_by}}', items: [
+    ['prepared_by_name', 'Name'], ['prepared_by_designation', 'Designation'], ['prepared_by_phone', 'Contact number'],
+  ] },
   { group: 'Business', items: [
     ['business_name', 'Business name'], ['business_address', 'Address'], ['logo_url', 'Logo image URL'], ['accent', 'Accent colour'],
   ] },
@@ -31962,6 +31981,11 @@ function _qtplData(inv, ic, cur) {
     customer_address: inv.customer_address || '',
     customer_phone:   inv.customer_phone || '',
     customer_email:   inv.customer_email || '',
+    // "Prepared by" — quotations only (the server's QuotationTemplateService sends the same)
+    has_prepared_by:         !!inv.prepared_by?.name,
+    prepared_by_name:        inv.prepared_by?.name || '',
+    prepared_by_designation: inv.prepared_by?.designation || '',
+    prepared_by_phone:       inv.prepared_by?.phone || '',
     business_name:    s.business_name || state._bizName || 'Your Business',
     business_address: s.receipt_address_line || '',
     logo_url:         s.business_logo_url || s.receipt_logo_url || '',
@@ -32021,6 +32045,7 @@ function _qtplSampleInv() {
     customer_address: 'No. 45, Commerce Drive\nColombo 03',
     customer_phone:   '011-2000000',
     customer_email:   'purchasing@acme.example',
+    prepared_by:      isQt ? { name: 'Nimal Perera', designation: 'Sales Executive', phone: '077 123 4567' } : null,
     notes:            '',
     items,
     subtotal:         sub,
@@ -63884,8 +63909,30 @@ async function submitDsCreate() {
       // The lead's customer, else the lead's own contact details — saved as a customer on save
       customer: _crmQtCustomerForm(_crmWs.quotations?.meta?.lead?.customer_defaults),
       discount_amount: 0, tax_amount: 0,
+      // "Prepared by" from the signed-in user's CRM profile (meta.prepared_by from GET …/quotations)
+      ..._crmQtPreparedByForm(_crmWs.quotations?.meta?.prepared_by),
       lines: fromInterest,
     };
+  }
+
+  function _crmQtPreparedByForm(p) {
+    return {
+      prepared_by_name: p?.name || '', prepared_by_designation: p?.designation || '', prepared_by_phone: p?.phone || '',
+      remember_prepared_by: false,
+    };
+  }
+
+  /** "Prepared by" card: name, designation and contact number printed on the quotation. */
+  function _crmQtPreparedByCardHtml(f) {
+    return `<section class="crm-qtx-card">
+        <div class="crm-qtx-card-h"><i class="fa fa-id-badge"></i> Prepared by<small style="font-weight:400">Printed on the quotation</small></div>
+        <div class="crm-qt-grid crm-qtx-fields">
+          <label>Name<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_name" value="${escHtml(f.prepared_by_name || '')}" placeholder="Your name"></label>
+          <label>Designation<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_designation" value="${escHtml(f.prepared_by_designation || '')}" placeholder="e.g. Sales Executive"></label>
+          <label>Contact number<input class="po-field-input" maxlength="40" data-qt-h="prepared_by_phone" value="${escHtml(f.prepared_by_phone || '')}" placeholder="07X XXX XXXX"></label>
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;align-self:end;padding-bottom:6px"><input type="checkbox" data-qt-remember${f.remember_prepared_by ? ' checked' : ''}> Save as my CRM profile</label>
+        </div>
+      </section>`;
   }
 
   function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
@@ -63933,6 +63980,8 @@ async function submitDsCreate() {
       // Quotations billed to a lead not saved as a customer yet start from the lead's details
       customer: _crmQtCustomerForm(q.customer || _crmWs.quotations?.meta?.lead?.customer_defaults),
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
+      // Made before "Prepared by" existed → start from the user's CRM profile
+      ..._crmQtPreparedByForm(q.prepared_by || _crmWs.quotations?.meta?.prepared_by),
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
         notes: i.notes || '', sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, list_price: i.list_price ?? null, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
@@ -64224,6 +64273,8 @@ async function submitDsCreate() {
         </div>
       </section>
 
+      ${_crmQtPreparedByCardHtml(f)}
+
       <section class="crm-qtx-card crm-qtx-card--flush">
         <div class="crm-qtx-card-h"><i class="fa fa-list"></i> Items<small>${n}</small></div>
         <div class="crm-qt-table-wrap"><table class="crm-qt-table">
@@ -64455,6 +64506,11 @@ async function submitDsCreate() {
         industry: cust.industry.trim() || null, address: address.slice(0, 255) || null,
       },
       discount_amount: _crmQtNum(f.discount_amount), tax_amount: _crmQtNum(f.tax_amount), items,
+      // "Prepared by" — an empty name falls back to the preparer's CRM profile on the server
+      prepared_by_name: (f.prepared_by_name || '').trim() || null,
+      prepared_by_designation: (f.prepared_by_designation || '').trim() || null,
+      prepared_by_phone: (f.prepared_by_phone || '').trim() || null,
+      remember_prepared_by: !!f.remember_prepared_by,
     };
     btn.disabled = true;
     btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
@@ -64670,6 +64726,7 @@ async function submitDsCreate() {
       q.expiry_date ? `<span><i class="fa fa-hourglass-end"></i> Valid until ${_crmQtDate(q.expiry_date)}</span>` : '',
       q.reference ? `<span><i class="fa fa-tag"></i> ${escHtml(q.reference)}</span>` : '',
       q.customer_name ? `<span><i class="fa fa-user"></i> ${escHtml(q.customer_name)}</span>` : '',
+      q.prepared_by?.name ? `<span title="Prepared by — printed on the quotation"><i class="fa fa-id-badge"></i> ${escHtml([q.prepared_by.name, q.prepared_by.designation, q.prepared_by.phone].filter(Boolean).join(' · '))}</span>` : '',
     ].join('');
 
     return `<div class="crm-qtx">
@@ -64795,7 +64852,9 @@ async function submitDsCreate() {
     const s = _crmWs.qt;
     if (!lead || !s?.form || s.view !== 'edit') return;
     const el = e.target;
-    if (el.dataset.qtF !== undefined) {
+    if (el.dataset.qtRemember !== undefined) {
+      s.form.remember_prepared_by = el.checked;
+    } else if (el.dataset.qtF !== undefined) {
       const line = s.form.lines[+el.dataset.qtI];
       if (!line) return;
       line[el.dataset.qtF] = el.value;

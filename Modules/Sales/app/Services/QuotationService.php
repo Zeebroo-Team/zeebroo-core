@@ -69,6 +69,7 @@ class QuotationService
                 'expiry_date'     => filled($data['expiry_date'] ?? '') ? $data['expiry_date'] : null,
                 'status'          => Quotation::STATUS_DRAFT,
                 'notes'           => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                ...$this->preparedByFields($data),
                 'subtotal'        => 0,
                 'discount_amount' => 0,
                 'tax_amount'      => 0,
@@ -103,6 +104,8 @@ class QuotationService
                 'quote_date'  => $data['quote_date'],
                 'expiry_date' => filled($data['expiry_date'] ?? '') ? $data['expiry_date'] : null,
                 'notes'       => filled($data['notes'] ?? '') ? $data['notes'] : null,
+                // Editors that don't send "Prepared by" keep the one on file
+                ...$this->preparedByFields($data),
             ]);
 
             $this->syncItems($quotation, $items);
@@ -239,6 +242,11 @@ class QuotationService
             'quote_date'          => now()->toDateString(),
             'expiry_date'         => $quotation->expiry_date?->toDateString(),
             'notes'               => $quotation->notes,
+            // The new version keeps who prepared it (its editor can change it)
+            'prepared_by'             => $quotation->prepared_by,
+            'prepared_by_name'        => $quotation->prepared_by_name,
+            'prepared_by_designation' => $quotation->prepared_by_designation,
+            'prepared_by_phone'       => $quotation->prepared_by_phone,
             ...$this->headerAdjustments($quotation),
         ], $items);
     }
@@ -368,6 +376,28 @@ class QuotationService
             'tax_amount'      => round($taxAmount, 2),
             'total'           => round($total, 2),
         ]);
+    }
+
+    /**
+     * The "Prepared by" columns present in $data (the caller fills them from the user's CRM
+     * profile); keys left out are not touched.
+     *
+     * @return array<string, mixed>
+     */
+    private function preparedByFields(array $data): array
+    {
+        $out = [];
+        if (array_key_exists('prepared_by', $data)) {
+            $out['prepared_by'] = $this->nullableInt($data['prepared_by']);
+        }
+        foreach (['prepared_by_name' => 120, 'prepared_by_designation' => 120, 'prepared_by_phone' => 40] as $key => $max) {
+            if (array_key_exists($key, $data)) {
+                $v         = trim((string) ($data[$key] ?? ''));
+                $out[$key] = $v === '' ? null : mb_substr($v, 0, $max);
+            }
+        }
+
+        return $out;
     }
 
     private function nullableInt(mixed $value): ?int

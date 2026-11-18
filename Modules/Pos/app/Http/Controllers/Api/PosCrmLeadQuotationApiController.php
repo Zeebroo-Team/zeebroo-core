@@ -13,6 +13,7 @@ use Modules\CRM\Models\Lead;
 use Modules\CRM\Policies\LeadPolicy;
 use Modules\CRM\Services\CrmAccess;
 use Modules\CRM\Services\CrmPermissionService;
+use Modules\CRM\Services\CrmProfileService;
 use Modules\CRM\Services\LeadAssignmentService;
 use Modules\CRM\Services\LeadQuotationService;
 use Modules\CRM\Services\QuotationApprovalMailer;
@@ -78,6 +79,8 @@ class PosCrmLeadQuotationApiController extends Controller
                 // …and when the total goes over the value limit (null = no limit set → always approval)
                 'value_limit'    => $this->approvals->valueLimit($lead),
                 'lead'        => $this->presentLead($lead),
+                // The signed-in user's CRM profile — a new quotation's "Prepared by"
+                'prepared_by' => $this->preparedByDefaults($business, $request),
             ],
         ]);
     }
@@ -535,6 +538,12 @@ class PosCrmLeadQuotationApiController extends Controller
             'notes'                   => ['nullable', 'string', 'max:5000'],
             'discount_amount'         => ['nullable', 'numeric', 'min:0'],
             'tax_amount'              => ['nullable', 'numeric', 'min:0'],
+            // "Prepared by" — left out → the signed-in user's CRM profile
+            'prepared_by_name'        => ['sometimes', 'nullable', 'string', 'max:120'],
+            'prepared_by_designation' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'prepared_by_phone'       => ['sometimes', 'nullable', 'string', 'max:40'],
+            // true → also keep these as the user's CRM profile for their next quotations
+            'remember_prepared_by'    => ['sometimes', 'boolean'],
             'items'                   => ['required', 'array', 'min:1', 'max:200'],
             'items.*.item_type'       => ['nullable', 'string', 'in:product,service,custom'],
             'items.*.product_id'      => ['nullable', 'integer', Rule::exists('products', 'id')->where(fn ($q) => $q->where('business_id', $business->id))],
@@ -546,6 +555,18 @@ class PosCrmLeadQuotationApiController extends Controller
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.tax_rate'        => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
+    }
+
+    /** @return array{name: string, designation: ?string, phone: ?string}|null */
+    private function preparedByDefaults(Business $business, Request $request): ?array
+    {
+        $userId = $request->user()?->id;
+        if (! $userId) {
+            return null;
+        }
+        $p = app(CrmProfileService::class)->get((int) $business->id, (int) $userId);
+
+        return ['name' => $p['name'], 'designation' => $p['designation'], 'phone' => $p['phone']];
     }
 
     private function presentListItem(Quotation $q): array
@@ -660,6 +681,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'customer_address' => $q->customer_address,
             // Who the printed quotation is addressed to — the customer, else the lead
             'bill_to'       => $q->billTo(),
+            // "Prepared by" block of the printed quotation: { name, designation, phone } or null
+            'prepared_by'   => $q->preparedByDetails(),
             'branch_id'     => $q->branch_id,
             'subtotal'      => round((float) $q->subtotal, 2),
             'discount_amount' => round((float) $q->discount_amount, 2),

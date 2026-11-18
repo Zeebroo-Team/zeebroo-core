@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
+use Modules\CRM\Services\CrmProfileService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Services\QuotationService;
@@ -17,6 +18,7 @@ class PosQuotationApiController extends Controller
 
     public function __construct(
         private readonly QuotationService $quotations,
+        private readonly CrmProfileService $profiles,
     ) {}
 
     public function index(Request $request): JsonResponse
@@ -46,7 +48,8 @@ class PosQuotationApiController extends Controller
         try {
             $quotation = $this->quotations->create(
                 $business,
-                $validated,
+                // "Prepared by": the signed-in user's CRM profile
+                $validated + ($request->user() ? $this->profiles->quotationFields((int) $business->id, (int) $request->user()->id) : []),
                 $request->input('items', []),
             );
         } catch (ValidationException $e) {
@@ -186,6 +189,8 @@ class PosQuotationApiController extends Controller
             'customer_address' => $q->customer?->address,
             'customer_phone'   => $q->customer?->phone,
             'customer_email'   => $q->customer?->email,
+            // "Prepared by" block of the printed quotation: { name, designation, phone } or null
+            'prepared_by'      => $q->preparedByDetails(),
             'is_editable'     => $q->isEditable() && ! $q->isLeadQuotation(),
             // The lead it was built from — the Sales panel links back to it
             'lead'            => $q->lead ? [

@@ -67,6 +67,11 @@ body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
 .qt-totals tr.grand td{font-size:15px;font-weight:700;color:#0f172a;border-top:2.5px solid {{ $accentColor }};border-bottom:none;padding-top:9px;}
 .qt-totals tr.grand td.v{color:{{ $accentColor }};}
 
+.qt-prep{margin-top:22px;page-break-inside:avoid;}
+.qt-prep td{vertical-align:top;}
+.qt-prep-name{font-size:12px;font-weight:700;color:#0f172a;}
+.qt-prep-info{font-size:11px;color:#64748b;margin-top:2px;}
+
 .qt-footer{margin-top:22px;border-top:1px solid #e2e8f0;}
 .qt-footer td{padding-top:12px;font-size:10px;color:#94a3b8;}
 
@@ -257,6 +262,20 @@ body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
             </td>
         </tr>
     </table>
+
+    {{-- Prepared by --}}
+    @if($preparedBy = $quotation->preparedByDetails())
+    <table class="qt-prep">
+        <tr>
+            <td>
+                <div class="qt-label">Prepared By</div>
+                <div class="qt-prep-name">{{ $preparedBy['name'] }}</div>
+                @if($preparedBy['designation'])<div class="qt-prep-info">{{ $preparedBy['designation'] }}</div>@endif
+                @if($preparedBy['phone'])<div class="qt-prep-info">Tel: {{ $preparedBy['phone'] }}</div>@endif
+            </td>
+        </tr>
+    </table>
+    @endif
 
     {{-- Footer --}}
     <table class="qt-footer">

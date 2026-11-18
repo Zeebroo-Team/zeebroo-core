@@ -1437,3 +1437,55 @@ test('a head asking for a revision gets the new version at once, recorded as app
         ->and($req->decided_by)->toBe(2)
         ->and($q->fresh()->status)->toBe('superseded');
 });
+// ── Prepared by ───────────────────────────────────────────────────────────
+
+test('a new quotation is prepared by the signed-in user, from their CRM profile', function () {
+    // Nothing saved: the HR record's full name (no job title / phone on file)
+    DB::table('hr_employees')->where('business_id', $this->business->id)->where('user_id', 3)->update(['full_name' => 'Sunil Fernando']);
+    $res = crmQuote('index', 3, [$this->lead->id]);
+    expect($res->getData(true)['meta']['prepared_by'])->toBe(['name' => 'Sunil Fernando', 'designation' => null, 'phone' => null]);
+
+    // Their own CRM profile wins
+    app(\Modules\CRM\Services\CrmProfileService::class)->save($this->business->id, 3, ['designation' => 'Sales Executive', 'phone' => '077 123 4567']);
+    $q = crmQuoteCreate();
+
+    expect($q->prepared_by)->toBe(3)
+        ->and($q->preparedByDetails())->toBe(['name' => 'Sunil Fernando', 'designation' => 'Sales Executive', 'phone' => '077 123 4567'])
+        ->and(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['prepared_by'])
+        ->toBe(['name' => 'Sunil Fernando', 'designation' => 'Sales Executive', 'phone' => '077 123 4567']);
+
+    // A later profile change does not rewrite the quotation
+    app(\Modules\CRM\Services\CrmProfileService::class)->save($this->business->id, 3, ['designation' => 'Sales Manager']);
+    expect($q->fresh()->prepared_by_designation)->toBe('Sales Executive');
+});
+
+test('the editor can change "Prepared by" and keep it as the CRM profile', function () {
+    $q = crmQuoteCreate(null, ['prepared_by_name' => 'S. Fernando', 'prepared_by_designation' => 'Engineer', 'prepared_by_phone' => '011 222 3333']);
+    expect($q->preparedByDetails())->toBe(['name' => 'S. Fernando', 'designation' => 'Engineer', 'phone' => '011 222 3333']);
+
+    // Not remembered: the profile is unchanged
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['prepared_by']['designation'])->toBeNull();
+
+    // Saving without the fields keeps them; an empty name falls back to the preparer's profile
+    crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody());
+    expect($q->fresh()->prepared_by_designation)->toBe('Engineer');
+    crmQuote('update', 3, [$this->lead->id, $q->id], 'PUT', crmQuoteBody(null, ['prepared_by_name' => '', 'prepared_by_designation' => 'Lead Engineer', 'remember_prepared_by' => true]));
+    expect($q->fresh()->prepared_by_name)->toBe('Sunil Silva')
+        ->and(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['prepared_by'])
+        ->toBe(['name' => 'Sunil Silva', 'designation' => 'Lead Engineer', 'phone' => null]);
+});
+
+test('"Prepared by" prints on the PDF and in custom HTML templates', function () {
+    $q = crmQuoteCreate(null, ['prepared_by_designation' => 'Sales Executive', 'prepared_by_phone' => '077 123 4567']);
+
+    $html = view('sales::quotations.print', app(QuotationPrintService::class)->viewData($this->business, $q->fresh()) + ['pdf' => true, 'logoSrc' => null])->render();
+    expect($html)->toContain('Prepared By')->toContain('Sunil')->toContain('Sales Executive')->toContain('Tel: 077 123 4567');
+
+    crmQuoteSetupSave(['template' => 'custom', 'custom_html' => '{{#has_prepared_by}}<p>{{prepared_by_name}}|{{prepared_by_designation}}|{{prepared_by_phone}}</p>{{/has_prepared_by}}']);
+    expect(app(QuotationTemplateService::class)->render($this->business, $q->fresh()))->toContain('<p>Sunil Silva|Sales Executive|077 123 4567</p>');
+
+    // A new version keeps who prepared it
+    $q->update(['status' => Quotation::STATUS_APPROVED]);
+    $v2 = app(QuotationService::class)->revise($q->fresh());
+    expect($v2->preparedByDetails())->toBe(['name' => 'Sunil Silva', 'designation' => 'Sales Executive', 'phone' => '077 123 4567']);
+});

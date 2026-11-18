@@ -29,6 +29,7 @@ class LeadQuotationService
         private readonly LeadService $leads,
         private readonly LeadStageService $stages,
         private readonly CustomerService $customers,
+        private readonly CrmProfileService $profiles,
     ) {}
 
     /** @return Collection<int, Quotation> newest first */
@@ -101,6 +102,7 @@ class LeadQuotationService
     {
         $customerId = $this->saveCustomer($lead, $data) ?? $data['customer_id'] ?? $lead->customer_id;
         unset($data['customer']);
+        $data = $this->withPreparedBy($business, $data, $userId, null);
 
         $quotation = $this->quotations->create($business, [
             ...$data,
@@ -127,6 +129,7 @@ class LeadQuotationService
             $customerId = $this->saveCustomer($lead, $data)
                 ?? (array_key_exists('customer_id', $data) ? $data['customer_id'] : $quotation->customer_id);
             unset($data['customer']);
+            $data = $this->withPreparedBy($lead->business()->firstOrFail(), $data, $userId, $quotation);
 
             $saved = $this->quotations->update($quotation, [...$data, 'customer_id' => $customerId], $items);
             // A version made from a revision request: remember who made the changes
@@ -134,6 +137,48 @@ class LeadQuotationService
 
             return $saved;
         });
+    }
+
+    /**
+     * The quotation's "Prepared by" (name, designation, contact number).
+     *
+     * A new quotation is prepared by the signed-in user: what the editor sent, else their CRM
+     * profile (CrmProfileService — their own values, else HR's). Saving an existing one changes
+     * only the fields the editor sent; an empty name falls back to the preparer's profile.
+     * remember_prepared_by = true also saves the values as the user's CRM profile.
+     */
+    private function withPreparedBy(Business $business, array $data, ?int $userId, ?Quotation $existing): array
+    {
+        $remember = (bool) ($data['remember_prepared_by'] ?? false);
+        unset($data['remember_prepared_by']);
+        $keys = ['prepared_by_name' => 'name', 'prepared_by_designation' => 'designation', 'prepared_by_phone' => 'phone'];
+
+        $preparerId = $existing?->prepared_by ?? $userId;
+        $profile    = $preparerId ? $this->profiles->quotationFields((int) $business->id, (int) $preparerId) : null;
+
+        if ($existing === null) {
+            foreach (array_keys($keys) as $key) {
+                if (! array_key_exists($key, $data)) {
+                    $data[$key] = $profile[$key] ?? null;
+                }
+            }
+            $data['prepared_by'] = $userId;
+        } elseif ($existing->prepared_by === null && $userId) {
+            // Made before "Prepared by" existed — whoever saves it now prepared it
+            $data['prepared_by'] = $userId;
+        }
+        if (array_key_exists('prepared_by_name', $data) && trim((string) $data['prepared_by_name']) === '') {
+            $data['prepared_by_name'] = $profile['prepared_by_name'] ?? null;
+        }
+
+        if ($remember && $userId) {
+            $this->profiles->save((int) $business->id, $userId, collect($keys)
+                ->filter(fn ($_, $key) => array_key_exists($key, $data))
+                ->mapWithKeys(fn ($field, $key) => [$field => $data[$key]])
+                ->all());
+        }
+
+        return $data;
     }
 
     /**
