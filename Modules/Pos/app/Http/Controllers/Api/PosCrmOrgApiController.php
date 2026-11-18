@@ -67,6 +67,13 @@ class PosCrmOrgApiController extends Controller
         $validated = $request->validate([
             'phone_country_code'    => ['sometimes', 'nullable', 'string', 'max:6', 'regex:/^\+?\d{0,4}$/'],
             'quotation_stock_check' => ['sometimes', 'required', 'in:' . implode(',', \Modules\CRM\Models\CrmSetting::STOCK_CHECKS)],
+            // Daily inquiry allocation and the daily report to management
+            'daily_inquiry_limit'         => ['sometimes', 'required', 'integer', 'min:1', 'max:500'],
+            'inquiry_report_enabled'      => ['sometimes', 'boolean'],
+            'inquiry_report_time'         => ['sometimes', 'required', 'string', 'regex:/^([01]\d|2[0-3]):[0-5]\d$/'],
+            'inquiry_report_review'       => ['sometimes', 'boolean'],
+            'inquiry_report_recipients'   => ['sometimes', 'nullable', 'array', 'max:30'],
+            'inquiry_report_recipients.*' => ['email'],
         ]);
         $this->settings->save($business, $validated);
 

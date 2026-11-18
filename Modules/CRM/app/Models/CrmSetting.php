@@ -21,7 +21,27 @@ class CrmSetting extends Model
         'business_id',
         'phone_country_code',
         'quotation_stock_check',
+        'daily_inquiry_limit',
+        'inquiry_report_enabled',
+        'inquiry_report_time',
+        'inquiry_report_review',
+        'inquiry_report_recipients',
+        'inquiry_report_last_run',
     ];
+
+    /** Inquiries a head may hand one user per day when nothing is saved. */
+    public const DEFAULT_DAILY_INQUIRY_LIMIT = 10;
+
+    protected function casts(): array
+    {
+        return [
+            'daily_inquiry_limit'       => 'integer',
+            'inquiry_report_enabled'    => 'boolean',
+            'inquiry_report_review'     => 'boolean',
+            'inquiry_report_recipients' => 'array',
+            'inquiry_report_last_run'   => 'date',
+        ];
+    }
 
     public function business(): BelongsTo
     {

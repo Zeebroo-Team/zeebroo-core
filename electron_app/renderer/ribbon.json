@@ -470,6 +470,7 @@
         {
           "label": "Activity",
           "items": [
+            { "type": "lg", "id": "rb-crm-inquiries",     "icon": "fa-clipboard-check",    "label": "Daily\nInquiries" },
             { "type": "lg", "id": "rb-crm-followups",     "icon": "fa-phone-volume",       "label": "My\nFollow-ups" },
             { "type": "stack", "items": [
               { "type": "sm", "id": "rb-crm-inbox",         "icon": "fa-inbox",            "label": "Marketing Inbox" },

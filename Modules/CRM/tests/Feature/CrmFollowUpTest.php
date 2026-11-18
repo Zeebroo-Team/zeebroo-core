@@ -128,6 +128,9 @@ test('overdue means still pending after the day it was due', function () {
 
 test('today and overdue follow the business\'s own timezone, not the server\'s', function () {
     $this->business->setSetting('business.timezone', 'Asia/Colombo'); // UTC+5:30
+    // CrmSettingsService caches the timezone per request, and the fixture's assignment (dated
+    // on the business calendar for the daily allocation record) already read it — a new request
+    app()->forgetScopedInstances();
     crmwfSentQuotation();
     $f = FollowUp::query()->orderBy('due_at')->firstOrFail(); // due 2026-11-12 09:00 UTC = 14:30 in Colombo
     Event::fake([FollowUpDue::class, FollowUpOverdue::class]);

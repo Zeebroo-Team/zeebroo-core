@@ -10132,6 +10132,12 @@ function _notifNavigate(n) {
       else window.switchMpView?.('tasks', { refresh: true });
       break;
     default:
+      // CRM daily inquiry report ready / sent: open it in Daily Inquiries
+      if (n.type === 'crm_inquiry_report') {
+        if (_activeTab() !== 'crm') activateTab('crm');
+        window.openCrmInquiriesModal?.('reports', { reportId: payload.report_id || null });
+        break;
+      }
       // CRM: deep-link to the lead (its quotation / follow-ups tab when the notification is about one)
       if (String(n.type).startsWith('crm_') && payload.lead_id && payload.project_id) {
         const tab = n.type.startsWith('crm_follow_up') ? 'followups' : null;
@@ -58906,6 +58912,8 @@ async function submitDsCreate() {
   function switchCrmView(view, opts = {}) {
     // Re-read access whenever the CRM tab opens, so changes and business switches apply
     if (view === 'overview' || !_crmAccess) loadCrmAccess();
+    // The daily inquiry status pops up once a day when CRM opens
+    if (view === 'overview') setTimeout(() => window._crmInqMaybeAutoShow?.(), 600);
     _crmView = view;
     $('#crm-overview-view').style.display = view === 'overview' ? 'flex' : 'none';
     $('#crm-relation-view').style.display = view === 'relation' ? 'flex' : 'none';
@@ -65494,6 +65502,415 @@ async function submitDsCreate() {
   });
   $('#rb-crm-followups')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmFollowUpsModal(); });
 
+  // ── Daily inquiries: the daily status pop-up (own day; the team for heads), the allocation
+  // record, the daily limit's exceptions (admins), the daily report heads review and send to
+  // management, and the settings (admins). Opens by itself once a day when CRM opens.
+  let _crmInq = { tab: 'mine', date: null, status: null, meta: {}, exceptions: [], excUser: null, reportId: null };
+  const _CRM_INQ_AUTOSHOW_KEY = 'crm-inq-autoshow';
+  function _crmInqLsGet(key) { try { return localStorage.getItem(key); } catch { return null; } }
+  function _crmInqLsSet(key, value) { try { localStorage.setItem(key, value); } catch { /* private / blocked storage */ } }
+
+  async function openCrmInquiriesModal(tab = 'mine', opts = {}) {
+    _crmInq.tab = tab;
+    _crmInq.date = opts.date || _crmInq.date || null;
+    _crmInq.reportId = opts.reportId || null;
+    // Off unless this person switched it on
+    $('#crm-inq-autoshow').checked = _crmInqLsGet(_CRM_INQ_AUTOSHOW_KEY) === '1';
+    _macShow($('#crm-inq-modal'));
+    await _crmInqLoad();
+  }
+  window.openCrmInquiriesModal = openCrmInquiriesModal;
+  window._crmInqMaybeAutoShow = () => _crmInqMaybeAutoShow();
+
+  /** Once a day per user, when CRM opens: show the day's status if there is anything to see. */
+  async function _crmInqMaybeAutoShow() {
+    if (_crmInqLsGet(_CRM_INQ_AUTOSHOW_KEY) !== '1' || $('#crm-inq-modal')?.style.display === 'flex') return;
+    const res = await API.crmInquiryStatus().catch(() => ({ status: 0 }));
+    if (res.status !== 200) return;
+    const d = res.body.data;
+    const key = `crm-inq-shown:${_crmAccess?.user_id || 'me'}:${d.today}`;
+    if (_crmInqLsGet(key)) return;
+    const hasTeam = (d.team || []).some(t => t.totals.total > 0 || t.users.length);
+    if (!d.mine.counts.total && !hasTeam) return;
+    _crmInqLsSet(key, '1');
+    _crmInq.status = d;
+    _crmInq.meta = res.body.meta || {};
+    _crmInq.date = d.date;
+    // Heads land on their team, everyone else on their own day
+    openCrmInquiriesModal(_crmInq.meta.can_team && !d.mine.counts.total ? 'team' : 'mine', { date: d.date });
+  }
+
+  function _crmInqTabs() {
+    const m = _crmInq.meta || {};
+    const tabs = [
+      ['mine', '<i class="fa fa-user"></i> My day'],
+      m.can_team && ['team', '<i class="fa fa-users"></i> Team'],
+      ['allocations', '<i class="fa fa-clipboard-list"></i> Allocation record'],
+      m.can_view_reports && ['reports', '<i class="fa fa-envelope-open-text"></i> Daily report'],
+      m.can_edit_settings && ['settings', '<i class="fa fa-sliders"></i> Settings'],
+    ].filter(Boolean);
+    $('#crm-inq-tabs').innerHTML = tabs.map(([k, label]) => `<button type="button" class="crm-inbox-tab${_crmInq.tab === k ? ' active' : ''}" data-inq-tab="${k}">${label}</button>`).join('');
+    $('#crm-inq-date-wrap').style.visibility = _crmInq.tab === 'settings' || _crmInq.tab === 'reports' ? 'hidden' : '';
+  }
+
+  async function _crmInqLoad() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryStatus(_crmInq.date).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { _crmInqTabs(); body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    _crmInq.status = res.body.data;
+    _crmInq.meta = res.body.meta || {};
+    _crmInq.date = _crmInq.status.date;
+    $('#crm-inq-date').value = _crmInq.date;
+    $('#crm-inq-date').max = _crmInq.status.today;
+    const isToday = _crmInq.date === _crmInq.status.today;
+    $('#crm-inq-sub').textContent = `${isToday ? 'Today' : _crmInqFmtDay(_crmInq.date)} · daily limit ${_crmInq.status.limit} inquiries per person`;
+    if (!['mine', 'team', 'allocations', 'reports', 'settings'].includes(_crmInq.tab)
+      || (_crmInq.tab === 'team' && !_crmInq.meta.can_team)
+      || (_crmInq.tab === 'reports' && !_crmInq.meta.can_view_reports)
+      || (_crmInq.tab === 'settings' && !_crmInq.meta.can_edit_settings)) _crmInq.tab = 'mine';
+    _crmInqTabs();
+    await _crmInqRender();
+  }
+
+  async function _crmInqRender() {
+    _crmInqTabs();
+    const t = _crmInq.tab;
+    if (t === 'mine') _crmInqRenderMine();
+    else if (t === 'team') await _crmInqRenderTeam();
+    else if (t === 'allocations') await _crmInqRenderAllocations();
+    else if (t === 'reports') await (_crmInq.reportId ? _crmInqRenderReport(_crmInq.reportId) : _crmInqRenderReports());
+    else if (t === 'settings') await _crmInqRenderSettings();
+  }
+
+  function _crmInqFmtDay(iso) {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  function _crmInqCat(key) {
+    return (_crmInq.status?.categories || []).find(c => c.key === key) || { key, label: key, color: '#94a3b8', icon: 'fa-circle' };
+  }
+
+  function _crmInqTilesHtml(counts) {
+    const cats = _crmInq.status?.categories || [];
+    const total = counts.total || 0;
+    const share = n => total ? Math.round(100 * n / total) : 0;
+    return `<div class="crm-inq-tiles">
+      <div class="crm-inq-tile crm-inq-tile--total">
+        <span class="crm-inq-tile-lbl">Total assigned</span>
+        <b>${total}</b>
+        <div class="crm-inq-bar" title="Progress of the day's inquiries">${cats.map(c => counts[c.key] ? `<i style="--c:${c.color};width:${(100 * counts[c.key] / total).toFixed(2)}%" title="${escHtml(c.label)}: ${counts[c.key]}"></i>` : '').join('')}</div>
+      </div>
+      <div class="crm-inq-metrics">
+        ${cats.map(c => {
+          const n = counts[c.key] || 0;
+          return `<div class="crm-inq-tile${n ? '' : ' is-zero'}" style="--c:${c.color}">
+            <span class="crm-inq-tile-lbl"><i class="fa ${c.icon}"></i>${escHtml(c.label)}</span>
+            <b>${n}</b>
+            <small>${total ? `${share(n)}%` : '—'}</small>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+
+  function _crmInqLoadHtml(cap) {
+    if (!cap) return '';
+    const full = cap.remaining < 1;
+    return `<span class="crm-inq-load${full ? ' crm-inq-load--full' : ''}" title="Given today / allowed today${cap.extra ? ` (limit ${cap.limit} + ${cap.extra} extra)` : ''}">${cap.used} / ${cap.allowed}${cap.extra ? ' <i class="fa fa-plus-circle" style="color:#f59e0b"></i>' : ''}</span>`;
+  }
+
+  function _crmInqRenderMine() {
+    const mine = _crmInq.status.mine;
+    const cap = mine.capacity;
+    const rows = mine.leads.map(l => {
+      const c = _crmInqCat(l.category);
+      return `<tr>
+        <td><button type="button" class="crm-inq-link" data-inq-open-lead="${l.id}" data-project="${l.project_id}">${escHtml(l.name || 'Lead')}</button>${l.company ? `<div class="crm-inq-muted">${escHtml(l.company)}</div>` : ''}</td>
+        <td class="crm-inq-muted">${escHtml(l.phone || '')}</td>
+        <td><span class="crm-inq-stage" style="--c:${escHtml(l.stage_color || '#94a3b8')}">${escHtml(l.stage || '—')}</span></td>
+        <td><span class="crm-inq-cat" style="--c:${c.color}"><i class="fa ${c.icon}"></i> ${escHtml(c.label)}</span></td>
+        <td class="crm-inq-muted">${escHtml(l.assigned_by || 'System')}${l.assigned_at ? ` · ${escHtml(new Date(l.assigned_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }))}` : ''}</td>
+      </tr>`;
+    }).join('');
+    $('#crm-inq-body').innerHTML = `
+      ${_crmInqTilesHtml(mine.counts)}
+      <div class="crm-inq-cap${cap.remaining < 1 ? ' is-full' : ''}">
+        <span class="crm-inq-cap-ico"><i class="fa fa-gauge-high"></i></span>
+        <div class="crm-inq-cap-text">
+          <b>Daily quota</b>
+          <span>You were given ${cap.used} of ${cap.allowed} inquiries${_crmInq.date === _crmInq.status.today ? ' today' : ' that day'}${cap.extra ? ` (limit ${cap.limit} + ${cap.extra} extra)` : ''}</span>
+        </div>
+        <div class="crm-inq-bar"><i style="--c:${cap.remaining < 1 ? '#ff3b30' : '#0071e3'};width:${Math.min(100, cap.allowed ? 100 * cap.used / cap.allowed : 0)}%"></i></div>
+        <span class="crm-inq-cap-left">${cap.remaining < 1 ? 'Limit reached' : `${cap.remaining} left`}</span>
+      </div>
+      <div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-list-check"></i> My inquiries <small>· each one counted once, at the furthest step it has reached</small></p>
+        ${rows ? `<table class="crm-inq-table"><thead><tr><th>Lead</th><th>Phone</th><th>Stage</th><th>Progress</th><th>Assigned by</th></tr></thead><tbody>${rows}</tbody></table>`
+               : _crmWsPanelHtml('No inquiries were assigned to you on this day.')}
+      </div>`;
+  }
+
+  async function _crmInqRenderTeam() {
+    const team = _crmInq.status.team || [];
+    const canGrant = !!_crmInq.meta.can_grant_exceptions;
+    const exRes = await API.crmInquiryExceptions(_crmInq.date).catch(() => ({ status: 0 }));
+    _crmInq.exceptions = exRes.status === 200 ? exRes.body.data : [];
+    const cats = _crmInq.status.categories;
+    const isFuture = _crmInq.date >= _crmInq.status.today;
+    const deptHtml = d => {
+      const rows = d.users.map(u => `
+        <tr>
+          <td>${escHtml(u.user.name)}${u.over_limit ? ` <span class="crm-inq-badge crm-inq-badge--over" title="Given beyond the daily limit under an exception">${u.over_limit} over limit</span>` : ''}</td>
+          <td>${_crmInqLoadHtml(u.capacity)}</td>
+          <td class="num"><b>${u.counts.total}</b></td>
+          ${cats.map(c => `<td class="num" style="${u.counts[c.key] ? `color:${c.color};font-weight:600` : 'color:var(--mac-muted)'}">${u.counts[c.key]}</td>`).join('')}
+          <td class="num">${u.counts.conversion_rate}%</td>
+          ${canGrant ? `<td>${isFuture ? `<button type="button" class="po-btn-ghost" style="padding:2px 8px;font-size:11.5px" data-inq-exc-user="${u.user.id}" data-inq-exc-name="${escHtml(u.user.name)}"><i class="fa fa-plus"></i> Exception</button>` : ''}</td>` : ''}
+        </tr>
+        ${_crmInq.excUser === u.user.id ? `<tr><td colspan="${cats.length + 5}">
+          <div class="crm-inq-form" style="padding:6px 0">
+            <label>Extra inquiries for ${escHtml(u.user.name)}<input type="number" min="1" max="200" value="2" class="po-field-input" id="crm-inq-exc-extra"></label>
+            <label style="grid-column:span 2">Reason *<input type="text" maxlength="500" class="po-field-input" id="crm-inq-exc-reason" placeholder="e.g. Exhibition leads must be called today"></label>
+            <div style="display:flex;gap:6px"><button type="button" class="po-btn-primary" data-inq-exc-save="${u.user.id}"><i class="fa fa-check"></i> Grant</button><button type="button" class="po-btn-ghost" data-inq-exc-cancel><i class="fa fa-xmark"></i></button></div>
+          </div></td></tr>` : ''}`).join('');
+      return `<div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-building"></i> ${escHtml(d.department.name)} <small>· ${d.totals.total} inquir${d.totals.total === 1 ? 'y' : 'ies'} · ${d.totals.conversion_rate}% to sale</small></p>
+        ${_crmInqTilesHtml(d.totals)}
+        ${d.users.length ? `<table class="crm-inq-table"><thead><tr><th>Staff</th><th>Load</th><th class="num">Assigned</th>${cats.map(c => `<th class="num">${escHtml(c.label)}</th>`).join('')}<th class="num">Conv.</th>${canGrant ? '<th></th>' : ''}</tr></thead>
+          <tbody>${rows}</tbody></table>` : _crmWsPanelHtml('Nobody in this department has a Zeebroo login yet.')}
+      </div>`;
+    };
+    const exHtml = _crmInq.exceptions.length ? `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-unlock-keyhole"></i> Exceptions to the daily limit <small>· ${escHtml(_crmInqFmtDay(_crmInq.date))}</small></p>
+      <table class="crm-inq-table"><thead><tr><th>Staff</th><th class="num">Extra</th><th>Reason</th><th>Granted by</th>${canGrant ? '<th></th>' : ''}</tr></thead><tbody>
+      ${_crmInq.exceptions.map(e => `<tr><td>${escHtml(e.user.name)}</td><td class="num">+${e.extra_allowed}</td><td>${escHtml(e.reason || '')}</td><td class="crm-inq-muted">${escHtml(e.granted_by?.name || '')}</td>
+        ${canGrant ? `<td><button type="button" class="po-btn-ghost" style="padding:2px 8px;font-size:11.5px" data-inq-exc-revoke="${e.id}"><i class="fa fa-trash"></i></button></td>` : ''}</tr>`).join('')}
+      </tbody></table></div>` : '';
+    $('#crm-inq-body').innerHTML = (team.length ? team.map(deptHtml).join('') : _crmWsPanelHtml('No departments to show.')) + exHtml
+      + `<div class="crm-inq-muted"><i class="fa fa-circle-info"></i> Only heads of department assign inquiries, at most ${_crmInq.status.limit} per person per day. ${canGrant ? 'You can allow someone more for a day with <b>Exception</b>.' : 'An administrator can allow someone more for a day.'}</div>`;
+  }
+
+  async function _crmInqRenderAllocations() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryAllocations({ from: _crmInq.date, to: _crmInq.date }).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const rows = res.body.data;
+    body.innerHTML = `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-clipboard-list"></i> Inquiries handed out on ${escHtml(_crmInqFmtDay(_crmInq.date))} <small>· ${rows.filter(r => !r.released_at).length} active${rows.some(r => r.released_at) ? `, ${rows.filter(r => r.released_at).length} taken back the same day` : ''}</small></p>
+      ${rows.length ? `<table class="crm-inq-table"><thead><tr><th>Time</th><th>Staff</th><th>Lead</th><th>Department</th><th>Assigned by</th><th></th></tr></thead><tbody>
+        ${rows.map(a => `<tr style="${a.released_at ? 'opacity:.55' : ''}">
+          <td class="crm-inq-muted">${a.created_at ? escHtml(new Date(a.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) : ''}</td>
+          <td>${escHtml(a.user.name)}</td>
+          <td>${a.lead ? `<button type="button" class="crm-inq-link" data-inq-open-lead="${a.lead.id}" data-project="${a.lead.project_id}">${escHtml(a.lead.name || 'Lead')}</button> <span class="crm-inq-stage" style="--c:${escHtml(a.lead.color || '#94a3b8')}">${escHtml(a.lead.stage || '')}</span>` : '<span class="crm-inq-muted">Deleted lead</span>'}</td>
+          <td class="crm-inq-muted">${escHtml(a.department?.name || '—')}</td>
+          <td class="crm-inq-muted">${escHtml(a.assigned_by?.name || 'System')}</td>
+          <td>${a.released_at ? '<span class="crm-inq-badge" style="background:var(--mac-fill)">Taken back</span>' : a.over_limit ? '<span class="crm-inq-badge crm-inq-badge--over">Over limit</span>' : ''}</td>
+        </tr>`).join('')}</tbody></table>` : _crmWsPanelHtml('Nothing was handed out on this day.')}
+    </div>`;
+  }
+
+  async function _crmInqRenderReports() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryReports().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const { data, meta } = res.body;
+    const s = meta.settings || {};
+    const how = !s.enabled
+      ? 'The automatic daily report is <b>off</b>' + (meta.can_edit_settings ? ' — turn it on under Settings.' : ' — an administrator can turn it on.')
+      : s.review
+        ? `Made every day at <b>${escHtml(s.time)}</b> and kept as a draft until the head of department reviews and sends it.`
+        : `Made and emailed every day at <b>${escHtml(s.time)}</b>; heads can review it and add a note afterwards.`;
+    body.innerHTML = `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-envelope-open-text"></i> Daily inquiry status reports
+        ${meta.can_manage_reports ? `<button type="button" class="po-btn-ghost" data-inq-generate><i class="fa fa-wand-magic-sparkles"></i> Make today's report now</button>` : ''}</p>
+      <div class="crm-inq-muted">${how} Goes to: ${meta.recipients?.length ? escHtml(meta.recipients.join(', ')) : '<b>nobody yet</b>'}.${meta.can_edit_settings ? ` <button type="button" class="crm-inq-link" data-inq-goto-settings><i class="fa fa-pen"></i> Change</button>` : ''}</div>
+      ${data.length ? `<table class="crm-inq-table"><thead><tr><th>Day</th><th>Department</th><th>Status</th><th class="num">Assigned</th><th class="num">Quotation</th><th class="num">Sale</th><th class="num">Pending</th><th>Reviewed</th><th>Sent</th><th></th></tr></thead><tbody>
+        ${data.map(r => `<tr>
+          <td>${escHtml(_crmInqFmtDay(r.report_date))}</td>
+          <td>${escHtml(r.department?.name || '')}</td>
+          <td><span class="crm-inq-badge crm-inq-badge--${r.status}">${r.status === 'draft' ? 'Waiting for review' : r.status === 'sent' ? 'Sent' : 'Not sent'}</span></td>
+          <td class="num"><b>${r.totals.total ?? 0}</b></td><td class="num">${r.totals.quotation ?? 0}</td><td class="num">${r.totals.sale ?? 0}</td><td class="num">${r.totals.pending ?? 0}</td>
+          <td class="crm-inq-muted">${r.reviewed_by ? escHtml(r.reviewed_by.name) : '—'}</td>
+          <td class="crm-inq-muted">${r.sent_at ? escHtml(new Date(r.sent_at).toLocaleString([], { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })) : '—'}</td>
+          <td><button type="button" class="po-btn-ghost" style="padding:2px 10px;font-size:11.5px" data-inq-report="${r.id}">${r.can_manage && r.status !== 'sent' ? 'Review' : 'Open'}</button></td>
+        </tr>`).join('')}</tbody></table>` : _crmWsPanelHtml('No reports in the last two weeks.')}
+    </div>`;
+  }
+
+  async function _crmInqRenderReport(id) {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmInquiryReport(id).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const r = res.body.data;
+    const d = r.data || {};
+    const cats = _crmInq.status.categories;
+    const totals = d.totals || {};
+    body.innerHTML = `
+      <div><button type="button" class="crm-inq-link" data-inq-reports-back><i class="fa fa-chevron-left"></i> All reports</button></div>
+      <div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-building"></i> ${escHtml(r.department?.name || '')} · ${escHtml(_crmInqFmtDay(r.report_date))}
+          <span class="crm-inq-badge crm-inq-badge--${r.status}">${r.status === 'draft' ? 'Waiting for review' : r.status === 'sent' ? 'Sent' : 'Not sent'}</span></p>
+        ${_crmInqTilesHtml(totals)}
+        <table class="crm-inq-table"><thead><tr><th>Staff member</th><th class="num">Assigned</th>${cats.map(c => `<th class="num">${escHtml(c.label)}</th>`).join('')}<th class="num">Conv.</th></tr></thead><tbody>
+          ${(d.users || []).map(u => `<tr><td>${escHtml(u.user.name)}${u.over_limit ? ` <span class="crm-inq-badge crm-inq-badge--over">${u.over_limit} over limit</span>` : ''}</td><td class="num"><b>${u.counts.total}</b></td>${cats.map(c => `<td class="num">${u.counts[c.key]}</td>`).join('')}<td class="num">${u.counts.conversion_rate}%</td></tr>`).join('')}
+        </tbody><tfoot><tr><td>Department</td><td class="num">${totals.total ?? 0}</td>${cats.map(c => `<td class="num">${totals[c.key] ?? 0}</td>`).join('')}<td class="num">${totals.conversion_rate ?? 0}%</td></tr></tfoot></table>
+        <div class="crm-inq-muted">Figures as of ${r.generated_at ? escHtml(new Date(r.generated_at).toLocaleString()) : '—'}${r.sent_at ? ` · sent ${escHtml(new Date(r.sent_at).toLocaleString())}${r.sent_by ? ` by ${escHtml(r.sent_by.name)}` : ' automatically'} to ${escHtml((r.recipients || []).join(', '))}` : ''}${r.error ? ` · <span style="color:#dc2626">${escHtml(r.error)}</span>` : ''}</div>
+      </div>
+      <div class="crm-inq-card">
+        <p class="crm-inq-h"><i class="fa fa-user-check"></i> Head of department's review ${r.reviewed_by ? `<small>· ${escHtml(r.reviewed_by.name)}, ${escHtml(new Date(r.reviewed_at).toLocaleString())}</small>` : ''}</p>
+        ${r.can_manage ? `
+          <textarea class="po-field-input crm-inq-note" id="crm-inq-review-note" maxlength="5000" placeholder="Optional note for management — it is added to the email">${escHtml(r.review_note || '')}</textarea>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button type="button" class="po-btn-ghost" data-inq-review="${r.id}"><i class="fa fa-floppy-disk"></i> Save review</button>
+            ${r.status !== 'sent' ? `<button type="button" class="po-btn-ghost" data-inq-refresh-report="${r.id}"><i class="fa fa-rotate"></i> Refresh figures</button>` : ''}
+            <button type="button" class="po-btn-primary" data-inq-send="${r.id}"><i class="fa fa-paper-plane"></i> ${r.status === 'sent' ? 'Send again' : 'Mark reviewed & send to management'}</button>
+          </div>`
+          : `<div>${r.review_note ? escHtml(r.review_note).replace(/\n/g, '<br>') : '<span class="crm-inq-muted">No review note.</span>'}</div>`}
+      </div>`;
+  }
+
+  async function _crmInqRenderSettings() {
+    const body = $('#crm-inq-body');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmSettings().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
+    const s = res.body.data;
+    body.innerHTML = `<div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-scale-balanced"></i> Daily allocation</p>
+      <div class="crm-inq-form">
+        <label>Inquiries per person per day<input type="number" min="1" max="500" class="po-field-input" id="crm-inq-set-limit" value="${s.daily_inquiry_limit}">
+          <small>Heads cannot assign more unless you grant an exception for that day.</small></label>
+      </div>
+    </div>
+    <div class="crm-inq-card">
+      <p class="crm-inq-h"><i class="fa fa-envelope-open-text"></i> Daily report to management</p>
+      <div class="crm-inq-form">
+        <label class="mac-switch-label" style="flex-direction:row;align-items:center"><input type="checkbox" class="mac-switch" id="crm-inq-set-enabled"${s.inquiry_report_enabled ? ' checked' : ''}> Make the report every day</label>
+        <label>At (business time)<input type="time" class="po-field-input" id="crm-inq-set-time" value="${escHtml(s.inquiry_report_time)}"></label>
+        <label>When it is made
+          <select class="po-field-input" id="crm-inq-set-review">
+            <option value="0"${!s.inquiry_report_review ? ' selected' : ''}>Email it straight away (heads review after)</option>
+            <option value="1"${s.inquiry_report_review ? ' selected' : ''}>Wait for the head to review and send it</option>
+          </select></label>
+        <label class="wide">Management email addresses<textarea class="po-field-input crm-inq-note" id="crm-inq-set-recipients" placeholder="ceo@company.com, gm@company.com">${escHtml((s.inquiry_report_recipients || []).join(', '))}</textarea>
+          <small>Separate with commas. Left empty, the report goes to the business owner.</small></label>
+      </div>
+      <div><button type="button" class="po-btn-primary" data-inq-save-settings><i class="fa fa-floppy-disk"></i> Save settings</button></div>
+    </div>`;
+  }
+
+  $('#crm-inq-modal')?.addEventListener('click', async e => {
+    if (e.target === e.currentTarget) { _macHide($('#crm-inq-modal')); return; }
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.id === 'crm-inq-close' || t.id === 'crm-inq-close-btn') { _macHide($('#crm-inq-modal')); return; }
+    if (t.id === 'crm-inq-refresh') { _crmInqLoad(); return; }
+    if (t.dataset.inqTab) { _crmInq.tab = t.dataset.inqTab; _crmInq.reportId = null; _crmInq.excUser = null; _crmInqRender(); return; }
+    if (t.dataset.inqOpenLead) {
+      _macHide($('#crm-inq-modal'));
+      crmOpenLead(+t.dataset.project, +t.dataset.inqOpenLead);
+      return;
+    }
+    // Exceptions (admins)
+    if (t.dataset.inqExcUser) { _crmInq.excUser = +t.dataset.inqExcUser; await _crmInqRenderTeam(); $('#crm-inq-exc-reason')?.focus(); return; }
+    if (t.matches('[data-inq-exc-cancel]')) { _crmInq.excUser = null; _crmInqRenderTeam(); return; }
+    if (t.dataset.inqExcSave) {
+      const reason = $('#crm-inq-exc-reason').value.trim();
+      if (!reason) { toast('Give a reason for the exception.', 'error'); return; }
+      t.disabled = true;
+      const res = await API.crmGrantInquiryException({ user_id: +t.dataset.inqExcSave, date: _crmInq.date, extra_allowed: +$('#crm-inq-exc-extra').value || 1, reason });
+      t.disabled = false;
+      if (res.status !== 201) { toast(_crmWsError(res, 'Could not grant the exception.'), 'error'); return; }
+      toast(res.body.message, 'success');
+      _crmInq.excUser = null;
+      _crmInqLoad();
+      return;
+    }
+    if (t.dataset.inqExcRevoke) {
+      if (!await appConfirm({ title: 'Remove this exception?', message: 'Inquiries already given stay; no more can be given beyond the limit.', confirmText: '<i class="fa fa-trash"></i> Remove', icon: 'fa-unlock-keyhole', danger: true })) return;
+      const res = await API.crmRevokeInquiryException(+t.dataset.inqExcRevoke);
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not remove it.'), 'error'); return; }
+      _crmInqLoad();
+      return;
+    }
+    // Reports
+    if (t.dataset.inqReport) { _crmInq.reportId = +t.dataset.inqReport; _crmInqRenderReport(_crmInq.reportId); return; }
+    if (t.matches('[data-inq-reports-back]')) { _crmInq.reportId = null; _crmInqRenderReports(); return; }
+    // Admins: jump from the report's "Goes to" line straight to the recipients box
+    if (t.matches('[data-inq-goto-settings]')) {
+      _crmInq.tab = 'settings';
+      _crmInq.reportId = null;
+      await _crmInqRender();
+      const box = $('#crm-inq-set-recipients');
+      box?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      box?.focus();
+      return;
+    }
+    if (t.matches('[data-inq-generate]')) {
+      t.disabled = true;
+      const res = await API.crmGenerateInquiryReports({}).catch(() => ({ status: 0 }));
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not make the report.'), 'error'); return; }
+      toast(res.body.message, 'success');
+      _crmInqRenderReports();
+      return;
+    }
+    if (t.dataset.inqRefreshReport) {
+      t.disabled = true;
+      const report = await API.crmInquiryReport(+t.dataset.inqRefreshReport);
+      const res = report.status === 200 ? await API.crmGenerateInquiryReports({ date: report.body.data.report_date, department_id: report.body.data.department?.id }) : report;
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not refresh the figures.'), 'error'); return; }
+      _crmInqRenderReport(+t.dataset.inqRefreshReport);
+      return;
+    }
+    if (t.dataset.inqReview || t.dataset.inqSend) {
+      const id = +(t.dataset.inqReview || t.dataset.inqSend);
+      const note = $('#crm-inq-review-note')?.value.trim() || null;
+      if (t.dataset.inqSend && !await appConfirm({ title: 'Send this report to management?', message: 'Your note is included in the email.', confirmText: '<i class="fa fa-paper-plane"></i> Send', icon: 'fa-envelope-open-text' })) return;
+      t.disabled = true;
+      let res = await API.crmReviewInquiryReport(id, note);
+      if (res.status === 200 && t.dataset.inqSend) res = await API.crmSendInquiryReport(id);
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save.'), 'error'); return; }
+      toast(res.body.message, 'success');
+      _crmInqRenderReport(id);
+      return;
+    }
+    // Settings (admins)
+    if (t.matches('[data-inq-save-settings]')) {
+      t.disabled = true;
+      const res = await API.crmSaveSettings({
+        daily_inquiry_limit:       +$('#crm-inq-set-limit').value,
+        inquiry_report_enabled:    $('#crm-inq-set-enabled').checked,
+        inquiry_report_time:       $('#crm-inq-set-time').value,
+        inquiry_report_review:     $('#crm-inq-set-review').value === '1',
+        inquiry_report_recipients: $('#crm-inq-set-recipients').value.split(/[\s,;]+/).map(x => x.trim()).filter(Boolean),
+      }).catch(() => ({ status: 0 }));
+      t.disabled = false;
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the settings.'), 'error'); return; }
+      toast('Daily inquiry settings saved.', 'success');
+      _crmInqLoad();
+    }
+  });
+
+  $('#crm-inq-date')?.addEventListener('change', e => {
+    if (!e.target.value) return;
+    _crmInq.date = e.target.value;
+    _crmInq.excUser = null;
+    _crmInqLoad();
+  });
+  $('#crm-inq-autoshow')?.addEventListener('change', e => {
+    _crmInqLsSet(_CRM_INQ_AUTOSHOW_KEY, e.target.checked ? '1' : '0');
+  });
+  $('#rb-crm-inquiries')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmInquiriesModal(_crmInq.tab || 'mine'); });
+
   // ── Management dashboard (view only): admin, CEO, heads (their departments) ──
   let _crmDash = { filters: null, data: null, range: '30', loadedAt: null };
 
@@ -66043,9 +66460,13 @@ async function submitDsCreate() {
     $('#crm-assign-sub').textContent = lead.name || '';
     $('#crm-assign-note').value = '';
     $('#crm-assign-body').innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
-    const res = await API.crmLeadAssignees(lead.id).catch(() => ({ status: 0 }));
+    // Today's inquiry load of each person, beside their name (a missing count just isn't shown)
+    const [res, capRes] = await Promise.all([
+      API.crmLeadAssignees(lead.id).catch(() => ({ status: 0 })),
+      API.crmLeadInquiryCapacity(lead.id).catch(() => ({ status: 0 })),
+    ]);
     if (res.status !== 200) { $('#crm-assign-body').innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load.'))); return; }
-    _crmAssign = { lead, data: res.body.data };
+    _crmAssign = { lead, data: res.body.data, capacity: capRes.status === 200 ? capRes.body.data : {}, limit: capRes.body?.meta?.limit };
     _crmRenderAssignModal();
   }
 
@@ -66075,11 +66496,13 @@ async function submitDsCreate() {
     const row = u => {
       const sub = [u.division_name ? `Heads ${u.division_name}` : '', u.job_title, u.email].filter(Boolean).map(escHtml).join(' · ');
       const search = [u.name, u.email, u.job_title, u.department_name, u.division_name].filter(Boolean).join(' ').toLowerCase();
+      const cap = _crmAssign.capacity?.[u.id];
+      const load = cap ? `<span class="crm-inq-load crm-assign-load${cap.remaining < 1 && !current.includes(u.id) ? ' crm-inq-load--full' : ''}" title="Inquiries given today / allowed today${cap.extra ? ` (limit ${cap.limit} + ${cap.extra} extra)` : ''}">${cap.used}/${cap.allowed} today</span>` : '';
       return `<div class="crm-assign-row" data-assign-search="${escHtml(search)}">
         <label><input type="checkbox" value="${u.id}" data-assign-user${current.includes(u.id) ? ' checked' : ''}>
           <span class="crm-assign-av">${escHtml(_crmInitials(u.name || '?'))}</span>
           <span class="crm-assign-who"><span class="crm-assign-name">${escHtml(u.name)}</span>${sub ? `<span class="crm-assign-sub">${sub}</span>` : ''}</span></label>
-        <label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
+        ${load}<label class="crm-assign-primary" title="Make primary"><input type="radio" name="crm-assign-primary" value="${u.id}"${u.id === primary ? ' checked' : ''}><i class="fa fa-star"></i></label>
       </div>`;
     };
     const rows = [...groups.keys()].sort().map(k => groups.get(k)).map(g => `
@@ -66097,7 +66520,7 @@ async function submitDsCreate() {
         </div>
       </div>`).join('');
     $('#crm-assign-body').innerHTML = `
-      <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.</div>
+      <div class="crm-ws-muted">Tick everyone who works this lead; the starred one is primary. Only people of the lead's department can be picked.${_crmAssign.limit ? ` Each person can be given at most ${_crmAssign.limit} inquiries a day.` : ''}</div>
       ${pickable.length ? `<div class="crm-assign-tools">
         <div class="crm-assign-search"><i class="fa fa-magnifying-glass"></i>
           <input type="text" id="crm-assign-search" autocomplete="off" placeholder="Search name, email, department or job title…"></div>
@@ -66161,7 +66584,26 @@ async function submitDsCreate() {
       note:            $('#crm-assign-note').value.trim() || null,
     });
     btn.disabled = false;
-    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the assignees.'), 'error'); return; }
+    if (res.status !== 200) {
+      // Daily limit reached: an administrator may allow the full people one more for today and save again
+      if (res.status === 422 && res.body?.errors?.daily_limit && _crmAccess?.unrestricted) {
+        const full = userIds.filter(id => !_crmAssign.data.assignees.some(a => a.id === id) && (_crmAssign.capacity?.[id]?.remaining ?? 1) < 1);
+        if (full.length) {
+          const asked = await _crmAskReason({ title: 'Daily limit reached — grant an exception?', reasonRequired: true, submitLabel: 'Grant 1 extra & save' });
+          if (asked === null) return;
+          for (const id of full) {
+            const cap = _crmAssign.capacity[id];
+            const g = await API.crmGrantInquiryException({ user_id: id, extra_allowed: (cap?.extra || 0) + 1, reason: asked.reason });
+            if (g.status !== 201) { toast(_crmWsError(g, 'Could not grant the exception.'), 'error'); return; }
+            if (cap) { cap.extra += 1; cap.allowed += 1; cap.remaining += 1; }
+          }
+          $('#crm-assign-save').click();
+          return;
+        }
+      }
+      toast(_crmWsError(res, 'Could not save the assignees.'), 'error');
+      return;
+    }
     toast('Assignees saved.', 'success');
     _crmCloseAssignModal();
     if (_crmViewLead?.id === lead.id) {

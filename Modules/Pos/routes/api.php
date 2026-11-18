@@ -768,6 +768,19 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/leads/{lead}/history',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'leadHistory']) ->name('crm.leads.history');
     Route::get   ('crm/projects/{project}/history',    [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistory'])->name('crm.projects.history');
     Route::get   ('crm/projects/{project}/history/flow', [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projectHistoryFlow'])->name('crm.projects.history.flow');
+    // CRM daily inquiry management: status pop-up, allocation record, limit exceptions, daily reports
+    Route::get   ('crm/inquiries/status',                     [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'status'])         ->name('crm.inquiries.status');
+    Route::get   ('crm/inquiries/allocations',                [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'allocations'])    ->name('crm.inquiries.allocations');
+    Route::get   ('crm/inquiries/exceptions',                 [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'exceptions'])     ->name('crm.inquiries.exceptions.index');
+    Route::post  ('crm/inquiries/exceptions',                 [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'grantException']) ->name('crm.inquiries.exceptions.store');
+    Route::delete('crm/inquiries/exceptions/{exception}',     [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'revokeException'])->whereNumber('exception')->name('crm.inquiries.exceptions.destroy');
+    Route::get   ('crm/inquiries/reports',                    [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'reports'])        ->name('crm.inquiries.reports.index');
+    Route::post  ('crm/inquiries/reports/generate',           [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'generate'])       ->name('crm.inquiries.reports.generate');
+    Route::get   ('crm/inquiries/reports/{report}',           [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'report'])         ->whereNumber('report')->name('crm.inquiries.reports.show');
+    Route::post  ('crm/inquiries/reports/{report}/review',    [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'review'])         ->whereNumber('report')->name('crm.inquiries.reports.review');
+    Route::post  ('crm/inquiries/reports/{report}/send',      [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'send'])           ->whereNumber('report')->name('crm.inquiries.reports.send');
+    Route::get   ('crm/leads/{lead}/inquiry-capacity',        [\Modules\Pos\Http\Controllers\Api\PosCrmInquiryApiController::class, 'leadCapacity'])   ->whereNumber('lead')->name('crm.leads.inquiry-capacity');
+
     Route::get   ('crm/overview',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'overview'])    ->name('crm.overview');
     Route::get   ('crm/contacts',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'contacts'])    ->name('crm.contacts.index');
     Route::get   ('crm/customers/{customer}',          [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'customer'])    ->whereNumber('customer')->name('crm.customers.show');

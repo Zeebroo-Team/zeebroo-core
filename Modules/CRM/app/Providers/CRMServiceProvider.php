@@ -33,6 +33,7 @@ class CRMServiceProvider extends ModuleServiceProvider
         \Modules\CRM\Console\Commands\NormalizeLeadPhonesCommand::class,
         \Modules\CRM\Console\Commands\NormalizeCustomerPhonesCommand::class,
         \Modules\CRM\Console\Commands\ProcessFollowUpsCommand::class,
+        \Modules\CRM\Console\Commands\SendInquiryReportsCommand::class,
     ];
 
     /**
@@ -89,6 +90,11 @@ class CRMServiceProvider extends ModuleServiceProvider
     {
         // Follow-up reminders and overdue marking (FollowUpService::process)
         $schedule->command('crm:process-follow-ups')
+            ->everyFifteenMinutes()
+            ->withoutOverlapping();
+
+        // Daily inquiry status reports, at each business's report time (InquiryReportService::runScheduled)
+        $schedule->command('crm:inquiry-reports')
             ->everyFifteenMinutes()
             ->withoutOverlapping();
     }

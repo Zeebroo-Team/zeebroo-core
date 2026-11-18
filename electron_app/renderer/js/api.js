@@ -776,6 +776,18 @@ const API = (() => {
     crmCancelFollowUp:        (id)                     => request('POST',   `/crm/follow-ups/${id}/cancel`),
     crmNotificationPrefs:     ()                       => request('GET',    '/crm/notification-preferences'),
     crmSaveNotificationPrefs: (body)                   => request('PUT',    '/crm/notification-preferences', body),
+    // Daily inquiry management: status pop-up, allocation record, limit exceptions, daily reports
+    crmInquiryStatus:         (date)                   => request('GET',    `/crm/inquiries/status${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+    crmInquiryAllocations:    (params = {})            => request('GET',    `/crm/inquiries/allocations?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmInquiryExceptions:     (date)                   => request('GET',    `/crm/inquiries/exceptions${date ? `?date=${encodeURIComponent(date)}` : ''}`),
+    crmGrantInquiryException: (body)                   => request('POST',   '/crm/inquiries/exceptions', body),
+    crmRevokeInquiryException:(id)                     => request('DELETE', `/crm/inquiries/exceptions/${id}`),
+    crmInquiryReports:        (params = {})            => request('GET',    `/crm/inquiries/reports?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
+    crmInquiryReport:         (id)                     => request('GET',    `/crm/inquiries/reports/${id}`),
+    crmGenerateInquiryReports:(body)                   => request('POST',   '/crm/inquiries/reports/generate', body),
+    crmReviewInquiryReport:   (id, note)               => request('POST',   `/crm/inquiries/reports/${id}/review`, { note }),
+    crmSendInquiryReport:     (id, refresh = false)    => request('POST',   `/crm/inquiries/reports/${id}/send`, { refresh }),
+    crmLeadInquiryCapacity:   (leadId)                 => request('GET',    `/crm/leads/${leadId}/inquiry-capacity`),
     // Management dashboard (admin, CEO, heads) — params: from, to, department_id, division_id, user_id, source
     crmDashboard:             (params = {})            => request('GET',    `/crm/reports/dashboard?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`),
     crmDashboardExportPath:   (format, params = {})    => `/crm/reports/dashboard/${format}?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== '' && v != null)).toString()}`,
