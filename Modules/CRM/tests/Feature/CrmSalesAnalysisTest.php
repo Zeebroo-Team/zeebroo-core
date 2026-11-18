@@ -67,10 +67,20 @@ beforeEach(function () {
         $t->string('full_name');
         $t->timestamps();
     });
+    Schema::create('settings', function (Blueprint $t) {
+        $t->id();
+        $t->string('scope_type');
+        $t->unsignedBigInteger('scope_id');
+        $t->string('key');
+        $t->text('value')->nullable();
+        $t->string('value_type')->default('string');
+        $t->timestamps();
+    });
     Schema::create('pos_customers', function (Blueprint $t) {
         $t->id();
         $t->unsignedBigInteger('business_id');
         $t->string('name');
+        $t->string('industry', 120)->nullable();
         $t->timestamps();
     });
     Schema::create('products', function (Blueprint $t) {
@@ -117,10 +127,11 @@ beforeEach(function () {
         ['id' => 2, 'project_id' => 1, 'name' => 'Won',  'system_key' => 'won',  'is_won' => true,  'is_lost' => false],
         ['id' => 3, 'project_id' => 1, 'name' => 'Lost', 'system_key' => 'lost', 'is_won' => false, 'is_lost' => true],
     ]);
+    $this->t0 = $t0 = now()->subDays(2)->startOfMinute();
     $lead = fn (int $id, string $name, ?string $company, int $dept, int $stage, float $estimate) => [
         'id' => $id, 'business_id' => 7, 'project_id' => 1, 'department_id' => $dept, 'stage_id' => $stage,
         'name' => $name, 'company' => $company, 'source' => 'manual', 'assigned_to' => 3,
-        'estimated_value' => $estimate, 'created_at' => now()->subDays(2), 'updated_at' => now(),
+        'estimated_value' => $estimate, 'created_at' => $t0, 'updated_at' => now(),
     ];
     DB::table('crm_leads')->insert([
         $lead(1, 'Ann',   'Acme Ltd', 10, 2, 900),
@@ -128,14 +139,41 @@ beforeEach(function () {
         $lead(3, 'Kasun', null,       10, 3, 300),
         $lead(4, 'Cara',  'Acme Ltd', 12, 1, 200),
     ]);
-    $quote = fn (int $id, int $lead, string $status, float $total) => [
+    $quote = fn (int $id, int $lead, string $status, float $total, float $subtotal = 0, float $discount = 0) => [
         'id' => $id, 'business_id' => 7, 'lead_id' => $lead, 'quote_number' => 'Q-' . $id, 'quote_date' => today(), 'status' => $status,
+        'subtotal' => $subtotal ?: $total, 'discount_amount' => $discount,
         'total' => $total, 'sent_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now(),
     ];
     DB::table('quotations')->insert([
-        $quote(1, 1, 'accepted', 1000),
-        $quote(2, 2, 'sent', 600),
+        $quote(1, 1, 'accepted', 1000, 1100, 100), // 9.1% discount, approved by the head
+        $quote(2, 2, 'sent', 600),                 // no discount, within the limits
         $quote(3, 3, 'superseded', 999),
+    ]);
+    DB::table('quotation_approvals')->insert([
+        ['quotation_id' => 1, 'action' => 'submitted',    'version' => 1, 'created_at' => now(), 'updated_at' => now()],
+        ['quotation_id' => 1, 'action' => 'approved',     'version' => 1, 'created_at' => now(), 'updated_at' => now()],
+        ['quotation_id' => 2, 'action' => 'within_limit', 'version' => 1, 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    // Acme Ltd is a saved customer in construction (leads 1 and 2 are linked to it)
+    DB::table('pos_customers')->insert(['id' => 1, 'business_id' => 7, 'name' => 'Acme Ltd', 'industry' => 'Construction']);
+    DB::table('crm_leads')->whereIn('id', [1, 2])->update(['customer_id' => 1]);
+
+    // Handling: lead 1 worked after 2 h, first contact = its quotation sent (a day later);
+    // lead 2 worked after 4 h, called after 5 h, follow-up done yesterday. Lead 4 never worked.
+    DB::table('crm_leads')->where('id', 1)->update(['first_response_at' => $t0->copy()->addHours(2)]);
+    DB::table('crm_leads')->where('id', 2)->update(['first_response_at' => $t0->copy()->addHours(4)]);
+    DB::table('quotations')->where('id', 1)->update(['sent_at' => $t0->copy()->addHours(24)]);
+    DB::table('crm_activities')->insert(['business_id' => 7, 'subject_type' => \Modules\CRM\Models\Lead::class, 'subject_id' => 2,
+        'type' => 'call', 'occurred_at' => $t0->copy()->addHours(5), 'created_at' => now(), 'updated_at' => now()]);
+    DB::table('crm_follow_ups')->insert(['business_id' => 7, 'lead_id' => 2, 'user_id' => 3, 'status' => 'done',
+        'due_at' => now()->subDay(), 'done_at' => now()->subDay(), 'created_at' => now(), 'updated_at' => now()]);
+
+    // What the leads asked for
+    DB::table('crm_lead_products')->insert([
+        ['lead_id' => 2, 'product_id' => 2],
+        ['lead_id' => 3, 'product_id' => 1],
+        ['lead_id' => 4, 'product_id' => 1],
     ]);
     DB::table('quotation_items')->insert([
         ['quotation_id' => 1, 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 4, 'unit_price' => 250, 'line_total' => 1000],
@@ -192,11 +230,111 @@ it('exports the table as CSV and PDF', function () {
     ob_start();
     $exports->salesAnalysisCsv($report)->sendContent();
     $csv = ob_get_clean();
-    expect($csv)->toContain('Department,Leads,Open,Won,Lost')
+    expect($csv)->toContain('CRM report — sales by department')
+        ->and($csv)->toContain('Department,Leads,Open,Won,Lost')
         ->and($csv)->toContain('Sales,3,1,1,1,33.3')
         ->and($csv)->toContain('Total,4');
 
     $pdf = $exports->salesAnalysisPdf($this->business, $report);
     expect($pdf->headers->get('Content-Type'))->toBe('application/pdf')
         ->and($pdf->getContent())->toStartWith('%PDF');
+});
+
+it('shows the inquiry-handling KPIs per department', function () {
+    $r = ($this->report)(['group_by' => 'department', 'view' => 'kpi']);
+    $rows = collect($r['rows'])->keyBy('label');
+
+    expect($r['view'])->toBe('kpi')
+        ->and(collect($r['columns'])->pluck('key'))->toContain('avg_contact_hours', 'assigned', 'quote_sale_rate')
+        ->and($rows['Sales'])->toMatchArray([
+            'inquiries'          => 3,
+            'avg_response_hours' => 3.0,   // (2 h + 4 h) ÷ 2
+            'avg_contact_hours'  => 17.7,  // (24 h + 5 h + 24 h) ÷ 3 — lead 3's sent (now superseded) version was a contact too
+            'follow_ups_done'    => 1,
+            'quotations'         => 2,     // the superseded version is left out
+            'converted'          => 1,
+            'quote_sale_rate'    => 50.0,
+            'pending'            => 1,
+            'overdue'            => 0,
+            'won'                => 1,
+            'won_value'          => 1000.0,
+            'assigned'           => 3,
+            'staff'              => 1,
+        ])
+        ->and($rows['Support'])->toMatchArray(['inquiries' => 1, 'pending' => 1, 'overdue' => 1, 'avg_response_hours' => null])
+        ->and($r['totals'])->toMatchArray(['inquiries' => 4, 'quotations' => 2, 'converted' => 1, 'overdue' => 1, 'inquiry_quote_rate' => 75.0])
+        ->and($r['totals'])->not->toHaveKey('staff');
+});
+
+it('groups by period with every bucket of the range', function () {
+    $from = now()->subDays(40)->toDateString();
+    $r = ($this->report)(['group_by' => 'period', 'period' => 'month', 'from' => $from, 'to' => today()->toDateString()]);
+
+    $expected = now()->subDays(40)->startOfMonth()->diffInMonths(now()->startOfMonth()) + 1;
+    expect($r['period'])->toBe('month')
+        ->and($r['rows'])->toHaveCount((int) round($expected))
+        ->and(collect($r['rows'])->firstWhere('label', $this->t0->format('F Y'))['leads'])->toBeGreaterThanOrEqual(1)
+        ->and($r['totals']['leads'])->toBe(4);
+
+    $kpi = ($this->report)(['group_by' => 'period', 'period' => 'day', 'view' => 'kpi']);
+    expect($kpi['rows'])->toHaveCount(30)
+        ->and(collect($kpi['rows'])->firstWhere('label', $this->t0->format('D, j M Y'))['inquiries'])->toBe(4)
+        ->and($kpi['totals']['quotations'])->toBe(2);
+});
+
+it('refuses a daily report over more than a year', function () {
+    ($this->report)(['group_by' => 'period', 'period' => 'day', 'from' => now()->subYears(2)->toDateString()]);
+})->throws(ValidationException::class);
+
+it('groups and filters by the customer industry', function () {
+    $rows = collect(($this->report)(['group_by' => 'industry'])['rows'])->keyBy('label');
+    expect($rows['Construction'])->toMatchArray(['leads' => 2, 'won' => 1])
+        ->and($rows['Industry not set']['leads'])->toBe(2);
+
+    $r = ($this->report)(['group_by' => 'department', 'industry' => 'Construction']);
+    expect($r['totals']['leads'])->toBe(2)
+        ->and($r['options']['industries'])->toBe(['Construction']);
+});
+
+it('shows product inquiry volume and filters by product', function () {
+    $products = collect(($this->report)(['group_by' => 'product'])['rows'])->keyBy('label');
+    expect($products['Solar panel']['inquiries'])->toBe(2)
+        ->and($products['Inverter']['inquiries'])->toBe(1);
+
+    expect(($this->report)(['group_by' => 'department', 'product_id' => 2])['totals']['leads'])->toBe(1)
+        ->and(collect(($this->report)([])['options']['products'])->pluck('name')->all())->toBe(['Inverter', 'Solar panel']);
+});
+
+it('breaks quotations down by discount band with the approval decisions', function () {
+    $r = ($this->report)(['group_by' => 'price']);
+    $rows = collect($r['rows'])->keyBy('label');
+
+    expect($rows)->toHaveCount(6)
+        ->and($rows['No discount'])->toMatchArray(['quotations' => 1, 'quoted_value' => 600.0, 'within_limit' => 1, 'sold' => 0])
+        ->and($rows['5% – 10%'])->toMatchArray(['quotations' => 1, 'discount' => 100.0, 'discount_percent' => 9.1, 'approved' => 1, 'sold' => 1, 'sales_value' => 1000.0])
+        ->and($r['totals'])->toMatchArray(['quotations' => 2, 'approved' => 1, 'rejected' => 0, 'sale_rate' => 50.0]);
+});
+
+it('lists one customer’s inquiries, quotations and sales', function () {
+    $h = app(CrmSalesAnalysisService::class)->customerHistory($this->business, CrmAccess::full(true, 1), ['customer' => 'Acme Ltd']);
+
+    expect($h['summary'])->toMatchArray(['inquiries' => 3, 'open' => 2, 'quotations' => 2, 'sales' => 1, 'sales_value' => 1000.0, 'industry' => 'Construction'])
+        ->and(collect($h['quotations'])->pluck('number')->sort()->values()->all())->toBe(['Q-1', 'Q-2'])
+        ->and($h['sales'][0])->toMatchArray(['lead_id' => 1, 'quotation' => 'Q-1', 'value' => 1000.0]);
+});
+
+it('exports the KPI view as Excel', function () {
+    $report = ($this->report)(['group_by' => 'staff', 'view' => 'kpi']);
+
+    ob_start();
+    app(CrmReportExportService::class)->salesAnalysisExcel($report)->sendContent();
+    $xlsx = ob_get_clean();
+
+    expect($xlsx)->toStartWith('PK');
+});
+
+it('adds the inquiry KPIs to the dashboard', function () {
+    $d = app(\Modules\CRM\Services\CrmReportService::class)->dashboard($this->business, CrmAccess::full(true, 1), []);
+
+    expect($d['inquiry_kpis'])->toMatchArray(['inquiries' => 4, 'quotations' => 2, 'converted' => 1, 'follow_ups_done' => 1, 'overdue' => 1]);
 });

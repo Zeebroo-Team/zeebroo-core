@@ -66107,6 +66107,7 @@ async function submitDsCreate() {
       'Open deals by status': 'fa-layer-group', 'Expected to close': 'fa-calendar-check', 'Largest open deals': 'fa-sack-dollar',
       'Where this period’s leads are now': 'fa-filter', 'Biggest wins in the period': 'fa-trophy', 'Why deals are lost': 'fa-circle-xmark',
       'Lead sources': 'fa-bullseye', 'Departments': 'fa-sitemap', 'Team leaderboard': 'fa-ranking-star',
+      'Inquiry handling': 'fa-inbox', 'Inquiry → sale': 'fa-filter-circle-dollar',
     };
     const card = (title, sub, body, cls = '', id = '') => `
       <div class="crm-dash-card${cls ? ' ' + cls : ''}"${id ? ` id="${id}"` : ''}>
@@ -66221,6 +66222,31 @@ async function submitDsCreate() {
       ${noDate / fcTotal > 0.5 ? '<div class="crm-dash-tip-hint"><i class="fa fa-lightbulb"></i> Most open deals have no expected close date. Set one on each lead to make this forecast useful.</div>' : ''}`
       : _crmWsPanelHtml('No open deals.');
 
+    // Inquiry-handling KPIs (admin reporting): times, follow-ups, quotations, conversion, pending / overdue
+    const q = d.inquiry_kpis;
+    const inquiryHtml = q ? `<div class="crm-dash-metrics">
+        ${metric('Inquiries received', _crmDashNum(q.inquiries), `${(+q.per_day).toLocaleString()} per day`, '', 'Leads created in the period')}
+        ${metric('Avg response', hours(q.avg_response_hours), 'received → first worked on', '', 'From the inquiry arriving to the first message, follow-up, quotation or activity on it')}
+        ${metric('Avg first contact', hours(q.avg_contact_hours), 'received → customer contacted', '', 'From the inquiry arriving to the first call, email or meeting with the customer, follow-up done or quotation sent')}
+        ${metric('Follow-ups done', _crmDashNum(q.follow_ups_done), 'logged in the period', '', 'Follow-ups logged as done in the period')}
+        ${metric('Quotations made', _crmDashNum(q.quotations), q.quotation_value ? `${_crmDashMoney(q.quotation_value, { compact: true })} quoted` : 'none', '', 'Quotations made in the period; a revised quotation counts once')}
+        ${metric('Converted to sales', _crmDashNum(q.converted), q.converted_value ? `${_crmDashMoney(q.converted_value, { compact: true })} accepted` : 'none yet', '', 'Of the quotations made in the period, those the customer accepted')}
+        ${metric('Inquiry → quotation', _crmDashPct(q.inquiry_quote_rate), `${_crmDashNum(q.quoted_inquiries)} of ${_crmDashNum(q.inquiries)} quoted`, '', 'Inquiries received in the period that got a quotation')}
+        ${metric('Quotation → sale', _crmDashPct(q.quote_sale_rate), `${_crmDashNum(q.converted)} of ${_crmDashNum(q.quotations)} accepted`, '', 'Quotations made in the period that the customer accepted')}
+        ${metric('Pending inquiries', _crmDashNum(q.pending), 'received in the period, still open', q.pending ? 'crm-dash-metric--warn' : '', 'Inquiries received in the period that are neither won nor lost')}
+        ${metric('Overdue inquiries', _crmDashNum(q.overdue), q.overdue ? 'need action now' : 'none', q.overdue ? 'crm-dash-metric--bad' : '', 'Pending inquiries with an overdue follow-up, past the expected close date, or not worked on since before today')}
+      </div>` : '';
+    const inquiryFunnel = q ? `${_crmDashBarsHtml([
+        { label: 'Inquiries received', leads: q.inquiries },
+        { label: 'Got a quotation', leads: q.quoted_inquiries },
+        { label: 'Won', leads: q.won },
+      ], { extra: r => _crmDashPct(r.leads / Math.max(1, q.inquiries) * 100), empty: 'No inquiries in this period.' })}
+      <div class="crm-dash-sub-head" style="margin:14px 0 6px">Quotations made in the period</div>
+      ${_crmDashBarsHtml([
+        { label: 'Quotations made', leads: q.quotations },
+        { label: 'Converted to sales', leads: q.converted },
+      ], { color: 'var(--crm-dash-c2)', extra: r => _crmDashPct(r.leads / Math.max(1, q.quotations) * 100), empty: 'No quotations in this period.' })}` : '';
+
     const mode = _crmDash.trendMode || 'revenue';
     const insights = _crmDashInsights(d);
     const jump = (id, label, badge = 0) => `<button type="button" data-dash-jump="${id}"${id === 'crm-dash-s-attention' ? ' class="active"' : ''}>${label}${badge ? `<b>${badge}</b>` : ''}</button>`;
@@ -66238,7 +66264,7 @@ async function submitDsCreate() {
       </div>
 
       <div class="crm-dash-jump">
-        ${jump('crm-dash-s-attention', 'Needs attention', urgent)}${jump('crm-dash-s-trend', 'Trend')}${jump('crm-dash-s-pipeline', 'Pipeline')}${jump('crm-dash-s-channels', 'Channels &amp; teams')}${jump('crm-dash-s-team', 'Team')}
+        ${jump('crm-dash-s-attention', 'Needs attention', urgent)}${q ? jump('crm-dash-s-inquiries', 'Inquiry KPIs', q.overdue) : ''}${jump('crm-dash-s-trend', 'Trend')}${jump('crm-dash-s-pipeline', 'Pipeline')}${jump('crm-dash-s-channels', 'Channels &amp; teams')}${jump('crm-dash-s-team', 'Team')}
       </div>
 
       <div class="crm-dash-heroes">
@@ -66273,6 +66299,12 @@ async function submitDsCreate() {
           ${metric('Sales cycle', k.avg_close_days == null ? '—' : `${k.avg_close_days} d`, 'created → won / lost', '', 'Average days from lead creation to won or lost, for deals closed in the period')}
           ${metric('Past-due deals', _crmDashNum(k.past_due_deals), k.past_due_deals ? `${_crmDashMoney(k.past_due_deals_value, { compact: true })} at risk` : 'None', k.past_due_deals ? 'crm-dash-metric--bad' : '', 'Live: open deals past their expected close date')}
         </div>`)}
+
+      ${q ? `<div class="crm-dash-section" id="crm-dash-s-inquiries">Inquiry KPIs</div>
+      <div class="crm-dash-split">
+        ${card('Inquiry → sale', 'conversion at each step', inquiryFunnel)}
+        ${card('Inquiry handling', 'hover a figure for its meaning', inquiryHtml)}
+      </div>` : ''}
 
       <div class="crm-dash-card" id="crm-dash-s-trend">
         <div class="crm-dash-card-head">
@@ -66668,23 +66700,52 @@ async function submitDsCreate() {
   $('#crm-audit-next')?.addEventListener('click', () => { _crmAuditPage++; _crmLoadAudit(); });
   $('#crm-audit-close')?.addEventListener('click', () => { $('#crm-audit-modal').style.display = 'none'; });
 
-  // ── CRM sales analysis report (ribbon → Report): leads grouped by department, customer,
-  //    product…, previewed here and saved as PDF or CSV for sales analysis ──
-  const _crmRep = { group: 'department', data: null, optionsReady: false, seq: 0 };
-
-  // Sidebar entry per report type: icon, one-line hint, label until the server's list arrives
-  const _crmRepGroupMeta = {
-    department:       ['fa-building-user',   'Leads & revenue per department', 'Department'],
-    division:         ['fa-sitemap',         'Leads & revenue per division',   'Division'],
-    customer:         ['fa-user-tie',        'Each company’s deals',           'Customer'],
-    staff:            ['fa-id-badge',        'Performance per salesperson',    'Staff'],
-    source:           ['fa-bullhorn',        'Where leads come from',          'Source'],
-    product:          ['fa-box-open',        'What gets quoted & won',         'Product / service'],
-    customer_product: ['fa-heart',           'What each company prefers',      'Customer preferences'],
+  // ── CRM reports (ribbon → Report): leads grouped by department, staff, customer, industry,
+  //    period, product, price…, as sales figures or inquiry KPIs; previewed here with summary
+  //    tiles and a chart, saved as Excel / PDF / CSV, and a customer row opens that customer's history ──
+  const _CRM_REP_PREFS = 'crm-report-prefs';
+  const _crmRep = { group: 'department', view: 'sales', period: '', range: '30', data: null, optionsReady: false, seq: 0, chart: true, history: null, sort: null, searchTimer: null };
+  try { Object.assign(_crmRep, JSON.parse(localStorage.getItem(_CRM_REP_PREFS) || '{}')); } catch { /* storage blocked or bad JSON */ }
+  const _crmReportSavePrefs = () => {
+    try { localStorage.setItem(_CRM_REP_PREFS, JSON.stringify({ group: _crmRep.group, view: _crmRep.view, chart: _crmRep.chart })); } catch { /* storage blocked */ }
   };
 
+  // Report types: icon, one-line hint, label, and what one row is ("per …")
+  const _crmRepGroupMeta = {
+    staff:            ['fa-id-badge',        'Each salesperson’s KPIs & sales', 'Staff',                'salesperson'],
+    department:       ['fa-building-user',   'Inquiries, KPIs & revenue',       'Department',           'department'],
+    division:         ['fa-sitemap',         'Leads & revenue per division',    'Division',             'division'],
+    period:           ['fa-calendar-days',   'Daily, weekly, monthly, yearly',  'Period',               'period'],
+    customer:         ['fa-user-tie',        'Each customer’s history',         'Customer',             'customer'],
+    industry:         ['fa-industry',        'Inquiries & sales per industry',  'Industry',             'industry'],
+    source:           ['fa-bullhorn',        'Where leads come from',           'Source',               'lead source'],
+    product:          ['fa-box-open',        'Inquired, quoted & won',          'Product / service',    'product'],
+    customer_product: ['fa-heart',           'What each customer buys',         'Customer preferences', 'customer and item'],
+    price:            ['fa-percent',         'Discounts, approvals & values',   'Price & discount',     'discount band'],
+  };
+  const _crmRepSections = [
+    ['People & performance', ['staff', 'department', 'division', 'period']],
+    ['Customers & markets',  ['customer', 'industry', 'source']],
+    ['Products & pricing',   ['product', 'customer_product', 'price']],
+  ];
+  const _crmRepLeadGroups = ['department', 'division', 'customer', 'staff', 'source', 'industry', 'period'];
+  const _crmRepViews   = [['sales', 'Sales'], ['kpi', 'KPIs']];
+  const _crmRepPeriods = [['day', 'Daily'], ['week', 'Weekly'], ['month', 'Monthly'], ['year', 'Yearly']];
+  // Filter dropdowns: [element, chip label, options key, value of, label of]
+  const _crmRepFilterDefs = [
+    ['#crm-report-department', 'Department',  'departments', x => x.id,  x => x.name],
+    ['#crm-report-division',   'Division',    'divisions',   x => x.id,  x => x.name],
+    ['#crm-report-user',       'Salesperson', 'staff',       x => x.id,  x => x.name],
+    ['#crm-report-source',     'Source',      'sources',     x => x.key, x => x.label],
+    ['#crm-report-status',     'Status',      'statuses',    x => x.key, x => x.label],
+    ['#crm-report-industry',   'Industry',    'industries',  x => x,     x => x],
+    ['#crm-report-product',    'Product',     'products',    x => x.id,  x => x.name],
+  ];
+
   function openCrmReportModal() {
-    if (!_crmRep.optionsReady) _crmReportGroups(Object.entries(_crmRepGroupMeta).map(([key, m]) => ({ key, label: m[2] })));
+    if (!_crmRepGroupMeta[_crmRep.group]) _crmRep.group = 'department';
+    _crmReportGroups();
+    _crmReportShowHistory(false);
     _macShow($('#crm-report-modal'));
     // Fetch now, but hold the result until the window has zoomed in (macWinIn, .38s):
     // redrawing the table mid-animation is what made the open stutter
@@ -66693,50 +66754,218 @@ async function submitDsCreate() {
 
   function _crmReportParams() {
     const val = id => $(id)?.value || '';
+    const leadGroup = _crmRepLeadGroups.includes(_crmRep.group);
     return {
-      group_by: _crmRep.group, from: val('#crm-report-from'), to: val('#crm-report-to'),
+      group_by: _crmRep.group, view: leadGroup ? _crmRep.view : '', period: _crmRep.group === 'period' ? _crmRep.period : '',
+      from: val('#crm-report-from'), to: val('#crm-report-to'),
       department_id: val('#crm-report-department'), division_id: val('#crm-report-division'),
       user_id: val('#crm-report-user'), source: val('#crm-report-source'),
-      status: val('#crm-report-status'), search: val('#crm-report-search').trim(),
+      status: val('#crm-report-status'), industry: val('#crm-report-industry'), product_id: val('#crm-report-product'),
+      search: val('#crm-report-search').trim(),
     };
   }
 
   function _crmReportCell(type, v) {
-    if (v == null || v === '') return type === 'text' ? '' : '—';
+    if (v == null || v === '') return type === 'text' ? '' : '<span class="crm-rep-zero">—</span>';
+    if (type !== 'text' && Number(v) === 0) return '<span class="crm-rep-zero">0</span>';
     if (type === 'money') return escHtml(_crmDashMoney(v));
     if (type === 'pct')   return `${v}%`;
+    if (type === 'hours') return v < 48 ? `${v} h` : `${(v / 24).toFixed(1)} days`;
+    if (type === 'num')   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 1 });
     if (type === 'qty')   return Number(v).toLocaleString(undefined, { maximumFractionDigits: 3 });
     if (type === 'int')   return Number(v).toLocaleString();
     return escHtml(String(v));
   }
 
   function _crmReportOptions(o) {
-    const fill = (id, list, all, keyOf, labelOf) => {
-      const el = $(id), cur = el.value;
-      el.innerHTML = `<option value="">${all}</option>` + list.map(x => `<option value="${escHtml(String(keyOf(x)))}">${escHtml(labelOf(x))}</option>`).join('');
+    _crmRepFilterDefs.forEach(([id, , key, valueOf, labelOf]) => {
+      const el = $(id), cur = el.value, all = el.options[0]?.textContent || 'All';
+      el.innerHTML = `<option value="">${escHtml(all)}</option>` + (o[key] || []).map(x => `<option value="${escHtml(String(valueOf(x)))}">${escHtml(labelOf(x))}</option>`).join('');
       el.value = cur;
-    };
-    fill('#crm-report-department', o.departments, 'All departments', x => x.id, x => x.name);
-    fill('#crm-report-division',   o.divisions,   'All divisions',   x => x.id, x => x.name);
-    fill('#crm-report-user',       o.staff,       'All staff',       x => x.id, x => x.name);
-    fill('#crm-report-source',     o.sources,     'All sources',     x => x.key, x => x.label);
-    fill('#crm-report-status',     o.statuses,    'Any status',      x => x.key, x => x.label);
-    _crmReportGroups(o.groups);
+    });
   }
 
-  function _crmReportGroups(groups) {
-    $('#crm-report-groups').innerHTML = groups.map(g => {
-      const [icon, hint] = _crmRepGroupMeta[g.key] || ['fa-table', ''];
-      return `<button type="button" class="crm-rep-group-btn${g.key === _crmRep.group ? ' active' : ''}" data-rep-group="${g.key}">
-        <i class="fa ${icon}"></i><span>${escHtml(g.label)}<small>${escHtml(hint)}</small></span></button>`;
+  /** The report list in the sidebar, in sections. */
+  function _crmReportGroups() {
+    $('#crm-report-groups').innerHTML = _crmRepSections.map(([title, keys]) => `<div class="crm-rep-section">${title}</div>` + keys.map(key => {
+      const [icon, hint, label] = _crmRepGroupMeta[key];
+      return `<button type="button" class="crm-rep-group-btn${key === _crmRep.group ? ' active' : ''}" data-rep-group="${key}">
+        <i class="fa ${icon}"></i><span>${escHtml(label)}<small>${escHtml(hint)}</small></span></button>`;
+    }).join('')).join('');
+  }
+
+  /** Active filters as removable chips, and their count on the Filters button. */
+  function _crmReportChips() {
+    const o = _crmRep.data?.options || {};
+    const chips = [];
+    const search = $('#crm-report-search').value.trim();
+    if (search) chips.push(['#crm-report-search', 'Customer', search]);
+    _crmRepFilterDefs.forEach(([id, label, key, valueOf, labelOf]) => {
+      const v = $(id).value;
+      if (!v) return;
+      const item = (o[key] || []).find(x => String(valueOf(x)) === v);
+      chips.push([id, label, item ? labelOf(item) : v]);
+    });
+    $('#crm-report-chips').innerHTML = chips.map(([id, label, value]) =>
+      `<button type="button" class="crm-rep-chip" data-rep-clear="${id}" title="Remove this filter"><span>${escHtml(label)}:</span> ${escHtml(value)} <i class="fa fa-xmark"></i></button>`).join('')
+      + (chips.length > 1 ? '<button type="button" class="crm-rep-chip" data-rep-clear="all" title="Remove every filter">Clear all <i class="fa fa-xmark"></i></button>' : '');
+    $('#crm-report-more-count').textContent = _crmRepFilterDefs.filter(([id]) => $(id).value).length || '';
+    return chips.length;
+  }
+
+  /** Title and a plain-language line on what the report shows. */
+  function _crmReportHeader(d) {
+    const [, , label, per] = _crmRepGroupMeta[d.group_by] || ['', '', d.group_label, 'row'];
+    const periodName = (_crmRepPeriods.find(p => p[0] === d.period)?.[1] || '');
+    const row = d.group_by === 'period' ? { day: 'day', week: 'week', month: 'month', year: 'year' }[d.period] : per;
+    const title = d.group_by === 'period' ? `${periodName} report` : label;
+    const desc = {
+      kpi:              `How quickly and how well inquiries are handled — one row per ${row}. Inquiries are counted when they arrive; follow-ups and quotations when they are done.`,
+      sales:            `Leads received in the period and what came of them — one row per ${row}.`,
+      product:          'How often each product was asked for, quoted and sold.',
+      customer_product: 'What each customer was quoted, item by item, and each item’s share of their quotes.',
+      price:            'Quotations made in the period by how much discount they give, whether the discount was approved, and how many were sold.',
+    }[d.view || d.group_by] || '';
+    $('#crm-report-title').textContent = d.view ? `${title} · ${d.view === 'kpi' ? 'KPIs' : 'Sales'}` : title;
+    $('#crm-report-desc').textContent = desc + (d.group_by === 'customer' ? ' Click a customer to see their full history.' : '');
+  }
+
+  /** The four to six figures that matter most for this report, from its totals. */
+  function _crmReportTiles(d) {
+    const t = d.totals || {};
+    const tile = (value, label, sub = '', tone = '') => `<div class="crm-rep-tile${tone ? ` crm-rep-tile--${tone}` : ''}"><b>${value}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ''}</div>`;
+    const money = v => escHtml(_crmDashMoney(v || 0, { compact: true }));
+    const num = v => _crmDashNum(v || 0);
+    const hours = v => v == null ? '—' : v < 48 ? `${v} h` : `${(v / 24).toFixed(1)} days`;
+    let tiles = [];
+    if (d.view === 'kpi') {
+      tiles = [
+        tile(num(t.inquiries), 'Inquiries received', `${(+t.per_day || 0).toLocaleString()} per day`),
+        tile(hours(t.avg_contact_hours), 'Avg time to first contact', `first response ${hours(t.avg_response_hours)}`),
+        tile(num(t.follow_ups_done), 'Follow-ups done'),
+        tile(num(t.quotations), 'Quotations made', `${_crmDashPct(t.inquiry_quote_rate)} of inquiries quoted`),
+        tile(_crmDashPct(t.quote_sale_rate), 'Quotation → sale', `${num(t.converted)} converted`, t.quote_sale_rate >= 30 ? 'good' : ''),
+        tile(num(t.overdue), 'Overdue inquiries', `${num(t.pending)} still pending`, t.overdue ? 'bad' : 'good'),
+        tile(money(t.won_value), 'Sales value', `${num(t.won)} won`),
+      ];
+    } else if (d.view === 'sales') {
+      tiles = [
+        tile(num(t.leads), 'Leads received', `${num(t.open)} still open`),
+        tile(num(t.won), 'Won', `${_crmDashPct(t.conversion_rate)} converted`, t.won ? 'good' : ''),
+        tile(num(t.lost), 'Lost'),
+        tile(money(t.won_value), 'Won value', t.avg_deal_value ? `avg ${escHtml(_crmDashMoney(t.avg_deal_value, { compact: true }))}` : ''),
+        tile(money(t.quoted_value), 'Quoted value', `${num(t.quotations)} quotations sent`),
+        tile(money(t.pipeline_value), 'Pipeline value', 'estimated'),
+      ];
+    } else if (d.group_by === 'price') {
+      tiles = [
+        tile(num(t.quotations), 'Quotations made', t.avg_value ? `avg ${escHtml(_crmDashMoney(t.avg_value, { compact: true }))}` : ''),
+        tile(money(t.discount), 'Discount given', `${_crmDashPct(t.discount_percent)} on average`),
+        tile(num(t.approved), 'Discounts approved', `${num(t.within_limit)} needed no approval`, 'good'),
+        tile(num(t.rejected), 'Discounts rejected', `${num(t.pending)} awaiting approval`, t.rejected ? 'bad' : ''),
+        tile(money(t.sales_value), 'Sales value', `${num(t.sold)} sold · ${_crmDashPct(t.sale_rate)}`),
+      ];
+    } else {
+      tiles = [
+        tile(num(d.rows.length), d.group_by === 'product' ? 'Products' : 'Customer & item pairs'),
+        tile(money(t.quoted_value), 'Quoted value', t.qty ? `${Number(t.qty).toLocaleString()} units` : ''),
+        tile(money(t.won_value), 'Won value', `${_crmDashPct(t.win_share)} of quoted`, t.won_value ? 'good' : ''),
+      ];
+    }
+    $('#crm-report-tiles').innerHTML = d.rows.length ? tiles.join('') : '';
+  }
+
+  /** The Sales / KPIs and Daily … Yearly switches, for the reports that have them. */
+  function _crmReportToolbar(d) {
+    const seg = (list, cur, attr) => list.map(([key, label]) => `<button type="button" ${attr}="${key}" class="${key === cur ? 'active' : ''}">${label}</button>`).join('');
+    $('#crm-report-views').innerHTML   = d.view ? seg(_crmRepViews, d.view, 'data-rep-view') : '';
+    $('#crm-report-periods').innerHTML = d.period ? seg(_crmRepPeriods, d.period, 'data-rep-period') : '';
+    $('#crm-report-chart-toggle').classList.toggle('active', _crmRep.chart);
+    $('#crm-report-chart-toggle').innerHTML = `<i class="fa fa-chart-bar"></i> ${_crmRep.chart ? 'Hide chart' : 'Show chart'}`;
+    $('#crm-report-hint').innerHTML = d.columns.some(c => c.hint)
+      ? '<i class="fa fa-circle-info"></i> Hover a column heading to see what it counts. Click a heading to sort.'
+      : 'Click a column heading to sort.';
+  }
+
+  /** Bars for the main figure of the report: the top rows, or every period in order. */
+  function _crmReportChart(d) {
+    const box = $('#crm-report-chart');
+    if (!_crmRep.chart || !d.rows.length || d.group_by === 'customer_product') { box.innerHTML = ''; return; }
+    const [key, title] = d.group_by === 'price' ? ['quotations', 'Quotations per discount band']
+      : d.group_by === 'product' ? ['quoted_value', 'Quoted value per product']
+      : d.view === 'kpi' ? ['inquiries', 'Inquiries received']
+      : d.rows.some(r => r.won_value) ? ['won_value', 'Won value'] : ['leads', 'Leads received'];
+    const col = d.columns.find(c => c.key === key);
+    const ordered = d.group_by === 'period' || d.group_by === 'price';
+    const rows = (ordered ? d.rows : [...d.rows].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10))
+      .map(r => ({ label: r.label, value: Number(r[key]) || 0 }));
+    if (rows.every(r => !r.value)) { box.innerHTML = ''; return; }
+    const max = Math.max(1, ...rows.map(r => r.value));
+    const by = ordered ? '' : ` — top ${rows.length}`;
+    box.innerHTML = `<div class="crm-rep-chart-title">${escHtml(title)}${escHtml(by)}</div><div class="crm-dash-bars">${rows.map(r => `
+      <div class="crm-dash-bar-row" title="${escHtml(r.label)}">
+        <span class="crm-dash-bar-label">${escHtml(r.label)}</span>
+        <span class="crm-dash-bar-track"><span class="crm-dash-bar" style="width:${Math.max(r.value ? 2 : 0, r.value / max * 100)}%;background:var(--accent)"></span></span>
+        <span class="crm-dash-bar-value">${_crmReportCell(col?.type || 'int', r.value)}</span>
+      </div>`).join('')}</div>`;
+  }
+
+  /** The table, sorted by the clicked heading (customer preferences keep their customer blocks). */
+  function _crmReportTable(d) {
+    const right = c => c.type === 'text' ? '' : ' r';
+    const sortable = d.group_by !== 'customer_product';
+    const sort = sortable && _crmRep.sort && d.columns.some(c => c.key === _crmRep.sort.key) ? _crmRep.sort : null;
+    $('#crm-report-head').innerHTML = `<tr>${d.columns.map(c => {
+      const on = sort?.key === c.key;
+      const arrow = sortable ? `<i class="fa ${on ? (sort.dir === 'asc' ? 'fa-arrow-up' : 'fa-arrow-down') : 'fa-sort'} crm-rep-sort"></i>` : '';
+      return `<th class="${right(c)}${on ? ' sorted' : ''}"${sortable ? ` data-rep-sort="${c.key}"` : ''}${c.hint ? ` title="${escHtml(c.hint)}"` : ''}>${escHtml(c.label)}${arrow}</th>`;
+    }).join('')}</tr>`;
+
+    if (!d.rows.length) {
+      const filtered = _crmReportChips() > 0;
+      $('#crm-report-rows').innerHTML = `<tr><td colspan="${d.columns.length}"><div class="crm-rep-empty">
+        <i class="fa fa-magnifying-glass-chart"></i><b>Nothing to show for this period</b>
+        ${filtered ? 'Try removing a filter, or pick a longer period.' : 'Try a longer period.'}
+        <div class="crm-rep-empty-actions">
+          <button type="button" class="po-btn-ghost" data-rep-range="year"><i class="fa fa-calendar"></i> Show this year</button>
+          ${filtered ? '<button type="button" class="po-btn-ghost" data-rep-clear="all"><i class="fa fa-eraser"></i> Clear filters</button>' : ''}
+        </div></div></td></tr>`;
+      $('#crm-report-foot').innerHTML = '';
+      return;
+    }
+
+    let rows = d.rows;
+    if (sort) {
+      const col = d.columns.find(c => c.key === sort.key);
+      const val = r => r[sort.key];
+      rows = [...rows].sort((a, b) => {
+        const [x, y] = [val(a), val(b)];
+        if (x == null || x === '') return 1;
+        if (y == null || y === '') return -1;
+        const cmp = col.type === 'text' ? String(x).localeCompare(String(y), undefined, { numeric: true }) : x - y;
+        return sort.dir === 'asc' ? cmp : -cmp;
+      });
+    }
+    const drill = d.group_by === 'customer';
+    let prevCustomer = null;
+    $('#crm-report-rows').innerHTML = rows.map(row => {
+      // Customer preferences: name each customer once, at the top of their block
+      const first = 'customer' in row && row.customer !== prevCustomer;
+      prevCustomer = row.customer ?? null;
+      const cls = [first ? 'crm-rep-group' : '', drill ? 'crm-rep-link' : ''].filter(Boolean).join(' ');
+      return `<tr${cls ? ` class="${cls}"` : ''}${drill ? ` data-rep-customer="${escHtml(row.label)}" title="Show ${escHtml(row.label)}’s history"` : ''}>${d.columns.map(c =>
+        `<td class="${right(c)}">${c.key === 'customer' && !first ? '' : (c.key === 'customer' ? `<strong>${_crmReportCell(c.type, row[c.key])}</strong>` : _crmReportCell(c.type, row[c.key]))}</td>`).join('')}</tr>`;
     }).join('');
+    $('#crm-report-foot').innerHTML = `<tr>${d.columns.map((c, i) => `<td class="${right(c)}">${i === 0 ? 'Total' : (c.key in d.totals ? _crmReportCell(c.type, d.totals[c.key]) : '')}</td>`).join('')}</tr>`;
   }
 
   // settled: hold the redraw until this resolves (the window's open animation)
   async function _crmLoadReport(settled) {
     const seq  = ++_crmRep.seq;
-    const card = $('#crm-report-modal .crm-rep-card');
+    const card = $('#crm-report-main .crm-rep-card');
     const cols = _crmRep.data?.columns.length || 6;
+    _crmReportShowHistory(false);
+    _crmReportChips();
     // Keep the last report up, dimmed, so the table doesn't collapse to a spinner and jump back
     if (_crmRep.data) card.classList.add('loading');
     else $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…')}</td></tr>`;
@@ -66746,38 +66975,96 @@ async function submitDsCreate() {
     if (res.status !== 200) {
       $('#crm-report-rows').innerHTML = `<tr><td colspan="${cols}">${_crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the report.')))}</td></tr>`;
       $('#crm-report-foot').innerHTML = '';
+      $('#crm-report-chart').innerHTML = '';
+      $('#crm-report-tiles').innerHTML = '';
       return;
     }
     const d = _crmRep.data = res.body.data;
     if (!_crmRep.optionsReady) {
       _crmReportOptions(d.options);
       _crmRep.optionsReady = true;
-    } else {
-      $('#crm-report-groups').querySelectorAll('[data-rep-group]').forEach(b => b.classList.toggle('active', b.dataset.repGroup === d.group_by));
     }
-    // Show the range actually used (the server fills in the last 30 days when left empty)
+    $('#crm-report-groups').querySelectorAll('[data-rep-group]').forEach(b => b.classList.toggle('active', b.dataset.repGroup === d.group_by));
+    // Show what was actually used (the server fills in the last 30 days and the period when left empty)
     $('#crm-report-from').value = d.filters.from;
     $('#crm-report-to').value   = d.filters.to;
+    if (d.view) _crmRep.view = d.view;
+    if (d.period) _crmRep.period = d.period;
+    $$('#crm-report-ranges [data-rep-range]').forEach(b => b.classList.toggle('active', b.dataset.repRange === _crmRep.range));
 
-    const r = c => c.type === 'text' ? '' : ' class="r"';
-    $('#crm-report-head').innerHTML = `<tr>${d.columns.map(c => `<th${r(c)}>${escHtml(c.label)}</th>`).join('')}</tr>`;
-    let prevCustomer = null;
-    $('#crm-report-rows').innerHTML = d.rows.length ? d.rows.map(row => {
-      // Customer preferences: name each customer once, at the top of their block
-      const first = 'customer' in row && row.customer !== prevCustomer;
-      prevCustomer = row.customer ?? null;
-      return `<tr${first ? ' class="crm-rep-group"' : ''}>${d.columns.map(c =>
-        `<td${r(c)}>${c.key === 'customer' && !first ? '' : (c.key === 'customer' ? `<strong>${_crmReportCell(c.type, row[c.key])}</strong>` : _crmReportCell(c.type, row[c.key]))}</td>`).join('')}</tr>`;
-    }).join('') : `<tr><td colspan="${d.columns.length}">${_crmWsPanelHtml('Nothing matches these filters.')}</td></tr>`;
-    $('#crm-report-foot').innerHTML = d.rows.length
-      ? `<tr>${d.columns.map((c, i) => `<td${r(c)}>${i === 0 ? 'Total' : (c.key in d.totals ? _crmReportCell(c.type, d.totals[c.key]) : '')}</td>`).join('')}</tr>`
-      : '';
-    $('#crm-report-summary').textContent = `${d.rows.length} ${d.rows.length === 1 ? 'row' : 'rows'} · by ${d.group_label.toLowerCase()} · leads created ${d.filters.from} → ${d.filters.to}`;
+    _crmReportChips();
+    _crmReportHeader(d);
+    _crmReportToolbar(d);
+    _crmReportTiles(d);
+    _crmReportChart(d);
+    _crmReportTable(d);
+    const span = `${_crmDashDay(d.filters.from)} – ${_crmDashDay(d.filters.to)}`;
+    $('#crm-report-summary').textContent = span;
+    $('#crm-report-foot-note').textContent = `${d.rows.length} ${d.rows.length === 1 ? 'row' : 'rows'} · ${span}`;
   }
 
-  async function _crmReportDownload(format, btn) {
+  // ── Customer history (drill-down from a customer row) ──
+  function _crmReportShowHistory(on) {
+    $('#crm-report-main').style.display    = on ? 'none' : '';
+    $('#crm-report-history').style.display = on ? '' : 'none';
+    $('.crm-rep-filterbar').style.display  = on ? 'none' : '';
+    if (!on) _crmRep.history = null;
+  }
+
+  async function _crmReportOpenHistory(customer) {
+    _crmReportShowHistory(true);
+    _crmRep.history = customer;
+    const box = $('#crm-report-history');
+    box.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const p = _crmReportParams();
-    const name = `crm-sales-by-${p.group_by.replace('_', '-')}-${p.from || 'last-30-days'}${p.to ? `-to-${p.to}` : ''}.${format}`;
+    const res = await API.crmCustomerHistory({ customer, department_id: p.department_id, division_id: p.division_id, user_id: p.user_id, source: p.source })
+      .catch(() => ({ status: 0 }));
+    if (_crmRep.history !== customer) return;
+    if (res.status !== 200) { box.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the customer history.'))); return; }
+    const h = res.body.data, s = h.summary;
+    const day = v => v ? escHtml(_crmDashDay(v)) : '—';
+    const pill = (label, color) => `<span class="crm-rep-pill" style="--pill:${escHtml(color || '#94a3b8')}">${escHtml(label)}</span>`;
+    const table = (title, head, rows, empty) => `<div class="crm-rep-history-title">${title}</div>
+      <div class="crm-rep-card"><table class="crm-audit-table crm-rep-table">
+        <thead><tr>${head.map(([label, right]) => `<th${right ? ' class="r"' : ''}>${label}</th>`).join('')}</tr></thead>
+        <tbody>${rows.length ? rows.join('') : `<tr><td colspan="${head.length}">${_crmWsPanelHtml(empty)}</td></tr>`}</tbody>
+      </table></div>`;
+    const tile = (value, label) => `<div class="crm-rep-tile"><b>${value}</b><span>${label}</span></div>`;
+
+    box.innerHTML = `
+      <div class="crm-rep-history-head">
+        <button type="button" class="po-btn-ghost" data-rep-history-back><i class="fa fa-arrow-left"></i> Back to the report</button>
+        <h3>${escHtml(h.customer)}</h3>
+        <span class="crm-rep-hint">${[s.industry, s.phone, s.email].filter(Boolean).map(escHtml).join(' · ')}${s.first_inquiry ? ` · customer since ${day(s.first_inquiry)}` : ''}</span>
+      </div>
+      <div class="crm-rep-tiles">
+        ${tile(_crmDashNum(s.inquiries), `inquiries · ${_crmDashNum(s.open)} open`)}
+        ${tile(_crmDashNum(s.quotations), 'quotations')}
+        ${tile(escHtml(_crmDashMoney(s.quoted_value, { compact: true })), 'quoted value')}
+        ${tile(_crmDashNum(s.sales), 'sales')}
+        ${tile(escHtml(_crmDashMoney(s.sales_value, { compact: true })), 'sales value')}
+      </div>
+      ${table('Inquiry history', [['Date'], ['Contact'], ['Source'], ['Department'], ['Owner'], ['Status'], ['Estimated value', true]],
+        h.inquiries.map(i => `<tr><td>${day(i.date)}</td><td>${escHtml(i.contact || '—')}</td><td>${escHtml(i.source || '—')}</td>
+          <td>${escHtml(i.department || '—')}</td><td>${escHtml(i.owner || 'Unassigned')}</td><td>${pill(i.stage, i.stage_color)}</td>
+          <td class="r">${_crmReportCell('money', i.value || null)}</td></tr>`), 'No inquiries.')}
+      ${table('Quotation history', [['Number'], ['Date'], ['Sent'], ['Status'], ['Discount', true], ['Total', true]],
+        h.quotations.map(q => `<tr><td><strong>${escHtml(q.number || '#' + q.id)}</strong>${q.version > 1 ? ` <span class="crm-ws-muted">v${q.version}</span>` : ''}</td>
+          <td>${day(q.date)}</td><td>${day(q.sent_at)}</td><td>${pill(q.status, q.status_color)}</td>
+          <td class="r">${q.discount_percent ? `${q.discount_percent}%` : '—'}</td><td class="r">${_crmReportCell('money', q.total)}</td></tr>`), 'No quotations.')}
+      ${table('Sales history', [['Closed'], ['Quotation'], ['Won by'], ['Value', true]],
+        h.sales.map(x => `<tr><td>${day(x.closed_at)}</td><td>${escHtml(x.quotation || '—')}</td><td>${escHtml(x.owner || '—')}</td>
+          <td class="r"><strong>${_crmReportCell('money', x.value)}</strong></td></tr>`), 'No sales yet.')}`;
+    $('#crm-report-summary').textContent = `Customer history · ${h.customer}`;
+  }
+
+  async function _crmReportDownload(format) {
+    const p = _crmReportParams();
+    const ext = format === 'excel' ? 'xlsx' : format;
+    const what = p.view === 'kpi' ? 'kpis' : 'sales';
+    const by = (p.group_by === 'period' && p.period ? p.period : p.group_by).replace('_', '-');
+    const name = `crm-${what}-by-${by}-${p.from || 'last-30-days'}${p.to ? `-to-${p.to}` : ''}.${ext}`;
+    const btn = $('#crm-report-download');
     btn.disabled = true;
     const res = await window.electronAPI.downloadFile(API.crmSalesAnalysisExportPath(format, p), name);
     btn.disabled = false;
@@ -66786,23 +67073,124 @@ async function submitDsCreate() {
     toast(`Saved ${name} — click to show in folder`, 'info', () => window.electronAPI.showInFolder(res.savedPath));
   }
 
+  function _crmReportDlMenu(open) {
+    $('#crm-report-dl-menu').hidden = !open;
+    $('#crm-report-download').setAttribute('aria-expanded', String(open));
+  }
+
+  /** Quick ranges: today, this week (from Monday), this month, the last 30 days, this year. */
+  function _crmReportRange(key) {
+    const now = new Date();
+    const to = _crmIsoDay(now);
+    const from = key === 'today' ? to
+      : key === 'week' ? _crmIsoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7)))
+      : key === 'month' ? _crmIsoDay(new Date(now.getFullYear(), now.getMonth(), 1))
+      : key === '30' ? _crmIsoDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29))
+      : _crmIsoDay(new Date(now.getFullYear(), 0, 1));
+    return { from, to };
+  }
+
+  function _crmReportApplyRange(key) {
+    const { from, to } = _crmReportRange(key);
+    $('#crm-report-from').value = from;
+    $('#crm-report-to').value = to;
+    _crmRep.range = key;
+    _crmRep.period = ''; // let the server pick days / weeks / months for the new length
+    _crmLoadReport();
+  }
+
+  function _crmReportClear(target) {
+    if (target === 'all') {
+      $('#crm-report-search').value = '';
+      _crmRepFilterDefs.forEach(([id]) => { $(id).value = ''; });
+    } else {
+      $(target).value = '';
+    }
+    _crmLoadReport();
+  }
+
   $('#crm-report-groups')?.addEventListener('click', e => {
     const b = e.target.closest('[data-rep-group]');
-    if (!b || b.dataset.repGroup === _crmRep.group) return;
+    if (!b || (b.dataset.repGroup === _crmRep.group && !_crmRep.history)) return;
     _crmRep.group = b.dataset.repGroup;
+    _crmRep.sort = null;
+    _crmReportSavePrefs();
     _crmLoadReport();
   });
-  $('#crm-report-run')?.addEventListener('click', () => _crmLoadReport());
-  // Dropdowns and dates apply straight away; the search waits for Enter / Generate
-  $('#crm-report-modal .crm-rep-filters')?.addEventListener('change', () => _crmLoadReport());
-  $('#crm-report-reset')?.addEventListener('click', () => {
-    $('#crm-report-modal').querySelectorAll('.crm-rep-filters .po-field-input, #crm-report-search').forEach(el => { el.value = ''; });
-    _crmLoadReport();
+  $('#crm-report-ranges')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep-range]');
+    if (b) _crmReportApplyRange(b.dataset.repRange);
   });
-  $('#crm-report-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') _crmLoadReport(); });
-  $('#crm-report-pdf')?.addEventListener('click', e => _crmReportDownload('pdf', e.currentTarget));
-  $('#crm-report-csv')?.addEventListener('click', e => _crmReportDownload('csv', e.currentTarget));
-  $('#crm-report-refresh')?.addEventListener('click', () => _crmLoadReport());
+  $('#crm-report-more')?.addEventListener('click', e => {
+    const panel = $('#crm-report-filters');
+    panel.hidden = !panel.hidden;
+    e.currentTarget.setAttribute('aria-expanded', String(!panel.hidden));
+  });
+  $('#crm-report-chips')?.addEventListener('click', e => {
+    const c = e.target.closest('[data-rep-clear]');
+    if (c) _crmReportClear(c.dataset.repClear);
+  });
+  $('#crm-report-main')?.addEventListener('click', e => {
+    const v = e.target.closest('[data-rep-view]');
+    if (v) { _crmRep.view = v.dataset.repView; _crmRep.sort = null; _crmReportSavePrefs(); _crmLoadReport(); return; }
+    const p = e.target.closest('[data-rep-period]');
+    if (p) { _crmRep.period = p.dataset.repPeriod; _crmLoadReport(); return; }
+    if (e.target.closest('#crm-report-chart-toggle')) {
+      _crmRep.chart = !_crmRep.chart;
+      _crmReportSavePrefs();
+      if (_crmRep.data) { _crmReportToolbar(_crmRep.data); _crmReportChart(_crmRep.data); }
+      return;
+    }
+    const th = e.target.closest('[data-rep-sort]');
+    if (th && _crmRep.data) {
+      // Click: highest first → lowest first → back to the report's own order
+      const key = th.dataset.repSort, cur = _crmRep.sort;
+      const first = _crmRep.data.columns.find(c => c.key === key)?.type === 'text' ? 'asc' : 'desc';
+      _crmRep.sort = cur?.key !== key ? { key, dir: first }
+        : cur.dir === first ? { key, dir: first === 'asc' ? 'desc' : 'asc' } : null;
+      _crmReportTable(_crmRep.data);
+      return;
+    }
+    const range = e.target.closest('[data-rep-range]');
+    if (range) { _crmReportApplyRange(range.dataset.repRange); return; }
+    const clear = e.target.closest('[data-rep-clear]');
+    if (clear) { _crmReportClear(clear.dataset.repClear); return; }
+    const c = e.target.closest('[data-rep-customer]');
+    if (c) _crmReportOpenHistory(c.dataset.repCustomer);
+  });
+  $('#crm-report-history')?.addEventListener('click', e => {
+    if (e.target.closest('[data-rep-history-back]')) {
+      _crmReportShowHistory(false);
+      if (_crmRep.data) _crmLoadReport();
+    }
+  });
+  // Dropdowns and dates apply straight away; typing in the search waits a moment
+  $('#crm-report-filters')?.addEventListener('change', () => _crmLoadReport());
+  ['#crm-report-from', '#crm-report-to'].forEach(id => $(id)?.addEventListener('change', () => {
+    if (!$('#crm-report-from').value || !$('#crm-report-to').value) return;
+    _crmRep.range = '';
+    _crmRep.period = '';
+    _crmLoadReport();
+  }));
+  $('#crm-report-search')?.addEventListener('input', () => {
+    clearTimeout(_crmRep.searchTimer);
+    _crmRep.searchTimer = setTimeout(() => _crmLoadReport(), 400);
+  });
+  $('#crm-report-search')?.addEventListener('keydown', e => { if (e.key === 'Enter') { clearTimeout(_crmRep.searchTimer); _crmLoadReport(); } });
+  $('#crm-report-reset')?.addEventListener('click', () => _crmReportClear('all'));
+  $('#crm-report-download')?.addEventListener('click', e => { e.stopPropagation(); _crmReportDlMenu($('#crm-report-dl-menu').hidden); });
+  $('#crm-report-dl-menu')?.addEventListener('click', e => {
+    const b = e.target.closest('[data-rep-dl]');
+    if (!b) return;
+    _crmReportDlMenu(false);
+    _crmReportDownload(b.dataset.repDl);
+  });
+  document.addEventListener('click', e => { if (!e.target.closest('.crm-rep-dl')) _crmReportDlMenu(false); });
+  document.addEventListener('keydown', e => {
+    const menu = $('#crm-report-dl-menu');
+    if (e.key === 'Escape' && menu && !menu.hidden) { e.stopPropagation(); _crmReportDlMenu(false); }
+  }, true);
+  $('#crm-report-refresh')?.addEventListener('click', () => _crmRep.history ? _crmReportOpenHistory(_crmRep.history) : _crmLoadReport());
   ['#crm-report-close', '#crm-report-close-btn'].forEach(id => $(id)?.addEventListener('click', () => _macHide($('#crm-report-modal'))));
 
   // macOS-style open/close: the window zooms out of the point that opened it (the clicked

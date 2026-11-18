@@ -727,6 +727,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/reports/sales-analysis',     [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysis'])   ->name('crm.reports.sales-analysis');
     Route::get   ('crm/reports/sales-analysis/pdf', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisPdf'])->name('crm.reports.sales-analysis.pdf');
     Route::get   ('crm/reports/sales-analysis/csv', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisCsv'])->name('crm.reports.sales-analysis.csv');
+    Route::get   ('crm/reports/sales-analysis/excel', [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'salesAnalysisExcel'])->name('crm.reports.sales-analysis.excel');
+    // CRM customer history (drill-down from a customer row of the report): inquiries, quotations, sales
+    Route::get   ('crm/reports/customer-history',   [\Modules\Pos\Http\Controllers\Api\PosCrmReportApiController::class, 'customerHistory'])->name('crm.reports.customer-history');
 
     // CRM
     Route::get   ('crm/projects',                      [\Modules\Pos\Http\Controllers\Api\PosCrmApiController::class, 'projects'])    ->name('crm.projects.index');

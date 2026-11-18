@@ -4,6 +4,7 @@ namespace Modules\CRM\Services;
 
 use Barryvdh\DomPDF\Facade\Pdf;
 use Modules\Business\Models\Business;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
@@ -72,6 +73,7 @@ class CrmReportExportService
         $binary = Pdf::loadView('crm::reports.sales-analysis-pdf', [
             'business' => $business,
             'report'   => $report,
+            'title'    => $this->salesTitle($report),
             'filters'  => $this->salesFilterLine($report),
             'cell'     => fn (array $column, $value) => $this->formatCell($column['type'], $value),
         ])->setPaper('a4', count($report['columns']) > 7 ? 'landscape' : 'portrait')->output();
@@ -88,7 +90,7 @@ class CrmReportExportService
         return response()->streamDownload(function () use ($report) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // UTF-8 BOM so Excel shows non-ASCII names correctly
-            fputcsv($out, ['CRM sales analysis — by ' . strtolower($report['group_label'])]);
+            fputcsv($out, [$this->salesTitle($report)]);
             fputcsv($out, [$this->salesFilterLine($report)]);
             fputcsv($out, []);
             fputcsv($out, array_column($report['columns'], 'label'));
@@ -100,6 +102,83 @@ class CrmReportExportService
         }, $this->salesFileName($report, 'csv'), ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
+    /**
+     * The same table as an Excel workbook: raw numbers with number formats, a title, the
+     * filters and a totals row.
+     */
+    public function salesAnalysisExcel(array $report): StreamedResponse
+    {
+        $book  = new Spreadsheet;
+        $sheet = $book->getActiveSheet();
+        $book->getProperties()->setTitle($this->salesTitle($report));
+        $sheet->setTitle(mb_substr($report['group_label'], 0, 31));
+
+        $columns = $report['columns'];
+        $last    = Coordinate::stringFromColumnIndex(count($columns));
+        $sheet->setCellValue('A1', $this->salesTitle($report));
+        $sheet->setCellValue('A2', $this->salesFilterLine($report));
+        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+        $sheet->getStyle('A2')->getFont()->setItalic(true);
+
+        $head = 4;
+        $sheet->fromArray(array_column($columns, 'label'), null, 'A' . $head, true);
+        $sheet->getStyle("A{$head}:{$last}{$head}")->getFont()->setBold(true);
+        $sheet->getStyle("A{$head}:{$last}{$head}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E2E8F0');
+
+        $line = $head;
+        foreach ($report['rows'] as $row) {
+            $sheet->fromArray(array_map(fn ($c) => $this->excelValue($c['type'], $row[$c['key']] ?? null), $columns), null, 'A' . ++$line, true);
+        }
+        $sheet->fromArray(array_map(fn ($c, $i) => $i === 0 ? 'Total' : $this->excelValue($c['type'], $report['totals'][$c['key']] ?? null),
+            $columns, array_keys($columns)), null, 'A' . ++$line, true);
+        $sheet->getStyle("A{$line}:{$last}{$line}")->getFont()->setBold(true);
+
+        foreach ($columns as $i => $c) {
+            $col    = Coordinate::stringFromColumnIndex($i + 1);
+            $format = match ($c['type']) {
+                'money' => '#,##0.00',
+                'pct'   => '0.0"%"',
+                'hours' => '0.0" h"',
+                'num'   => '0.0',
+                'qty'   => '#,##0.###',
+                'int'   => '#,##0',
+                default => null,
+            };
+            if ($format !== null) {
+                $sheet->getStyle("{$col}" . ($head + 1) . ":{$col}{$line}")->getNumberFormat()->setFormatCode($format);
+            }
+            $sheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        $sheet->freezePane('B' . ($head + 1));
+
+        return response()->streamDownload(function () use ($book) {
+            (new Xlsx($book))->save('php://output');
+        }, $this->salesFileName($report, 'xlsx'), ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']);
+    }
+
+    /** "CRM report — KPIs by staff", "CRM report — sales by month" … */
+    public function salesTitle(array $report): string
+    {
+        $by = $report['group_by'] === 'period' && $report['period']
+            ? strtolower(collect($report['options']['periods'])->firstWhere('key', $report['period'])['label'] ?? 'period') . ' (by period)'
+            : 'by ' . strtolower($report['group_label']);
+
+        return 'CRM report — ' . match ($report['view'] ?? null) {
+            'kpi'   => 'KPIs ',
+            'sales' => 'sales ',
+            default => '',
+        } . $by;
+    }
+
+    private function excelValue(string $type, $value)
+    {
+        if ($value === null || $value === '') {
+            return $type === 'text' ? '' : null;
+        }
+
+        return $type === 'text' ? (string) $value : (float) $value;
+    }
+
     public function salesFilterLine(array $report): string
     {
         $f = $report['filters'];
@@ -107,7 +186,9 @@ class CrmReportExportService
         return implode(' · ', array_filter([
             $this->filterLine($report),
             $f['status'] ? 'Status: ' . (collect($report['options']['statuses'])->firstWhere('key', $f['status'])['label'] ?? $f['status']) : null,
-            $f['search'] ? 'Search: "' . $f['search'] . '"' : null,
+            $f['search'] ? 'Customer: "' . $f['search'] . '"' : null,
+            ($f['industry'] ?? null) ? 'Industry: ' . $f['industry'] : null,
+            ($f['product_id'] ?? null) ? 'Product: ' . (collect($report['options']['products'] ?? [])->firstWhere('id', $f['product_id'])['name'] ?? '#' . $f['product_id']) : null,
         ]));
     }
 
@@ -121,6 +202,8 @@ class CrmReportExportService
             'money' => number_format((float) $value, 2),
             'qty'   => rtrim(rtrim(number_format((float) $value, 3), '0'), '.'),
             'pct'   => $value . '%',
+            'num'   => number_format((float) $value, 1),
+            'hours' => number_format((float) $value, 1) . ' h',
             'int'   => number_format((int) $value),
             default => (string) $value,
         };
@@ -128,7 +211,10 @@ class CrmReportExportService
 
     private function salesFileName(array $report, string $ext): string
     {
-        return 'crm-sales-by-' . str_replace('_', '-', $report['group_by']) . '-' . $report['filters']['from'] . '-to-' . $report['filters']['to'] . '.' . $ext;
+        $group = $report['group_by'] === 'period' && ($report['period'] ?? null) ? $report['period'] : $report['group_by'];
+
+        return 'crm-' . (($report['view'] ?? null) === 'kpi' ? 'kpis' : 'sales') . '-by-' . str_replace('_', '-', $group)
+            . '-' . $report['filters']['from'] . '-to-' . $report['filters']['to'] . '.' . $ext;
     }
 
     /** @return list<array{0: string, 1: string|int|float}> label, value */
@@ -159,6 +245,30 @@ class CrmReportExportService
             ['Past-due deals now', $k['past_due_deals'] . ' · ' . $money($k['past_due_deals_value'])],
             ['Not contacted yet (now)', $k['uncontacted_leads']],
             ['Unassigned leads (now)', $k['unassigned_leads']],
+            ...$this->inquiryKpiRows($report['inquiry_kpis'] ?? null),
+        ];
+    }
+
+    /** The inquiry-handling KPIs (CrmKpiService) as label / value rows. */
+    private function inquiryKpiRows(?array $k): array
+    {
+        if ($k === null) {
+            return [];
+        }
+        $hours = fn ($h) => $h !== null ? $h . ' h' : '—';
+
+        return [
+            ['Inquiries received', $k['inquiries'] . ' (' . $k['per_day'] . ' per day)'],
+            ['Average response time', $hours($k['avg_response_hours'])],
+            ['Average time to first contact', $hours($k['avg_contact_hours'])],
+            ['Follow-ups done', $k['follow_ups_done']],
+            ['Quotations made', $k['quotations'] . ' · ' . number_format((float) $k['quotation_value'], 2)],
+            ['Quotations converted to sales', $k['converted'] . ' · ' . number_format((float) $k['converted_value'], 2)],
+            ['Inquiry → quotation rate', $k['inquiry_quote_rate'] . '%'],
+            ['Quotation → sale rate', $k['quote_sale_rate'] . '%'],
+            ['Pending inquiries', $k['pending']],
+            ['Overdue inquiries', $k['overdue']],
+            ['Sales from these inquiries', $k['won'] . ' · ' . number_format((float) $k['won_value'], 2)],
         ];
     }
 

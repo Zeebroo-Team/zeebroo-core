@@ -108,6 +108,7 @@ function crmwfSetUp(): void
         $t->string('normalized_phone', 32)->nullable();
         $t->string('email')->nullable();
         $t->text('notes')->nullable();
+        $t->string('industry', 120)->nullable();
         $t->timestamps();
     });
     Schema::create('products', function (Blueprint $t) {
