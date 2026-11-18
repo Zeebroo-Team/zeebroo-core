@@ -63869,6 +63869,7 @@ async function submitDsCreate() {
     const lead = _crmViewLead;
     const fromInterest = (lead?.product_items || []).map(p => ({
       item_type: 'product', product_id: p.id, description: p.name, sku: p.sku || '', quantity: p.quantity || 1, unit_price: p.unit_price ?? 0, discount_amount: 0, tax_rate: 0,
+      _autoPrice: true, // replaced by the standard price once the stock check returns it
     }));
     return {
       id: null, number: null,
@@ -63929,7 +63930,7 @@ async function submitDsCreate() {
       discount_amount: q.header?.discount_amount || 0, tax_amount: q.header?.tax_amount || 0,
       lines: (q.items || []).map(i => ({
         item_type: i.item_type, product_id: i.product_id, service_item_id: i.service_item_id, description: i.description || i.product_name || '',
-        notes: i.notes || '', sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
+        notes: i.notes || '', sku: i.sku || '', quantity: i.quantity, unit_price: i.unit_price, list_price: i.list_price ?? null, discount_amount: i.discount_amount, tax_rate: i.tax_rate,
       })),
     };
   }
@@ -63964,6 +63965,52 @@ async function submitDsCreate() {
     return stock.mode === 'block'
       ? '<div class="crm-qt-banner crm-qt-banner--red"><i class="fa fa-ban"></i> Some lines ask for more than is in stock — this quotation cannot be saved until they fit.</div>'
       : '<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-triangle-exclamation"></i> Some lines ask for more than is in stock.</div>';
+  }
+
+  // ── Automatic pricing: product lines carry their standard (catalog) price as list_price ──
+  // Without "Change standard prices" (meta.can_change_price) the price is filled in and locked;
+  // with it, any change is flagged here and to the approver (QuotationApprovalService::priceChanges).
+  function _crmQtCanChangePrice() { return _crmWs.quotations?.meta?.can_change_price !== false; }
+  function _crmQtHasStd(l) { return l.item_type === 'product' && !!l.product_id && l.list_price != null; }
+  function _crmQtPriceLocked(l) { return _crmQtHasStd(l) && !_crmQtCanChangePrice(); }
+  function _crmQtPriceChanged(l) { return _crmQtHasStd(l) && Math.abs(_crmQtNum(l.unit_price) - _crmQtNum(l.list_price)) >= 0.005; }
+
+  /** Under a line's price box: locked, or changed from the standard price with a reset button. */
+  function _crmQtStdHtml(l, i) {
+    if (_crmQtPriceLocked(l)) return '<span title="Standard price from the catalog"><i class="fa fa-lock"></i> Standard</span>';
+    if (!_crmQtPriceChanged(l)) return '';
+    const up = _crmQtNum(l.unit_price) > _crmQtNum(l.list_price);
+    return `<span class="crm-qt-std--changed" title="Standard price ${escHtml(_crmQtMoney(l.list_price))} — the approver will see this change">
+        <i class="fa fa-arrow-${up ? 'up' : 'down'}"></i> Std ${escHtml(_crmQtMoney(l.list_price))}</span>
+      <button type="button" class="crm-ws-link" data-qt-price-reset="${i}" title="Use the standard price"><i class="fa fa-rotate-left"></i></button>`;
+  }
+
+  function _crmQtPriceWarnHtml(form) {
+    const n = (form?.lines || []).filter(_crmQtPriceChanged).length;
+    return n ? `<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-tag"></i> ${n} ${n === 1 ? 'price differs' : 'prices differ'} from the standard price — the approver will see ${n === 1 ? 'this change' : 'these changes'}.</div>` : '';
+  }
+
+  /** Standard prices from the stock check (product id → price): set list_price, and the price itself when locked or not changed by hand. */
+  function _crmQtApplyPrices(s, prices) {
+    if (!prices || !s.form) return;
+    s.form.lines.forEach((l, i) => {
+      if (l.item_type !== 'product' || !l.product_id) return;
+      const p = prices[l.product_id];
+      if (p == null) return;
+      const followed = l._autoPrice || (l.list_price != null && !_crmQtPriceChanged(l)) || _crmQtNum(l.unit_price) <= 0;
+      l.list_price = p;
+      delete l._autoPrice;
+      const box = $(`#crm-qt-edit-body [data-qt-f="unit_price"][data-qt-i="${i}"]`);
+      if (followed || !_crmQtCanChangePrice()) {
+        l.unit_price = p;
+        if (box && document.activeElement !== box) box.value = String(p);
+      }
+      if (box) {
+        box.readOnly = _crmQtPriceLocked(l);
+        box.classList.toggle('crm-qt-numin--locked', box.readOnly);
+      }
+    });
+    _crmQtRefreshTotals();
   }
 
   /** Live version of the detail view's discount banner: the overall discount % against the department's limit (QuotationApprovalService::discountSummary). */
@@ -64143,7 +64190,8 @@ async function submitDsCreate() {
           </div></div>
         </td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0.001" step="any" data-qt-f="quantity" data-qt-i="${i}" value="${escHtml(String(l.quantity ?? ''))}" data-wheel-blur></td>
-        <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}" data-wheel-blur></td>
+        <td><input class="po-field-input crm-qt-numin${_crmQtPriceLocked(l) ? ' crm-qt-numin--locked' : ''}" type="number" min="0" step="any" data-qt-f="unit_price" data-qt-i="${i}" value="${escHtml(String(l.unit_price ?? ''))}"${_crmQtPriceLocked(l) ? ' readonly' : ''} data-wheel-blur>
+          <div class="crm-qt-std" data-qt-std="${i}">${_crmQtStdHtml(l, i)}</div></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" step="any" data-qt-f="discount_amount" data-qt-i="${i}" value="${l.discount_amount ? escHtml(String(l.discount_amount)) : ''}" placeholder="0" data-wheel-blur></td>
         <td><input class="po-field-input crm-qt-numin" type="number" min="0" max="100" step="any" data-qt-f="tax_rate" data-qt-i="${i}" value="${l.tax_rate ? escHtml(String(l.tax_rate)) : ''}" placeholder="0" data-wheel-blur></td>
         <td class="crm-qt-right" data-qt-lt="${i}">${_crmQtMoney(t.lines[i].net)}</td>
@@ -64185,6 +64233,7 @@ async function submitDsCreate() {
         </div>
       </section>
 
+      <div id="crm-qt-price-warn">${_crmQtPriceWarnHtml(f)}</div>
       <div id="crm-qt-disc-warn">${_crmQtDiscountWarnHtml(t)}</div>
 
       <div class="crm-qtx-foot">
@@ -64235,6 +64284,9 @@ async function submitDsCreate() {
     set('#crm-qt-t-total-dock', _crmQtMoney(t.total));
     const warn = $('#crm-qt-disc-warn');
     if (warn) warn.innerHTML = _crmQtDiscountWarnHtml(t);
+    s.form.lines.forEach((l, i) => { const el = $(`#crm-qt-edit-body [data-qt-std="${i}"]`); if (el) el.innerHTML = _crmQtStdHtml(l, i); });
+    const pw = $('#crm-qt-price-warn');
+    if (pw) pw.innerHTML = _crmQtPriceWarnHtml(s.form);
   }
 
   function _crmQtScheduleStock(lead) {
@@ -64246,6 +64298,7 @@ async function submitDsCreate() {
       const res = await API.crmLeadQuotationStock(lead.id, { items }).catch(() => ({ status: 0 }));
       if (_crmViewLead?.id !== lead.id || s.view !== 'edit' || res.status !== 200) return;
       s.stock = res.body.data;
+      _crmQtApplyPrices(s, s.stock?.prices);
       s.form.lines.forEach((_, i) => { const el = $(`#crm-qt-edit-body [data-qt-stock="${i}"]`); if (el) el.innerHTML = _crmQtStockCellHtml(s, i); });
       const warn = $('#crm-qt-stock-warn');
       if (warn) warn.innerHTML = _crmQtStockWarnHtml(s.stock);
@@ -64353,7 +64406,7 @@ async function submitDsCreate() {
     const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
     if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
     else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
-      quantity: qty, unit_price: m.unit_sell_price ?? 0, discount_amount: 0, tax_rate: 0 });
+      quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: 0 });
     s.pick = { ...s.pick, modelId: '', qty: 1, open: null }; // keep the brand for the next model
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
@@ -64456,7 +64509,7 @@ async function submitDsCreate() {
         <td>${idx + 1}</td>
         <td>${escHtml(i.description || i.product_name || '—')}${i.sku ? `<div class="crm-ws-muted crm-qt-sub">${escHtml(i.sku)}</div>` : ''}${i.notes ? `<div class="crm-ws-muted crm-qt-sub crm-qt-note-view"><i class="fa fa-note-sticky"></i> ${escHtml(i.notes)}</div>` : ''}</td>
         <td class="crm-qt-right">${_crmQtQty(i.quantity)}</td>
-        <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}</td>
+        <td class="crm-qt-right">${_crmQtMoney(i.unit_price)}${i.price_changed ? `<div class="crm-qt-std crm-qt-std--changed" title="Changed from the standard price">Std ${escHtml(_crmQtMoney(i.list_price))}</div>` : ''}</td>
         ${lineDisc ? `<td class="crm-qt-right">${i.discount_amount > 0 ? '−' + _crmQtMoney(i.discount_amount) : '—'}</td>` : ''}
         ${lineTax ? `<td class="crm-qt-right">${i.tax_amount > 0 ? `${_crmQtMoney(i.tax_amount)} <span class="crm-ws-muted">(${_crmQtQty(i.tax_rate)}%)</span>` : '—'}</td>` : ''}
         <td class="crm-qt-right"><strong>${_crmQtMoney(i.line_total)}</strong></td>
@@ -64470,6 +64523,9 @@ async function submitDsCreate() {
     if (q.approved_by && ['approved', 'sent', 'accepted'].includes(q.status)) banners.push(`<div class="crm-qt-banner crm-qt-banner--teal"><i class="fa fa-circle-check"></i> Approved by ${escHtml(q.approved_by.name)} ${q.approved_at ? escHtml(_crmFmtDateTime(q.approved_at)) : ''}${q.approval_comment ? ` — ${escHtml(q.approval_comment)}` : ''}</div>`);
     if (q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--purple"><i class="fa fa-lock"></i> This version was replaced${q.superseded_by ? ` by <button type="button" class="crm-ws-link" data-qt-open="${q.superseded_by.id}">${escHtml(q.superseded_by.quote_number)}</button>` : ''} — it is kept read-only as history.</div>`);
     if (q.discount?.over_limit && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-percent"></i> Discount ${_crmQtQty(q.discount.percent)}% is over the department's limit of ${_crmQtQty(q.discount.limit)}%${['draft', 'returned'].includes(q.status) ? ' — it must be approved by the department head before it is sent' : ''}.</div>`);
+    const pc = q.price_changes || [];
+    if (pc.length && !q.is_superseded) banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-tag"></i> <span>${pc.length} ${pc.length === 1 ? 'price was' : 'prices were'} changed from the standard price${q.status === 'pending_approval' ? ' — check before approving' : ''}:
+      ${pc.map(c => `<br>${escHtml(c.description)}: ${_crmQtMoney(c.list_price)} → <b>${_crmQtMoney(c.unit_price)}</b>${c.change_percent != null ? ` (${c.change_percent > 0 ? '+' : ''}${_crmQtQty(c.change_percent)}%)` : ''}`).join('')}</span></div>`);
     const lastAsk = [...(q.responses || [])].reverse().find(r => r.response === 'discount_request');
     if (lastAsk && q.status === 'sent') banners.push(`<div class="crm-qt-banner crm-qt-banner--amber"><i class="fa fa-handshake"></i> The customer asked for ${_crmQtQty(lastAsk.requested_discount)}% discount${lastAsk.notes ? ` — ${escHtml(lastAsk.notes)}` : ''}. Make a new version with the revised price.</div>`);
     if (stock.has_shortage) banners.push(_crmQtStockWarnHtml(stock));
@@ -64702,6 +64758,7 @@ async function submitDsCreate() {
       const line = s.form.lines[+el.dataset.qtI];
       if (!line) return;
       line[el.dataset.qtF] = el.value;
+      if (el.dataset.qtF === 'unit_price') delete line._autoPrice; // typed by hand — the standard price no longer replaces it
       el.closest('tr')?.classList.remove('crm-qt-line--error');
       if (el.dataset.qtF === 'notes') { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; return; }
       _crmQtRefreshTotals();
@@ -64775,7 +64832,7 @@ async function submitDsCreate() {
     const pick = e.target.closest('[data-qt-pick]');
     if (pick && s.form) {
       const line = { item_type: 'product', product_id: +pick.dataset.qtPick, description: pick.dataset.name, sku: pick.dataset.sku,
-        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0 };
+        quantity: 1, unit_price: parseFloat(pick.dataset.price || 0), discount_amount: 0, tax_rate: 0, _autoPrice: true };
       s.form.lines.push(line);
       _crmRenderWsTab();
       _crmQtScheduleStock(lead);
@@ -64822,6 +64879,15 @@ async function submitDsCreate() {
       s.form.lines.push({ item_type: 'custom', product_id: null, description: '', quantity: 1, unit_price: 0, discount_amount: 0, tax_rate: 0 });
       _crmRenderWsTab();
       $$('#crm-qt-edit-body [data-qt-f="description"]').pop()?.focus();
+    } else if (t.dataset.qtPriceReset !== undefined && s.form) {
+      // Back to the product's standard price
+      const i = +t.dataset.qtPriceReset;
+      const line = s.form.lines[i];
+      if (!line || line.list_price == null) return;
+      line.unit_price = line.list_price;
+      const box = $(`#crm-qt-edit-body [data-qt-f="unit_price"][data-qt-i="${i}"]`);
+      if (box) box.value = String(line.list_price);
+      _crmQtRefreshTotals();
     } else if (t.dataset.qtNoteOpen !== undefined && s.form) {
       // Open the line's note field in place — no re-render, so other fields keep their state
       const line = s.form.lines[+t.dataset.qtNoteOpen];
@@ -65125,6 +65191,7 @@ async function submitDsCreate() {
           ${q.items_count != null ? `<div class="crm-appr-fig">Items<b>${q.items_count}</b></div>` : ''}
           ${q.subtotal != null ? `<div class="crm-appr-fig">Subtotal<b>${_crmQtMoney(q.subtotal)}</b></div>` : ''}
           <div class="crm-appr-fig">Discount<b class="${d.over_limit ? 'crm-qt-stock--short' : ''}">${d.percent ? `${_crmQtQty(d.percent)}%` : '—'}</b>${d.limit != null ? `limit ${_crmQtQty(d.limit)}%` : ''}</div>
+          ${q.price_changes?.length ? `<div class="crm-appr-fig" title="${escHtml(q.price_changes.map(c => `${c.description}: ${_crmQtMoney(c.list_price)} → ${_crmQtMoney(c.unit_price)}`).join('\n'))}">Price changes<b class="crm-qt-stock--short">${q.price_changes.length}</b>from standard</div>` : ''}
           <div class="crm-appr-fig crm-appr-fig--total">Total<b>${_crmQtMoney(q.total)}</b></div>
           <div class="crm-appr-actions">
             <button type="button" class="po-btn-ghost" data-appr-open="${q.id}" data-lead="${q.lead?.id}" data-project="${q.lead?.project_id}"><i class="fa fa-up-right-from-square"></i> Review</button>

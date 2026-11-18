@@ -67,6 +67,7 @@ class CrmPermissionService
                 'items' => [
                     ['key' => 'quotations_view',    'label' => 'View quotations',   'desc' => 'See a lead\'s quotations, versions and PDFs'],
                     ['key' => 'quotations_manage',  'label' => 'Create & send quotations', 'desc' => 'Build, revise, submit and send quotations'],
+                    ['key' => 'quotations_price_edit', 'label' => 'Change standard prices', 'desc' => 'Quote a product at a price other than its catalog price — the approver sees every change. Off: prices are filled in and locked'],
                     ['key' => 'quotations_approve', 'label' => 'Approve quotations', 'desc' => 'Approve, return or reject quotations (heads and admins)'],
                 ],
             ],

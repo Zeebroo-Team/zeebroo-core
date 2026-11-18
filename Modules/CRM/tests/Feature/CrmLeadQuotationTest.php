@@ -387,7 +387,8 @@ test('the stock check can be switched off', function () {
 
     $res = crmQuote('stockCheck', 3, [$this->lead->id], 'POST', ['items' => [['item_type' => 'product', 'product_id' => 1, 'quantity' => 99]]]);
 
-    expect($res->getData(true)['data'])->toBe(['mode' => 'off', 'has_shortage' => false, 'lines' => []]);
+    // (prices: the standard prices for automatic pricing — none set in this catalog)
+    expect($res->getData(true)['data'])->toBe(['mode' => 'off', 'has_shortage' => false, 'lines' => [], 'prices' => []]);
 });
 
 test('in branch mode the stock is that of the quotation\'s branch', function () {
@@ -1183,4 +1184,75 @@ test('the customer responses migration rolls back and runs again', function () {
     expect(Schema::hasTable('quotation_customer_responses'))->toBeFalse();
     (require $file)->up();
     expect(Schema::hasColumns('quotation_customer_responses', ['quotation_id', 'version', 'response', 'requested_discount', 'notes', 'recorded_by']))->toBeTrue();
+});
+
+// ── Automatic pricing ────────────────────────────────────────────────────
+
+/** The catalog's standard price for the Solar panel (1) is 150; the Inverter (2) has none. */
+function crmQuoteStubStandardPrices(): void
+{
+    app()->instance(\Modules\Pos\Services\CrmQuotationCatalogService::class, new class(app(\Modules\Pos\Services\PosCatalogService::class)) extends \Modules\Pos\Services\CrmQuotationCatalogService {
+        public function standardPrices(Business $business, array $productIds, ?int $branchId = null): array
+        {
+            return array_intersect_key([1 => 150.0], array_flip(array_map('intval', $productIds)));
+        }
+    });
+}
+
+it('saves the standard price with each product line and shows a changed price to the approver', function () {
+    crmQuoteStubStandardPrices();
+    $q = crmQuoteCreate([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 120],
+        ['item_type' => 'product', 'product_id' => 2, 'description' => 'Inverter',    'quantity' => 1, 'unit_price' => 80],
+        ['item_type' => 'custom',  'description' => 'Installation', 'quantity' => 1, 'unit_price' => 50],
+    ]);
+
+    $items = $q->items()->orderBy('sort_order')->get();
+    expect((float) $items[0]->unit_price)->toBe(120.0)
+        ->and((float) $items[0]->list_price)->toBe(150.0)
+        ->and($items[1]->list_price)->toBeNull()   // no standard price → typed in, not a change
+        ->and($items[2]->list_price)->toBeNull();
+
+    $detail = crmQuote('show', 2, [test()->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['items'][0]['price_changed'])->toBeTrue()
+        ->and($detail['price_changes'])->toHaveCount(1)
+        ->and($detail['price_changes'][0]['list_price'])->toEqual(150)
+        ->and($detail['price_changes'][0]['unit_price'])->toEqual(120)
+        ->and($detail['price_changes'][0]['change_percent'])->toEqual(-20);
+});
+
+it('fills in and locks the standard price for users who may not change prices', function () {
+    crmQuoteStubStandardPrices();
+    app(\Modules\CRM\Services\CrmPermissionService::class)->saveForUser($this->business, 3, ['quotations_price_edit' => false], []);
+
+    expect(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['can_change_price'])->toBeFalse()
+        ->and(crmQuote('index', 2, [$this->lead->id])->getData(true)['meta']['can_change_price'])->toBeTrue();
+
+    $q = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 1]]);
+    $item = $q->items()->first();
+
+    expect((float) $item->unit_price)->toBe(150.0)
+        ->and((float) $q->fresh()->total)->toBe(300.0)
+        ->and($item->isPriceChanged())->toBeFalse();
+});
+
+it('returns the standard prices with the stock check', function () {
+    crmQuoteStubStandardPrices();
+    $data = crmQuote('stockCheck', 3, [$this->lead->id], 'POST', ['items' => [
+        ['item_type' => 'product', 'product_id' => 1, 'quantity' => 1],
+        ['item_type' => 'product', 'product_id' => 2, 'quantity' => 1],
+    ]])->getData(true)['data'];
+
+    expect($data['prices'])->toBe(['1' => 150]);
+});
+
+it('keeps the standard price when a quotation is revised', function () {
+    crmQuoteStubStandardPrices();
+    $q = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 140]]);
+    $q->update(['status' => Quotation::STATUS_APPROVED]);
+
+    $revision = app(QuotationService::class)->revise($q->fresh());
+
+    expect((float) $revision->items()->first()->list_price)->toBe(150.0)
+        ->and($revision->items()->first()->isPriceChanged())->toBeTrue();
 });

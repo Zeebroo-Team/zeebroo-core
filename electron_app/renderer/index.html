@@ -1801,6 +1801,13 @@ body.dark .crm-qtx-pick-dup{color:#ffb340}
 .crm-qtx .crm-qt-table .crm-qt-stock--short i{display:none}
 body.dark .crm-qtx .crm-qt-table .crm-qt-stock{color:var(--mac-muted)}
 body.dark .crm-qtx .crm-qt-table .crm-qt-stock--short{color:#ff6961}
+/* automatic pricing: locked standard price / changed-from-standard hint under the price box */
+.crm-qt-std{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:2px;font-size:11px;line-height:1.3;color:var(--mac-muted,#6b7280);white-space:nowrap}
+.crm-qt-std:empty{display:none}
+.crm-qt-std .crm-ws-link{padding:0;font-size:11px}
+.crm-qt-std--changed{color:#b45309}
+body.dark .crm-qt-std--changed{color:#fbbf24}
+.crm-qt-numin--locked{background:var(--mac-fill,rgba(0,0,0,.04));color:var(--mac-muted,#6b7280);cursor:not-allowed}
 /* remove: a quiet ✕ that appears on hover */
 .crm-qtx .crm-qt-table .crm-qtx-del{width:24px;height:24px;font-size:11px;color:var(--mac-muted);background:transparent;opacity:0}
 .crm-qtx .crm-qt-table tr:hover .crm-qtx-del,.crm-qtx .crm-qt-table .crm-qtx-del:focus-visible{opacity:1}

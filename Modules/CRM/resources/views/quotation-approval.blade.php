@@ -239,6 +239,15 @@
                     <div><strong>Discount exceeds the department limit.</strong> This quotation gives {{ $num($discount['percent']) }}% ({{ $money($q->discount_amount) }}) off; the limit is {{ $num($discount['limit']) }}%.</div></div>
             @endif
 
+            @if(! empty($priceChanges))
+                <div class="callout bad"><i class="fa fa-tag"></i>
+                    <div><strong>{{ count($priceChanges) }} {{ count($priceChanges) === 1 ? 'price was' : 'prices were' }} changed from the standard price.</strong>
+                        @foreach($priceChanges as $pc)
+                            <div>{{ $pc['description'] }}: {{ $money($pc['list_price']) }} → <strong>{{ $money($pc['unit_price']) }}</strong>@if($pc['change_percent'] !== null) ({{ $pc['change_percent'] > 0 ? '+' : '' }}{{ $num($pc['change_percent']) }}%)@endif</div>
+                        @endforeach
+                    </div></div>
+            @endif
+
             @if($submission?->comment)
                 <div class="callout note"><i class="fa fa-quote-left" style="color:var(--accent)"></i>
                     <div><div class="lbl">Note from {{ $preparedBy['name'] ?? 'the submitter' }}</div>{!! nl2br(e($submission->comment)) !!}</div></div>

@@ -218,6 +218,7 @@ class QuotationService
             'notes'           => $i->notes,
             'quantity'        => (float) $i->quantity,
             'unit_price'      => (float) $i->unit_price,
+            'list_price'      => $i->list_price !== null ? (float) $i->list_price : null,
             'discount_amount' => (float) $i->discount_amount,
             'tax_rate'        => (float) $i->tax_rate,
         ])->all();
@@ -292,6 +293,7 @@ class QuotationService
                 'notes'           => $item['notes'],
                 'quantity'        => $item['quantity'],
                 'unit_price'      => $item['unit_price'],
+                'list_price'      => $item['list_price'],
                 'discount_amount' => $item['discount_amount'],
                 'tax_rate'        => $item['tax_rate'],
                 'tax_amount'      => $item['tax_amount'],
@@ -320,13 +322,17 @@ class QuotationService
             $discount = min($gross, round(max(0, (float) ($item['discount_amount'] ?? 0)), 2));
             $taxRate  = min(100, max(0, (float) ($item['tax_rate'] ?? 0)));
             $net      = round($gross - $discount, 2);
+            $productId = $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null;
             $normalized[] = [
-                'product_id'      => $type === 'product' ? $this->nullableInt($item['product_id'] ?? null) : null,
+                'product_id'      => $productId,
                 'service_item_id' => $type === 'service' ? $this->nullableInt($item['service_item_id'] ?? null) : null,
                 'description'     => trim((string) ($item['description'] ?? '')),
                 'notes'           => trim((string) ($item['notes'] ?? '')) ?: null,
                 'quantity'        => $qty,
                 'unit_price'      => $price,
+                // The product's standard price (set by the CRM editor) — only product lines have one
+                'list_price'      => $productId !== null && isset($item['list_price']) && is_numeric($item['list_price'])
+                    ? round(max(0, (float) $item['list_price']), 2) : null,
                 'discount_amount' => $discount,
                 'tax_rate'        => $taxRate,
                 'tax_amount'      => round($net * $taxRate / 100, 2),

@@ -18,6 +18,7 @@ use Modules\CRM\Policies\LeadPolicy;
 use Modules\HRManagement\Models\Employee;
 use Modules\Sales\Models\Quotation;
 use Modules\Sales\Models\QuotationApproval;
+use Modules\Sales\Models\QuotationItem;
 use Modules\Sales\Services\QuotationPrintService;
 
 /**
@@ -183,6 +184,35 @@ class QuotationApprovalService
         $limit   = $this->discountLimit($lead);
 
         return ['percent' => $percent, 'limit' => $limit, 'over_limit' => $limit !== null && $percent > $limit];
+    }
+
+    /**
+     * Product lines quoted at a price other than their standard (catalog) price, for the
+     * approver — "change_percent" is negative when the price was lowered.
+     *
+     * @return list<array{description: string, sku: ?string, list_price: float, unit_price: float, change: float, change_percent: ?float}>
+     */
+    public function priceChanges(Quotation $quotation): array
+    {
+        $quotation->loadMissing('items.product:id,name,sku');
+
+        return $quotation->items
+            ->filter(fn (QuotationItem $i) => $i->isPriceChanged())
+            ->map(function (QuotationItem $i) {
+                $list = (float) $i->list_price;
+                $unit = (float) $i->unit_price;
+
+                return [
+                    'description'    => $i->description ?: ($i->product?->name ?? 'Item'),
+                    'sku'            => $i->product?->sku,
+                    'list_price'     => round($list, 2),
+                    'unit_price'     => round($unit, 2),
+                    'change'         => round($unit - $list, 2),
+                    'change_percent' => $list > 0 ? round(($unit - $list) / $list * 100, 2) : null,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     /** The lead's department discount approval limit (%), or null when none is set. */

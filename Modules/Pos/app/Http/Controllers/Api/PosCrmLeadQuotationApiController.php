@@ -67,6 +67,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'meta' => [
                 'can_create'  => $this->policy->canQuote($access, $lead),
                 'can_approve' => $this->policy->canApproveQuotation($access, $lead),
+                // false → product prices are filled in from the catalog and locked
+                'can_change_price' => $this->policy->canChangeQuotationPrice($access, $lead),
                 'stock_mode'  => $this->leadQuotations->stockCheck($business, [])['mode'],
                 // So the editor can warn live when the discount goes over it (null = no limit set)
                 'discount_limit' => $this->approvals->discountLimit($lead),
@@ -82,7 +84,8 @@ class PosCrmLeadQuotationApiController extends Controller
         $this->abortUnlessAllowed($this->policy->canQuote($access, $lead));
 
         $data      = $this->validated($request, $business);
-        $quotation = $this->leadQuotations->create($lead, $data, $data['items'], $request->user()?->id);
+        $items     = $this->priced($request, $business, $access, $lead, $data['items']);
+        $quotation = $this->leadQuotations->create($lead, $data, $items, $request->user()?->id);
 
         return response()->json([
             'message' => 'Quotation ' . $quotation->quote_number . ' created.',
@@ -90,7 +93,11 @@ class PosCrmLeadQuotationApiController extends Controller
         ], 201);
     }
 
-    /** POST crm/leads/{lead}/quotations/stock-check — { items[], branch_id? }: stock of each product line. */
+    /**
+     * POST crm/leads/{lead}/quotations/stock-check — { items[], branch_id? }: stock of each
+     * product line, plus "prices": each product's standard price (product id => price) for
+     * automatic pricing.
+     */
     public function stockCheck(Request $request, int $leadId): JsonResponse
     {
         [$business] = $this->context($request, $leadId);
@@ -103,7 +110,12 @@ class PosCrmLeadQuotationApiController extends Controller
             'items.*.quantity'   => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        return response()->json(['data' => $this->leadQuotations->stockCheck($business, $data['items'], $data['branch_id'] ?? null)]);
+        $productIds = array_column(array_filter($data['items'], fn (array $i) => ($i['item_type'] ?? null) === 'product'), 'product_id');
+
+        return response()->json(['data' => $this->leadQuotations->stockCheck($business, $data['items'], $data['branch_id'] ?? null) + [
+            // JSON object even when empty, keyed by product id
+            'prices' => (object) app(CrmQuotationCatalogService::class)->standardPrices($business, $productIds, $this->branchHeader($request)),
+        ]]);
     }
 
     /** GET crm/leads/{lead}/quotations/customers?q= — saved customers for the editor's customer auto-suggest. */
@@ -130,10 +142,9 @@ class PosCrmLeadQuotationApiController extends Controller
         [$business] = $this->context($request, $leadId);
 
         $data = $request->validate(['brand_id' => ['required', 'integer', 'min:1']]);
-        $branchId = $request->header('X-Branch-Id');
 
         return response()->json([
-            'data' => $catalog->models($business, (int) $data['brand_id'], is_numeric($branchId) ? (int) $branchId : null),
+            'data' => $catalog->models($business, (int) $data['brand_id'], $this->branchHeader($request)),
         ]);
     }
 
@@ -165,7 +176,8 @@ class PosCrmLeadQuotationApiController extends Controller
         $quotation = $this->leadQuotations->quotationForLead($lead, $quotationId);
 
         $data      = $this->validated($request, $business);
-        $quotation = $this->leadQuotations->update($lead, $quotation, $data, $data['items']);
+        $items     = $this->priced($request, $business, $access, $lead, $data['items']);
+        $quotation = $this->leadQuotations->update($lead, $quotation, $data, $items);
 
         return response()->json(['message' => 'Quotation saved.', 'data' => $this->presentDetail($business, $access, $lead, $quotation)]);
     }
@@ -347,6 +359,7 @@ class PosCrmLeadQuotationApiController extends Controller
         $rows = $this->approvals->inbox($business, $access)->map(fn (Quotation $q) => $this->presentListItem($q) + [
             'lead'     => $this->presentLead($q->lead),
             'discount' => $this->approvals->discountSummary($q->lead, $q),
+            'price_changes' => $this->approvals->priceChanges($q),
             'routing'  => $this->approvals->routing($q),
             'subtotal' => round((float) $q->subtotal, 2),
             'items_count' => $q->items()->count(),
@@ -373,6 +386,25 @@ class PosCrmLeadQuotationApiController extends Controller
         };
 
         return response()->json(['message' => $message, 'data' => $this->presentDetail($business, $access, $lead->fresh(), $quotation)]);
+    }
+
+    /** Automatic pricing: standard prices on the product lines, locked unless the user may change them. */
+    private function priced(Request $request, Business $business, CrmAccess $access, Lead $lead, array $items): array
+    {
+        return app(CrmQuotationCatalogService::class)->applyStandardPrices(
+            $business,
+            $items,
+            $this->policy->canChangeQuotationPrice($access, $lead),
+            $this->branchHeader($request),
+        );
+    }
+
+    /** The desktop's branch (X-Branch-Id) — prices and stock follow it when branches run separate POS. */
+    private function branchHeader(Request $request): ?int
+    {
+        $branchId = $request->header('X-Branch-Id');
+
+        return is_numeric($branchId) ? (int) $branchId : null;
     }
 
     /** @return array<string, mixed> header fields + items, validated */
@@ -453,6 +485,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'notes'           => $i->notes,
             'quantity'        => round((float) $i->quantity, 3),
             'unit_price'      => round((float) $i->unit_price, 2),
+            'list_price'      => $i->list_price !== null ? round((float) $i->list_price, 2) : null,
+            'price_changed'   => $i->isPriceChanged(),
             'discount_amount' => round((float) $i->discount_amount, 2),
             'tax_rate'        => round((float) $i->tax_rate, 3),
             'tax_amount'      => round((float) $i->tax_amount, 2),
@@ -484,6 +518,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'items'         => $items,
             'stock'         => $this->leadQuotations->stockCheck($business, $items, $q->branch_id),
             'discount'      => $this->approvals->discountSummary($lead, $q),
+            // Product lines quoted away from their standard price — shown to the approver
+            'price_changes' => $this->approvals->priceChanges($q),
             // The heads the submit form offers to email for approval
             'approvers'     => $canSubmit ? $this->approvals->approvers($lead) : [],
             'superseded_by' => $newer ? ['id' => (int) $newer->id, 'quote_number' => $newer->quote_number, 'version' => (int) $newer->version] : null,

@@ -52,10 +52,7 @@ class CrmQuotationCatalogService
      */
     public function models(Business $business, int $brandId, ?int $branchId = null): array
     {
-        $branchPosSeparate     = (bool) get_settings('business.branch_pos_separate', false, $business);
-        $branchProductSeparate = (bool) get_settings('business.branch_product_separate', false, $business);
-        $branchStockSeparate   = (bool) get_settings('business.branch_stock_separate', false, $business);
-        $effectiveBranchId     = $branchPosSeparate ? $branchId : null;
+        [$effectiveBranchId, $branchProductSeparate, $branchStockSeparate] = $this->branchScope($business, $branchId);
 
         // The POS catalog pages at 100 — walk the pages so a big brand is not cut short
         $cards = [];
@@ -103,6 +100,74 @@ class CrmQuotationCatalogService
         usort($models, fn (array $a, array $b) => strnatcasecmp($a['label'], $b['label']));
 
         return $models;
+    }
+
+    /**
+     * Each product's standard selling price — the same one the Brand → Model picker shows (POS
+     * catalog: the next stock batch's sell price, else the product's price). Products of other
+     * businesses, and products with no price set, are left out — their price is typed in.
+     *
+     * @param  int[]  $productIds
+     * @return array<int, float> product id => price
+     */
+    public function standardPrices(Business $business, array $productIds, ?int $branchId = null): array
+    {
+        $productIds = array_values(array_unique(array_filter(array_map('intval', $productIds))));
+        if ($productIds === []) {
+            return [];
+        }
+        [$effectiveBranchId, , $branchStockSeparate] = $this->branchScope($business, $branchId);
+
+        $prices = [];
+        Product::query()
+            ->where('business_id', $business->id)
+            ->whereIn('id', $productIds)
+            ->get()
+            ->each(function (Product $p) use (&$prices, $effectiveBranchId, $branchStockSeparate) {
+                $layers = $this->catalog->sellableLayersForProduct($p, $effectiveBranchId, $branchStockSeparate);
+                $price  = $layers[0]['unit_sell_price'] ?? $this->catalog->posMetaForProduct($p, $effectiveBranchId, $branchStockSeparate)['unit_sell_price'];
+                if ($price !== null && (float) $price > 0) {
+                    $prices[(int) $p->id] = round((float) $price, 2);
+                }
+            });
+
+        return $prices;
+    }
+
+    /**
+     * Automatic pricing for a quotation's lines: every product line gets its standard price as
+     * list_price. A user who may not change prices has unit_price set to it as well; one who may
+     * keeps the price they typed — the difference is shown to the approver (price changes).
+     *
+     * @param  list<array<string, mixed>>  $items
+     * @return list<array<string, mixed>>
+     */
+    public function applyStandardPrices(Business $business, array $items, bool $mayChangePrice, ?int $branchId = null): array
+    {
+        $isProduct = fn (array $i) => ($i['item_type'] ?? null) === 'product' && ! empty($i['product_id']);
+        $prices    = $this->standardPrices($business, array_column(array_filter($items, $isProduct), 'product_id'), $branchId);
+
+        return array_map(function (array $item) use ($isProduct, $prices, $mayChangePrice) {
+            $standard = $isProduct($item) ? ($prices[(int) $item['product_id']] ?? null) : null;
+            $item['list_price'] = $standard;
+            if ($standard !== null && ! $mayChangePrice) {
+                $item['unit_price'] = $standard;
+            }
+
+            return $item;
+        }, $items);
+    }
+
+    /** @return array{0: ?int, 1: bool, 2: bool} effective branch, branch-separate products, branch-separate stock */
+    private function branchScope(Business $business, ?int $branchId): array
+    {
+        $branchPosSeparate = (bool) get_settings('business.branch_pos_separate', false, $business);
+
+        return [
+            $branchPosSeparate ? $branchId : null,
+            (bool) get_settings('business.branch_product_separate', false, $business),
+            (bool) get_settings('business.branch_stock_separate', false, $business),
+        ];
     }
 
     /**
