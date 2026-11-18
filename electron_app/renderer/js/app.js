@@ -64243,9 +64243,9 @@ async function submitDsCreate() {
         <td><div class="crm-qt-item">
           <span class="crm-qt-item-ic${l.item_type === 'product' && l.product_id ? '' : ' crm-qt-item-ic--custom'}"><i class="fa ${l.item_type === 'product' && l.product_id ? 'fa-box' : 'fa-pen'}"></i></span>
           <div class="crm-qt-item-main">
-          <input class="po-field-input crm-qt-item-name" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="What are you quoting? e.g. Installation, delivery…">
+          <input class="po-field-input crm-qt-item-name" data-qt-f="description" data-qt-i="${i}" maxlength="255" value="${escHtml(l.description || '')}" placeholder="${l.item_type === 'product' && l.product_id ? 'Item description' : 'Type the item or service — e.g. Installation, Delivery'}">
           <div class="crm-qt-note${l.notes || l._noteOpen ? ' open' : ''}">
-            ${l.item_type === 'product' && l.product_id ? `<span class="crm-qt-sku">${escHtml(l.sku || 'Product')}</span>` : '<span class="crm-qt-sku">Custom line</span>'}
+            ${l.item_type === 'product' && l.product_id ? `<span class="crm-qt-sku">${escHtml(l.sku || 'Product')}</span>` : '<span class="crm-qt-sku crm-qt-sku--custom">Custom line</span>'}
             <button type="button" class="crm-qt-note-add" data-qt-note-open="${i}"><i class="fa fa-plus"></i> Note</button>
             <div class="crm-qt-note-box">
               <i class="fa fa-note-sticky"></i>
@@ -64286,7 +64286,7 @@ async function submitDsCreate() {
       <section class="crm-qtx-card crm-qtx-card--flush">
         <div class="crm-qtx-card-h"><i class="fa fa-list"></i> Items<small>${n}</small></div>
         <div class="crm-qt-table-wrap"><table class="crm-qt-table">
-          <thead><tr><th>Item</th><th style="width:78px">Qty</th><th style="width:110px">Unit price</th><th style="width:96px">Discount</th><th style="width:74px">Tax %</th><th style="width:110px" class="crm-qt-right">Total</th><th style="width:120px">Stock</th><th style="width:40px"></th></tr></thead>
+          <thead><tr><th>Item</th><th style="width:84px">Qty</th><th style="width:120px">Unit price</th><th style="width:104px">Discount</th><th style="width:80px">Tax %</th><th style="width:110px" class="crm-qt-right">Total</th><th style="width:120px">Stock</th><th style="width:40px"></th></tr></thead>
           <tbody>${rows || `<tr><td colspan="8"><div class="crm-qtx-noitems"><i class="fa fa-box-open"></i> No lines yet — search inventory below or add a custom line.</div></td></tr>`}</tbody>
         </table></div>
         <div id="crm-qt-stock-warn" class="crm-qtx-pad">${_crmQtStockWarnHtml(s.stock)}</div>
@@ -66841,11 +66841,11 @@ async function submitDsCreate() {
     if (d.view === 'kpi') {
       tiles = [
         tile(num(t.inquiries), 'Inquiries received', `${(+t.per_day || 0).toLocaleString()} per day`),
-        tile(hours(t.avg_contact_hours), 'Avg time to first contact', `first response ${hours(t.avg_response_hours)}`),
+        tile(hours(t.avg_contact_hours), 'Avg first contact', `response ${hours(t.avg_response_hours)}`),
         tile(num(t.follow_ups_done), 'Follow-ups done'),
-        tile(num(t.quotations), 'Quotations made', `${_crmDashPct(t.inquiry_quote_rate)} of inquiries quoted`),
+        tile(num(t.quotations), 'Quotations made', `${_crmDashPct(t.inquiry_quote_rate)} quoted`),
         tile(_crmDashPct(t.quote_sale_rate), 'Quotation → sale', `${num(t.converted)} converted`, t.quote_sale_rate >= 30 ? 'good' : ''),
-        tile(num(t.overdue), 'Overdue inquiries', `${num(t.pending)} still pending`, t.overdue ? 'bad' : 'good'),
+        tile(num(t.overdue), 'Overdue', `${num(t.pending)} pending`, t.overdue ? 'bad' : 'good'),
         tile(money(t.won_value), 'Sales value', `${num(t.won)} won`),
       ];
     } else if (d.view === 'sales') {
@@ -66897,11 +66897,12 @@ async function submitDsCreate() {
       : d.rows.some(r => r.won_value) ? ['won_value', 'Won value'] : ['leads', 'Leads received'];
     const col = d.columns.find(c => c.key === key);
     const ordered = d.group_by === 'period' || d.group_by === 'price';
-    const rows = (ordered ? d.rows : [...d.rows].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10))
+    // Ranked charts show only rows that have something; periods and bands show every one
+    const rows = (ordered ? d.rows : d.rows.filter(r => Number(r[key]) > 0).sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10))
       .map(r => ({ label: r.label, value: Number(r[key]) || 0 }));
     if (rows.every(r => !r.value)) { box.innerHTML = ''; return; }
     const max = Math.max(1, ...rows.map(r => r.value));
-    const by = ordered ? '' : ` — top ${rows.length}`;
+    const by = ordered || rows.length < 2 ? '' : ` — top ${rows.length}`;
     box.innerHTML = `<div class="crm-rep-chart-title">${escHtml(title)}${escHtml(by)}</div><div class="crm-dash-bars">${rows.map(r => `
       <div class="crm-dash-bar-row" title="${escHtml(r.label)}">
         <span class="crm-dash-bar-label">${escHtml(r.label)}</span>
