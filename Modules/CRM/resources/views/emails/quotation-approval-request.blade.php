@@ -62,7 +62,7 @@
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
             @foreach([
                 ['Quotation total', $money($q->total), $ink],
-                ['Discount', (float) $q->discount_amount > 0 ? $num($discount['percent']) . '%' . ($discount['limit'] !== null ? ' / ' . $num($discount['limit']) . '% limit' : '') : 'None', $discount['over_limit'] ? '#b91c1c' : $ink],
+                ['Discount', ((float) $q->discount_amount > 0 || ($discount['price_cut'] ?? 0) > 0) ? $num($discount['effective_percent'] ?? $discount['percent']) . '%' . (($discount['price_cut'] ?? 0) > 0 ? ' incl. price cuts' : '') . ($discount['limit'] !== null ? ' / ' . $num($discount['limit']) . '% limit' : '') : 'None', $discount['over_limit'] ? '#b91c1c' : $ink],
                 ['Valid until', $expires ? $expires->format('d M Y') : '—', $daysLeft !== null && $daysLeft < 0 ? '#b91c1c' : $ink],
                 ['Status', 'Awaiting approval', '#7c3aed'],
             ] as [$k, $v, $c])
@@ -89,7 +89,11 @@
                 <td style="width:4px;background:#dc2626;"></td>
                 <td style="background:#fef2f2;padding:11px 14px;font-size:13px;color:#7f1d1d;">
                     <strong>Discount exceeds the department limit.</strong>
-                    This quotation gives {{ $num($discount['percent']) }}% ({{ $money($q->discount_amount) }}) off; the {{ $chain['department'] ?? 'department' }} limit is {{ $num($discount['limit']) }}%.
+                    @if(($discount['price_cut'] ?? 0) > 0)
+                        This quotation gives {{ $num($discount['effective_percent']) }}% off the standard prices — {{ $money($q->discount_amount) }} in discounts plus {{ $money($discount['price_cut']) }} in prices lowered below the catalog price; the {{ $chain['department'] ?? 'department' }} limit is {{ $num($discount['limit']) }}%.
+                    @else
+                        This quotation gives {{ $num($discount['percent']) }}% ({{ $money($q->discount_amount) }}) off; the {{ $chain['department'] ?? 'department' }} limit is {{ $num($discount['limit']) }}%.
+                    @endif
                 </td>
             </tr></table>
         @endif

@@ -1123,7 +1123,7 @@ test('with no value limit set, every quotation needs the head\'s approval, whate
     // 5% off â€” within the 10% limit, still not sendable before approval
     $within = crmQuoteCreate(null, ['discount_amount' => 10]);
     $detail = crmQuote('show', 3, [$this->lead->id, $within->id])->getData(true)['data'];
-    expect($detail['discount'])->toEqual(['percent' => 5.0, 'limit' => 10.0, 'over_limit' => false])
+    expect($detail['discount'])->toEqual(['percent' => 5.0, 'price_cut' => 0.0, 'effective_percent' => 5.0, 'limit' => 10.0, 'over_limit' => false])
         ->and($detail['can']['send'])->toBeFalse()
         ->and($detail['can']['submit'])->toBeTrue()
         ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $within->id], 'POST', $send)))->toBe(422)
@@ -1276,6 +1276,69 @@ it('saves the standard price with each product line and shows a changed price to
         ->and($detail['price_changes'][0]['list_price'])->toEqual(150)
         ->and($detail['price_changes'][0]['unit_price'])->toEqual(120)
         ->and($detail['price_changes'][0]['change_percent'])->toEqual(-20);
+});
+
+it('counts a price lowered below the standard price toward the discount limit', function () {
+    Queue::fake();
+    Mail::fake();
+    crmQuoteStubStandardPrices();   // Solar panel standard price 150
+    crmQuoteSetLimit(10, 100000);
+
+    // 150 → 120 with no discount at all: 20% off the standard price
+    $q      = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 2, 'unit_price' => 120]]);
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+
+    expect($detail['discount']['percent'])->toEqual(0)
+        ->and($detail['discount']['price_cut'])->toEqual(60)
+        ->and($detail['discount']['effective_percent'])->toEqual(20)
+        ->and($detail['discount']['over_limit'])->toBeTrue()
+        ->and($detail['approval']['required'])->toBeTrue()
+        ->and($detail['approval']['reasons'][0])->toContain('prices lowered below the catalog price');
+
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST');
+    expect($q->fresh()->status)->toBe('pending_approval')
+        ->and(crmQuoteStatus(fn () => crmQuote('send', 3, [$this->lead->id, $q->id], 'POST', ['to' => 'kasun@example.com', 'subject' => 'Quote', 'message' => 'Hi'])))->toBe(422);
+});
+
+it('adds price cuts and discounts together against the limit', function () {
+    Queue::fake();
+    crmQuoteStubStandardPrices();
+    crmQuoteSetLimit(10, 100000);
+
+    // 150 → 141 (6%) plus a 9 discount on the 141: (9 + 9) / 150 = 12% — each alone is under 10%
+    $q      = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 141]], ['discount_amount' => 9]);
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+
+    expect($detail['discount']['effective_percent'])->toEqual(12)
+        ->and($detail['approval']['required'])->toBeTrue();
+});
+
+it('issues a small price cut within the limit without the head', function () {
+    Queue::fake();
+    Mail::fake();
+    crmQuoteStubStandardPrices();
+    crmQuoteSetLimit(10, 100000);
+
+    // 150 → 140 on a 200 quotation at standard prices: 5% off
+    $q = crmQuoteCreate([
+        ['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 140],
+        ['item_type' => 'custom',  'description' => 'Installation', 'quantity' => 1, 'unit_price' => 50],
+    ]);
+    $detail = crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data'];
+    expect($detail['discount']['price_cut'])->toEqual(10)
+        ->and($detail['approval']['required'])->toBeFalse();
+
+    crmQuote('submit', 3, [$this->lead->id, $q->id], 'POST', ['approver_ids' => []]);
+    expect($q->fresh()->status)->toBe('approved');
+});
+
+it('does not count a price raised above the standard price as a discount', function () {
+    crmQuoteStubStandardPrices();
+    crmQuoteSetLimit(10, 100000);
+
+    $q = crmQuoteCreate([['item_type' => 'product', 'product_id' => 1, 'description' => 'Solar panel', 'quantity' => 1, 'unit_price' => 200]]);
+    expect($q->fresh()->priceCutAmount())->toBe(0.0)
+        ->and($q->fresh()->effectiveDiscountPercent())->toBe(0.0);
 });
 
 it('fills in and locks the standard price for users who may not change prices', function () {
