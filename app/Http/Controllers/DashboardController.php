@@ -38,7 +38,10 @@ class DashboardController extends Controller
         // signing out) goes straight into it — signed in via the one-time
         // handoff code — instead of the legacy web dashboard. A flashed error
         // (payment error/cancel) still renders here so it is not lost.
-        if (! $request->session()->has('errors')) {
+        // A user with no business yet (fresh sign-up) stays here: the dashboard
+        // view renders the business onboarding wizard (details → package →
+        // payment), which hands off to /pos-app once the business exists.
+        if (! $request->session()->has('errors') && $this->hasBusiness($request->user())) {
             return redirect()->route('pos.web-app.launch');
         }
 
@@ -85,6 +88,12 @@ class DashboardController extends Controller
         }
 
         return redirect()->route('business.platform-choice');
+    }
+
+    /** Same lookup the dashboard view uses to decide whether to show the onboarding wizard. */
+    private function hasBusiness(?User $user): bool
+    {
+        return $user !== null && Business::currentForNavbar($user) instanceof Business;
     }
 
     private function redirectIfSingleLocationNeedsBranch(?User $user): ?RedirectResponse
