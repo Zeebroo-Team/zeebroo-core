@@ -29,7 +29,14 @@ class PosWebAppController extends Controller
     {
         $user = $request->user();
         $business = Business::currentForNavbar($user);
-        $code = $this->handoff->issue($user, $business?->id, $request->session()->getId());
+
+        // No business yet (e.g. a bookmark right after sign-up): the POS app has
+        // nothing to open, so send them to the dashboard's onboarding wizard.
+        if (! $business instanceof Business) {
+            return redirect()->route('dashboard');
+        }
+
+        $code =$this->handoff->issue($user, $business?->id, $request->session()->getId());
 
         return redirect()->to(url('/pos-app').'?handoff='.$code);
     }
