@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Modules\Payment\Http\Controllers\Admin\AdminPaymentCheckController;
 use Modules\Payment\Http\Controllers\Admin\AdminPaymentController;
 use Modules\Payment\Http\Controllers\BillingController;
 use Modules\Payment\Http\Controllers\PaymentController;
@@ -8,6 +9,10 @@ use Modules\Payment\Http\Controllers\PaymentController;
 // Admin — platform-wide payment history and per-payment detail view.
 Route::middleware(['auth', 'role:admin'])->prefix('admin/payments')->name('admin.payments.')->group(function (): void {
     Route::get('/', [AdminPaymentController::class, 'index'])->name('index');
+    // Stripe double-check (scheduled + "Run now") results and schedule settings.
+    Route::get('/checks', [AdminPaymentCheckController::class, 'index'])->name('checks.index');
+    Route::put('/checks/settings', [AdminPaymentCheckController::class, 'updateSettings'])->name('checks.settings');
+    Route::post('/checks/run', [AdminPaymentCheckController::class, 'runNow'])->name('checks.run');
     Route::get('/{payment}', [AdminPaymentController::class, 'show'])->whereNumber('payment')->name('show');
 });
 

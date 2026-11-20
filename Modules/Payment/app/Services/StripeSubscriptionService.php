@@ -122,4 +122,21 @@ class StripeSubscriptionService
     {
         return $this->client()->invoices->retrieve($invoiceId);
     }
+
+    /**
+     * A subscription's invoices created at or after `$since` (newest first) —
+     * used by the payment check to find renewals the webhook may have missed.
+     *
+     * @return list<Invoice>
+     */
+    public function invoicesForSubscription(string $subscriptionId, \DateTimeInterface $since, int $limit = 10): array
+    {
+        $page = $this->client()->invoices->all([
+            'subscription' => $subscriptionId,
+            'created' => ['gte' => $since->getTimestamp()],
+            'limit' => $limit,
+        ]);
+
+        return $page->data;
+    }
 }
