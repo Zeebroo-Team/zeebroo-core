@@ -649,7 +649,8 @@
                 <div class="menu-section">Administration</div>
                 <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Dashboard</span></a>
                 <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Management</span></a>
-                <a href="{{ route('admin.payments.index') }}" class="{{ request()->routeIs('admin.payments.*') ? 'active' : '' }}"><i class="fa fa-credit-card"></i><span>Payment History</span></a>
+                <a href="{{ route('admin.payments.index') }}" class="{{ request()->routeIs('admin.payments.*') && ! request()->routeIs('admin.payments.checks.*') ? 'active' : '' }}"><i class="fa fa-credit-card"></i><span>Payment History</span></a>
+                <a href="{{ route('admin.payments.checks.index') }}" class="{{ request()->routeIs('admin.payments.checks.*') ? 'active' : '' }}"><i class="fa fa-shield-halved"></i><span>Payment Checks</span></a>
                 <a href="{{ route('admin.email-marketing.index') }}" class="{{ request()->routeIs('admin.email-marketing.*') ? 'active' : '' }}"><i class="fa fa-envelope-open-text"></i><span>Email Marketing</span></a>
                 <a href="{{ route('admin.automated-emails.index') }}" class="{{ request()->routeIs('admin.automated-emails.*') ? 'active' : '' }}"><i class="fa fa-envelope-circle-check"></i><span>Automated Emails</span></a>
                 <a href="{{ route('admin.releases.index') }}" class="{{ request()->routeIs('admin.releases.*') ? 'active' : '' }}"><i class="fa fa-rocket"></i><span>Release Management</span></a>

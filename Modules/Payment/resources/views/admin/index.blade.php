@@ -59,9 +59,12 @@
 @endphp
 
 <div class="apay-wrap">
-    <div class="apay-header">
-        <h1 class="apay-title"><i class="fa fa-credit-card" style="color:var(--primary);margin-right:8px;"></i>Payment History</h1>
-        <p class="apay-sub">Every subscription and plan payment across all businesses. Click a row for the full details.</p>
+    <div class="apay-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div>
+            <h1 class="apay-title"><i class="fa fa-credit-card" style="color:var(--primary);margin-right:8px;"></i>Payment History</h1>
+            <p class="apay-sub">Every subscription and plan payment across all businesses. Click a row for the full details.</p>
+        </div>
+        <a href="{{ route('admin.payments.checks.index') }}" class="apay-btn"><i class="fa fa-shield-halved"></i> Payment Checks</a>
     </div>
 
     <div class="apay-summary">
