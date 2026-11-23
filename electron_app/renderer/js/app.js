@@ -2258,9 +2258,7 @@ async function _salSelectSale(id) {
     totalsHTML += `<div class="sal-total-row"><span class="label">Coupon${sale.coupon?.code ? ' (' + escHtml(sale.coupon.code) + ')' : ''}</span><span>-${formatMoney(couponAmt, {currency: cur})}</span></div>`;
   }
   const giftAmt = parseFloat(sale.gift_card_amount || 0);
-  const paidVia = giftAmt > 0
-    ? Math.max(0, parseFloat(sale.total || 0) - giftAmt)
-    : parseFloat(sale.amount_paid || sale.total || 0);
+  const paidVia = _rcptPaidAmount(sale);
   totalsHTML += `
     <div class="sal-total-row grand"><span class="label">Total</span><span>${formatMoney(parseFloat(sale.total || 0), {currency: cur})}</span></div>`;
   if (giftAmt > 0) {
@@ -3906,6 +3904,8 @@ function _qtToPrintDoc(q) {
     customer_email:  b.email || q.customer_email,
     // { name, designation, phone } — printed as "Prepared By"
     prepared_by:     q.prepared_by || null,
+    // { name, designation, phone, signature } of the head who approved it — printed as "Approved By"
+    approved_by_print: q.approved_by_print || null,
     reference:       q.reference,
     status:          q.status,
     status_label:    q.status_label,
@@ -7511,6 +7511,9 @@ function applyFeatureVisibility() {
   grp('#rb-crm-projects',  crm_pipeline || crm_tasks);        // Manage group
   btn('#rb-crm-projects',  crm_pipeline || crm_tasks);
   btn('#rb-crm-stages',    crm_pipeline || crm_tasks);
+  btn('#rb-crm-delivery-terms', crm_pipeline || crm_tasks);
+  grp('#rb-crm-my-profile', crm_any);                         // Profile group
+  btn('#rb-crm-my-profile', crm_any);
   grp('#rb-crm-refresh',   crm_any);                          // Actions group
   btn('#rb-crm-refresh',   crm_any);
 
@@ -10020,6 +10023,8 @@ async function refreshNotifBadge() {
   if (res.status !== 200) return;
   _notif.unread = res.body?.unread_count ?? 0;
   _notifApplyBadge();
+  // The CRM ribbon counters ride the same 60s poll
+  window.refreshCrmRibbonBadges?.();
 }
 
 function _notifBindRows(container, sourceList) {
@@ -13760,7 +13765,7 @@ async function _tdsOpenSaleProfit(id) {
       ${discount > 0 ? `<div class="sal-total-row"><span class="label">Discount</span><span>-${fm(discount)}</span></div>` : ''}
       ${coupon > 0 ? `<div class="sal-total-row"><span class="label">Coupon${sale.coupon?.code ? ' (' + escHtml(sale.coupon.code) + ')' : ''}</span><span>-${fm(coupon)}</span></div>` : ''}
       <div class="sal-total-row grand"><span class="label">Total</span><span>${fm(total)}</span></div>
-      <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${fm(sale.amount_paid ?? total)}</span></div>
+      <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${fm(_rcptPaidAmount(sale))}</span></div>
       ${change > 0 ? `<div class="sal-total-row"><span class="label">Change</span><span>${fm(change)}</span></div>` : ''}
       ${sale.payment_method === 'credit' ? `<div class="sal-total-row"><span class="label">Balance due</span><strong>${fm(sale.due_amount)}</strong></div>` : ''}
     </div>
@@ -31230,12 +31235,21 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const notesText = escHtml(inv.notes || 'Thank you for your business!');
   // "Prepared By" (quotations): name, designation, contact number — inline styles so every template can drop it in
   const pb   = inv.prepared_by?.name ? inv.prepared_by : null;
-  const prep = pb ? `<div style="margin-top:20px;page-break-inside:avoid;break-inside:avoid">
+  // "Approved By" (quotations a head approved): name, designation, mobile and their signature
+  const ab   = inv.approved_by_print?.name ? inv.approved_by_print : null;
+  const abSig = _qtSignatureSrc(ab?.signature);
+  const prep = (pb ? `<div style="margin-top:20px;page-break-inside:avoid;break-inside:avoid">
   <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px">Prepared By</div>
   <div style="font-size:12px;font-weight:700;color:#0f172a">${escHtml(pb.name)}</div>
   ${pb.designation ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escHtml(pb.designation)}</div>` : ''}
   ${pb.phone ? `<div style="font-size:11px;color:#64748b;margin-top:2px">Tel: ${escHtml(pb.phone)}</div>` : ''}
-</div>` : '';
+</div>` : '') + (ab ? `<div style="margin-top:16px;page-break-inside:avoid;break-inside:avoid">
+  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px">Approved By</div>
+  ${abSig ? `<img src="${escHtml(abSig)}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:2px 0 4px">` : ''}
+  <div style="font-size:12px;font-weight:700;color:#0f172a">${escHtml(ab.name)}</div>
+  ${ab.designation ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escHtml(ab.designation)}</div>` : ''}
+  ${ab.phone ? `<div style="font-size:11px;color:#64748b;margin-top:2px">Mobile: ${escHtml(ab.phone)}</div>` : ''}
+</div>` : '');
   const sub  = fmt(inv.subtotal);
   const disc = parseFloat(inv.discount_amount || 0);
   const tax  = parseFloat(inv.tax_amount      || 0);
@@ -32076,6 +32090,11 @@ const QTPL_FIELDS = [
   { group: 'Prepared by — wrap in {{#has_prepared_by}}', items: [
     ['prepared_by_name', 'Name'], ['prepared_by_designation', 'Designation'], ['prepared_by_phone', 'Contact number'],
   ] },
+  { group: 'Approved by — wrap in {{#has_approved_by}}', items: [
+    ['__approved_block', '↳ Whole "Approved By" block (signature, name, designation, mobile)'],
+    ['approved_by_signature', 'Signature image (inserts an <img> block)'],
+    ['approved_by_name', 'Name'], ['approved_by_designation', 'Designation'], ['approved_by_phone', 'Mobile number'],
+  ] },
   { group: 'Business', items: [
     ['business_name', 'Business name'], ['business_address', 'Address'], ['logo_url', 'Logo image URL'], ['accent', 'Accent colour'],
   ] },
@@ -32150,6 +32169,11 @@ function _qtplSanitize(html) {
 
 function _qtplNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// The "Prepared by" signature (a data:image URI from the server) — anything else is dropped
+function _qtSignatureSrc(v) {
+  return typeof v === 'string' && /^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : '';
 }
 
 // 'YYYY-MM-DD…' → dd/mm/yyyy; anything else is passed through unchanged
@@ -32229,7 +32253,14 @@ function _qtplData(inv, ic, cur) {
     prepared_by_name:        inv.prepared_by?.name || '',
     prepared_by_designation: inv.prepared_by?.designation || '',
     prepared_by_phone:       inv.prepared_by?.phone || '',
-    business_name:    s.business_name || state._bizName || 'Your Business',
+    // "Approved by" — the head who approved it (the server's QuotationTemplateService sends the same)
+    has_approved_by:           !!inv.approved_by_print?.name,
+    approved_by_name:          inv.approved_by_print?.name || '',
+    approved_by_designation:   inv.approved_by_print?.designation || '',
+    approved_by_phone:         inv.approved_by_print?.phone || '',
+    has_approved_by_signature: !!_qtSignatureSrc(inv.approved_by_print?.signature),
+    approved_by_signature:     _qtSignatureSrc(inv.approved_by_print?.signature),
+    business_name:   s.business_name || state._bizName || 'Your Business',
     business_address: s.receipt_address_line || '',
     logo_url:         s.business_logo_url || s.receipt_logo_url || '',
     accent:           ic.color || (INV_TEMPLATES.find(t => t.id === 'custom') || {}).accent,
@@ -32252,8 +32283,22 @@ function _qtplData(inv, ic, cur) {
   };
 }
 
+// "Approved By" for custom templates that don't place it themselves: added right after the
+// template's last {{/has_prepared_by}} (same as the server's QuotationTemplateService)
+const QTPL_APPROVED_BLOCK = '{{#has_approved_by}}<div style="margin-top:16px;page-break-inside:avoid;break-inside:avoid"><i>Approved By:</i><br>'
+  + '{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}'
+  + '{{approved_by_name}}<br>{{#approved_by_designation}}{{approved_by_designation}}<br>{{/approved_by_designation}}'
+  + '{{#approved_by_phone}}Mobile: {{approved_by_phone}}{{/approved_by_phone}}</div>{{/has_approved_by}}';
+
+function _qtplWithApprovedBlock(html) {
+  const src = String(html || '');
+  if (/approved_by/.test(src)) return src;
+  const m = [...src.matchAll(/\{\{\s*\/\s*has_prepared_by\s*\}\}/g)].pop();
+  return m ? src.slice(0, m.index + m[0].length) + QTPL_APPROVED_BLOCK + src.slice(m.index + m[0].length) : src;
+}
+
 function _qtplBuildDoc(html, inv, ic, cur) {
-  const out = _qtplRenderNodes(_qtplParse(_qtplSanitize(html)).children, [_qtplData(inv, ic, cur)]);
+  const out = _qtplRenderNodes(_qtplParse(_qtplWithApprovedBlock(_qtplSanitize(html))).children, [_qtplData(inv, ic, cur)]);
   // Paper size from the setup goes first so the template's own @page can still override it
   const pageCss = `<style>${_isetupPageAtCss(_isetupGeom(ic))}</style>`;
   if (/<head\b[^>]*>/i.test(out)) return out.replace(/<head\b[^>]*>/i, h => h + pageCss);
@@ -32289,6 +32334,7 @@ function _qtplSampleInv() {
     customer_phone:   '011-2000000',
     customer_email:   'purchasing@acme.example',
     prepared_by:      isQt ? { name: 'Nimal Perera', designation: 'Sales Executive', phone: '077 123 4567' } : null,
+    approved_by_print: isQt ? { name: 'Kamala Silva', designation: 'Head of Sales', phone: '077 765 4321', signature: null } : null,
     notes:            '',
     items,
     subtotal:         sub,
@@ -32405,7 +32451,11 @@ function _isetupApplyCustomHtml(html, msg) {
       if (!k) return;
       _isetupCodeInsert(k === '__items'
         ? '{{#items}}\n<tr><td>{{no}}</td><td>{{name}}</td><td>{{qty}}</td><td>{{unit_price}}</td><td>{{total}}</td></tr>\n{{/items}}'
-        : `{{${k}}}`);
+        : k === 'approved_by_signature'
+          ? '{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}'
+          : k === '__approved_block'
+            ? '{{#has_approved_by}}\n<p style="margin-top:24px"><i>Approved By:</i></p>\n{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}\n<p style="margin:0"><b>{{approved_by_name}}</b><br>\n{{#approved_by_designation}}<b>{{approved_by_designation}}</b><br>{{/approved_by_designation}}\n{{#approved_by_phone}}<b>Mobile: {{approved_by_phone}}</b>{{/approved_by_phone}}</p>\n{{/has_approved_by}}'
+            : `{{${k}}}`);
     });
   }
 
@@ -33955,6 +34005,19 @@ const _RCPT_SAMPLE = {
   payment_method: 'cash', payment_method_label: 'Cash', change_amount: 10.00,
 };
 
+// Amount shown on the "Paid (method)" row: for cash it's what the customer handed over
+// (amount_tendered, e.g. 10000), otherwise what the payment method covered after any gift card.
+function _rcptPaidAmount(sale) {
+  const giftAmt  = parseFloat(sale?.gift_card_amount || 0);
+  const tendered = sale?.amount_tendered;
+  if (sale?.payment_method === 'cash' && tendered != null && tendered !== '') {
+    return parseFloat(tendered) || 0;
+  }
+  return giftAmt > 0
+    ? Math.max(0, parseFloat(sale?.total || 0) - giftAmt)
+    : parseFloat(sale?.amount_paid || sale?.total || 0);
+}
+
 function buildReceiptHTML(sale, overrides = {}) {
   const s   = state.receiptSettings || {};
 
@@ -33986,18 +34049,21 @@ function buildReceiptHTML(sale, overrides = {}) {
     }
     const discPerUnit = parseFloat(i.discount_amount || 0);
     const qty = parseFloat(i.quantity);
+    // Row math stays consistent: QTY × PRICE (after discount) = TOTAL.
+    // One line underneath shows the original price, the % off and the total saved.
+    const netUnit  = parseFloat(i.unit_sell_price);
+    const origUnit = netUnit + discPerUnit;
+    const discPct  = origUnit > 0 ? Math.round((discPerUnit / origUnit) * 10000) / 100 : 0;
     const discLine = discPerUnit > 0
       ? `<div class="rcpt-item-disc">
-          <span class="rid-label"><i class="fa fa-tag"></i> Discount</span>
-          <span class="rid-per">-${discPerUnit.toFixed(2)}</span>
-          <span class="rid-total">-${(discPerUnit * qty).toFixed(2)}</span>
+          <span class="rid-label"><i class="fa fa-tag"></i> Was ${origUnit.toFixed(2)}${discPct > 0 ? ' · ' + discPct + '% off' : ''} · Save ${(discPerUnit * qty).toFixed(2)}</span>
         </div>`
       : '';
     return `
     <div class="rcpt-item">
       <span class="ri-name">${escHtml(i.product_name)}</span>
       <span class="ri-qty">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</span>
-      <span class="ri-price">${parseFloat(i.unit_sell_price).toFixed(2)}</span>
+      <span class="ri-price">${netUnit.toFixed(2)}</span>
       <span class="ri-total">${parseFloat(i.line_total).toFixed(2)}</span>
     </div>${discLine}${wtyLine}`;
   }).join('');
@@ -34035,7 +34101,7 @@ function buildReceiptHTML(sale, overrides = {}) {
     }
   }
   if (showAcct) {
-    const paidVia = giftAmt > 0 ? Math.max(0, parseFloat(sale.total) - giftAmt) : (sale.amount_paid || sale.total);
+    const paidVia = _rcptPaidAmount(sale);
     totalsHTML += `<div class="rcpt-total-row"><span>${lbl.paid} (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${formatMoney(paidVia)}</span></div>`;
     if (change > 0.005) {
       totalsHTML += `<div class="rcpt-total-row change"><span>${lbl.change}</span><span>${formatMoney(change)}</span></div>`;
@@ -34254,13 +34320,20 @@ function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
       : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
     customer:      sale?.customer?.name || sale?.customer_name || '',
     cashier:       sale?.cashier?.name || '',
-    items:         (sale?.items || []).map(i => ({
-      name:     i.product_name || '',
-      qty:      parseFloat(i.quantity),
-      price:    parseFloat(i.unit_sell_price),
-      total:    parseFloat(i.line_total),
-      discount: parseFloat(i.discount_amount || 0),
-    })),
+    items:         (sale?.items || []).map(i => {
+      const qty  = parseFloat(i.quantity);
+      const disc = parseFloat(i.discount_amount || 0);   // per unit
+      const orig = parseFloat(i.unit_sell_price) + disc;  // pre-discount unit price
+      return {
+        name:     i.product_name || '',
+        qty,
+        price:    parseFloat(i.unit_sell_price),           // after discount, so qty × price = total
+        total:    parseFloat(i.line_total),
+        discount: disc * qty,                              // total saved on this line
+        origPrice: orig,                                   // pre-discount unit price
+        discountPct: orig > 0 ? Math.round((disc / orig) * 10000) / 100 : 0,
+      };
+    }),
     subtotal:      parseFloat(sale?.subtotal     || 0),
     discount:      parseFloat(sale?.discount_amount || 0),
     discountPct:   sale?.discount_percent || '',
@@ -34268,9 +34341,7 @@ function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
     couponCode:     sale?.coupon?.code || '',
     taxes:        (sale?._taxBreakdown || []).map(t => ({ name: t.name, amount: parseFloat(t.amount) })),
     total:         parseFloat(sale?.total        || 0),
-    paid:          parseFloat(sale?.gift_card_amount || 0) > 0
-      ? Math.max(0, parseFloat(sale?.total || 0) - parseFloat(sale.gift_card_amount))
-      : parseFloat(sale?.amount_paid  || sale?.total || 0),
+    paid:          _rcptPaidAmount(sale),
     giftCardAmount:  parseFloat(sale?.gift_card_amount || 0),
     giftCardCode:    sale?.gift_card?.code || '',
     giftCardBalance: sale?.gift_card ? parseFloat(sale.gift_card.balance) : null,
@@ -57053,7 +57124,7 @@ async function submitDsCreate() {
     list.innerHTML = _umUsers.map(u => {
       const isActive = _umSelected && _umSelected.user_id === u.user_id;
       return `
-        <div class="um-user-card${isActive ? ' active' : ''}" data-uid="${u.user_id}" data-mid="${u.id}">
+        <div class="um-user-card${isActive ? ' active' : ''}" data-uid="${u.user_id}" data-mid="${u.id}" data-um-text="${_esc(_umSearchText(u))}">
           <div class="um-avatar ${ROLE_COLORS[u.role] || 'staff'}">${_initials(u.name)}</div>
           <div class="um-card-info">
             <div class="um-card-name">${u.name}</div>
@@ -57080,7 +57151,46 @@ async function submitDsCreate() {
         if (inv) selectInvite(inv, card, detailId);
       });
     });
+    _umApplySearch(listId);
   }
+
+  // ── Search (client-side over the loaded users + invitations) ────────────
+
+  function _umSearchText(u) {
+    const e = u.employee || {};
+    return [u.name, u.email, u.role, u.role_name, u.status, e.name, e.employee_id, e.department, e.job_title]
+      .filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function _umApplySearch(listId) {
+    const list = $(`#${listId}`);
+    const input = document.querySelector(`[data-um-search="${listId}"]`);
+    if (!list || !input) return;
+    const q = input.value.trim().toLowerCase();
+    let shown = 0;
+    list.querySelectorAll('.um-user-card[data-um-text]').forEach(card => {
+      const match = !q || card.dataset.umText.includes(q);
+      card.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    // Hide the invitations heading when none of its cards match
+    const invTitle = list.querySelector('.um-invite-section-title');
+    if (invTitle) invTitle.style.display = !q || list.querySelector('.um-invite-card:not([style*="display: none"])') ? '' : 'none';
+    let empty = list.querySelector('.um-search-empty');
+    if (q && !shown) {
+      if (!empty) { empty = document.createElement('div'); empty.className = 'um-search-empty'; list.appendChild(empty); }
+      empty.textContent = `No users match “${input.value.trim()}”`;
+    } else if (empty) empty.remove();
+  }
+
+  document.addEventListener('input', e => {
+    const listId = e.target?.dataset?.umSearch;
+    if (listId) _umApplySearch(listId);
+  });
+  document.addEventListener('keydown', e => {
+    const listId = e.target?.dataset?.umSearch;
+    if (listId && e.key === 'Escape' && e.target.value) { e.stopPropagation(); e.target.value = ''; _umApplySearch(listId); }
+  }, true);
 
   // ── Pending invitations ─────────────────────────────────────────────────
 
@@ -57088,7 +57198,7 @@ async function submitDsCreate() {
     if (_umInvites.length === 0) return '';
     return `<div class="um-invite-section-title"><i class="fa fa-envelope"></i> Invitations not accepted yet (${_umInvites.length})</div>` +
       _umInvites.map(inv => `
-        <div class="um-user-card um-invite-card" data-iid="${inv.id}">
+        <div class="um-user-card um-invite-card" data-iid="${inv.id}" data-um-text="${_esc([inv.name, inv.email, inv.role, inv.role_name, 'invited', inv.status, inv.employee?.name, inv.employee?.employee_id, inv.employee?.department, inv.employee?.job_title].filter(Boolean).join(' ').toLowerCase())}">
           <div class="um-avatar um-invite-avatar"><i class="fa fa-envelope"></i></div>
           <div class="um-card-info">
             <div class="um-card-name">${_esc(inv.name || inv.email)}</div>
@@ -59106,7 +59216,77 @@ async function submitDsCreate() {
     const res = await API.crmMyPermissions().catch(() => ({ status: 0 }));
     _crmAccess = res.status === 200 ? res.body.data : null;
     _crmApplyAccessUI();
+    _crmBadges.denied = false; // access may have changed (business switch, new role)
+    refreshCrmRibbonBadges();
   }
+
+  // ── Ribbon counters: red badges on My Follow-ups, Quotation Approvals, Marketing Inbox, Daily Inquiries ──
+  const _CRM_BADGE_BUTTONS = {
+    followups: { id: 'rb-crm-followups', title: n => `${n} follow-up${n === 1 ? '' : 's'} due today or overdue` },
+    approvals: { id: 'rb-crm-approvals', title: n => `${n} quotation${n === 1 ? '' : 's'} waiting for your approval` },
+    inbox:     { id: 'rb-crm-inbox',     title: n => `${n} lead${n === 1 ? '' : 's'} in the marketing inbox` },
+    inquiries: { id: 'rb-crm-inquiries', title: n => `${n} item${n === 1 ? '' : 's'} need attention: pending inquiries today and daily reports waiting to be sent` },
+  };
+  const _crmBadges = { busy: false, denied: false, details: {} };
+
+  /** The count pill on a tab inside a CRM window: tone true / 'red' = needs action, 'amber' = due soon, false = grey. */
+  function _crmTabCountHtml(n, tone = false) {
+    n = Number(n) || 0;
+    const cls = tone === 'amber' ? ' crm-fu-count--today' : tone ? ' crm-fu-count--overdue' : '';
+    return n ? `<span class="crm-fu-count${cls}">${n > 99 ? '99+' : n}</span>` : '';
+  }
+
+  /** A window that is open right now (its tabs are redrawn when fresh counts arrive). */
+  function _crmModalOpen(id) {
+    const el = document.getElementById(id);
+    return !!el && el.style.display !== 'none' && el.style.display !== '';
+  }
+
+  function _crmSetRibbonBadge(btnId, count, title) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    let badge = btn.querySelector(':scope > .rb-btn-count');
+    if (!count) {
+      badge?.remove();
+      if (btn.classList.contains('has-rb-count')) btn.removeAttribute('title');
+      btn.classList.remove('has-rb-count');
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'rb-btn-count';
+      btn.appendChild(badge);
+    }
+    badge.textContent = count > 99 ? '99+' : String(count);
+    btn.classList.add('has-rb-count');
+    btn.title = title;
+  }
+
+  async function refreshCrmRibbonBadges() {
+    if (_crmBadges.busy || _crmBadges.denied || !document.getElementById('rb-crm-followups')) return;
+    _crmBadges.busy = true;
+    try {
+      const res = await API.crmBadgeCounts().catch(() => ({ status: 0 }));
+      if (res.status === 403 || res.status === 404) {
+        // No CRM for this user/business: clear and stop asking until access is re-read
+        _crmBadges.denied = true;
+        Object.values(_CRM_BADGE_BUTTONS).forEach(b => _crmSetRibbonBadge(b.id, 0));
+        return;
+      }
+      if (res.status !== 200) return;
+      const counts = res.body?.data || {};
+      _crmBadges.details = counts.details || {};
+      Object.entries(_CRM_BADGE_BUTTONS).forEach(([key, b]) => {
+        const n = Number(counts[key]) || 0;
+        _crmSetRibbonBadge(b.id, n, b.title(n));
+      });
+      // Daily Inquiries takes its "Daily report" count from here — redraw its tabs if it is open
+      if (_crmModalOpen('crm-inq-modal') && _crmInq.meta) _crmInqTabs();
+    } finally {
+      _crmBadges.busy = false;
+    }
+  }
+  window.refreshCrmRibbonBadges = refreshCrmRibbonBadges;
 
   function _crmApplyAccessUI() {
     const perms = _crmAccess?.permissions || {};
@@ -64170,17 +64350,115 @@ async function submitDsCreate() {
     };
   }
 
+  // ── Designation dropdown: the HR positions (HR → Positions), or "Other" to type a custom one ──
+  // The text input stays the value that is saved / printed; the dropdown just fills it.
+  const CRM_DESIG_CUSTOM = '__custom__';
+
+  /** @param {string} inputAttrs attributes for the value input (id or data-qt-h) */
+  function _crmDesignationPickerHtml(value, positions, inputAttrs) {
+    const v = (value || '').trim();
+    const list = Array.isArray(positions) ? positions : [];
+    const custom = !!v && !list.includes(v);
+    return `<span class="crm-desig-pick" style="display:flex;flex-direction:column;gap:6px">
+        <select class="po-field-input" data-desig-sel>
+          <option value=""${v ? '' : ' selected'}>— Select a position —</option>
+          ${list.map(p => `<option value="${escHtml(p)}"${p === v ? ' selected' : ''}>${escHtml(p)}</option>`).join('')}
+          <option value="${CRM_DESIG_CUSTOM}"${custom ? ' selected' : ''}>Other — type a custom designation…</option>
+        </select>
+        <input class="po-field-input" maxlength="120" ${inputAttrs} value="${escHtml(v)}" autocomplete="off"
+          placeholder="e.g. Head of Measuring Instruments" style="${custom ? '' : 'display:none'}">
+      </span>`;
+  }
+
+  // Picking from the dropdown fills the value input and tells its listeners (form state, preview)
+  document.addEventListener('change', e => {
+    const sel = e.target.closest?.('[data-desig-sel]');
+    if (!sel) return;
+    const input = sel.parentElement.querySelector('input');
+    if (!input) return;
+    const custom = sel.value === CRM_DESIG_CUSTOM;
+    input.style.display = custom ? '' : 'none';
+    if (!custom) input.value = sel.value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    if (custom) input.focus();
+  });
+
   /** "Prepared by" card: name, designation and contact number printed on the quotation. */
   function _crmQtPreparedByCardHtml(f) {
     return `<section class="crm-qtx-card">
         <div class="crm-qtx-card-h"><i class="fa fa-id-badge"></i> Prepared by<small style="font-weight:400">Printed on the quotation</small></div>
         <div class="crm-qt-grid crm-qtx-fields">
           <label>Name<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_name" value="${escHtml(f.prepared_by_name || '')}" placeholder="Your name"></label>
-          <label>Designation<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_designation" value="${escHtml(f.prepared_by_designation || '')}" placeholder="e.g. Sales Executive"></label>
+          <label>Designation${_crmDesignationPickerHtml(f.prepared_by_designation, _crmWs.quotations?.meta?.positions, 'data-qt-h="prepared_by_designation"')}</label>
           <label>Contact number<input class="po-field-input" maxlength="40" data-qt-h="prepared_by_phone" value="${escHtml(f.prepared_by_phone || '')}" placeholder="07X XXX XXXX"></label>
           <label style="display:flex;align-items:center;gap:6px;font-weight:400;align-self:end;padding-bottom:6px"><input type="checkbox" data-qt-remember${f.remember_prepared_by ? ' checked' : ''}> Save as my CRM profile</label>
         </div>
       </section>`;
+  }
+
+  /** For a head about to approve: their signature, printed in "Approved By" on what they approve. */
+  function _crmQtApproverSignatureHtml() {
+    return `<div class="crm-qt-send">
+        <div class="crm-qtx-card-h"><i class="fa fa-signature"></i> My signature<small style="font-weight:400">Printed in "Approved By" with my name, designation and mobile on the quotations I approve — PNG / JPG up to 1 MB, a transparent PNG prints best</small></div>
+        <div data-qt-sig-box>${_crmQtSignatureBoxHtml(_crmWs.quotations?.meta?.my_signature)}</div>
+      </div>`;
+  }
+
+  /** The signed-in user's signature preview with Upload / Change / Remove. */
+  function _crmQtSignatureBoxHtml(sig) {
+    const src = _qtSignatureSrc(sig);
+    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${src
+          ? `<img src="${escHtml(src)}" alt="Signature" style="max-height:60px;max-width:200px;padding:4px 8px;border:1px dashed var(--border,#cbd5e1);border-radius:6px;background:#fff">`
+          : '<span class="crm-ws-muted" style="font-size:12px">No signature yet</span>'}
+        <button type="button" class="crm-qtx-btn" data-qt-sig-upload><i class="fa fa-signature"></i> ${src ? 'Change' : 'Upload signature'}</button>
+        ${src ? '<button type="button" class="crm-qtx-btn" data-qt-sig-remove><i class="fa fa-trash"></i> Remove</button>' : ''}
+      </div>`;
+  }
+
+  function _crmQtApplySignature(sig) {
+    const meta = _crmWs.quotations?.meta;
+    if (meta) meta.my_signature = sig || null;
+    $$('[data-qt-sig-box]').forEach(box => { box.innerHTML = _crmQtSignatureBoxHtml(sig); });
+    // The profile window only follows while it shows the signed-in user (an admin may have someone else open)
+    if (_crmProfile && _crmProfileIsMe()) {
+      _crmProfile.signature = sig || null;
+      const box = $('#crm-profile-sig');
+      if (box) box.innerHTML = _crmQtSignatureBoxHtml(sig);
+    }
+  }
+
+  /**
+   * Upload a signature image. By default the signed-in user's; an admin editing someone else's
+   * profile passes that person's upload path and how to show the result.
+   */
+  async function _crmQtUploadSignature(btn, { path = API.crmProfileSignatureUploadPath, apply = _crmQtApplySignature, who = 'your' } = {}) {
+    const result = await window.electronAPI.showOpenDialog({
+      title: `Choose ${who} signature image`,
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths?.length) return;
+    btn.disabled = true;
+    const res = await window.electronAPI.apiUpload(path, result.filePaths[0]);
+    btn.disabled = false;
+    if (res.status === 200) {
+      apply(res.body?.data?.signature);
+      toast(who === 'your' ? 'Signature saved — it prints in "Approved By" on quotations you approve'
+        : 'Signature saved — it prints in "Approved By" on quotations they approve', 'success');
+    } else {
+      toast(res.status === 413 ? 'Image is too large for the server.'
+        : Object.values(res.body?.errors || {}).flat().join(' ') || res.body?.message || 'Could not upload the signature', 'error');
+    }
+  }
+
+  async function _crmQtRemoveSignature(btn, { remove = () => API.crmDeleteProfileSignature(), apply = _crmQtApplySignature } = {}) {
+    btn.disabled = true;
+    const res = await remove();
+    btn.disabled = false;
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not remove the signature.'), 'error'); return; }
+    apply(null);
+    toast('Signature removed', 'success');
   }
 
   function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
@@ -64389,11 +64667,11 @@ async function submitDsCreate() {
         </div>
         <dl class="crm-qtx-pick-info">
           <div><dt>Warranty</dt><dd>${val(model.warranty, 'None')}</dd></div>
-          <div><dt>Delivery</dt><dd>${val(model.delivery, 'Not offered')}</dd></div>
+          <div><dt>Delivery</dt><dd>${_crmQtDeliverySelectHtml(s, model)}</dd></div>
           <div><dt>Unit price</dt><dd>${_crmQtMoney(model.unit_sell_price)}</dd></div>
         </dl>
         ${onQuote ? `<div class="crm-qtx-pick-dup">Already on this quotation (qty ${_crmQtQty(_crmQtNum(onQuote.quantity))}) — adding increases that line.</div>`
-          : _crmQtInfoNote(model) ? '<div class="crm-qtx-pick-note"><i class="fa fa-note-sticky"></i> Model, warranty and delivery go into the item\'s note — edit it there if needed.</div>' : ''}
+          : _crmQtInfoNote(_crmQtPickInfo(s, model)) ? '<div class="crm-qtx-pick-note"><i class="fa fa-note-sticky"></i> Model, warranty and delivery go into the item\'s note — edit it there if needed.</div>' : ''}
       </div>` : '';
 
     return `<div class="crm-qtx-pick">
@@ -64498,6 +64776,15 @@ async function submitDsCreate() {
     const lead = _crmViewLead;
     const s = _crmWs.qt;
     if (!lead || !s?.pick) return;
+    if (kind === 'delivery') {
+      const model = _crmQtPickedModel(s);
+      const o = model ? _crmQtDeliveryOptions(s, model)[+value] : null;
+      if (o) s.pick.delivery = { modelId: s.pick.modelId, value: o.value };
+      s.pick.open = null;
+      _crmQtRenderPick();
+      $('#crm-qt-pick [data-qt-combo-toggle="delivery"]')?.focus();
+      return;
+    }
     if (kind === 'brand') {
       // Straight on to the model menu of that brand ("All brands" → the name search)
       s.pick = { ..._crmQtPickBlank(), brandId: value, open: 'model' };
@@ -64685,6 +64972,7 @@ async function submitDsCreate() {
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
     _crmQtLoadBrands(lead);
+    _crmDlvLoad();
     // A new quotation starts with the lead's products of interest — give them their warranty / delivery note too
     if (!form.id) form.lines.filter(l => l.product_id && !(l.notes || '').trim()).forEach(l => _crmQtFillNote(lead, l));
   }
@@ -64755,6 +65043,58 @@ async function submitDsCreate() {
     ].filter(Boolean).join('\n');
   }
 
+  // ── Delivery dropdown (GET /crm/delivery-terms) — terms managed from CRM ribbon → Delivery Terms ──
+  // _crmDlv.list: null (not loaded) | 'loading' | [{ id, label }]; the pick's choice is kept per model.
+  const _crmDlv = { list: null, canManage: false };
+
+  async function _crmDlvLoad(force = false) {
+    if (!force && (Array.isArray(_crmDlv.list) || _crmDlv.list === 'loading')) return;
+    _crmDlv.list = 'loading';
+    const res = await API.crmDeliveryTerms().catch(() => ({ status: 0 }));
+    _crmDlv.list = res.status === 200 ? (res.body?.data || []) : null; // null → try again next time
+    _crmDlv.canManage = !!res.body?.meta?.can_manage;
+    _crmQtRenderPick();
+  }
+
+  /** The delivery chosen for the picked model — until changed, the product's own (courier) delivery. */
+  function _crmQtPickDelivery(s, model) {
+    const d = s?.pick?.delivery;
+    return d && String(d.modelId) === String(model?.id) ? d.value : (model?.delivery || '');
+  }
+
+  /** The model with the chosen delivery — what goes into the line's note. */
+  function _crmQtPickInfo(s, model) {
+    return model ? { ...model, delivery: _crmQtPickDelivery(s, model) } : null;
+  }
+
+  /** The Delivery menu's choices: none, the product's courier delivery, a term deleted meanwhile, then the terms. */
+  function _crmQtDeliveryOptions(s, model) {
+    const current = _crmQtPickDelivery(s, model);
+    const terms = Array.isArray(_crmDlv.list) ? _crmDlv.list.map(t => t.label) : [];
+    const extra = [model?.delivery, current].filter((v, i, a) => v && !terms.includes(v) && a.indexOf(v) === i);
+    return [
+      { value: '', title: 'Not offered', sub: 'Nothing about delivery goes into the note' },
+      ...extra.map(v => ({ value: v, title: v, sub: v === model?.delivery ? 'Product courier delivery' : '' })),
+      ...terms.map(v => ({ value: v, title: v })),
+    ];
+  }
+
+  /** Searchable pop-up like Brand / Model (_crmQtComboHtml); ⚙ opens the Delivery Terms window. */
+  function _crmQtDeliverySelectHtml(s, model) {
+    const current = _crmQtPickDelivery(s, model);
+    const opts = _crmQtDeliveryOptions(s, model);
+    const combo = _crmQtComboHtml('delivery', {
+      value: current || 'Not offered', placeholder: 'Not offered', open: s.pick?.open === 'delivery',
+      searchPh: 'Search delivery terms', loading: _crmDlv.list === 'loading',
+      empty: 'No delivery terms yet.',
+      // id = position in the options — the labels themselves can hold any character
+      items: opts.map((o, i) => ({ id: i, title: o.title, sub: o.sub, search: o.title, sel: o.value === current })),
+    });
+    return `<div class="crm-qtx-dlv">${combo}
+        ${_crmDlv.canManage ? '<button type="button" class="crm-qtx-dlv-manage" data-qt-dlv-manage title="Add or edit delivery terms"><i class="fa fa-gear"></i></button>' : ''}
+      </div>`;
+  }
+
   /** Lines added from the inventory search: fetch the product's info and fill the note (unless one was typed meanwhile). */
   async function _crmQtFillNote(lead, line) {
     const res = await API.crmQuotationProductInfo(lead.id, line.product_id).catch(() => ({ status: 0 }));
@@ -64779,7 +65119,7 @@ async function submitDsCreate() {
     const qty = Math.max(0.001, _crmQtNum(s.pick.qty) || 1);
     const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
     if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
-    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
+    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(_crmQtPickInfo(s, m)),
       quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
     s.pick = { ...s.pick, modelId: '', found: null, qty: 1, open: null }; // keep the brand for the next model
     _crmRenderWsTab();
@@ -65056,6 +65396,7 @@ async function submitDsCreate() {
       </section>
       ${banners.join('')}
       ${actions}
+      ${can.approve ? _crmQtApproverSignatureHtml() : ''}
       ${submitForm}
       ${sendForm}
       ${respondForm}
@@ -65258,6 +65599,9 @@ async function submitDsCreate() {
     if (!t) return;
 
     if (t.matches('[data-qt-pick-add]') && s.form) { _crmQtAddPicked(lead, s); return; }
+    if (t.matches('[data-qt-dlv-manage]')) { openCrmDeliveryTermsModal(); return; }
+    if (t.matches('[data-qt-sig-upload]')) { _crmQtUploadSignature(t); return; }
+    if (t.matches('[data-qt-sig-remove]')) { _crmQtRemoveSignature(t); return; }
 
     if (t.matches('[data-qt-new]')) {
       _crmQtEdit(lead, _crmQtNewForm());
@@ -65596,6 +65940,7 @@ async function submitDsCreate() {
   }
 
   async function _crmLoadApprovals() {
+    refreshCrmRibbonBadges();
     const body = $('#crm-approvals-rows');
     body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const [res, revRes] = await Promise.all([
@@ -65608,9 +65953,10 @@ async function submitDsCreate() {
     const revs = revRes.status === 200 ? (revRes.body.data || []) : [];
     const total = rows.length + revs.length;
     $('#crm-approvals-count').textContent = total ? `${total} waiting` : '';
+    // Each section carries its own red count, so it is clear what waits where
     body.innerHTML = total
-      ? rows.map(_crmApprovalCardHtml).join('')
-        + (revs.length ? `<div class="crm-qtx-h" style="margin:14px 2px 8px">Revision requests<small>${revs.length}</small></div>${revs.map(_crmRevisionCardHtml).join('')}` : '')
+      ? (rows.length ? `<div class="crm-qtx-h" style="margin:2px 2px 8px"><i class="fa fa-file-signature"></i> Quotations to approve${_crmTabCountHtml(rows.length, true)}</div>${rows.map(_crmApprovalCardHtml).join('')}` : '')
+        + (revs.length ? `<div class="crm-qtx-h" style="margin:14px 2px 8px"><i class="fa fa-code-pull-request"></i> Revision requests${_crmTabCountHtml(revs.length, true)}</div>${revs.map(_crmRevisionCardHtml).join('')}` : '')
       : _crmWsPanelHtml('<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing is waiting for your approval.');
   }
 
@@ -65735,6 +66081,434 @@ async function submitDsCreate() {
   $('#crm-approvals-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseApprovals(); });
   $('#rb-crm-approvals')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmApprovalsModal(); });
 
+  // ── My profile & signature: CRM ribbon → My Profile & Signature ──
+  // Name / designation / mobile print as "Prepared By" and "Approved By"; the signature only in "Approved By".
+  // Admins also get a "Person" picker: anyone's profile & signature, viewed and edited on their behalf.
+  let _crmProfile = null;
+  let _crmProfileUserId = null;   // null = the signed-in user; otherwise the person an admin has open
+  let _crmProfilePeople = [];     // admin only: GET crm/profiles
+
+  function _crmProfileIsMe() { return _crmProfileUserId == null; }
+
+  /** @param {number|null} userId someone else's user id (admins only), or null for "me" */
+  async function openCrmProfileModal(userId = null) {
+    _macShow($('#crm-profile-modal'));
+    $('#crm-profile-save').disabled = true;
+    $('#crm-profile-preview').innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    // The person picker shows only when the server says we may list everyone (admins)
+    await _crmProfileLoadPeople();
+    // Opening your own row (e.g. from Departments) is the same as "My profile"
+    const meRow = _crmProfilePeople.find(p => p.is_me);
+    if (userId && meRow && meRow.user_id === Number(userId)) userId = null;
+    await _crmProfileLoad(userId);
+    if (_crmProfilePeople.length) _crmProfileRenderPeople(_crmProfileUserId);
+  }
+  window.openCrmProfileModal = openCrmProfileModal;
+
+  async function _crmProfileLoad(userId) {
+    const save = $('#crm-profile-save');
+    save.disabled = true;
+    _crmProfileFeedback('idle');
+    $('#crm-profile-preview').innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const res = await (userId ? API.crmUserProfile(userId) : API.crmProfile()).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      toast(_crmWsError(res, userId ? 'Could not load that profile.' : 'Could not load your profile.'), 'error');
+      if (!userId) _macHide($('#crm-profile-modal'));
+      else { const sel = $('#crm-profile-person'); if (sel) sel.value = _crmProfileUserId ?? ''; }
+      return;
+    }
+    _crmProfileUserId = userId || null;
+    _crmProfileFill(res.body.data);
+    save.disabled = false;
+    // Open at the top so the person picker / HR record stay in view (focusing must not scroll the body)
+    const body = $('#crm-profile-body');
+    if (body) body.scrollTop = 0;
+    $('#crm-profile-name')?.focus({ preventScroll: true });
+  }
+
+  async function _crmProfileLoadPeople() {
+    const bar = $('#crm-profile-admin'), sel = $('#crm-profile-person');
+    if (!bar || !sel) return;
+    const res = await API.crmProfiles().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { bar.style.display = 'none'; _crmProfilePeople = []; return; }
+    _crmProfilePeople = res.body.data || [];
+    bar.style.display = '';
+  }
+
+  function _crmProfileRenderPeople(selectId) {
+    const sel = $('#crm-profile-person');
+    if (!sel) return;
+    const label = p => [p.name, p.designation, p.department, ...(p.leads || [])].filter(Boolean).join(' · ')
+      + (p.has_employee ? '' : '  (no HR record)')
+      + (p.has_signature ? '  ✓ signature' : '  — no signature');
+    sel.innerHTML = _crmProfilePeople.map(p =>
+      `<option value="${p.is_me ? '' : p.user_id}">${escHtml(label(p))}${p.is_me ? ' (me)' : ''}</option>`).join('');
+    sel.value = selectId ? String(selectId) : '';
+    const n = _crmProfilePeople.length, signed = _crmProfilePeople.filter(p => p.has_signature).length;
+    const count = $('#crm-profile-people-count');
+    if (count) count.textContent = `${n} people · ${signed} with a signature`;
+  }
+
+  function _crmProfileFill(p) {
+    _crmProfile = p || {};
+    const me = _crmProfileIsMe();
+    // The boxes hold the real value that prints (own value, else the HR record); the hint under each
+    // says where it comes from. A value equal to HR's is saved as "follow HR" (server side too).
+    [['name', me ? 'Your name' : 'Name'], ['phone', '07X XXX XXXX']].forEach(([k, ph]) => {
+      const el = $(`#crm-profile-${k}`);
+      el.value = _crmProfile[k] || '';
+      el.placeholder = ph;
+    });
+    _crmProfileSetDesignation(_crmProfile.designation);
+    _crmProfileRenderSources();
+    _crmProfileRenderHrLink();
+    $('#crm-profile-title').textContent = me ? 'My Profile & Signature' : `Profile & Signature — ${_crmProfile.name || 'User'}`;
+    const hrNote = _crmProfile.employee
+      ? ` Name, position and mobile are ${me ? 'your' : 'their'} HR record: saving here updates HR → Employees and Settings → Users too.`
+      : ` Values come from ${me ? 'your' : 'their'} HR record unless changed here.`;
+    $('#crm-profile-intro').innerHTML = (me
+      ? 'Printed as <b>Prepared By</b> on the quotations you make, and as <b>Approved By</b> (with your signature) on the quotations you approve.'
+      : `You are editing <b>${escHtml(_crmProfile.name || 'this person')}</b>'s profile as an admin. It prints as <b>Prepared By</b> on the quotations they make, and as <b>Approved By</b> (with their signature) on the quotations they approve.`) + hrNote;
+    if (me) _crmQtApplySignature(_crmProfile.signature);
+    else $('#crm-profile-sig').innerHTML = _crmQtSignatureBoxHtml(_crmProfile.signature);
+    _crmProfileRenderPreview();
+  }
+
+  /** Designation: dropdown of HR positions (+ "Other" for a custom one) around #crm-profile-designation. */
+  function _crmProfileSetDesignation(value) {
+    const wrap = $('#crm-profile-designation-wrap');
+    if (!wrap) return;
+    const positions = [...(_crmProfile?.positions || [])];
+    // Their HR position is always offered, even if it was renamed / removed since
+    const hrPos = (_crmProfile?.hr?.designation || '').trim();
+    if (hrPos && !positions.includes(hrPos)) positions.unshift(hrPos);
+    wrap.innerHTML = _crmDesignationPickerHtml(value, positions, 'id="crm-profile-designation"');
+  }
+
+  /** Under each box: "From HR record", or "Custom for quotations · HR: X · Use HR value". */
+  function _crmProfileRenderSources() {
+    const hr = _crmProfile?.hr || {};
+    const linked = !!_crmProfile?.employee;
+    const positions = (_crmProfile?.positions || []).map(p => p.toLowerCase());
+    ['name', 'designation', 'phone'].forEach(k => {
+      const hint = $(`[data-profile-src="${k}"]`);
+      if (!hint) return;
+      const v = $(`#crm-profile-${k}`).value.trim();
+      const h = (hr[k] || '').trim();
+      if (linked) {
+        // Saved straight onto the HR record (server: CrmProfileService::save) — except a custom designation
+        if (!v) {
+          hint.innerHTML = h ? `Empty — keeps the HR record: ${escHtml(h)}` : (k === 'name' ? 'Empty — uses the login name' : 'Not printed');
+        } else if (v === h) {
+          hint.innerHTML = '<i class="fa fa-link"></i> Same as the HR record';
+        } else if (k === 'designation' && !positions.includes(v.toLowerCase()) && v.toLowerCase() !== h.toLowerCase()) {
+          hint.innerHTML = '<i class="fa fa-pen"></i> Custom for quotations only — not an HR position'
+            + (h ? ` · HR: ${escHtml(h)} · <a href="#" data-profile-use-hr="${k}">Use HR value</a>` : '');
+        } else {
+          hint.innerHTML = '<i class="fa fa-arrows-rotate"></i> Saving updates the HR record'
+            + (k === 'name' ? ' and login name' : '') + (h ? ` · now: ${escHtml(h)}` : '');
+        }
+        return;
+      }
+      if (!v) {
+        hint.innerHTML = h ? `Empty — uses HR record: ${escHtml(h)}` : (k === 'name' ? 'Empty — uses the login name' : 'Not printed');
+      } else if (h && v === h) {
+        hint.innerHTML = '<i class="fa fa-link"></i> From HR record — follows HR changes';
+      } else {
+        hint.innerHTML = '<i class="fa fa-pen"></i> Custom for quotations'
+          + (h ? ` · HR: ${escHtml(h)} · <a href="#" data-profile-use-hr="${k}">Use HR value</a>` : (_crmProfile?.employee ? ' · not set in HR' : ''));
+      }
+    });
+  }
+
+  /** The HR record this profile is linked to: employee no., department, position, head / co-head. */
+  function _crmProfileRenderHrLink() {
+    const box = $('#crm-profile-hr');
+    if (!box) return;
+    const e = _crmProfile?.employee;
+    box.style.display = '';
+    const cardStyle = 'padding:10px 12px;border:1px solid var(--border,#e2e8f0);border-radius:8px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center';
+    if (!e) {
+      box.innerHTML = `<div style="${cardStyle}"><i class="fa fa-circle-info" style="color:#f59e0b"></i>
+        <span>No HR employee record is linked to this login — link one in HR → Employees to fill these values automatically.</span></div>`;
+      return;
+    }
+    const chip = (txt, color = '#2563eb') => `<span style="padding:2px 8px;border-radius:999px;background:${color}1a;color:${color};font-weight:600;font-size:11.5px">${txt}</span>`;
+    const type = { full_time: 'Full Time', part_time: 'Part Time', contract: 'Contract' }[e.employment_type] || e.employment_type;
+    box.innerHTML = `<div style="${cardStyle}">
+        <span style="font-weight:600"><i class="fa fa-id-badge"></i> HR record</span>
+        ${e.employee_id ? `<span>#${escHtml(e.employee_id)}</span>` : ''}
+        ${e.department ? `<span>· ${escHtml(e.department)}</span>` : ''}
+        ${e.job_title ? `<span>· ${escHtml(e.job_title)}</span>` : ''}
+        ${type ? chip(escHtml(type), '#16a34a') : ''}
+        ${(e.leads || []).map(l => chip(`${l.role === 'head' ? '<i class="fa fa-crown"></i> Head' : '<i class="fa fa-user"></i> Co-Head'} · ${escHtml(l.department)}`, l.role === 'head' ? '#d97706' : '#7c3aed')).join('')}
+      </div>`;
+  }
+
+  /** After an upload / removal in the profile window — for "me" it also updates the quotation screens. */
+  function _crmProfileApplySignature(sig) {
+    if (_crmProfileIsMe()) _crmQtApplySignature(sig);
+    else {
+      _crmProfile.signature = sig || null;
+      $('#crm-profile-sig').innerHTML = _crmQtSignatureBoxHtml(sig);
+    }
+    _crmProfileSyncPerson({ has_signature: !!sig });
+  }
+
+  /** Keep the admin's person list in step with what was just saved. */
+  function _crmProfileSyncPerson(changes) {
+    if (!_crmProfilePeople.length) return;
+    const p = _crmProfilePeople.find(x => _crmProfileIsMe() ? x.is_me : x.user_id === _crmProfileUserId);
+    if (!p) return;
+    Object.assign(p, changes);
+    _crmProfileRenderPeople(_crmProfileUserId);
+  }
+
+  function _crmProfileRenderPreview() {
+    // What prints: the box, else the HR record (the server's rule), else the login name for the name
+    const hr = _crmProfile?.hr || {};
+    const val = k => $(`#crm-profile-${k}`).value.trim() || (hr[k] || '').trim()
+      || (k === 'name' ? (_crmProfile?.login_name || _crmProfile?.name || '') : '');
+    const isEx = s => /^e\.g\.|07X/.test(s);
+    const name = val('name'), des = val('designation'), phone = val('phone');
+    const sig = _qtSignatureSrc(_crmProfile?.signature);
+    $('#crm-profile-preview').innerHTML = `<i style="font-weight:400">Approved By:</i><br>
+      ${sig ? `<img src="${escHtml(sig)}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">` : '<span class="crm-ws-muted" style="font-family:inherit;font-weight:400;font-size:12px">(no signature yet)</span><br>'}
+      ${escHtml(name)}<br>${des && !isEx(des) ? `${escHtml(des)}<br>` : ''}${phone && !isEx(phone) ? `Mobile: ${escHtml(phone)}` : ''}`;
+  }
+
+  const _CRM_PROFILE_SAVE_HTML = '<i class="fa fa-floppy-disk"></i> Save';
+  let _crmProfileFeedbackTimer = null;
+
+  /** In-modal save feedback: button state + a status line in the footer (the toast sits behind this modal). */
+  function _crmProfileFeedback(state, msg = '') {
+    const btn = $('#crm-profile-save'), status = $('#crm-profile-status');
+    clearTimeout(_crmProfileFeedbackTimer);
+    btn?.classList.remove('is-saving', 'is-saved');
+    if (btn) btn.innerHTML = _CRM_PROFILE_SAVE_HTML;
+    if (status) { status.className = 'crm-profile-status'; status.innerHTML = ''; }
+    if (state === 'saving') {
+      btn?.classList.add('is-saving');
+      if (btn) btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+    } else if (state === 'saved') {
+      btn?.classList.add('is-saved');
+      if (btn) btn.innerHTML = '<i class="fa fa-check"></i> Saved';
+      if (status) { status.classList.add('is-shown', 'is-ok'); status.innerHTML = `<i class="fa fa-circle-check"></i> ${escHtml(msg)}`; }
+      _crmProfileFeedbackTimer = setTimeout(() => _crmProfileFeedback('idle'), 3000);
+    } else if (state === 'error') {
+      if (status) { status.classList.add('is-shown', 'is-error'); status.innerHTML = `<i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}`; }
+    }
+  }
+
+  async function _crmProfileSave() {
+    const btn = $('#crm-profile-save');
+    btn.disabled = true;
+    _crmProfileFeedback('saving');
+    const me = _crmProfileIsMe(), userId = _crmProfileUserId;
+    const body = {
+      name:        $('#crm-profile-name').value.trim() || null,
+      designation: $('#crm-profile-designation').value.trim() || null,
+      phone:       $('#crm-profile-phone').value.trim() || null,
+    };
+    const res = await (me ? API.crmUpdateProfile(body) : API.crmUpdateUserProfile(userId, body)).catch(() => ({ status: 0 }));
+    btn.disabled = false;
+    if (res.status !== 200) {
+      const err = _crmWsError(res, me ? 'Could not save your profile.' : 'Could not save the profile.');
+      _crmProfileFeedback('error', err);
+      toast(err, 'error');
+      return;
+    }
+    if (userId !== _crmProfileUserId) { _crmProfileFeedback('idle'); return; }   // switched person while saving
+    const d = res.body.data;
+    _crmProfileFill(d);
+    _crmProfileSyncPerson({ name: d.name, designation: d.designation, phone: d.phone });
+    if (me) {
+      // New quotations start "Prepared by" from this profile
+      const meta = _crmWs.quotations?.meta;
+      if (meta) meta.prepared_by = { name: d.name, designation: d.designation, phone: d.phone };
+    }
+    const msg = (me ? 'Profile saved — it prints on your quotations' : `Profile of ${d.name || 'this person'} saved — it prints on their quotations`)
+      + (d.employee ? ' (HR record updated)' : '');
+    _crmProfileFeedback('saved', msg);
+    toast(msg, 'success');
+  }
+
+  $('#crm-profile-person')?.addEventListener('change', e => {
+    const id = e.target.value ? Number(e.target.value) : null;
+    _crmProfileLoad(id);
+  });
+  $('#crm-profile-save')?.addEventListener('click', _crmProfileSave);
+  $('#crm-profile-cancel')?.addEventListener('click', () => _macHide($('#crm-profile-modal')));
+  $('#crm-profile-close')?.addEventListener('click', () => _macHide($('#crm-profile-modal')));
+  $('#crm-profile-modal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) { _macHide($('#crm-profile-modal')); return; }
+    const t = e.target.closest('button');
+    const id = _crmProfileUserId;
+    const opts = _crmProfileIsMe() ? { apply: _crmProfileApplySignature } : {
+      path:   API.crmUserSignatureUploadPath(id),
+      remove: () => API.crmDeleteUserSignature(id),
+      apply:  sig => { if (_crmProfileUserId === id) _crmProfileApplySignature(sig); },
+      who:    'their',
+    };
+    if (t?.matches('[data-qt-sig-upload]')) _crmQtUploadSignature(t, opts).then(_crmProfileRenderPreview);
+    else if (t?.matches('[data-qt-sig-remove]')) _crmQtRemoveSignature(t, opts).then(_crmProfileRenderPreview);
+  });
+  $('#crm-profile-body')?.addEventListener('input', e => {
+    if (!e.target.matches('input')) return;
+    if ($('#crm-profile-save')?.classList.contains('is-saved')) _crmProfileFeedback('idle');
+    _crmProfileRenderSources();
+    _crmProfileRenderPreview();
+  });
+  // "Use HR value" under a box: put the HR record's value back (saved as "follow HR")
+  $('#crm-profile-body')?.addEventListener('click', e => {
+    const a = e.target.closest('[data-profile-use-hr]');
+    if (!a) return;
+    e.preventDefault();
+    const k = a.dataset.profileUseHr;
+    if (k === 'designation') _crmProfileSetDesignation(_crmProfile?.hr?.designation || '');
+    else $(`#crm-profile-${k}`).value = _crmProfile?.hr?.[k] || '';
+    _crmProfileRenderSources();
+    _crmProfileRenderPreview();
+  });
+  $('#crm-approvals-profile')?.addEventListener('click', () => openCrmProfileModal());
+  $('#rb-crm-my-profile')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmProfileModal(); });
+
+  // ── Delivery terms window: CRM ribbon → Delivery Terms, or ⚙ next to the quotation editor's Delivery ──
+  // Add / rename / switch off / reorder / delete; every change saves straight away and the editor's dropdown follows.
+  let _crmDlvRows = [];
+
+  async function openCrmDeliveryTermsModal() {
+    _macShow($('#crm-dlv-modal'));
+    $('#crm-dlv-new').value = '';
+    await _crmDlvLoadRows();
+    if (_crmDlv.canManage) $('#crm-dlv-new')?.focus();
+  }
+  window.openCrmDeliveryTermsModal = openCrmDeliveryTermsModal;
+
+  async function _crmDlvLoadRows() {
+    const body = $('#crm-dlv-rows');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmDeliveryTerms(true).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the delivery terms.'))); return; }
+    _crmDlvRows = res.body.data || [];
+    _crmDlv.canManage = !!res.body.meta?.can_manage;
+    _crmDlvRender();
+    _crmDlvSync();
+  }
+
+  /** The editor's dropdown lists the active terms, in this order. */
+  function _crmDlvSync() {
+    _crmDlv.list = _crmDlvRows.filter(t => t.is_active !== false).map(t => ({ id: t.id, label: t.label }));
+    _crmQtRenderPick();
+  }
+
+  function _crmDlvRender() {
+    const can = _crmDlv.canManage;
+    $('#crm-dlv-add-row').style.display = can ? '' : 'none';
+    $('#crm-dlv-count').textContent = `${_crmDlvRows.length} ${_crmDlvRows.length === 1 ? 'term' : 'terms'}${can ? '' : ' · view only'}`;
+    const body = $('#crm-dlv-rows');
+    if (!_crmDlvRows.length) { body.innerHTML = _crmWsPanelHtml('No delivery terms yet — add the first one above.'); return; }
+    const last = _crmDlvRows.length - 1;
+    body.innerHTML = _crmDlvRows.map((t, i) => `
+      <div class="crm-dlv-row${t.is_active ? '' : ' crm-dlv-row--off'}" data-dlv-id="${t.id}">
+        <span class="crm-dlv-num">${i + 1}</span>
+        <input class="po-field-input crm-dlv-label" maxlength="255" data-dlv-label value="${escHtml(t.label)}"${can ? '' : ' readonly'} title="${can ? 'Click to edit — saved when you leave the box' : ''}">
+        <label class="crm-dlv-active" title="Inactive terms are hidden from the quotation editor"><input type="checkbox" data-dlv-active${t.is_active ? ' checked' : ''}${can ? '' : ' disabled'}> Active</label>
+        ${can ? `<div class="crm-dlv-btns">
+          <button type="button" class="po-btn-ghost" data-dlv-move="-1"${i === 0 ? ' disabled' : ''} title="Move up"><i class="fa fa-arrow-up"></i></button>
+          <button type="button" class="po-btn-ghost" data-dlv-move="1"${i === last ? ' disabled' : ''} title="Move down"><i class="fa fa-arrow-down"></i></button>
+          <button type="button" class="po-btn-ghost crm-dlv-del" data-dlv-del title="Delete"><i class="fa fa-trash"></i></button>
+        </div>` : ''}
+      </div>`).join('');
+  }
+
+  async function _crmDlvAdd() {
+    const input = $('#crm-dlv-new');
+    const label = input.value.trim();
+    if (!label) { input.focus(); return; }
+    const btn = $('#crm-dlv-add');
+    btn.disabled = true;
+    const res = await API.crmCreateDeliveryTerm({ label }).catch(() => ({ status: 0 }));
+    btn.disabled = false;
+    if (res.status !== 201 && res.status !== 200) { toast(_crmWsError(res, 'Could not add the delivery term.'), 'error'); input.focus(); return; }
+    _crmDlvRows.push(res.body.data);
+    input.value = '';
+    _crmDlvRender();
+    _crmDlvSync();
+    toast('Delivery term added.', 'success');
+    input.focus();
+  }
+
+  async function _crmDlvSave(id, body, onFail) {
+    const res = await API.crmUpdateDeliveryTerm(id, body).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the delivery term.'), 'error'); onFail?.(); return; }
+    const i = _crmDlvRows.findIndex(t => t.id === id);
+    if (i >= 0) _crmDlvRows[i] = res.body.data;
+    _crmDlvRender();
+    _crmDlvSync();
+  }
+
+  $('#crm-dlv-add')?.addEventListener('click', _crmDlvAdd);
+  $('#crm-dlv-new')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _crmDlvAdd(); } });
+  $('#crm-dlv-rows')?.addEventListener('keydown', e => {
+    if (!e.target.matches('[data-dlv-label]')) return;
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      const t = _crmDlvRows.find(x => x.id === +e.target.closest('[data-dlv-id]').dataset.dlvId);
+      if (t) e.target.value = t.label;
+      e.target.blur();
+    }
+  });
+  $('#crm-dlv-rows')?.addEventListener('change', e => {
+    const row = e.target.closest('[data-dlv-id]');
+    if (!row || !_crmDlv.canManage) return;
+    const id = +row.dataset.dlvId;
+    const t = _crmDlvRows.find(x => x.id === id);
+    if (!t) return;
+    if (e.target.matches('[data-dlv-label]')) {
+      const label = e.target.value.trim();
+      if (!label || label === t.label) { e.target.value = t.label; return; }
+      _crmDlvSave(id, { label }, () => { e.target.value = t.label; });
+    } else if (e.target.matches('[data-dlv-active]')) {
+      _crmDlvSave(id, { is_active: e.target.checked }, () => { e.target.checked = t.is_active; });
+    }
+  });
+  $('#crm-dlv-rows')?.addEventListener('click', async e => {
+    const b = e.target.closest('button');
+    const row = b?.closest('[data-dlv-id]');
+    if (!row || !_crmDlv.canManage) return;
+    const id = +row.dataset.dlvId;
+    const i = _crmDlvRows.findIndex(x => x.id === id);
+    if (i < 0) return;
+    if (b.dataset.dlvMove) {
+      const j = i + +b.dataset.dlvMove;
+      if (j < 0 || j >= _crmDlvRows.length) return;
+      [_crmDlvRows[i], _crmDlvRows[j]] = [_crmDlvRows[j], _crmDlvRows[i]];
+      _crmDlvRender();
+      _crmDlvSync();
+      $(`#crm-dlv-rows [data-dlv-id="${id}"] [data-dlv-move="${b.dataset.dlvMove}"]`)?.focus();
+      const res = await API.crmReorderDeliveryTerms(_crmDlvRows.map(t => t.id)).catch(() => ({ status: 0 }));
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the order.'), 'error'); _crmDlvLoadRows(); }
+    } else if (b.matches('[data-dlv-del]')) {
+      const t = _crmDlvRows[i];
+      const ok = await appConfirm({ title: 'Delete delivery term?', message: `"${t.label}" will no longer be offered on quotations. Quotations already saved keep their text.`,
+        confirmText: '<i class="fa fa-trash"></i> Delete', icon: 'fa-trash', danger: true });
+      if (!ok) return;
+      const res = await API.crmDeleteDeliveryTerm(id).catch(() => ({ status: 0 }));
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the delivery term.'), 'error'); return; }
+      _crmDlvRows = _crmDlvRows.filter(x => x.id !== id);
+      _crmDlvRender();
+      _crmDlvSync();
+      toast('Delivery term deleted.', 'success');
+    }
+  });
+  const _crmDlvClose = () => _macHide($('#crm-dlv-modal'));
+  $('#crm-dlv-close')?.addEventListener('click', _crmDlvClose);
+  $('#crm-dlv-done')?.addEventListener('click', _crmDlvClose);
+  $('#crm-dlv-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmDlvClose(); });
+  $('#rb-crm-delivery-terms')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmDeliveryTermsModal(); });
+
   // ── My follow-ups (staff) / Team (heads): overdue in red, log from the list ──
   let _crmFu = { scope: 'mine', status: 'pending', data: [], meta: {}, logId: null };
 
@@ -65746,6 +66520,7 @@ async function submitDsCreate() {
   window.openCrmFollowUpsModal = openCrmFollowUpsModal;
 
   async function _crmLoadFollowUps() {
+    refreshCrmRibbonBadges();
     const list = $('#crm-fu-rows');
     list.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmFollowUps(_crmFu.scope, _crmFu.status).catch(() => ({ status: 0 }));
@@ -65761,7 +66536,15 @@ async function submitDsCreate() {
     const tab = (scope, label, n, red) => `<button type="button" class="crm-inbox-tab${_crmFu.scope === scope ? ' active' : ''}" data-fu-scope="${scope}">${label}${n ? ` <span class="crm-fu-count${red ? ' crm-fu-count--overdue' : ''}">${n}</span>` : ''}</button>`;
     $('#crm-fu-scopes').innerHTML = tab('mine', 'My follow-ups', c.mine_overdue || c.mine_pending, c.mine_overdue > 0)
       + (meta.can_team ? tab('team', 'Team', c.team_overdue, c.team_overdue > 0) : '');
-    $$('#crm-fu-status [data-fu-status]').forEach(b => b.classList.toggle('active', b.dataset.fuStatus === _crmFu.status));
+    // Counts on the status tabs for the scope shown: overdue in red, due today / all pending in grey
+    const sc = _crmFu.scope === 'team' ? 'team' : 'mine';
+    const statusCounts = { overdue: [c[`${sc}_overdue`], true], today: [c[`${sc}_today`], 'amber'], pending: [c[`${sc}_pending`], false] };
+    $$('#crm-fu-status [data-fu-status]').forEach(b => {
+      b.classList.toggle('active', b.dataset.fuStatus === _crmFu.status);
+      b.querySelector('.crm-fu-count')?.remove();
+      const [n, red] = statusCounts[b.dataset.fuStatus] || [];
+      if (n) b.insertAdjacentHTML('beforeend', _crmTabCountHtml(n, red));
+    });
     $('#crm-fu-email').checked = !!meta.email_notifications;
     const empty = _crmFu.status === 'overdue' ? '<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing overdue.' : 'No follow-ups here.';
     $('#crm-fu-rows').innerHTML = data.length
@@ -65848,18 +66631,25 @@ async function submitDsCreate() {
 
   function _crmInqTabs() {
     const m = _crmInq.meta || {};
+    // Counts on the tabs: pending inquiries of the day shown (mine / team) and reports still to send
+    const st = _crmInq.status;
+    const minePending = st?.mine?.counts?.pending ?? _crmBadges.details.inquiries?.mine_pending;
+    const teamPending = (st?.team || []).reduce((sum, d) => sum + (Number(d?.totals?.pending) || 0), 0);
+    const unsent = _crmBadges.details.inquiries?.reports_unsent;
     const tabs = [
-      ['mine', '<i class="fa fa-user"></i> My day'],
-      m.can_team && ['team', '<i class="fa fa-users"></i> Team'],
+      ['mine', '<i class="fa fa-user"></i> My day', minePending, 'pending inquiries waiting for your first call'],
+      m.can_team && ['team', '<i class="fa fa-users"></i> Team', teamPending, 'pending inquiries in your team'],
       ['allocations', '<i class="fa fa-clipboard-list"></i> Allocation record'],
-      m.can_view_reports && ['reports', '<i class="fa fa-envelope-open-text"></i> Daily report'],
+      m.can_view_reports && ['reports', '<i class="fa fa-envelope-open-text"></i> Daily report', unsent, 'daily reports waiting to be reviewed and sent'],
       m.can_edit_settings && ['settings', '<i class="fa fa-sliders"></i> Settings'],
     ].filter(Boolean);
-    $('#crm-inq-tabs').innerHTML = tabs.map(([k, label]) => `<button type="button" class="crm-inbox-tab${_crmInq.tab === k ? ' active' : ''}" data-inq-tab="${k}">${label}</button>`).join('');
+    $('#crm-inq-tabs').innerHTML = tabs.map(([k, label, n, hint]) =>
+      `<button type="button" class="crm-inbox-tab${_crmInq.tab === k ? ' active' : ''}" data-inq-tab="${k}"${n ? ` title="${n} ${hint}"` : ''}>${label}${_crmTabCountHtml(n, true)}</button>`).join('');
     $('#crm-inq-date-wrap').style.visibility = _crmInq.tab === 'settings' || _crmInq.tab === 'reports' ? 'hidden' : '';
   }
 
   async function _crmInqLoad() {
+    refreshCrmRibbonBadges();
     const body = $('#crm-inq-body');
     body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmInquiryStatus(_crmInq.date).catch(() => ({ status: 0 }));
@@ -69090,6 +69880,8 @@ async function submitDsCreate() {
     const n = d.employees_count || 0;
     const t = d.employment_types || {};
     const employees = d.employees || [];
+    // Admins can open each employee's quotation profile & signature (the server checks again)
+    const canEditProfiles = document.body.classList.contains('crm-is-admin') && typeof window.openCrmProfileModal === 'function';
     // Head / co-head pickers: any member of the department, searchable by name or email
     const lead = (role, label, current) => {
       const cur = employees.find(e => e.id === current);
@@ -69135,16 +69927,21 @@ async function submitDsCreate() {
       </div>
 
       <div class="mac-section">
-        <div class="mac-section-title">Employees <span class="crm-perms-muted" style="font-weight:400">· ${n}</span></div>
-        <div class="mac-group">
-          ${employees.map(e => `<div class="mac-row">
+        <div class="mac-section-title">Employees <span class="crm-perms-muted" style="font-weight:400" id="crm-dept-emp-count">· ${n}</span></div>
+        ${employees.length ? `<div class="mac-search" style="margin:0 0 8px"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-dept-emp-search" placeholder="Search employees by name, ID, job title or email" autocomplete="off"></div>` : ''}
+        <div class="mac-group" id="crm-dept-emp-list">
+          ${employees.map(e => `<div class="mac-row" data-emp-search="${escHtml([e.name, e.employee_id, e.job_title, e.email, DEPT_TYPE_LABEL[e.employment_type] || e.employment_type].filter(Boolean).join(' ').toLowerCase())}">
             <div class="mac-row-label mac-row-label--icon">
               <span class="crm-dept-avatar">${escHtml(_crmInitials(e.name || '?'))}</span>
               <span style="min-width:0"><strong>${escHtml(e.name || '—')}</strong>
                 <small>${[e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</small></span>
             </div>
-            <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+            <span style="display:flex;align-items:center;gap:8px">
+              ${canEditProfiles && e.user_id ? `<button type="button" class="po-btn-ghost" data-dept-profile="${e.user_id}" title="View / update ${escHtml(e.name || '')}'s profile & signature (printed on quotations)"><i class="fa fa-signature"></i> Profile</button>` : ''}
+              <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+            </span>
           </div>`).join('') || '<div class="mac-row mac-muted-row">No one is in this department yet. Put people in it from Settings → Users (or HR Management).</div>'}
+          ${employees.length ? '<div class="mac-row mac-muted-row" id="crm-dept-emp-empty" style="display:none">No matching employees</div>' : ''}
         </div>
       </div>
 
@@ -69157,6 +69954,23 @@ async function submitDsCreate() {
         </div>
       </div>`;
     ['head', 'co_head'].forEach(role => _crmWireLeadCombo(role, employees));
+
+    // Employee search: filters the rows already rendered (no extra request)
+    const empSearch = $('#crm-dept-emp-search');
+    if (empSearch) {
+      empSearch.addEventListener('input', () => {
+        const q = empSearch.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#crm-dept-emp-list [data-emp-search]').forEach(row => {
+          const match = !q || row.dataset.empSearch.includes(q);
+          row.style.display = match ? '' : 'none';
+          if (match) shown++;
+        });
+        $('#crm-dept-emp-empty').style.display = shown ? 'none' : '';
+        $('#crm-dept-emp-count').textContent = q ? `· ${shown} of ${n}` : `· ${n}`;
+      });
+      empSearch.addEventListener('keydown', e => { if (e.key === 'Escape' && empSearch.value) { e.stopPropagation(); empSearch.value = ''; empSearch.dispatchEvent(new Event('input')); } });
+    }
   }
 
   // Leader combobox: filters department members by name, email, employee ID or job title
@@ -69257,6 +70071,8 @@ async function submitDsCreate() {
 
     if (t.matches('[data-dept-lead-save]')) { _crmSaveDeptLeadership(t); return; }
 
+    if (t.matches('[data-dept-profile]')) { window.openCrmProfileModal?.(Number(t.dataset.deptProfile)); return; }
+
     if (t.matches('[data-dept-org]')) {
       _crmOrgDeptId = _crmDeptDetail?.id ?? null;
       _crmCloseDept();
@@ -69327,6 +70143,7 @@ async function submitDsCreate() {
   }
 
   async function _crmLoadInbox() {
+    refreshCrmRibbonBadges();
     _crmInboxAlert('');
     const res = await API.crmInbox(_crmInboxFilter, _crmInboxQ);
     if (res.status !== 200) {
@@ -69346,7 +70163,8 @@ async function submitDsCreate() {
 
   function _crmRenderInboxTabs() {
     $('#crm-inbox-tabs').innerHTML = _crmInbox.filters.map(f =>
-      `<button type="button" class="crm-inbox-tab${f.key === _crmInboxFilter ? ' active' : ''}" data-inbox-filter="${f.key}">${escHtml(f.label)} (${_crmInbox.counts[f.key] ?? 0})</button>`).join('');
+      // "Needs review" and "Unverified" wait on Marketing → red; the other filters a grey total
+      `<button type="button" class="crm-inbox-tab${f.key === _crmInboxFilter ? ' active' : ''}" data-inbox-filter="${f.key}">${escHtml(f.label)}${_crmTabCountHtml(_crmInbox.counts[f.key], f.key === 'review' || f.key === 'unverified')}</button>`).join('');
   }
 
   function _crmRenderInboxList() {

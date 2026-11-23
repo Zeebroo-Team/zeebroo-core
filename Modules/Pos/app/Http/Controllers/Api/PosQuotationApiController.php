@@ -191,6 +191,8 @@ class PosQuotationApiController extends Controller
             'customer_email'   => $q->customer?->email,
             // "Prepared by" block of the printed quotation: { name, designation, phone } or null
             'prepared_by'      => $q->preparedByDetails(),
+            // "Approved by" block: the approving head's { name, designation, phone, signature } or null
+            'approved_by_print' => $q->approvedByDetails(),
             'is_editable'     => $q->isEditable() && ! $q->isLeadQuotation(),
             // The lead it was built from — the Sales panel links back to it
             'lead'            => $q->lead ? [

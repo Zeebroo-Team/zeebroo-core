@@ -664,6 +664,7 @@ const API = (() => {
     crmSettings:                 ()                    => request('GET',    '/crm/settings'),
     crmSaveSettings:             (body)                => request('PUT',    '/crm/settings', body),
     // Marketing inbox
+    crmBadgeCounts:       ()                   => request('GET',    '/crm/badge-counts'),
     crmInbox:             (filter, q)          => request('GET',    `/crm/inbox?filter=${encodeURIComponent(filter||'all')}&q=${encodeURIComponent(q||'')}`),
     crmInboxLead:         (leadId)             => request('GET',    `/crm/inbox/leads/${leadId}`),
     crmInboxUpdateLead:   (leadId, body)       => request('PUT',    `/crm/inbox/leads/${leadId}`, body),
@@ -743,6 +744,17 @@ const API = (() => {
     crmLeadAttachmentDownloadPath: (leadId, attachmentId, inline) => `/crm/leads/${leadId}/attachments/${attachmentId}/download${inline ? '?inline=1' : ''}`,
     crmLeadTasks:             (leadId)                 => request('GET',    `/crm/leads/${leadId}/tasks`),
     crmCreateLeadTask:        (leadId, body)           => request('POST',   `/crm/leads/${leadId}/tasks`, body),
+    // The signed-in user's signature, printed in "Approved by" on quotations they approve — upload via electronAPI.apiUpload (multipart "files[]")
+    crmProfile:                ()                      => request('GET', '/crm/profile'),
+    crmUpdateProfile:          (body)                  => request('PUT', '/crm/profile', body),
+    crmProfileSignatureUploadPath: '/crm/profile/signature',
+    crmDeleteProfileSignature: ()                      => request('DELETE', '/crm/profile/signature'),
+    // Admin only: any person's profile & signature
+    crmProfiles:               ()                      => request('GET', '/crm/profiles'),
+    crmUserProfile:            (userId)                => request('GET', `/crm/profiles/${userId}`),
+    crmUpdateUserProfile:      (userId, body)          => request('PUT', `/crm/profiles/${userId}`, body),
+    crmUserSignatureUploadPath: (userId)               => `/crm/profiles/${userId}/signature`,
+    crmDeleteUserSignature:    (userId)                => request('DELETE', `/crm/profiles/${userId}/signature`),
     // Lead quotations (PosCrmLeadQuotationApiController): build from inventory → submit → head approves → PDF → send
     crmLeadQuotations:        (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations`),
     crmLeadQuotation:         (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}`),
@@ -754,6 +766,12 @@ const API = (() => {
     crmQuotationModels:       (leadId, brandId)        => request('GET',    `/crm/leads/${leadId}/quotations/catalog/models?brand_id=${encodeURIComponent(brandId)}`),
     crmQuotationSearch:       (leadId, q)              => request('GET',    `/crm/leads/${leadId}/quotations/catalog/search?q=${encodeURIComponent(q)}`),
     crmQuotationProductInfo:  (leadId, productId)      => request('GET',    `/crm/leads/${leadId}/quotations/catalog/products/${productId}`),
+    // Delivery terms (PosCrmDeliveryTermApiController) — the editor's Delivery dropdown; all=true includes inactive ones
+    crmDeliveryTerms:         (all = false)            => request('GET',    `/crm/delivery-terms${all ? '?all=1' : ''}`),
+    crmCreateDeliveryTerm:    (body)                   => request('POST',   `/crm/delivery-terms`, body),
+    crmUpdateDeliveryTerm:    (id, body)               => request('PUT',    `/crm/delivery-terms/${id}`, body),
+    crmDeleteDeliveryTerm:    (id)                     => request('DELETE', `/crm/delivery-terms/${id}`),
+    crmReorderDeliveryTerms:  (ids)                    => request('POST',   `/crm/delivery-terms/reorder`, { ids }),
     crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
     // action: submit | approve | return | reject — body { comment }
     crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),

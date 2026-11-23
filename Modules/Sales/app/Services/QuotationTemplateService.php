@@ -91,7 +91,7 @@ class QuotationTemplateService
         $setup = $this->get($business);
         $quotation->loadMissing(['customer', 'lead', 'items.product']);
 
-        $html = $this->inlineImages($business, $this->sanitize($setup['custom_html']));
+        $html = $this->inlineImages($business, $this->withApprovedBlock($this->sanitize($setup['custom_html'])));
         $out  = $this->renderNodes($this->parse($html), [$this->data($business, $quotation, $setup)]);
 
         // Paper size first. dompdf merges every @page rule (even inside @media), so the
@@ -160,6 +160,7 @@ class QuotationTemplateService
         [$wMm, $hMm] = $this->paper($business);
         $bill = $q->billTo();
         $prep = $q->preparedByDetails();
+        $appr = $q->approvedByDetails();
 
         return [
             'doc_title'        => 'Quotation',
@@ -183,6 +184,13 @@ class QuotationTemplateService
             'prepared_by_name'        => $prep['name'] ?? '',
             'prepared_by_designation' => $prep['designation'] ?? '',
             'prepared_by_phone'       => $prep['phone'] ?? '',
+            // "Approved by" — the head who approved it (their CRM profile); signature is a data URI
+            'has_approved_by'           => $appr !== null,
+            'approved_by_name'          => $appr['name'] ?? '',
+            'approved_by_designation'   => $appr['designation'] ?? '',
+            'approved_by_phone'         => $appr['phone'] ?? '',
+            'has_approved_by_signature' => ! empty($appr['signature']),
+            'approved_by_signature'     => $appr['signature'] ?? '',
             'business_name'    => (string) $business->name,
             'business_address' => (string) ($business->getSetting('pos.receipt_address', '') ?: ''),
             'logo_url'         => $this->logoSrc($business),
@@ -203,6 +211,24 @@ class QuotationTemplateService
             'mg_left'          => $setup['mg_left'],
             'mg_right'         => $setup['mg_right'],
         ];
+    }
+
+    /** "Approved By" for custom templates that don't place it themselves (same block as the desktop). */
+    public const APPROVED_BLOCK = '{{#has_approved_by}}<div style="margin-top:16px;page-break-inside:avoid;break-inside:avoid"><i>Approved By:</i><br>'
+        . '{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}'
+        . '{{approved_by_name}}<br>{{#approved_by_designation}}{{approved_by_designation}}<br>{{/approved_by_designation}}'
+        . '{{#approved_by_phone}}Mobile: {{approved_by_phone}}{{/approved_by_phone}}</div>{{/has_approved_by}}';
+
+    /** Adds APPROVED_BLOCK right after the template's last {{/has_prepared_by}}, unless it uses approved_by itself. */
+    private function withApprovedBlock(string $html): string
+    {
+        if (str_contains($html, 'approved_by') || ! preg_match_all('/\{\{\s*\/\s*has_prepared_by\s*\}\}/', $html, $m, PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+        [$tag, $pos] = end($m[0]);
+        $at = $pos + strlen($tag);
+
+        return substr($html, 0, $at) . self::APPROVED_BLOCK . substr($html, $at);
     }
 
     private function num(mixed $n): string

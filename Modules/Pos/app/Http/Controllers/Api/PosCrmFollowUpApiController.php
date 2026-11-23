@@ -63,7 +63,10 @@ class PosCrmFollowUpApiController extends Controller
                 'counts'   => [
                     'mine_pending' => $this->followUps->listFor($business, $access, 'mine', 'pending')->count(),
                     'mine_overdue' => $this->followUps->listFor($business, $access, 'mine', 'overdue')->count(),
+                    'mine_today'   => $this->followUps->listFor($business, $access, 'mine', 'today')->count(),
+                    'team_pending' => $canTeam ? $this->followUps->listFor($business, $access, 'team', 'pending')->count() : null,
                     'team_overdue' => $canTeam ? $this->followUps->listFor($business, $access, 'team', 'overdue')->count() : null,
+                    'team_today'   => $canTeam ? $this->followUps->listFor($business, $access, 'team', 'today')->count() : null,
                 ],
                 ...$this->choices(),
                 'email_notifications' => $access->userId ? $this->notifier->emailEnabled($business->id, $access->userId) : false,

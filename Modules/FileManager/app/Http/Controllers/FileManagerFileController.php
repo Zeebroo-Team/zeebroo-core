@@ -65,6 +65,13 @@ class FileManagerFileController extends Controller
         }
 
         abort_unless($this->fileManagerService->fileForBusiness($business, $file) instanceof FileManagerFile, 404);
+        // A staff signature: business admins may open it here; for anyone else it does not exist
+        if ($file->isAdminOnly()) {
+            abort_unless($this->fileManagerService->isBusinessAdmin($business, (int) $request->user()?->id), 404);
+            abort_unless(Storage::disk($file->diskName())->exists($file->stored_path), 404);
+
+            return Storage::disk($file->diskName())->download($file->stored_path, $file->original_filename);
+        }
         // A module-owned file (e.g. a CRM lead attachment) is only served through that module's own checks
         abort_if($file->isManaged(), 403, 'This file belongs to '.strtoupper((string) $file->managed_by).'. Open it from there.');
         abort_unless(Storage::disk($file->diskName())->exists($file->stored_path), 404);

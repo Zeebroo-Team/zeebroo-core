@@ -277,6 +277,21 @@ body,b,strong,th{font-family:'DejaVu Sans',sans-serif;}
     </table>
     @endif
 
+    {{-- Approved by — the head who approved it, with their signature --}}
+    @if($approvedBy = $quotation->approvedByDetails())
+    <table class="qt-prep">
+        <tr>
+            <td>
+                <div class="qt-label">Approved By</div>
+                @if($approvedBy['signature'])<img src="{{ $approvedBy['signature'] }}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">@endif
+                <div class="qt-prep-name">{{ $approvedBy['name'] }}</div>
+                @if($approvedBy['designation'])<div class="qt-prep-info">{{ $approvedBy['designation'] }}</div>@endif
+                @if($approvedBy['phone'])<div class="qt-prep-info">Mobile: {{ $approvedBy['phone'] }}</div>@endif
+            </td>
+        </tr>
+    </table>
+    @endif
+
     {{-- Footer --}}
     <table class="qt-footer">
         <tr>

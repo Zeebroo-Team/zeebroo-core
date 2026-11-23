@@ -40,6 +40,7 @@ class DepartmentDetailService
 
             return [
                 'id'               => $e->id,
+                'user_id'          => $e->user_id,
                 'name'             => $e->full_name,
                 'employee_id'      => $e->employee_id,
                 'email'            => $e->user?->email ?: $e->personal_email,

@@ -186,6 +186,31 @@ class Quotation extends Model
         ];
     }
 
+    /**
+     * The "Approved by" block of the printed quotation: the head who approved it, from their
+     * CRM profile (name, designation, phone, signature as a data URI). Null until a head has
+     * approved it — a quotation issued within the department's limits has no approver.
+     *
+     * @return array{name: string, designation: string, phone: string, signature: ?string}|null
+     */
+    public function approvedByDetails(): ?array
+    {
+        if (! $this->approved_by || ! $this->approved_at || ! class_exists(\Modules\CRM\Services\CrmProfileService::class)) {
+            return null;
+        }
+        $p = app(\Modules\CRM\Services\CrmProfileService::class)->get((int) $this->business_id, (int) $this->approved_by);
+        if (trim((string) $p['name']) === '') {
+            return null;
+        }
+
+        return [
+            'name'        => trim((string) $p['name']),
+            'designation' => trim((string) $p['designation']),
+            'phone'       => trim((string) $p['phone']),
+            'signature'   => $p['signature'],
+        ];
+    }
+
     public function submittedBy(): BelongsTo
     {
         return $this->belongsTo(\App\Models\User::class, 'submitted_by');

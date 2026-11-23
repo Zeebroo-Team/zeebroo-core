@@ -25,7 +25,9 @@ class FileManagerController extends Controller
         }
 
         $folderId = $request->filled('folder') ? (int) $request->query('folder') : null;
-        $browse = $this->fileManagerService->browse($business, $folderId);
+        // Staff signatures (CRM / Signatures) are listed for business admins only
+        $browse = $this->fileManagerService->browse($business, $folderId,
+            $this->fileManagerService->isBusinessAdmin($business, (int) $request->user()?->id));
 
         return view('filemanager::index', [
             'business' => $business,

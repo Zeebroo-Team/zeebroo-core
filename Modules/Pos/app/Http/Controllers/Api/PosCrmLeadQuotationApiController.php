@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Policies\LeadPolicy;
@@ -81,6 +82,10 @@ class PosCrmLeadQuotationApiController extends Controller
                 'lead'        => $this->presentLead($lead),
                 // The signed-in user's CRM profile — a new quotation's "Prepared by"
                 'prepared_by' => $this->preparedByDefaults($business, $request),
+                // HR positions — the "Prepared by" designation dropdown
+                'positions'   => app(CrmProfileService::class)->positions((int) $business->id),
+                // The signed-in user's signature (data URI) — printed in "Approved by" on quotations they approve
+                'my_signature' => $request->user() ? app(CrmProfileService::class)->signatureDataUri((int) $business->id, (int) $request->user()->id) : null,
             ],
         ]);
     }
@@ -581,6 +586,168 @@ class PosCrmLeadQuotationApiController extends Controller
         return ['name' => $p['name'], 'designation' => $p['designation'], 'phone' => $p['phone']];
     }
 
+    /**
+     * GET crm/profile — the signed-in user's CRM profile: what prints as "Prepared by" / "Approved by".
+     * data: { name, designation, phone, signature (data URI|null), saved: {…own values}, hr: {…HR record} }
+     */
+    public function profile(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        return $this->profileResponse($business, (int) $request->user()->id);
+    }
+
+    /** PUT crm/profile — { name?, designation?, phone? }; an empty value goes back to the HR / login default. */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        return $this->saveProfileFor($request, $business, (int) $request->user()->id);
+    }
+
+    /**
+     * POST crm/profile/signature — multipart "files[]" (or "signature"): the signed-in user's
+     * signature image, printed in "Approved by" on the quotations they approve.
+     */
+    public function uploadSignature(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        return $this->uploadSignatureFor($request, $business, (int) $request->user()->id);
+    }
+
+    /** DELETE crm/profile/signature — removes the signed-in user's signature. */
+    public function deleteSignature(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        return $this->deleteSignatureFor($business, (int) $request->user()->id);
+    }
+
+    // ── Admin: every person's profile & signature ─────────────────────────────
+
+    /**
+     * GET crm/profiles — admin only: every person of the business (owner + members) with the
+     * name / designation / mobile that prints on their quotations and whether a signature is on file.
+     */
+    public function profiles(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessProfileAdmin($request, $business);
+
+        $me   = (int) $request->user()->id;
+        $rows = array_map(fn (array $r) => $r + ['is_me' => $r['user_id'] === $me],
+            app(CrmProfileService::class)->listForBusiness($business));
+
+        return response()->json(['data' => $rows]);
+    }
+
+    /** GET crm/profiles/{user} — admin only: one person's profile (same shape as GET crm/profile). */
+    public function userProfile(Request $request, int $user): JsonResponse
+    {
+        $business = $this->profileAdminContext($request, $user);
+
+        return $this->profileResponse($business, $user);
+    }
+
+    /** PUT crm/profiles/{user} — admin only: { name?, designation?, phone? } for that person. */
+    public function updateUserProfile(Request $request, int $user): JsonResponse
+    {
+        $business = $this->profileAdminContext($request, $user);
+
+        return $this->saveProfileFor($request, $business, $user);
+    }
+
+    /** POST crm/profiles/{user}/signature — admin only: upload / replace that person's signature. */
+    public function uploadUserSignature(Request $request, int $user): JsonResponse
+    {
+        $business = $this->profileAdminContext($request, $user);
+
+        return $this->uploadSignatureFor($request, $business, $user);
+    }
+
+    /** DELETE crm/profiles/{user}/signature — admin only: remove that person's signature. */
+    public function deleteUserSignature(Request $request, int $user): JsonResponse
+    {
+        $business = $this->profileAdminContext($request, $user);
+
+        return $this->deleteSignatureFor($business, $user);
+    }
+
+    private function abortUnlessProfileAdmin(Request $request, Business $business): void
+    {
+        if (! $this->access($request, $business)->isAdmin) {
+            throw new HttpResponseException(
+                response()->json(['message' => 'Only the business owner or an admin can manage other people\'s profiles.'], 403)
+            );
+        }
+    }
+
+    /** The business, after checking the caller is an admin and the user belongs to it (404 otherwise). */
+    private function profileAdminContext(Request $request, int $userId): Business
+    {
+        $business = $this->businessOrAbort($request);
+        $this->abortUnlessProfileAdmin($request, $business);
+        if (! app(CrmProfileService::class)->belongsToBusiness($business, $userId)) {
+            throw new HttpResponseException(response()->json(['message' => 'User is not a member of this business.'], 404));
+        }
+
+        return $business;
+    }
+
+    private function profileResponse(Business $business, int $userId): JsonResponse
+    {
+        $profiles = app(CrmProfileService::class);
+        $data = $profiles->get((int) $business->id, $userId);
+        $data['user_id']   = $userId;
+        $data['positions'] = $profiles->positions((int) $business->id);   // designation dropdown
+
+        return response()->json(['data' => $data]);
+    }
+
+    private function saveProfileFor(Request $request, Business $business, int $userId): JsonResponse
+    {
+        $data = $request->validate([
+            'name'        => ['sometimes', 'nullable', 'string', 'max:120'],
+            'designation' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'phone'       => ['sometimes', 'nullable', 'string', 'max:40'],
+        ]);
+
+        $profiles = app(CrmProfileService::class);
+        $saved = $profiles->save((int) $business->id, $userId, $data);
+        $saved['user_id']   = $userId;
+        $saved['positions'] = $profiles->positions((int) $business->id);
+
+        return response()->json(['message' => 'Profile saved.', 'data' => $saved]);
+    }
+
+    private function uploadSignatureFor(Request $request, Business $business, int $userId): JsonResponse
+    {
+        $request->validate([
+            'signature' => ['nullable', ...CrmProfileService::signatureRules()],
+            'files'     => ['nullable', 'array', 'max:1'],
+            'files.*'   => CrmProfileService::signatureRules(),
+        ], [
+            'files.*.mimes' => 'The signature must be a PNG or JPG image.',
+            'files.*.max'   => 'The signature image can be at most 1 MB.',
+        ]);
+        $file = $request->file('signature') ?? ($request->file('files')[0] ?? null);
+        if ($file === null) {
+            throw ValidationException::withMessages(['signature' => ['Choose a signature image to upload.']]);
+        }
+
+        $signature = app(CrmProfileService::class)->saveSignature((int) $business->id, $userId, $file);
+
+        return response()->json(['message' => 'Signature saved.', 'data' => ['signature' => $signature]]);
+    }
+
+    private function deleteSignatureFor(Business $business, int $userId): JsonResponse
+    {
+        app(CrmProfileService::class)->removeSignature((int) $business->id, $userId);
+
+        return response()->json(['message' => 'Signature removed.', 'data' => ['signature' => null]]);
+    }
+
     private function presentListItem(Quotation $q): array
     {
         return [
@@ -695,6 +862,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'bill_to'       => $q->billTo(),
             // "Prepared by" block of the printed quotation: { name, designation, phone } or null
             'prepared_by'   => $q->preparedByDetails(),
+            // "Approved by" block: the approving head's { name, designation, phone, signature (data URI) } or null
+            'approved_by_print' => $q->approvedByDetails(),
             'branch_id'     => $q->branch_id,
             'subtotal'      => round((float) $q->subtotal, 2),
             'discount_amount' => round((float) $q->discount_amount, 2),

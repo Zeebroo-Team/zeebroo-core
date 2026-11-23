@@ -521,8 +521,15 @@
           "items": [
             { "type": "stack", "items": [
               { "type": "sm", "id": "rb-crm-projects",      "icon": "fa-diagram-project",  "label": "Pipeline Projects" },
-              { "type": "sm", "id": "rb-crm-stages",        "icon": "fa-stairs",           "label": "Stages" }
+              { "type": "sm", "id": "rb-crm-stages",        "icon": "fa-stairs",           "label": "Stages" },
+              { "type": "sm", "id": "rb-crm-delivery-terms", "icon": "fa-truck-fast",      "label": "Delivery Terms" }
             ]}
+          ]
+        },
+        {
+          "label": "Profile",
+          "items": [
+            { "type": "lg", "id": "rb-crm-my-profile",    "icon": "fa-signature",          "label": "My Profile\n& Signature" }
           ]
         },
         {

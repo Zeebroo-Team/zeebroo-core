@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
+use Modules\Business\Models\BusinessMember;
+use Modules\Business\Models\BusinessRole;
 use Modules\FileManager\Models\FileManagerFile;
 use Modules\FileManager\Models\FileManagerFolder;
 
@@ -22,26 +24,37 @@ class FileManagerService
 
     public const MAX_FILE_KB = 20480;
 
+    /** managed_by values only business admins may see and open here (staff signatures). */
+    public const ADMIN_ONLY_MANAGED = ['crm-signature'];
+
+    /** The folder those files live in — hidden from everyone but admins. */
+    public const ADMIN_ONLY_FOLDER = ['CRM', 'Signatures'];
+
     /**
+     * @param  bool  $showAdminOnly  true for a business admin: also list the admin-only folder / files
      * @return array{folder: ?FileManagerFolder, folders: Collection<int, FileManagerFolder>, files: Collection<int, FileManagerFile>, breadcrumbs: list<array{id: ?int, name: string}>}
      */
-    public function browse(Business $business, ?int $folderId): array
+    public function browse(Business $business, ?int $folderId, bool $showAdminOnly = false): array
     {
         $folder = null;
         if ($folderId !== null) {
             $folder = $this->folderForBusiness($business, $folderId);
             abort_unless($folder instanceof FileManagerFolder, 404);
         }
+        $hiddenFolderId = $showAdminOnly ? null : $this->adminOnlyFolderId($business);
+        abort_if($hiddenFolderId !== null && $folder !== null && $this->isInside($folder, $hiddenFolderId), 404);
 
         $folders = FileManagerFolder::query()
             ->where('business_id', $business->id)
             ->where('parent_id', $folder?->id)
+            ->when($hiddenFolderId !== null, fn ($q) => $q->whereKeyNot($hiddenFolderId))
             ->orderBy('name')
             ->get();
 
         $files = FileManagerFile::query()
             ->where('business_id', $business->id)
             ->where('folder_id', $folder?->id)
+            ->when(! $showAdminOnly, fn ($q) => $this->withoutAdminOnly($q))
             ->orderByDesc('created_at')
             ->get();
 
@@ -246,6 +259,7 @@ class FileManagerService
         return FileManagerFile::query()
             ->where('business_id', $business->id)
             ->where('mime_type', 'like', 'image/%')
+            ->where(fn ($q) => $this->withoutAdminOnly($q))
             ->orderByDesc('created_at')
             ->limit($limit)
             ->get();
@@ -255,6 +269,61 @@ class FileManagerService
     {
         return $business->fileManagerFiles()->exists()
             || $business->fileManagerFolders()->exists();
+    }
+
+    /** Owner, an "admin" member, or a member whose role grants full access (same rule as the CRM / /pos/me). */
+    public function isBusinessAdmin(Business $business, ?int $userId): bool
+    {
+        if (! $userId) {
+            return false;
+        }
+        if ((int) $business->user_id === $userId) {
+            return true;
+        }
+        $member = BusinessMember::query()->where('business_id', $business->id)->where('user_id', $userId)->first();
+        if ($member === null) {
+            return false;
+        }
+        if ($member->role === 'admin') {
+            return true;
+        }
+        $role = BusinessRole::query()->where('business_id', $business->id)->where('slug', $member->role)->first();
+
+        return $role !== null && $role->permissions === null;
+    }
+
+    /** The admin-only folder (CRM / Signatures) if it exists — never created here. */
+    public function adminOnlyFolderId(Business $business): ?int
+    {
+        $parentId = null;
+        foreach (self::ADMIN_ONLY_FOLDER as $name) {
+            $parentId = FileManagerFolder::query()
+                ->where('business_id', $business->id)
+                ->where('parent_id', $parentId)
+                ->where('name', $name)
+                ->value('id');
+            if ($parentId === null) {
+                return null;
+            }
+        }
+
+        return (int) $parentId;
+    }
+
+    private function withoutAdminOnly($query)
+    {
+        return $query->where(fn ($q) => $q->whereNull('managed_by')->orWhereNotIn('managed_by', self::ADMIN_ONLY_MANAGED));
+    }
+
+    private function isInside(FileManagerFolder $folder, int $ancestorId): bool
+    {
+        for ($f = $folder; $f !== null; $f = $f->parent) {
+            if ((int) $f->id === $ancestorId) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
