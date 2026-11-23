@@ -446,6 +446,12 @@ const API = (() => {
     productBrandUpdate:  (id, body)   => request('PATCH',  `/brands/${id}`, body),
     productBrandDelete:  (id)         => request('DELETE', `/brands/${id}`),
 
+    // Product Countries (Country of Origin / Country of Manufacture)
+    productCountries:      (q, status) => request('GET',    `/product-countries?q=${encodeURIComponent(q||'')}&status=${status||''}`),
+    productCountryCreate:  (body)      => request('POST',   '/product-countries', body),
+    productCountryUpdate:  (id, body)  => request('PATCH',  `/product-countries/${id}`, body),
+    productCountryDelete:  (id)        => request('DELETE', `/product-countries/${id}`),
+
     // Product Discounts
     discounts:             (q, status)     => request('GET',    `/discounts?q=${encodeURIComponent(q||'')}&status=${status||''}`),
     discountProductOpts:   (q)             => request('GET',    `/discounts/product-options?q=${encodeURIComponent(q||'')}`),
@@ -746,6 +752,7 @@ const API = (() => {
     crmLeadQuotationCustomers:(leadId, q)              => request('GET',    `/crm/leads/${leadId}/quotations/customers?q=${encodeURIComponent(q)}`),
     crmQuotationBrands:       (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations/catalog/brands`),
     crmQuotationModels:       (leadId, brandId)        => request('GET',    `/crm/leads/${leadId}/quotations/catalog/models?brand_id=${encodeURIComponent(brandId)}`),
+    crmQuotationSearch:       (leadId, q)              => request('GET',    `/crm/leads/${leadId}/quotations/catalog/search?q=${encodeURIComponent(q)}`),
     crmQuotationProductInfo:  (leadId, productId)      => request('GET',    `/crm/leads/${leadId}/quotations/catalog/products/${productId}`),
     crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
     // action: submit | approve | return | reject — body { comment }

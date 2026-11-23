@@ -195,7 +195,8 @@
             { "type": "lg", "id": "rb-inv-audit",         "icon": "fa-clipboard-list",     "label": "Stock Audit" },
             { "type": "stack", "items": [
               { "type": "sm", "id": "rb-inv-brands",        "icon": "fa-tag",              "label": "Brands" },
-              { "type": "sm", "id": "rb-inv-discounts",     "icon": "fa-percent",          "label": "Discounts" }
+              { "type": "sm", "id": "rb-inv-discounts",     "icon": "fa-percent",          "label": "Discounts" },
+              { "type": "sm", "id": "rb-inv-countries",     "icon": "fa-earth-americas",   "label": "Countries" }
             ]}
           ]
         },

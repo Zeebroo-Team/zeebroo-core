@@ -23,6 +23,8 @@ class Product extends Model
         'sku',
         'model_no',
         'size',
+        'origin_country_id',
+        'manufacture_country_id',
         'mfg_date',
         'exp_date',
         'description',
@@ -120,6 +122,16 @@ class Product extends Model
             'product_id',
             'product_brand_id',
         )->withTimestamps()->orderBy('product_brands.name');
+    }
+
+    public function originCountry(): BelongsTo
+    {
+        return $this->belongsTo(ProductCountry::class, 'origin_country_id');
+    }
+
+    public function manufactureCountry(): BelongsTo
+    {
+        return $this->belongsTo(ProductCountry::class, 'manufacture_country_id');
     }
 
     public function productUnit(): BelongsTo

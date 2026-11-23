@@ -151,7 +151,7 @@ class PosCatalogApiController extends Controller
         $product->loadMissing([
             'productUnit', 'imageFile', 'categories', 'brands',
             'productImages.file', 'sellingUnits', 'stockLayers',
-            'bundleItems.itemProduct',
+            'bundleItems.itemProduct', 'originCountry', 'manufactureCountry',
         ]);
 
         $card = $this->catalog->productCardForProduct($product, $branchId, $branchStockSeparate);
@@ -177,6 +177,14 @@ class PosCatalogApiController extends Controller
                 'is_bundle'          => $product->is_bundle,
                 'model_no'           => $product->model_no,
                 'size'               => $product->size,
+                'origin_country_id'        => $product->origin_country_id,
+                'origin_country'           => $product->originCountry
+                    ? ['id' => $product->originCountry->id, 'name' => $product->originCountry->name, 'is_active' => (bool) $product->originCountry->is_active]
+                    : null,
+                'manufacture_country_id'   => $product->manufacture_country_id,
+                'manufacture_country'      => $product->manufactureCountry
+                    ? ['id' => $product->manufactureCountry->id, 'name' => $product->manufactureCountry->name, 'is_active' => (bool) $product->manufactureCountry->is_active]
+                    : null,
                 'mfg_date'           => $product->mfg_date?->toDateString(),
                 'exp_date'           => $product->exp_date?->toDateString(),
                 'has_warranty'       => (bool) $product->has_warranty,

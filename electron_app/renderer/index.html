@@ -4119,6 +4119,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
               <button class="ribbon-btn-sm" id="rb-inv-discounts">
                 <i class="fa fa-tag"></i> Discounts
               </button>
+              <button class="ribbon-btn-sm" id="rb-inv-countries">
+                <i class="fa fa-earth-americas"></i> Countries
+              </button>
             </div>
           </div>
           <div class="ribbon-group-label">Stock</div>
@@ -6376,6 +6379,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <button class="inv-subnav-btn" data-inv-view="categories"><i class="fa fa-tags"></i> Categories</button>
         <button class="inv-subnav-btn" data-inv-view="discounts"><i class="fa fa-tag"></i> Discounts</button>
         <button class="inv-subnav-btn" data-inv-view="brands"><i class="fa fa-award"></i> Brands</button>
+        <button class="inv-subnav-btn" data-inv-view="countries"><i class="fa fa-earth-americas"></i> Countries</button>
         <button class="inv-subnav-btn" data-inv-view="barcodes"><i class="fa fa-barcode"></i> Barcodes</button>
       </div>
 
@@ -6645,6 +6649,27 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                 </div>
                 <div class="tag-input-dd" id="prod-brand-dd" style="display:none"></div>
               </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                <div class="po-field">
+                  <label class="po-field-label">Country of Origin</label>
+                  <div style="display:flex;gap:6px">
+                    <select id="prod-f-origin-country" class="po-field-input" style="flex:1;min-width:0">
+                      <option value="">— Not set —</option>
+                    </select>
+                    <button type="button" class="po-btn-ghost prod-country-add" data-target="prod-f-origin-country" style="padding:0 10px;flex-shrink:0" title="Add a new country"><i class="fa fa-plus"></i></button>
+                  </div>
+                </div>
+                <div class="po-field">
+                  <label class="po-field-label">Country of Manufacture</label>
+                  <div style="display:flex;gap:6px">
+                    <select id="prod-f-manufacture-country" class="po-field-input" style="flex:1;min-width:0">
+                      <option value="">— Not set —</option>
+                    </select>
+                    <button type="button" class="po-btn-ghost prod-country-add" data-target="prod-f-manufacture-country" style="padding:0 10px;flex-shrink:0" title="Add a new country"><i class="fa fa-plus"></i></button>
+                  </div>
+                </div>
+              </div>
+              <button type="button" id="prod-country-manage" class="po-btn-ghost" style="width:fit-content;font-size:12px;margin-top:-4px" title="Edit, activate/deactivate or delete countries"><i class="fa fa-earth-americas"></i> Manage countries</button>
             </div>
 
             <!-- Pane 4: Advanced -->
@@ -7439,6 +7464,37 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         </div>
       </div><!-- /inv-brands-view -->
 
+      <!-- ── Countries view (Country of Origin / Manufacture options) ── -->
+      <div id="inv-countries-view" style="display:none">
+        <div class="po-toolbar">
+          <div class="po-search-wrap">
+            <i class="fa fa-magnifying-glass"></i>
+            <input type="text" id="country-search" placeholder="Search countries…">
+          </div>
+          <div class="disc-filter-tabs">
+            <button class="country-ft-btn disc-ft-btn active" data-country-status="">All</button>
+            <button class="country-ft-btn disc-ft-btn" data-country-status="active">Active</button>
+            <button class="country-ft-btn disc-ft-btn" data-country-status="inactive">Inactive</button>
+          </div>
+          <button class="po-add-btn cat-add-btn" id="country-add-btn">
+            <i class="fa fa-plus"></i> New Country
+          </button>
+        </div>
+        <div class="cat-body">
+          <table class="po-table">
+            <thead><tr>
+              <th>Name</th>
+              <th>Code</th>
+              <th style="text-align:right">Products</th>
+              <th style="text-align:center">Status</th>
+              <th style="text-align:center">Actions</th>
+            </tr></thead>
+            <tbody id="country-tbody"></tbody>
+          </table>
+          <div class="po-footer"><span id="country-count">—</span></div>
+        </div>
+      </div><!-- /inv-countries-view -->
+
       <!-- ── Discount Create / Edit Modal ─────────────────────────────── -->
       <div id="discount-modal" class="modal-overlay" style="display:none">
         <div class="po-aim-shell" style="width:min(520px,96vw)">
@@ -7945,6 +8001,35 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <div class="po-aim-footer">
             <button class="po-btn-ghost" id="brand-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
             <button class="po-btn-primary" id="brand-modal-save"><i class="fa fa-check"></i> Save Brand</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Country Create / Edit Modal ─────────────────────────────── -->
+      <div id="country-modal" class="modal-overlay" style="display:none;z-index:10003">
+        <div class="po-aim-shell" style="width:min(420px,96vw)">
+          <div class="po-aim-header">
+            <i class="fa fa-earth-americas" style="color:var(--accent)"></i>
+            <span id="country-modal-title">New Country</span>
+            <button class="psm-close" id="country-modal-close"><i class="fa fa-xmark"></i></button>
+          </div>
+          <div class="po-aim-body" style="gap:14px">
+            <div class="po-field">
+              <label class="po-field-label">Country Name <span class="po-required">*</span></label>
+              <input type="text" id="country-f-name" class="po-field-input" placeholder="e.g. Sri Lanka, China, Germany…" maxlength="120">
+            </div>
+            <div class="po-field" style="max-width:160px">
+              <label class="po-field-label">Code</label>
+              <input type="text" id="country-f-code" class="po-field-input" placeholder="e.g. LK" maxlength="3" style="text-transform:uppercase">
+            </div>
+            <div class="po-field" style="flex-direction:row;align-items:center;gap:10px">
+              <input type="checkbox" id="country-f-active" checked style="width:16px;height:16px;cursor:pointer;accent-color:var(--accent)">
+              <label for="country-f-active" class="po-field-label" style="margin:0;cursor:pointer">Active <span style="font-weight:400;color:var(--text-muted);text-transform:none">— inactive countries are hidden from the product form</span></label>
+            </div>
+          </div>
+          <div class="po-aim-footer">
+            <button class="po-btn-ghost" id="country-modal-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+            <button class="po-btn-primary" id="country-modal-save"><i class="fa fa-check"></i> Save Country</button>
           </div>
         </div>
       </div>
@@ -19775,7 +19860,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="csv-upload-info">
         <div class="csv-info-item"><i class="fa fa-circle-check"></i> First row must be column headers</div>
         <div class="csv-info-item"><i class="fa fa-circle-check"></i> Required columns: <strong>name</strong>, <strong>price</strong></div>
-        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: sku, stock, category, brand, description</div>
+        <div class="csv-info-item"><i class="fa fa-circle-check"></i> Optional: sku, stock, category, brand, description, country_of_origin, country_of_manufacture, warranty (e.g. 1 Year)</div>
         <div class="csv-info-item"><i class="fa fa-circle-check"></i> Max 500 rows per import</div>
       </div>
       <div class="csv-import-footer">

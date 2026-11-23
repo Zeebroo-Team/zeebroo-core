@@ -9163,29 +9163,29 @@ body.dark .han-icon-amber  { color: #fbbf24; }
 .po-row.po-row-active { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 .po-row.po-row-active td { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: var(--accent); }
 
-/* ── Card rows: cheques, categories, discounts, brands (plain <tr>) ── */
-#chq-tbody tr, #cat-tbody tr, #disc-tbody tr, #brand-tbody tr {
+/* ── Card rows: cheques, categories, discounts, brands, countries (plain <tr>) ── */
+#chq-tbody tr, #cat-tbody tr, #disc-tbody tr, #brand-tbody tr, #country-tbody tr {
   box-shadow: 0 1px 3px rgba(0,0,0,.07); transition: box-shadow .15s; cursor: pointer;
 }
-#chq-tbody tr td, #cat-tbody tr td, #disc-tbody tr td, #brand-tbody tr td {
+#chq-tbody tr td, #cat-tbody tr td, #disc-tbody tr td, #brand-tbody tr td, #country-tbody tr td {
   background: var(--surface);
   border-top: 1px solid var(--border-light); border-bottom: 1px solid var(--border-light);
   transition: background .12s, border-color .12s;
 }
 #chq-tbody tr td:first-child, #cat-tbody tr td:first-child,
 #disc-tbody tr td:first-child,
-#brand-tbody tr td:first-child {
+#brand-tbody tr td:first-child, #country-tbody tr td:first-child {
   border-left: 1px solid var(--border-light); border-radius: var(--radius) 0 0 var(--radius);
 }
 #chq-tbody tr td:last-child, #cat-tbody tr td:last-child,
 #disc-tbody tr td:last-child,
-#brand-tbody tr td:last-child {
+#brand-tbody tr td:last-child, #country-tbody tr td:last-child {
   border-right: 1px solid var(--border-light); border-radius: 0 var(--radius) var(--radius) 0;
 }
 #chq-tbody tr:hover, #cat-tbody tr:hover,
-#disc-tbody tr:hover, #brand-tbody tr:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
+#disc-tbody tr:hover, #brand-tbody tr:hover, #country-tbody tr:hover { box-shadow: 0 3px 10px rgba(0,0,0,.12); }
 #chq-tbody tr:hover td, #cat-tbody tr:hover td,
-#disc-tbody tr:hover td, #brand-tbody tr:hover td {
+#disc-tbody tr:hover td, #brand-tbody tr:hover td, #country-tbody tr:hover td {
   background: var(--surface2); border-color: var(--border);
 }
 
@@ -13905,7 +13905,8 @@ body.dark .pc-modal-head {
 /* ── End Coupons ──────────────────────────────────────── */
 
 /* ── Brands View ──────────────────────────────────────── */
-#inv-brands-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
+#inv-brands-view,
+#inv-countries-view { display: flex; flex-direction: column; flex: 1; min-height: 0; background: var(--bg); }
 /* ── End Brands View ──────────────────────────────────── */
 
 /* ── Barcode Sheets View ──────────────────────────────── */

@@ -13,6 +13,7 @@ use Modules\Pos\Services\PosSettingsService;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductBrand;
 use Modules\Product\Models\ProductCategory;
+use Modules\Product\Services\ProductCountryService;
 use Modules\Product\Services\ProductService;
 use Modules\Product\Services\ProductStockLayerService;
 
@@ -26,6 +27,7 @@ class PosProductApiController extends Controller
         private readonly ProductStockLayerService $stockLayers,
         private readonly PosSettingsService $posSettings,
         private readonly PosProductExportService $exporter,
+        private readonly ProductCountryService $countries,
     ) {
     }
 
@@ -77,10 +79,32 @@ class PosProductApiController extends Controller
         return $out;
     }
 
+    /**
+     * Reject origin/manufacture country ids that aren't this business's.
+     */
+    private function validateCountries(\Modules\Business\Models\Business $business, Request $request): ?JsonResponse
+    {
+        $errors = [];
+        foreach (['origin_country_id' => 'Country of Origin', 'manufacture_country_id' => 'Country of Manufacture'] as $key => $label) {
+            $id = $request->input($key);
+            if ($id !== null && $id !== '' && (! is_numeric($id) || ! $this->countries->belongsToBusiness($business, $id))) {
+                $errors[$key] = ["The selected {$label} is invalid."];
+            }
+        }
+
+        return $errors
+            ? response()->json(['message' => reset($errors)[0], 'errors' => $errors], 422)
+            : null;
+    }
+
     public function store(Request $request): JsonResponse
     {
         $business = $this->businessOrAbort($request);
         $this->abortUnlessPerm($request, $business, 'inv_products');
+
+        if ($bad = $this->validateCountries($business, $request)) {
+            return $bad;
+        }
 
         // The desktop/POS clients scope stock to the branch the user currently has
         // selected via the X-Branch-Id header (or a branch query/body param), rather
@@ -111,6 +135,15 @@ class PosProductApiController extends Controller
                 if ($request->has('tags'))                   $fill['tags']                 = $this->normalizeTags((array) $request->input('tags', []));
                 if ($request->filled('model_no'))            $fill['model_no']             = $request->input('model_no');
                 if ($request->filled('size'))                $fill['size']                 = $request->input('size');
+                if ($request->filled('origin_country_id'))   $fill['origin_country_id']    = (int) $request->input('origin_country_id');
+                if ($request->filled('manufacture_country_id')) $fill['manufacture_country_id'] = (int) $request->input('manufacture_country_id');
+                // Importers send country names instead of ids.
+                foreach (['origin_country' => 'origin_country_id', 'manufacture_country' => 'manufacture_country_id'] as $nameKey => $idKey) {
+                    if (! isset($fill[$idKey]) && is_string($request->input($nameKey))) {
+                        $country = $this->countries->findOrCreateByName($business, $request->input($nameKey));
+                        if ($country) $fill[$idKey] = $country->id;
+                    }
+                }
                 if ($request->filled('mfg_date'))            $fill['mfg_date']             = $request->input('mfg_date');
                 if ($request->filled('exp_date'))            $fill['exp_date']             = $request->input('exp_date');
                 if ($request->has('cost_price'))             $fill['cost_price']           = $request->input('cost_price') !== null ? (float) $request->input('cost_price') : null;
@@ -196,11 +229,17 @@ class PosProductApiController extends Controller
             return response()->json(['message' => 'Not found.'], 404);
         }
 
+        if ($bad = $this->validateCountries($business, $request)) {
+            return $bad;
+        }
+
         $data = $request->validate([
             'name'                      => 'sometimes|required|string|max:255',
             'sku'                       => 'nullable|string|max:120',
             'model_no'                  => 'nullable|string|max:120',
             'size'                      => 'nullable|string|max:120',
+            'origin_country_id'         => 'nullable|integer',
+            'manufacture_country_id'    => 'nullable|integer',
             'mfg_date'                  => 'nullable|date',
             'exp_date'                  => 'nullable|date',
             'description'               => 'nullable|string|max:5000',
@@ -395,6 +434,10 @@ class PosProductApiController extends Controller
             'rows.*.category'       => ['nullable', 'string', 'max:255'],
             'rows.*.brand'          => ['nullable', 'string', 'max:255'],
             'rows.*.description'    => ['nullable', 'string', 'max:5000'],
+            'rows.*.origin_country'      => ['nullable', 'string', 'max:120'],
+            'rows.*.manufacture_country' => ['nullable', 'string', 'max:120'],
+            'rows.*.has_warranty'        => ['nullable', 'boolean'],
+            'rows.*.warranty_duration'   => ['nullable', 'string', 'max:120'],
             // Branches that receive each row's opening stock (the full quantity per branch).
             'branch_ids'            => ['nullable', 'array'],
             'branch_ids.*'          => [
@@ -410,6 +453,7 @@ class PosProductApiController extends Controller
         $errors     = [];
         $catCache   = [];
         $brandCache = [];
+        $countryCache = [];
 
         foreach ($rows as $idx => $row) {
             try {
@@ -429,6 +473,17 @@ class PosProductApiController extends Controller
                     if (!empty($row['description']))    $fill2['description']    = $row['description'];
                     if (isset($row['wholesale_price']) && $row['wholesale_price'] !== '') {
                         $fill2['wholesale_price'] = (float) $row['wholesale_price'];
+                    }
+                    if (! empty($row['has_warranty'])) {
+                        $fill2['has_warranty']      = true;
+                        $fill2['warranty_duration'] = trim((string) ($row['warranty_duration'] ?? '')) ?: null;
+                    }
+                    foreach (['origin_country' => 'origin_country_id', 'manufacture_country' => 'manufacture_country_id'] as $nameKey => $idKey) {
+                        $countryName = trim((string) ($row[$nameKey] ?? ''));
+                        if ($countryName === '') continue;
+                        $cacheKey = mb_strtolower($countryName);
+                        $countryCache[$cacheKey] ??= $this->countries->findOrCreateByName($business, $countryName)?->id;
+                        if ($countryCache[$cacheKey]) $fill2[$idKey] = $countryCache[$cacheKey];
                     }
                     if ($fill2) $product->fill($fill2)->save();
 

@@ -59,7 +59,7 @@ const MODULE_WARM_PATHS = [
   '/invoices?q=&status=all', '/quotations?q=&status=all', '/sales-orders?q=&status=all',
   '/subscriptions?q=&status=all', '/sales/pending-credits', '/sale-reverts?page=1', '/sale-cheques?page=1',
   // Inventory
-  '/categories?q=&status=&page=1', '/categories/parent-options', '/brands?q=&status=', '/discounts?q=&status=',
+  '/categories?q=&status=&page=1', '/categories/parent-options', '/brands?q=&status=', '/product-countries?q=&status=', '/discounts?q=&status=',
   '/sale-campaigns?q=&status=', '/gift-card-groups?q=&status=', '/stock-audits?page=1', '/stock-transfers?page=1&q=',
   '/cheques?filter=all', '/grns?q=&payment=all', '/grn-permissions', '/purchase-orders?q=&status=',
   '/suppliers?q=&page=1', '/supplier-categories', '/units', '/online/barcodes/products',
