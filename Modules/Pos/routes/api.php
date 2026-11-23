@@ -52,6 +52,7 @@ use Modules\Pos\Http\Controllers\Api\PosSaleCampaignApiController;
 use Modules\Pos\Http\Controllers\Api\PosGiftCardApiController;
 use Modules\Pos\Http\Controllers\Api\PosCouponApiController;
 use Modules\Pos\Http\Controllers\Api\PosProductBrandApiController;
+use Modules\Pos\Http\Controllers\Api\PosProductCountryApiController;
 use Modules\Pos\Http\Controllers\Api\PosFileManagerApiController;
 use Modules\Pos\Http\Controllers\Api\PosTodaySummaryApiController;
 use Modules\Pos\Http\Controllers\Api\PosExpensesOverviewApiController;
@@ -291,6 +292,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::post('brands', [PosProductBrandApiController::class, 'store'])->name('brands.store');
     Route::patch('brands/{brand}', [PosProductBrandApiController::class, 'update'])->name('brands.update');
     Route::delete('brands/{brand}', [PosProductBrandApiController::class, 'destroy'])->name('brands.destroy');
+
+    // Product Countries (Country of Origin / Country of Manufacture)
+    Route::get('product-countries', [PosProductCountryApiController::class, 'index'])->name('product-countries.index');
+    Route::post('product-countries', [PosProductCountryApiController::class, 'store'])->name('product-countries.store');
+    Route::patch('product-countries/{country}', [PosProductCountryApiController::class, 'update'])->whereNumber('country')->name('product-countries.update');
+    Route::delete('product-countries/{country}', [PosProductCountryApiController::class, 'destroy'])->whereNumber('country')->name('product-countries.destroy');
 
     // Product Discounts
     Route::get('discounts', [PosProductDiscountApiController::class, 'index'])->name('discounts.index');
@@ -682,6 +689,7 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/leads/{lead}/quotations/customers',                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'customers'])       ->whereNumber('lead')->name('crm.leads.quotations.customers');
     Route::get   ('crm/leads/{lead}/quotations/catalog/brands',            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogBrands'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.brands');
     Route::get   ('crm/leads/{lead}/quotations/catalog/models',             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogModels'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.models');
+    Route::get   ('crm/leads/{lead}/quotations/catalog/search',             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogSearch'])   ->whereNumber('lead')->name('crm.leads.quotations.catalog.search');
     Route::get   ('crm/leads/{lead}/quotations/catalog/products/{product}', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'catalogProduct'])  ->whereNumber(['lead', 'product'])->name('crm.leads.quotations.catalog.product');
     Route::get   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'show'])            ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.show');
     Route::put   ('crm/leads/{lead}/quotations/{quotation}',                [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'update'])          ->whereNumber(['lead', 'quotation'])->name('crm.leads.quotations.update');

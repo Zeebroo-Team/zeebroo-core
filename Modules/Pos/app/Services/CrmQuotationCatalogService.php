@@ -73,15 +73,61 @@ class CrmQuotationCatalogService
             array_push($cards, ...$result['data']);
         } while ($page++ < $result['meta']['last_page'] && count($cards) < self::MAX_MODELS);
 
-        // Fields the POS card does not carry
+        $models = $this->present($business, $cards);
+        usort($models, fn (array $a, array $b) => strnatcasecmp($a['label'], $b['label']));
+
+        return $models;
+    }
+
+    /**
+     * Sellable products of any brand whose name or SKU matches every word of $term — for picking
+     * a product straight away, without choosing its brand first. Each carries its brand (if any).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function search(Business $business, string $term, ?int $branchId = null, int $limit = 30): array
+    {
+        if (trim($term) === '') {
+            return [];
+        }
+        [$effectiveBranchId, $branchProductSeparate, $branchStockSeparate] = $this->branchScope($business, $branchId);
+
+        $result = $this->catalog->productCardsForPos(
+            $business,
+            $term,
+            null,
+            1,
+            max(1, min(100, $limit)),
+            $effectiveBranchId,
+            $branchProductSeparate,
+            $branchStockSeparate,
+        );
+
+        return $this->present($business, $result['data']);
+    }
+
+    /**
+     * POS cards → picker models, with the fields the POS card does not carry (model no., warranty,
+     * delivery, brand).
+     *
+     * @param  list<array<string, mixed>>  $cards
+     * @return list<array<string, mixed>>
+     */
+    private function present(Business $business, array $cards): array
+    {
         $extra = Product::query()
+            ->where('business_id', $business->id)
             ->whereIn('id', array_column($cards, 'id'))
+            ->with(['brands' => fn ($q) => $q
+                ->where($q->getRelated()->qualifyColumn('is_active'), true)
+                ->orderBy($q->getRelated()->qualifyColumn('name'))])
             ->get(['id', 'model_no', 'has_warranty', 'warranty_duration', 'courier_delivery', 'delivery_methods'])
             ->keyBy('id');
 
-        $models = array_map(function (array $card) use ($extra) {
+        return array_map(function (array $card) use ($extra) {
             $p = $extra->get($card['id']);
             $modelNo = trim((string) ($p?->model_no ?? ''));
+            $brand = $p?->brands->first();
 
             return [
                 'id'              => $card['id'],
@@ -89,6 +135,8 @@ class CrmQuotationCatalogService
                 'sku'             => $card['sku'],
                 'model_no'        => $modelNo !== '' ? $modelNo : null,
                 'label'           => $modelNo !== '' ? $modelNo : $card['name'],
+                'brand_id'        => $brand ? (int) $brand->id : null,
+                'brand_name'      => $brand?->name,
                 'unit'            => $card['unit'],
                 'unit_sell_price' => $card['unit_sell_price'] !== null ? round((float) $card['unit_sell_price'], 2) : 0.0,
                 'stock_quantity'  => $card['stock_quantity'] !== null ? (float) $card['stock_quantity'] : null,
@@ -96,10 +144,6 @@ class CrmQuotationCatalogService
                 'delivery'        => $this->delivery($p),
             ];
         }, $cards);
-
-        usort($models, fn (array $a, array $b) => strnatcasecmp($a['label'], $b['label']));
-
-        return $models;
     }
 
     /**

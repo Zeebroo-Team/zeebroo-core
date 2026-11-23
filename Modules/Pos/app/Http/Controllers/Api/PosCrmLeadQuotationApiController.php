@@ -156,6 +156,18 @@ class PosCrmLeadQuotationApiController extends Controller
         ]);
     }
 
+    /** GET crm/leads/{lead}/quotations/catalog/search?q= — products of any brand by name / SKU, each with its brand. */
+    public function catalogSearch(Request $request, int $leadId, CrmQuotationCatalogService $catalog): JsonResponse
+    {
+        [$business] = $this->context($request, $leadId);
+
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:120']]);
+
+        return response()->json([
+            'data' => $catalog->search($business, (string) ($data['q'] ?? ''), $this->branchHeader($request)),
+        ]);
+    }
+
     /** GET crm/leads/{lead}/quotations/catalog/products/{product} — model no. / warranty / delivery for a line's note. */
     public function catalogProduct(Request $request, int $leadId, int $productId, CrmQuotationCatalogService $catalog): JsonResponse
     {

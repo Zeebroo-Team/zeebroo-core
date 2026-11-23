@@ -15,6 +15,7 @@ use Modules\FileManager\Models\FileManagerFolder;
 use Modules\Product\Models\Product;
 use Modules\Product\Models\ProductBrand;
 use Modules\Product\Models\ProductCategory;
+use Modules\Product\Models\ProductCountry;
 use Modules\Product\Models\ProductBarcodeSheet;
 use Modules\Product\Models\ProductDiscount;
 use Modules\Product\Models\ProductUnit;
@@ -327,6 +328,11 @@ class Business extends Model
     public function productBrands(): HasMany
     {
         return $this->hasMany(ProductBrand::class)->orderBy('name');
+    }
+
+    public function productCountries(): HasMany
+    {
+        return $this->hasMany(ProductCountry::class)->orderBy('name');
     }
 
     public function productUnits(): HasMany

@@ -317,7 +317,7 @@ const _sbSubNavs = {
 // Buttons that open a modal, apply a filter or run an action are left out on purpose.
 const _sbToolViews = [
   ['.home-tab-btn[data-home-view', { 'rb-home-dashboard':'overview', 'rb-home-daily-summary':'today', 'rb-home-analytics':'analytics', 'rb-home-orders':'orders', 'rb-home-expenses':'expenses', 'rb-home-profit':'profit', 'rb-home-payroll':'payroll' }],
-  ['.inv-subnav-btn[data-inv-view', { 'rb-inv-products':'products', 'rb-inv-categories':'categories', 'rb-inv-audit':'audit', 'rb-inv-brands':'brands', 'rb-inv-discounts':'discounts', 'rb-orders':'po', 'rb-inv-grn':'grn', 'rb-inv-cheques':'cheques', 'rb-inv-barcodes':'barcodes' }],
+  ['.inv-subnav-btn[data-inv-view', { 'rb-inv-products':'products', 'rb-inv-categories':'categories', 'rb-inv-audit':'audit', 'rb-inv-brands':'brands', 'rb-inv-countries':'countries', 'rb-inv-discounts':'discounts', 'rb-orders':'po', 'rb-inv-grn':'grn', 'rb-inv-cheques':'cheques', 'rb-inv-barcodes':'barcodes' }],
   ['.fin-subnav-btn[data-fin', { 'rb-bills-list':'bills', 'rb-loans':'loans', 'rb-rentals':'rentals', 'rb-properties':'properties' }],
   ['.fin-subnav-btn[data-hr', { 'rb-employees':'employees', 'rb-departments':'departments', 'rb-hr-payroll':'payroll', 'rb-positions':'positions', 'rb-attendance':'attendance' }],
   ['.fin-subnav-btn[data-svc', { 'rb-svc-requests':'requests', 'rb-svc-catalog':'catalog', 'rb-svc-categories':'categories' }],
@@ -7158,6 +7158,7 @@ function applyFeatureVisibility() {
 
   // Inventory Stock group: Audit vs Brands/Discounts
   btn('#rb-inv-brands',    inv_discounts);
+  btn('#rb-inv-countries', inv_discounts);
   btn('#rb-inv-discounts', inv_discounts);
 
   // Inventory Purchasing group: POs vs GRN/Cheques
@@ -7361,6 +7362,7 @@ function applyFeatureVisibility() {
   // so a permission-only check here would leak these when only Stock
   // Management is installed.
   btn('#rb-inv-brands',    bf('product_management') && mp('inv_btn_brands'));
+  btn('#rb-inv-countries', bf('product_management') && (mp('inv_btn_countries') || mp('inv_btn_brands')));
   btn('#rb-inv-discounts', bf('product_management') && mp('inv_btn_discounts'));
   btn('#rb-orders',        mp('inv_btn_orders'));
   btn('#rb-inv-grn',       mp('inv_btn_grn'));
@@ -7400,6 +7402,7 @@ function applyFeatureVisibility() {
       units:      bf('product_management') && mp('inv_tab_units'),
       discounts:  bf('product_management') && mp('inv_tab_discounts'),
       brands:     bf('product_management') && mp('inv_tab_brands'),
+      countries:  bf('product_management') && (mp('inv_tab_countries') || mp('inv_tab_brands')),
       barcodes:   _invStockOrProd          && mp('inv_tab_barcodes'),
     };
     $$('.inv-subnav-btn').forEach(b => { b.style.display = _invTabPerms[b.dataset.invView] ? '' : 'none'; });
@@ -16081,7 +16084,7 @@ $('#inv-back-btn').addEventListener('click', () => {
 // ── Inventory sub-nav switching ───────────────────────────────────────────
 function switchInvView(view) {
   if (view === 'units') { openUnitsModal(); return; }
-  const views = { products: '#inv-products-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', barcodes: '#inv-barcodes-view' };
+  const views = { products: '#inv-products-view', po: '#inv-po-view', grn: '#inv-grn-view', cheques: '#inv-cheques-view', audit: '#inv-audit-view', transfer: '#inv-transfer-view', categories: '#inv-categories-view', discounts: '#inv-discounts-view', brands: '#inv-brands-view', countries: '#inv-countries-view', barcodes: '#inv-barcodes-view' };
   Object.entries(views).forEach(([k, sel]) => {
     const el = $(sel);
     if (el) el.style.display = k === view ? 'flex' : 'none';
@@ -16096,6 +16099,7 @@ function switchInvView(view) {
   if (view === 'categories') _catLoad();
   if (view === 'discounts')  _discLoad();
   if (view === 'brands')     _brandLoad();
+  if (view === 'countries')  _countryLoad();
   if (view === 'barcodes')   _barcodeLoad();
 }
 
@@ -21754,6 +21758,159 @@ $$('.brand-ft-btn').forEach(btn => {
 });
 // ── End Product Brands ────────────────────────────────────────────────────
 
+// ── Product Countries (Country of Origin / Country of Manufacture) ───────
+// One list per business serves both product fields. Inactive countries stay
+// on products that already use them but aren't offered for new picks.
+// `onSaved` lets the product form's quick-add select the new country.
+const _country = { list: [], q: '', status: '', searchTimer: null, editingId: null, onSaved: null };
+
+async function _countryLoad() {
+  const tbody = $('#country-tbody');
+  tbody.innerHTML = `<tr><td colspan="5" class="inv-loading"><i class="fa fa-spinner fa-spin"></i> Loading…</td></tr>`;
+  const res = await API.productCountries(_country.q, _country.status);
+  if (res.status !== 200) {
+    tbody.innerHTML = `<tr><td colspan="5" class="inv-loading"><i class="fa fa-triangle-exclamation"></i> Failed to load</td></tr>`;
+    return;
+  }
+  _country.list = res.body?.data || [];
+  _countryRender();
+}
+
+function _countryRender() {
+  const tbody = $('#country-tbody');
+  const n = _country.list.length;
+  $('#country-count').textContent = `${n} countr${n !== 1 ? 'ies' : 'y'}`;
+  if (!n) {
+    tbody.innerHTML = `<tr><td colspan="5" class="inv-loading" style="font-size:12px;padding:32px 10px">No countries found. Click <b>New Country</b> to add one.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = _country.list.map(c => `<tr>
+      <td style="font-weight:600">${escHtml(c.name)}</td>
+      <td>${c.code ? escHtml(c.code) : '<span style="color:var(--text-muted)">—</span>'}</td>
+      <td style="text-align:right">${c.products_count}</td>
+      <td style="text-align:center">
+        <button class="cat-status-badge ${c.is_active ? 'cat-status-active' : 'cat-status-inactive'}" data-country-toggle="${c.id}" title="Click to mark ${c.is_active ? 'inactive' : 'active'}" style="border:none;cursor:pointer">${c.is_active ? 'Active' : 'Inactive'}</button>
+      </td>
+      <td style="text-align:center">
+        <button class="cat-action-btn" data-country-edit="${c.id}"><i class="fa fa-pen"></i> Edit</button>
+        <button class="cat-action-btn danger" data-country-del="${c.id}"><i class="fa fa-trash"></i></button>
+      </td>
+    </tr>`).join('');
+}
+
+// Row actions (delegated — inline onclick is blocked by the page's CSP)
+$('#country-tbody')?.addEventListener('click', e => {
+  const edit = e.target.closest('[data-country-edit]');
+  if (edit) { _countryOpenModal(+edit.dataset.countryEdit); return; }
+  const tog = e.target.closest('[data-country-toggle]');
+  if (tog) { _countryToggleActive(+tog.dataset.countryToggle); return; }
+  const del = e.target.closest('[data-country-del]');
+  if (del) _countryDelete(+del.dataset.countryDel);
+});
+
+function _countryOpenModal(id, onSaved = null) {
+  _country.editingId = id || null;
+  _country.onSaved   = onSaved;
+  $('#country-modal-title').textContent = id ? 'Edit Country' : 'New Country';
+  $('#country-f-name').value     = '';
+  $('#country-f-code').value     = '';
+  $('#country-f-active').checked = true;
+
+  if (id) {
+    const c = _country.list.find(x => x.id === id);
+    if (c) {
+      $('#country-f-name').value     = c.name;
+      $('#country-f-code').value     = c.code || '';
+      $('#country-f-active').checked = c.is_active;
+    }
+  }
+
+  $('#country-modal').style.display = 'flex';
+  setTimeout(() => $('#country-f-name').focus(), 80);
+}
+
+function _countryCloseModal() {
+  $('#country-modal').style.display = 'none';
+  _country.onSaved = null;
+}
+
+async function _countrySave() {
+  const name = $('#country-f-name').value.trim();
+  if (!name) { toast('Country name is required', 'error'); return; }
+
+  const body = {
+    name,
+    code:      $('#country-f-code').value.trim().toUpperCase() || null,
+    is_active: $('#country-f-active').checked,
+  };
+
+  const btn = $('#country-modal-save');
+  btn.disabled = true;
+  const res = _country.editingId
+    ? await API.productCountryUpdate(_country.editingId, body)
+    : await API.productCountryCreate(body);
+  btn.disabled = false;
+
+  if (res.status === 200 || res.status === 201) {
+    toast(_country.editingId ? 'Country updated' : 'Country created', 'success');
+    const onSaved = _country.onSaved;
+    _countryCloseModal();
+    if (onSaved) onSaved(res.body?.data);
+    if ($('#inv-countries-view')?.style.display !== 'none') _countryLoad();
+  } else {
+    const errors = res.body?.errors;
+    const first  = errors ? Object.values(errors)[0]?.[0] : null;
+    toast(first || res.body?.message || 'Failed to save', 'error');
+  }
+}
+
+async function _countryToggleActive(id) {
+  const c = _country.list.find(x => x.id === id);
+  if (!c) return;
+  const res = await API.productCountryUpdate(id, { is_active: !c.is_active });
+  if (res.status === 200) {
+    toast(`${c.name} marked ${c.is_active ? 'inactive' : 'active'}`, 'success');
+    _countryLoad();
+  } else {
+    toast(res.body?.message || 'Failed to update', 'error');
+  }
+}
+
+async function _countryDelete(id) {
+  const c = _country.list.find(x => x.id === id);
+  if (!c) return;
+  if (!confirm(`Delete country "${c.name}"?`)) return;
+  const res = await API.productCountryDelete(id);
+  if (res.status === 200) {
+    toast('Country deleted', 'success');
+    _countryLoad();
+  } else {
+    toast(res.body?.message || 'Failed to delete', 'error');
+  }
+}
+
+$('#country-add-btn')?.addEventListener('click',      () => _countryOpenModal(null));
+$('#country-modal-close')?.addEventListener('click',  _countryCloseModal);
+$('#country-modal-cancel')?.addEventListener('click', _countryCloseModal);
+$('#country-modal-save')?.addEventListener('click',   _countrySave);
+$('#country-f-name')?.addEventListener('keydown',     e => { if (e.key === 'Enter') _countrySave(); });
+
+$('#country-search')?.addEventListener('input', e => {
+  _country.q = e.target.value.trim();
+  clearTimeout(_country.searchTimer);
+  _country.searchTimer = setTimeout(_countryLoad, 300);
+});
+
+$$('.country-ft-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.country-ft-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    _country.status = btn.dataset.countryStatus;
+    _countryLoad();
+  });
+});
+// ── End Product Countries ─────────────────────────────────────────────────
+
 // ── Barcode Sheets ────────────────────────────────────────────────────────
 const _bc      = { items: [], queue: [], selected: new Set(), searchTimer: null };
 const _bcPrint = { pageType: 'roll', rollCols: 1, a4Cols: 3, a4Rows: 8 };
@@ -23779,6 +23936,13 @@ async function _prodOpenModal(editId) {
   // Load options once
   await _prodLoadFormOptions();
 
+  // Countries load on every open — they're managed in their own tab and an
+  // inactive country must still show on a product that already uses it.
+  const _editP = isEdit ? _prodActiveData : null;
+  await _prodLoadCountryOptions([_editP?.origin_country, _editP?.manufacture_country]);
+  $('#prod-f-origin-country').value      = _editP?.origin_country_id      ?? '';
+  $('#prod-f-manufacture-country').value = _editP?.manufacture_country_id ?? '';
+
   // Load business delivery settings (global enable + enabled partner keys)
   let _deliveryEnabled = false;
   let _deliveryEnabledKeys = [];
@@ -23909,6 +24073,46 @@ function _prodRemoveBrand(id) {
   _prod.selectedBrands = _prod.selectedBrands.filter(x => x.id !== id);
   _tagRender('prod-brand-tags', _prod.selectedBrands, _prodRemoveBrand);
 }
+
+// Fills both country dropdowns with the business's active countries, plus any
+// `keep` country (the product's current pick) even if it's since gone inactive.
+async function _prodLoadCountryOptions(keep = []) {
+  const res  = await API.productCountries('', '');
+  const all  = res.status === 200 ? (res.body?.data || []) : [];
+  const opts = all.filter(c => c.is_active);
+  keep.filter(Boolean).forEach(k => {
+    if (!opts.some(c => c.id === k.id)) opts.push({ ...k, is_active: !!k.is_active });
+  });
+  opts.sort((a, b) => a.name.localeCompare(b.name));
+  const html = '<option value="">— Not set —</option>' + opts.map(c =>
+    `<option value="${c.id}">${escHtml(c.name)}${c.code ? ` (${escHtml(c.code)})` : ''}${c.is_active ? '' : ' — inactive'}</option>`).join('');
+  ['#prod-f-origin-country', '#prod-f-manufacture-country'].forEach(sel => {
+    const el = $(sel);
+    const cur = el.value;
+    el.innerHTML = html;
+    el.value = cur;
+  });
+}
+
+// "Manage countries" link: leave the product form for the Countries tab.
+$('#prod-country-manage')?.addEventListener('click', () => {
+  if ($('#prod-f-name').value.trim() && !confirm('Leave this product form? Unsaved changes will be lost.')) return;
+  $('#product-modal').style.display = 'none';
+  activateTab('inventory');
+  switchInvView('countries');
+});
+
+// "+" beside a country dropdown: add a country without leaving the product form.
+$$('#product-modal .prod-country-add').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.target;
+    _countryOpenModal(null, async saved => {
+      if (!saved) return;
+      await _prodLoadCountryOptions([saved]);
+      $(`#${target}`).value = saved.id;
+    });
+  });
+});
 
 async function _prodLoadFormOptions() {
   if (_prod._optionsLoaded) return;
@@ -24065,6 +24269,8 @@ async function _prodSave(andNew = false) {
     loyalty_redeemable:    $('#prod-f-loyalty').checked,
     model_no:              $('#prod-f-model-no').value.trim()  || null,
     size:                  $('#prod-f-size').value.trim()      || null,
+    origin_country_id:     parseInt($('#prod-f-origin-country').value)      || null,
+    manufacture_country_id: parseInt($('#prod-f-manufacture-country').value) || null,
     mfg_date:              $('#prod-f-mfg-date').value         || null,
     exp_date:              $('#prod-f-exp-date').value         || null,
     is_customer_required:  $('#prod-f-customer-required').checked,
@@ -24230,6 +24436,8 @@ const _PROD_FIELD_MAP = [
   { id: 'image',      label: 'Image',      icon: 'fa-image',     section: 'Media', getEl() { return document.getElementById('prod-img-thumb')?.closest('.po-field'); } },
   { id: 'categories', label: 'Categories', icon: 'fa-folder',    section: 'Media', getEl() { return document.getElementById('prod-cat-wrap')?.closest('.po-field'); } },
   { id: 'brands',     label: 'Brands',     icon: 'fa-trademark', section: 'Media', getEl() { return document.getElementById('prod-brand-wrap')?.closest('.po-field'); } },
+  { id: 'origin-country',      label: 'Country of Origin',      icon: 'fa-earth-americas', section: 'Media', getEl() { return document.getElementById('prod-f-origin-country')?.closest('.po-field'); } },
+  { id: 'manufacture-country', label: 'Country of Manufacture', icon: 'fa-industry',       section: 'Media', getEl() { return document.getElementById('prod-f-manufacture-country')?.closest('.po-field'); } },
   // Advanced
   { id: 'bundle',            label: 'Bundle Product',     icon: 'fa-cubes',          section: 'Advanced', getEl() { return document.querySelector('#product-modal .prod-bundle-toggle-row'); } },
   { id: 'warranty',          label: 'Warranty',           icon: 'fa-shield-halved',  section: 'Advanced', getEl() { return document.getElementById('prod-f-warranty')?.closest('.prod-adv-card'); } },
@@ -24531,13 +24739,23 @@ $('#prod-batch-pricing-chk')?.addEventListener('change', function () {
 });
 
 // ── CSV Product Import ─────────────────────────────────────────────────────
+// Import warranty cell → { has_warranty, warranty_duration }.
+// "1 Year" → on with that duration; "yes"/"true"/"1" → on, no duration;
+// blank/"no"/"none"/"0"/"false"/"-" → off.
+function _importParseWarranty(raw) {
+  const v = String(raw ?? '').trim();
+  if (!v || /^(no|none|n|0|false|-|—|n\/a)$/i.test(v)) return { has_warranty: false, warranty_duration: null };
+  if (/^(yes|y|true|1)$/i.test(v)) return { has_warranty: true, warranty_duration: null };
+  return { has_warranty: true, warranty_duration: v.slice(0, 120) };
+}
+
 const _CSV_SAMPLE = [
-  'name,sku,price,wholesale_price,stock,category,brand,description',
-  'Apple iPhone 15,IPH15-128,999.99,850.00,50,Electronics,Apple,Apple flagship smartphone',
-  'Samsung Galaxy S24,SAM-S24-256,849.99,720.00,30,Electronics,Samsung,Samsung flagship phone',
-  'Wireless Headphones,WH-BT-001,149.99,,100,Electronics,,Bluetooth over-ear headphones',
-  'Coffee Beans 500g,CB-ARABICA-500,12.50,10.00,200,Food & Beverages,Lavazza,Premium arabica coffee beans',
-  'Office Chair,CHAIR-ERG-01,299.00,,15,Furniture,,Ergonomic adjustable office chair',
+  'name,sku,price,wholesale_price,stock,category,brand,description,country_of_origin,country_of_manufacture,warranty',
+  'Apple iPhone 15,IPH15-128,999.99,850.00,50,Electronics,Apple,Apple flagship smartphone,United States,China,1 Year',
+  'Samsung Galaxy S24,SAM-S24-256,849.99,720.00,30,Electronics,Samsung,Samsung flagship phone,South Korea,Vietnam,2 Years',
+  'Wireless Headphones,WH-BT-001,149.99,,100,Electronics,,Bluetooth over-ear headphones,,,6 Months',
+  'Coffee Beans 500g,CB-ARABICA-500,12.50,10.00,200,Food & Beverages,Lavazza,Premium arabica coffee beans,Brazil,Italy,',
+  'Office Chair,CHAIR-ERG-01,299.00,,15,Furniture,,Ergonomic adjustable office chair,,,Yes',
 ].join('\n');
 
 // Column name aliases → canonical key
@@ -24553,6 +24771,15 @@ const _CSV_COL_MAP = {
   'category': 'category', 'categories': 'category', 'product category': 'category',
   'brand': 'brand', 'brand name': 'brand',
   'description': 'description', 'desc': 'description', 'notes': 'description',
+  // Optional — matched to the business's countries by name or code; missing ones are added.
+  'country_of_origin': 'origin_country', 'country of origin': 'origin_country', 'origin_country': 'origin_country',
+  'origin country': 'origin_country', 'origin': 'origin_country',
+  'country_of_manufacture': 'manufacture_country', 'country of manufacture': 'manufacture_country',
+  'manufacture_country': 'manufacture_country', 'manufacture country': 'manufacture_country',
+  'manufactured in': 'manufacture_country', 'made in': 'manufacture_country',
+  // Optional — "1 Year", "Yes", or blank/"No" for none.
+  'warranty': 'warranty', 'warranty_duration': 'warranty', 'warranty duration': 'warranty',
+  'warranty period': 'warranty', 'guarantee': 'warranty',
 };
 
 let _csvParsedRows = [];
@@ -24595,6 +24822,7 @@ function _csvParseFile(text) {
       const wp = parseFloat(row.wholesale_price);
       row.wholesale_price = isNaN(wp) ? null : Math.max(0, wp);
     } else { row.wholesale_price = null; }
+    Object.assign(row, _importParseWarranty(row.warranty));
 
     rows.push(row);
   }
@@ -24645,7 +24873,7 @@ function _csvShowPreview(rows) {
   const display = rows.slice(0, 100);
   $('#csv-preview-thead').innerHTML = `<tr>
     <th>#</th><th>Name</th><th>SKU</th><th>Price</th><th>Wholesale</th><th>Stock</th>
-    <th>Category</th><th>Brand</th><th>Status</th>
+    <th>Category</th><th>Brand</th><th>Origin</th><th>Manufacture</th><th>Warranty</th><th>Status</th>
   </tr>`;
   $('#csv-preview-tbody').innerHTML = display.map(r => {
     const isErr = r._errors.length > 0;
@@ -24661,6 +24889,9 @@ function _csvShowPreview(rows) {
       <td>${r.stock_quantity || 0}</td>
       <td>${escHtml(r.category || '—')}</td>
       <td>${escHtml(r.brand || '—')}</td>
+      <td>${escHtml(r.origin_country || '—')}</td>
+      <td>${escHtml(r.manufacture_country || '—')}</td>
+      <td>${r.has_warranty ? escHtml(r.warranty_duration || 'Yes') : '—'}</td>
       <td>${status}</td>
     </tr>`;
   }).join('');
@@ -24806,6 +25037,10 @@ $('#csv-import-btn')?.addEventListener('click', async () => {
     category:        r.category || undefined,
     brand:           r.brand    || undefined,
     description:     r.description || undefined,
+    origin_country:      r.origin_country      || undefined,
+    manufacture_country: r.manufacture_country || undefined,
+    has_warranty:        r.has_warranty || undefined,
+    warranty_duration:   r.has_warranty ? (r.warranty_duration || undefined) : undefined,
   }));
 
   const res = await API.importProducts(payload, branchIds);
@@ -25334,6 +25569,8 @@ function renderProductDetail(p, stockHistory = []) {
     { label: 'BRANDS',     value: brandChip },
     { label: 'TAGS',       value: tagChips },
     { label: 'UNIT',       value: unitName ? escHtml(unitName) : '<span class="inv-detail-none">—</span>' },
+    { label: 'COUNTRY OF ORIGIN',      value: p.origin_country?.name      ? escHtml(p.origin_country.name)      : '<span class="inv-detail-none">—</span>' },
+    { label: 'COUNTRY OF MANUFACTURE', value: p.manufacture_country?.name ? escHtml(p.manufacture_country.name) : '<span class="inv-detail-none">—</span>' },
   ];
 
   const descHtml = (p.description || p.short_description)
@@ -37787,6 +38024,7 @@ $('#rb-inv-categories')?.addEventListener('click',() => { activateTab('inventory
 $('#rb-inv-units')?.addEventListener('click',     () => { activateTab('inventory'); switchInvView('units'); });
 $('#rb-inv-audit')?.addEventListener('click',     () => { activateTab('inventory'); switchInvView('audit'); });
 $('#rb-inv-brands')?.addEventListener('click',    () => { activateTab('inventory'); switchInvView('brands'); });
+$('#rb-inv-countries')?.addEventListener('click', () => { activateTab('inventory'); switchInvView('countries'); });
 $('#rb-inv-discounts')?.addEventListener('click', () => { activateTab('inventory'); switchInvView('discounts'); });
 $('#rb-orders')?.addEventListener('click',        () => { activateTab('inventory'); switchInvView('po'); });
 $('#rb-inv-grn')?.addEventListener('click',       () => { activateTab('inventory'); switchInvView('grn'); });
@@ -56593,6 +56831,7 @@ async function submitDsCreate() {
       { key: 'inv_btn_audit',       label: 'Stock Audit',      desc: 'Ribbon Stock: Stock Audit button' },
       { key: 'inv_btn_transfer',    label: 'Stock Transfer',   desc: 'Ribbon Stock: Stock Transfer button' },
       { key: 'inv_btn_brands',      label: 'Brands',           desc: 'Ribbon Stock: Brands button' },
+      { key: 'inv_btn_countries',   label: 'Countries',        desc: 'Ribbon Stock: Countries (origin / manufacture) button' },
       { key: 'inv_btn_discounts',   label: 'Discounts',        desc: 'Ribbon Stock: Discounts button' },
       { key: 'inv_btn_orders',      label: 'Purchase Orders',  desc: 'Ribbon Purchasing: Purchase Orders button' },
       { key: 'inv_btn_grn',         label: 'Goods Receive',    desc: 'Ribbon Purchasing: Goods Receive (GRN) button' },
@@ -56614,6 +56853,7 @@ async function submitDsCreate() {
       { key: 'inv_tab_units',      label: 'Tab: Units',           desc: 'Inventory panel: Units sub-nav tab' },
       { key: 'inv_tab_discounts',  label: 'Tab: Discounts',       desc: 'Inventory panel: Discounts sub-nav tab' },
       { key: 'inv_tab_brands',     label: 'Tab: Brands',          desc: 'Inventory panel: Brands sub-nav tab' },
+      { key: 'inv_tab_countries',  label: 'Tab: Countries',       desc: 'Inventory panel: Countries (origin / manufacture) sub-nav tab' },
       { key: 'inv_tab_barcodes',   label: 'Tab: Barcodes',        desc: 'Inventory panel: Barcodes sub-nav tab' },
     ]},
     { key: 'fin_ribbon', label: 'Finance · Ribbon', icon: 'fa-file-invoice-dollar', color: '#22c55e', items: [
@@ -64108,33 +64348,43 @@ async function submitDsCreate() {
     const cat = _crmWs.qtCatalog;
     if (!cat || cat.brands === null) return '<div class="crm-qtx-pick crm-ws-muted" style="font-size:12px"><i class="fa fa-spinner fa-spin"></i> Loading brands…</div>';
     if (!cat.brands.length) return ''; // no brands set up — the inventory search below still works
-    const p = (s.pick ||= { brandId: '', modelId: '', qty: 1, open: null });
+    const p = (s.pick ||= _crmQtPickBlank());
     const brand = cat.brands.find(b => String(b.id) === p.brandId);
     const models = p.brandId ? cat.models[p.brandId] : null;
-    const model = Array.isArray(models) ? models.find(m => String(m.id) === p.modelId) : null;
+    const model = _crmQtPickedModel(s);
     const onQuote = model ? s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +model.id) : null;
 
-    const brandCombo = _crmQtComboHtml('brand', {
-      value: brand?.name, placeholder: 'Choose a brand', searchPh: `Search ${cat.brands.length} brands`, open: p.open === 'brand',
-      items: cat.brands.map(b => ({ id: b.id, title: b.name, right: `${b.product_count}`, search: b.name, sel: String(b.id) === p.brandId })),
+    const modelItem = (m, withBrand) => ({
+      id: m.id, title: m.label,
+      sub: [withBrand && m.brand_name, m.model_no && m.name !== m.label ? m.name : '', m.sku].filter(Boolean).join(' · '),
+      right: `${_crmQtMoney(m.unit_sell_price)}${m.stock_quantity != null && m.stock_quantity <= 0 ? ' · <span class="crm-qtc-out">Out</span>' : ''}`,
+      search: [m.label, m.name, m.sku, m.model_no, withBrand && m.brand_name].filter(Boolean).join(' '), sel: String(m.id) === p.modelId,
     });
-    const modelCombo = _crmQtComboHtml('model', {
-      value: model ? model.label : '', placeholder: p.brandId ? 'Choose a model' : 'Choose a brand first', disabled: !p.brandId,
+
+    const brandCombo = _crmQtComboHtml('brand', {
+      value: brand?.name, placeholder: 'All brands', searchPh: `Search ${cat.brands.length} brands`, open: p.open === 'brand',
+      items: [{ id: '', title: 'All brands', sub: 'Search every product by name', search: 'all brands', sel: !p.brandId },
+        ...cat.brands.map(b => ({ id: b.id, title: b.name, right: `${b.product_count}`, search: b.name, sel: String(b.id) === p.brandId }))],
+    });
+    // With a brand: its models, filtered here. Without one: any product, searched on the server by name / SKU.
+    const modelCombo = p.brandId ? _crmQtComboHtml('model', {
+      value: model ? model.label : '', placeholder: 'Choose a model',
       searchPh: Array.isArray(models) ? `Search ${models.length} models — name, model no. or SKU` : 'Search', open: p.open === 'model',
-      loading: models === 'loading' || (p.brandId && models === undefined),
+      loading: models === 'loading' || models === undefined,
       empty: models === 'error' ? 'Could not load the models — pick the brand again.' : 'No products for this brand.',
-      items: Array.isArray(models) ? models.map(m => ({
-        id: m.id, title: m.label, sub: [m.model_no && m.name !== m.label ? m.name : '', m.sku].filter(Boolean).join(' · '),
-        right: `${_crmQtMoney(m.unit_sell_price)}${m.stock_quantity != null && m.stock_quantity <= 0 ? ' · <span class="crm-qtc-out">Out</span>' : ''}`,
-        search: [m.label, m.name, m.sku, m.model_no].filter(Boolean).join(' '), sel: String(m.id) === p.modelId,
-      })) : [],
+      items: Array.isArray(models) ? models.map(m => modelItem(m, false)) : [],
+    }) : _crmQtComboHtml('model', {
+      value: model ? model.label : '', placeholder: 'Search a product by name or SKU', remote: true, query: p.q,
+      searchPh: 'Type a product name or SKU', open: p.open === 'model',
+      empty: p.q ? 'No products match.' : 'Type a product name or SKU to search all brands.',
+      items: Array.isArray(p.results) ? p.results.map(m => modelItem(m, true)) : [],
     });
 
     const stock = model?.stock_quantity;
     const val = (v, none) => v ? escHtml(v) : `<span class="crm-qtc-none">${none}</span>`;
     const card = model ? `<div class="crm-qtx-pick-card">
         <div class="crm-qtx-pick-title">
-          <span class="crm-qtx-pick-name"><b>${escHtml(model.name)}</b><small>${[model.model_no && `Model ${escHtml(model.model_no)}`, model.sku && `SKU ${escHtml(model.sku)}`].filter(Boolean).join(' · ')}</small></span>
+          <span class="crm-qtx-pick-name"><b>${escHtml(model.name)}</b><small>${[model.brand_name && escHtml(model.brand_name), model.model_no && `Model ${escHtml(model.model_no)}`, model.sku && `SKU ${escHtml(model.sku)}`].filter(Boolean).join(' · ')}</small></span>
           ${stock != null ? `<span class="crm-qtx-dot${stock > 0 ? '' : ' crm-qtx-dot--out'}">${stock > 0 ? `${_crmQtQty(stock)} in stock` : 'Out of stock'}</span>` : ''}
         </div>
         <dl class="crm-qtx-pick-info">
@@ -64151,7 +64401,7 @@ async function submitDsCreate() {
           <div class="crm-qtx-pick-f"><span>Brand</span>${brandCombo}</div>
           <div class="crm-qtx-pick-f"><span>Model</span>${modelCombo}</div>
           <div class="crm-qtx-pick-f"><span>Qty</span><input class="po-field-input crm-qt-numin" type="number" min="1" step="any" data-qt-pick-qty value="${escHtml(String(p.qty ?? 1))}"${model ? '' : ' disabled'} data-wheel-blur></div>
-          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-pick-add${model ? '' : ' disabled'} title="${model ? 'Add to the quotation (Enter)' : 'Choose a brand and a model first'}">${onQuote ? 'Add more' : 'Add'}</button>
+          <button type="button" class="crm-qtx-btn crm-qtx-btn--primary" data-qt-pick-add${model ? '' : ' disabled'} title="${model ? 'Add to the quotation (Enter)' : 'Choose a model, or search a product by name, first'}">${onQuote ? 'Add more' : 'Add'}</button>
         </div>
         ${card}
         <div class="crm-qtx-pick-or">or search all inventory</div>
@@ -64169,7 +64419,7 @@ async function submitDsCreate() {
     return `<div class="mac-combo crm-qtc${o.open ? ' open' : ''}" data-qt-combo="${kind}">
         <button type="button" class="mac-popup crm-qtc-btn" data-qt-combo-toggle="${kind}"${o.disabled ? ' disabled' : ''}>${o.value ? escHtml(o.value) : `<span class="crm-qtc-ph">${escHtml(o.placeholder)}</span>`}</button>
         ${o.open ? `<div class="mac-combo-pop crm-qtc-pop">
-          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" data-qt-combo-q="${kind}" placeholder="${escHtml(o.searchPh || 'Search')}" autocomplete="off" spellcheck="false"></div>
+          <div class="mac-search"><i class="fa fa-magnifying-glass"></i><input type="text" data-qt-combo-q="${kind}"${o.remote ? ` data-qt-combo-remote value="${escHtml(o.query || '')}"` : ''} placeholder="${escHtml(o.searchPh || 'Search')}" autocomplete="off" spellcheck="false"></div>
           <div class="mac-combo-list crm-qtc-list">${list}</div>
         </div>` : ''}
       </div>`;
@@ -64181,13 +64431,45 @@ async function submitDsCreate() {
     if (!el || s?.view !== 'edit') return;
     const prevQ = el.querySelector('[data-qt-combo-q]'); // keep what was typed while the models were loading
     const typed = prevQ && prevQ.dataset.qtComboQ === s.pick?.open ? prevQ.value : '';
+    const qtyFocused = document.activeElement?.matches?.('#crm-qt-pick [data-qt-pick-qty]'); // e.g. the brand's models arrived
     el.innerHTML = _crmQtPickHtml(s);
+    if (qtyFocused && !s.pick?.open) el.querySelector('[data-qt-pick-qty]')?.focus();
     const q = el.querySelector('[data-qt-combo-q]');
     if (q) {
       q.focus();
-      if (typed) { q.value = typed; _crmQtComboFilter(q); }
+      if (typed) q.value = typed;
+      // Server-searched results are already filtered — just highlight the first
+      if (typed && !q.hasAttribute('data-qt-combo-remote')) _crmQtComboFilter(q);
       else _crmQtComboHl(el.querySelector('.crm-qtc-item.sel') || el.querySelector('.crm-qtc-item'));
     }
+  }
+
+  function _crmQtPickBlank() { return { brandId: '', modelId: '', qty: 1, open: null, found: null, results: null, q: '' }; }
+
+  /** The chosen model: from the brand's list, or the product picked from the name search. */
+  function _crmQtPickedModel(s) {
+    const p = s?.pick;
+    if (!p?.modelId) return null;
+    const models = _crmWs.qtCatalog?.models[p.brandId];
+    return (Array.isArray(models) && models.find(m => String(m.id) === p.modelId))
+      || (p.found && String(p.found.id) === p.modelId ? p.found : null);
+  }
+
+  /** No brand chosen: search every product by name / SKU on the server (debounced). */
+  let _crmQtPickSearchTimer = null;
+  function _crmQtRemoteSearch(value) {
+    clearTimeout(_crmQtPickSearchTimer);
+    const term = value.trim();
+    _crmQtPickSearchTimer = setTimeout(async () => {
+      const s = _crmWs.qt, lead = _crmViewLead;
+      if (!s?.pick || !lead || s.pick.brandId) return;
+      s.pick.q = term;
+      if (!term) { s.pick.results = null; _crmQtRenderPick(); return; }
+      const res = await API.crmQuotationSearch(lead.id, term).catch(() => ({ status: 0 }));
+      if (_crmWs.qt !== s || s.pick.brandId || s.pick.open !== 'model' || s.pick.q !== term) return; // a newer search / pick won
+      s.pick.results = res.status === 200 ? (res.body?.data || []) : [];
+      _crmQtRenderPick();
+    }, 250);
   }
 
   /** Highlight one menu item (keyboard / hover) and keep it in view. */
@@ -64217,12 +64499,21 @@ async function submitDsCreate() {
     const s = _crmWs.qt;
     if (!lead || !s?.pick) return;
     if (kind === 'brand') {
-      // Straight on to the model menu of that brand
-      s.pick = { brandId: value, modelId: '', qty: 1, open: 'model' };
+      // Straight on to the model menu of that brand ("All brands" → the name search)
+      s.pick = { ..._crmQtPickBlank(), brandId: value, open: 'model' };
       _crmQtRenderPick();
-      _crmQtLoadModels(lead, value);
+      if (value) _crmQtLoadModels(lead, value);
+    } else if (!s.pick.brandId) {
+      // Picked from the name search: fill in its brand too, so the model menu then lists that brand
+      const found = (Array.isArray(s.pick.results) ? s.pick.results : []).find(m => String(m.id) === value);
+      if (!found) return;
+      const brandId = found.brand_id && _crmWs.qtCatalog?.brands?.some(b => +b.id === +found.brand_id) ? String(found.brand_id) : '';
+      s.pick = { ...s.pick, brandId, modelId: value, found, qty: 1, open: null };
+      _crmQtRenderPick();
+      if (brandId) _crmQtLoadModels(lead, brandId);
+      $('#crm-qt-pick [data-qt-pick-qty]')?.select();
     } else {
-      s.pick = { ...s.pick, modelId: value, qty: 1, open: null };
+      s.pick = { ...s.pick, modelId: value, found: null, qty: 1, open: null };
       _crmQtRenderPick();
       $('#crm-qt-pick [data-qt-pick-qty]')?.select();
     }
@@ -64390,7 +64681,7 @@ async function submitDsCreate() {
 
   function _crmQtEdit(lead, form) {
     const s = _crmQtState();
-    Object.assign(s, { view: 'edit', form, stock: null, pick: { brandId: '', modelId: '', qty: 1, open: null } });
+    Object.assign(s, { view: 'edit', form, stock: null, pick: _crmQtPickBlank() });
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
     _crmQtLoadBrands(lead);
@@ -64427,6 +64718,7 @@ async function submitDsCreate() {
   });
   $('#crm-qt-edit-modal')?.addEventListener('input', e => {
     if (e.target.matches('[data-qt-pick-qty]') && _crmWs.qt?.pick) _crmWs.qt.pick.qty = e.target.value;
+    else if (e.target.matches('[data-qt-combo-remote]')) _crmQtRemoteSearch(e.target.value);
     else if (e.target.matches('[data-qt-combo-q]')) _crmQtComboFilter(e.target);
   });
   $('#crm-qt-edit-modal')?.addEventListener('keydown', e => {
@@ -64482,15 +64774,14 @@ async function submitDsCreate() {
 
   /** Add the picked model — or bump the quantity when it is already on the quotation. */
   function _crmQtAddPicked(lead, s) {
-    const models = _crmWs.qtCatalog?.models[s.pick?.brandId];
-    const m = Array.isArray(models) ? models.find(x => String(x.id) === s.pick.modelId) : null;
+    const m = _crmQtPickedModel(s);
     if (!m) return;
     const qty = Math.max(0.001, _crmQtNum(s.pick.qty) || 1);
     const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
     if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
     else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
       quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
-    s.pick = { ...s.pick, modelId: '', qty: 1, open: null }; // keep the brand for the next model
+    s.pick = { ...s.pick, modelId: '', found: null, qty: 1, open: null }; // keep the brand for the next model
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
     toast(existing ? `${m.name} — quantity now ${_crmQtQty(existing.quantity)}` : `Added ${m.name}`, 'success');
@@ -82050,6 +82341,9 @@ init();
     { value: 'description',     label: 'Description' },
     { value: 'model_no',        label: 'Model No.' },
     { value: 'size',            label: 'Size' },
+    { value: 'origin_country',      label: 'Country of Origin' },
+    { value: 'manufacture_country', label: 'Country of Manufacture' },
+    { value: 'warranty',            label: 'Warranty' },
   ];
 
   // Column-name heuristics → auto-suggest product field
@@ -82068,6 +82362,9 @@ init();
     [/^(description|details|about)$/i,    'description'],
     [/^model(_no)?$/i,                    'model_no'],
     [/^size$/i,                           'size'],
+    [/^(country_?of_?)?origin(_?country)?$/i,                   'origin_country'],
+    [/^(country_?of_?)?manufacture(_?country)?$|^made_?in$/i,   'manufacture_country'],
+    [/^(warranty|guarantee)(_?(duration|period))?$/i,           'warranty'],
   ];
 
   function suggestField(col) {
@@ -82314,7 +82611,7 @@ init();
     tbl.columns.forEach((c, i) => { colIdx[c] = i; });
     _dim.mapped = tbl.rows.map(row => {
       // unit_price is required by the API — dumps with only names (or blank prices) default to 0
-      const prod = { name:'', sku:null, unit_price:0, cost_price:null, wholesale_price:null, stock_quantity:0, description:null, model_no:null, size:null };
+      const prod = { name:'', sku:null, unit_price:0, cost_price:null, wholesale_price:null, stock_quantity:0, description:null, model_no:null, size:null, origin_country:null, manufacture_country:null };
       for (const [col, field] of Object.entries(_dim.columnMap)) {
         if (!field) continue;
         const val = row[colIdx[col]] ?? '';
@@ -82324,6 +82621,8 @@ init();
           prod[field] = parseFloat(val) || null;
         } else if (field === 'stock_quantity') {
           prod[field] = parseInt(val) || 0;
+        } else if (field === 'warranty') {
+          Object.assign(prod, _importParseWarranty(val));
         } else {
           prod[field] = val || null;
         }
@@ -82332,8 +82631,12 @@ init();
     }).filter(p => p.name);
 
     const preview = _dim.mapped.slice(0, 10);
-    const shownFields = ['name','sku','unit_price','cost_price','stock_quantity','description'];
-    const labels = { name:'Name', sku:'SKU', unit_price:'Price', cost_price:'Cost', stock_quantity:'Stock', description:'Description' };
+    const mappedFields = Object.values(_dim.columnMap);
+    const shownFields = ['name','sku','unit_price','cost_price','stock_quantity','description',
+      ...['origin_country','manufacture_country'].filter(f => mappedFields.includes(f)),
+      ...(mappedFields.includes('warranty') ? ['warranty_duration'] : [])];
+    const labels = { name:'Name', sku:'SKU', unit_price:'Price', cost_price:'Cost', stock_quantity:'Stock', description:'Description',
+      origin_country:'Origin', manufacture_country:'Manufacture', warranty_duration:'Warranty' };
 
     D('dim-preview-count').textContent = preview.length;
     D('dim-total-count').textContent   = _dim.mapped.length;
