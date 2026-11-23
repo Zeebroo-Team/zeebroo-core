@@ -743,6 +743,11 @@ const API = (() => {
     crmLeadAttachmentDownloadPath: (leadId, attachmentId, inline) => `/crm/leads/${leadId}/attachments/${attachmentId}/download${inline ? '?inline=1' : ''}`,
     crmLeadTasks:             (leadId)                 => request('GET',    `/crm/leads/${leadId}/tasks`),
     crmCreateLeadTask:        (leadId, body)           => request('POST',   `/crm/leads/${leadId}/tasks`, body),
+    // The signed-in user's signature, printed in "Approved by" on quotations they approve — upload via electronAPI.apiUpload (multipart "files[]")
+    crmProfile:                ()                      => request('GET', '/crm/profile'),
+    crmUpdateProfile:          (body)                  => request('PUT', '/crm/profile', body),
+    crmProfileSignatureUploadPath: '/crm/profile/signature',
+    crmDeleteProfileSignature: ()                      => request('DELETE', '/crm/profile/signature'),
     // Lead quotations (PosCrmLeadQuotationApiController): build from inventory → submit → head approves → PDF → send
     crmLeadQuotations:        (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations`),
     crmLeadQuotation:         (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}`),

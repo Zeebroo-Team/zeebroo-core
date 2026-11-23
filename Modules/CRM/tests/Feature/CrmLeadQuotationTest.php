@@ -1552,3 +1552,117 @@ test('"Prepared by" prints on the PDF and in custom HTML templates', function ()
     $v2 = app(QuotationService::class)->revise($q->fresh());
     expect($v2->preparedByDetails())->toBe(['name' => 'Sunil Silva', 'designation' => 'Sales Executive', 'phone' => '077 123 4567']);
 });
+
+test('"Approved by" prints the approving head\'s name, designation, mobile and signature', function () {
+    \Illuminate\Support\Facades\Storage::fake('local');
+    // 1×1 transparent PNG
+    $png  = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+    $file = fn () => \Illuminate\Http\UploadedFile::fake()->createWithContent('signature.png', $png);
+    $profiles = app(\Modules\CRM\Services\CrmProfileService::class);
+    $profiles->save($this->business->id, 2, ['name' => 'Brundha Priyadharshini', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623']);
+    $q = crmQuoteCreate();
+
+    // Not approved by a head yet (or issued within limits) → no "Approved by"
+    expect($q->approvedByDetails())->toBeNull();
+    $q->update(['status' => Quotation::STATUS_APPROVED, 'approved_by' => null, 'approved_at' => now()]);
+    expect($q->fresh()->approvedByDetails())->toBeNull();
+
+    // The head uploads their signature (multipart "files[]", as the desktop sends it)
+    $request = Request::create('/api/v1/pos/crm', 'POST', [], [], ['files' => [$file()]]);
+    $request->setUserResolver(fn () => User::find(2));
+    $uri = app(CrmQuoteTestApi::class)->uploadSignature($request)->getData(true)['data']['signature'];
+    expect($uri)->toStartWith('data:image/png;base64,')
+        ->and(crmQuote('index', 2, [$this->lead->id])->getData(true)['meta']['my_signature'])->toBe($uri);
+
+    $q->update(['approved_by' => 2]);
+    $expected = ['name' => 'Brundha Priyadharshini', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623', 'signature' => $uri];
+    expect($q->fresh()->approvedByDetails())->toBe($expected)
+        ->and(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['approved_by_print'])->toBe($expected)
+        // "Prepared by" stays without a signature
+        ->and(crmQuote('show', 3, [$this->lead->id, $q->id])->getData(true)['data']['prepared_by'])->not->toHaveKey('signature');
+
+    // Default PDF and custom templates
+    $html = view('sales::quotations.print', app(QuotationPrintService::class)->viewData($this->business, $q->fresh()) + ['pdf' => true, 'logoSrc' => null])->render();
+    expect($html)->toContain('Approved By')->toContain($uri)->toContain('Head of Measuring Instruments')->toContain('Mobile: 0770104623');
+    crmQuoteSetupSave(['template' => 'custom', 'custom_html' => '{{#has_approved_by}}{{#has_approved_by_signature}}<img src="{{approved_by_signature}}">{{/has_approved_by_signature}}<p>{{approved_by_name}}|{{approved_by_designation}}|{{approved_by_phone}}</p>{{/has_approved_by}}']);
+    expect(app(QuotationTemplateService::class)->render($this->business, $q->fresh()))
+        ->toContain('<img src="' . $uri . '">')
+        ->toContain('<p>Brundha Priyadharshini|Head of Measuring Instruments|0770104623</p>');
+
+    // A custom template with only "Prepared by" gets "Approved By" added right after it
+    crmQuoteSetupSave(['template' => 'custom', 'custom_html' => '<div class="sign">{{#has_prepared_by}}<i>Prepared By:</i> {{prepared_by_name}}{{/has_prepared_by}}</div><footer>LOGOS</footer>']);
+    $out = app(QuotationTemplateService::class)->render($this->business, $q->fresh());
+    expect($out)->toContain('Approved By:')->toContain('Brundha Priyadharshini<br>Head of Measuring Instruments<br>Mobile: 0770104623')->toContain($uri)
+        ->and(strpos($out, 'Approved By:'))->toBeGreaterThan(strpos($out, 'Prepared By:'))->toBeLessThan(strpos($out, 'LOGOS'));
+
+    // Replacing keeps one file; removing drops the image but keeps the details
+    $signatures = fn () => \Modules\FileManager\Models\FileManagerFile::query()->where('managed_by', 'crm-signature');
+    $profiles->saveSignature($this->business->id, 2, $file());
+    expect($signatures()->count())->toBe(1)
+        ->and(\Illuminate\Support\Facades\Storage::disk('local')->exists($signatures()->value('stored_path')))->toBeTrue();
+
+    $del = Request::create('/api/v1/pos/crm', 'DELETE');
+    $del->setUserResolver(fn () => User::find(2));
+    app(CrmQuoteTestApi::class)->deleteSignature($del);
+    expect($q->fresh()->approvedByDetails()['signature'])->toBeNull()
+        ->and($signatures()->count())->toBe(0)
+        ->and(\Illuminate\Support\Facades\Storage::disk('local')->allFiles())->toBe([])
+        ->and(app(QuotationTemplateService::class)->render($this->business, $q->fresh()))->not->toContain('<img')->toContain('Brundha Priyadharshini');
+});
+
+test('My Profile: name, designation, mobile are saved; empty goes back to HR', function () {
+    $put = fn (array $body) => crmQuote('updateProfile', 2, [], 'PUT', $body)->getData(true)['data'];
+
+    expect(crmQuote('profile', 2)->getData(true)['data'])->toMatchArray(['name' => 'Nimal Perera', 'designation' => null, 'phone' => null, 'signature' => null])
+        ->and($put(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623']))
+        ->toMatchArray(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623'])
+        ->and($put(['name' => '', 'phone' => null]))->toMatchArray(['name' => 'Nimal Perera', 'designation' => 'Head of Measuring Instruments', 'phone' => null])
+        ->and(crmQuoteStatus(fn () => crmQuote('updateProfile', 2, [], 'PUT', ['phone' => str_repeat('9', 41)])))->toBe(422);
+});
+
+test('signatures sit in the file manager\'s "CRM / Signatures", seen and opened by admins only', function () {
+    Storage::fake('local');
+    Storage::fake('public');
+    $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+    app(\Modules\CRM\Services\CrmProfileService::class)->saveSignature(7, 2, \Illuminate\Http\UploadedFile::fake()->createWithContent('sig.png', $png));
+
+    $fm   = app(\Modules\FileManager\Services\FileManagerService::class);
+    $biz  = Business::find(7);
+    $sigFolder = $fm->adminOnlyFolderId($biz);
+    $crmFolder = \Modules\FileManager\Models\FileManagerFolder::query()->where('business_id', 7)->whereNull('parent_id')->where('name', 'CRM')->value('id');
+    $api  = new class(app(\Modules\FileManager\Services\FileManagerService::class)) extends \Modules\Pos\Http\Controllers\Api\PosFileManagerApiController {
+        protected function businessOrAbort(Request $request): Business { return Business::find(7); }
+    };
+    $browse = function (int $userId, ?int $folder, bool $imagesOnly = false) use ($api) {
+        $r = Request::create('/api/v1/pos/online/file-manager', 'GET', array_filter(['folder' => $folder, 'images_only' => $imagesOnly ? 1 : null]));
+        $r->setUserResolver(fn () => User::find($userId));
+
+        return $api->browse($r)->getData(true);
+    };
+
+    expect($sigFolder)->not->toBeNull()
+        ->and($fm->isBusinessAdmin($biz, 1))->toBeTrue()
+        ->and($fm->isBusinessAdmin($biz, 3))->toBeFalse();
+
+    // Staff: the folder is not listed, cannot be opened, and pickers never offer the image
+    expect(collect($browse(3, $crmFolder)['folders'])->pluck('name')->all())->not->toContain('Signatures')
+        ->and(crmQuoteStatus(fn () => $browse(3, $sigFolder)))->toBe(404)
+        ->and($fm->listImagesForBusiness($biz))->toHaveCount(0);
+
+    // Admin (the owner): sees it, the image comes inline (no reusable URL); still not in image pickers
+    $files = $browse(1, $sigFolder)['files'];
+    expect(collect($browse(1, $crmFolder)['folders'])->pluck('name')->all())->toContain('Signatures')
+        ->and($files)->toHaveCount(1)
+        ->and($files[0]['url'])->toStartWith('data:image/png;base64,')
+        ->and($files[0]['managed'])->toBeTrue()
+        ->and($browse(1, $sigFolder, true)['files'])->toBe([]);
+
+    // Staff can't upload into it or delete it
+    $up = Request::create('/api/v1/pos/online/file-manager/upload', 'POST', ['folder_id' => $sigFolder], [], ['files' => [\Illuminate\Http\UploadedFile::fake()->createWithContent('x.png', $png)]]);
+    $up->setUserResolver(fn () => User::find(3));
+    $rmFolder = Request::create('/x', 'DELETE');
+    $rmFolder->setUserResolver(fn () => User::find(1));
+    expect(crmQuoteStatus(fn () => $api->upload($up)))->toBe(404)
+        ->and(crmQuoteStatus(fn () => $api->destroyFolder($rmFolder, \Modules\FileManager\Models\FileManagerFolder::find($sigFolder))))->toBe(403)
+        ->and(crmQuoteStatus(fn () => $api->destroy($rmFolder, \Modules\FileManager\Models\FileManagerFile::query()->where('managed_by', 'crm-signature')->first())))->toBe(403);
+});

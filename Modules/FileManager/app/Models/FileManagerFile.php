@@ -62,6 +62,12 @@ class FileManagerFile extends Model
         return filled($this->managed_by);
     }
 
+    /** Only business admins may see / open it in the file manager (e.g. staff signatures). */
+    public function isAdminOnly(): bool
+    {
+        return in_array($this->managed_by, \Modules\FileManager\Services\FileManagerService::ADMIN_ONLY_MANAGED, true);
+    }
+
     public function publicUrl(): string
     {
         // Files off the public disk have no public URL — go through the authorised download

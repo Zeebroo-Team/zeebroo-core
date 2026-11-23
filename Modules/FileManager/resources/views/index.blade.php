@@ -97,7 +97,11 @@
                             <span class="fm-card__meta" style="margin-top:-4px;">{{ \Illuminate\Support\Str::limit($fileRow->notes, 60) }}</span>
                         @endif
                         <div class="fm-card__actions">
-                            @if($fileRow->isManaged())
+                            @if($fileRow->isAdminOnly())
+                                {{-- Staff signature: listed to admins only; changed from the CRM profile --}}
+                                <a class="fm-link" href="{{ route('filemanager.files.download', $fileRow) }}"><i class="fa fa-download"></i> Download</a>
+                                <span class="fm-card__meta"><i class="fa fa-lock"></i> Signature · admins only</span>
+                            @elseif($fileRow->isManaged())
                                 {{-- Served only by its own module, after that module's access checks --}}
                                 <span class="fm-card__meta"><i class="fa fa-lock"></i> Managed by {{ strtoupper($fileRow->managed_by) }}</span>
                             @else

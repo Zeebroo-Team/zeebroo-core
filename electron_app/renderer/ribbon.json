@@ -527,6 +527,12 @@
           ]
         },
         {
+          "label": "Profile",
+          "items": [
+            { "type": "lg", "id": "rb-crm-my-profile",    "icon": "fa-signature",          "label": "My Profile\n& Signature" }
+          ]
+        },
+        {
           "label": "Access",
           "items": [
             { "type": "lg", "id": "rb-crm-permissions",   "icon": "fa-user-shield",        "label": "Permissions" },

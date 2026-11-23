@@ -3906,6 +3906,8 @@ function _qtToPrintDoc(q) {
     customer_email:  b.email || q.customer_email,
     // { name, designation, phone } — printed as "Prepared By"
     prepared_by:     q.prepared_by || null,
+    // { name, designation, phone, signature } of the head who approved it — printed as "Approved By"
+    approved_by_print: q.approved_by_print || null,
     reference:       q.reference,
     status:          q.status,
     status_label:    q.status_label,
@@ -7512,6 +7514,8 @@ function applyFeatureVisibility() {
   btn('#rb-crm-projects',  crm_pipeline || crm_tasks);
   btn('#rb-crm-stages',    crm_pipeline || crm_tasks);
   btn('#rb-crm-delivery-terms', crm_pipeline || crm_tasks);
+  grp('#rb-crm-my-profile', crm_any);                         // Profile group
+  btn('#rb-crm-my-profile', crm_any);
   grp('#rb-crm-refresh',   crm_any);                          // Actions group
   btn('#rb-crm-refresh',   crm_any);
 
@@ -31231,12 +31235,21 @@ function _invBuildActualDoc(inv, ic, cur, lhDataUrl = null) {
   const notesText = escHtml(inv.notes || 'Thank you for your business!');
   // "Prepared By" (quotations): name, designation, contact number — inline styles so every template can drop it in
   const pb   = inv.prepared_by?.name ? inv.prepared_by : null;
-  const prep = pb ? `<div style="margin-top:20px;page-break-inside:avoid;break-inside:avoid">
+  // "Approved By" (quotations a head approved): name, designation, mobile and their signature
+  const ab   = inv.approved_by_print?.name ? inv.approved_by_print : null;
+  const abSig = _qtSignatureSrc(ab?.signature);
+  const prep = (pb ? `<div style="margin-top:20px;page-break-inside:avoid;break-inside:avoid">
   <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px">Prepared By</div>
   <div style="font-size:12px;font-weight:700;color:#0f172a">${escHtml(pb.name)}</div>
   ${pb.designation ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escHtml(pb.designation)}</div>` : ''}
   ${pb.phone ? `<div style="font-size:11px;color:#64748b;margin-top:2px">Tel: ${escHtml(pb.phone)}</div>` : ''}
-</div>` : '';
+</div>` : '') + (ab ? `<div style="margin-top:16px;page-break-inside:avoid;break-inside:avoid">
+  <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#94a3b8;margin-bottom:5px">Approved By</div>
+  ${abSig ? `<img src="${escHtml(abSig)}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:2px 0 4px">` : ''}
+  <div style="font-size:12px;font-weight:700;color:#0f172a">${escHtml(ab.name)}</div>
+  ${ab.designation ? `<div style="font-size:11px;color:#64748b;margin-top:2px">${escHtml(ab.designation)}</div>` : ''}
+  ${ab.phone ? `<div style="font-size:11px;color:#64748b;margin-top:2px">Mobile: ${escHtml(ab.phone)}</div>` : ''}
+</div>` : '');
   const sub  = fmt(inv.subtotal);
   const disc = parseFloat(inv.discount_amount || 0);
   const tax  = parseFloat(inv.tax_amount      || 0);
@@ -32077,6 +32090,11 @@ const QTPL_FIELDS = [
   { group: 'Prepared by — wrap in {{#has_prepared_by}}', items: [
     ['prepared_by_name', 'Name'], ['prepared_by_designation', 'Designation'], ['prepared_by_phone', 'Contact number'],
   ] },
+  { group: 'Approved by — wrap in {{#has_approved_by}}', items: [
+    ['__approved_block', '↳ Whole "Approved By" block (signature, name, designation, mobile)'],
+    ['approved_by_signature', 'Signature image (inserts an <img> block)'],
+    ['approved_by_name', 'Name'], ['approved_by_designation', 'Designation'], ['approved_by_phone', 'Mobile number'],
+  ] },
   { group: 'Business', items: [
     ['business_name', 'Business name'], ['business_address', 'Address'], ['logo_url', 'Logo image URL'], ['accent', 'Accent colour'],
   ] },
@@ -32151,6 +32169,11 @@ function _qtplSanitize(html) {
 
 function _qtplNum(n) {
   return (parseFloat(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// The "Prepared by" signature (a data:image URI from the server) — anything else is dropped
+function _qtSignatureSrc(v) {
+  return typeof v === 'string' && /^data:image\/(png|jpe?g);base64,[A-Za-z0-9+/=]+$/.test(v) ? v : '';
 }
 
 // 'YYYY-MM-DD…' → dd/mm/yyyy; anything else is passed through unchanged
@@ -32230,7 +32253,14 @@ function _qtplData(inv, ic, cur) {
     prepared_by_name:        inv.prepared_by?.name || '',
     prepared_by_designation: inv.prepared_by?.designation || '',
     prepared_by_phone:       inv.prepared_by?.phone || '',
-    business_name:    s.business_name || state._bizName || 'Your Business',
+    // "Approved by" — the head who approved it (the server's QuotationTemplateService sends the same)
+    has_approved_by:           !!inv.approved_by_print?.name,
+    approved_by_name:          inv.approved_by_print?.name || '',
+    approved_by_designation:   inv.approved_by_print?.designation || '',
+    approved_by_phone:         inv.approved_by_print?.phone || '',
+    has_approved_by_signature: !!_qtSignatureSrc(inv.approved_by_print?.signature),
+    approved_by_signature:     _qtSignatureSrc(inv.approved_by_print?.signature),
+    business_name:   s.business_name || state._bizName || 'Your Business',
     business_address: s.receipt_address_line || '',
     logo_url:         s.business_logo_url || s.receipt_logo_url || '',
     accent:           ic.color || (INV_TEMPLATES.find(t => t.id === 'custom') || {}).accent,
@@ -32253,8 +32283,22 @@ function _qtplData(inv, ic, cur) {
   };
 }
 
+// "Approved By" for custom templates that don't place it themselves: added right after the
+// template's last {{/has_prepared_by}} (same as the server's QuotationTemplateService)
+const QTPL_APPROVED_BLOCK = '{{#has_approved_by}}<div style="margin-top:16px;page-break-inside:avoid;break-inside:avoid"><i>Approved By:</i><br>'
+  + '{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}'
+  + '{{approved_by_name}}<br>{{#approved_by_designation}}{{approved_by_designation}}<br>{{/approved_by_designation}}'
+  + '{{#approved_by_phone}}Mobile: {{approved_by_phone}}{{/approved_by_phone}}</div>{{/has_approved_by}}';
+
+function _qtplWithApprovedBlock(html) {
+  const src = String(html || '');
+  if (/approved_by/.test(src)) return src;
+  const m = [...src.matchAll(/\{\{\s*\/\s*has_prepared_by\s*\}\}/g)].pop();
+  return m ? src.slice(0, m.index + m[0].length) + QTPL_APPROVED_BLOCK + src.slice(m.index + m[0].length) : src;
+}
+
 function _qtplBuildDoc(html, inv, ic, cur) {
-  const out = _qtplRenderNodes(_qtplParse(_qtplSanitize(html)).children, [_qtplData(inv, ic, cur)]);
+  const out = _qtplRenderNodes(_qtplParse(_qtplWithApprovedBlock(_qtplSanitize(html))).children, [_qtplData(inv, ic, cur)]);
   // Paper size from the setup goes first so the template's own @page can still override it
   const pageCss = `<style>${_isetupPageAtCss(_isetupGeom(ic))}</style>`;
   if (/<head\b[^>]*>/i.test(out)) return out.replace(/<head\b[^>]*>/i, h => h + pageCss);
@@ -32290,6 +32334,7 @@ function _qtplSampleInv() {
     customer_phone:   '011-2000000',
     customer_email:   'purchasing@acme.example',
     prepared_by:      isQt ? { name: 'Nimal Perera', designation: 'Sales Executive', phone: '077 123 4567' } : null,
+    approved_by_print: isQt ? { name: 'Kamala Silva', designation: 'Head of Sales', phone: '077 765 4321', signature: null } : null,
     notes:            '',
     items,
     subtotal:         sub,
@@ -32406,7 +32451,11 @@ function _isetupApplyCustomHtml(html, msg) {
       if (!k) return;
       _isetupCodeInsert(k === '__items'
         ? '{{#items}}\n<tr><td>{{no}}</td><td>{{name}}</td><td>{{qty}}</td><td>{{unit_price}}</td><td>{{total}}</td></tr>\n{{/items}}'
-        : `{{${k}}}`);
+        : k === 'approved_by_signature'
+          ? '{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}'
+          : k === '__approved_block'
+            ? '{{#has_approved_by}}\n<p style="margin-top:24px"><i>Approved By:</i></p>\n{{#has_approved_by_signature}}<img src="{{approved_by_signature}}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">{{/has_approved_by_signature}}\n<p style="margin:0"><b>{{approved_by_name}}</b><br>\n{{#approved_by_designation}}<b>{{approved_by_designation}}</b><br>{{/approved_by_designation}}\n{{#approved_by_phone}}<b>Mobile: {{approved_by_phone}}</b>{{/approved_by_phone}}</p>\n{{/has_approved_by}}'
+            : `{{${k}}}`);
     });
   }
 
@@ -64184,6 +64233,61 @@ async function submitDsCreate() {
       </section>`;
   }
 
+  /** For a head about to approve: their signature, printed in "Approved By" on what they approve. */
+  function _crmQtApproverSignatureHtml() {
+    return `<div class="crm-qt-send">
+        <div class="crm-qtx-card-h"><i class="fa fa-signature"></i> My signature<small style="font-weight:400">Printed in "Approved By" with my name, designation and mobile on the quotations I approve — PNG / JPG up to 1 MB, a transparent PNG prints best</small></div>
+        <div data-qt-sig-box>${_crmQtSignatureBoxHtml(_crmWs.quotations?.meta?.my_signature)}</div>
+      </div>`;
+  }
+
+  /** The signed-in user's signature preview with Upload / Change / Remove. */
+  function _crmQtSignatureBoxHtml(sig) {
+    const src = _qtSignatureSrc(sig);
+    return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${src
+          ? `<img src="${escHtml(src)}" alt="Signature" style="max-height:60px;max-width:200px;padding:4px 8px;border:1px dashed var(--border,#cbd5e1);border-radius:6px;background:#fff">`
+          : '<span class="crm-ws-muted" style="font-size:12px">No signature yet</span>'}
+        <button type="button" class="crm-qtx-btn" data-qt-sig-upload><i class="fa fa-signature"></i> ${src ? 'Change' : 'Upload signature'}</button>
+        ${src ? '<button type="button" class="crm-qtx-btn" data-qt-sig-remove><i class="fa fa-trash"></i> Remove</button>' : ''}
+      </div>`;
+  }
+
+  function _crmQtApplySignature(sig) {
+    const meta = _crmWs.quotations?.meta;
+    if (meta) meta.my_signature = sig || null;
+    if (_crmProfile) _crmProfile.signature = sig || null;
+    $$('[data-qt-sig-box]').forEach(box => { box.innerHTML = _crmQtSignatureBoxHtml(sig); });
+  }
+
+  async function _crmQtUploadSignature(btn) {
+    const result = await window.electronAPI.showOpenDialog({
+      title: 'Choose your signature image',
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }],
+      properties: ['openFile'],
+    });
+    if (result.canceled || !result.filePaths?.length) return;
+    btn.disabled = true;
+    const res = await window.electronAPI.apiUpload(API.crmProfileSignatureUploadPath, result.filePaths[0]);
+    btn.disabled = false;
+    if (res.status === 200) {
+      _crmQtApplySignature(res.body?.data?.signature);
+      toast('Signature saved — it prints in "Approved By" on quotations you approve', 'success');
+    } else {
+      toast(res.status === 413 ? 'Image is too large for the server.'
+        : Object.values(res.body?.errors || {}).flat().join(' ') || res.body?.message || 'Could not upload the signature', 'error');
+    }
+  }
+
+  async function _crmQtRemoveSignature(btn) {
+    btn.disabled = true;
+    const res = await API.crmDeleteProfileSignature();
+    btn.disabled = false;
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not remove the signature.'), 'error'); return; }
+    _crmQtApplySignature(null);
+    toast('Signature removed', 'success');
+  }
+
   function _crmQtCustomerAddress() { return _crmWs.quotations?.meta?.lead?.customer_address || ''; }
 
   /** "Saved customer" / "New customer" chip beside the customer card's heading. */
@@ -65119,6 +65223,7 @@ async function submitDsCreate() {
       </section>
       ${banners.join('')}
       ${actions}
+      ${can.approve ? _crmQtApproverSignatureHtml() : ''}
       ${submitForm}
       ${sendForm}
       ${respondForm}
@@ -65322,6 +65427,8 @@ async function submitDsCreate() {
 
     if (t.matches('[data-qt-pick-add]') && s.form) { _crmQtAddPicked(lead, s); return; }
     if (t.matches('[data-qt-dlv-manage]')) { openCrmDeliveryTermsModal(); return; }
+    if (t.matches('[data-qt-sig-upload]')) { _crmQtUploadSignature(t); return; }
+    if (t.matches('[data-qt-sig-remove]')) { _crmQtRemoveSignature(t); return; }
 
     if (t.matches('[data-qt-new]')) {
       _crmQtEdit(lead, _crmQtNewForm());
@@ -65798,6 +65905,76 @@ async function submitDsCreate() {
   $('#crm-approvals-refresh')?.addEventListener('click', _crmLoadApprovals);
   $('#crm-approvals-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseApprovals(); });
   $('#rb-crm-approvals')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmApprovalsModal(); });
+
+  // ── My profile & signature: CRM ribbon → My Profile & Signature ──
+  // Name / designation / mobile print as "Prepared By" and "Approved By"; the signature only in "Approved By".
+  let _crmProfile = null;
+
+  async function openCrmProfileModal() {
+    _macShow($('#crm-profile-modal'));
+    const save = $('#crm-profile-save');
+    save.disabled = true;
+    $('#crm-profile-preview').innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const res = await API.crmProfile().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not load your profile.'), 'error'); _macHide($('#crm-profile-modal')); return; }
+    _crmProfileFill(res.body.data);
+    save.disabled = false;
+    $('#crm-profile-name')?.focus();
+  }
+  window.openCrmProfileModal = openCrmProfileModal;
+
+  function _crmProfileFill(p) {
+    _crmProfile = p || {};
+    const saved = _crmProfile.saved || {}, hr = _crmProfile.hr || {};
+    // The boxes hold what the user saved; the HR value shows as the placeholder (used when empty)
+    [['name', 'Your name'], ['designation', 'e.g. Head of Measuring Instruments'], ['phone', '07X XXX XXXX']].forEach(([k, ph]) => {
+      const el = $(`#crm-profile-${k}`);
+      el.value = saved[k] || '';
+      el.placeholder = hr[k] || (k === 'name' ? (_crmProfile.name || ph) : ph);
+    });
+    _crmQtApplySignature(_crmProfile.signature);
+    _crmProfileRenderPreview();
+  }
+
+  function _crmProfileRenderPreview() {
+    const val = k => $(`#crm-profile-${k}`).value.trim() || $(`#crm-profile-${k}`).placeholder.trim();
+    const isEx = s => /^e\.g\.|07X/.test(s);
+    const name = val('name'), des = val('designation'), phone = val('phone');
+    const sig = _qtSignatureSrc(_crmProfile?.signature);
+    $('#crm-profile-preview').innerHTML = `<i style="font-weight:400">Approved By:</i><br>
+      ${sig ? `<img src="${escHtml(sig)}" alt="Signature" style="display:block;max-height:60px;max-width:180px;margin:4px 0">` : '<span class="crm-ws-muted" style="font-family:inherit;font-weight:400;font-size:12px">(no signature yet)</span><br>'}
+      ${escHtml(name)}<br>${des && !isEx(des) ? `${escHtml(des)}<br>` : ''}${phone && !isEx(phone) ? `Mobile: ${escHtml(phone)}` : ''}`;
+  }
+
+  async function _crmProfileSave() {
+    const btn = $('#crm-profile-save');
+    btn.disabled = true;
+    const res = await API.crmUpdateProfile({
+      name:        $('#crm-profile-name').value.trim() || null,
+      designation: $('#crm-profile-designation').value.trim() || null,
+      phone:       $('#crm-profile-phone').value.trim() || null,
+    });
+    btn.disabled = false;
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save your profile.'), 'error'); return; }
+    _crmProfileFill(res.body.data);
+    // New quotations start "Prepared by" from this profile
+    const meta = _crmWs.quotations?.meta;
+    if (meta) meta.prepared_by = { name: res.body.data.name, designation: res.body.data.designation, phone: res.body.data.phone };
+    toast('Profile saved — it prints on your quotations', 'success');
+  }
+
+  $('#crm-profile-save')?.addEventListener('click', _crmProfileSave);
+  $('#crm-profile-cancel')?.addEventListener('click', () => _macHide($('#crm-profile-modal')));
+  $('#crm-profile-close')?.addEventListener('click', () => _macHide($('#crm-profile-modal')));
+  $('#crm-profile-modal')?.addEventListener('click', e => {
+    if (e.target === e.currentTarget) { _macHide($('#crm-profile-modal')); return; }
+    const t = e.target.closest('button');
+    if (t?.matches('[data-qt-sig-upload]')) _crmQtUploadSignature(t).then(_crmProfileRenderPreview);
+    else if (t?.matches('[data-qt-sig-remove]')) _crmQtRemoveSignature(t).then(_crmProfileRenderPreview);
+  });
+  $('#crm-profile-body')?.addEventListener('input', e => { if (e.target.matches('input')) _crmProfileRenderPreview(); });
+  $('#crm-approvals-profile')?.addEventListener('click', openCrmProfileModal);
+  $('#rb-crm-my-profile')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmProfileModal(); });
 
   // ── Delivery terms window: CRM ribbon → Delivery Terms, or ⚙ next to the quotation editor's Delivery ──
   // Add / rename / switch off / reorder / delete; every change saves straight away and the editor's dropdown follows.

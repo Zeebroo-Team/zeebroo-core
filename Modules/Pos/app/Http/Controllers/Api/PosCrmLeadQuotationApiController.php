@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Modules\Business\Models\Business;
 use Modules\CRM\Models\Lead;
 use Modules\CRM\Policies\LeadPolicy;
@@ -81,6 +82,8 @@ class PosCrmLeadQuotationApiController extends Controller
                 'lead'        => $this->presentLead($lead),
                 // The signed-in user's CRM profile — a new quotation's "Prepared by"
                 'prepared_by' => $this->preparedByDefaults($business, $request),
+                // The signed-in user's signature (data URI) — printed in "Approved by" on quotations they approve
+                'my_signature' => $request->user() ? app(CrmProfileService::class)->signatureDataUri((int) $business->id, (int) $request->user()->id) : null,
             ],
         ]);
     }
@@ -581,6 +584,69 @@ class PosCrmLeadQuotationApiController extends Controller
         return ['name' => $p['name'], 'designation' => $p['designation'], 'phone' => $p['phone']];
     }
 
+    /**
+     * GET crm/profile — the signed-in user's CRM profile: what prints as "Prepared by" / "Approved by".
+     * data: { name, designation, phone, signature (data URI|null), saved: {…own values}, hr: {…HR record} }
+     */
+    public function profile(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+
+        return response()->json(['data' => app(CrmProfileService::class)->get((int) $business->id, (int) $request->user()->id)]);
+    }
+
+    /** PUT crm/profile — { name?, designation?, phone? }; an empty value goes back to the HR / login default. */
+    public function updateProfile(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $data = $request->validate([
+            'name'        => ['sometimes', 'nullable', 'string', 'max:120'],
+            'designation' => ['sometimes', 'nullable', 'string', 'max:120'],
+            'phone'       => ['sometimes', 'nullable', 'string', 'max:40'],
+        ]);
+
+        return response()->json([
+            'message' => 'Profile saved.',
+            'data'    => app(CrmProfileService::class)->save((int) $business->id, (int) $request->user()->id, $data),
+        ]);
+    }
+
+    /**
+     * POST crm/profile/signature — multipart "files[]" (or "signature"): the signed-in user's
+     * signature image, printed in "Approved by" on the quotations they approve.
+     */
+    public function uploadSignature(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $userId   = (int) $request->user()->id;
+
+        $request->validate([
+            'signature' => ['nullable', ...CrmProfileService::signatureRules()],
+            'files'     => ['nullable', 'array', 'max:1'],
+            'files.*'   => CrmProfileService::signatureRules(),
+        ], [
+            'files.*.mimes' => 'The signature must be a PNG or JPG image.',
+            'files.*.max'   => 'The signature image can be at most 1 MB.',
+        ]);
+        $file = $request->file('signature') ?? ($request->file('files')[0] ?? null);
+        if ($file === null) {
+            throw ValidationException::withMessages(['signature' => ['Choose a signature image to upload.']]);
+        }
+
+        $signature = app(CrmProfileService::class)->saveSignature((int) $business->id, $userId, $file);
+
+        return response()->json(['message' => 'Signature saved.', 'data' => ['signature' => $signature]]);
+    }
+
+    /** DELETE crm/profile/signature — removes the signed-in user's signature. */
+    public function deleteSignature(Request $request): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        app(CrmProfileService::class)->removeSignature((int) $business->id, (int) $request->user()->id);
+
+        return response()->json(['message' => 'Signature removed.', 'data' => ['signature' => null]]);
+    }
+
     private function presentListItem(Quotation $q): array
     {
         return [
@@ -695,6 +761,8 @@ class PosCrmLeadQuotationApiController extends Controller
             'bill_to'       => $q->billTo(),
             // "Prepared by" block of the printed quotation: { name, designation, phone } or null
             'prepared_by'   => $q->preparedByDetails(),
+            // "Approved by" block: the approving head's { name, designation, phone, signature (data URI) } or null
+            'approved_by_print' => $q->approvedByDetails(),
             'branch_id'     => $q->branch_id,
             'subtotal'      => round((float) $q->subtotal, 2),
             'discount_amount' => round((float) $q->discount_amount, 2),

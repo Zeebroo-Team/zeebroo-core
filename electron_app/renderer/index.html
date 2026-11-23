@@ -4646,6 +4646,15 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 
         <div class="ribbon-group">
           <div class="ribbon-group-content">
+            <button class="ribbon-btn-lg" id="rb-crm-my-profile" title="Your name, designation, mobile and signature — printed on quotations">
+              <i class="fa fa-signature"></i>My Profile<br>&amp; Signature
+            </button>
+          </div>
+          <div class="ribbon-group-label">Profile</div>
+        </div>
+
+        <div class="ribbon-group">
+          <div class="ribbon-group-content">
             <button class="ribbon-btn-lg" id="rb-crm-permissions">
               <i class="fa fa-user-shield"></i>Permissions
             </button>
@@ -15215,7 +15224,10 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       </div>
       <div class="po-aim-footer mac-footer" style="justify-content:space-between">
         <span class="crm-ws-muted">Review opens the lead's quotation to approve, return with comments or reject.</span>
-        <button class="po-btn-ghost" id="crm-approvals-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+        <span style="display:flex;gap:8px">
+          <button class="po-btn-ghost" id="crm-approvals-profile" title="Your name, designation, mobile and signature — printed in &quot;Approved By&quot;"><i class="fa fa-signature"></i> My signature</button>
+          <button class="po-btn-ghost" id="crm-approvals-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+        </span>
       </div>
     </div>
   </div>
@@ -15243,6 +15255,41 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="po-aim-footer mac-footer" style="justify-content:space-between">
         <span class="crm-ws-muted">Changes save straight away.</span>
         <button class="po-btn-ghost" id="crm-dlv-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: My profile & signature — printed as "Prepared By" / "Approved By" on quotations ── -->
+  <div class="modal-overlay mac-overlay" id="crm-profile-modal" style="display:none;z-index:2080">
+    <div class="mac-window" style="width:620px;max-width:96vw;max-height:88vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-signature"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">My Profile &amp; Signature</div><div class="mac-title-sub">Printed on quotations</div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-profile-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-scroll" style="padding:16px 18px" id="crm-profile-body">
+        <p class="crm-ws-muted" style="margin:0 0 14px;font-size:12.5px">Printed as <b>Prepared By</b> on the quotations you make, and as <b>Approved By</b> (with your signature) on the quotations you approve. Leave a box empty to use your HR record.</p>
+        <div class="crm-qt-grid" style="grid-template-columns:1fr 1fr;gap:12px">
+          <label style="grid-column:1 / -1">Name<input class="po-field-input" id="crm-profile-name" maxlength="120" autocomplete="off"></label>
+          <label>Designation / position<input class="po-field-input" id="crm-profile-designation" maxlength="120" autocomplete="off" placeholder="e.g. Head of Measuring Instruments"></label>
+          <label>Mobile<input class="po-field-input" id="crm-profile-phone" maxlength="40" autocomplete="off" placeholder="07X XXX XXXX"></label>
+        </div>
+        <div style="margin-top:16px">
+          <div style="font-weight:600;margin-bottom:6px">Signature <small class="crm-ws-muted" style="font-weight:400">— PNG / JPG up to 1 MB; a transparent PNG prints best. Kept private: only admins can see it in the File Manager.</small></div>
+          <div data-qt-sig-box id="crm-profile-sig"></div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="font-weight:600;margin-bottom:6px">How it prints</div>
+          <div id="crm-profile-preview" style="border:1px dashed var(--border,#cbd5e1);border-radius:8px;padding:12px 14px;background:#fff;color:#0f172a;font-family:'Times New Roman',serif;font-weight:700;font-size:14px;line-height:1.45"></div>
+        </div>
+      </div>
+      <div class="po-aim-footer mac-footer" style="justify-content:flex-end;gap:8px">
+        <button class="po-btn-ghost" id="crm-profile-cancel">Close</button>
+        <button class="po-btn-primary" id="crm-profile-save"><i class="fa fa-floppy-disk"></i> Save</button>
       </div>
     </div>
   </div>

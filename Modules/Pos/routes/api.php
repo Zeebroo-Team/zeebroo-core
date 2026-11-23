@@ -682,6 +682,13 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::post  ('crm/leads/{lead}/tasks',                             [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'storeTask'])         ->whereNumber('lead')->name('crm.leads.tasks.store');
     Route::get   ('crm/audit-logs',                                     [\Modules\Pos\Http\Controllers\Api\PosCrmLeadWorkspaceApiController::class, 'auditLogs'])         ->name('crm.audit-logs.index');
 
+    // The signed-in user's CRM profile (name, designation, mobile) and signature — printed as
+    // "Prepared by" / "Approved by" on quotations. Signatures sit in the file manager's admin-only "CRM / Signatures".
+    Route::get   ('crm/profile',                                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'profile'])          ->name('crm.profile.show');
+    Route::put   ('crm/profile',                                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'updateProfile'])    ->name('crm.profile.update');
+    Route::post  ('crm/profile/signature',                                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'uploadSignature'])  ->name('crm.profile.signature.upload');
+    Route::delete('crm/profile/signature',                                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'deleteSignature'])  ->name('crm.profile.signature.delete');
+
     // CRM lead quotations (built from inventory, stock-checked) and their approval → PDF → send to the customer
     Route::get   ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'index'])           ->whereNumber('lead')->name('crm.leads.quotations.index');
     Route::post  ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'store'])           ->whereNumber('lead')->name('crm.leads.quotations.store');
