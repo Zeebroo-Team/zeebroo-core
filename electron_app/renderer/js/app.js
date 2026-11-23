@@ -10025,6 +10025,8 @@ async function refreshNotifBadge() {
   if (res.status !== 200) return;
   _notif.unread = res.body?.unread_count ?? 0;
   _notifApplyBadge();
+  // The CRM ribbon counters ride the same 60s poll
+  window.refreshCrmRibbonBadges?.();
 }
 
 function _notifBindRows(container, sourceList) {
@@ -59195,7 +59197,77 @@ async function submitDsCreate() {
     const res = await API.crmMyPermissions().catch(() => ({ status: 0 }));
     _crmAccess = res.status === 200 ? res.body.data : null;
     _crmApplyAccessUI();
+    _crmBadges.denied = false; // access may have changed (business switch, new role)
+    refreshCrmRibbonBadges();
   }
+
+  // ── Ribbon counters: red badges on My Follow-ups, Quotation Approvals, Marketing Inbox, Daily Inquiries ──
+  const _CRM_BADGE_BUTTONS = {
+    followups: { id: 'rb-crm-followups', title: n => `${n} follow-up${n === 1 ? '' : 's'} due today or overdue` },
+    approvals: { id: 'rb-crm-approvals', title: n => `${n} quotation${n === 1 ? '' : 's'} waiting for your approval` },
+    inbox:     { id: 'rb-crm-inbox',     title: n => `${n} lead${n === 1 ? '' : 's'} in the marketing inbox` },
+    inquiries: { id: 'rb-crm-inquiries', title: n => `${n} item${n === 1 ? '' : 's'} need attention: pending inquiries today and daily reports waiting to be sent` },
+  };
+  const _crmBadges = { busy: false, denied: false, details: {} };
+
+  /** The count pill on a tab inside a CRM window: tone true / 'red' = needs action, 'amber' = due soon, false = grey. */
+  function _crmTabCountHtml(n, tone = false) {
+    n = Number(n) || 0;
+    const cls = tone === 'amber' ? ' crm-fu-count--today' : tone ? ' crm-fu-count--overdue' : '';
+    return n ? `<span class="crm-fu-count${cls}">${n > 99 ? '99+' : n}</span>` : '';
+  }
+
+  /** A window that is open right now (its tabs are redrawn when fresh counts arrive). */
+  function _crmModalOpen(id) {
+    const el = document.getElementById(id);
+    return !!el && el.style.display !== 'none' && el.style.display !== '';
+  }
+
+  function _crmSetRibbonBadge(btnId, count, title) {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    let badge = btn.querySelector(':scope > .rb-btn-count');
+    if (!count) {
+      badge?.remove();
+      if (btn.classList.contains('has-rb-count')) btn.removeAttribute('title');
+      btn.classList.remove('has-rb-count');
+      return;
+    }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.className = 'rb-btn-count';
+      btn.appendChild(badge);
+    }
+    badge.textContent = count > 99 ? '99+' : String(count);
+    btn.classList.add('has-rb-count');
+    btn.title = title;
+  }
+
+  async function refreshCrmRibbonBadges() {
+    if (_crmBadges.busy || _crmBadges.denied || !document.getElementById('rb-crm-followups')) return;
+    _crmBadges.busy = true;
+    try {
+      const res = await API.crmBadgeCounts().catch(() => ({ status: 0 }));
+      if (res.status === 403 || res.status === 404) {
+        // No CRM for this user/business: clear and stop asking until access is re-read
+        _crmBadges.denied = true;
+        Object.values(_CRM_BADGE_BUTTONS).forEach(b => _crmSetRibbonBadge(b.id, 0));
+        return;
+      }
+      if (res.status !== 200) return;
+      const counts = res.body?.data || {};
+      _crmBadges.details = counts.details || {};
+      Object.entries(_CRM_BADGE_BUTTONS).forEach(([key, b]) => {
+        const n = Number(counts[key]) || 0;
+        _crmSetRibbonBadge(b.id, n, b.title(n));
+      });
+      // Daily Inquiries takes its "Daily report" count from here — redraw its tabs if it is open
+      if (_crmModalOpen('crm-inq-modal') && _crmInq.meta) _crmInqTabs();
+    } finally {
+      _crmBadges.busy = false;
+    }
+  }
+  window.refreshCrmRibbonBadges = refreshCrmRibbonBadges;
 
   function _crmApplyAccessUI() {
     const perms = _crmAccess?.permissions || {};
@@ -65849,6 +65921,7 @@ async function submitDsCreate() {
   }
 
   async function _crmLoadApprovals() {
+    refreshCrmRibbonBadges();
     const body = $('#crm-approvals-rows');
     body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const [res, revRes] = await Promise.all([
@@ -65861,9 +65934,10 @@ async function submitDsCreate() {
     const revs = revRes.status === 200 ? (revRes.body.data || []) : [];
     const total = rows.length + revs.length;
     $('#crm-approvals-count').textContent = total ? `${total} waiting` : '';
+    // Each section carries its own red count, so it is clear what waits where
     body.innerHTML = total
-      ? rows.map(_crmApprovalCardHtml).join('')
-        + (revs.length ? `<div class="crm-qtx-h" style="margin:14px 2px 8px">Revision requests<small>${revs.length}</small></div>${revs.map(_crmRevisionCardHtml).join('')}` : '')
+      ? (rows.length ? `<div class="crm-qtx-h" style="margin:2px 2px 8px"><i class="fa fa-file-signature"></i> Quotations to approve${_crmTabCountHtml(rows.length, true)}</div>${rows.map(_crmApprovalCardHtml).join('')}` : '')
+        + (revs.length ? `<div class="crm-qtx-h" style="margin:14px 2px 8px"><i class="fa fa-code-pull-request"></i> Revision requests${_crmTabCountHtml(revs.length, true)}</div>${revs.map(_crmRevisionCardHtml).join('')}` : '')
       : _crmWsPanelHtml('<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing is waiting for your approval.');
   }
 
@@ -66427,6 +66501,7 @@ async function submitDsCreate() {
   window.openCrmFollowUpsModal = openCrmFollowUpsModal;
 
   async function _crmLoadFollowUps() {
+    refreshCrmRibbonBadges();
     const list = $('#crm-fu-rows');
     list.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmFollowUps(_crmFu.scope, _crmFu.status).catch(() => ({ status: 0 }));
@@ -66442,7 +66517,15 @@ async function submitDsCreate() {
     const tab = (scope, label, n, red) => `<button type="button" class="crm-inbox-tab${_crmFu.scope === scope ? ' active' : ''}" data-fu-scope="${scope}">${label}${n ? ` <span class="crm-fu-count${red ? ' crm-fu-count--overdue' : ''}">${n}</span>` : ''}</button>`;
     $('#crm-fu-scopes').innerHTML = tab('mine', 'My follow-ups', c.mine_overdue || c.mine_pending, c.mine_overdue > 0)
       + (meta.can_team ? tab('team', 'Team', c.team_overdue, c.team_overdue > 0) : '');
-    $$('#crm-fu-status [data-fu-status]').forEach(b => b.classList.toggle('active', b.dataset.fuStatus === _crmFu.status));
+    // Counts on the status tabs for the scope shown: overdue in red, due today / all pending in grey
+    const sc = _crmFu.scope === 'team' ? 'team' : 'mine';
+    const statusCounts = { overdue: [c[`${sc}_overdue`], true], today: [c[`${sc}_today`], 'amber'], pending: [c[`${sc}_pending`], false] };
+    $$('#crm-fu-status [data-fu-status]').forEach(b => {
+      b.classList.toggle('active', b.dataset.fuStatus === _crmFu.status);
+      b.querySelector('.crm-fu-count')?.remove();
+      const [n, red] = statusCounts[b.dataset.fuStatus] || [];
+      if (n) b.insertAdjacentHTML('beforeend', _crmTabCountHtml(n, red));
+    });
     $('#crm-fu-email').checked = !!meta.email_notifications;
     const empty = _crmFu.status === 'overdue' ? '<i class="fa fa-circle-check" style="color:#10b981"></i> Nothing overdue.' : 'No follow-ups here.';
     $('#crm-fu-rows').innerHTML = data.length
@@ -66529,18 +66612,25 @@ async function submitDsCreate() {
 
   function _crmInqTabs() {
     const m = _crmInq.meta || {};
+    // Counts on the tabs: pending inquiries of the day shown (mine / team) and reports still to send
+    const st = _crmInq.status;
+    const minePending = st?.mine?.counts?.pending ?? _crmBadges.details.inquiries?.mine_pending;
+    const teamPending = (st?.team || []).reduce((sum, d) => sum + (Number(d?.totals?.pending) || 0), 0);
+    const unsent = _crmBadges.details.inquiries?.reports_unsent;
     const tabs = [
-      ['mine', '<i class="fa fa-user"></i> My day'],
-      m.can_team && ['team', '<i class="fa fa-users"></i> Team'],
+      ['mine', '<i class="fa fa-user"></i> My day', minePending, 'pending inquiries waiting for your first call'],
+      m.can_team && ['team', '<i class="fa fa-users"></i> Team', teamPending, 'pending inquiries in your team'],
       ['allocations', '<i class="fa fa-clipboard-list"></i> Allocation record'],
-      m.can_view_reports && ['reports', '<i class="fa fa-envelope-open-text"></i> Daily report'],
+      m.can_view_reports && ['reports', '<i class="fa fa-envelope-open-text"></i> Daily report', unsent, 'daily reports waiting to be reviewed and sent'],
       m.can_edit_settings && ['settings', '<i class="fa fa-sliders"></i> Settings'],
     ].filter(Boolean);
-    $('#crm-inq-tabs').innerHTML = tabs.map(([k, label]) => `<button type="button" class="crm-inbox-tab${_crmInq.tab === k ? ' active' : ''}" data-inq-tab="${k}">${label}</button>`).join('');
+    $('#crm-inq-tabs').innerHTML = tabs.map(([k, label, n, hint]) =>
+      `<button type="button" class="crm-inbox-tab${_crmInq.tab === k ? ' active' : ''}" data-inq-tab="${k}"${n ? ` title="${n} ${hint}"` : ''}>${label}${_crmTabCountHtml(n, true)}</button>`).join('');
     $('#crm-inq-date-wrap').style.visibility = _crmInq.tab === 'settings' || _crmInq.tab === 'reports' ? 'hidden' : '';
   }
 
   async function _crmInqLoad() {
+    refreshCrmRibbonBadges();
     const body = $('#crm-inq-body');
     body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
     const res = await API.crmInquiryStatus(_crmInq.date).catch(() => ({ status: 0 }));
@@ -70034,6 +70124,7 @@ async function submitDsCreate() {
   }
 
   async function _crmLoadInbox() {
+    refreshCrmRibbonBadges();
     _crmInboxAlert('');
     const res = await API.crmInbox(_crmInboxFilter, _crmInboxQ);
     if (res.status !== 200) {
@@ -70053,7 +70144,8 @@ async function submitDsCreate() {
 
   function _crmRenderInboxTabs() {
     $('#crm-inbox-tabs').innerHTML = _crmInbox.filters.map(f =>
-      `<button type="button" class="crm-inbox-tab${f.key === _crmInboxFilter ? ' active' : ''}" data-inbox-filter="${f.key}">${escHtml(f.label)} (${_crmInbox.counts[f.key] ?? 0})</button>`).join('');
+      // "Needs review" and "Unverified" wait on Marketing → red; the other filters a grey total
+      `<button type="button" class="crm-inbox-tab${f.key === _crmInboxFilter ? ' active' : ''}" data-inbox-filter="${f.key}">${escHtml(f.label)}${_crmTabCountHtml(_crmInbox.counts[f.key], f.key === 'review' || f.key === 'unverified')}</button>`).join('');
   }
 
   function _crmRenderInboxList() {

@@ -6246,6 +6246,20 @@ body.dark .schq-badge--bounced { color: #f87171; }
   line-height: 1; box-shadow: 0 0 0 2px var(--ribbon-bg);
 }
 
+/* ── Counter badges on ribbon buttons (CRM: My Follow-ups, Quotation Approvals, …) ── */
+.ribbon-btn-lg.has-rb-count { position: relative; }
+.rb-btn-count {
+  background: #dc2626; color: #fff; font-size: 9px; font-weight: 700; font-style: normal;
+  min-width: 15px; height: 15px; border-radius: 8px; padding: 0 4px;
+  display: inline-flex; align-items: center; justify-content: center; line-height: 1;
+  box-shadow: 0 0 0 2px var(--ribbon-bg);
+  pointer-events: none;
+  animation: rb-count-pop .25s ease-out;
+}
+.ribbon-btn-lg > .rb-btn-count { position: absolute; top: 3px; right: 6px; }
+.ribbon-btn-sm > .rb-btn-count { margin-left: 2px; }
+@keyframes rb-count-pop { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
 .rb-notif-menu {
   display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 420;
   width: 340px; background: var(--surface); border: 1px solid var(--border);

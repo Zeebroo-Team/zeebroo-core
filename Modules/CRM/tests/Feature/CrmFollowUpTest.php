@@ -215,14 +215,15 @@ test('my follow-ups for staff, team overdue for heads only', function () {
         ->and($mine['data'][1]['is_overdue'])->toBeFalse()
         ->and($mine['data'][0]['lead']['name'])->toBe('Kasun')
         ->and($mine['data'][0]['can_log'])->toBeTrue()
-        ->and($mine['meta']['counts'])->toBe(['mine_pending' => 2, 'mine_overdue' => 1, 'team_overdue' => null])
+        ->and($mine['meta']['counts'])->toBe(['mine_pending' => 2, 'mine_overdue' => 1, 'mine_today' => 0, 'team_pending' => null, 'team_overdue' => null, 'team_today' => null])
         ->and($mine['meta']['can_team'])->toBeFalse();
 
     expect(crmwfStatus(fn () => crmwf(CrmwfFollowUpApi::class, 'index', 3, [], 'GET', ['scope' => 'team'])))->toBe(403);
 
     $team = crmwf(CrmwfFollowUpApi::class, 'index', 2, [], 'GET', ['scope' => 'team', 'status' => 'overdue'])->getData(true);
     expect(count($team['data']))->toBe(1)->and($team['data'][0]['user']['name'])->toBe('Sunil')
-        ->and($team['meta']['counts']['team_overdue'])->toBe(1);
+        ->and($team['meta']['counts']['team_overdue'])->toBe(1)
+        ->and($team['meta']['counts']['team_pending'])->toBeGreaterThanOrEqual(1);
 
     // Another department's head sees none of it
     $other = crmwf(CrmwfFollowUpApi::class, 'index', 8, [], 'GET', ['scope' => 'team', 'status' => 'all'])->getData(true);
