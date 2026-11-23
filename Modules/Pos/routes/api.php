@@ -711,6 +711,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/revision-requests/{revisionRequest}/reject',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'rejectRevision'])  ->whereNumber(['lead', 'quotation', 'revisionRequest'])->name('crm.leads.quotations.revision-requests.reject');
     Route::post  ('crm/leads/{lead}/quotations/{quotation}/revision-requests/{revisionRequest}/cancel',  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'cancelRevision'])  ->whereNumber(['lead', 'quotation', 'revisionRequest'])->name('crm.leads.quotations.revision-requests.cancel');
     Route::get   ('crm/quotation-revision-requests',                        [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'revisionInbox'])   ->name('crm.quotation-revision-requests.index');
+    // Delivery terms — the quotation editor's Delivery dropdown, managed from the CRM ribbon
+    Route::get   ('crm/delivery-terms',                [\Modules\Pos\Http\Controllers\Api\PosCrmDeliveryTermApiController::class, 'index'])  ->name('crm.delivery-terms.index');
+    Route::post  ('crm/delivery-terms',                [\Modules\Pos\Http\Controllers\Api\PosCrmDeliveryTermApiController::class, 'store'])  ->name('crm.delivery-terms.store');
+    Route::post  ('crm/delivery-terms/reorder',        [\Modules\Pos\Http\Controllers\Api\PosCrmDeliveryTermApiController::class, 'reorder'])->name('crm.delivery-terms.reorder');
+    Route::put   ('crm/delivery-terms/{term}',         [\Modules\Pos\Http\Controllers\Api\PosCrmDeliveryTermApiController::class, 'update']) ->whereNumber('term')->name('crm.delivery-terms.update');
+    Route::delete('crm/delivery-terms/{term}',         [\Modules\Pos\Http\Controllers\Api\PosCrmDeliveryTermApiController::class, 'destroy'])->whereNumber('term')->name('crm.delivery-terms.destroy');
 
     // CRM closing a lead: Won (+ invoice / sales order / project), Lost (lost reason), Reopen (head / admin)
     Route::get   ('crm/leads/{lead}/close-options', [\Modules\Pos\Http\Controllers\Api\PosCrmLeadCloseApiController::class, 'options'])->whereNumber('lead')->name('crm.leads.close-options');

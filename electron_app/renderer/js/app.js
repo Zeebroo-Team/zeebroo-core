@@ -7511,6 +7511,7 @@ function applyFeatureVisibility() {
   grp('#rb-crm-projects',  crm_pipeline || crm_tasks);        // Manage group
   btn('#rb-crm-projects',  crm_pipeline || crm_tasks);
   btn('#rb-crm-stages',    crm_pipeline || crm_tasks);
+  btn('#rb-crm-delivery-terms', crm_pipeline || crm_tasks);
   grp('#rb-crm-refresh',   crm_any);                          // Actions group
   btn('#rb-crm-refresh',   crm_any);
 
@@ -64389,11 +64390,11 @@ async function submitDsCreate() {
         </div>
         <dl class="crm-qtx-pick-info">
           <div><dt>Warranty</dt><dd>${val(model.warranty, 'None')}</dd></div>
-          <div><dt>Delivery</dt><dd>${val(model.delivery, 'Not offered')}</dd></div>
+          <div><dt>Delivery</dt><dd>${_crmQtDeliverySelectHtml(s, model)}</dd></div>
           <div><dt>Unit price</dt><dd>${_crmQtMoney(model.unit_sell_price)}</dd></div>
         </dl>
         ${onQuote ? `<div class="crm-qtx-pick-dup">Already on this quotation (qty ${_crmQtQty(_crmQtNum(onQuote.quantity))}) — adding increases that line.</div>`
-          : _crmQtInfoNote(model) ? '<div class="crm-qtx-pick-note"><i class="fa fa-note-sticky"></i> Model, warranty and delivery go into the item\'s note — edit it there if needed.</div>' : ''}
+          : _crmQtInfoNote(_crmQtPickInfo(s, model)) ? '<div class="crm-qtx-pick-note"><i class="fa fa-note-sticky"></i> Model, warranty and delivery go into the item\'s note — edit it there if needed.</div>' : ''}
       </div>` : '';
 
     return `<div class="crm-qtx-pick">
@@ -64498,6 +64499,15 @@ async function submitDsCreate() {
     const lead = _crmViewLead;
     const s = _crmWs.qt;
     if (!lead || !s?.pick) return;
+    if (kind === 'delivery') {
+      const model = _crmQtPickedModel(s);
+      const o = model ? _crmQtDeliveryOptions(s, model)[+value] : null;
+      if (o) s.pick.delivery = { modelId: s.pick.modelId, value: o.value };
+      s.pick.open = null;
+      _crmQtRenderPick();
+      $('#crm-qt-pick [data-qt-combo-toggle="delivery"]')?.focus();
+      return;
+    }
     if (kind === 'brand') {
       // Straight on to the model menu of that brand ("All brands" → the name search)
       s.pick = { ..._crmQtPickBlank(), brandId: value, open: 'model' };
@@ -64685,6 +64695,7 @@ async function submitDsCreate() {
     _crmRenderWsTab();
     _crmQtScheduleStock(lead);
     _crmQtLoadBrands(lead);
+    _crmDlvLoad();
     // A new quotation starts with the lead's products of interest — give them their warranty / delivery note too
     if (!form.id) form.lines.filter(l => l.product_id && !(l.notes || '').trim()).forEach(l => _crmQtFillNote(lead, l));
   }
@@ -64755,6 +64766,58 @@ async function submitDsCreate() {
     ].filter(Boolean).join('\n');
   }
 
+  // ── Delivery dropdown (GET /crm/delivery-terms) — terms managed from CRM ribbon → Delivery Terms ──
+  // _crmDlv.list: null (not loaded) | 'loading' | [{ id, label }]; the pick's choice is kept per model.
+  const _crmDlv = { list: null, canManage: false };
+
+  async function _crmDlvLoad(force = false) {
+    if (!force && (Array.isArray(_crmDlv.list) || _crmDlv.list === 'loading')) return;
+    _crmDlv.list = 'loading';
+    const res = await API.crmDeliveryTerms().catch(() => ({ status: 0 }));
+    _crmDlv.list = res.status === 200 ? (res.body?.data || []) : null; // null → try again next time
+    _crmDlv.canManage = !!res.body?.meta?.can_manage;
+    _crmQtRenderPick();
+  }
+
+  /** The delivery chosen for the picked model — until changed, the product's own (courier) delivery. */
+  function _crmQtPickDelivery(s, model) {
+    const d = s?.pick?.delivery;
+    return d && String(d.modelId) === String(model?.id) ? d.value : (model?.delivery || '');
+  }
+
+  /** The model with the chosen delivery — what goes into the line's note. */
+  function _crmQtPickInfo(s, model) {
+    return model ? { ...model, delivery: _crmQtPickDelivery(s, model) } : null;
+  }
+
+  /** The Delivery menu's choices: none, the product's courier delivery, a term deleted meanwhile, then the terms. */
+  function _crmQtDeliveryOptions(s, model) {
+    const current = _crmQtPickDelivery(s, model);
+    const terms = Array.isArray(_crmDlv.list) ? _crmDlv.list.map(t => t.label) : [];
+    const extra = [model?.delivery, current].filter((v, i, a) => v && !terms.includes(v) && a.indexOf(v) === i);
+    return [
+      { value: '', title: 'Not offered', sub: 'Nothing about delivery goes into the note' },
+      ...extra.map(v => ({ value: v, title: v, sub: v === model?.delivery ? 'Product courier delivery' : '' })),
+      ...terms.map(v => ({ value: v, title: v })),
+    ];
+  }
+
+  /** Searchable pop-up like Brand / Model (_crmQtComboHtml); ⚙ opens the Delivery Terms window. */
+  function _crmQtDeliverySelectHtml(s, model) {
+    const current = _crmQtPickDelivery(s, model);
+    const opts = _crmQtDeliveryOptions(s, model);
+    const combo = _crmQtComboHtml('delivery', {
+      value: current || 'Not offered', placeholder: 'Not offered', open: s.pick?.open === 'delivery',
+      searchPh: 'Search delivery terms', loading: _crmDlv.list === 'loading',
+      empty: 'No delivery terms yet.',
+      // id = position in the options — the labels themselves can hold any character
+      items: opts.map((o, i) => ({ id: i, title: o.title, sub: o.sub, search: o.title, sel: o.value === current })),
+    });
+    return `<div class="crm-qtx-dlv">${combo}
+        ${_crmDlv.canManage ? '<button type="button" class="crm-qtx-dlv-manage" data-qt-dlv-manage title="Add or edit delivery terms"><i class="fa fa-gear"></i></button>' : ''}
+      </div>`;
+  }
+
   /** Lines added from the inventory search: fetch the product's info and fill the note (unless one was typed meanwhile). */
   async function _crmQtFillNote(lead, line) {
     const res = await API.crmQuotationProductInfo(lead.id, line.product_id).catch(() => ({ status: 0 }));
@@ -64779,7 +64842,7 @@ async function submitDsCreate() {
     const qty = Math.max(0.001, _crmQtNum(s.pick.qty) || 1);
     const existing = s.form.lines.find(l => l.item_type === 'product' && +l.product_id === +m.id);
     if (existing) existing.quantity = _crmQtNum(existing.quantity) + qty;
-    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(m),
+    else s.form.lines.push({ item_type: 'product', product_id: m.id, description: m.name, sku: m.sku || '', notes: _crmQtInfoNote(_crmQtPickInfo(s, m)),
       quantity: qty, unit_price: m.unit_sell_price ?? 0, list_price: m.unit_sell_price > 0 ? m.unit_sell_price : null, discount_amount: 0, tax_rate: CRM_QT_DEFAULT_TAX });
     s.pick = { ...s.pick, modelId: '', found: null, qty: 1, open: null }; // keep the brand for the next model
     _crmRenderWsTab();
@@ -65258,6 +65321,7 @@ async function submitDsCreate() {
     if (!t) return;
 
     if (t.matches('[data-qt-pick-add]') && s.form) { _crmQtAddPicked(lead, s); return; }
+    if (t.matches('[data-qt-dlv-manage]')) { openCrmDeliveryTermsModal(); return; }
 
     if (t.matches('[data-qt-new]')) {
       _crmQtEdit(lead, _crmQtNewForm());
@@ -65734,6 +65798,142 @@ async function submitDsCreate() {
   $('#crm-approvals-refresh')?.addEventListener('click', _crmLoadApprovals);
   $('#crm-approvals-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmCloseApprovals(); });
   $('#rb-crm-approvals')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmApprovalsModal(); });
+
+  // ── Delivery terms window: CRM ribbon → Delivery Terms, or ⚙ next to the quotation editor's Delivery ──
+  // Add / rename / switch off / reorder / delete; every change saves straight away and the editor's dropdown follows.
+  let _crmDlvRows = [];
+
+  async function openCrmDeliveryTermsModal() {
+    _macShow($('#crm-dlv-modal'));
+    $('#crm-dlv-new').value = '';
+    await _crmDlvLoadRows();
+    if (_crmDlv.canManage) $('#crm-dlv-new')?.focus();
+  }
+  window.openCrmDeliveryTermsModal = openCrmDeliveryTermsModal;
+
+  async function _crmDlvLoadRows() {
+    const body = $('#crm-dlv-rows');
+    body.innerHTML = _crmWsPanelHtml('<i class="fa fa-spinner fa-spin"></i> Loading…');
+    const res = await API.crmDeliveryTerms(true).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { body.innerHTML = _crmWsPanelHtml(escHtml(_crmWsError(res, 'Failed to load the delivery terms.'))); return; }
+    _crmDlvRows = res.body.data || [];
+    _crmDlv.canManage = !!res.body.meta?.can_manage;
+    _crmDlvRender();
+    _crmDlvSync();
+  }
+
+  /** The editor's dropdown lists the active terms, in this order. */
+  function _crmDlvSync() {
+    _crmDlv.list = _crmDlvRows.filter(t => t.is_active !== false).map(t => ({ id: t.id, label: t.label }));
+    _crmQtRenderPick();
+  }
+
+  function _crmDlvRender() {
+    const can = _crmDlv.canManage;
+    $('#crm-dlv-add-row').style.display = can ? '' : 'none';
+    $('#crm-dlv-count').textContent = `${_crmDlvRows.length} ${_crmDlvRows.length === 1 ? 'term' : 'terms'}${can ? '' : ' · view only'}`;
+    const body = $('#crm-dlv-rows');
+    if (!_crmDlvRows.length) { body.innerHTML = _crmWsPanelHtml('No delivery terms yet — add the first one above.'); return; }
+    const last = _crmDlvRows.length - 1;
+    body.innerHTML = _crmDlvRows.map((t, i) => `
+      <div class="crm-dlv-row${t.is_active ? '' : ' crm-dlv-row--off'}" data-dlv-id="${t.id}">
+        <span class="crm-dlv-num">${i + 1}</span>
+        <input class="po-field-input crm-dlv-label" maxlength="255" data-dlv-label value="${escHtml(t.label)}"${can ? '' : ' readonly'} title="${can ? 'Click to edit — saved when you leave the box' : ''}">
+        <label class="crm-dlv-active" title="Inactive terms are hidden from the quotation editor"><input type="checkbox" data-dlv-active${t.is_active ? ' checked' : ''}${can ? '' : ' disabled'}> Active</label>
+        ${can ? `<div class="crm-dlv-btns">
+          <button type="button" class="po-btn-ghost" data-dlv-move="-1"${i === 0 ? ' disabled' : ''} title="Move up"><i class="fa fa-arrow-up"></i></button>
+          <button type="button" class="po-btn-ghost" data-dlv-move="1"${i === last ? ' disabled' : ''} title="Move down"><i class="fa fa-arrow-down"></i></button>
+          <button type="button" class="po-btn-ghost crm-dlv-del" data-dlv-del title="Delete"><i class="fa fa-trash"></i></button>
+        </div>` : ''}
+      </div>`).join('');
+  }
+
+  async function _crmDlvAdd() {
+    const input = $('#crm-dlv-new');
+    const label = input.value.trim();
+    if (!label) { input.focus(); return; }
+    const btn = $('#crm-dlv-add');
+    btn.disabled = true;
+    const res = await API.crmCreateDeliveryTerm({ label }).catch(() => ({ status: 0 }));
+    btn.disabled = false;
+    if (res.status !== 201 && res.status !== 200) { toast(_crmWsError(res, 'Could not add the delivery term.'), 'error'); input.focus(); return; }
+    _crmDlvRows.push(res.body.data);
+    input.value = '';
+    _crmDlvRender();
+    _crmDlvSync();
+    toast('Delivery term added.', 'success');
+    input.focus();
+  }
+
+  async function _crmDlvSave(id, body, onFail) {
+    const res = await API.crmUpdateDeliveryTerm(id, body).catch(() => ({ status: 0 }));
+    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the delivery term.'), 'error'); onFail?.(); return; }
+    const i = _crmDlvRows.findIndex(t => t.id === id);
+    if (i >= 0) _crmDlvRows[i] = res.body.data;
+    _crmDlvRender();
+    _crmDlvSync();
+  }
+
+  $('#crm-dlv-add')?.addEventListener('click', _crmDlvAdd);
+  $('#crm-dlv-new')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _crmDlvAdd(); } });
+  $('#crm-dlv-rows')?.addEventListener('keydown', e => {
+    if (!e.target.matches('[data-dlv-label]')) return;
+    if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); }
+    else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      const t = _crmDlvRows.find(x => x.id === +e.target.closest('[data-dlv-id]').dataset.dlvId);
+      if (t) e.target.value = t.label;
+      e.target.blur();
+    }
+  });
+  $('#crm-dlv-rows')?.addEventListener('change', e => {
+    const row = e.target.closest('[data-dlv-id]');
+    if (!row || !_crmDlv.canManage) return;
+    const id = +row.dataset.dlvId;
+    const t = _crmDlvRows.find(x => x.id === id);
+    if (!t) return;
+    if (e.target.matches('[data-dlv-label]')) {
+      const label = e.target.value.trim();
+      if (!label || label === t.label) { e.target.value = t.label; return; }
+      _crmDlvSave(id, { label }, () => { e.target.value = t.label; });
+    } else if (e.target.matches('[data-dlv-active]')) {
+      _crmDlvSave(id, { is_active: e.target.checked }, () => { e.target.checked = t.is_active; });
+    }
+  });
+  $('#crm-dlv-rows')?.addEventListener('click', async e => {
+    const b = e.target.closest('button');
+    const row = b?.closest('[data-dlv-id]');
+    if (!row || !_crmDlv.canManage) return;
+    const id = +row.dataset.dlvId;
+    const i = _crmDlvRows.findIndex(x => x.id === id);
+    if (i < 0) return;
+    if (b.dataset.dlvMove) {
+      const j = i + +b.dataset.dlvMove;
+      if (j < 0 || j >= _crmDlvRows.length) return;
+      [_crmDlvRows[i], _crmDlvRows[j]] = [_crmDlvRows[j], _crmDlvRows[i]];
+      _crmDlvRender();
+      _crmDlvSync();
+      $(`#crm-dlv-rows [data-dlv-id="${id}"] [data-dlv-move="${b.dataset.dlvMove}"]`)?.focus();
+      const res = await API.crmReorderDeliveryTerms(_crmDlvRows.map(t => t.id)).catch(() => ({ status: 0 }));
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not save the order.'), 'error'); _crmDlvLoadRows(); }
+    } else if (b.matches('[data-dlv-del]')) {
+      const t = _crmDlvRows[i];
+      const ok = await appConfirm({ title: 'Delete delivery term?', message: `"${t.label}" will no longer be offered on quotations. Quotations already saved keep their text.`,
+        confirmText: '<i class="fa fa-trash"></i> Delete', icon: 'fa-trash', danger: true });
+      if (!ok) return;
+      const res = await API.crmDeleteDeliveryTerm(id).catch(() => ({ status: 0 }));
+      if (res.status !== 200) { toast(_crmWsError(res, 'Could not delete the delivery term.'), 'error'); return; }
+      _crmDlvRows = _crmDlvRows.filter(x => x.id !== id);
+      _crmDlvRender();
+      _crmDlvSync();
+      toast('Delivery term deleted.', 'success');
+    }
+  });
+  const _crmDlvClose = () => _macHide($('#crm-dlv-modal'));
+  $('#crm-dlv-close')?.addEventListener('click', _crmDlvClose);
+  $('#crm-dlv-done')?.addEventListener('click', _crmDlvClose);
+  $('#crm-dlv-modal')?.addEventListener('click', e => { if (e.target === e.currentTarget) _crmDlvClose(); });
+  $('#rb-crm-delivery-terms')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmDeliveryTermsModal(); });
 
   // ── My follow-ups (staff) / Team (heads): overdue in red, log from the list ──
   let _crmFu = { scope: 'mine', status: 'pending', data: [], meta: {}, logId: null };

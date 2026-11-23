@@ -1830,6 +1830,23 @@ input[data-industry]{padding-right:30px!important;background-repeat:no-repeat;ba
 .crm-qtx-pick-info dt{font-size:11px;color:var(--mac-muted,var(--text-muted))}
 .crm-qtx-pick-info dd{margin:1px 0 0;font-size:12.5px;font-weight:500;color:var(--mac-text,var(--text));overflow-wrap:anywhere}
 .crm-qtc-none{font-weight:400;color:var(--mac-muted,var(--text-muted))}
+/* Delivery dropdown on the picked model's card, ⚙ opens the Delivery Terms window */
+.crm-qtx-dlv{display:flex;align-items:stretch;gap:6px;margin-top:2px;font-weight:400}
+.crm-qtx-dlv .crm-qtc{flex:1;min-width:0}
+.crm-qtx-dlv-manage{flex:none;width:34px;border:1px solid var(--mac-line,#d1d5db);border-radius:7px;background:var(--mac-field,#fff);color:var(--mac-muted,var(--text-muted));cursor:pointer}
+.crm-qtx-dlv-manage:hover{color:var(--primary,#2563eb);border-color:var(--primary,#2563eb)}
+/* Delivery Terms window */
+.crm-dlv-add{display:flex;gap:8px;margin-bottom:14px}
+.crm-dlv-add .po-field-input{flex:1}
+.crm-dlv-list{display:flex;flex-direction:column;gap:6px}
+.crm-dlv-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--mac-line,#e5e7eb);border-radius:8px;background:var(--mac-field,#fff)}
+.crm-dlv-row--off .crm-dlv-label{color:var(--mac-muted,var(--text-muted));text-decoration:line-through}
+.crm-dlv-num{flex:none;width:20px;text-align:right;font-size:11.5px;color:var(--mac-muted,var(--text-muted))}
+.crm-dlv-label{flex:1;min-width:0;height:30px}
+.crm-dlv-active{flex:none;display:flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;cursor:pointer}
+.crm-dlv-btns{flex:none;display:flex;gap:2px}
+.crm-dlv-btns .po-btn-ghost{padding:4px 8px}
+.crm-dlv-del:hover{color:var(--danger,#dc2626)}
 .crm-qtx-pick-dup{margin-top:8px;font-size:11.5px;color:#c93400}
 .crm-qtx-pick-note{margin-top:8px;font-size:11.5px;color:var(--mac-muted,var(--text-muted))}
 .crm-qtx-pick-note i{margin-right:4px;color:#c99a00}
@@ -4618,6 +4635,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
               </button>
               <button class="ribbon-btn-sm" id="rb-crm-stages">
                 <i class="fa fa-stairs"></i> Stages
+              </button>
+              <button class="ribbon-btn-sm" id="rb-crm-delivery-terms" title="Delivery terms offered on quotations">
+                <i class="fa fa-truck-fast"></i> Delivery Terms
               </button>
             </div>
           </div>
@@ -15196,6 +15216,33 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="po-aim-footer mac-footer" style="justify-content:space-between">
         <span class="crm-ws-muted">Review opens the lead's quotation to approve, return with comments or reject.</span>
         <button class="po-btn-ghost" id="crm-approvals-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── CRM: delivery terms — the quotation editor's Delivery dropdown (above the editor, below app-confirm) ── -->
+  <div class="modal-overlay mac-overlay" id="crm-dlv-modal" style="display:none;z-index:2080">
+    <div class="mac-window" style="width:640px;max-width:96vw;max-height:84vh">
+      <div class="mac-titlebar">
+        <div class="mac-title">
+          <span class="mac-title-icon"><i class="fa fa-truck-fast"></i></span>
+          <div style="min-width:0"><div class="mac-title-main">Delivery Terms</div><div class="mac-title-sub" id="crm-dlv-count"></div></div>
+        </div>
+        <div class="mac-win-btns" style="margin-left:auto">
+          <button type="button" class="mac-close-btn" id="crm-dlv-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+        </div>
+      </div>
+      <div class="mac-scroll" style="padding:16px 18px">
+        <p class="crm-ws-muted" style="margin:0 0 12px;font-size:12.5px">Offered in the quotation editor's <b>Delivery</b> dropdown and printed in the item's note, e.g. <i>Delivery: Within 04-06 weeks from confirmed PO</i>.</p>
+        <div class="crm-dlv-add" id="crm-dlv-add-row">
+          <input class="po-field-input" id="crm-dlv-new" maxlength="255" autocomplete="off" placeholder="e.g. Within 04-06 weeks from confirmed PO">
+          <button type="button" class="po-btn-primary" id="crm-dlv-add"><i class="fa fa-plus"></i> Add</button>
+        </div>
+        <div class="crm-dlv-list" id="crm-dlv-rows"></div>
+      </div>
+      <div class="po-aim-footer mac-footer" style="justify-content:space-between">
+        <span class="crm-ws-muted">Changes save straight away.</span>
+        <button class="po-btn-ghost" id="crm-dlv-done">Done</button>
       </div>
     </div>
   </div>

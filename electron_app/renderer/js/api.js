@@ -754,6 +754,12 @@ const API = (() => {
     crmQuotationModels:       (leadId, brandId)        => request('GET',    `/crm/leads/${leadId}/quotations/catalog/models?brand_id=${encodeURIComponent(brandId)}`),
     crmQuotationSearch:       (leadId, q)              => request('GET',    `/crm/leads/${leadId}/quotations/catalog/search?q=${encodeURIComponent(q)}`),
     crmQuotationProductInfo:  (leadId, productId)      => request('GET',    `/crm/leads/${leadId}/quotations/catalog/products/${productId}`),
+    // Delivery terms (PosCrmDeliveryTermApiController) — the editor's Delivery dropdown; all=true includes inactive ones
+    crmDeliveryTerms:         (all = false)            => request('GET',    `/crm/delivery-terms${all ? '?all=1' : ''}`),
+    crmCreateDeliveryTerm:    (body)                   => request('POST',   `/crm/delivery-terms`, body),
+    crmUpdateDeliveryTerm:    (id, body)               => request('PUT',    `/crm/delivery-terms/${id}`, body),
+    crmDeleteDeliveryTerm:    (id)                     => request('DELETE', `/crm/delivery-terms/${id}`),
+    crmReorderDeliveryTerms:  (ids)                    => request('POST',   `/crm/delivery-terms/reorder`, { ids }),
     crmReviseLeadQuotation:   (leadId, id)             => request('POST',   `/crm/leads/${leadId}/quotations/${id}/revise`),
     // action: submit | approve | return | reject — body { comment }
     crmLeadQuotationAction:   (leadId, id, action, body) => request('POST', `/crm/leads/${leadId}/quotations/${id}/${action}`, body),
