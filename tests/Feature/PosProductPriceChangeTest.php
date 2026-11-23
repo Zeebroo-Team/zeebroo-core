@@ -194,6 +194,7 @@ function productPriceController(): PosProductApiController
         app(\Modules\Product\Services\ProductStockLayerService::class),
         app(\Modules\Pos\Services\PosSettingsService::class),
         app(\Modules\Pos\Services\PosProductExportService::class),
+        app(\Modules\Product\Services\ProductCountryService::class),
     ) extends PosProductApiController {
         protected function businessOrAbort(Request $request): Business
         {
