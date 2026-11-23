@@ -664,6 +664,7 @@ const API = (() => {
     crmSettings:                 ()                    => request('GET',    '/crm/settings'),
     crmSaveSettings:             (body)                => request('PUT',    '/crm/settings', body),
     // Marketing inbox
+    crmBadgeCounts:       ()                   => request('GET',    '/crm/badge-counts'),
     crmInbox:             (filter, q)          => request('GET',    `/crm/inbox?filter=${encodeURIComponent(filter||'all')}&q=${encodeURIComponent(q||'')}`),
     crmInboxLead:         (leadId)             => request('GET',    `/crm/inbox/leads/${leadId}`),
     crmInboxUpdateLead:   (leadId, body)       => request('PUT',    `/crm/inbox/leads/${leadId}`, body),
@@ -748,6 +749,12 @@ const API = (() => {
     crmUpdateProfile:          (body)                  => request('PUT', '/crm/profile', body),
     crmProfileSignatureUploadPath: '/crm/profile/signature',
     crmDeleteProfileSignature: ()                      => request('DELETE', '/crm/profile/signature'),
+    // Admin only: any person's profile & signature
+    crmProfiles:               ()                      => request('GET', '/crm/profiles'),
+    crmUserProfile:            (userId)                => request('GET', `/crm/profiles/${userId}`),
+    crmUpdateUserProfile:      (userId, body)          => request('PUT', `/crm/profiles/${userId}`, body),
+    crmUserSignatureUploadPath: (userId)               => `/crm/profiles/${userId}/signature`,
+    crmDeleteUserSignature:    (userId)                => request('DELETE', `/crm/profiles/${userId}/signature`),
     // Lead quotations (PosCrmLeadQuotationApiController): build from inventory → submit → head approves → PDF → send
     crmLeadQuotations:        (leadId)                 => request('GET',    `/crm/leads/${leadId}/quotations`),
     crmLeadQuotation:         (leadId, id)             => request('GET',    `/crm/leads/${leadId}/quotations/${id}`),

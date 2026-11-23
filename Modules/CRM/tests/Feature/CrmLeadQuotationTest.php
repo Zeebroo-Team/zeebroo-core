@@ -103,12 +103,20 @@ beforeEach(function () {
         $t->unsignedBigInteger('co_head_employee_id')->nullable();
         $t->timestamps();
     });
+    Schema::create('hr_job_titles', function (Blueprint $t) {
+        $t->id();
+        $t->unsignedBigInteger('business_id');
+        $t->string('name');
+        $t->timestamps();
+    });
     Schema::create('hr_employees', function (Blueprint $t) {
         $t->id();
         $t->unsignedBigInteger('business_id');
         $t->unsignedBigInteger('user_id')->nullable();
         $t->unsignedBigInteger('department_id')->nullable();
+        $t->unsignedBigInteger('job_title_id')->nullable();
         $t->string('full_name');
+        $t->string('phone_number')->nullable();
         $t->timestamps();
     });
     Schema::create('pos_customers', function (Blueprint $t) {
@@ -1610,14 +1618,113 @@ test('"Approved by" prints the approving head\'s name, designation, mobile and s
         ->and(app(QuotationTemplateService::class)->render($this->business, $q->fresh()))->not->toContain('<img')->toContain('Brundha Priyadharshini');
 });
 
-test('My Profile: name, designation, mobile are saved; empty goes back to HR', function () {
+test('My Profile: name and mobile are saved onto the HR record and the login; a custom designation stays CRM-only', function () {
     $put = fn (array $body) => crmQuote('updateProfile', 2, [], 'PUT', $body)->getData(true)['data'];
+    $emp = fn () => DB::table('hr_employees')->where('id', 100)->first();
 
-    expect(crmQuote('profile', 2)->getData(true)['data'])->toMatchArray(['name' => 'Nimal Perera', 'designation' => null, 'phone' => null, 'signature' => null])
-        ->and($put(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623']))
-        ->toMatchArray(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623'])
-        ->and($put(['name' => '', 'phone' => null]))->toMatchArray(['name' => 'Nimal Perera', 'designation' => 'Head of Measuring Instruments', 'phone' => null])
+    expect(crmQuote('profile', 2)->getData(true)['data'])->toMatchArray(['name' => 'Nimal Perera', 'designation' => null, 'phone' => null, 'signature' => null]);
+
+    $saved = $put(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623']);
+    expect($saved)->toMatchArray(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623'])
+        ->and($saved['saved'])->toBe(['name' => null, 'designation' => 'Head of Measuring Instruments', 'phone' => null])
+        ->and($emp()->full_name)->toBe('Brundha')
+        ->and($emp()->phone_number)->toBe('0770104623')
+        ->and($emp()->job_title_id)->toBeNull()
+        ->and(User::find(2)->name)->toBe('Brundha');
+
+    // Empty keeps what HR has (HR is not blanked from the CRM)
+    expect($put(['name' => '', 'phone' => null]))->toMatchArray(['name' => 'Brundha', 'designation' => 'Head of Measuring Instruments', 'phone' => '0770104623'])
         ->and(crmQuoteStatus(fn () => crmQuote('updateProfile', 2, [], 'PUT', ['phone' => str_repeat('9', 41)])))->toBe(422);
+});
+
+test('the profile is linked to the HR record: a value equal to HR keeps following HR', function () {
+    $p = crmQuote('profile', 2)->getData(true)['data'];
+    expect($p['employee'])->not->toBeNull()
+        ->and($p['login_name'])->toBe('Nimal');
+    $emp = \Modules\HRManagement\Models\Employee::query()->where('user_id', 2)->firstOrFail();
+    $heads = collect($p['employee']['leads'])->where('role', 'head')->pluck('department')->all();
+    expect($heads)->toBe(\Modules\HRManagement\Models\Department::query()->where('head_employee_id', $emp->id)->orderBy('name')->pluck('name')->all());
+
+    // Saving the HR name as-is is not an override…
+    $saved = crmQuote('updateProfile', 2, [], 'PUT', ['name' => 'Nimal Perera'])->getData(true)['data'];
+    expect($saved['saved']['name'])->toBeNull()->and($saved['name'])->toBe('Nimal Perera');
+
+    // …so an HR rename flows through to the quotation profile
+    $emp->update(['full_name' => 'Nimal K. Perera']);
+    expect(crmQuote('profile', 2)->getData(true)['data']['name'])->toBe('Nimal K. Perera');
+
+    // A different value is written to HR and the login — one name everywhere
+    $saved = crmQuote('updateProfile', 2, [], 'PUT', ['name' => 'N. Perera'])->getData(true)['data'];
+    expect($saved['saved']['name'])->toBeNull()
+        ->and($emp->fresh()->full_name)->toBe('N. Perera')
+        ->and(User::find(2)->name)->toBe('N. Perera');
+
+    // …and a rename in HR → Employees reaches the login (Settings → Users) and the profile
+    app(\Modules\HRManagement\Services\EmployeeService::class)->updateField($emp->fresh(), 'full_name', ['full_name' => 'Nimal Perera']);
+    expect(User::find(2)->name)->toBe('Nimal Perera')
+        ->and(crmQuote('profile', 2)->getData(true)['data']['name'])->toBe('Nimal Perera');
+});
+
+test('the designation dropdown offers the HR positions; picking the HR position keeps following HR', function () {
+    DB::table('hr_job_titles')->insert([
+        ['id' => 1, 'business_id' => 7, 'name' => 'Sales Manager'],
+        ['id' => 2, 'business_id' => 7, 'name' => 'Accountant'],
+        ['id' => 3, 'business_id' => 7, 'name' => 'Unspecified'],
+        ['id' => 4, 'business_id' => 99, 'name' => 'Other business'],
+    ]);
+    DB::table('hr_employees')->where('id', 100)->update(['job_title_id' => 1]);
+
+    $p = crmQuote('profile', 2)->getData(true)['data'];
+    expect($p['positions'])->toBe(['Accountant', 'Sales Manager'])
+        ->and($p['designation'])->toBe('Sales Manager')
+        ->and($p['employee']['job_title'])->toBe('Sales Manager')
+        ->and(crmQuote('index', 3, [$this->lead->id])->getData(true)['meta']['positions'])->toBe(['Accountant', 'Sales Manager']);
+
+    // Picking the HR position is "follow HR"; another HR position moves them to it in HR
+    expect(crmQuote('updateProfile', 2, [], 'PUT', ['designation' => 'Sales Manager'])->getData(true)['data']['saved']['designation'])->toBeNull();
+    $p = crmQuote('updateProfile', 2, [], 'PUT', ['designation' => 'accountant'])->getData(true)['data'];
+    expect($p['designation'])->toBe('Accountant')
+        ->and($p['saved']['designation'])->toBeNull()
+        ->and($p['employee']['job_title'])->toBe('Accountant')
+        ->and((int) DB::table('hr_employees')->where('id', 100)->value('job_title_id'))->toBe(2);
+});
+
+test('an admin sees every person\'s profile and updates anyone\'s profile and signature', function () {
+    Storage::fake('local');
+    Storage::fake('public');
+    $png = base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==');
+    DB::table('users')->insert(['id' => 50, 'name' => 'Outsider', 'email' => 'outsider@example.com']);
+
+    // Everyone of the business is listed (owner + members), not outsiders; "me" is flagged
+    $list = collect(crmQuote('profiles', 1)->getData(true)['data']);
+    expect($list->pluck('user_id')->sort()->values()->all())->toBe([1, 2, 3, 4, 5, 6, 8])
+        ->and($list->firstWhere('user_id', 1)['is_me'])->toBeTrue()
+        ->and($list->firstWhere('user_id', 2)['is_me'])->toBeFalse()
+        ->and($list->firstWhere('user_id', 2)['has_signature'])->toBeFalse();
+
+    // The admin edits Nimal's profile — it is what Nimal sees as "My profile"
+    $saved = crmQuote('updateUserProfile', 1, [2], 'PUT', ['designation' => 'Head of Sales', 'phone' => '0771234567'])->getData(true)['data'];
+    expect($saved)->toMatchArray(['user_id' => 2, 'designation' => 'Head of Sales', 'phone' => '0771234567'])
+        ->and(crmQuote('profile', 2)->getData(true)['data'])->toMatchArray(['designation' => 'Head of Sales', 'phone' => '0771234567'])
+        ->and(crmQuote('userProfile', 1, [2])->getData(true)['data'])->toMatchArray(['user_id' => 2, 'designation' => 'Head of Sales']);
+
+    // …and uploads / removes Nimal's signature
+    $up = Request::create('/api/v1/pos/crm/profiles/2/signature', 'POST', [], [], ['signature' => \Illuminate\Http\UploadedFile::fake()->createWithContent('sig.png', $png)]);
+    $up->setUserResolver(fn () => User::find(1));
+    expect(app(CrmQuoteTestApi::class)->uploadUserSignature($up, 2)->getData(true)['data']['signature'])->toStartWith('data:image/png;base64,')
+        ->and(crmQuote('profile', 2)->getData(true)['data']['signature'])->toStartWith('data:image/png;base64,')
+        ->and(collect(crmQuote('profiles', 1)->getData(true)['data'])->firstWhere('user_id', 2)['has_signature'])->toBeTrue()
+        ->and(crmQuote('profile', 1)->getData(true)['data']['signature'])->toBeNull();
+    crmQuote('deleteUserSignature', 1, [2], 'DELETE');
+    expect(crmQuote('profile', 2)->getData(true)['data']['signature'])->toBeNull();
+
+    // Non-admins (a head, staff) can't; someone outside the business is not found
+    expect(crmQuoteStatus(fn () => crmQuote('profiles', 2)))->toBe(403)
+        ->and(crmQuoteStatus(fn () => crmQuote('userProfile', 3, [2])))->toBe(403)
+        ->and(crmQuoteStatus(fn () => crmQuote('updateUserProfile', 2, [3], 'PUT', ['name' => 'X'])))->toBe(403)
+        ->and(crmQuoteStatus(fn () => crmQuote('deleteUserSignature', 3, [2], 'DELETE')))->toBe(403)
+        ->and(crmQuoteStatus(fn () => crmQuote('userProfile', 1, [50])))->toBe(404)
+        ->and(crmQuoteStatus(fn () => crmQuote('updateUserProfile', 1, [50], 'PUT', ['name' => 'X'])))->toBe(404);
 });
 
 test('signatures sit in the file manager\'s "CRM / Signatures", seen and opened by admins only', function () {

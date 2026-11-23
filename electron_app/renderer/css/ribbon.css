@@ -6450,6 +6450,16 @@ body.dark .schq-badge--bounced { color: #f87171; }
 }
 .psm-roles-toolbar-left { display: flex; align-items: center; gap: 8px; }
 .psm-roles-title { font-size: 13px; font-weight: 600; }
+.um-toolbar-right { display: flex; align-items: center; gap: 10px; }
+.um-search { position: relative; }
+.um-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--text-muted, #8a8f98); pointer-events: none; }
+.um-search input {
+  width: 260px; height: 32px; padding: 0 10px 0 30px; box-sizing: border-box;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface, #fff);
+  font: inherit; font-size: 13px; color: inherit; outline: none;
+}
+.um-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,130,246,.18); }
+.um-search-empty { padding: 18px 16px; font-size: 12.5px; color: var(--text-muted, #8a8f98); text-align: center; }
 .psm-roles-body { display: flex; flex: 1; overflow: hidden; }
 .psm-roles-body .um-list-col { width: 220px; flex-shrink: 0; overflow-y: auto; border-right: 1px solid var(--border); }
 .psm-roles-body .um-detail-col { flex: 1; overflow-y: auto; padding: 16px; }
@@ -9779,6 +9789,19 @@ body.dark .email-verify-bar .billing-alert-dismiss { color: #bfdbfe; }
 }
 .po-btn-primary:hover { opacity: .9; box-shadow: 0 4px 14px var(--accent-light); }
 .po-btn-primary:disabled, .po-btn-outline:disabled { opacity: .5; cursor: default; }
+
+/* CRM profile modal: save feedback (the global toast sits behind this modal) */
+#crm-profile-save { transition: background-color .2s, opacity .12s, box-shadow .12s; }
+#crm-profile-save.is-saving:disabled { opacity: .8; }
+#crm-profile-save.is-saved { background: #16a34a; }
+#crm-profile-save.is-saved:hover { box-shadow: 0 4px 14px rgba(22, 163, 74, .3); }
+.crm-profile-status {
+  margin-right: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12.5px; font-weight: 600; opacity: 0; transition: opacity .2s;
+}
+.crm-profile-status.is-shown { opacity: 1; }
+.crm-profile-status.is-ok { color: #16a34a; }
+.crm-profile-status.is-error { color: #dc2626; }
 
 /* toolbar */
 .inv-toolbar {

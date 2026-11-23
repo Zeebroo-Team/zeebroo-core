@@ -640,6 +640,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'crmSettings'])    ->name('crm.settings.show');
     Route::put   ('crm/settings',                               [\Modules\Pos\Http\Controllers\Api\PosCrmOrgApiController::class, 'saveCrmSettings'])->name('crm.settings.update');
 
+    // CRM ribbon notification counters (follow-ups due, approvals waiting, inbox, unsent inquiry reports)
+    Route::get   ('crm/badge-counts',                  [\Modules\Pos\Http\Controllers\Api\PosCrmBadgeApiController::class, 'index'])  ->name('crm.badge-counts');
+
     // CRM marketing inbox (verify, forward, review flags, merge duplicates)
     Route::get   ('crm/inbox',                         [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'index'])  ->name('crm.inbox.index');
     Route::get   ('crm/inbox/leads/{lead}',            [\Modules\Pos\Http\Controllers\Api\PosCrmInboxApiController::class, 'show'])   ->whereNumber('lead')->name('crm.inbox.show');
@@ -688,6 +691,12 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::put   ('crm/profile',                                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'updateProfile'])    ->name('crm.profile.update');
     Route::post  ('crm/profile/signature',                                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'uploadSignature'])  ->name('crm.profile.signature.upload');
     Route::delete('crm/profile/signature',                                  [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'deleteSignature'])  ->name('crm.profile.signature.delete');
+    // Admin only: every person's profile & signature (view and edit on their behalf)
+    Route::get   ('crm/profiles',                                           [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'profiles'])           ->name('crm.profiles.index');
+    Route::get   ('crm/profiles/{user}',                                    [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'userProfile'])        ->whereNumber('user')->name('crm.profiles.show');
+    Route::put   ('crm/profiles/{user}',                                    [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'updateUserProfile'])  ->whereNumber('user')->name('crm.profiles.update');
+    Route::post  ('crm/profiles/{user}/signature',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'uploadUserSignature'])->whereNumber('user')->name('crm.profiles.signature.upload');
+    Route::delete('crm/profiles/{user}/signature',                          [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'deleteUserSignature'])->whereNumber('user')->name('crm.profiles.signature.delete');
 
     // CRM lead quotations (built from inventory, stock-checked) and their approval → PDF → send to the customer
     Route::get   ('crm/leads/{lead}/quotations',                            [\Modules\Pos\Http\Controllers\Api\PosCrmLeadQuotationApiController::class, 'index'])           ->whereNumber('lead')->name('crm.leads.quotations.index');

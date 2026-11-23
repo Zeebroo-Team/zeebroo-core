@@ -2,6 +2,7 @@
 
 namespace Modules\HRManagement\Services;
 
+use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\Rule;
 use Modules\Business\Models\Business;
@@ -201,6 +202,11 @@ class EmployeeService
 
         $employee->fill($payload);
         $employee->save();
+
+        // Their login carries the same name (Settings → Users and the CRM profile show it)
+        if ($field === 'full_name' && $employee->user_id) {
+            User::query()->whereKey($employee->user_id)->update(['name' => (string) $employee->full_name]);
+        }
 
         if ($field === 'basic_salary') {
             $this->recalculateMonthlyGross($employee->fresh());

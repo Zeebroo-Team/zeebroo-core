@@ -57103,7 +57103,7 @@ async function submitDsCreate() {
     list.innerHTML = _umUsers.map(u => {
       const isActive = _umSelected && _umSelected.user_id === u.user_id;
       return `
-        <div class="um-user-card${isActive ? ' active' : ''}" data-uid="${u.user_id}" data-mid="${u.id}">
+        <div class="um-user-card${isActive ? ' active' : ''}" data-uid="${u.user_id}" data-mid="${u.id}" data-um-text="${_esc(_umSearchText(u))}">
           <div class="um-avatar ${ROLE_COLORS[u.role] || 'staff'}">${_initials(u.name)}</div>
           <div class="um-card-info">
             <div class="um-card-name">${u.name}</div>
@@ -57130,7 +57130,46 @@ async function submitDsCreate() {
         if (inv) selectInvite(inv, card, detailId);
       });
     });
+    _umApplySearch(listId);
   }
+
+  // ── Search (client-side over the loaded users + invitations) ────────────
+
+  function _umSearchText(u) {
+    const e = u.employee || {};
+    return [u.name, u.email, u.role, u.role_name, u.status, e.name, e.employee_id, e.department, e.job_title]
+      .filter(Boolean).join(' ').toLowerCase();
+  }
+
+  function _umApplySearch(listId) {
+    const list = $(`#${listId}`);
+    const input = document.querySelector(`[data-um-search="${listId}"]`);
+    if (!list || !input) return;
+    const q = input.value.trim().toLowerCase();
+    let shown = 0;
+    list.querySelectorAll('.um-user-card[data-um-text]').forEach(card => {
+      const match = !q || card.dataset.umText.includes(q);
+      card.style.display = match ? '' : 'none';
+      if (match) shown++;
+    });
+    // Hide the invitations heading when none of its cards match
+    const invTitle = list.querySelector('.um-invite-section-title');
+    if (invTitle) invTitle.style.display = !q || list.querySelector('.um-invite-card:not([style*="display: none"])') ? '' : 'none';
+    let empty = list.querySelector('.um-search-empty');
+    if (q && !shown) {
+      if (!empty) { empty = document.createElement('div'); empty.className = 'um-search-empty'; list.appendChild(empty); }
+      empty.textContent = `No users match “${input.value.trim()}”`;
+    } else if (empty) empty.remove();
+  }
+
+  document.addEventListener('input', e => {
+    const listId = e.target?.dataset?.umSearch;
+    if (listId) _umApplySearch(listId);
+  });
+  document.addEventListener('keydown', e => {
+    const listId = e.target?.dataset?.umSearch;
+    if (listId && e.key === 'Escape' && e.target.value) { e.stopPropagation(); e.target.value = ''; _umApplySearch(listId); }
+  }, true);
 
   // ── Pending invitations ─────────────────────────────────────────────────
 
@@ -57138,7 +57177,7 @@ async function submitDsCreate() {
     if (_umInvites.length === 0) return '';
     return `<div class="um-invite-section-title"><i class="fa fa-envelope"></i> Invitations not accepted yet (${_umInvites.length})</div>` +
       _umInvites.map(inv => `
-        <div class="um-user-card um-invite-card" data-iid="${inv.id}">
+        <div class="um-user-card um-invite-card" data-iid="${inv.id}" data-um-text="${_esc([inv.name, inv.email, inv.role, inv.role_name, 'invited', inv.status, inv.employee?.name, inv.employee?.employee_id, inv.employee?.department, inv.employee?.job_title].filter(Boolean).join(' ').toLowerCase())}">
           <div class="um-avatar um-invite-avatar"><i class="fa fa-envelope"></i></div>
           <div class="um-card-info">
             <div class="um-card-name">${_esc(inv.name || inv.email)}</div>
@@ -64220,13 +64259,46 @@ async function submitDsCreate() {
     };
   }
 
+  // ── Designation dropdown: the HR positions (HR → Positions), or "Other" to type a custom one ──
+  // The text input stays the value that is saved / printed; the dropdown just fills it.
+  const CRM_DESIG_CUSTOM = '__custom__';
+
+  /** @param {string} inputAttrs attributes for the value input (id or data-qt-h) */
+  function _crmDesignationPickerHtml(value, positions, inputAttrs) {
+    const v = (value || '').trim();
+    const list = Array.isArray(positions) ? positions : [];
+    const custom = !!v && !list.includes(v);
+    return `<span class="crm-desig-pick" style="display:flex;flex-direction:column;gap:6px">
+        <select class="po-field-input" data-desig-sel>
+          <option value=""${v ? '' : ' selected'}>— Select a position —</option>
+          ${list.map(p => `<option value="${escHtml(p)}"${p === v ? ' selected' : ''}>${escHtml(p)}</option>`).join('')}
+          <option value="${CRM_DESIG_CUSTOM}"${custom ? ' selected' : ''}>Other — type a custom designation…</option>
+        </select>
+        <input class="po-field-input" maxlength="120" ${inputAttrs} value="${escHtml(v)}" autocomplete="off"
+          placeholder="e.g. Head of Measuring Instruments" style="${custom ? '' : 'display:none'}">
+      </span>`;
+  }
+
+  // Picking from the dropdown fills the value input and tells its listeners (form state, preview)
+  document.addEventListener('change', e => {
+    const sel = e.target.closest?.('[data-desig-sel]');
+    if (!sel) return;
+    const input = sel.parentElement.querySelector('input');
+    if (!input) return;
+    const custom = sel.value === CRM_DESIG_CUSTOM;
+    input.style.display = custom ? '' : 'none';
+    if (!custom) input.value = sel.value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    if (custom) input.focus();
+  });
+
   /** "Prepared by" card: name, designation and contact number printed on the quotation. */
   function _crmQtPreparedByCardHtml(f) {
     return `<section class="crm-qtx-card">
         <div class="crm-qtx-card-h"><i class="fa fa-id-badge"></i> Prepared by<small style="font-weight:400">Printed on the quotation</small></div>
         <div class="crm-qt-grid crm-qtx-fields">
           <label>Name<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_name" value="${escHtml(f.prepared_by_name || '')}" placeholder="Your name"></label>
-          <label>Designation<input class="po-field-input" maxlength="120" data-qt-h="prepared_by_designation" value="${escHtml(f.prepared_by_designation || '')}" placeholder="e.g. Sales Executive"></label>
+          <label>Designation${_crmDesignationPickerHtml(f.prepared_by_designation, _crmWs.quotations?.meta?.positions, 'data-qt-h="prepared_by_designation"')}</label>
           <label>Contact number<input class="po-field-input" maxlength="40" data-qt-h="prepared_by_phone" value="${escHtml(f.prepared_by_phone || '')}" placeholder="07X XXX XXXX"></label>
           <label style="display:flex;align-items:center;gap:6px;font-weight:400;align-self:end;padding-bottom:6px"><input type="checkbox" data-qt-remember${f.remember_prepared_by ? ' checked' : ''}> Save as my CRM profile</label>
         </div>
@@ -64256,35 +64328,45 @@ async function submitDsCreate() {
   function _crmQtApplySignature(sig) {
     const meta = _crmWs.quotations?.meta;
     if (meta) meta.my_signature = sig || null;
-    if (_crmProfile) _crmProfile.signature = sig || null;
     $$('[data-qt-sig-box]').forEach(box => { box.innerHTML = _crmQtSignatureBoxHtml(sig); });
+    // The profile window only follows while it shows the signed-in user (an admin may have someone else open)
+    if (_crmProfile && _crmProfileIsMe()) {
+      _crmProfile.signature = sig || null;
+      const box = $('#crm-profile-sig');
+      if (box) box.innerHTML = _crmQtSignatureBoxHtml(sig);
+    }
   }
 
-  async function _crmQtUploadSignature(btn) {
+  /**
+   * Upload a signature image. By default the signed-in user's; an admin editing someone else's
+   * profile passes that person's upload path and how to show the result.
+   */
+  async function _crmQtUploadSignature(btn, { path = API.crmProfileSignatureUploadPath, apply = _crmQtApplySignature, who = 'your' } = {}) {
     const result = await window.electronAPI.showOpenDialog({
-      title: 'Choose your signature image',
+      title: `Choose ${who} signature image`,
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }],
       properties: ['openFile'],
     });
     if (result.canceled || !result.filePaths?.length) return;
     btn.disabled = true;
-    const res = await window.electronAPI.apiUpload(API.crmProfileSignatureUploadPath, result.filePaths[0]);
+    const res = await window.electronAPI.apiUpload(path, result.filePaths[0]);
     btn.disabled = false;
     if (res.status === 200) {
-      _crmQtApplySignature(res.body?.data?.signature);
-      toast('Signature saved — it prints in "Approved By" on quotations you approve', 'success');
+      apply(res.body?.data?.signature);
+      toast(who === 'your' ? 'Signature saved — it prints in "Approved By" on quotations you approve'
+        : 'Signature saved — it prints in "Approved By" on quotations they approve', 'success');
     } else {
       toast(res.status === 413 ? 'Image is too large for the server.'
         : Object.values(res.body?.errors || {}).flat().join(' ') || res.body?.message || 'Could not upload the signature', 'error');
     }
   }
 
-  async function _crmQtRemoveSignature(btn) {
+  async function _crmQtRemoveSignature(btn, { remove = () => API.crmDeleteProfileSignature(), apply = _crmQtApplySignature } = {}) {
     btn.disabled = true;
-    const res = await API.crmDeleteProfileSignature();
+    const res = await remove();
     btn.disabled = false;
     if (res.status !== 200) { toast(_crmWsError(res, 'Could not remove the signature.'), 'error'); return; }
-    _crmQtApplySignature(null);
+    apply(null);
     toast('Signature removed', 'success');
   }
 
@@ -65908,36 +65990,192 @@ async function submitDsCreate() {
 
   // ── My profile & signature: CRM ribbon → My Profile & Signature ──
   // Name / designation / mobile print as "Prepared By" and "Approved By"; the signature only in "Approved By".
+  // Admins also get a "Person" picker: anyone's profile & signature, viewed and edited on their behalf.
   let _crmProfile = null;
+  let _crmProfileUserId = null;   // null = the signed-in user; otherwise the person an admin has open
+  let _crmProfilePeople = [];     // admin only: GET crm/profiles
 
-  async function openCrmProfileModal() {
+  function _crmProfileIsMe() { return _crmProfileUserId == null; }
+
+  /** @param {number|null} userId someone else's user id (admins only), or null for "me" */
+  async function openCrmProfileModal(userId = null) {
     _macShow($('#crm-profile-modal'));
-    const save = $('#crm-profile-save');
-    save.disabled = true;
+    $('#crm-profile-save').disabled = true;
     $('#crm-profile-preview').innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
-    const res = await API.crmProfile().catch(() => ({ status: 0 }));
-    if (res.status !== 200) { toast(_crmWsError(res, 'Could not load your profile.'), 'error'); _macHide($('#crm-profile-modal')); return; }
-    _crmProfileFill(res.body.data);
-    save.disabled = false;
-    $('#crm-profile-name')?.focus();
+    // The person picker shows only when the server says we may list everyone (admins)
+    await _crmProfileLoadPeople();
+    // Opening your own row (e.g. from Departments) is the same as "My profile"
+    const meRow = _crmProfilePeople.find(p => p.is_me);
+    if (userId && meRow && meRow.user_id === Number(userId)) userId = null;
+    await _crmProfileLoad(userId);
+    if (_crmProfilePeople.length) _crmProfileRenderPeople(_crmProfileUserId);
   }
   window.openCrmProfileModal = openCrmProfileModal;
 
+  async function _crmProfileLoad(userId) {
+    const save = $('#crm-profile-save');
+    save.disabled = true;
+    _crmProfileFeedback('idle');
+    $('#crm-profile-preview').innerHTML = '<i class="fa fa-spinner fa-spin"></i>';
+    const res = await (userId ? API.crmUserProfile(userId) : API.crmProfile()).catch(() => ({ status: 0 }));
+    if (res.status !== 200) {
+      toast(_crmWsError(res, userId ? 'Could not load that profile.' : 'Could not load your profile.'), 'error');
+      if (!userId) _macHide($('#crm-profile-modal'));
+      else { const sel = $('#crm-profile-person'); if (sel) sel.value = _crmProfileUserId ?? ''; }
+      return;
+    }
+    _crmProfileUserId = userId || null;
+    _crmProfileFill(res.body.data);
+    save.disabled = false;
+    // Open at the top so the person picker / HR record stay in view (focusing must not scroll the body)
+    const body = $('#crm-profile-body');
+    if (body) body.scrollTop = 0;
+    $('#crm-profile-name')?.focus({ preventScroll: true });
+  }
+
+  async function _crmProfileLoadPeople() {
+    const bar = $('#crm-profile-admin'), sel = $('#crm-profile-person');
+    if (!bar || !sel) return;
+    const res = await API.crmProfiles().catch(() => ({ status: 0 }));
+    if (res.status !== 200) { bar.style.display = 'none'; _crmProfilePeople = []; return; }
+    _crmProfilePeople = res.body.data || [];
+    bar.style.display = '';
+  }
+
+  function _crmProfileRenderPeople(selectId) {
+    const sel = $('#crm-profile-person');
+    if (!sel) return;
+    const label = p => [p.name, p.designation, p.department, ...(p.leads || [])].filter(Boolean).join(' · ')
+      + (p.has_employee ? '' : '  (no HR record)')
+      + (p.has_signature ? '  ✓ signature' : '  — no signature');
+    sel.innerHTML = _crmProfilePeople.map(p =>
+      `<option value="${p.is_me ? '' : p.user_id}">${escHtml(label(p))}${p.is_me ? ' (me)' : ''}</option>`).join('');
+    sel.value = selectId ? String(selectId) : '';
+    const n = _crmProfilePeople.length, signed = _crmProfilePeople.filter(p => p.has_signature).length;
+    const count = $('#crm-profile-people-count');
+    if (count) count.textContent = `${n} people · ${signed} with a signature`;
+  }
+
   function _crmProfileFill(p) {
     _crmProfile = p || {};
-    const saved = _crmProfile.saved || {}, hr = _crmProfile.hr || {};
-    // The boxes hold what the user saved; the HR value shows as the placeholder (used when empty)
-    [['name', 'Your name'], ['designation', 'e.g. Head of Measuring Instruments'], ['phone', '07X XXX XXXX']].forEach(([k, ph]) => {
+    const me = _crmProfileIsMe();
+    // The boxes hold the real value that prints (own value, else the HR record); the hint under each
+    // says where it comes from. A value equal to HR's is saved as "follow HR" (server side too).
+    [['name', me ? 'Your name' : 'Name'], ['phone', '07X XXX XXXX']].forEach(([k, ph]) => {
       const el = $(`#crm-profile-${k}`);
-      el.value = saved[k] || '';
-      el.placeholder = hr[k] || (k === 'name' ? (_crmProfile.name || ph) : ph);
+      el.value = _crmProfile[k] || '';
+      el.placeholder = ph;
     });
-    _crmQtApplySignature(_crmProfile.signature);
+    _crmProfileSetDesignation(_crmProfile.designation);
+    _crmProfileRenderSources();
+    _crmProfileRenderHrLink();
+    $('#crm-profile-title').textContent = me ? 'My Profile & Signature' : `Profile & Signature — ${_crmProfile.name || 'User'}`;
+    const hrNote = _crmProfile.employee
+      ? ` Name, position and mobile are ${me ? 'your' : 'their'} HR record: saving here updates HR → Employees and Settings → Users too.`
+      : ` Values come from ${me ? 'your' : 'their'} HR record unless changed here.`;
+    $('#crm-profile-intro').innerHTML = (me
+      ? 'Printed as <b>Prepared By</b> on the quotations you make, and as <b>Approved By</b> (with your signature) on the quotations you approve.'
+      : `You are editing <b>${escHtml(_crmProfile.name || 'this person')}</b>'s profile as an admin. It prints as <b>Prepared By</b> on the quotations they make, and as <b>Approved By</b> (with their signature) on the quotations they approve.`) + hrNote;
+    if (me) _crmQtApplySignature(_crmProfile.signature);
+    else $('#crm-profile-sig').innerHTML = _crmQtSignatureBoxHtml(_crmProfile.signature);
     _crmProfileRenderPreview();
   }
 
+  /** Designation: dropdown of HR positions (+ "Other" for a custom one) around #crm-profile-designation. */
+  function _crmProfileSetDesignation(value) {
+    const wrap = $('#crm-profile-designation-wrap');
+    if (!wrap) return;
+    const positions = [...(_crmProfile?.positions || [])];
+    // Their HR position is always offered, even if it was renamed / removed since
+    const hrPos = (_crmProfile?.hr?.designation || '').trim();
+    if (hrPos && !positions.includes(hrPos)) positions.unshift(hrPos);
+    wrap.innerHTML = _crmDesignationPickerHtml(value, positions, 'id="crm-profile-designation"');
+  }
+
+  /** Under each box: "From HR record", or "Custom for quotations · HR: X · Use HR value". */
+  function _crmProfileRenderSources() {
+    const hr = _crmProfile?.hr || {};
+    const linked = !!_crmProfile?.employee;
+    const positions = (_crmProfile?.positions || []).map(p => p.toLowerCase());
+    ['name', 'designation', 'phone'].forEach(k => {
+      const hint = $(`[data-profile-src="${k}"]`);
+      if (!hint) return;
+      const v = $(`#crm-profile-${k}`).value.trim();
+      const h = (hr[k] || '').trim();
+      if (linked) {
+        // Saved straight onto the HR record (server: CrmProfileService::save) — except a custom designation
+        if (!v) {
+          hint.innerHTML = h ? `Empty — keeps the HR record: ${escHtml(h)}` : (k === 'name' ? 'Empty — uses the login name' : 'Not printed');
+        } else if (v === h) {
+          hint.innerHTML = '<i class="fa fa-link"></i> Same as the HR record';
+        } else if (k === 'designation' && !positions.includes(v.toLowerCase()) && v.toLowerCase() !== h.toLowerCase()) {
+          hint.innerHTML = '<i class="fa fa-pen"></i> Custom for quotations only — not an HR position'
+            + (h ? ` · HR: ${escHtml(h)} · <a href="#" data-profile-use-hr="${k}">Use HR value</a>` : '');
+        } else {
+          hint.innerHTML = '<i class="fa fa-arrows-rotate"></i> Saving updates the HR record'
+            + (k === 'name' ? ' and login name' : '') + (h ? ` · now: ${escHtml(h)}` : '');
+        }
+        return;
+      }
+      if (!v) {
+        hint.innerHTML = h ? `Empty — uses HR record: ${escHtml(h)}` : (k === 'name' ? 'Empty — uses the login name' : 'Not printed');
+      } else if (h && v === h) {
+        hint.innerHTML = '<i class="fa fa-link"></i> From HR record — follows HR changes';
+      } else {
+        hint.innerHTML = '<i class="fa fa-pen"></i> Custom for quotations'
+          + (h ? ` · HR: ${escHtml(h)} · <a href="#" data-profile-use-hr="${k}">Use HR value</a>` : (_crmProfile?.employee ? ' · not set in HR' : ''));
+      }
+    });
+  }
+
+  /** The HR record this profile is linked to: employee no., department, position, head / co-head. */
+  function _crmProfileRenderHrLink() {
+    const box = $('#crm-profile-hr');
+    if (!box) return;
+    const e = _crmProfile?.employee;
+    box.style.display = '';
+    const cardStyle = 'padding:10px 12px;border:1px solid var(--border,#e2e8f0);border-radius:8px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center';
+    if (!e) {
+      box.innerHTML = `<div style="${cardStyle}"><i class="fa fa-circle-info" style="color:#f59e0b"></i>
+        <span>No HR employee record is linked to this login — link one in HR → Employees to fill these values automatically.</span></div>`;
+      return;
+    }
+    const chip = (txt, color = '#2563eb') => `<span style="padding:2px 8px;border-radius:999px;background:${color}1a;color:${color};font-weight:600;font-size:11.5px">${txt}</span>`;
+    const type = { full_time: 'Full Time', part_time: 'Part Time', contract: 'Contract' }[e.employment_type] || e.employment_type;
+    box.innerHTML = `<div style="${cardStyle}">
+        <span style="font-weight:600"><i class="fa fa-id-badge"></i> HR record</span>
+        ${e.employee_id ? `<span>#${escHtml(e.employee_id)}</span>` : ''}
+        ${e.department ? `<span>· ${escHtml(e.department)}</span>` : ''}
+        ${e.job_title ? `<span>· ${escHtml(e.job_title)}</span>` : ''}
+        ${type ? chip(escHtml(type), '#16a34a') : ''}
+        ${(e.leads || []).map(l => chip(`${l.role === 'head' ? '<i class="fa fa-crown"></i> Head' : '<i class="fa fa-user"></i> Co-Head'} · ${escHtml(l.department)}`, l.role === 'head' ? '#d97706' : '#7c3aed')).join('')}
+      </div>`;
+  }
+
+  /** After an upload / removal in the profile window — for "me" it also updates the quotation screens. */
+  function _crmProfileApplySignature(sig) {
+    if (_crmProfileIsMe()) _crmQtApplySignature(sig);
+    else {
+      _crmProfile.signature = sig || null;
+      $('#crm-profile-sig').innerHTML = _crmQtSignatureBoxHtml(sig);
+    }
+    _crmProfileSyncPerson({ has_signature: !!sig });
+  }
+
+  /** Keep the admin's person list in step with what was just saved. */
+  function _crmProfileSyncPerson(changes) {
+    if (!_crmProfilePeople.length) return;
+    const p = _crmProfilePeople.find(x => _crmProfileIsMe() ? x.is_me : x.user_id === _crmProfileUserId);
+    if (!p) return;
+    Object.assign(p, changes);
+    _crmProfileRenderPeople(_crmProfileUserId);
+  }
+
   function _crmProfileRenderPreview() {
-    const val = k => $(`#crm-profile-${k}`).value.trim() || $(`#crm-profile-${k}`).placeholder.trim();
+    // What prints: the box, else the HR record (the server's rule), else the login name for the name
+    const hr = _crmProfile?.hr || {};
+    const val = k => $(`#crm-profile-${k}`).value.trim() || (hr[k] || '').trim()
+      || (k === 'name' ? (_crmProfile?.login_name || _crmProfile?.name || '') : '');
     const isEx = s => /^e\.g\.|07X/.test(s);
     const name = val('name'), des = val('designation'), phone = val('phone');
     const sig = _qtSignatureSrc(_crmProfile?.signature);
@@ -65946,34 +66184,100 @@ async function submitDsCreate() {
       ${escHtml(name)}<br>${des && !isEx(des) ? `${escHtml(des)}<br>` : ''}${phone && !isEx(phone) ? `Mobile: ${escHtml(phone)}` : ''}`;
   }
 
+  const _CRM_PROFILE_SAVE_HTML = '<i class="fa fa-floppy-disk"></i> Save';
+  let _crmProfileFeedbackTimer = null;
+
+  /** In-modal save feedback: button state + a status line in the footer (the toast sits behind this modal). */
+  function _crmProfileFeedback(state, msg = '') {
+    const btn = $('#crm-profile-save'), status = $('#crm-profile-status');
+    clearTimeout(_crmProfileFeedbackTimer);
+    btn?.classList.remove('is-saving', 'is-saved');
+    if (btn) btn.innerHTML = _CRM_PROFILE_SAVE_HTML;
+    if (status) { status.className = 'crm-profile-status'; status.innerHTML = ''; }
+    if (state === 'saving') {
+      btn?.classList.add('is-saving');
+      if (btn) btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Saving…';
+    } else if (state === 'saved') {
+      btn?.classList.add('is-saved');
+      if (btn) btn.innerHTML = '<i class="fa fa-check"></i> Saved';
+      if (status) { status.classList.add('is-shown', 'is-ok'); status.innerHTML = `<i class="fa fa-circle-check"></i> ${escHtml(msg)}`; }
+      _crmProfileFeedbackTimer = setTimeout(() => _crmProfileFeedback('idle'), 3000);
+    } else if (state === 'error') {
+      if (status) { status.classList.add('is-shown', 'is-error'); status.innerHTML = `<i class="fa fa-circle-exclamation"></i> ${escHtml(msg)}`; }
+    }
+  }
+
   async function _crmProfileSave() {
     const btn = $('#crm-profile-save');
     btn.disabled = true;
-    const res = await API.crmUpdateProfile({
+    _crmProfileFeedback('saving');
+    const me = _crmProfileIsMe(), userId = _crmProfileUserId;
+    const body = {
       name:        $('#crm-profile-name').value.trim() || null,
       designation: $('#crm-profile-designation').value.trim() || null,
       phone:       $('#crm-profile-phone').value.trim() || null,
-    });
+    };
+    const res = await (me ? API.crmUpdateProfile(body) : API.crmUpdateUserProfile(userId, body)).catch(() => ({ status: 0 }));
     btn.disabled = false;
-    if (res.status !== 200) { toast(_crmWsError(res, 'Could not save your profile.'), 'error'); return; }
-    _crmProfileFill(res.body.data);
-    // New quotations start "Prepared by" from this profile
-    const meta = _crmWs.quotations?.meta;
-    if (meta) meta.prepared_by = { name: res.body.data.name, designation: res.body.data.designation, phone: res.body.data.phone };
-    toast('Profile saved — it prints on your quotations', 'success');
+    if (res.status !== 200) {
+      const err = _crmWsError(res, me ? 'Could not save your profile.' : 'Could not save the profile.');
+      _crmProfileFeedback('error', err);
+      toast(err, 'error');
+      return;
+    }
+    if (userId !== _crmProfileUserId) { _crmProfileFeedback('idle'); return; }   // switched person while saving
+    const d = res.body.data;
+    _crmProfileFill(d);
+    _crmProfileSyncPerson({ name: d.name, designation: d.designation, phone: d.phone });
+    if (me) {
+      // New quotations start "Prepared by" from this profile
+      const meta = _crmWs.quotations?.meta;
+      if (meta) meta.prepared_by = { name: d.name, designation: d.designation, phone: d.phone };
+    }
+    const msg = (me ? 'Profile saved — it prints on your quotations' : `Profile of ${d.name || 'this person'} saved — it prints on their quotations`)
+      + (d.employee ? ' (HR record updated)' : '');
+    _crmProfileFeedback('saved', msg);
+    toast(msg, 'success');
   }
 
+  $('#crm-profile-person')?.addEventListener('change', e => {
+    const id = e.target.value ? Number(e.target.value) : null;
+    _crmProfileLoad(id);
+  });
   $('#crm-profile-save')?.addEventListener('click', _crmProfileSave);
   $('#crm-profile-cancel')?.addEventListener('click', () => _macHide($('#crm-profile-modal')));
   $('#crm-profile-close')?.addEventListener('click', () => _macHide($('#crm-profile-modal')));
   $('#crm-profile-modal')?.addEventListener('click', e => {
     if (e.target === e.currentTarget) { _macHide($('#crm-profile-modal')); return; }
     const t = e.target.closest('button');
-    if (t?.matches('[data-qt-sig-upload]')) _crmQtUploadSignature(t).then(_crmProfileRenderPreview);
-    else if (t?.matches('[data-qt-sig-remove]')) _crmQtRemoveSignature(t).then(_crmProfileRenderPreview);
+    const id = _crmProfileUserId;
+    const opts = _crmProfileIsMe() ? { apply: _crmProfileApplySignature } : {
+      path:   API.crmUserSignatureUploadPath(id),
+      remove: () => API.crmDeleteUserSignature(id),
+      apply:  sig => { if (_crmProfileUserId === id) _crmProfileApplySignature(sig); },
+      who:    'their',
+    };
+    if (t?.matches('[data-qt-sig-upload]')) _crmQtUploadSignature(t, opts).then(_crmProfileRenderPreview);
+    else if (t?.matches('[data-qt-sig-remove]')) _crmQtRemoveSignature(t, opts).then(_crmProfileRenderPreview);
   });
-  $('#crm-profile-body')?.addEventListener('input', e => { if (e.target.matches('input')) _crmProfileRenderPreview(); });
-  $('#crm-approvals-profile')?.addEventListener('click', openCrmProfileModal);
+  $('#crm-profile-body')?.addEventListener('input', e => {
+    if (!e.target.matches('input')) return;
+    if ($('#crm-profile-save')?.classList.contains('is-saved')) _crmProfileFeedback('idle');
+    _crmProfileRenderSources();
+    _crmProfileRenderPreview();
+  });
+  // "Use HR value" under a box: put the HR record's value back (saved as "follow HR")
+  $('#crm-profile-body')?.addEventListener('click', e => {
+    const a = e.target.closest('[data-profile-use-hr]');
+    if (!a) return;
+    e.preventDefault();
+    const k = a.dataset.profileUseHr;
+    if (k === 'designation') _crmProfileSetDesignation(_crmProfile?.hr?.designation || '');
+    else $(`#crm-profile-${k}`).value = _crmProfile?.hr?.[k] || '';
+    _crmProfileRenderSources();
+    _crmProfileRenderPreview();
+  });
+  $('#crm-approvals-profile')?.addEventListener('click', () => openCrmProfileModal());
   $('#rb-crm-my-profile')?.addEventListener('click', () => { if (typeof activateTab === 'function') activateTab('crm'); openCrmProfileModal(); });
 
   // ── Delivery terms window: CRM ribbon → Delivery Terms, or ⚙ next to the quotation editor's Delivery ──
@@ -69467,6 +69771,8 @@ async function submitDsCreate() {
     const n = d.employees_count || 0;
     const t = d.employment_types || {};
     const employees = d.employees || [];
+    // Admins can open each employee's quotation profile & signature (the server checks again)
+    const canEditProfiles = document.body.classList.contains('crm-is-admin') && typeof window.openCrmProfileModal === 'function';
     // Head / co-head pickers: any member of the department, searchable by name or email
     const lead = (role, label, current) => {
       const cur = employees.find(e => e.id === current);
@@ -69512,16 +69818,21 @@ async function submitDsCreate() {
       </div>
 
       <div class="mac-section">
-        <div class="mac-section-title">Employees <span class="crm-perms-muted" style="font-weight:400">· ${n}</span></div>
-        <div class="mac-group">
-          ${employees.map(e => `<div class="mac-row">
+        <div class="mac-section-title">Employees <span class="crm-perms-muted" style="font-weight:400" id="crm-dept-emp-count">· ${n}</span></div>
+        ${employees.length ? `<div class="mac-search" style="margin:0 0 8px"><i class="fa fa-magnifying-glass"></i><input type="text" id="crm-dept-emp-search" placeholder="Search employees by name, ID, job title or email" autocomplete="off"></div>` : ''}
+        <div class="mac-group" id="crm-dept-emp-list">
+          ${employees.map(e => `<div class="mac-row" data-emp-search="${escHtml([e.name, e.employee_id, e.job_title, e.email, DEPT_TYPE_LABEL[e.employment_type] || e.employment_type].filter(Boolean).join(' ').toLowerCase())}">
             <div class="mac-row-label mac-row-label--icon">
               <span class="crm-dept-avatar">${escHtml(_crmInitials(e.name || '?'))}</span>
               <span style="min-width:0"><strong>${escHtml(e.name || '—')}</strong>
                 <small>${[e.employee_id ? '#' + escHtml(e.employee_id) : '', e.job_title ? escHtml(e.job_title) : ''].filter(Boolean).join(' · ') || '&nbsp;'}</small></span>
             </div>
-            <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+            <span style="display:flex;align-items:center;gap:8px">
+              ${canEditProfiles && e.user_id ? `<button type="button" class="po-btn-ghost" data-dept-profile="${e.user_id}" title="View / update ${escHtml(e.name || '')}'s profile & signature (printed on quotations)"><i class="fa fa-signature"></i> Profile</button>` : ''}
+              <span class="mac-pill">${escHtml(DEPT_TYPE_LABEL[e.employment_type] || e.employment_type || '—')}</span>
+            </span>
           </div>`).join('') || '<div class="mac-row mac-muted-row">No one is in this department yet. Put people in it from Settings → Users (or HR Management).</div>'}
+          ${employees.length ? '<div class="mac-row mac-muted-row" id="crm-dept-emp-empty" style="display:none">No matching employees</div>' : ''}
         </div>
       </div>
 
@@ -69534,6 +69845,23 @@ async function submitDsCreate() {
         </div>
       </div>`;
     ['head', 'co_head'].forEach(role => _crmWireLeadCombo(role, employees));
+
+    // Employee search: filters the rows already rendered (no extra request)
+    const empSearch = $('#crm-dept-emp-search');
+    if (empSearch) {
+      empSearch.addEventListener('input', () => {
+        const q = empSearch.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('#crm-dept-emp-list [data-emp-search]').forEach(row => {
+          const match = !q || row.dataset.empSearch.includes(q);
+          row.style.display = match ? '' : 'none';
+          if (match) shown++;
+        });
+        $('#crm-dept-emp-empty').style.display = shown ? 'none' : '';
+        $('#crm-dept-emp-count').textContent = q ? `· ${shown} of ${n}` : `· ${n}`;
+      });
+      empSearch.addEventListener('keydown', e => { if (e.key === 'Escape' && empSearch.value) { e.stopPropagation(); empSearch.value = ''; empSearch.dispatchEvent(new Event('input')); } });
+    }
   }
 
   // Leader combobox: filters department members by name, email, employee ID or job title
@@ -69633,6 +69961,8 @@ async function submitDsCreate() {
     if (t.matches('[data-dept-cancel]')) { _crmDeptAlert(''); _crmSelectDept(_crmDepts[0]?.id ?? null); return; }
 
     if (t.matches('[data-dept-lead-save]')) { _crmSaveDeptLeadership(t); return; }
+
+    if (t.matches('[data-dept-profile]')) { window.openCrmProfileModal?.(Number(t.dataset.deptProfile)); return; }
 
     if (t.matches('[data-dept-org]')) {
       _crmOrgDeptId = _crmDeptDetail?.id ?? null;

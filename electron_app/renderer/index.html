@@ -15265,22 +15265,32 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div class="mac-titlebar">
         <div class="mac-title">
           <span class="mac-title-icon"><i class="fa fa-signature"></i></span>
-          <div style="min-width:0"><div class="mac-title-main">My Profile &amp; Signature</div><div class="mac-title-sub">Printed on quotations</div></div>
+          <div style="min-width:0"><div class="mac-title-main" id="crm-profile-title">My Profile &amp; Signature</div><div class="mac-title-sub">Printed on quotations</div></div>
         </div>
         <div class="mac-win-btns" style="margin-left:auto">
           <button type="button" class="mac-close-btn" id="crm-profile-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
         </div>
       </div>
       <div class="mac-scroll" style="padding:16px 18px" id="crm-profile-body">
-        <p class="crm-ws-muted" style="margin:0 0 14px;font-size:12.5px">Printed as <b>Prepared By</b> on the quotations you make, and as <b>Approved By</b> (with your signature) on the quotations you approve. Leave a box empty to use your HR record.</p>
+        <!-- Admins only (shown when GET crm/profiles succeeds): pick anyone in the business -->
+        <div id="crm-profile-admin" style="display:none;margin:0 0 14px;padding:10px 12px;border:1px solid var(--border,#e2e8f0);border-radius:8px;background:var(--surface-2,#f8fafc)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-weight:600"><i class="fa fa-user-shield"></i> Person</span>
+            <small class="crm-ws-muted" id="crm-profile-people-count" style="margin-left:auto"></small>
+          </div>
+          <select class="po-field-input" id="crm-profile-person" style="width:100%"></select>
+          <small class="crm-ws-muted" style="display:block;margin-top:4px">As an admin you can view and update anyone's profile and signature.</small>
+        </div>
+        <p class="crm-ws-muted" id="crm-profile-intro" style="margin:0 0 14px;font-size:12.5px">Printed as <b>Prepared By</b> on the quotations you make, and as <b>Approved By</b> (with your signature) on the quotations you approve. Leave a box empty to use your HR record.</p>
         <div class="crm-qt-grid" style="grid-template-columns:1fr 1fr;gap:12px">
-          <label style="grid-column:1 / -1">Name<input class="po-field-input" id="crm-profile-name" maxlength="120" autocomplete="off"></label>
-          <label>Designation / position<input class="po-field-input" id="crm-profile-designation" maxlength="120" autocomplete="off" placeholder="e.g. Head of Measuring Instruments"></label>
-          <label>Mobile<input class="po-field-input" id="crm-profile-phone" maxlength="40" autocomplete="off" placeholder="07X XXX XXXX"></label>
+          <div id="crm-profile-hr" style="grid-column:1 / -1;display:none"></div>
+          <label style="grid-column:1 / -1">Name<input class="po-field-input" id="crm-profile-name" maxlength="120" autocomplete="off"><small class="crm-ws-muted" data-profile-src="name" style="font-size:11.5px"></small></label>
+          <label>Designation / position<span id="crm-profile-designation-wrap"><input class="po-field-input" id="crm-profile-designation" maxlength="120" autocomplete="off"></span><small class="crm-ws-muted" data-profile-src="designation" style="font-size:11.5px"></small></label>
+          <label>Mobile<input class="po-field-input" id="crm-profile-phone" maxlength="40" autocomplete="off" placeholder="07X XXX XXXX"><small class="crm-ws-muted" data-profile-src="phone" style="font-size:11.5px"></small></label>
         </div>
         <div style="margin-top:16px">
           <div style="font-weight:600;margin-bottom:6px">Signature <small class="crm-ws-muted" style="font-weight:400">— PNG / JPG up to 1 MB; a transparent PNG prints best. Kept private: only admins can see it in the File Manager.</small></div>
-          <div data-qt-sig-box id="crm-profile-sig"></div>
+          <div id="crm-profile-sig"></div>
         </div>
         <div style="margin-top:16px">
           <div style="font-weight:600;margin-bottom:6px">How it prints</div>
@@ -15288,6 +15298,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         </div>
       </div>
       <div class="po-aim-footer mac-footer" style="justify-content:flex-end;gap:8px">
+        <span class="crm-profile-status" id="crm-profile-status" role="status" aria-live="polite"></span>
         <button class="po-btn-ghost" id="crm-profile-cancel">Close</button>
         <button class="po-btn-primary" id="crm-profile-save"><i class="fa fa-floppy-disk"></i> Save</button>
       </div>
@@ -20926,9 +20937,12 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
               <span class="psm-roles-title">User Management</span>
               <span class="um-count-badge" id="psm-users-count"></span>
             </div>
-            <button class="um-add-btn" id="psm-add-user-btn">
-              <i class="fa fa-user-plus"></i> Add User
-            </button>
+            <div class="um-toolbar-right">
+              <div class="um-search"><i class="fa fa-magnifying-glass"></i><input type="text" data-um-search="psm-users-list" placeholder="Search name, email, role, department…" autocomplete="off"></div>
+              <button class="um-add-btn" id="psm-add-user-btn">
+                <i class="fa fa-user-plus"></i> Add User
+              </button>
+            </div>
           </div>
           <div class="psm-roles-body">
             <div class="um-list-col" id="psm-users-list">
@@ -23559,9 +23573,12 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
               <span class="psm-roles-title">User Management</span>
               <span class="um-count-badge" id="bwz-sc-users-count"></span>
             </div>
-            <button class="um-add-btn" id="bwz-sc-add-user-btn" type="button">
-              <i class="fa fa-user-plus"></i> Add User
-            </button>
+            <div class="um-toolbar-right">
+              <div class="um-search"><i class="fa fa-magnifying-glass"></i><input type="text" data-um-search="bwz-sc-users-list" placeholder="Search name, email, role, department…" autocomplete="off"></div>
+              <button class="um-add-btn" id="bwz-sc-add-user-btn" type="button">
+                <i class="fa fa-user-plus"></i> Add User
+              </button>
+            </div>
           </div>
           <div class="psm-roles-body">
             <div class="um-list-col" id="bwz-sc-users-list">
