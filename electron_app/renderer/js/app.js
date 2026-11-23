@@ -2258,9 +2258,7 @@ async function _salSelectSale(id) {
     totalsHTML += `<div class="sal-total-row"><span class="label">Coupon${sale.coupon?.code ? ' (' + escHtml(sale.coupon.code) + ')' : ''}</span><span>-${formatMoney(couponAmt, {currency: cur})}</span></div>`;
   }
   const giftAmt = parseFloat(sale.gift_card_amount || 0);
-  const paidVia = giftAmt > 0
-    ? Math.max(0, parseFloat(sale.total || 0) - giftAmt)
-    : parseFloat(sale.amount_paid || sale.total || 0);
+  const paidVia = _rcptPaidAmount(sale);
   totalsHTML += `
     <div class="sal-total-row grand"><span class="label">Total</span><span>${formatMoney(parseFloat(sale.total || 0), {currency: cur})}</span></div>`;
   if (giftAmt > 0) {
@@ -13767,7 +13765,7 @@ async function _tdsOpenSaleProfit(id) {
       ${discount > 0 ? `<div class="sal-total-row"><span class="label">Discount</span><span>-${fm(discount)}</span></div>` : ''}
       ${coupon > 0 ? `<div class="sal-total-row"><span class="label">Coupon${sale.coupon?.code ? ' (' + escHtml(sale.coupon.code) + ')' : ''}</span><span>-${fm(coupon)}</span></div>` : ''}
       <div class="sal-total-row grand"><span class="label">Total</span><span>${fm(total)}</span></div>
-      <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${fm(sale.amount_paid ?? total)}</span></div>
+      <div class="sal-total-row"><span class="label">Paid (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${fm(_rcptPaidAmount(sale))}</span></div>
       ${change > 0 ? `<div class="sal-total-row"><span class="label">Change</span><span>${fm(change)}</span></div>` : ''}
       ${sale.payment_method === 'credit' ? `<div class="sal-total-row"><span class="label">Balance due</span><strong>${fm(sale.due_amount)}</strong></div>` : ''}
     </div>
@@ -34007,6 +34005,19 @@ const _RCPT_SAMPLE = {
   payment_method: 'cash', payment_method_label: 'Cash', change_amount: 10.00,
 };
 
+// Amount shown on the "Paid (method)" row: for cash it's what the customer handed over
+// (amount_tendered, e.g. 10000), otherwise what the payment method covered after any gift card.
+function _rcptPaidAmount(sale) {
+  const giftAmt  = parseFloat(sale?.gift_card_amount || 0);
+  const tendered = sale?.amount_tendered;
+  if (sale?.payment_method === 'cash' && tendered != null && tendered !== '') {
+    return parseFloat(tendered) || 0;
+  }
+  return giftAmt > 0
+    ? Math.max(0, parseFloat(sale?.total || 0) - giftAmt)
+    : parseFloat(sale?.amount_paid || sale?.total || 0);
+}
+
 function buildReceiptHTML(sale, overrides = {}) {
   const s   = state.receiptSettings || {};
 
@@ -34038,18 +34049,21 @@ function buildReceiptHTML(sale, overrides = {}) {
     }
     const discPerUnit = parseFloat(i.discount_amount || 0);
     const qty = parseFloat(i.quantity);
+    // Row math stays consistent: QTY × PRICE (after discount) = TOTAL.
+    // One line underneath shows the original price, the % off and the total saved.
+    const netUnit  = parseFloat(i.unit_sell_price);
+    const origUnit = netUnit + discPerUnit;
+    const discPct  = origUnit > 0 ? Math.round((discPerUnit / origUnit) * 10000) / 100 : 0;
     const discLine = discPerUnit > 0
       ? `<div class="rcpt-item-disc">
-          <span class="rid-label"><i class="fa fa-tag"></i> Discount</span>
-          <span class="rid-per">-${discPerUnit.toFixed(2)}</span>
-          <span class="rid-total">-${(discPerUnit * qty).toFixed(2)}</span>
+          <span class="rid-label"><i class="fa fa-tag"></i> Was ${origUnit.toFixed(2)}${discPct > 0 ? ' · ' + discPct + '% off' : ''} · Save ${(discPerUnit * qty).toFixed(2)}</span>
         </div>`
       : '';
     return `
     <div class="rcpt-item">
       <span class="ri-name">${escHtml(i.product_name)}</span>
       <span class="ri-qty">${qty % 1 === 0 ? parseInt(qty) : qty.toFixed(2)}</span>
-      <span class="ri-price">${parseFloat(i.unit_sell_price).toFixed(2)}</span>
+      <span class="ri-price">${netUnit.toFixed(2)}</span>
       <span class="ri-total">${parseFloat(i.line_total).toFixed(2)}</span>
     </div>${discLine}${wtyLine}`;
   }).join('');
@@ -34087,7 +34101,7 @@ function buildReceiptHTML(sale, overrides = {}) {
     }
   }
   if (showAcct) {
-    const paidVia = giftAmt > 0 ? Math.max(0, parseFloat(sale.total) - giftAmt) : (sale.amount_paid || sale.total);
+    const paidVia = _rcptPaidAmount(sale);
     totalsHTML += `<div class="rcpt-total-row"><span>${lbl.paid} (${escHtml(sale.payment_method_label || sale.payment_method || '')})</span><span>${formatMoney(paidVia)}</span></div>`;
     if (change > 0.005) {
       totalsHTML += `<div class="rcpt-total-row change"><span>${lbl.change}</span><span>${formatMoney(change)}</span></div>`;
@@ -34306,13 +34320,20 @@ function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
       : new Date().toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }),
     customer:      sale?.customer?.name || sale?.customer_name || '',
     cashier:       sale?.cashier?.name || '',
-    items:         (sale?.items || []).map(i => ({
-      name:     i.product_name || '',
-      qty:      parseFloat(i.quantity),
-      price:    parseFloat(i.unit_sell_price),
-      total:    parseFloat(i.line_total),
-      discount: parseFloat(i.discount_amount || 0),
-    })),
+    items:         (sale?.items || []).map(i => {
+      const qty  = parseFloat(i.quantity);
+      const disc = parseFloat(i.discount_amount || 0);   // per unit
+      const orig = parseFloat(i.unit_sell_price) + disc;  // pre-discount unit price
+      return {
+        name:     i.product_name || '',
+        qty,
+        price:    parseFloat(i.unit_sell_price),           // after discount, so qty × price = total
+        total:    parseFloat(i.line_total),
+        discount: disc * qty,                              // total saved on this line
+        origPrice: orig,                                   // pre-discount unit price
+        discountPct: orig > 0 ? Math.round((disc / orig) * 10000) / 100 : 0,
+      };
+    }),
     subtotal:      parseFloat(sale?.subtotal     || 0),
     discount:      parseFloat(sale?.discount_amount || 0),
     discountPct:   sale?.discount_percent || '',
@@ -34320,9 +34341,7 @@ function _buildEscposReceiptData(sale, s = state.receiptSettings || {}) {
     couponCode:     sale?.coupon?.code || '',
     taxes:        (sale?._taxBreakdown || []).map(t => ({ name: t.name, amount: parseFloat(t.amount) })),
     total:         parseFloat(sale?.total        || 0),
-    paid:          parseFloat(sale?.gift_card_amount || 0) > 0
-      ? Math.max(0, parseFloat(sale?.total || 0) - parseFloat(sale.gift_card_amount))
-      : parseFloat(sale?.amount_paid  || sale?.total || 0),
+    paid:          _rcptPaidAmount(sale),
     giftCardAmount:  parseFloat(sale?.gift_card_amount || 0),
     giftCardCode:    sale?.gift_card?.code || '',
     giftCardBalance: sale?.gift_card ? parseFloat(sale.gift_card.balance) : null,

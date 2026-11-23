@@ -538,7 +538,12 @@ function _escposBuffer(receipt, paperWidth, margins = {}, logo = null) {
     const total = parseFloat(item.total).toFixed(2).padStart(TOTF);
     println((name + qty + price + total).slice(0, COL));
     if (parseFloat(item.discount) > 0) {
-      println(('  Discount: -' + parseFloat(item.discount).toFixed(2)).slice(0, COL));
+      const was = item.origPrice != null ? 'Was ' + parseFloat(item.origPrice).toFixed(2) + ' ' : '';
+      const pct = parseFloat(item.discountPct) > 0 ? '-' + item.discountPct + '% ' : '';
+      const save = 'Save ' + parseFloat(item.discount).toFixed(2);
+      const one  = '  ' + was + pct + save;
+      if (one.length <= COL) println(one);
+      else { println(('  ' + was + pct).trimEnd().slice(0, COL)); println(('  ' + save).slice(0, COL)); }
     }
   }
 
