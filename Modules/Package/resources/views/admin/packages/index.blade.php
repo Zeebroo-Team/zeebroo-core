@@ -36,6 +36,11 @@
     background:color-mix(in srgb,#3b82f6 14%,transparent);color:#2563eb;}
 .pkg-mobile-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
     background:color-mix(in srgb,#a855f7 14%,transparent);color:#9333ea;}
+.pkg-trial-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;
+    background:color-mix(in srgb,#16a34a 14%,transparent);color:#15803d;}
+.pkg-card--trial{border-color:color-mix(in srgb,#16a34a 50%,var(--border));box-shadow:0 0 0 2px color-mix(in srgb,#16a34a 12%,transparent);}
+.pkg-trial-box{padding:12px 13px;border-radius:11px;border:1px dashed color-mix(in srgb,#16a34a 45%,var(--border));
+    background:color-mix(in srgb,#16a34a 5%,transparent);}
 .pkg-feat-list{display:flex;flex-wrap:wrap;gap:4px;}
 .pkg-feat-chip{font-size:9.5px;font-weight:600;padding:1.5px 7px;border-radius:999px;border:1px solid var(--border);color:var(--muted);}
 .pkg-feat-more{font-size:9.5px;color:var(--muted);font-style:italic;padding:1.5px 3px;}
@@ -152,7 +157,7 @@
   @else
     <div class="pkg-grid">
       @foreach($packages as $package)
-      <div class="pkg-card">
+      <div class="pkg-card {{ $package->is_trial ? 'pkg-card--trial' : '' }}">
         <div class="pkg-card-img">
           @if($package->image)
             <img src="{{ asset('storage/' . $package->image) }}" alt="{{ $package->name }}">
@@ -168,6 +173,10 @@
             </span>
           </div>
 
+          @if($package->is_trial)
+            <span class="pkg-trial-badge"><i class="fa fa-gift" style="font-size:9px"></i> Free Trial · {{ $package->trialDays() }} days</span>
+          @endif
+
           @if($package->is_mobile_only)
             <span class="pkg-mobile-badge"><i class="fa fa-mobile-screen" style="font-size:9px"></i> Mobile App Only</span>
           @endif
@@ -181,7 +190,10 @@
           @endif
 
           <div class="pkg-price-row">
-            @if($package->is_free)
+            @if($package->is_trial)
+              <span class="pkg-price">Free</span>
+              <span class="pkg-price-strike" style="text-decoration:none">for {{ $package->trialDays() }} days</span>
+            @elseif($package->is_free)
               <span class="pkg-free-badge"><i class="fa fa-gift" style="font-size:10px"></i> Free</span>
             @else
               @if($package->discounted_price !== null)
@@ -222,7 +234,8 @@
                     data-currency="{{ $package->currency }}"
                     data-max-users="{{ $package->max_users }}"
                     data-extra-user-price="{{ $package->extra_user_price }}"
-                    data-is-free="{{ $package->is_free ? '1' : '0' }}"
+                    data-is-trial="{{ $package->is_trial ? '1' : '0' }}"
+                    data-trial-days="{{ $package->trial_days }}"
                     data-is-active="{{ $package->is_active ? '1' : '0' }}"
                     data-is-mobile-only="{{ $package->is_mobile_only ? '1' : '0' }}"
                     data-supports-pos-lite="{{ $package->supports_pos_lite ? '1' : '0' }}"
@@ -287,11 +300,18 @@
           @error('image')<p class="pkg-field-err">{{ $message }}</p>@enderror
         </div>
 
-        <div class="pkg-field">
+        <div class="pkg-field pkg-trial-box">
           <label class="pkg-check-row" style="text-transform:none;letter-spacing:0;font-weight:normal;cursor:pointer">
-            <input type="checkbox" name="is_free" id="pkg-f-is-free" value="1" {{ old('is_free') ? 'checked' : '' }}>
-            <span><strong>This package is free</strong> — price fields will be ignored</span>
+            <input type="checkbox" name="is_trial" id="pkg-f-is-trial" value="1" {{ old('is_trial') ? 'checked' : '' }}>
+            <span><strong>Free trial package</strong> — no payment, expires after the trial days, shown first &amp; highlighted in onboarding, usable once per user</span>
           </label>
+          <div id="pkg-trial-fields" style="margin-top:12px">
+            <label>Trial length (days) <span style="color:#ef4444">*</span></label>
+            <input type="number" step="1" min="1" max="365" name="trial_days" id="pkg-f-trial-days" value="{{ old('trial_days', 7) }}">
+            <p class="pkg-field-hint">After this many days the business must choose another package. Set the user limit below with Max Users. All features are ticked by default — untick any you don't want in the trial.</p>
+            @error('trial_days')<p class="pkg-field-err">{{ $message }}</p>@enderror
+          </div>
+          @error('is_trial')<p class="pkg-field-err">{{ $message }}</p>@enderror
         </div>
 
         <div class="pkg-field" id="pkg-currency-field">
@@ -403,7 +423,9 @@
   var descEl       = document.getElementById('pkg-f-description');
   var imageEl      = document.getElementById('pkg-f-image');
   var imgPreview   = document.getElementById('pkg-img-preview');
-  var isFreeEl     = document.getElementById('pkg-f-is-free');
+  var isTrialEl    = document.getElementById('pkg-f-is-trial');
+  var trialDaysEl  = document.getElementById('pkg-f-trial-days');
+  var trialFields  = document.getElementById('pkg-trial-fields');
   var priceFields  = document.getElementById('pkg-price-fields');
   var priceEl      = document.getElementById('pkg-f-price');
   var discPriceEl  = document.getElementById('pkg-f-discounted-price');
@@ -433,8 +455,24 @@
   }
 
   function togglePriceFields() {
-    priceFields.style.display = isFreeEl.checked ? 'none' : '';
+    var trial = isTrialEl.checked;
+    priceFields.style.display = trial ? 'none' : '';
+    // A trial costs nothing, so there's no currency to pick (the select still posts its default).
+    document.getElementById('pkg-currency-field').style.display = trial ? 'none' : '';
+    trialFields.style.display = trial ? '' : 'none';
+    trialDaysEl.required = trial;
+    extraUserField.style.display = trial ? 'none' : '';
   }
+
+  // A trial showcases the whole product — tick every feature when it's switched on
+  // (the admin can still untick features they want to hold back).
+  isTrialEl.addEventListener('change', function () {
+    if (isTrialEl.checked) {
+      if (!trialDaysEl.value) trialDaysEl.value = 7;
+      featureBoxes.forEach(function (cb) { cb.checked = true; });
+    }
+    togglePriceFields();
+  });
 
   function updateCurrencySymbol() {
     var symbol = CURRENCY_SYMBOLS[currencyEl.value] || currencyEl.value;
@@ -462,7 +500,8 @@
     descEl.value = '';
     imageEl.value = '';
     setPreview(null);
-    isFreeEl.checked = false;
+    isTrialEl.checked = false;
+    trialDaysEl.value = 7;
     priceEl.value = 0;
     discPriceEl.value = '';
     currencyEl.value = 'LKR';
@@ -478,7 +517,7 @@
     toggleExtraUserField();
   }
 
-  isFreeEl.addEventListener('change', togglePriceFields);
+  togglePriceFields(); // reflect old() values after a validation error
   maxUsersEl.addEventListener('input', toggleExtraUserField);
   currencyEl.addEventListener('change', updateCurrencySymbol);
   imageEl.addEventListener('change', function () {
@@ -510,7 +549,8 @@
       descEl.value = btn.getAttribute('data-description') || '';
       imageEl.value = '';
       setPreview(btn.getAttribute('data-image') || null);
-      isFreeEl.checked = btn.getAttribute('data-is-free') === '1';
+      isTrialEl.checked = btn.getAttribute('data-is-trial') === '1';
+      trialDaysEl.value = btn.getAttribute('data-trial-days') || 7;
       priceEl.value = btn.getAttribute('data-price');
       discPriceEl.value = btn.getAttribute('data-discounted-price') || '';
       currencyEl.value = btn.getAttribute('data-currency') || 'LKR';

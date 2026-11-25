@@ -17,13 +17,21 @@ class BusinessMember extends Model
         'permissions',
         'status',
         'invited_by',
+        'deactivated_at',
     ];
 
     protected function casts(): array
     {
         return [
             'permissions' => 'array',
+            'deactivated_at' => 'datetime',
         ];
+    }
+
+    /** Switched off because the business moved to a package with fewer seats. */
+    public function isDeactivated(): bool
+    {
+        return $this->deactivated_at !== null;
     }
 
     public function business(): BelongsTo

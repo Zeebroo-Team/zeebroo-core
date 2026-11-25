@@ -110,7 +110,8 @@ Route::prefix('v1/pos')->group(function (): void {
 });
 
 // PosIdempotency only acts on writes sent with an Idempotency-Key header (desktop offline queue).
-Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
+// EnsureFeatureInPlan blocks crm/, mail/, developers/ … when the business's package lacks that feature.
+Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, \Modules\Pos\Http\Middleware\EnsureFeatureInPlan::class, PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function (): void {
     Route::get ('auth/me',       [PosAuthApiController::class, 'me'])->name('auth.me')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::put ('auth/profile',  [PosAuthApiController::class, 'updateProfile'])->name('auth.profile.update')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post  ('auth/profile/avatar', [PosAuthApiController::class, 'uploadAvatar'])->name('auth.profile.avatar.upload')->withoutMiddleware(EnsureSubscriptionSettled::class);
@@ -127,6 +128,10 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get ('auth/payment/{payment}/status', [PosPaymentApiController::class, 'status'])->name('auth.payment.status')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/{payment}/receipt', [PosPaymentApiController::class, 'receipt'])->name('auth.payment.receipt')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('auth/payment/{payment}',        [PosPaymentApiController::class, 'show'])->name('auth.payment.show')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    // Free trial → real plan ("Choose your plan"); must work after the trial expired.
+    Route::get ('auth/plan',                     [\Modules\Pos\Http\Controllers\Api\PosPlanApiController::class, 'index'])->name('auth.plan.index')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::get ('auth/plan/{package}/preview',   [\Modules\Pos\Http\Controllers\Api\PosPlanApiController::class, 'preview'])->whereNumber('package')->name('auth.plan.preview')->withoutMiddleware(EnsureSubscriptionSettled::class);
+    Route::post('auth/plan/{package}',           [\Modules\Pos\Http\Controllers\Api\PosPlanApiController::class, 'change'])->whereNumber('package')->name('auth.plan.change')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get ('businesses', [PosBusinessesApiController::class, 'index'])->name('businesses.index')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::post('businesses', [PosBusinessesApiController::class, 'store'])->name('businesses.store')->withoutMiddleware(EnsureSubscriptionSettled::class);
     Route::get('online/bootstrap', PosOnlineBootstrapApiController::class)->name('online.bootstrap')->withoutMiddleware(EnsureSubscriptionSettled::class);

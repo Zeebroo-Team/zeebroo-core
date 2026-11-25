@@ -26,6 +26,17 @@ class EnsureSubscriptionSettled
             return $next($request);
         }
 
+        if ($business->trialHasExpired()) {
+            $requester = $request->user();
+
+            return response()->json([
+                'message' => 'Your free trial has ended. Choose a plan to continue using Zeebroo POS.',
+                'code' => 'trial_expired',
+                'trial_ended_at' => $business->trial_ends_at?->toIso8601String(),
+                'can_change_plan' => $requester instanceof User && (int) $business->user_id === (int) $requester->id,
+            ], 402);
+        }
+
         $overdue = $business->overdueSubscriptionPayment();
         if ($overdue) {
             $requester = $request->user();

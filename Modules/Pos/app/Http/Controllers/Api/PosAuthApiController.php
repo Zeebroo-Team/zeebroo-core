@@ -174,6 +174,10 @@ class PosAuthApiController extends Controller
                 'amount'   => $requiresPayment ? (float) $payment->amount : null,
                 'currency' => $requiresPayment ? $payment->currency : null,
             ],
+            'trial' => [
+                'active'  => $business->fresh()->isOnTrial(),
+                'ends_at' => $business->fresh()->trial_ends_at?->toIso8601String(),
+            ],
         ], 201);
     }
 
@@ -218,10 +222,12 @@ class PosAuthApiController extends Controller
             ? $request->query('platform')
             : 'desktop';
 
+        // Public route — but a signed-in caller (adding another business) who
+        // already used the free trial must not be offered it again.
         $packages = Package::query()
             ->where('is_active', true)
             ->visibleForPlatform($platform)
-            ->orderBy('sort_order')
+            ->offeredTo($request->user('sanctum'))
             ->get()
             ->map(fn (Package $package) => [
                 'id'               => $package->id,
@@ -238,6 +244,8 @@ class PosAuthApiController extends Controller
                 'user_limit_label' => $package->userLimitLabel(),
                 'extra_user_price_label' => $package->extraUserPriceLabel(),
                 'is_free'         => $package->is_free,
+                'is_trial'         => $package->is_trial,
+                'trial_days'       => $package->is_trial ? $package->trialDays() : null,
                 'is_mobile_only'   => $package->is_mobile_only,
                 'supports_pos_lite' => $package->supports_pos_lite,
                 'features'         => $package->features ?? [],

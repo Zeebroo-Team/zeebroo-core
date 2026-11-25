@@ -12,6 +12,8 @@ class Payment extends Model
 {
     public const TYPE_SUBSCRIPTION = 'subscription';
     public const TYPE_FREE = 'free';
+    /** Zero-amount record of a free-trial start; current_period_end holds the trial end. */
+    public const TYPE_TRIAL = 'trial';
     /** One-off charge for extra user seats beyond the package's max_users (see ExtraUserPurchaseService). */
     public const TYPE_EXTRA_USERS = 'extra_users';
 
@@ -99,6 +101,16 @@ class Payment extends Model
     public function isExtraUsers(): bool
     {
         return $this->payment_type === self::TYPE_EXTRA_USERS;
+    }
+
+    /**
+     * A checkout started from the "Choose your plan" page (trial → paid plan).
+     * The business keeps its current package until this row succeeds, and the
+     * row never carries a due_at, so abandoning it never locks the business.
+     */
+    public function isPlanChange(): bool
+    {
+        return (bool) (($this->metadata ?? [])['plan_change'] ?? false);
     }
 
     /**

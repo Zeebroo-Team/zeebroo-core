@@ -6668,20 +6668,13 @@ function _obBuildCatGrid(cats) {
   });
 }
 
-const OB_PKG_FALLBACK_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent(
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-     <rect width="64" height="64" rx="14" fill="#f59e0b" fill-opacity=".12"/>
-     <path d="M32 13l17 9v20l-17 9-17-9V22l17-9z" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/>
-     <path d="M15 22l17 9 17-9M32 31v20" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-linejoin="round"/>
-   </svg>`
-);
-
 function _obCurrencySymbol(pkg) {
   if (pkg.currency_symbol) return pkg.currency_symbol;
   return pkg.currency === 'LKR' ? 'Rs.' : '$';
 }
 
 function _obPkgPriceHtml(pkg) {
+  if (pkg.is_trial) return `<span class="ob-pkg-price">Free<span class="ob-pkg-price-suffix"> for ${Number(pkg.trial_days || 7)} days · no card needed</span></span>`;
   if (pkg.is_free) return `<span class="ob-pkg-price">Free</span>`;
   const symbol = escHtml(_obCurrencySymbol(pkg));
   const price = Number(pkg.price || 0);
@@ -6701,35 +6694,87 @@ function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
     grid.innerHTML = `<div class="ob-pkg-empty"><i class="fa fa-spinner fa-spin"></i> Loading packages…</div>`;
     return;
   }
+  // Same card layout as the web onboarding wizard (dashboard.blade.php step 3):
+  // coloured header (name, badge, price, users chip) + module checklist + select button.
+  const SHOW_MODS = 6;
   grid.innerHTML = packages.map(pkg => {
-    const active = selectedId === pkg.id ? ' active' : '';
-    const labels = (pkg.feature_labels || []).slice(0, 4);
-    const extra  = (pkg.feature_labels || []).length - labels.length;
-    return `<div class="ob-pkg-card${active}" data-pkg-id="${pkg.id}">
-      <div class="ob-pkg-check"><i class="fa fa-check"></i></div>
-      <div class="ob-pkg-img-wrap">
-        <img src="${escHtml(pkg.image_url || OB_PKG_FALLBACK_IMG)}" alt="${escHtml(pkg.name)}" class="ob-pkg-img">
+    const isOn   = selectedId === pkg.id;
+    const labels = pkg.feature_labels || [];
+    const extra  = labels.length - SHOW_MODS;
+    const symbol = escHtml(_obCurrencySymbol(pkg));
+    const price  = Number(pkg.price || 0);
+    const disc   = pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
+    const hasDisc = !pkg.is_trial && !pkg.is_free && disc != null && disc < price;
+    const save   = hasDisc && price > 0 ? Math.round((1 - disc / price) * 100) : 0;
+    const fmt    = n => Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+    let badge = '';
+    if (pkg.is_trial)  badge = `<span class="ob-pkg-save"><i class="fa fa-gift"></i> Try free</span>`;
+    else if (save > 0) badge = `<span class="ob-pkg-save">Save ${save}%</span>`;
+
+    let priceRow;
+    if (pkg.is_trial)     priceRow = `<span class="ob-pkg-price">Free</span><span class="ob-pkg-price-suffix">/${Number(pkg.trial_days || 7)} days</span>`;
+    else if (pkg.is_free) priceRow = `<span class="ob-pkg-price">Free</span>`;
+    else                  priceRow = `<span class="ob-pkg-price">${symbol}${fmt(hasDisc ? disc : price)}</span><span class="ob-pkg-price-suffix">/month</span>`;
+
+    let subNote = '';
+    if (hasDisc)           subNote = `<span class="ob-pkg-price-strike">${symbol}${fmt(price)}/month</span>`;
+    else if (pkg.is_trial) subNote = `<span class="ob-pkg-trial-note">No card needed · Recommended</span>`;
+
+    const usersChip = pkg.user_limit_label
+      ? `<span class="ob-pkg-users-chip"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}${pkg.extra_user_price_label ? `<span class="ob-pkg-users-extra">&nbsp;· ${escHtml(pkg.extra_user_price_label)}</span>` : ''}</span>`
+      : '';
+
+    return `<div class="ob-pkg-card${isOn ? ' active' : ''}${pkg.is_trial ? ' ob-pkg-card--trial' : ''}" data-pkg-id="${pkg.id}"
+                 role="radio" aria-checked="${isOn ? 'true' : 'false'}" tabindex="0">
+      <div class="ob-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
+      <div class="ob-pkg-head">
+        <div class="ob-pkg-head-top">
+          <div class="ob-pkg-name">${escHtml(pkg.name)}</div>
+          ${badge}
+        </div>
+        <div class="ob-pkg-price-row">${priceRow}</div>
+        ${subNote}
+        ${usersChip}
       </div>
-      <div class="ob-pkg-name">${escHtml(pkg.name)}</div>
-      <div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>
-      ${pkg.description ? `<div class="ob-pkg-desc">${escHtml(pkg.description)}</div>` : ''}
-      ${pkg.user_limit_label ? `<div class="ob-pkg-desc" style="font-weight:600"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}${pkg.extra_user_price_label ? ` · <span style="font-weight:500">${escHtml(pkg.extra_user_price_label)}</span>` : ''}</div>` : ''}
-      <div class="ob-pkg-feat-tags">
-        ${labels.map(l => `<span class="ob-pkg-tag">${escHtml(l)}</span>`).join('')}
-        ${extra > 0 ? `<span class="ob-pkg-tag ob-pkg-tag-more">+${extra}</span>` : ''}
+      <div class="ob-pkg-body">
+        ${pkg.description && !pkg.is_trial ? `<p class="ob-pkg-desc">${escHtml(pkg.description)}</p>` : ''}
+        <div class="ob-pkg-mod-title">${labels.length} ${labels.length === 1 ? 'module' : 'modules'} included</div>
+        <ul class="ob-pkg-mods">
+          ${labels.map((l, i) => `<li${i >= SHOW_MODS ? ' class="ob-pkg-mod--extra"' : ''}>${escHtml(l)}</li>`).join('')}
+        </ul>
+        ${extra > 0 ? `<button type="button" class="ob-pkg-more" data-more="+${extra} more modules">+${extra} more modules</button>` : ''}
+        <span class="ob-pkg-select" aria-hidden="true">
+          <span class="ob-pkg-select-off">${pkg.is_trial ? 'Start free' : 'Choose plan'} <i class="fa fa-arrow-right"></i></span>
+          <span class="ob-pkg-select-on"><i class="fa fa-check"></i> Selected</span>
+        </span>
       </div>
     </div>`;
   }).join('');
-  grid.querySelectorAll('.ob-pkg-img').forEach(img => {
-    img.addEventListener('error', () => { img.src = OB_PKG_FALLBACK_IMG; }, { once: true });
+
+  grid.querySelectorAll('.ob-pkg-more').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const card = btn.closest('.ob-pkg-card');
+      const open = card.classList.toggle('ob-pkg-card--expanded');
+      btn.textContent = open ? 'Show less' : btn.dataset.more;
+    });
   });
+  const select = card => {
+    const id = Number(card.dataset.pkgId);
+    const pkg = packages.find(p => p.id === id) || null;
+    grid.querySelectorAll('.ob-pkg-card').forEach(c => {
+      c.classList.remove('active');
+      c.setAttribute('aria-checked', 'false');
+    });
+    card.classList.add('active');
+    card.setAttribute('aria-checked', 'true');
+    onSelect(pkg);
+  };
   grid.querySelectorAll('.ob-pkg-card').forEach(card => {
-    card.addEventListener('click', () => {
-      const id = Number(card.dataset.pkgId);
-      const pkg = packages.find(p => p.id === id) || null;
-      grid.querySelectorAll('.ob-pkg-card').forEach(c => c.classList.remove('active'));
-      card.classList.add('active');
-      onSelect(pkg);
+    card.addEventListener('click', () => select(card));
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(card); }
     });
   });
 }
@@ -6885,7 +6930,9 @@ function _obPopulatePaySummary() {
   const isFree = !pkg || pkg.is_free || amount <= 0;
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
-  $('#ob-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  $('#ob-pay-package').textContent = pkg
+    ? `${pkg.name}${pkg.is_trial ? ` (${Number(pkg.trial_days || 7)}-day free trial)` : (isFree ? ' (Free)' : '')}`
+    : '—';
   _obFillPayUsers('ob', pkg);
   $('#ob-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#ob-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
@@ -7891,6 +7938,8 @@ async function showApp() {
   _checkBankOnboarding();
   // Warn if the business's subscription payment is pending/failed
   _checkBillingAlert();
+  // Free trial: "N days left" bar, or the plan picker once it expired (js/trial-plan.js)
+  if (typeof window.trialPlanCheck === 'function') window.trialPlanCheck();
   // Remind new sign-ups to verify their email
   _checkEmailVerifyAlert();
   // Load business + branch switchers
@@ -9793,7 +9842,7 @@ async function doSignupOrPay() {
   if (!packageId) { _obSetStep(4); showAlert(alert, 'Please select a package'); return; }
   if (!_obValidateLocation()) { _obSetStep(6); _obValidateLocation(); return; }
 
-  const wasFree = !_obSelectedPackage || _obSelectedPackage.is_free;
+  const wasFree = !_obSelectedPackage || _obSelectedPackage.is_free || _obSelectedPackage.is_trial;
   btn.disabled = true;
   btn.innerHTML = wasFree
     ? '<i class="fa fa-spinner fa-spin"></i> Creating account…'
@@ -10002,6 +10051,60 @@ window.addEventListener('api-unauthorized', async () => {
     _unauthorizedHandling = false;
   }
 });
+
+// ── Ribbon tab strip overflow: tighten → chevrons → wheel scroll ──────────────
+(function initRibbonTabOverflow() {
+  const row   = $('#ribbon-tabrow');
+  const tabs  = $('#ribbon-tabs');
+  const left  = $('#rb-tabs-left');
+  const right = $('#rb-tabs-right');
+  if (!row || !tabs) return;
+
+  const overflows = () => tabs.scrollWidth > tabs.clientWidth + 1;
+
+  function syncArrows() {
+    if (!left || !right) return;
+    left.disabled  = tabs.scrollLeft <= 0;
+    right.disabled = tabs.scrollLeft + tabs.clientWidth >= tabs.scrollWidth - 1;
+  }
+
+  let raf = 0;
+  function update() {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      // Measure from the roomy layout each time so widening the window restores it.
+      row.classList.remove('tabs-tight', 'tabs-overflow');
+      if (overflows()) row.classList.add('tabs-tight');
+      if (overflows()) row.classList.add('tabs-overflow');
+      syncArrows();
+    });
+  }
+
+  const step = () => Math.max(120, tabs.clientWidth * 0.6);
+  left?.addEventListener('click',  () => tabs.scrollBy({ left: -step(), behavior: 'smooth' }));
+  right?.addEventListener('click', () => tabs.scrollBy({ left:  step(), behavior: 'smooth' }));
+  tabs.addEventListener('scroll', syncArrows, { passive: true });
+
+  // Vertical mouse wheel scrolls the strip sideways while it overflows.
+  tabs.addEventListener('wheel', (e) => {
+    if (!overflows() || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    tabs.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
+
+  // Keep the clicked / activated tab fully in view.
+  tabs.addEventListener('click', (e) => {
+    const t = e.target.closest('.ribbon-tab');
+    if (t) t.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  });
+
+  new ResizeObserver(update).observe(row);
+  // Tabs are shown/hidden as features & permissions load.
+  new MutationObserver(update).observe(tabs, { subtree: true, childList: true, attributes: true, attributeFilter: ['style', 'class'] });
+  const shell = $('#app-shell');
+  if (shell) new MutationObserver(update).observe(shell, { attributes: true, attributeFilter: ['class'] });
+  update();
+})();
 
 // ── Profile dropdown ───────────────────────────────────────────────────────
 const profileBtn  = $('#tb-profile-btn');
@@ -11709,7 +11812,9 @@ const _pmDueStatuses = ['pending', 'failed', 'canceled'];
 
 async function openPaymentModal() {
   const overlay = $('#payment-modal-overlay');
+  overlay.classList.remove('mac-out');
   overlay.style.display = 'flex';
+  overlay.classList.add('mac-in');
   document.body.style.overflow = 'hidden';
   $('#pm-alert').style.display = 'none';
   $('#pm-list-panel').style.display = '';
@@ -11747,10 +11852,10 @@ function _pmRenderTabs() {
   const paidCount = _pm.items.length - dueCount;
 
   $('#pm-tabs').innerHTML = `
-    <button class="pm-tab ${_pm.tab === 'paid' ? 'active' : ''}" data-pm-tab="paid">
+    <button type="button" class="crm-inbox-tab pm-tab ${_pm.tab === 'paid' ? 'active' : ''}" data-pm-tab="paid">
       Paid <span class="pm-tab-count">${paidCount}</span>
     </button>
-    <button class="pm-tab ${_pm.tab === 'due' ? 'active' : ''}" data-pm-tab="due">
+    <button type="button" class="crm-inbox-tab pm-tab ${_pm.tab === 'due' ? 'active' : ''}" data-pm-tab="due">
       Due &amp; Upcoming <span class="pm-tab-count">${dueCount}</span>
     </button>`;
 
@@ -11764,11 +11869,22 @@ function _pmRenderTabs() {
 }
 
 function _closePaymentModal() {
-  $('#payment-modal-overlay').style.display = 'none';
+  const overlay = $('#payment-modal-overlay');
+  overlay.classList.remove('mac-in', 'mac-out');
+  overlay.style.display = 'none';
   document.body.style.overflow = '';
 }
 
 $('#payment-modal-close').addEventListener('click', _closePaymentModal);
+$('#pm-close-btn').addEventListener('click', _closePaymentModal);
+$('#pm-refresh').addEventListener('click', async () => {
+  const btn = $('#pm-refresh');
+  btn.disabled = true;
+  $('#pm-alert').style.display = 'none';
+  $('#pm-detail-panel').style.display = 'none';
+  $('#pm-list-panel').style.display = '';
+  try { await _pmRefresh(); } finally { btn.disabled = false; }
+});
 $('#payment-modal-overlay').addEventListener('click', e => {
   if (e.target === $('#payment-modal-overlay')) _closePaymentModal();
 });
@@ -11814,6 +11930,7 @@ function _pmRenderSummary(data) {
   if (!data.subscription_status && !data.next_renewal_at) {
     summary.innerHTML = usersHtml;
     _pmBindBuyUsers(data.users);
+    window.trialPlanDecorateBilling?.(summary, _closePaymentModal);
     return;
   }
   const rawStatus = data.subscription_status || 'unknown';
@@ -11847,6 +11964,8 @@ function _pmRenderSummary(data) {
     ${usersHtml}`;
 
   _pmBindBuyUsers(data.users);
+  // Free trial: days left + "Change plan" (js/trial-plan.js)
+  window.trialPlanDecorateBilling?.(summary, _closePaymentModal);
   $('#pm-cancel-sub')?.addEventListener('click', () => _pmChangeCancellation(true, accessUntil));
   $('#pm-resume-sub')?.addEventListener('click', () => _pmChangeCancellation(false, accessUntil));
 }
@@ -30039,7 +30158,7 @@ async function doCreateBusinessOrPay() {
   if (!name) { _bbwzSetStep(1); $('#bbwz-name').focus(); return; }
   if (!_bbwz.selectedPackage) { _bbwzSetStep(2); return; }
 
-  const wasFree = !_bbwz.selectedPackage || _bbwz.selectedPackage.is_free;
+  const wasFree = !_bbwz.selectedPackage || _bbwz.selectedPackage.is_free || _bbwz.selectedPackage.is_trial;
   const btn = $('#bbwz-submit-btn');
   btn.disabled = true;
   btn.innerHTML = wasFree

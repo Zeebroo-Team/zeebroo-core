@@ -79,7 +79,8 @@ class PosBusinessesApiController extends Controller
 
         $package = null;
         if (isset($validated['package_id'])) {
-            $package = Package::query()->where('is_active', true)->visibleForPlatform($platform)->find($validated['package_id']);
+            // offeredTo() refuses the free trial to a user who already used theirs.
+            $package = Package::query()->where('is_active', true)->visibleForPlatform($platform)->offeredTo($user)->find($validated['package_id']);
             if (! $package) {
                 throw ValidationException::withMessages([
                     'package_id' => ['The selected package is no longer available.'],

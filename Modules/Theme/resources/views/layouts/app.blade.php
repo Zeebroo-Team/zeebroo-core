@@ -406,11 +406,18 @@
         $navBusinesses = \Modules\Business\Models\Business::allForNavbar(auth()->user());
 
         // Load feature flags first — used to gate sidebar sections below.
+        // A feature shows only when the business toggled it on AND its package
+        // allows it — so moving to a smaller package hides that module's menu.
         $businessFeatures = $navBusiness
             ? (function () use ($navBusiness) {
                 $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
                 $defaults = array_fill_keys(array_keys(config('features.list', [])), true);
-                return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
+                $merged = !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
+                $allowed = array_flip($navBusiness->effectiveFeatureKeys());
+                foreach ($merged as $key => $on) {
+                    $merged[$key] = $on && isset($allowed[$key]);
+                }
+                return $merged;
             })()
             : [];
         $featureOn = fn (string $key) => (bool) ($businessFeatures[$key] ?? true);
@@ -1840,6 +1847,24 @@
             }
         })();
         </script>
+        @endif
+        @if(! empty($trialBanner) && $trialBanner['days_left'] !== null)
+            @php $__trialDays = (int) $trialBanner['days_left']; @endphp
+            <div role="status" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:14px 24px 0;padding:11px 16px;border-radius:14px;font-size:13.5px;color:var(--text);
+                 background:color-mix(in srgb,var(--primary) 9%,var(--card));border:1px solid color-mix(in srgb,var(--primary) 35%,var(--border));">
+                <i class="fa fa-gift" style="color:var(--primary)" aria-hidden="true"></i>
+                <div style="flex:1;min-width:200px">
+                    You're on the <b>free trial</b> —
+                    <b>{{ $__trialDays === 0 ? 'last day' : $__trialDays.' '.\Illuminate\Support\Str::plural('day', $__trialDays).' left' }}</b>
+                    (ends {{ $trialBanner['ends_at']->format('d M Y, g:i A') }}).
+                    @unless($trialBanner['is_owner']) Ask your business owner to choose a plan. @endunless
+                </div>
+                @if($trialBanner['is_owner'])
+                    <a href="{{ route('plan.choose') }}" style="padding:7px 14px;border-radius:10px;background:var(--btn-bg);color:#fff;font-weight:700;text-decoration:none;font-size:12.5px">
+                        <i class="fa fa-arrow-up" aria-hidden="true"></i> Choose a plan
+                    </a>
+                @endif
+            </div>
         @endif
         @if(! empty($subscriptionDue))
             @php

@@ -22,7 +22,9 @@ class PackageServiceProvider extends ModuleServiceProvider
      *
      * @var string[]
      */
-    // protected array $commands = [];
+    protected array $commands = [
+        \Modules\Package\Console\SendTrialReminders::class,
+    ];
 
     /**
      * Provider classes to register.
@@ -39,8 +41,10 @@ class PackageServiceProvider extends ModuleServiceProvider
      * 
      * @param $schedule
      */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
+    protected function configureSchedules(Schedule $schedule): void
+    {
+        // Emails owners whose free trial ends within 2 days (once per trial).
+        // Expiry itself needs no job — the subscription middleware checks trial_ends_at live.
+        $schedule->command(\Modules\Package\Console\SendTrialReminders::class)->hourly()->withoutOverlapping();
+    }
 }
