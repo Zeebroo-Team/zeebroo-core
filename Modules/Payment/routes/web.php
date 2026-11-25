@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use Modules\Payment\Http\Controllers\Admin\AdminPaymentCheckController;
 use Modules\Payment\Http\Controllers\Admin\AdminPaymentController;
+use Modules\Payment\Http\Controllers\Admin\AdminUserSeatController;
 use Modules\Payment\Http\Controllers\BillingController;
 use Modules\Payment\Http\Controllers\PaymentController;
 
@@ -14,6 +15,12 @@ Route::middleware(['auth', 'role:admin'])->prefix('admin/payments')->name('admin
     Route::put('/checks/settings', [AdminPaymentCheckController::class, 'updateSettings'])->name('checks.settings');
     Route::post('/checks/run', [AdminPaymentCheckController::class, 'runNow'])->name('checks.run');
     Route::get('/{payment}', [AdminPaymentController::class, 'show'])->whereNumber('payment')->name('show');
+});
+
+// Admin — user seats per business (package limit, extra users bought, who holds each seat).
+Route::middleware(['auth', 'role:admin'])->prefix('admin/user-seats')->name('admin.user-seats.')->group(function (): void {
+    Route::get('/', [AdminUserSeatController::class, 'index'])->name('index');
+    Route::get('/{business}', [AdminUserSeatController::class, 'show'])->whereNumber('business')->name('show');
 });
 
 Route::middleware(['auth'])->prefix('payment')->name('payment.')->group(function (): void {

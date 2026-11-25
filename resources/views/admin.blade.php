@@ -175,7 +175,7 @@ a.adash-recent-row:hover{background:color-mix(in srgb,var(--primary) 5%,transpar
                 <i class="fa fa-users-gear" style="color:var(--primary);margin-right:7px;"></i>User Seats &amp; Extra Users
                 <span class="adash-recent-head-meta">{{ $so['limited_businesses'] }} {{ $so['limited_businesses'] === 1 ? 'business' : 'businesses' }} on plans with a user limit</span>
             </h3>
-            <a href="{{ route('admin.payments.index', ['type' => 'extra_users']) }}" class="adash-recent-link">Extra-user payments <i class="fa fa-arrow-right"></i></a>
+            <a href="{{ route('admin.user-seats.index') }}" class="adash-recent-link">View all <i class="fa fa-arrow-right"></i></a>
         </div>
 
         <div class="adash-seat-stats">
@@ -220,11 +220,7 @@ a.adash-recent-row:hover{background:color-mix(in srgb,var(--primary) 5%,transpar
                             @php $pct = min(100, (int) round($r['usage_ratio'] * 100)); @endphp
                             <tr>
                                 <td>
-                                    @if($r['owner_id'])
-                                        <a href="{{ route('admin.users.show', $r['owner_id']) }}" class="adash-recent-name" style="text-decoration:none;">{{ $r['business'] }}</a>
-                                    @else
-                                        <span class="adash-recent-name">{{ $r['business'] }}</span>
-                                    @endif
+                                    <a href="{{ route('admin.user-seats.show', $r['business_id']) }}" class="adash-recent-name" style="text-decoration:none;">{{ $r['business'] }}</a>
                                     <div class="adash-recent-email">{{ $r['owner_email'] ?? '—' }}</div>
                                 </td>
                                 <td>{{ $r['plan'] ?? '—' }}</td>

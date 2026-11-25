@@ -315,6 +315,43 @@ test('the admin overview totals extra users, their monthly revenue and full busi
         ->and($o['rows']->first()['business'])->toBe('Full Shop'); // fullest first
 });
 
+test('the admin seats page lists every business and filters by seat state', function () {
+    DB::table('packages')->insert(['id' => 4, 'name' => 'Unlimited', 'price' => 0, 'currency' => 'LKR']);
+    DB::table('businesses')->insert(['id' => 9, 'user_id' => 2, 'package_id' => 4, 'name' => 'Open Shop']);
+    $this->seats->addExtraSeats($this->business, 1, 500);
+
+    $service = app(\Modules\Payment\Services\AdminUserSeatOverviewService::class);
+
+    expect($service->paginate([])->total())->toBe(2)
+        ->and($service->paginate(['seats' => 'unlimited'])->items()[0]['business'])->toBe('Open Shop')
+        ->and($service->paginate(['seats' => 'extras'])->items()[0]['business'])->toBe('ABC Solution')
+        ->and($service->paginate(['search' => 'owner@example'])->total())->toBe(1)
+        ->and($service->paginate(['package' => 4])->total())->toBe(1);
+});
+
+test('the admin seat detail lists the owner, members, open invitations and purchases', function () {
+    $this->invitations->invite($this->business, 'a@example.com', 'staff', null, $this->owner);
+    DB::table('business_invitations')->insert([
+        'business_id' => 7, 'email' => 'old@example.com', 'role' => 'staff', 'token_hash' => str_repeat('b', 64),
+        'status' => 'pending', 'expires_at' => now()->subDay(),
+    ]);
+    Payment::create([
+        'business_id' => 7, 'user_id' => 1, 'package_id' => 3,
+        'payment_type' => Payment::TYPE_EXTRA_USERS, 'payment_status' => Payment::STATUS_SUCCEEDED,
+        'amount' => 1000, 'currency' => 'lkr', 'paid_at' => now(), 'metadata' => ['quantity' => 2, 'unit_price' => 500],
+    ]);
+
+    $d = app(\Modules\Payment\Services\AdminUserSeatOverviewService::class)->detail($this->business);
+
+    expect($d['owner']->email)->toBe('owner@example.com')
+        ->and($d['members']->pluck('user.email')->all())->toBe(['member@example.com'])
+        ->and($d['open_invitations']->pluck('email')->all())->toBe(['a@example.com'])
+        ->and($d['past_invitations']->pluck('email')->all())->toBe(['old@example.com'])
+        ->and($d['seats_bought_total'])->toBe(2)
+        ->and($d['purchase_revenue'])->toBe(1000.0)
+        ->and($d['summary']['users_used'])->toBe(3);
+});
+
 test('an admin user limit for one business replaces the package limit', function () {
     (new \Modules\Package\Services\BusinessPackageService())->setMaxUsersOverride($this->business, 10);
     $business = Business::find(7);
