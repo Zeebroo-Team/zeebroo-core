@@ -48,6 +48,23 @@ a.adash-recent-row:hover{background:color-mix(in srgb,var(--primary) 5%,transpar
 .adash-pay-status--refunded{background:color-mix(in srgb,#64748b 15%,transparent);color:#64748b;}
 .adash-empty{padding:28px 20px;text-align:center;font-size:13px;color:var(--muted);}
 @media(max-width:560px){.adash-recent-time{display:none;}}
+/* ── user seats & extra users ── */
+.adash-seat-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));border-bottom:1px solid var(--border);}
+.adash-seat-stat{padding:16px 20px;border-right:1px solid color-mix(in srgb,var(--border) 55%,transparent);display:flex;flex-direction:column;gap:4px;}
+.adash-seat-stat:last-child{border-right:none;}
+.adash-seat-value{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15;}
+.adash-seat-value--sm{font-size:17px;}
+.adash-seat-table-wrap{overflow-x:auto;}
+.adash-seat-table{width:100%;border-collapse:collapse;font-size:13px;}
+.adash-seat-table th{text-align:left;padding:10px 20px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border);}
+.adash-seat-table td{padding:12px 20px;border-bottom:1px solid color-mix(in srgb,var(--border) 55%,transparent);vertical-align:top;}
+.adash-seat-table tr:last-child td{border-bottom:none;}
+.adash-seat-table .num{text-align:right;white-space:nowrap;}
+.adash-seat-bar{height:6px;border-radius:999px;background:color-mix(in srgb,var(--border) 80%,transparent);margin:5px 0 3px;overflow:hidden;}
+.adash-seat-bar>div{height:100%;border-radius:999px;}
+.adash-seat-flag{padding:0 7px;border-radius:999px;font-size:10.5px;}
+.adash-seat-flag--full{background:color-mix(in srgb,#d97706 15%,transparent);color:#b45309;}
+.adash-seat-flag--near{background:color-mix(in srgb,#f59e0b 13%,transparent);color:#b45309;}
 </style>
 
 <div class="adash">
@@ -147,6 +164,102 @@ a.adash-recent-row:hover{background:color-mix(in srgb,var(--primary) 5%,transpar
 
     </div>
 
+    {{-- ── USER SEATS & EXTRA USERS ── --}}
+    @php
+        $so = $seatOverview;
+        $soMoney = fn ($totals) => $totals->isEmpty() ? '—' : $totals->map(fn ($t, $c) => $c.' '.number_format($t, 2))->implode(' · ');
+    @endphp
+    <div class="adash-recent" style="margin-bottom:28px;">
+        <div class="adash-recent-head">
+            <h3 class="adash-recent-title">
+                <i class="fa fa-users-gear" style="color:var(--primary);margin-right:7px;"></i>User Seats &amp; Extra Users
+                <span class="adash-recent-head-meta">{{ $so['limited_businesses'] }} {{ $so['limited_businesses'] === 1 ? 'business' : 'businesses' }} on plans with a user limit</span>
+            </h3>
+            <a href="{{ route('admin.payments.index', ['type' => 'extra_users']) }}" class="adash-recent-link">Extra-user payments <i class="fa fa-arrow-right"></i></a>
+        </div>
+
+        <div class="adash-seat-stats">
+            <div class="adash-seat-stat">
+                <div class="adash-card-label">Extra users sold</div>
+                <div class="adash-seat-value">{{ number_format($so['extra_seats_total']) }}</div>
+                <div class="adash-card-sub">across {{ $so['businesses_with_extras'] }} {{ $so['businesses_with_extras'] === 1 ? 'business' : 'businesses' }} · {{ $so['extra_purchases_this_month'] }} bought this month</div>
+            </div>
+            <div class="adash-seat-stat">
+                <div class="adash-card-label">Extra users / month</div>
+                <div class="adash-seat-value adash-seat-value--sm">{{ $soMoney($so['extra_mrr']) }}</div>
+                <div class="adash-card-sub">added to subscriptions every renewal</div>
+            </div>
+            <div class="adash-seat-stat">
+                <div class="adash-card-label">Extra users collected</div>
+                <div class="adash-seat-value adash-seat-value--sm">{{ $soMoney($so['extra_revenue']) }}</div>
+                <div class="adash-card-sub">first-month seat purchases (paid)</div>
+            </div>
+            <div class="adash-seat-stat">
+                <div class="adash-card-label">At the user limit</div>
+                <div class="adash-seat-value" style="{{ $so['full_businesses'] ? 'color:#d97706;' : '' }}">{{ $so['full_businesses'] }}</div>
+                <div class="adash-card-sub">{{ $so['near_full_businesses'] }} more at 80%+ — likely to buy extra users</div>
+            </div>
+        </div>
+
+        @if($so['rows']->isEmpty())
+            <div class="adash-empty">No business is on a package with a user limit yet. Set “Max users” on a package in Package Management.</div>
+        @else
+            <div class="adash-seat-table-wrap">
+                <table class="adash-seat-table">
+                    <thead>
+                        <tr>
+                            <th>Business</th>
+                            <th>Plan</th>
+                            <th>Users</th>
+                            <th class="num">Extra users</th>
+                            <th class="num">Monthly total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($so['rows'] as $r)
+                            @php $pct = min(100, (int) round($r['usage_ratio'] * 100)); @endphp
+                            <tr>
+                                <td>
+                                    @if($r['owner_id'])
+                                        <a href="{{ route('admin.users.show', $r['owner_id']) }}" class="adash-recent-name" style="text-decoration:none;">{{ $r['business'] }}</a>
+                                    @else
+                                        <span class="adash-recent-name">{{ $r['business'] }}</span>
+                                    @endif
+                                    <div class="adash-recent-email">{{ $r['owner_email'] ?? '—' }}</div>
+                                </td>
+                                <td>{{ $r['plan'] ?? '—' }}</td>
+                                <td style="min-width:150px;">
+                                    <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;">
+                                        <span>{{ $r['users_used'] }} / {{ $r['user_limit'] }}</span>
+                                        @if($r['is_full'])
+                                            <span class="adash-seat-flag adash-seat-flag--full">Full</span>
+                                        @elseif($r['is_near_full'])
+                                            <span class="adash-seat-flag adash-seat-flag--near">{{ $pct }}%</span>
+                                        @endif
+                                    </div>
+                                    <div class="adash-seat-bar"><div style="width:{{ $pct }}%;background:{{ $r['is_full'] ? '#d97706' : ($r['is_near_full'] ? '#f59e0b' : 'var(--primary)') }};"></div></div>
+                                    <div class="adash-recent-email">{{ $r['included_users'] }} {{ $r['custom_limit'] ? 'custom limit' : 'included' }}{{ $r['extra_users'] ? ' + '.$r['extra_users'].' extra' : '' }}</div>
+                                </td>
+                                <td class="num">
+                                    @if($r['extra_users'])
+                                        <strong>+{{ $r['extra_users'] }}</strong>
+                                        <div class="adash-recent-email">{{ $r['currency'] }} {{ number_format($r['extra_monthly'], 2) }} / mo</div>
+                                    @else
+                                        <span class="adash-recent-email">—</span>
+                                    @endif
+                                </td>
+                                <td class="num">
+                                    <strong>{{ $r['currency'] }} {{ number_format($r['monthly_total'], 2) }}</strong>
+                                    <div class="adash-recent-email">plan {{ number_format($r['base_amount'], 2) }}</div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+    </div>
+
     {{-- ── RECENT USERS ── --}}
     <div class="adash-recent" style="margin-bottom:28px;">
         <div class="adash-recent-head">
@@ -188,7 +301,7 @@ a.adash-recent-row:hover{background:color-mix(in srgb,var(--primary) 5%,transpar
                 <div class="adash-pay-icon"><i class="fa fa-receipt"></i></div>
                 <div style="flex:1;min-width:0;">
                     <div class="adash-recent-name">{{ $rp->business?->name ?? 'Unknown business' }}</div>
-                    <div class="adash-recent-email">{{ $rp->package?->name ?? ucfirst($rp->payment_type) }} · {{ $rp->user?->email ?? '—' }}</div>
+                    <div class="adash-recent-email">{{ $rp->package?->name ?? ucfirst($rp->payment_type) }}@if($rp->isExtraUsers()) · <strong style="color:var(--primary);">Extra users (+{{ (int) ($rp->metadata['quantity'] ?? 1) }})</strong>@endif · {{ $rp->user?->email ?? '—' }}</div>
                 </div>
                 <div class="adash-recent-time" title="{{ $rpDate?->format('d M Y, H:i') }}">{{ $rpDate?->diffForHumans() }}</div>
                 <div class="adash-pay-amount">{{ strtoupper($rp->currency ?? 'USD') }} {{ number_format((float) $rp->amount, 2) }}</div>

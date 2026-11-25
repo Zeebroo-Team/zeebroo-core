@@ -18,6 +18,7 @@ class SubscriptionSummaryService
     public function __construct(
         private readonly StripeSubscriptionService $stripe,
         private readonly PaymentProvisioningService $provisioning,
+        private readonly ExtraUserPurchaseService $extraUsers,
     ) {}
 
     /**
@@ -64,7 +65,15 @@ class SubscriptionSummaryService
             ] : null,
             // Unpaid but still inside the grace period — warn, don't lock yet.
             'payment_due' => $due ? $this->formatDue($due, $requester) : null,
-            'items' => $payments->map(fn (Payment $p) => $this->formatPayment($p))->all(),
+            // Plan price, user seats and the monthly total incl. extra users.
+            'users' => $this->extraUsers->summary($business, $requester),
+            // An extra-users checkout that was never paid is just an abandoned
+            // offer (nothing is owed) — keep it out of "Due & Upcoming".
+            'items' => $payments
+                ->reject(fn (Payment $p) => $p->isExtraUsers() && ! $p->isSucceeded())
+                ->map(fn (Payment $p) => $this->formatPayment($p))
+                ->values()
+                ->all(),
         ];
     }
 
@@ -162,9 +171,16 @@ class SubscriptionSummaryService
     /** @return array<string, mixed> */
     public function formatPayment(Payment $payment): array
     {
+        $meta = $payment->metadata ?? [];
+        $extraQty = $payment->isExtraUsers() ? max(1, (int) ($meta['quantity'] ?? 1)) : null;
+
         return [
             'id' => $payment->id,
             'plan' => $payment->package?->name,
+            // e.g. "Extra users (+1)" for a seat purchase, null for plan payments.
+            'title' => $extraQty !== null ? 'Extra users (+'.$extraQty.')' : null,
+            'line_items' => $payment->lineItems(),
+            'new_monthly_total' => isset($meta['new_monthly_total']) ? (float) $meta['new_monthly_total'] : null,
             'payment_type' => $payment->payment_type,
             'payment_status' => $payment->payment_status,
             'billing_cycle' => $payment->billing_cycle,

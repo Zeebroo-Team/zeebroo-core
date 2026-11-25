@@ -579,6 +579,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('me',             [PosUserManagementApiController::class, 'me'])     ->name('users.me');
     Route::get   ('users',          [PosUserManagementApiController::class, 'index'])  ->name('users.index');
     Route::post  ('users',          [PosUserManagementApiController::class, 'store'])  ->name('users.store');
+    // Package user limit: seat usage/pricing, and buying extra users (Stripe Checkout)
+    Route::get   ('users/seats',          [PosUserManagementApiController::class, 'seats'])       ->name('users.seats');
+    Route::post  ('users/seats/checkout', [PosUserManagementApiController::class, 'purchaseSeats'])->middleware('throttle:10,1')->name('users.seats.checkout');
     Route::put   ('users/{member}', [PosUserManagementApiController::class, 'update']) ->name('users.update');
     Route::delete('users/{member}', [PosUserManagementApiController::class, 'destroy'])->name('users.destroy');
     Route::post  ('users/invitations/{invitation}/resend', [PosUserManagementApiController::class, 'resendInvitation'])->whereNumber('invitation')->middleware('throttle:10,1')->name('users.invitations.resend');

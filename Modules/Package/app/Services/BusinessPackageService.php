@@ -57,6 +57,18 @@ class BusinessPackageService
     }
 
     /**
+     * Admin-set user limit for this one business (null = the package's Max Users).
+     * It replaces the package limit; extra users the business bought still add on
+     * top. Lowering it below current usage removes nobody — it only blocks new
+     * invitations until users are removed.
+     */
+    public function setMaxUsersOverride(Business $business, ?int $maxUsers): void
+    {
+        $business->max_users_override = $maxUsers;
+        $business->save();
+    }
+
+    /**
      * Set the business's payment grace period (null = platform default) and
      * move the deadline of its still-unsettled subscription payments by the
      * change, so the adjustment applies to the bill that's already pending —

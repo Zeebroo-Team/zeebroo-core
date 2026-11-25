@@ -24481,6 +24481,58 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
   </div>
 </div>
 
+<!-- User limit reached / buy extra users (after the Billing + Add User modals so it stacks on top) -->
+<div id="ul-modal" class="modal-overlay" style="display:none">
+  <div class="po-aim-shell" style="width:600px;max-width:94vw;max-height:92vh">
+    <div class="po-aim-header">
+      <i class="fa fa-triangle-exclamation" id="ul-icon" style="color:#d97706"></i>
+      <span id="ul-title">User limit reached</span>
+      <button class="psm-close" id="ul-close"><i class="fa fa-xmark"></i></button>
+    </div>
+    <div class="po-aim-body ul-body">
+      <p class="ul-msg" id="ul-msg"></p>
+
+      <div class="ul-usage">
+        <div class="ul-usage-head">
+          <span><i class="fa fa-users"></i> <strong id="ul-usage-text"></strong></span>
+          <span class="ul-usage-sub" id="ul-usage-sub"></span>
+        </div>
+        <div class="ul-usage-bar"><div class="ul-usage-fill" id="ul-usage-fill"></div></div>
+      </div>
+
+      <div id="ul-blocked" class="ul-blocked" style="display:none"></div>
+
+      <div id="ul-buy">
+        <div class="ul-qty-row">
+          <label for="ul-qty">Extra users to add</label>
+          <div class="ul-qty">
+            <button type="button" id="ul-qty-minus" aria-label="Fewer"><i class="fa fa-minus"></i></button>
+            <input type="number" id="ul-qty" min="1" max="50" value="1">
+            <button type="button" id="ul-qty-plus" aria-label="More"><i class="fa fa-plus"></i></button>
+          </div>
+        </div>
+        <div class="ul-breakdown" id="ul-breakdown"></div>
+      </div>
+
+      <div id="ul-waiting" class="ul-waiting" style="display:none">
+        <i class="fa fa-spinner fa-spin"></i>
+        <div class="ul-waiting-title">Complete the payment in your browser</div>
+        <div class="ul-waiting-sub">Stripe Checkout opened in your browser. The extra users are added as soon as the payment is confirmed.</div>
+        <div class="ul-waiting-actions">
+          <button type="button" class="po-btn-primary" id="ul-check"><i class="fa fa-arrows-rotate"></i> Check payment status</button>
+          <button type="button" class="po-btn-ghost" id="ul-retry"><i class="fa fa-arrow-left"></i> Back</button>
+        </div>
+      </div>
+
+      <div id="ul-alert" class="qap-alert" style="display:none;margin-top:12px"></div>
+    </div>
+    <div class="po-aim-footer">
+      <button class="po-btn-ghost" id="ul-cancel"><i class="fa fa-xmark"></i> Cancel</button>
+      <button class="po-btn-primary" id="ul-pay"><i class="fa fa-credit-card"></i> Pay &amp; add user</button>
+    </div>
+  </div>
+</div>
+
 <style>
 .about-row {
   display: flex;

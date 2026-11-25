@@ -83,6 +83,116 @@ class StripeSubscriptionService
     }
 
     /**
+     * One-off Checkout (mode=payment) for the first month of extra user seats.
+     * The recurring part is added to the subscription afterwards by
+     * upsertExtraUsersItem(), once Stripe confirms this charge.
+     */
+    public function createExtraUsersCheckoutSession(
+        Payment $payment,
+        Business $business,
+        Package $package,
+        int $quantity,
+        float $unitPrice,
+        ?string $customerId,
+        string $successUrl,
+        string $cancelUrl,
+    ): CheckoutSession {
+        $metadata = [
+            'payment_id' => (string) $payment->id,
+            'business_id' => (string) $business->id,
+            'package_id' => (string) $package->id,
+            'kind' => Payment::TYPE_EXTRA_USERS,
+            'quantity' => (string) $quantity,
+        ];
+
+        $params = [
+            'mode' => 'payment',
+            'client_reference_id' => (string) $payment->id,
+            'line_items' => [[
+                'quantity' => $quantity,
+                'price_data' => [
+                    'currency' => $payment->currency ?? 'usd',
+                    'unit_amount' => (int) round($unitPrice * 100),
+                    'product_data' => [
+                        'name' => 'Extra user — '.$package->name.' plan',
+                        'description' => 'Additional user seat for '.$business->name.' (first month)',
+                        'tax_code' => 'txcd_10103000',
+                    ],
+                ],
+            ]],
+            'success_url' => $successUrl.'?session_id={CHECKOUT_SESSION_ID}',
+            'cancel_url' => $cancelUrl,
+            'metadata' => $metadata,
+            'payment_intent_data' => ['metadata' => $metadata],
+        ];
+
+        // Reuse the subscription's customer so the charge shows up on the same Stripe account.
+        if ($customerId) {
+            $params['customer'] = $customerId;
+        } else {
+            $params['customer_email'] = $payment->user?->email;
+        }
+
+        return $this->client()->checkout->sessions->create($params);
+    }
+
+    /**
+     * Sets the subscription's "Extra users" item to `$seats` × `$unitPrice` per
+     * month, creating it on first use. No proration — the current month was
+     * already paid through createExtraUsersCheckoutSession(), so the new
+     * amount applies from the next renewal.
+     */
+    public function upsertExtraUsersItem(string $subscriptionId, int $seats, float $unitPrice, string $currency, string $productName): void
+    {
+        $subscription = $this->retrieveSubscription($subscriptionId);
+
+        $existing = null;
+        foreach ($subscription->items->data ?? [] as $item) {
+            if (($item->metadata['kind'] ?? null) === Payment::TYPE_EXTRA_USERS) {
+                $existing = $item;
+                break;
+            }
+        }
+
+        if ($seats <= 0) {
+            if ($existing) {
+                $this->client()->subscriptions->update($subscriptionId, [
+                    'items' => [['id' => $existing->id, 'deleted' => true]],
+                    'proration_behavior' => 'none',
+                ]);
+            }
+
+            return;
+        }
+
+        $productId = $existing
+            ? (is_string($existing->price->product) ? $existing->price->product : $existing->price->product->id)
+            : $this->client()->products->create([
+                'name' => $productName,
+                'tax_code' => 'txcd_10103000',
+            ])->id;
+
+        $item = [
+            'quantity' => $seats,
+            'price_data' => [
+                'currency' => strtolower($currency),
+                'product' => $productId,
+                'unit_amount' => (int) round($unitPrice * 100),
+                'recurring' => ['interval' => 'month'],
+            ],
+            'metadata' => ['kind' => Payment::TYPE_EXTRA_USERS],
+        ];
+        if ($existing) {
+            $item['id'] = $existing->id;
+        }
+
+        $this->client()->subscriptions->update($subscriptionId, [
+            'items' => [$item],
+            'proration_behavior' => 'none',
+        ]);
+    }
+
+    /**
      * Schedule (or undo) cancellation at the end of the paid period — the
      * customer keeps access until then and is not charged again.
      */

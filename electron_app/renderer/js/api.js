@@ -604,6 +604,9 @@ const API = (() => {
     memberMe:    ()                  => request('GET',    '/me'),
     usersList:   ()                  => request('GET',    '/users'),
     usersAdd:    (body)              => request('POST',   '/users', body),
+    // Package user limit — seat usage + extra-user pricing, and Stripe Checkout for N extra users
+    usersSeats:         ()           => request('GET',    '/users/seats'),
+    usersSeatsCheckout: (quantity)   => request('POST',   '/users/seats/checkout', { quantity }),
     usersUpdate: (memberId, body)    => request('PUT',    `/users/${memberId}`, body),
     usersRemove: (memberId)          => request('DELETE', `/users/${memberId}`),
     usersInviteResend: (inviteId)    => request('POST',   `/users/invitations/${inviteId}/resend`),

@@ -105,6 +105,7 @@
             <option value="">All types</option>
             <option value="subscription" @selected(request('type') === 'subscription')>Subscription</option>
             <option value="free" @selected(request('type') === 'free')>Free</option>
+            <option value="extra_users" @selected(request('type') === 'extra_users')>Extra users</option>
         </select>
         @if($gateways->isNotEmpty())
             <select name="gateway" onchange="this.form.submit()">
@@ -158,7 +159,7 @@
                         </td>
                         <td data-label="Package">
                             {{ $p->package?->name ?? '—' }}
-                            <div class="apay-meta" style="text-transform:capitalize;">{{ $p->payment_type }}@if($p->billing_cycle) · {{ $p->billing_cycle }}@endif</div>
+                            <div class="apay-meta" style="text-transform:capitalize;">@if($p->isExtraUsers())<strong style="color:var(--primary);text-transform:none;">Extra users (+{{ (int) ($p->metadata['quantity'] ?? 1) }})</strong>@else{{ $p->payment_type }}@endif @if($p->billing_cycle) · {{ $p->billing_cycle }}@endif</div>
                         </td>
                         <td data-label="Amount"><span class="apay-amount">{{ strtoupper($p->currency ?? 'USD') }} {{ number_format((float) $p->amount, 2) }}</span></td>
                         <td data-label="Status"><span class="apay-badge apay-badge--{{ $p->payment_status }}">{{ $p->payment_status }}</span></td>

@@ -150,7 +150,7 @@ class AdminPaymentHistoryService
                 ->orWhereHas('business', fn ($b) => $b->where('name', 'like', "%{$search}%"))
                 ->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%")->orWhere('email', 'like', "%{$search}%"))))
             ->when(in_array($status, self::STATUSES, true), fn ($q) => $q->where('payment_status', $status))
-            ->when(in_array($type, [Payment::TYPE_SUBSCRIPTION, Payment::TYPE_FREE], true), fn ($q) => $q->where('payment_type', $type))
+            ->when(in_array($type, [Payment::TYPE_SUBSCRIPTION, Payment::TYPE_FREE, Payment::TYPE_EXTRA_USERS], true), fn ($q) => $q->where('payment_type', $type))
             ->when($gateway !== '', fn ($q) => $q->where('gateway', $gateway))
             ->when($platform !== '', fn ($q) => $q->where('platform', $platform))
             ->when($from, fn ($q) => $q->where('created_at', '>=', Carbon::parse($from)->startOfDay()))

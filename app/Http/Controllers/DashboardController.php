@@ -13,6 +13,7 @@ use Modules\Business\Models\BusinessCategory;
 use Modules\Account\Models\Account;
 use Modules\Package\Models\Package;
 use Modules\Payment\Services\AdminPaymentHistoryService;
+use Modules\Payment\Services\AdminUserSeatOverviewService;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -145,7 +146,7 @@ class DashboardController extends Controller
             ->exists();
     }
 
-    public function adminPanel(AdminPaymentHistoryService $paymentHistory): View
+    public function adminPanel(AdminPaymentHistoryService $paymentHistory, AdminUserSeatOverviewService $seatOverview): View
     {
         $now = now();
         $startOfMonth = $now->copy()->startOfMonth();
@@ -193,12 +194,16 @@ class DashboardController extends Controller
         $recentPayments = $paymentHistory->recent(5);
         $paymentSummary = $paymentHistory->summary();
 
+        // Package user limits + extra users sold (Package Management → Max users / Price per extra user)
+        $seatOverview = $seatOverview->overview(8);
+
         return view('admin', compact(
             'totalUsers', 'usersThisMonth', 'usersLastMonth',
             'totalBusinesses', 'bizThisMonth', 'bizLastMonth',
             'totalAccounts', 'accountsThisMonth',
             'chartLabels', 'chartUsers', 'chartBiz',
             'recentUsers', 'recentPayments', 'paymentSummary',
+            'seatOverview',
         ));
     }
 }

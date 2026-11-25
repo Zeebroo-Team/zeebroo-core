@@ -12,6 +12,8 @@ class Payment extends Model
 {
     public const TYPE_SUBSCRIPTION = 'subscription';
     public const TYPE_FREE = 'free';
+    /** One-off charge for extra user seats beyond the package's max_users (see ExtraUserPurchaseService). */
+    public const TYPE_EXTRA_USERS = 'extra_users';
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_PROCESSING = 'processing';
@@ -92,6 +94,55 @@ class Payment extends Model
     public function isOverdue(): bool
     {
         return $this->due_at !== null && $this->due_at->isPast();
+    }
+
+    public function isExtraUsers(): bool
+    {
+        return $this->payment_type === self::TYPE_EXTRA_USERS;
+    }
+
+    /**
+     * What this payment paid for, line by line — shared by the billing screen
+     * and the PDF receipt. Extra-user purchases and renewals that include extra
+     * users carry their breakdown in metadata; anything else is one plan line.
+     *
+     * @return list<array{description: string, quantity: int, unit_price: float, amount: float}>
+     */
+    public function lineItems(): array
+    {
+        $meta = $this->metadata ?? [];
+        $plan = $this->package?->name ?? 'Subscription';
+
+        if ($this->isExtraUsers()) {
+            $qty = max(1, (int) ($meta['quantity'] ?? 1));
+            $unit = (float) ($meta['unit_price'] ?? ((float) $this->amount / $qty));
+
+            return [[
+                'description' => 'Extra users — '.$plan.' plan',
+                'quantity' => $qty,
+                'unit_price' => $unit,
+                'amount' => (float) $this->amount,
+            ]];
+        }
+
+        $seats = (int) ($meta['extra_users'] ?? 0);
+        $unit = (float) ($meta['extra_user_price'] ?? 0);
+        if ($this->payment_type === self::TYPE_SUBSCRIPTION && $seats > 0 && $unit > 0) {
+            $extra = round($seats * $unit, 2);
+            $base = round((float) $this->amount - $extra, 2);
+
+            return [
+                ['description' => $plan.' plan', 'quantity' => 1, 'unit_price' => $base, 'amount' => $base],
+                ['description' => 'Extra users', 'quantity' => $seats, 'unit_price' => $unit, 'amount' => $extra],
+            ];
+        }
+
+        return [[
+            'description' => $plan.' plan',
+            'quantity' => 1,
+            'unit_price' => (float) $this->amount,
+            'amount' => (float) $this->amount,
+        ]];
     }
 
     public function currencySymbol(): string

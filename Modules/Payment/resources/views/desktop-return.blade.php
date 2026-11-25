@@ -38,6 +38,11 @@
     'cancel'  => ['icon' => '!', 'cls' => 'cancel',  'title' => 'Payment canceled', 'text' => 'Your business setup is saved. Return to the app to try the payment again.'],
     'failed'  => ['icon' => '×', 'cls' => 'failed',  'title' => 'We could not confirm your payment', 'text' => 'Please return to the app and try again, or contact support if the problem continues.'],
   ][$status] ?? ['icon' => '×', 'cls' => 'failed', 'title' => 'Something went wrong', 'text' => 'Please return to the app and try again.'];
+  if (! empty($extraUsers) && $status === 'success') {
+    $copy['text'] = 'Your extra users were added and your monthly subscription has been updated. You can close this window and return to the Zeebroo POS app.';
+  } elseif (! empty($extraUsers) && $status === 'cancel') {
+    $copy['text'] = 'No extra users were added and you were not charged. Return to the app to try again.';
+  }
   $scheme = ($platform ?? 'desktop') === 'pos_lite' ? 'zeebroopos' : 'socibiz';
   $deepLink = $scheme . '://payment?status=' . urlencode($status) . ($paymentId ? '&payment_id=' . urlencode((string) $paymentId) : '');
 @endphp

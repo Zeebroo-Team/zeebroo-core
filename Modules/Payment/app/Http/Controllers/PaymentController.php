@@ -75,6 +75,7 @@ class PaymentController extends Controller
             'status' => ($payment?->isSucceeded() ?? false) ? 'success' : 'failed',
             'paymentId' => $payment?->id,
             'platform' => $payment?->platform ?? 'desktop',
+            'extraUsers' => (bool) $payment?->isExtraUsers(),
         ]);
     }
 
@@ -90,6 +91,7 @@ class PaymentController extends Controller
             'status' => 'cancel',
             'paymentId' => $payment?->id,
             'platform' => $payment?->platform ?? 'desktop',
+            'extraUsers' => (bool) $payment?->isExtraUsers(),
         ]);
     }
 

@@ -27,7 +27,14 @@ class BusinessInvitationService
 {
     public const EXPIRY_DAYS = 7;
 
-    public function __construct(private readonly AutomatedEmailService $automated) {}
+    private readonly UserSeatService $seats;
+
+    public function __construct(
+        private readonly AutomatedEmailService $automated,
+        ?UserSeatService $seats = null,
+    ) {
+        $this->seats = $seats ?? new UserSeatService();
+    }
 
     /**
      * Create (or refresh) an invitation and email it. Re-inviting a pending email
@@ -36,6 +43,7 @@ class BusinessInvitationService
      * @return array{0: BusinessInvitation, 1: bool} invitation, whether the email was sent
      *
      * @throws ValidationException
+     * @throws \Modules\Business\Exceptions\UserLimitReachedException when no user seat is free
      */
     public function invite(Business $business, string $email, string $role, ?array $permissions, User $inviter): array
     {
@@ -58,11 +66,18 @@ class BusinessInvitationService
                 ->value('permissions') ?? [];
         }
 
-        $invitation = BusinessInvitation::query()
+        $pending = BusinessInvitation::query()
             ->where('business_id', $business->id)
             ->where('email', $email)
             ->where('status', BusinessInvitation::STATUS_PENDING)
-            ->first() ?? new BusinessInvitation([
+            ->first();
+
+        // Refreshing an open invite keeps its seat; anything else needs a free seat.
+        if ($pending === null || $pending->isExpired()) {
+            $this->seats->assertCanAdd($business);
+        }
+
+        $invitation = $pending ?? new BusinessInvitation([
                 'business_id' => $business->id,
                 'email' => $email,
                 'status' => BusinessInvitation::STATUS_PENDING,

@@ -286,6 +286,30 @@
                                 </div>
                             </div>
 
+                            @php $seats = $stats['seats']; @endphp
+                            <div class="ads-stat-grid" style="margin-bottom:12px;">
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">User seats ({{ $seats['plan'] ?? 'no package' }})</p>
+                                    @if($seats['limited'])
+                                        <p class="ads-mini-stat-value" style="{{ $seats['users_remaining'] === 0 ? 'color:#d97706;' : '' }}">{{ $seats['users_used'] }} / {{ $seats['user_limit'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">{{ $seats['users_remaining'] === 0 ? 'full' : $seats['users_remaining'].' free' }}</span></p>
+                                    @else
+                                        <p class="ads-mini-stat-value">{{ $seats['users_used'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">unlimited</span></p>
+                                    @endif
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">{{ $seats['custom_limit'] ? 'Custom limit (admin)' : 'Included' }} / extra users</p>
+                                    <p class="ads-mini-stat-value">{{ $seats['included_users'] ?? '∞' }} <span style="font-size:11px;font-weight:600;color:var(--muted);">+ {{ $seats['extra_users'] }} extra</span></p>
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Price per extra user</p>
+                                    <p class="ads-mini-stat-value">{{ $seats['extra_user_price'] !== null ? $seats['currency'].' '.number_format($seats['extra_user_price'], 2) : '—' }}</p>
+                                </div>
+                                <div class="ads-mini-stat">
+                                    <p class="ads-mini-stat-label">Monthly total</p>
+                                    <p class="ads-mini-stat-value">{{ $seats['currency'] }} {{ number_format($seats['monthly_total'], 2) }} <span style="font-size:11px;font-weight:600;color:var(--muted);">plan {{ number_format($seats['base_amount'], 2) }} + extra {{ number_format($seats['extra_monthly'], 2) }}</span></p>
+                                </div>
+                            </div>
+
                             <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">
                                 <table class="ads-table">
                                     <thead>

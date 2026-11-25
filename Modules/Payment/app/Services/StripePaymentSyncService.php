@@ -41,6 +41,7 @@ class StripePaymentSyncService
 
     public function __construct(
         private readonly PosNotificationService $notifications,
+        private readonly ExtraUserPurchaseService $extraUsers,
     ) {}
 
     public function paymentForSession(object $session): ?Payment
@@ -64,6 +65,16 @@ class StripePaymentSyncService
 
         if (! in_array($session->payment_status ?? null, ['paid', 'no_payment_required'], true)) {
             return false;
+        }
+
+        // A one-off extra-users charge: adds seats, never touches subscription status.
+        if ($payment->isExtraUsers()) {
+            return $this->extraUsers->settle(
+                $payment,
+                $session->id,
+                $this->idOf($session->customer ?? null),
+                $this->idOf($session->payment_intent ?? null),
+            );
         }
 
         // retrieveSession() expands subscription/payment_intent into full Stripe
@@ -179,6 +190,7 @@ class StripePaymentSyncService
                 'stripe_payment_intent_id' => $this->idOf($invoice->payment_intent ?? null),
                 'stripe_subscription_status' => 'active',
                 'paid_at' => $this->invoicePaidAt($invoice) ?? now(),
+                'metadata' => $this->extraUsers->renewalMetadata($anchor->business),
             ]);
 
             if ($renewal->business) {
@@ -231,6 +243,7 @@ class StripePaymentSyncService
                     'stripe_invoice_id' => $invoice->id,
                     'failure_reason' => 'Stripe invoice payment failed for subscription renewal.',
                     'due_at' => Payment::dueAtFor($anchor->business),
+                    'metadata' => $this->extraUsers->renewalMetadata($anchor->business),
                 ]);
             }
 

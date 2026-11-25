@@ -109,6 +109,7 @@ class Business extends Model
             'has_unlimited_access' => 'boolean',
             'has_manual_features' => 'boolean',
             'payment_grace_days' => 'integer',
+            'max_users_override' => 'integer',
         ];
     }
 

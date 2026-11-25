@@ -19,6 +19,11 @@
 
   $symbol = $payment->currencySymbol();
   $amountText = $symbol . number_format((float) $payment->amount, 2);
+  $money = fn ($v) => $symbol . number_format((float) $v, 2);
+
+  $lines = $payment->lineItems();
+  $isExtraUsers = $payment->isExtraUsers();
+  $newMonthlyTotal = $payment->metadata['new_monthly_total'] ?? null;
 
   // This receipt is issued by the platform for the business's subscription
   // payment — the business (and its owner) is the paying customer, not the seller.
@@ -180,22 +185,44 @@
       </tr>
     </thead>
     <tbody>
+      @foreach($lines as $i => $line)
       <tr>
         <td>
-          <div class="item-title">{{ $planName }} — {{ $billingCycle }} plan</div>
-          @if($periodStart && $periodEnd)
-            <div class="item-sub">{{ $periodStart->format('M j') }} – {{ $periodEnd->format('M j, Y') }}</div>
-          @endif
-          @if($planDescription)
-            <div class="item-sub">{{ $planDescription }}</div>
+          @if($isExtraUsers)
+            <div class="item-title">{{ $line['description'] }}</div>
+            <div class="item-sub">Additional user {{ $line['quantity'] === 1 ? 'seat' : 'seats' }} — first month. Added to your monthly subscription from the next renewal.</div>
+          @elseif($i === 0)
+            <div class="item-title">{{ $planName }} — {{ $billingCycle }} plan</div>
+            @if($periodStart && $periodEnd)
+              <div class="item-sub">{{ $periodStart->format('M j') }} – {{ $periodEnd->format('M j, Y') }}</div>
+            @endif
+            @if($planDescription)
+              <div class="item-sub">{{ $planDescription }}</div>
+            @endif
+          @else
+            <div class="item-title">{{ $line['description'] }}</div>
+            <div class="item-sub">Users beyond the plan's included {{ $payment->package?->max_users ?? '' }} users</div>
           @endif
         </td>
-        <td class="num">1</td>
-        <td class="num">{{ $amountText }}</td>
-        <td class="num">{{ $amountText }}</td>
+        <td class="num">{{ $line['quantity'] }}</td>
+        <td class="num">{{ $money($line['unit_price']) }}</td>
+        <td class="num">{{ $money($line['amount']) }}</td>
       </tr>
+      @endforeach
     </tbody>
   </table>
+
+  @if($isExtraUsers && $newMonthlyTotal !== null)
+    <div class="summary-strip" style="margin-top:18px">
+      <div class="summary-label">New monthly subscription total</div>
+      <div class="summary-date" style="color:#111111;font-size:12px;font-weight:700">
+        {{ $money($newMonthlyTotal) }} / month from the next renewal
+        @if(isset($payment->metadata['base_amount']))
+          ({{ $money($payment->metadata['base_amount']) }} plan + {{ (int) ($payment->metadata['extra_users_before'] ?? 0) + (int) ($payment->metadata['quantity'] ?? 1) }} extra {{ ((int) ($payment->metadata['extra_users_before'] ?? 0) + (int) ($payment->metadata['quantity'] ?? 1)) === 1 ? 'user' : 'users' }} × {{ $money($payment->metadata['unit_price'] ?? 0) }})
+        @endif
+      </div>
+    </div>
+  @endif
 
   <table class="totals">
     <tr>
