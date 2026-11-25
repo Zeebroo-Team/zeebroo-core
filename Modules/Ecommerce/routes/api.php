@@ -7,7 +7,14 @@ use Modules\Ecommerce\Http\Controllers\StorefrontController;
 
 // Desktop (Electron) E-Commerce tab — manage the business's online store.
 // PosIdempotency: writes the desktop app queued offline (Idempotency-Key header) run once.
-Route::middleware(['auth:sanctum', PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function () {
+// EnsureSubscriptionSettled: locked (overdue / trial expired) businesses can't use it.
+// EnsureFeatureInPlan: only packages that include E-Commerce can use it.
+Route::middleware([
+    'auth:sanctum',
+    \Modules\Pos\Http\Middleware\EnsureSubscriptionSettled::class,
+    \Modules\Pos\Http\Middleware\EnsureFeatureInPlan::class,
+    PosIdempotency::class,
+])->prefix('v1/pos')->name('pos.')->group(function () {
 
     $c = EcommerceApiController::class;
 

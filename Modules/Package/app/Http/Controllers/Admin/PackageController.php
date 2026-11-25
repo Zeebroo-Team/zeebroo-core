@@ -15,7 +15,7 @@ class PackageController extends Controller
 
     public function index(): View
     {
-        $packages = Package::orderBy('sort_order')->orderBy('id')->get();
+        $packages = Package::orderByDesc('is_trial')->orderBy('sort_order')->orderBy('id')->get();
         $features = config('features.list', []);
 
         return view('package::admin.packages.index', compact('packages', 'features'));
@@ -61,7 +61,23 @@ class PackageController extends Controller
             'currency'          => ['required', 'string', 'in:LKR,USD'],
             'max_users'         => ['nullable', 'integer', 'min:1'],
             'extra_user_price'  => ['nullable', 'numeric', 'min:0'],
-            'is_free'          => ['boolean'],
+            'is_trial'          => [
+                'boolean',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request, $ignorePackageId): void {
+                    if (! $request->boolean('is_trial')) {
+                        return;
+                    }
+
+                    $alreadyTaken = Package::where('is_trial', true)
+                        ->when($ignorePackageId, fn ($query) => $query->whereKeyNot($ignorePackageId))
+                        ->exists();
+
+                    if ($alreadyTaken) {
+                        $fail('Only one free trial package can exist. Turn off "Free trial" on the other package first.');
+                    }
+                },
+            ],
+            'trial_days'        => ['nullable', 'required_if:is_trial,1', 'integer', 'min:1', 'max:365'],
             'is_active'         => ['boolean'],
             'is_mobile_only'    => ['boolean'],
             'supports_pos_lite' => [
@@ -87,7 +103,8 @@ class PackageController extends Controller
 
         unset($data['image']);
 
-        $data['is_free'] = $request->boolean('is_free');
+        // "Free forever" packages are retired — the free trial package replaces them.
+        $data['is_free'] = false;
         $data['is_active'] = $request->boolean('is_active');
         $data['is_mobile_only'] = $request->boolean('is_mobile_only');
         $data['supports_pos_lite'] = $request->boolean('supports_pos_lite');
@@ -97,9 +114,14 @@ class PackageController extends Controller
         // An extra-user charge only makes sense once there is a user cap to exceed.
         $data['extra_user_price'] = $data['max_users'] !== null ? ($data['extra_user_price'] ?? null) : null;
 
-        if ($data['is_free']) {
+        $data['is_trial'] = $request->boolean('is_trial');
+        $data['trial_days'] = $data['is_trial'] ? (int) $data['trial_days'] : null;
+
+        if ($data['is_trial']) {
+            // A trial is never paid — it expires after trial_days.
             $data['price'] = 0;
             $data['discounted_price'] = null;
+            $data['extra_user_price'] = null;
         }
 
         return $data;

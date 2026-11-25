@@ -3822,6 +3822,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
     <!-- Tab row: File button + tabs + collapse pin -->
     <div id="ribbon-tabrow">
       <button id="ribbon-file-btn"><i class="fa fa-bars"></i> File</button>
+      <button class="rb-tabs-scroll" id="rb-tabs-left" title="Scroll tabs left" tabindex="-1"><i class="fa fa-chevron-left"></i></button>
       <div id="ribbon-tabs">
         <!-- Shown while feature flags / permissions load (see setFeaturesLoading) -->
         <div id="ribbon-tabs-loading" aria-label="Loading features">
@@ -3851,6 +3852,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
         <div class="ribbon-tab" data-tab="event-mgmt">Event</div>
         <div class="ribbon-tab" data-tab="ecommerce">E-Commerce</div>
       </div>
+      <button class="rb-tabs-scroll" id="rb-tabs-right" title="Scroll tabs right" tabindex="-1"><i class="fa fa-chevron-right"></i></button>
       <button id="sb-tools-more" title="More actions"><span>More</span><i class="fa fa-chevron-down"></i></button>
       <div class="rb-notif-wrap" id="rb-notif-wrap">
         <button class="rb-notif-btn" id="rb-notif-btn" title="Notifications">
@@ -5037,6 +5039,35 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <span id="email-verify-bar-text"></span>
       <button class="po-btn-primary" id="email-verify-bar-btn"><i class="fa fa-envelope-circle-check"></i> Verify Now</button>
       <button class="billing-alert-dismiss" id="email-verify-bar-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Free trial running — days left (js/trial-plan.js) -->
+    <div id="trial-bar" class="billing-alert-bar trial-bar" style="display:none">
+      <i class="fa fa-gift"></i>
+      <span id="trial-bar-text"></span>
+      <button class="po-btn-primary" id="trial-bar-btn"><i class="fa fa-arrow-up"></i> Choose a plan</button>
+      <button class="billing-alert-dismiss" id="trial-bar-dismiss" title="Dismiss"><i class="fa fa-xmark"></i></button>
+    </div>
+
+    <!-- Free trial → "Choose your plan" (also the lock screen once the trial expired) -->
+    <div id="trial-plan-overlay" class="trial-plan-overlay mac-overlay" style="display:none">
+      <div class="mac-window trial-plan-window" style="width:1000px;max-width:96vw;max-height:90vh">
+        <div class="mac-titlebar">
+          <div class="mac-title">
+            <span class="mac-title-icon trial-plan-title-icon"><i class="fa fa-gem"></i></span>
+            <div style="min-width:0"><div class="mac-title-main" id="trial-plan-title">Choose your plan</div><div class="mac-title-sub" id="trial-plan-sub"></div></div>
+          </div>
+          <div class="mac-win-btns" style="margin-left:auto">
+            <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+            <button type="button" class="mac-close-btn" id="trial-plan-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+          </div>
+        </div>
+        <div class="mac-scroll" id="trial-plan-body"></div>
+        <div class="po-aim-footer mac-footer" style="justify-content:space-between;align-items:center">
+          <span class="pm-foot-note"><i class="fa fa-lock"></i> Prices are per month · paid securely with Stripe</span>
+          <button class="po-btn-ghost" id="trial-plan-close-btn"><i class="fa fa-xmark"></i> Close</button>
+        </div>
+      </div>
     </div>
 
     <!-- Subscription overdue — full lockout screen -->
@@ -24455,20 +24486,28 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 </div>
 
 <!-- Billing & Payments Modal -->
-<div id="payment-modal-overlay" class="modal-overlay" style="display:none">
-  <div class="po-aim-shell" style="width:70vw;max-width:980px;max-height:90vh">
-    <div class="po-aim-header">
-      <i class="fa fa-file-invoice-dollar" style="color:var(--accent)"></i>
-      <span>Billing &amp; Payments</span>
-      <button class="psm-close" id="payment-modal-close"><i class="fa fa-xmark"></i></button>
+<div id="payment-modal-overlay" class="modal-overlay mac-overlay" style="display:none">
+  <div class="mac-window pm-window" style="width:920px;max-width:96vw;height:86vh">
+    <div class="mac-titlebar">
+      <div class="mac-title">
+        <span class="mac-title-icon pm-title-icon"><i class="fa fa-file-invoice-dollar"></i></span>
+        <div style="min-width:0"><div class="mac-title-main">Billing &amp; Payments</div><div class="mac-title-sub">Your plan, users and payment history</div></div>
+      </div>
+      <div class="mac-win-btns" style="margin-left:auto">
+        <button type="button" class="mac-close-btn mac-zoom-btn" data-mac-zoom title="Full screen"><i class="fa fa-expand"></i></button>
+        <button type="button" class="mac-close-btn" id="payment-modal-close" data-mac-close title="Close (Esc)"><i class="fa fa-xmark"></i></button>
+      </div>
     </div>
-    <div class="po-aim-body" style="max-height:78vh;overflow-y:auto">
+    <div class="mac-scroll">
       <div id="pm-alert" class="qap-alert" style="display:none;margin-bottom:14px"></div>
 
       <!-- List panel -->
       <div id="pm-list-panel">
         <div id="pm-summary"></div>
-        <div id="pm-tabs" class="pm-tabs"></div>
+        <div class="pm-history-head">
+          <div class="pm-history-title">Payment history</div>
+          <div id="pm-tabs" class="crm-inbox-tabs pm-tabs"></div>
+        </div>
         <div id="pm-list" class="pm-list"></div>
       </div>
 
@@ -24476,6 +24515,13 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
       <div id="pm-detail-panel" style="display:none">
         <button class="po-btn-ghost" id="pm-detail-back" style="margin-bottom:14px"><i class="fa fa-arrow-left"></i> Back to history</button>
         <div id="pm-detail-body"></div>
+      </div>
+    </div>
+    <div class="po-aim-footer mac-footer" style="justify-content:space-between;align-items:center">
+      <span class="pm-foot-note"><i class="fa fa-lock"></i> Payments are processed securely by Stripe</span>
+      <div style="display:flex;gap:8px">
+        <button class="po-btn-ghost" id="pm-refresh"><i class="fa fa-rotate"></i> Refresh</button>
+        <button class="po-btn-ghost" id="pm-close-btn"><i class="fa fa-xmark"></i> Close</button>
       </div>
     </div>
   </div>
@@ -26072,6 +26118,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
 <script src="js/jsbarcode.min.js"></script>
 <script src="js/api.js"></script>
 <script src="js/app.js"></script>
+<script src="js/trial-plan.js"></script>
 <script src="js/ecommerce.js"></script>
 <script src="js/ribbon-customize.js"></script>
 <script src="js/home-subnav-customize.js"></script>

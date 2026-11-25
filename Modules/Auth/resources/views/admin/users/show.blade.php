@@ -125,6 +125,21 @@
                 <span class="ads-role ads-role--{{ $roleName }}">{{ ucfirst($roleName) }}</span>
             </h1>
             <p class="ads-email">{{ $user->email }}</p>
+            @php
+                // Contact details entered at sign-up live on the first branch
+                // (onboarding "Location" step), not on the user record.
+                $contactBranches = $user->businesses->sortBy('created_at')->flatMap(fn ($b) => $b->branches->sortBy('id'));
+                $contactPhone = $contactBranches->pluck('phone')->filter()->first();
+                $contactEmail = $contactBranches->pluck('email')->filter(fn ($e) => $e && strcasecmp($e, (string) $user->email) !== 0)->first();
+                $contactAddress = $contactBranches->pluck('address')->filter()->first();
+            @endphp
+            @if($contactPhone || $contactEmail || $contactAddress)
+                <p class="ads-meta">
+                    @if($contactPhone)<span><i class="fa fa-phone"></i> <a href="tel:{{ preg_replace('/[^\d+]/', '', $contactPhone) }}" style="color:inherit;">{{ $contactPhone }}</a></span>@endif
+                    @if($contactEmail)<span><i class="fa fa-envelope"></i> {{ $contactEmail }}</span>@endif
+                    @if($contactAddress)<span><i class="fa fa-location-dot"></i> {{ $contactAddress }}</span>@endif
+                </p>
+            @endif
             <p class="ads-meta">
                 <span><i class="fa fa-calendar"></i> Joined {{ $user->created_at?->format('d M Y') }} ({{ $user->created_at?->diffForHumans() }})</span>
                 @if($user->email_verified_at)
@@ -220,8 +235,8 @@
                                             <div class="ads-branch-name">{{ $branch->name }}</div>
                                             <div class="ads-branch-meta">
                                                 @if($branch->address){{ $branch->address }}@endif
-                                                @if($branch->phone)@if($branch->address) · @endif{{ $branch->phone }}@endif
-                                                @if(! $branch->address && ! $branch->phone)No address or phone on file @endif
+                                                @php $branchContact = collect([$branch->address, $branch->phone, $branch->email])->filter()->implode(' · '); @endphp
+                                                {{ $branchContact !== '' ? $branchContact : 'No address, phone or email on file' }}
                                             </div>
                                         </div>
                                         <span class="ads-branch-badge {{ $branch->is_active ? 'ads-branch-badge--active' : 'ads-branch-badge--inactive' }}">{{ $branch->is_active ? 'Active' : 'Inactive' }}</span>

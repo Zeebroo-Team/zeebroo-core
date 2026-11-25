@@ -23,6 +23,7 @@ class UserSeatService
     {
         $members = BusinessMember::query()
             ->where('business_id', $business->id)
+            ->whereNull('deactivated_at') // members switched off by a plan change don't hold a seat
             ->whereHas('user')
             ->count();
 

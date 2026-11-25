@@ -110,7 +110,31 @@ class Business extends Model
             'has_manual_features' => 'boolean',
             'payment_grace_days' => 'integer',
             'max_users_override' => 'integer',
+            'trial_ends_at' => 'datetime',
+            'trial_reminder_sent_at' => 'datetime',
         ];
+    }
+
+    /** Running on a free-trial package (expired or not). Cleared once the business picks another plan. */
+    public function isOnTrial(): bool
+    {
+        return $this->trial_ends_at !== null;
+    }
+
+    /** The trial period has run out and no other plan was chosen yet — access locks until they do. */
+    public function trialHasExpired(): bool
+    {
+        return $this->trial_ends_at !== null && $this->trial_ends_at->isPast();
+    }
+
+    /** Whole days left in an active trial (0 on the last day), or null when not on a running trial. */
+    public function trialDaysLeft(): ?int
+    {
+        if ($this->trial_ends_at === null || $this->trial_ends_at->isPast()) {
+            return null;
+        }
+
+        return (int) floor(now()->diffInSeconds($this->trial_ends_at) / 86400);
     }
 
     /** Days this business's unpaid subscription payments stay open before access locks. */

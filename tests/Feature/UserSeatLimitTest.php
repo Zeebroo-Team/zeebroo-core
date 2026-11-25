@@ -61,6 +61,7 @@ beforeEach(function () {
         $t->json('permissions')->nullable();
         $t->string('status')->default('active');
         $t->unsignedBigInteger('invited_by')->nullable();
+        $t->timestamp('deactivated_at')->nullable();
         $t->timestamps();
     });
     Schema::create('business_invitations', function (Blueprint $t) {

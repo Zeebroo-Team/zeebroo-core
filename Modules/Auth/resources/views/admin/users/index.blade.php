@@ -234,6 +234,10 @@
                                         [$subLabel, $subTone] = ['No payment', 'muted'];
                                     } elseif ($pay->payment_type === \Modules\Payment\Models\Payment::TYPE_FREE) {
                                         [$subLabel, $subTone] = ['Free', 'muted'];
+                                    } elseif ($b->trial_ends_at) {
+                                        [$subLabel, $subTone] = $b->trial_ends_at->isPast()
+                                            ? ['Trial expired', 'bad']
+                                            : ['Trial · ends '.$b->trial_ends_at->format('d M'), 'warn'];
                                     } else {
                                         $raw = $pay->stripe_subscription_status ?: $pay->payment_status;
                                         $subLabel = ucfirst(str_replace('_', ' ', $raw));

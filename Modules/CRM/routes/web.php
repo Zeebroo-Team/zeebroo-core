@@ -20,8 +20,9 @@ use Modules\CRM\Http\Controllers\PublicLeadFormController;
 use Modules\CRM\Http\Controllers\QuotationApprovalLinkController;
 use Modules\CRM\Http\Controllers\TaskController;
 
-Route::middleware(['web', 'auth', 'verified'])->group(function () {
-    Route::get('/crm',                            [OverviewController::class, 'index'])   ->name('crm.overview');
+// EnsureFeatureInPlan:crm — businesses whose package lacks CRM can't reach these pages.
+Route::middleware(['web', 'auth', 'verified', \Modules\Pos\Http\Middleware\EnsureFeatureInPlan::class.':crm'])->group(function () {
+    Route::get('/crm',                           [OverviewController::class, 'index'])   ->name('crm.overview');
 
     Route::get('/crm/projects',                  [ProjectController::class, 'index'])     ->name('crm.projects.index');
     Route::post('/crm/projects',                 [ProjectController::class, 'store'])     ->name('crm.projects.store');

@@ -12,6 +12,12 @@ const API = (() => {
     if (res.status === 402 && res.body?.code === 'subscription_ended') {
       window.dispatchEvent(new CustomEvent('api-subscription-ended'));
     }
+    if (res.status === 402 && res.body?.code === 'trial_expired') {
+      window.dispatchEvent(new CustomEvent('api-trial-expired', { detail: res.body }));
+    }
+    if (res.status === 403 && res.body?.code === 'feature_not_in_plan') {
+      window.dispatchEvent(new CustomEvent('api-feature-not-in-plan', { detail: res.body }));
+    }
     // Offline mode kept a change on this PC (checkout shows its own message)
     if (res.offline && method !== 'GET' && res.status >= 200 && res.status < 300 && path !== '/online/checkout') {
       window.dispatchEvent(new CustomEvent('api-saved-offline', { detail: res.body?.message }));
@@ -52,6 +58,10 @@ const API = (() => {
     cancelBillingSubscription: () => request('POST', '/auth/payment/subscription/cancel'),
     resumeBillingSubscription: () => request('POST', '/auth/payment/subscription/resume'),
     paymentDetail:        (paymentId) => request('GET', `/auth/payment/${paymentId}`),
+    // Free trial → real plan (PosPlanApiController)
+    planInfo:     ()          => request('GET', '/auth/plan'),
+    planPreview:  (packageId) => request('GET', `/auth/plan/${packageId}/preview`),
+    planChange:   (packageId, body) => request('POST', `/auth/plan/${packageId}`, body),
     updateProfile:      (body) => request('PUT', '/auth/profile', body),
     updatePassword:     (body) => request('PUT', '/auth/password', body),
     // Profile photo — upload goes through electronAPI.apiUpload (multipart "files[]").

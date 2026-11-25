@@ -5,7 +5,12 @@ use Modules\Pos\Http\Middleware\PosIdempotency;
 use Modules\AutomationEditor\Http\Controllers\Api\AutomationFlowApiController;
 
 // PosIdempotency: writes the desktop app queued offline (Idempotency-Key header) run once.
-Route::middleware(['auth:sanctum', PosIdempotency::class])->prefix('v1/pos')->name('pos.')->group(function () {
+Route::middleware([
+    'auth:sanctum',
+    \Modules\Pos\Http\Middleware\EnsureSubscriptionSettled::class,
+    \Modules\Pos\Http\Middleware\EnsureFeatureInPlan::class,
+    PosIdempotency::class,
+])->prefix('v1/pos')->name('pos.')->group(function () {
     Route::get   ('automations',              [AutomationFlowApiController::class, 'index'])->name('automations.index');
     Route::post  ('automations',              [AutomationFlowApiController::class, 'store'])->name('automations.store');
     Route::get   ('automations/{id}',         [AutomationFlowApiController::class, 'show'])->where('id', '[0-9]+')->name('automations.show');

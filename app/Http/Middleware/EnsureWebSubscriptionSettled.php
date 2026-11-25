@@ -23,6 +23,7 @@ final class EnsureWebSubscriptionSettled
 {
     private const EXEMPT_ROUTE_PREFIXES = [
         'payment.',
+        'plan.',
         'business.platform-choice',
         'business.get-started.',
         'business.select',
@@ -46,6 +47,26 @@ final class EnsureWebSubscriptionSettled
         $business = Business::currentForNavbar($user);
         if ($business === null) {
             return $next($request);
+        }
+
+        // Free trial ran out — lock until the owner picks a real plan.
+        if ($business->trialHasExpired()) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json([
+                    'message' => 'Your free trial has ended. Choose a plan to continue using Zeebroo.',
+                    'code' => 'trial_expired',
+                ], 402);
+            }
+
+            return redirect()->route('plan.choose');
+        }
+
+        if ($business->isOnTrial() && ! $request->ajax() && ! $request->wantsJson()) {
+            View::share('trialBanner', [
+                'days_left' => $business->trialDaysLeft(),
+                'ends_at' => $business->trial_ends_at,
+                'is_owner' => (int) $business->user_id === (int) $user->id,
+            ]);
         }
 
         $overdue = $business->overdueSubscriptionPayment();

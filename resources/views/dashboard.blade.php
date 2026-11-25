@@ -29,7 +29,12 @@
         ? (function () use ($navBusiness) {
             $saved = (array) ($navBusiness->getSetting('business.features', []) ?: []);
             $defaults = array_fill_keys(array_keys(config('features.list', [])), true);
-            return !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
+            $merged = !empty($saved) ? array_merge($defaults, array_map('boolval', $saved)) : $defaults;
+            $allowed = array_flip($navBusiness->effectiveFeatureKeys());
+            foreach ($merged as $key => $on) {
+                $merged[$key] = $on && isset($allowed[$key]);
+            }
+            return $merged;
         })()
         : [];
     $featureOn = fn (string $key) => (bool) ($businessFeatures[$key] ?? true);
@@ -323,26 +328,16 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             padding:clamp(32px,7vh,80px) 0;padding-left:240px;box-sizing:border-box;
             /* --wiz-actions-h is the live height of the fixed bottom bar (set in JS) so content never hides under it */
             padding-bottom:calc(var(--wiz-actions-h, 84px) + 20px);
-            background:var(--bg);
+            background:var(--card);
         }
         @media(max-width:760px){.wiz-panel{padding-left:0;}}
-        .wiz-panel::before{
-            content:'';position:absolute;inset:0;pointer-events:none;
-            background-image:radial-gradient(circle,color-mix(in srgb,var(--primary) 7%,transparent) 1px,transparent 1px);
-            background-size:32px 32px;
-        }
-        /* Decorative blobs */
-        .wiz-blob{position:absolute;border-radius:50%;pointer-events:none;filter:blur(80px);opacity:.45;}
-        .wiz-blob--a{width:480px;height:480px;top:-120px;left:-120px;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 55%,transparent),transparent 70%);}
-        .wiz-blob--b{width:380px;height:380px;bottom:-90px;right:-60px;background:radial-gradient(circle,color-mix(in srgb,var(--primary) 25%,transparent),transparent 70%);}
 
         /* Step indicator — vertical sidebar */
         .wiz-stepper{
             position:fixed;top:0;left:0;bottom:0;z-index:50;width:240px;
             display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:0;
             padding:40px 28px;box-sizing:border-box;
-            background:color-mix(in srgb,var(--bg) 92%,transparent);
-            backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+            background:var(--card);
             border-right:1px solid var(--border);
         }
         @media(max-width:760px){.wiz-stepper{display:none;}}
@@ -405,12 +400,12 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-btn-primary{
             display:flex;align-items:center;justify-content:center;gap:9px;
             width:100%;padding:16px 24px;border-radius:13px;border:none;
-            background:var(--btn-bg);
-            color:var(--card);font-size:15.5px;font-weight:700;cursor:pointer;font-family:inherit;
-            transition:opacity .2s,transform .15s,box-shadow .2s;
-            box-shadow:0 6px 18px color-mix(in srgb,var(--primary) 38%,transparent);margin-top:26px;
+            background:var(--primary);
+            color:#fff;font-size:15.5px;font-weight:700;cursor:pointer;font-family:inherit;
+            transition:background .2s,transform .15s,box-shadow .2s;
+            box-shadow:none;margin-top:26px;
         }
-        .wiz-btn-primary:hover{opacity:.9;transform:translateY(-1px);box-shadow:0 8px 24px color-mix(in srgb,var(--primary) 45%,transparent);}
+        .wiz-btn-primary:hover{background:color-mix(in srgb,var(--primary) 88%,#000);box-shadow:0 6px 16px -8px color-mix(in srgb,var(--primary) 60%,transparent);}
         .wiz-btn-primary:active{transform:translateY(0);}
         .wiz-btn-back{
             display:inline-flex;align-items:center;gap:7px;
@@ -425,8 +420,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             position:fixed;bottom:0;left:240px;right:0;z-index:50;
             display:flex;justify-content:center;
             padding:16px clamp(20px,5vw,64px);box-sizing:border-box;
-            background:color-mix(in srgb,var(--bg) 92%,transparent);
-            backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+            background:var(--card);
             border-top:1px solid var(--border);
         }
         @media(max-width:760px){.wiz-actions-row{left:0;}}
@@ -685,95 +679,192 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-cat-search-wrap{position:relative;display:flex;align-items:center;margin-bottom:12px;}
         .wiz-cat-search-ico{position:absolute;left:14px;font-size:13.5px;color:var(--muted);pointer-events:none;}
         .wiz-cat-search-input{
-            width:100%;padding:11px 40px 11px 38px;border-radius:11px;
-            border:1.5px solid var(--border);background:color-mix(in srgb,var(--card) 94%,transparent);
+            width:100%;padding:12px 40px 12px 40px;border-radius:12px;
+            border:1px solid var(--border);background:var(--card);
             color:var(--text);font-size:14px;font-family:inherit;outline:none;
             transition:border-color .2s,box-shadow .2s;box-sizing:border-box;
         }
         .wiz-cat-search-input::placeholder{color:var(--muted);}
         .wiz-cat-search-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent);background:var(--card);}
-        .wiz-cat-search-clear{position:absolute;right:10px;width:26px;height:26px;border-radius:50%;border:none;background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--muted);cursor:pointer;display:grid;place-items:center;font-size:11px;transition:background .18s,color .18s;}
+        .wiz-cat-search-clear{position:absolute;right:10px;top:0;bottom:0;margin:auto 0;transform:none !important;width:26px;height:26px;padding:0;border-radius:50%;border:none;background:color-mix(in srgb,var(--muted) 16%,transparent);color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;transition:background .18s,color .18s;}
+        .wiz-cat-search-clear[hidden]{display:none;}
+        .wiz-cat-search-clear i{line-height:1;display:block;}
         .wiz-cat-search-clear:hover{background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary);}
         .wiz-cat-noresults{text-align:center;color:var(--muted);font-size:13.5px;padding:24px 0;margin:0;}
 
         /* Business category card grid (step 2) */
-        .wiz-cat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:4px;max-height:min(520px,56vh);overflow-y:auto;padding:3px;}
-        @media(max-width:760px){.wiz-cat-grid{grid-template-columns:repeat(2,1fr);}}
-        @media(max-width:480px){.wiz-cat-grid{grid-template-columns:1fr;}}
+        /* Same visual language as the package cards (step 3). No nested scroll: .wiz-card scrolls. */
+        .wiz-cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;margin-bottom:4px;padding:3px;}
+        /* Minimal white & gold: white card, hairline border, gold only as accent */
         .wiz-cat-card{
-            display:flex;flex-direction:column;gap:0;text-align:left;
-            border-radius:14px;border:2px solid var(--border);overflow:hidden;
-            background:color-mix(in srgb,var(--card) 94%,transparent);
-            transition:border-color .18s ease,background .18s ease,box-shadow .18s ease;
+            position:relative;display:flex;flex-direction:column;gap:0;text-align:left;cursor:pointer;
+            border-radius:16px;border:1px solid var(--border);overflow:hidden;background:var(--card);
+            transition:border-color .18s ease,box-shadow .18s ease;
         }
-        .wiz-cat-card:hover{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 4px 18px -8px color-mix(in srgb,var(--primary) 18%,transparent);}
-        .wiz-cat-card--on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,var(--card));box-shadow:0 6px 22px -8px color-mix(in srgb,var(--primary) 28%,transparent);}
-        /* Card head */
-        .wiz-cat-head{display:flex;align-items:center;gap:10px;padding:14px 14px 8px;}
-        .wiz-cat-ico{width:38px;height:38px;border-radius:10px;flex-shrink:0;display:grid;place-items:center;font-size:17px;background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted);transition:color .18s,background .18s;}
-        .wiz-cat-card--on .wiz-cat-ico{color:var(--primary);background:color-mix(in srgb,var(--primary) 16%,transparent);}
-        .wiz-cat-title-row{flex:1;min-width:0;}
-        .wiz-cat-name{display:block;font-size:13.5px;font-weight:700;color:var(--text);line-height:1.3;}
-        .wiz-cat-users{display:flex;align-items:center;gap:4px;margin-top:2px;font-size:11px;font-weight:600;color:var(--muted);}
-        .wiz-cat-users i{font-size:10px;}
+        .wiz-cat-card:hover{border-color:color-mix(in srgb,var(--primary) 50%,var(--border));box-shadow:0 8px 24px -16px color-mix(in srgb,var(--primary) 50%,transparent);}
+        .wiz-cat-card--on{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary),0 8px 24px -16px color-mix(in srgb,var(--primary) 55%,transparent);}
+        .wiz-cat-head{position:relative;display:flex;align-items:center;gap:14px;padding:20px 20px 0;background:transparent;}
+        /* Soft gold circle in the corner, same effect as the package card header */
+        .wiz-cat-card::after{content:"";position:absolute;right:-46px;top:-56px;width:140px;height:140px;border-radius:50%;
+            background:color-mix(in srgb,var(--primary) 9%,transparent);pointer-events:none;z-index:0;transition:background .2s ease,transform .25s ease;}
+        .wiz-cat-card:hover::after{transform:scale(1.08);}
+        .wiz-cat-card--on::after{background:color-mix(in srgb,var(--primary) 16%,transparent);}
+        .wiz-cat-head,.wiz-cat-desc,.wiz-cat-actions{position:relative;z-index:1;}
+        .wiz-cat-ico{width:42px;height:42px;border-radius:12px;flex-shrink:0;display:grid;place-items:center;font-size:17px;
+            background:color-mix(in srgb,var(--primary) 10%,var(--card));color:var(--primary);
+            border:1px solid color-mix(in srgb,var(--primary) 22%,transparent);transition:background .18s,color .18s;}
+        .wiz-cat-card--on .wiz-cat-ico{background:var(--primary);color:#fff;border-color:var(--primary);}
+        .wiz-cat-title-row{flex:1;min-width:0;padding-right:24px;}
+        .wiz-cat-name{display:block;font-size:15.5px;font-weight:700;letter-spacing:-.01em;color:var(--text);line-height:1.3;}
+        .wiz-cat-users{display:inline-flex;align-items:center;gap:5px;margin-top:4px;font-size:11.5px;font-weight:600;color:var(--muted);}
+        .wiz-cat-users i{font-size:10px;color:var(--primary);}
+        /* Selected check */
+        .wiz-cat-check{position:absolute;top:14px;right:14px;z-index:2;width:20px;height:20px;border-radius:50%;
+            background:var(--primary);color:#fff;font-size:9px;display:grid;place-items:center;
+            opacity:0;transform:scale(.6);transition:opacity .15s,transform .15s;}
+        .wiz-cat-card--on .wiz-cat-check{opacity:1;transform:scale(1);}
         /* Card desc */
-        .wiz-cat-desc{padding:0 14px 8px;font-size:12px;color:var(--muted);line-height:1.45;}
+        .wiz-cat-desc{margin:0;padding:12px 20px 0;font-size:13px;color:var(--muted);line-height:1.5;}
         /* Module chips */
         .wiz-cat-modules{display:flex;flex-wrap:wrap;gap:5px;padding:8px 12px;border-bottom:1px solid var(--border);}
         .wiz-cat-mod{font-size:10px;font-weight:700;letter-spacing:.02em;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--muted) 10%,transparent);color:var(--muted);transition:background .18s,color .18s;}
         .wiz-cat-mod--on{background:color-mix(in srgb,var(--primary) 13%,transparent);color:var(--primary);}
         .wiz-cat-card--on .wiz-cat-mod--on{background:color-mix(in srgb,var(--primary) 20%,transparent);}
         /* Card action buttons */
-        .wiz-cat-actions{display:flex;gap:7px;padding:10px 12px;margin-top:auto;}
-        .wiz-cat-btn-detail{
-            flex:1;padding:7px 8px;border-radius:9px;border:1.5px solid var(--border);
-            background:transparent;color:var(--muted);font-size:11.5px;font-weight:700;
-            font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;
-            transition:border-color .18s,color .18s,background .18s;
-        }
-        .wiz-cat-btn-detail:hover{border-color:var(--primary);color:var(--text);background:color-mix(in srgb,var(--primary) 5%,transparent);}
+        .wiz-cat-actions{display:flex;gap:8px;padding:18px 20px 20px;margin-top:auto;}
         .wiz-cat-btn-select{
-            flex:1;padding:7px 8px;border-radius:9px;
-            border:1.5px solid color-mix(in srgb,var(--primary) 40%,var(--border));
-            background:color-mix(in srgb,var(--primary) 9%,transparent);color:var(--primary);
-            font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;
-            display:flex;align-items:center;justify-content:center;gap:5px;transition:all .18s;
+            flex:1;padding:9px 14px;border-radius:10px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--border));
+            background:transparent;color:var(--text);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;gap:8px;transition:background .18s,color .18s,border-color .18s;
         }
-        .wiz-cat-btn-select:hover,.wiz-cat-card--on .wiz-cat-btn-select{background:var(--primary);color:#fff;border-color:var(--primary);}
+        .wiz-cat-btn-select i{color:var(--primary);font-size:11px;}
+        .wiz-cat-btn-select:hover{background:color-mix(in srgb,var(--primary) 8%,transparent);border-color:var(--primary);}
+        .wiz-cat-card--on .wiz-cat-btn-select{background:var(--primary);border-color:var(--primary);color:#fff;}
+        .wiz-cat-card--on .wiz-cat-btn-select i{color:#fff;}
+        .wiz-cat-btn-detail{
+            flex-shrink:0;padding:9px 14px;border-radius:10px;border:0;
+            background:transparent;color:var(--muted);font-size:13px;font-weight:600;
+            font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;
+            transition:color .18s;
+        }
+        .wiz-cat-btn-detail:hover{color:var(--primary);}
 
         /* Package card grid (step 3) */
-        .wiz-pkg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:4px;max-height:min(520px,56vh);overflow-y:auto;padding:3px;}
-        @media(max-width:760px){.wiz-pkg-grid{grid-template-columns:repeat(2,1fr);}}
-        @media(max-width:480px){.wiz-pkg-grid{grid-template-columns:1fr;}}
+        /* No nested scroll here: .wiz-card already scrolls, and a second scroll box clipped the cards. */
+        .wiz-pkg-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-bottom:8px;padding:3px;align-items:stretch;}
         .wiz-pkg-card{
-            position:relative;display:flex;flex-direction:column;gap:6px;text-align:left;
-            padding:14px 14px 12px;border-radius:14px;border:2px solid var(--border);
-            background:color-mix(in srgb,var(--card) 94%,transparent);cursor:pointer;user-select:none;
-            transition:border-color .18s ease,background .18s ease,box-shadow .18s ease;
+            position:relative;display:flex;flex-direction:column;text-align:left;overflow:hidden;
+            border-radius:20px;border:2px solid var(--border);background:var(--card);
+            cursor:pointer;user-select:none;
+            transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease;
         }
-        .wiz-pkg-card:hover{border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 4px 18px -8px color-mix(in srgb,var(--primary) 18%,transparent);}
-        .wiz-pkg-card--on{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 5%,var(--card));box-shadow:0 6px 22px -8px color-mix(in srgb,var(--primary) 28%,transparent);}
+        .wiz-pkg-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 10px 28px -14px color-mix(in srgb,var(--primary) 45%,transparent);}
+        .wiz-pkg-card--on{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 22%,transparent),0 12px 30px -14px color-mix(in srgb,var(--primary) 50%,transparent);}
+        .wiz-pkg-card:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 35%,transparent);}
+
+        /* Coloured header: name, save badge, price */
+        .wiz-pkg-head{
+            position:relative;overflow:hidden;padding:20px 22px 18px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.12);
+            background:linear-gradient(160deg,color-mix(in srgb,var(--primary) 62%,#fff),var(--primary));
+        }
+        .wiz-pkg-head::after{content:"";position:absolute;right:-40px;bottom:-70px;width:150px;height:150px;border-radius:50%;
+            background:rgba(255,255,255,.22);pointer-events:none;}
+        .wiz-pkg-head-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+        .wiz-pkg-name{font-size:19px;font-weight:800;letter-spacing:-.01em;line-height:1.2;color:#fff;}
+        .wiz-pkg-save{flex-shrink:0;padding:3px 9px;border-radius:999px;background:#fff;color:var(--primary);
+            font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;}
+        /* Shared with the step summary pill */
+        .wiz-pkg-price{font-weight:800;color:var(--primary);}
+        .wiz-pkg-price-suffix{font-weight:600;color:var(--muted);margin-left:2px;}
+        .wiz-pkg-price-strike{color:var(--muted);text-decoration:line-through;}
+        /* In-card versions */
+        .wiz-pkg-head .wiz-pkg-price-row{position:relative;z-index:1;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 6px;margin-top:14px;}
+        .wiz-pkg-head .wiz-pkg-price{font-size:28px;letter-spacing:-.02em;line-height:1;color:#fff;}
+        .wiz-pkg-head .wiz-pkg-price-suffix{font-size:12.5px;color:rgba(255,255,255,.88);margin-left:0;}
+        .wiz-pkg-head .wiz-pkg-price-strike{position:relative;z-index:1;display:block;margin-top:6px;font-size:12px;color:rgba(255,255,255,.8);}
+        .wiz-pkg-users-chip{position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:4px 10px;
+            border-radius:999px;background:rgba(255,255,255,.22);font-size:11.5px;font-weight:700;color:#fff;}
+        .wiz-pkg-users-chip i{font-size:10.5px;}
+        .wiz-pkg-users-extra{font-weight:500;color:rgba(255,255,255,.8);}
+
+        /* Selected check */
         .wiz-pkg-check{
-            position:absolute;top:10px;right:10px;width:20px;height:20px;border-radius:50%;
-            background:var(--primary);color:#fff;font-size:10px;display:grid;place-items:center;
+            position:absolute;top:12px;right:12px;z-index:2;width:22px;height:22px;border-radius:50%;
+            background:#fff;color:var(--primary);font-size:10px;display:grid;place-items:center;
             opacity:0;transform:scale(.6);transition:opacity .15s,transform .15s;
         }
         .wiz-pkg-card--on .wiz-pkg-check{opacity:1;transform:scale(1);}
-        .wiz-pkg-img-wrap{width:44px;height:44px;border-radius:10px;overflow:hidden;background:color-mix(in srgb,var(--primary) 6%,var(--bg));display:grid;place-items:center;flex-shrink:0;}
-        .wiz-pkg-img{width:100%;height:100%;object-fit:contain;object-position:center;padding:5px;box-sizing:border-box;}
-        .wiz-pkg-img--fallback{color:var(--primary);font-size:17px;}
-        .wiz-pkg-name{font-size:13.5px;font-weight:700;color:var(--text);padding-right:20px;}
-        .wiz-pkg-price-row{display:flex;align-items:baseline;gap:6px;}
-        .wiz-pkg-price{font-size:16px;font-weight:800;color:var(--primary);}
-        .wiz-pkg-price-suffix{font-size:11px;font-weight:600;color:var(--muted);margin-left:2px;}
-        .wiz-pkg-price-strike{font-size:11.5px;color:var(--muted);text-decoration:line-through;}
-        .wiz-pkg-desc{font-size:11.5px;color:var(--muted);line-height:1.4;margin:0;}
-        .wiz-pkg-users{font-size:11.5px;font-weight:600;color:var(--text);margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px;}
-        .wiz-pkg-users i{color:var(--primary);font-size:10.5px;}
-        .wiz-pkg-users-extra{font-weight:500;color:var(--muted);}
-        .wiz-pkg-feat-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
-        .wiz-pkg-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--muted) 10%,transparent);color:var(--muted);}
-        .wiz-pkg-tag--more{background:transparent;border:1px dashed var(--border);}
+        .wiz-pkg-card--on .wiz-pkg-save{visibility:hidden;}
+
+        /* Body: module checklist + select button */
+        .wiz-pkg-body{display:flex;flex-direction:column;flex:1;padding:18px 22px 20px;gap:12px;}
+        .wiz-pkg-desc{font-size:12px;color:var(--muted);line-height:1.45;margin:0;}
+        .wiz-pkg-mod-title{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
+        .wiz-pkg-mods{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;}
+        .wiz-pkg-mods li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);line-height:1.3;}
+        .wiz-pkg-mods li::before{content:"\2713";flex-shrink:0;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;
+            background:#fff;color:var(--primary);font-size:10px;font-weight:800;
+            border:1.5px solid color-mix(in srgb,var(--primary) 55%,transparent);box-sizing:border-box;}
+        .wiz-pkg-more{align-self:flex-start;font-size:12px;font-weight:700;color:var(--text);padding:0 0 1px;}
+        .wiz-pkg-select{margin-top:auto;display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 16px;border-radius:999px;
+            background:#fff;color:var(--text);border:1.5px solid color-mix(in srgb,var(--primary) 55%,var(--border));
+            font-size:13px;font-weight:700;transition:background .18s ease,color .18s ease,border-color .18s ease;}
+        .wiz-pkg-select i{color:var(--primary);font-size:12px;}
+        .wiz-pkg-card:not(.wiz-pkg-card--on):hover .wiz-pkg-select{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,#fff);}
+        .wiz-pkg-card.wiz-pkg-card--on:hover .wiz-pkg-select{background:color-mix(in srgb,var(--primary) 88%,#000);border-color:color-mix(in srgb,var(--primary) 88%,#000);color:#fff;}
+        .wiz-pkg-select .wiz-pkg-select-on{display:none;}
+        .wiz-pkg-card--on .wiz-pkg-select{background:var(--primary);border-color:var(--primary);color:#fff;}
+        .wiz-pkg-card--on .wiz-pkg-select i{color:#fff;}
+        .wiz-pkg-card--on .wiz-pkg-select .wiz-pkg-select-off{display:none;}
+        .wiz-pkg-card--on .wiz-pkg-select .wiz-pkg-select-on{display:inline-flex;align-items:center;gap:8px;}
+
+        /* Actions row: select (whole card is clickable) + Details */
+        .wiz-pkg-actions{margin-top:auto;display:flex;gap:8px;align-items:stretch;}
+        .wiz-pkg-actions .wiz-pkg-select{flex:1;margin-top:0;}
+        .wiz-pkg-details-btn{flex-shrink:0;padding:10px 16px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);
+            color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:border-color .18s ease;}
+        .wiz-pkg-details-btn:hover{border-color:var(--text);}
+        .wiz-pkg-more{background:none;border:0;border-bottom:2px solid var(--primary);border-radius:0;cursor:pointer;font-family:inherit;}
+        .wiz-pkg-more:hover{color:var(--primary);}
+
+        /* Free trial: same card shape, green theme (also used by the details popup) */
+        .wiz-pkg-card--trial{border-color:color-mix(in srgb,#16a34a 40%,var(--border));}
+        .wiz-pkg-card--trial:hover{border-color:color-mix(in srgb,#16a34a 70%,var(--border));box-shadow:0 10px 28px -14px rgba(22,163,74,.45);}
+        .wiz-pkg-card--trial.wiz-pkg-card--on{border-color:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.22),0 12px 30px -14px rgba(22,163,74,.5);}
+        .wiz-pkg-theme--trial .wiz-pkg-head{color:#fff;background:linear-gradient(160deg,#4ade80,#15803d);}
+        .wiz-pkg-theme--trial .wiz-pkg-name,.wiz-pkg-theme--trial .wiz-pkg-head .wiz-pkg-price{color:#fff;}
+        .wiz-pkg-theme--trial .wiz-pkg-head .wiz-pkg-price-suffix{color:rgba(255,255,255,.88);}
+        .wiz-pkg-theme--trial .wiz-pkg-users-chip{background:rgba(255,255,255,.22);color:#fff;}
+        .wiz-pkg-theme--trial .wiz-pkg-users-extra{color:rgba(255,255,255,.8);}
+        .wiz-pkg-theme--trial .wiz-pkg-save{background:#fff;color:#15803d;}
+        .wiz-pkg-theme--trial .wiz-pkg-check{background:#fff;color:#15803d;}
+        .wiz-pkg-theme--trial .wiz-pkg-mods li::before{background:#16a34a;color:#fff;}
+        .wiz-pkg-theme--trial .wiz-pkg-more{border-bottom-color:#16a34a;}
+        .wiz-pkg-theme--trial .wiz-pkg-more:hover{color:#16a34a;}
+        .wiz-pkg-theme--trial .wiz-pkg-select{border-color:color-mix(in srgb,#16a34a 55%,var(--border));}
+        .wiz-pkg-theme--trial .wiz-pkg-select i{color:#16a34a;}
+        .wiz-pkg-card--trial:not(.wiz-pkg-card--on):hover .wiz-pkg-select{border-color:#16a34a;background:color-mix(in srgb,#16a34a 8%,#fff);}
+        .wiz-pkg-card--trial.wiz-pkg-card--on:hover .wiz-pkg-select{background:#15803d;border-color:#15803d;color:#fff;}
+        .wiz-pkg-card--trial.wiz-pkg-card--on .wiz-pkg-select{background:#16a34a;border-color:#16a34a;color:#fff;}
+        .wiz-pkg-card--trial.wiz-pkg-card--on .wiz-pkg-select i{color:#fff;}
+        .wiz-pkg-trial-note{position:relative;z-index:1;display:block;margin-top:6px;font-size:12px;color:rgba(255,255,255,.88);}
+        .wiz-pkg-foot-note{margin:10px 0 0;font-size:12px;color:var(--muted);}
+
+        /* Package details popup */
+        .wiz-pkg-modal .wiz-cat-modal__box{max-width:560px;}
+        .wiz-pkg-modal .wiz-pkg-head{padding:26px 26px 22px;flex-shrink:0;}
+        .wiz-pkg-modal .wiz-pkg-head-top{padding-right:40px;}
+        .wiz-pkg-modal .wiz-pkg-name{font-size:22px;}
+        .wiz-pkg-modal .wiz-cat-modal__close{background:rgba(255,255,255,.75);border-color:transparent;color:#141414;}
+        .wiz-pkg-modal__body{overflow-y:auto;padding:20px 26px 22px;flex:1;min-height:0;display:flex;flex-direction:column;gap:14px;}
+        .wiz-pkg-modal .wiz-pkg-mods{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;}
+        @media(max-width:480px){.wiz-pkg-modal .wiz-pkg-mods{grid-template-columns:1fr;}}
+        .wiz-pkg-modal .wiz-cat-modal__footer .wiz-btn-primary{border-radius:999px;width:auto;}
+        .wiz-pkg-modal .wiz-cat-modal__footer .wiz-btn-back{border-radius:999px;flex-shrink:0;}
+        /* Free-trial popup: green action button to match the green header */
+        .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-primary{background:#16a34a;}
+        .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-primary:hover{background:#15803d;box-shadow:0 6px 16px -8px rgba(22,163,74,.6);}
+        .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-back:hover{border-color:#16a34a;background:rgba(22,163,74,.06);}
 
         /* Category details modal */
         .wiz-cat-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
@@ -920,8 +1011,6 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
 
     <div class="wiz-shell">
         <div class="wiz-panel">
-            <div class="wiz-blob wiz-blob--a" aria-hidden="true"></div>
-            <div class="wiz-blob wiz-blob--b" aria-hidden="true"></div>
 
             {{-- Step indicator --}}
             <div class="wiz-stepper" aria-label="Setup progress">
@@ -1031,7 +1120,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     'ecommerce'             => ['icon'=>'fa-cart-shopping',      'desc'=>'Online stores, dropshipping & marketplaces',       'users'=>'3.7k','fullDesc'=>'Optimised for e-commerce businesses, online stores, dropshippers and marketplace sellers. Manage your product catalogue, track warehouse stock, process online orders at the POS, and run promotional campaigns across channels.','highlights'=>['Product catalogue management','Warehouse & fulfilment stock tracking','Online order processing at POS','Multi-channel campaign management']],
                                     'manufacturing'         => ['icon'=>'fa-industry',           'desc'=>'Factories, workshops & production lines',          'users'=>'1.2k','fullDesc'=>'Built for manufacturers, factories, workshops and assembly operations. Track raw material inventory, manage production staff HR and payroll, handle supplier bills, and monitor finished goods stock levels with ease.','highlights'=>['Raw material & finished goods stock','Production staff HR & payroll','Supplier and utility bill tracking','Output and quality record management']],
                                     'real_estate'           => ['icon'=>'fa-house-chimney',      'desc'=>'Agents, property management & rentals',            'users'=>'890', 'fullDesc'=>'Designed for real estate agencies, property management firms and rental businesses. Track rental income and expenses, manage property-related bills, handle agent and staff HR, and run lead generation campaigns effectively.','highlights'=>['Rental income & expense tracking','Property bill and maintenance costs','Agent commission and staff payroll','Lead generation campaign management']],
-                                    'nonprofit'             => ['icon'=>'fa-hands-holding-heart','desc'=>'Charities, NGOs & community organisations',        'users'=>'640', 'fullDesc'=>'Purpose-built for non-profits, charities, NGOs and community organisations. Track donations and operational budgets, manage volunteer and staff HR, handle utility bills, and run awareness campaigns for maximum outreach.','highlights'=>['Donation and grant budget tracking','Volunteer and staff HR management','Operational and utility bill tracking','Awareness campaign coordination']],
+                                    'nonprofit'             => ['icon'=>'fa-hand-holding-heart','desc'=>'Charities, NGOs & community organisations',        'users'=>'640', 'fullDesc'=>'Purpose-built for non-profits, charities, NGOs and community organisations. Track donations and operational budgets, manage volunteer and staff HR, handle utility bills, and run awareness campaigns for maximum outreach.','highlights'=>['Donation and grant budget tracking','Volunteer and staff HR management','Operational and utility bill tracking','Awareness campaign coordination']],
                                     'professional_services' => ['icon'=>'fa-briefcase',          'desc'=>'Law firms, consultants & accounting practices',    'users'=>'2.9k','fullDesc'=>'Optimised for law firms, management consultants, accounting practices and professional service providers. Manage retainer billing and client accounts, track professional bills, handle staff payroll, and coordinate business development campaigns.','highlights'=>['Retainer & time-based billing','Client account management','Professional expense tracking','Business development campaigns']],
                                     'other'                 => ['icon'=>'fa-ellipsis',           'desc'=>'Anything that doesn\'t fit the categories above', 'users'=>'1.1k','fullDesc'=>'A flexible workspace for any business type not listed above. All core modules are available and can be customised to match your unique operational needs — from billing and HR to stock management and campaigns.','highlights'=>['Full module access with no restrictions','Customisable billing and HR setup','Flexible stock and product tracking','General-purpose campaign management']],
                                 ];
@@ -1060,11 +1149,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 @foreach($businessCategoryOptions ?? [] as $categoryOption)
                                     @php
                                         $slug = $categoryOption['value'];
-                                        $meta = $wizCatMeta[$slug] ?? ['icon'=>'fa-tag','desc'=>'','users'=>'0','fullDesc'=>'','highlights'=>[]];
+                                        $meta = $wizCatMeta[$slug] ?? ['icon'=>'','desc'=>'','users'=>'0','fullDesc'=>'','highlights'=>[]];
+                                        // Built-in icon first, then the icon set on the category in admin, then a placeholder.
+                                        $meta['icon'] = trim((string) ($meta['icon'] ?: ($categoryOption['icon'] ?? ''))) ?: 'fa-building';
                                         $mods = $wizCategoryFeatureMap[$slug] ?? ['account_management'];
                                     @endphp
                                     <div class="wiz-cat-card {{ (string) old('company_category_slug') === $slug ? 'wiz-cat-card--on' : '' }}"
                                          data-cat-slug="{{ $slug }}">
+                                        <div class="wiz-cat-check" aria-hidden="true"><i class="fa fa-check"></i></div>
                                         <div class="wiz-cat-head">
                                             <span class="wiz-cat-ico"><i class="fa {{ $meta['icon'] }}" aria-hidden="true"></i></span>
                                             <span class="wiz-cat-title-row">
@@ -1074,6 +1166,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                         </div>
                                         <p class="wiz-cat-desc">{{ $meta['desc'] }}</p>
                                         <div class="wiz-cat-actions">
+                                            <button type="button" class="wiz-cat-btn-select" data-cat-slug="{{ $slug }}">
+                                                <span>{{ (string) old('company_category_slug') === $slug ? 'Selected' : 'Select' }}</span>
+                                                <i class="fa {{ (string) old('company_category_slug') === $slug ? 'fa-check' : 'fa-arrow-right' }}" aria-hidden="true"></i>
+                                            </button>
                                             <button type="button" class="wiz-cat-btn-detail"
                                                 data-cat-slug="{{ $slug }}"
                                                 data-cat-label="{{ $categoryOption['label'] }}"
@@ -1082,11 +1178,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                                 data-cat-fulldesc="{{ $meta['fullDesc'] }}"
                                                 data-cat-highlights="{{ json_encode($meta['highlights']) }}"
                                                 data-cat-mods="{{ json_encode($mods) }}">
-                                                <i class="fa fa-circle-info" aria-hidden="true"></i> Details
-                                            </button>
-                                            <button type="button" class="wiz-cat-btn-select" data-cat-slug="{{ $slug }}">
-                                                <i class="fa fa-check" aria-hidden="true"></i>
-                                                <span>{{ (string) old('company_category_slug') === $slug ? 'Selected' : 'Select' }}</span>
+                                                Details
                                             </button>
                                         </div>
                                     </div>
@@ -1112,12 +1204,20 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 @php
                                     $pkgFeatures = $pkg->features ?? [];
                                     $pkgLabels   = $pkg->featureLabels();
+                                    $pkgHasDiscount = $pkg->discounted_price !== null && (float) $pkg->discounted_price < (float) $pkg->price;
+                                    $pkgSave = (! $pkg->is_trial && ! $pkg->is_free && $pkgHasDiscount && (float) $pkg->price > 0)
+                                        ? (int) round((1 - (float) $pkg->discounted_price / (float) $pkg->price) * 100)
+                                        : 0;
+                                    $pkgShowMods = 6;
                                 @endphp
-                                <div class="wiz-pkg-card {{ (string) old('package_id') === (string) $pkg->id ? 'wiz-pkg-card--on' : '' }}"
+                                <div class="wiz-pkg-card {{ $pkg->is_trial ? 'wiz-pkg-card--trial wiz-pkg-theme--trial' : '' }} {{ (string) old('package_id') === (string) $pkg->id ? 'wiz-pkg-card--on' : '' }}"
                                      data-pkg-id="{{ $pkg->id }}"
+                                     data-pkg-labels="{{ json_encode(array_values($pkgLabels)) }}"
+                                     data-pkg-desc="{{ $pkg->description }}"
                                      data-pkg-features="{{ json_encode($pkgFeatures) }}"
                                      data-pkg-name="{{ $pkg->name }}"
-                                     data-pkg-free="{{ $pkg->is_free ? '1' : '0' }}"
+                                     data-pkg-free="{{ ($pkg->is_free || $pkg->is_trial) ? '1' : '0' }}"
+                                     data-pkg-trial-days="{{ $pkg->is_trial ? $pkg->trialDays() : '' }}"
                                      data-pkg-price="{{ (float) $pkg->price }}"
                                      data-pkg-discounted="{{ $pkg->discounted_price !== null ? (float) $pkg->discounted_price : '' }}"
                                      data-pkg-currency-symbol="{{ $pkg->currencySymbol() }}"
@@ -1125,41 +1225,62 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                      data-pkg-extra-user-label="{{ $pkg->extraUserPriceLabel() }}"
                                      role="radio" aria-checked="{{ (string) old('package_id') === (string) $pkg->id ? 'true' : 'false' }}" tabindex="0">
                                     <div class="wiz-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
-                                    <div class="wiz-pkg-img-wrap">
-                                        @if($pkg->image)
-                                            <img src="{{ asset('storage/' . $pkg->image) }}" alt="{{ $pkg->name }}" class="wiz-pkg-img">
-                                        @else
-                                            <div class="wiz-pkg-img wiz-pkg-img--fallback"><i class="fa fa-box-open" aria-hidden="true"></i></div>
+
+                                    <div class="wiz-pkg-head">
+                                        <div class="wiz-pkg-head-top">
+                                            <div class="wiz-pkg-name">{{ $pkg->name }}</div>
+                                            @if($pkg->is_trial)
+                                                <span class="wiz-pkg-save"><i class="fa fa-gift" aria-hidden="true"></i> Try free</span>
+                                            @elseif($pkgSave > 0)
+                                                <span class="wiz-pkg-save">Save {{ $pkgSave }}%</span>
+                                            @endif
+                                        </div>
+                                        <div class="wiz-pkg-price-row">
+                                            @if($pkg->is_trial)
+                                                <span class="wiz-pkg-price">Free</span><span class="wiz-pkg-price-suffix">/{{ $pkg->trialDays() }} days</span>
+                                            @elseif($pkg->is_free)
+                                                <span class="wiz-pkg-price">Free</span>
+                                            @elseif($pkgHasDiscount)
+                                                <span class="wiz-pkg-price">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->discounted_price, 0) }}</span><span class="wiz-pkg-price-suffix">/month</span>
+                                            @else
+                                                <span class="wiz-pkg-price">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->price, 0) }}</span><span class="wiz-pkg-price-suffix">/month</span>
+                                            @endif
+                                        </div>
+                                        @if(! $pkg->is_trial && ! $pkg->is_free && $pkgHasDiscount)
+                                            <span class="wiz-pkg-price-strike">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->price, 0) }}/month</span>
+                                        @elseif($pkg->is_trial)
+                                            <span class="wiz-pkg-trial-note">No card needed · Recommended</span>
                                         @endif
+                                        <span class="wiz-pkg-users-chip"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra">&nbsp;· {{ $pkg->extraUserPriceLabel() }}</span>@endif</span>
                                     </div>
-                                    <div class="wiz-pkg-name">{{ $pkg->name }}</div>
-                                    <div class="wiz-pkg-price-row">
-                                        @if($pkg->is_free)
-                                            <span class="wiz-pkg-price">Free</span>
-                                        @elseif($pkg->discounted_price !== null && (float) $pkg->discounted_price < (float) $pkg->price)
-                                            <span class="wiz-pkg-price">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->discounted_price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
-                                            <span class="wiz-pkg-price-strike">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->price, 2) }}</span>
-                                        @else
-                                            <span class="wiz-pkg-price">{{ $pkg->currencySymbol() }}{{ number_format((float) $pkg->price, 2) }}<span class="wiz-pkg-price-suffix">/mo</span></span>
+
+                                    <div class="wiz-pkg-body">
+                                        @if($pkg->description && ! $pkg->is_trial)
+                                            <p class="wiz-pkg-desc">{{ $pkg->description }}</p>
                                         @endif
-                                    </div>
-                                    @if($pkg->description)
-                                        <p class="wiz-pkg-desc">{{ $pkg->description }}</p>
-                                    @endif
-                                    <p class="wiz-pkg-users"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra"> · {{ $pkg->extraUserPriceLabel() }}</span>@endif</p>
-                                    <div class="wiz-pkg-feat-tags">
-                                        @foreach(array_slice($pkgLabels, 0, 4) as $label)
-                                            <span class="wiz-pkg-tag">{{ $label }}</span>
-                                        @endforeach
-                                        @if(count($pkgLabels) > 4)
-                                            <span class="wiz-pkg-tag wiz-pkg-tag--more">+{{ count($pkgLabels) - 4 }}</span>
+                                        <div class="wiz-pkg-mod-title">{{ count($pkgLabels) }} {{ count($pkgLabels) === 1 ? 'module' : 'modules' }} included</div>
+                                        <ul class="wiz-pkg-mods">
+                                            @foreach(array_slice($pkgLabels, 0, $pkgShowMods) as $label)
+                                                <li>{{ $label }}</li>
+                                            @endforeach
+                                        </ul>
+                                        @if(count($pkgLabels) > $pkgShowMods)
+                                            <button type="button" class="wiz-pkg-more" data-pkg-details>+{{ count($pkgLabels) - $pkgShowMods }} more modules</button>
                                         @endif
+                                        <div class="wiz-pkg-actions">
+                                            <span class="wiz-pkg-select" aria-hidden="true">
+                                                <span class="wiz-pkg-select-off">{{ $pkg->is_trial ? 'Start free' : 'Choose plan' }} <i class="fa fa-arrow-right"></i></span>
+                                                <span class="wiz-pkg-select-on"><i class="fa fa-check"></i> Selected</span>
+                                            </span>
+                                            <button type="button" class="wiz-pkg-details-btn" data-pkg-details>Details</button>
+                                        </div>
                                     </div>
                                 </div>
                             @empty
                                 <p class="wiz-cat-noresults">No packages are available right now — contact support.</p>
                             @endforelse
                         </div>
+                        <p class="wiz-pkg-foot-note">Prices are per business, billed monthly. Cancel or change package any time.</p>
                     </div>
 
                     {{-- Step 4: Feature preview (read-only, locked to the selected package) --}}
@@ -1448,7 +1569,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                         <div class="wiz-pay-gateway" id="wizPayFreeNote" style="display:none;">
                             <div class="wiz-pay-gateway-head"><i class="fa fa-gift" aria-hidden="true"></i><span>No payment required</span></div>
-                            <p class="wiz-pay-gateway-sub">Your selected package is free — click Finish setup below to activate your workspace right away.</p>
+                            <p class="wiz-pay-gateway-sub" id="wizPayFreeNoteText">Your selected package is free — click Finish setup below to activate your workspace right away.</p>
                         </div>
 
                         @error('payment')
@@ -1620,6 +1741,30 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 </button>
                 <button type="button" class="wiz-btn-primary" id="wizStorageAgreementConfirmBtn" disabled>
                     <i class="fa fa-check" aria-hidden="true"></i> Agree &amp; Select
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Package details popup (filled from the clicked card) --}}
+    <div id="wizPkgModal" class="wiz-cat-modal wiz-pkg-modal" hidden aria-modal="true" role="dialog" aria-labelledby="wizPkgModalTitle">
+        <div class="wiz-cat-modal__backdrop" data-pkg-modal-close></div>
+        <div class="wiz-cat-modal__box" id="wizPkgModalBox">
+            <button type="button" class="wiz-cat-modal__close" data-pkg-modal-close aria-label="Close">
+                <i class="fa fa-xmark" aria-hidden="true"></i>
+            </button>
+            <div class="wiz-pkg-head" id="wizPkgModalHead"></div>
+            <div class="wiz-pkg-modal__body">
+                <p class="wiz-pkg-desc" id="wizPkgModalDesc"></p>
+                <div class="wiz-pkg-mod-title" id="wizPkgModalModTitle"></div>
+                <ul class="wiz-pkg-mods" id="wizPkgModalMods"></ul>
+            </div>
+            <div class="wiz-cat-modal__footer">
+                <button type="button" class="wiz-btn-back" data-pkg-modal-close>
+                    <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                </button>
+                <button type="button" class="wiz-btn-primary" id="wizPkgModalSelectBtn">
+                    <i class="fa fa-check" aria-hidden="true"></i> <span id="wizPkgModalSelectLbl">Choose this plan</span>
                 </button>
             </div>
         </div>
@@ -3007,9 +3152,62 @@ function openWizStorageAgreementModal(type) {
             applyPackageFeatures(features);
             updateWizPkgSummary(card);
         }
+        // Package details popup
+        const pkgModal = document.getElementById('wizPkgModal');
+        let pkgModalCard = null;
+        function openPkgModal(card) {
+            if (!pkgModal) return;
+            pkgModalCard = card;
+            const isTrial = card.classList.contains('wiz-pkg-card--trial');
+            document.getElementById('wizPkgModalBox').classList.toggle('wiz-pkg-theme--trial', isTrial);
+            const head = document.getElementById('wizPkgModalHead');
+            const srcHead = card.querySelector('.wiz-pkg-head');
+            head.innerHTML = srcHead ? srcHead.innerHTML : '';
+            const title = head.querySelector('.wiz-pkg-name');
+            if (title) title.id = 'wizPkgModalTitle';
+
+            const desc = card.getAttribute('data-pkg-desc') || '';
+            const descEl = document.getElementById('wizPkgModalDesc');
+            descEl.textContent = desc;
+            descEl.style.display = desc ? '' : 'none';
+
+            let labels = [];
+            try { labels = JSON.parse(card.getAttribute('data-pkg-labels') || '[]'); } catch (e) {}
+            document.getElementById('wizPkgModalModTitle').textContent =
+                labels.length + (labels.length === 1 ? ' module' : ' modules') + ' included';
+            document.getElementById('wizPkgModalMods').innerHTML =
+                labels.map(function (l) { return '<li>' + escPkg(l) + '</li>'; }).join('');
+
+            document.getElementById('wizPkgModalSelectLbl').textContent =
+                card.classList.contains('wiz-pkg-card--on') ? 'Selected — continue' : (isTrial ? 'Start free trial' : 'Choose this plan');
+            pkgModal.hidden = false;
+            document.addEventListener('keydown', pkgModalEsc);
+        }
+        function closePkgModal() {
+            if (!pkgModal) return;
+            pkgModal.hidden = true;
+            document.removeEventListener('keydown', pkgModalEsc);
+            if (pkgModalCard) pkgModalCard.focus();
+            pkgModalCard = null;
+        }
+        function pkgModalEsc(e) { if (e.key === 'Escape') closePkgModal(); }
+        if (pkgModal) {
+            pkgModal.querySelectorAll('[data-pkg-modal-close]').forEach(function (el) {
+                el.addEventListener('click', closePkgModal);
+            });
+            document.getElementById('wizPkgModalSelectBtn').addEventListener('click', function () {
+                if (pkgModalCard) selectPackage(pkgModalCard);
+                closePkgModal();
+            });
+        }
+
         wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (card) {
-            card.addEventListener('click', function () { selectPackage(card); });
+            card.addEventListener('click', function (e) {
+                if (e.target.closest('[data-pkg-details]')) { e.stopPropagation(); openPkgModal(card); return; }
+                selectPackage(card);
+            });
             card.addEventListener('keydown', function (e) {
+                if (e.target !== card) return; // let the Details buttons handle their own keys
                 if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); selectPackage(card); }
             });
         });
@@ -3063,7 +3261,14 @@ function openWizStorageAgreementModal(type) {
             if (amount <= 0) isFree = true;
         }
 
-        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (isFree ? ' (Free)' : '')) : '—';
+        const trialDays = pkgCard ? (pkgCard.getAttribute('data-pkg-trial-days') || '') : '';
+        const freeNoteText = document.getElementById('wizPayFreeNoteText');
+        if (freeNoteText) {
+            freeNoteText.textContent = trialDays
+                ? 'Your free trial runs for ' + trialDays + ' days with no card needed. Before it ends, choose a plan to keep going.'
+                : 'Your selected package is free — click Finish setup below to activate your workspace right away.';
+        }
+        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial)' : (isFree ? ' (Free)' : ''))) : '—';
 
         const usersEl       = document.getElementById('wizPaySummaryUsers');
         const extraUserRow  = document.getElementById('wizPaySummaryExtraUserRow');
@@ -3097,6 +3302,20 @@ function openWizStorageAgreementModal(type) {
     const wizCatModalCloseBtn = document.getElementById('wizCatModalCloseBtn');
     const wizCatModalBackdrop = document.getElementById('wizCatModalBackdrop');
 
+    // Swap any category icon whose class has no glyph in the loaded icon font
+    // (missing, misspelled or Pro-only) for a placeholder, so no tile is left blank.
+    const WIZ_CAT_ICON_PLACEHOLDER = 'fa-building';
+    function wizCatIconFallback(root) {
+        (root || document).querySelectorAll('.wiz-cat-ico i, .wiz-cat-modal__ico i').forEach(function (i) {
+            const content = window.getComputedStyle(i, '::before').getPropertyValue('content');
+            if (!content || content === 'none' || content === 'normal' || content === '""') {
+                i.className = 'fa ' + WIZ_CAT_ICON_PLACEHOLDER;
+            }
+        });
+    }
+    if (document.readyState === 'complete') wizCatIconFallback();
+    else window.addEventListener('load', function () { wizCatIconFallback(); });
+
     if (categoryInput) {
         let categoryMap = {};
         try { categoryMap = JSON.parse(categoryInput.getAttribute('data-wiz-category-map') || '{}'); } catch (e) {}
@@ -3119,6 +3338,8 @@ function openWizStorageAgreementModal(type) {
                 c.classList.toggle('wiz-cat-card--on', on);
                 const btn = c.querySelector('.wiz-cat-btn-select span');
                 if (btn) btn.textContent = on ? 'Selected' : 'Select';
+                const ico = c.querySelector('.wiz-cat-btn-select i');
+                if (ico) ico.className = 'fa ' + (on ? 'fa-check' : 'fa-arrow-right');
             });
             applyCategoryRecommendation(slug);
         }
@@ -3127,6 +3348,13 @@ function openWizStorageAgreementModal(type) {
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 selectCategory(btn.getAttribute('data-cat-slug'));
+            });
+        });
+        // Clicking anywhere else on the card selects it too (Details keeps opening the popup).
+        document.querySelectorAll('.wiz-cat-card').forEach(function (card) {
+            card.addEventListener('click', function (e) {
+                if (e.target.closest('.wiz-cat-btn-detail, .wiz-cat-btn-select')) return;
+                selectCategory(card.getAttribute('data-cat-slug'));
             });
         });
 
@@ -3176,6 +3404,7 @@ function openWizStorageAgreementModal(type) {
             wizCatModalSelectBtn.disabled = isSelected;
 
             wizCatModal.removeAttribute('hidden');
+            wizCatIconFallback(wizCatModalBody);
             document.body.style.overflow = 'hidden';
         }
 

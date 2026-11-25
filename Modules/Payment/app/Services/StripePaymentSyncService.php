@@ -104,7 +104,11 @@ class StripePaymentSyncService
         $payment->update([
             'payment_status' => Payment::STATUS_CANCELED,
             'failure_reason' => $reason,
-            'due_at' => $payment->due_at ?? Payment::dueAtFor($payment->business),
+            // An abandoned plan change is simply not applied — the business
+            // stays on its current plan, so there is nothing to fall due.
+            'due_at' => $payment->isPlanChange()
+                ? null
+                : ($payment->due_at ?? Payment::dueAtFor($payment->business)),
         ]);
 
         return true;
@@ -126,6 +130,12 @@ class StripePaymentSyncService
         ]);
 
         $payment->business?->setSetting('business.subscription_status', 'active');
+
+        // Trial → paid plan: the package switch (features, seats, trial end)
+        // happens only now that the new plan is actually paid.
+        if ($payment->isPlanChange() && $payment->business) {
+            app(\Modules\Package\Services\PlanChangeService::class)->applyPaid($payment);
+        }
 
         if ($payment->business) {
             $this->notifications->notifyPaymentSucceeded($payment->business, $payment->refresh());
