@@ -6,10 +6,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Modules\Payment\Services\AdminPaymentHistoryService;
+use Modules\Payment\Services\AdminUserSeatOverviewService;
 
 class AdminPaymentController extends Controller
 {
-    public function __construct(private readonly AdminPaymentHistoryService $history) {}
+    public function __construct(
+        private readonly AdminPaymentHistoryService $history,
+        private readonly AdminUserSeatOverviewService $seats,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -30,6 +34,8 @@ class AdminPaymentController extends Controller
         return view('payment::admin.show', [
             'payment' => $record,
             'related' => $this->history->relatedForBusiness($record),
+            // The business's user seats today (plan limit, extra users, monthly total)
+            'seats' => $record->business ? $this->seats->forBusiness($record->business) : null,
         ]);
     }
 }

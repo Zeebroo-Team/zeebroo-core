@@ -99,13 +99,62 @@
         </div>
     @endif
 
+    @php
+        $lines = $payment->lineItems();
+        $meta = $payment->metadata ?? [];
+        $showBreakdown = $payment->isExtraUsers() || count($lines) > 1;
+    @endphp
+    @if($showBreakdown || ($seats['limited'] ?? false))
+    <div class="apd-grid" style="margin-bottom:20px;">
+        @if($showBreakdown)
+        <div class="apd-card">
+            <div class="apd-card-head"><i class="fa fa-list-ul" style="color:var(--primary);"></i> {{ $payment->isExtraUsers() ? 'Extra users purchase' : 'Charge breakdown' }}</div>
+            <div class="apd-card-body">
+                @foreach($lines as $line)
+                    <div class="apd-row"><span class="apd-label">{{ $line['description'] }}</span><span class="apd-value">{{ $line['quantity'] }} × {{ $currency }} {{ number_format($line['unit_price'], 2) }} = {{ $currency }} {{ number_format($line['amount'], 2) }}</span></div>
+                @endforeach
+                @if($payment->isExtraUsers())
+                    @isset($meta['base_amount'])
+                        <div class="apd-row"><span class="apd-label">Plan price at purchase</span><span class="apd-value">{{ $currency }} {{ number_format((float) $meta['base_amount'], 2) }} / month</span></div>
+                    @endisset
+                    <div class="apd-row"><span class="apd-label">Extra users before → after</span><span class="apd-value">{{ (int) ($meta['extra_users_before'] ?? 0) }} → {{ $meta['extra_users_after'] ?? ((int) ($meta['extra_users_before'] ?? 0) + (int) ($meta['quantity'] ?? 1)) }}</span></div>
+                    @isset($meta['new_monthly_total'])
+                        <div class="apd-row"><span class="apd-label">New monthly total</span><span class="apd-value"><strong>{{ $currency }} {{ number_format((float) $meta['new_monthly_total'], 2) }}</strong> from next renewal</span></div>
+                    @endisset
+                    @if($payment->isSucceeded())
+                        <div class="apd-row"><span class="apd-label">Stripe subscription updated</span><span class="apd-value" style="{{ ($meta['stripe_synced'] ?? null) === false ? 'color:#dc2626;' : '' }}">
+                            @if(($meta['stripe_synced'] ?? null) === true) Yes — renewals include these users
+                            @elseif(($meta['stripe_synced'] ?? null) === false) No — update the subscription in Stripe manually
+                            @else — @endif
+                        </span></div>
+                    @endif
+                @endif
+            </div>
+        </div>
+        @endif
+
+        @if($seats['limited'] ?? false)
+        <div class="apd-card">
+            <div class="apd-card-head"><i class="fa fa-users" style="color:var(--primary);"></i> {{ $payment->business?->name ?? 'Business' }} — user seats today</div>
+            <div class="apd-card-body">
+                <div class="apd-row"><span class="apd-label">Plan</span><span class="apd-value">{{ $seats['plan'] ?? '—' }}</span></div>
+                <div class="apd-row"><span class="apd-label">Users</span><span class="apd-value" style="{{ $seats['users_remaining'] === 0 ? 'color:#d97706;' : '' }}">{{ $seats['users_used'] }} of {{ $seats['user_limit'] }} used{{ $seats['users_remaining'] === 0 ? ' (full)' : '' }}</span></div>
+                <div class="apd-row"><span class="apd-label">Included / extra</span><span class="apd-value">{{ $seats['included_users'] }} included + {{ $seats['extra_users'] }} extra</span></div>
+                <div class="apd-row"><span class="apd-label">Price per extra user</span><span class="apd-value">{{ $seats['extra_user_price'] !== null ? $seats['currency'].' '.number_format($seats['extra_user_price'], 2) : 'Not offered' }}</span></div>
+                <div class="apd-row"><span class="apd-label">Monthly total</span><span class="apd-value"><strong>{{ $seats['currency'] }} {{ number_format($seats['monthly_total'], 2) }}</strong> (plan {{ number_format($seats['base_amount'], 2) }} + extra {{ number_format($seats['extra_monthly'], 2) }})</span></div>
+            </div>
+        </div>
+        @endif
+    </div>
+    @endif
+
     <div class="apd-grid">
         <div class="apd-card">
             <div class="apd-card-head"><i class="fa fa-file-invoice-dollar" style="color:var(--primary);"></i> Payment</div>
             <div class="apd-card-body">
                 <div class="apd-row"><span class="apd-label">Amount</span><span class="apd-value">{{ $currency }} {{ number_format((float) $payment->amount, 2) }}</span></div>
                 <div class="apd-row"><span class="apd-label">Status</span><span class="apd-value" style="text-transform:capitalize;">{{ $payment->payment_status }}</span></div>
-                <div class="apd-row"><span class="apd-label">Type</span><span class="apd-value" style="text-transform:capitalize;">{{ $payment->payment_type ?: '—' }}</span></div>
+                <div class="apd-row"><span class="apd-label">Type</span><span class="apd-value" style="text-transform:capitalize;">{{ $payment->isExtraUsers() ? 'Extra users (+'.(int) (($payment->metadata ?? [])['quantity'] ?? 1).')' : ($payment->payment_type ?: '—') }}</span></div>
                 <div class="apd-row"><span class="apd-label">Package</span><span class="apd-value">{{ $payment->package?->name ?? '—' }}</span></div>
                 <div class="apd-row"><span class="apd-label">Billing cycle</span><span class="apd-value" style="text-transform:capitalize;">{{ $payment->billing_cycle ?: '—' }}</span></div>
                 <div class="apd-row"><span class="apd-label">Gateway</span><span class="apd-value" style="text-transform:capitalize;">{{ $payment->gateway ?: '—' }}</span></div>

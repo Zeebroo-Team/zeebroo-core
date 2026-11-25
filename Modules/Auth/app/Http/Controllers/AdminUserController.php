@@ -202,6 +202,8 @@ class AdminUserController extends Controller
 
         return [
             'currency' => (string) (get_settings('business.currency', '', $business) ?: 'LKR'),
+            // Package user limit, extra users bought and the monthly total (same numbers as the customer's Billing screen)
+            'seats' => app(\Modules\Payment\Services\AdminUserSeatOverviewService::class)->forBusiness($business),
             'overview' => [
                 'products_total' => $business->products()->count(),
                 'products_active' => $business->products()->where('is_active', true)->count(),

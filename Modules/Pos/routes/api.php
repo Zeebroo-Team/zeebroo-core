@@ -79,6 +79,7 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
     Route::post('auth/web-handoff',       [PosAuthApiController::class, 'webHandoff'])->middleware('throttle:20,1')->name('auth.web-handoff');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
+    Route::post('auth/check-email',       [PosAuthApiController::class, 'checkEmail'])->middleware('throttle:30,1')->name('auth.check-email');
     Route::post('auth/password/forgot',   [PosAuthApiController::class, 'forgotPassword'])->middleware('throttle:5,1')->name('auth.password.forgot');
     Route::post('auth/password/reset',    [PosAuthApiController::class, 'resetPassword'])->middleware('throttle:10,1')->name('auth.password.reset');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');
@@ -578,6 +579,9 @@ Route::middleware(['auth:sanctum', EnsureSubscriptionSettled::class, PosIdempote
     Route::get   ('me',             [PosUserManagementApiController::class, 'me'])     ->name('users.me');
     Route::get   ('users',          [PosUserManagementApiController::class, 'index'])  ->name('users.index');
     Route::post  ('users',          [PosUserManagementApiController::class, 'store'])  ->name('users.store');
+    // Package user limit: seat usage/pricing, and buying extra users (Stripe Checkout)
+    Route::get   ('users/seats',          [PosUserManagementApiController::class, 'seats'])       ->name('users.seats');
+    Route::post  ('users/seats/checkout', [PosUserManagementApiController::class, 'purchaseSeats'])->middleware('throttle:10,1')->name('users.seats.checkout');
     Route::put   ('users/{member}', [PosUserManagementApiController::class, 'update']) ->name('users.update');
     Route::delete('users/{member}', [PosUserManagementApiController::class, 'destroy'])->name('users.destroy');
     Route::post  ('users/invitations/{invitation}/resend', [PosUserManagementApiController::class, 'resendInvitation'])->whereNumber('invitation')->middleware('throttle:10,1')->name('users.invitations.resend');

@@ -37,6 +37,7 @@ Route::middleware('guest')->group(function (): void {
 
 Route::middleware('auth')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Route::post('/signup/cancel', [AuthController::class, 'cancelSignup'])->name('signup.cancel');
 
     // Outside the admin group: while impersonating, the signed-in user is not an admin.
     Route::post('/impersonate/leave', [ImpersonationController::class, 'leave'])->name('impersonate.leave');

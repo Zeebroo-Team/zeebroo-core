@@ -320,7 +320,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-panel{
             position:relative;flex:1;min-height:0;width:100%;overflow:hidden;
             display:flex;flex-direction:column;align-items:center;justify-content:center;
-            padding:clamp(32px,7vh,80px) 0;padding-left:240px;padding-bottom:104px;box-sizing:border-box;
+            padding:clamp(32px,7vh,80px) 0;padding-left:240px;box-sizing:border-box;
+            /* --wiz-actions-h is the live height of the fixed bottom bar (set in JS) so content never hides under it */
+            padding-bottom:calc(var(--wiz-actions-h, 84px) + 20px);
             background:var(--bg);
         }
         @media(max-width:760px){.wiz-panel{padding-left:0;}}
@@ -428,7 +430,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             border-top:1px solid var(--border);
         }
         @media(max-width:760px){.wiz-actions-row{left:0;}}
-        .wiz-actions-row-inner{width:100%;max-width:none;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+        .wiz-actions-row{gap:14px;align-items:center;}
+        .wiz-actions-row-inner{flex:1 1 auto;min-width:0;width:100%;max-width:none;display:flex;align-items:center;justify-content:space-between;gap:14px;}
+        .wiz-btn-cancel{
+            flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;
+            padding:11px 18px;border-radius:10px;border:1.5px solid color-mix(in srgb,#ef4444 35%,var(--border));
+            background:var(--card);
+            font-size:13.5px;font-weight:700;color:#dc2626;cursor:pointer;font-family:inherit;
+            transition:color .2s,border-color .2s,background .2s;
+        }
+        .wiz-btn-cancel:hover{color:#b91c1c;border-color:#ef4444;background:color-mix(in srgb,#ef4444 8%,var(--card));}
+        @media(max-width:640px){.wiz-btn-cancel .wiz-btn-cancel-lbl{display:none;}}
         .wiz-actions-row-inner--end{justify-content:flex-end;}
         .wiz-actions-row-inner .wiz-btn-primary,
         .wiz-actions-row-inner .wiz-btn-back{
@@ -442,6 +454,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             background:color-mix(in srgb,var(--primary) 6%,var(--card));
             font-size:13px;font-weight:700;color:var(--muted);
             white-space:nowrap;
+            flex-wrap:wrap;justify-content:center;row-gap:4px;
+            max-width:100%;min-width:0;box-sizing:border-box;
         }
         .wiz-pkg-summary i{color:var(--primary);font-size:12px;}
         .wiz-pkg-summary-name{color:var(--text);}
@@ -449,9 +463,20 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-summary .wiz-pkg-price{font-size:14px;}
         .wiz-pkg-summary .wiz-pkg-price-suffix{font-size:10px;}
         .wiz-pkg-summary .wiz-pkg-price-strike{font-size:10px;}
+        .wiz-pkg-summary-users{display:inline-flex;align-items:center;gap:5px;padding-left:9px;margin-left:2px;
+            border-left:1px solid var(--border);font-size:11.5px;font-weight:600;color:var(--muted);white-space:nowrap;}
+        .wiz-pkg-summary-users i{font-size:10.5px;}
         @media(max-width:640px){
-            .wiz-actions-row-inner{flex-wrap:wrap;row-gap:8px;}
-            .wiz-pkg-summary{order:3;flex-basis:100%;justify-content:center;}
+            /* Mobile: package summary on top, then [logout] [Back] [Continue] on one row */
+            .wiz-actions-row{align-items:flex-end;gap:10px;padding:10px 14px;}
+            .wiz-actions-row-inner{flex-wrap:wrap;row-gap:10px;gap:10px;}
+            .wiz-actions-row-inner .wiz-btn-back{padding:11px 16px;}
+            .wiz-actions-row-inner .wiz-btn-primary{flex:1 1 auto;justify-content:center;padding:11px 16px;}
+            .wiz-btn-cancel{padding:11px 14px;}
+            .wiz-pkg-summary{order:-1;flex-basis:100%;justify-content:center;border-radius:14px;padding:8px 12px;}
+            /* Users allowance drops to its own centred line under the price */
+            .wiz-pkg-summary-users{flex-basis:100%;justify-content:center;flex-wrap:wrap;white-space:normal;text-align:center;
+                border-left:0;padding-left:0;margin-left:0;padding-top:5px;border-top:1px dashed var(--border);}
         }
 
         /* Guide character + bubble (right side) */
@@ -743,6 +768,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-price-suffix{font-size:11px;font-weight:600;color:var(--muted);margin-left:2px;}
         .wiz-pkg-price-strike{font-size:11.5px;color:var(--muted);text-decoration:line-through;}
         .wiz-pkg-desc{font-size:11.5px;color:var(--muted);line-height:1.4;margin:0;}
+        .wiz-pkg-users{font-size:11.5px;font-weight:600;color:var(--text);margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:4px;}
+        .wiz-pkg-users i{color:var(--primary);font-size:10.5px;}
+        .wiz-pkg-users-extra{font-weight:500;color:var(--muted);}
         .wiz-pkg-feat-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px;}
         .wiz-pkg-tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:999px;background:color-mix(in srgb,var(--muted) 10%,transparent);color:var(--muted);}
         .wiz-pkg-tag--more{background:transparent;border:1px dashed var(--border);}
@@ -865,6 +893,17 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-storage-modal__actions .wiz-btn-primary{width:auto;flex:0 0 auto;margin-top:0;padding:10px 20px;font-size:14px;border-radius:10px;box-shadow:none;}
         .wiz-storage-modal__actions .wiz-btn-back{margin-top:0;padding:10px 18px;font-size:14px;border-radius:10px;}
         .wiz-storage-modal__actions .wiz-btn-primary[disabled]{opacity:.45;cursor:not-allowed;}
+        .wiz-cancel-box{position:relative;z-index:1;width:100%;max-width:360px;padding:24px;border-radius:14px;
+            background:var(--card);border:1px solid var(--border);box-shadow:0 12px 32px rgba(0,0,0,.16);}
+        .wiz-cancel-title{margin:0 0 6px;font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.01em;}
+        .wiz-cancel-text{margin:0 0 20px;font-size:13.5px;line-height:1.55;color:var(--muted);}
+        .wiz-cancel-actions{display:flex;justify-content:flex-end;gap:8px;}
+        .wiz-cancel-btn{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;
+            font-size:13px;font-weight:600;color:var(--text);cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s;}
+        .wiz-cancel-btn:hover{background:color-mix(in srgb,var(--muted) 10%,transparent);}
+        .wiz-cancel-btn--danger{background:#dc2626;border-color:#dc2626;color:#fff;}
+        .wiz-cancel-btn--danger:hover{background:#b91c1c;border-color:#b91c1c;}
+        .wiz-cancel-btn[disabled]{opacity:.6;cursor:default;}
         /* Step 7: Payment */
         .wiz-pay-summary{border:1.5px solid var(--border);border-radius:14px;padding:16px 18px;background:var(--card);margin-bottom:16px;}
         .wiz-pay-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 0;font-size:13px;}
@@ -1082,6 +1121,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                      data-pkg-price="{{ (float) $pkg->price }}"
                                      data-pkg-discounted="{{ $pkg->discounted_price !== null ? (float) $pkg->discounted_price : '' }}"
                                      data-pkg-currency-symbol="{{ $pkg->currencySymbol() }}"
+                                     data-pkg-users-label="{{ $pkg->userLimitLabel() }}"
+                                     data-pkg-extra-user-label="{{ $pkg->extraUserPriceLabel() }}"
                                      role="radio" aria-checked="{{ (string) old('package_id') === (string) $pkg->id ? 'true' : 'false' }}" tabindex="0">
                                     <div class="wiz-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
                                     <div class="wiz-pkg-img-wrap">
@@ -1105,6 +1146,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     @if($pkg->description)
                                         <p class="wiz-pkg-desc">{{ $pkg->description }}</p>
                                     @endif
+                                    <p class="wiz-pkg-users"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra"> · {{ $pkg->extraUserPriceLabel() }}</span>@endif</p>
                                     <div class="wiz-pkg-feat-tags">
                                         @foreach(array_slice($pkgLabels, 0, 4) as $label)
                                             <span class="wiz-pkg-tag">{{ $label }}</span>
@@ -1181,6 +1223,13 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <div class="wiz-feat-sidebar-head">
                                     <span class="wiz-feat-sidebar-title">Your setup</span>
                                     <span class="wiz-feat-sidebar-count" id="wizFeatEnabledCount">0</span>
+                                </div>
+                                <div class="wiz-feat-sidebar-item" id="wizSidebarUsers" style="display:none;border-bottom:1px solid var(--border);">
+                                    <span class="wiz-feat-sidebar-ico"><i class="fa fa-users" aria-hidden="true"></i></span>
+                                    <span class="wiz-feat-sidebar-info">
+                                        <span class="wiz-feat-sidebar-name" id="wizSidebarUsersLabel"></span>
+                                        <span class="wiz-feat-sidebar-status wiz-feat-sidebar-status--on" id="wizSidebarUsersExtra"></span>
+                                    </span>
                                 </div>
                                 <div class="wiz-feat-sidebar-list" id="wizFeatSidebarList">
                                     @foreach($wizFeatureItems as $wizFeat)
@@ -1369,6 +1418,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <span class="wiz-pay-row-value" id="wizPaySummaryPackage">—</span>
                             </div>
                             <div class="wiz-pay-row">
+                                <span class="wiz-pay-row-label">Users included</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryUsers">—</span>
+                            </div>
+                            <div class="wiz-pay-row" id="wizPaySummaryExtraUserRow" style="display:none;">
+                                <span class="wiz-pay-row-label">Additional users</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryExtraUser">—</span>
+                            </div>
+                            <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Data storage</span>
                                 <span class="wiz-pay-row-value" id="wizPaySummaryStorage">—</span>
                             </div>
@@ -1403,6 +1460,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                          anchors to the viewport (an ancestor with `transform` creates a new
                          containing block for fixed descendants, which broke this before). --}}
                     <div class="wiz-actions-row">
+                        {{-- Opens #wizCancelSignupModal; its confirm button submits #wizCancelSignupForm. --}}
+                        <button type="button" class="wiz-btn-cancel" id="wizCancelSignupBtn" aria-haspopup="dialog">
+                            <i class="fa fa-sign-out" aria-hidden="true"></i> <span class="wiz-btn-cancel-lbl">Cancel &amp; log out</span>
+                        </button>
                         <div class="wiz-actions-row-inner wiz-actions-row-inner--end" data-wiz-actions="1">
                             <button type="button" class="wiz-btn-primary" id="nextStepBtn">
                                 Continue <i class="fa fa-arrow-right" aria-hidden="true"></i>
@@ -1463,6 +1524,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                     </div>
                 </form>
+                <form id="wizCancelSignupForm" method="post" action="{{ route('signup.cancel') }}" style="display:none;">
+                    @csrf
+                </form>
             </div>
 
             <p class="wiz-footer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your data is secure and private.</p>
@@ -1484,6 +1548,43 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         </div>
         <img src="{{ asset('bussiness_man.png') }}" alt="Guide character" class="wiz-guide-char" id="wizGuideChar">
     </div>
+
+    {{-- Cancel sign-up confirmation (reuses the storage-agreement modal styles) --}}
+    <div id="wizCancelSignupModal" class="wiz-storage-modal wiz-cancel-modal" hidden aria-modal="true" role="dialog" aria-labelledby="wizCancelSignupTitle" aria-describedby="wizCancelSignupText">
+        <div class="wiz-storage-modal__backdrop" data-wiz-cancel-close></div>
+        <div class="wiz-cancel-box">
+            <h3 class="wiz-cancel-title" id="wizCancelSignupTitle">Cancel sign-up?</h3>
+            <p class="wiz-cancel-text" id="wizCancelSignupText">Your account and setup details will be removed and you'll be logged out.</p>
+            <div class="wiz-cancel-actions">
+                <button type="button" class="wiz-cancel-btn" data-wiz-cancel-close>Keep going</button>
+                <button type="submit" form="wizCancelSignupForm" class="wiz-cancel-btn wiz-cancel-btn--danger" id="wizCancelSignupConfirm">Cancel &amp; log out</button>
+            </div>
+        </div>
+    </div>
+    <script>
+    (function () {
+        var modal = document.getElementById('wizCancelSignupModal');
+        var openBtn = document.getElementById('wizCancelSignupBtn');
+        var form = document.getElementById('wizCancelSignupForm');
+        var confirmBtn = document.getElementById('wizCancelSignupConfirm');
+        if (!modal || !openBtn || !form) return;
+
+        function open() { modal.hidden = false; confirmBtn.focus(); }
+        function close() { modal.hidden = true; openBtn.focus(); }
+
+        openBtn.addEventListener('click', open);
+        modal.querySelectorAll('[data-wiz-cancel-close]').forEach(function (el) {
+            el.addEventListener('click', close);
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && !modal.hidden) close();
+        });
+        form.addEventListener('submit', function () {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Logging out…';
+        });
+    })();
+    </script>
 
     {{-- Step 5: Data Storage Agreement Modal (outside form — avoids wiz-card stacking context) --}}
     <div id="wizStorageAgreementModal" class="wiz-storage-modal" hidden aria-modal="true" role="dialog" aria-labelledby="wizStorageAgreementTitle">
@@ -2606,6 +2707,22 @@ function openWizStorageAgreementModal(type) {
         6: document.getElementById('wizStepLine6'),
     };
     const actionGroups = wizardForm.querySelectorAll('[data-wiz-actions]');
+
+    // The bottom bar is position:fixed and its height changes (wrapping on mobile,
+    // package summary appearing) — publish its real height so the panel can
+    // reserve exactly that much space and nothing hides underneath it.
+    const wizActionsBar = wizardForm.querySelector('.wiz-actions-row');
+    if (wizActionsBar) {
+        const syncWizActionsHeight = function () {
+            document.documentElement.style.setProperty('--wiz-actions-h', wizActionsBar.offsetHeight + 'px');
+        };
+        syncWizActionsHeight();
+        if (window.ResizeObserver) {
+            new ResizeObserver(syncWizActionsHeight).observe(wizActionsBar);
+        } else {
+            window.addEventListener('resize', syncWizActionsHeight);
+        }
+    }
     let wizStorageAdvancePending = false;
 
     function setWizStep(num, goingBack) {
@@ -2840,6 +2957,14 @@ function openWizStorageAgreementModal(type) {
             }
             return '<span class="wiz-pkg-price">' + symbol + price.toFixed(2) + '<span class="wiz-pkg-price-suffix">/mo</span></span>';
         }
+        // "Up to 3 users · +$5.00 per extra user" for the footer chip.
+        function pkgUsersHtml(card) {
+            const users = card.getAttribute('data-pkg-users-label') || '';
+            if (!users) return '';
+            const extra = card.getAttribute('data-pkg-extra-user-label') || '';
+            return '<span class="wiz-pkg-summary-users"><i class="fa fa-users" aria-hidden="true"></i>'
+                + escPkg(users) + (extra ? ' · ' + escPkg(extra) : '') + '</span>';
+        }
         // Keeps the footer chip (shown on every step from Package onward) in
         // sync with whichever package is currently selected.
         function updateWizPkgSummary(card) {
@@ -2849,11 +2974,25 @@ function openWizStorageAgreementModal(type) {
                 ? '<i class="fa fa-box-open" aria-hidden="true"></i>'
                     + '<span class="wiz-pkg-summary-name">' + escPkg(card.getAttribute('data-pkg-name') || '') + '</span>'
                     + '<div class="wiz-pkg-price-row">' + pkgPriceHtml(card) + '</div>'
+                    + pkgUsersHtml(card)
                 : '';
             summaries.forEach(function (el) {
                 el.innerHTML = html;
                 el.style.display = card ? 'flex' : 'none';
             });
+
+            // Features step sidebar: user allowance of the selected package.
+            const usersItem  = document.getElementById('wizSidebarUsers');
+            const usersLabel = document.getElementById('wizSidebarUsersLabel');
+            const usersExtra = document.getElementById('wizSidebarUsersExtra');
+            const usersText  = card ? (card.getAttribute('data-pkg-users-label') || '') : '';
+            const extraText  = card ? (card.getAttribute('data-pkg-extra-user-label') || '') : '';
+            if (usersItem) usersItem.style.display = usersText ? 'flex' : 'none';
+            if (usersLabel) usersLabel.textContent = usersText;
+            if (usersExtra) {
+                usersExtra.textContent = extraText;
+                usersExtra.style.display = extraText ? 'flex' : 'none';
+            }
         }
         function selectPackage(card) {
             wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (c) {
@@ -2925,6 +3064,14 @@ function openWizStorageAgreementModal(type) {
         }
 
         if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (isFree ? ' (Free)' : '')) : '—';
+
+        const usersEl       = document.getElementById('wizPaySummaryUsers');
+        const extraUserRow  = document.getElementById('wizPaySummaryExtraUserRow');
+        const extraUserEl   = document.getElementById('wizPaySummaryExtraUser');
+        const extraUserText = pkgCard ? (pkgCard.getAttribute('data-pkg-extra-user-label') || '') : '';
+        if (usersEl) usersEl.textContent = pkgCard ? (pkgCard.getAttribute('data-pkg-users-label') || '—') : '—';
+        if (extraUserEl) extraUserEl.textContent = extraUserText;
+        if (extraUserRow) extraUserRow.style.display = extraUserText ? 'flex' : 'none';
         if (totalEl)   totalEl.textContent   = isFree ? (symbol + '0.00') : (symbol + amount.toFixed(2) + ' / mo');
         if (cycleBadge)  cycleBadge.style.display  = isFree ? 'none'  : 'inline-flex';
         if (gatewayNote) gatewayNote.style.display = isFree ? 'none'  : 'block';

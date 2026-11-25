@@ -6512,7 +6512,32 @@ function showLogin() {
   $('#login-email').focus();
 }
 
+// Steps: 1 Account · 2 Profile · 3 Industry · 4 Package · 5 Features · 6 Location · 7 Payment
+const OB_LAST_STEP = 7;
 let _obStep = 1;
+let _obCheckedEmail = ''; // last email the server confirmed is free (skip re-checking on Back → Continue)
+let _obMultiLocation = false;
+
+function _obSetMultiLocation(on) {
+  _obMultiLocation = !!on;
+  const sw = $('#su-multi-switch');
+  if (sw) { sw.classList.toggle('on', _obMultiLocation); sw.setAttribute('aria-checked', String(_obMultiLocation)); }
+  const lbl = $('#su-multi-lbl');
+  if (lbl) lbl.textContent = _obMultiLocation ? 'Multiple locations' : 'Single location';
+}
+
+// Location fields sent with /auth/register (see PosAuthApiController::register)
+function _obLocationPayload() {
+  const v = sel => $(sel)?.value.trim() || '';
+  return {
+    multi_warehouse_branch: _obMultiLocation,
+    branch_name:    v('#su-branch-name'),
+    branch_address: v('#su-branch-address') || null,
+    branch_phone:   v('#su-branch-phone'),
+    branch_email:   v('#su-branch-email') || null,
+  };
+}
+
 let _obSelectedCat = '';
 let _obFeatureSet  = new Set(['point_of_sale', 'sales_management', 'product_management', 'stock_management']);
 let _obPackages = [];
@@ -6688,6 +6713,7 @@ function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
       <div class="ob-pkg-name">${escHtml(pkg.name)}</div>
       <div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>
       ${pkg.description ? `<div class="ob-pkg-desc">${escHtml(pkg.description)}</div>` : ''}
+      ${pkg.user_limit_label ? `<div class="ob-pkg-desc" style="font-weight:600"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}${pkg.extra_user_price_label ? ` · <span style="font-weight:500">${escHtml(pkg.extra_user_price_label)}</span>` : ''}</div>` : ''}
       <div class="ob-pkg-feat-tags">
         ${labels.map(l => `<span class="ob-pkg-tag">${escHtml(l)}</span>`).join('')}
         ${extra > 0 ? `<span class="ob-pkg-tag ob-pkg-tag-more">+${extra}</span>` : ''}
@@ -6740,6 +6766,24 @@ function _obBuildPkgGrid() {
   });
 }
 
+// "Up to 3 users · +$5.00 per extra user" segment for the footer package chip.
+function _obPkgUsersChipHtml(pkg) {
+  if (!pkg || !pkg.user_limit_label) return '';
+  const extra = pkg.extra_user_price_label ? ` · ${escHtml(pkg.extra_user_price_label)}` : '';
+  return `<span class="ob-pkg-summary-users"><i class="fa fa-users"></i>${escHtml(pkg.user_limit_label)}${extra}</span>`;
+}
+
+// Fills the "Users included" / "Additional users" rows of a Confirm & Pay summary.
+function _obFillPayUsers(prefix, pkg) {
+  const usersEl = $(`#${prefix}-pay-users`);
+  const extraRow = $(`#${prefix}-pay-extra-user-row`);
+  const extraEl = $(`#${prefix}-pay-extra-user`);
+  const extraText = pkg && pkg.extra_user_price_label ? pkg.extra_user_price_label : '';
+  if (usersEl) usersEl.textContent = pkg && pkg.user_limit_label ? pkg.user_limit_label : '—';
+  if (extraEl) extraEl.textContent = extraText;
+  if (extraRow) extraRow.style.display = extraText ? 'flex' : 'none';
+}
+
 // Keeps the bottom-bar chip in sync with the currently selected package —
 // visible on every step from Package onward, hidden before a pick is made.
 function _obUpdatePkgSummary() {
@@ -6747,7 +6791,7 @@ function _obUpdatePkgSummary() {
   if (!el) return;
   const pkg = _obSelectedPackage;
   if (!pkg || _obStep < 4) { el.style.display = 'none'; return; }
-  el.innerHTML = `<i class="fa fa-box-open"></i><span class="ob-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>`;
+  el.innerHTML = `<i class="fa fa-box-open"></i><span class="ob-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>${_obPkgUsersChipHtml(pkg)}`;
   el.style.display = 'flex';
 }
 
@@ -6773,24 +6817,24 @@ function _obSetStep(n) {
   });
 
   // Show/hide panels
-  ['1','2','3','4','5','6'].forEach(i => {
+  ['1','2','3','4','5','6','7'].forEach(i => {
     const p = $(`#ob-panel-${i}`);
     if (p) p.style.display = (String(n) === i) ? '' : 'none';
   });
 
   // Show/hide bottom-bar back buttons
-  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn', 6: 'ob-back-6-btn' };
+  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn', 6: 'ob-back-6-btn', 7: 'ob-back-7-btn' };
   Object.values(backIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   if (backIds[n]) { const el = $(`#${backIds[n]}`); if (el) el.style.display = ''; }
 
   // Show/hide bottom-bar next/submit buttons
-  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'ob-next-5-btn', 6:'signup-btn' };
+  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'ob-next-5-btn', 6:'ob-next-6-btn', 7:'signup-btn' };
   Object.values(nextIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   { const el = $(`#${nextIds[n]}`); if (el) el.style.display = ''; }
 
   // Update progress bar (hidden but JS still sets it)
   const pb = $('#ob-progress-bar');
-  if (pb) pb.style.width = `${Math.round(n * 100 / 6)}%`;
+  if (pb) pb.style.width = `${Math.round(n * 100 / OB_LAST_STEP)}%`;
 
   if (n === 5) {
     const sub = $('#ob-panel-5-sub');
@@ -6800,12 +6844,19 @@ function _obSetStep(n) {
   }
 
   if (n === 6) {
+    // Pre-fill like the web wizard: location named after the business, contact email = sign-up email
+    const bn = $('#su-branch-name'), be = $('#su-branch-email');
+    if (bn && !bn.value.trim()) bn.value = $('#su-biz')?.value.trim() || '';
+    if (be && !be.value.trim()) be.value = $('#su-email')?.value.trim() || '';
+  }
+
+  if (n === OB_LAST_STEP) {
     _obShowPayWaiting(false);
     _obPopulatePaySummary();
   }
 
   $('#signup-alert').style.display = 'none';
-  const focusMap = { 1: '#su-email', 2: '#su-name' };
+  const focusMap = { 1: '#su-email', 2: '#su-name', 6: '#su-branch-phone' };
   const focusSel = focusMap[n];
   if (focusSel) setTimeout(() => $(focusSel)?.focus(), 50);
 
@@ -6822,6 +6873,11 @@ function _obPopulatePaySummary() {
   const catName = catCard?.querySelector('.ob-cat-name')?.textContent.trim() || '—';
   $('#ob-pay-category').textContent = catName;
 
+  const loc = _obLocationPayload();
+  $('#ob-pay-location').textContent = loc.branch_name
+    ? `${loc.branch_name}${loc.multi_warehouse_branch ? ' (multiple locations)' : ''}`
+    : '—';
+
   const pkg = _obSelectedPackage;
   const price = pkg ? Number(pkg.price || 0) : 0;
   const disc  = pkg && pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
@@ -6830,6 +6886,7 @@ function _obPopulatePaySummary() {
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
   $('#ob-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  _obFillPayUsers('ob', pkg);
   $('#ob-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#ob-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
   $('#ob-pay-gateway-note').style.display = isFree ? 'none'  : '';
@@ -6850,7 +6907,7 @@ function _obShowPayWaiting(show) {
   const bar     = $('#ob-bottom-bar');
   if (review)  review.style.display  = show ? 'none' : '';
   if (waiting) waiting.style.display = show ? '' : 'none';
-  if (bar)     bar.style.display     = (show && _obStep === 6) ? 'none' : '';
+  if (bar)     bar.style.display     = (show && _obStep === OB_LAST_STEP) ? 'none' : '';
   const err = $('#ob-pay-waiting-error');
   if (err) err.style.display = 'none';
 }
@@ -6867,6 +6924,10 @@ function showSignup() {
   $('#su-password').value = '';
   $('#su-name').value     = '';
   $('#su-biz').value      = '';
+  ['#su-branch-name', '#su-branch-address', '#su-branch-phone', '#su-branch-email']
+    .forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+  _obSetMultiLocation(false);
+  _obCheckedEmail = '';
   _obSelectedCat = '';
   _obFeatureSet  = new Set();
   _obPackages = [];
@@ -9562,15 +9623,47 @@ $('#ctb-min-win')?.addEventListener('click',   () => window.electronAPI.minimize
 $('#ctb-close-win')?.addEventListener('click', () => window.electronAPI.close?.());
 
 // Onboarding wizard — step navigation
-$('#ob-next-btn').addEventListener('click', () => {
+$('#ob-next-btn').addEventListener('click', async () => {
   const email    = $('#su-email').value.trim();
   const password = $('#su-password').value;
   const alert    = $('#signup-alert');
+  const btn      = $('#ob-next-btn');
+  if (btn.disabled) return;
   if (!email)                       { showAlert(alert, 'Please enter your email'); return; }
-  if (!/\S+@\S+\.\S+/.test(email)) { showAlert(alert, 'Please enter a valid email'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { showAlert(alert, 'Please enter a valid email'); return; }
   if (password.length < 8)          { showAlert(alert, 'Password must be at least 8 characters'); return; }
+
+  // Ask the server now whether the email is valid and still free, instead of
+  // only finding out on the final Pay step.
+  if (_obCheckedEmail !== email.toLowerCase()) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking…';
+    alert.style.display = 'none';
+    const res = await API.checkEmail(email);
+    btn.disabled = false;
+    btn.innerHTML = 'Continue <i class="fa fa-arrow-right"></i>';
+
+    if (res.status === 422) {
+      const errs = res.body?.errors || {};
+      showAlert(alert, (errs.email || []).join(' ') || res.body?.message || 'Please enter a valid email');
+      return;
+    }
+    if (res.status === 200 && res.body?.available === false) {
+      showAlert(alert, res.body?.message || 'This email is already registered. Sign in instead, or use a different email.');
+      $('#su-email').focus();
+      return;
+    }
+    if (res.status === 200) {
+      _obCheckedEmail = email.toLowerCase();
+    } else if (res.status === 429) {
+      showAlert(alert, 'Too many attempts. Please wait a minute and try again.');
+      return;
+    }
+    // Network/server error: let them continue — /auth/register re-validates the email at the end.
+  }
   _obSetStep(2);
 });
+$('#su-email').addEventListener('keydown', e => { if (e.key === 'Enter') $('#su-password').focus(); });
 $('#su-password').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-btn').click(); });
 
 $('#ob-back-2-btn').addEventListener('click', () => _obSetStep(1));
@@ -9624,6 +9717,24 @@ $('#ob-back-5-btn').addEventListener('click', () => {
 
 $('#ob-next-5-btn').addEventListener('click', () => _obSetStep(6));
 $('#ob-back-6-btn').addEventListener('click', () => _obSetStep(5));
+
+// Step 6 — first location
+$('#su-multi-switch').addEventListener('click', () => _obSetMultiLocation(!_obMultiLocation));
+function _obValidateLocation() {
+  const loc   = _obLocationPayload();
+  const alert = $('#signup-alert');
+  if (!loc.branch_name)  { showAlert(alert, 'Please enter a location name'); $('#su-branch-name').focus(); return false; }
+  if (!loc.branch_phone) { showAlert(alert, 'Phone number is required'); $('#su-branch-phone').focus(); return false; }
+  if (!/^[+\d][\d\s()\-]{5,}$/.test(loc.branch_phone)) { showAlert(alert, 'Please enter a valid phone number'); $('#su-branch-phone').focus(); return false; }
+  if (loc.branch_email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(loc.branch_email)) {
+    showAlert(alert, 'Please enter a valid location email'); $('#su-branch-email').focus(); return false;
+  }
+  return true;
+}
+$('#ob-next-6-btn').addEventListener('click', () => { if (_obValidateLocation()) _obSetStep(7); });
+['#su-branch-name', '#su-branch-phone', '#su-branch-email'].forEach(sel =>
+  $(sel).addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-6-btn').click(); }));
+$('#ob-back-7-btn').addEventListener('click', () => _obSetStep(6));
 
 // Password visibility toggle
 $('#su-pw-toggle').addEventListener('click', () => {
@@ -9680,6 +9791,7 @@ async function doSignupOrPay() {
   if (!biz)       { _obSetStep(2); showAlert(alert, 'Please enter a business name'); return; }
   if (!category)  { _obSetStep(3); showAlert(alert, 'Please select your industry'); return; }
   if (!packageId) { _obSetStep(4); showAlert(alert, 'Please select a package'); return; }
+  if (!_obValidateLocation()) { _obSetStep(6); _obValidateLocation(); return; }
 
   const wasFree = !_obSelectedPackage || _obSelectedPackage.is_free;
   btn.disabled = true;
@@ -9689,7 +9801,7 @@ async function doSignupOrPay() {
   alert.style.display = 'none';
 
   const deviceName = state.config?.device_name || 'pos-desktop-1';
-  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId);
+  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId, _obLocationPayload());
 
   btn.disabled = false;
 
@@ -9701,7 +9813,8 @@ async function doSignupOrPay() {
     const msg  = Object.keys(errs).length
       ? Object.values(errs).flat().join(' ')
       : (res.body?.message || `Registration failed (${res.status})`);
-    if (errs.email || errs.password) _obSetStep(1);
+    if (errs.email || errs.password) { _obCheckedEmail = ''; _obSetStep(1); }
+    else if (Object.keys(errs).some(k => k.startsWith('branch_'))) _obSetStep(6);
     showAlert($('#signup-alert'), msg);
     return;
   }
@@ -11660,10 +11773,47 @@ $('#payment-modal-overlay').addEventListener('click', e => {
   if (e.target === $('#payment-modal-overlay')) _closePaymentModal();
 });
 
+// Plan price, user seats and the monthly total incl. extra users (data.users from the API).
+function _pmUsersHtml(u) {
+  if (!u || (!u.limited && !u.base_amount)) return '';
+  const cur = u.currency;
+  const usage = u.limited
+    ? `${u.users_used} of ${u.user_limit} used`
+    : `${u.users_used} · unlimited`;
+  const full = u.limited && u.users_remaining <= 0;
+  const extraCell = u.extra_users > 0
+    ? `<div class="pm-plan-cell"><div class="pm-plan-label">Extra users</div>
+         <div class="pm-plan-value">${u.extra_users} × ${escHtml(_pmMoney(u.extra_monthly / u.extra_users, cur))}</div>
+         <div class="pm-plan-sub">${escHtml(_pmMoney(u.extra_monthly, cur))} / month</div></div>`
+    : '';
+  const canBuy = u.limited && u.extra_user_price;
+  return `
+    <div class="pm-plan">
+      <div class="pm-plan-grid">
+        <div class="pm-plan-cell"><div class="pm-plan-label">Plan</div>
+          <div class="pm-plan-value">${escHtml(u.plan || '—')}</div>
+          <div class="pm-plan-sub">${escHtml(_pmMoney(u.base_amount, cur))} / month</div></div>
+        <div class="pm-plan-cell"><div class="pm-plan-label">Users</div>
+          <div class="pm-plan-value ${full ? 'is-full' : ''}">${escHtml(usage)}</div>
+          <div class="pm-plan-sub">${u.limited ? `${u.included_users} included${u.extra_users ? ` + ${u.extra_users} extra` : ''}` : 'No user limit'}</div></div>
+        ${extraCell}
+        <div class="pm-plan-cell"><div class="pm-plan-label">Monthly total</div>
+          <div class="pm-plan-value pm-plan-total">${escHtml(_pmMoney(u.monthly_total, cur))}</div>
+          <div class="pm-plan-sub">${u.next_renewal_at ? 'Next charge ' + escHtml(_pmDate(u.next_renewal_at)) : 'per month'}</div></div>
+      </div>
+      ${canBuy ? `<div class="pm-plan-foot">
+        <span>Extra users: ${escHtml(_pmMoney(u.extra_user_price, cur))} each per month</span>
+        <button class="po-btn-outline" id="pm-buy-users"><i class="fa fa-user-plus"></i> Add extra users</button>
+      </div>` : ''}
+    </div>`;
+}
+
 function _pmRenderSummary(data) {
   const summary = $('#pm-summary');
+  const usersHtml = _pmUsersHtml(data.users);
   if (!data.subscription_status && !data.next_renewal_at) {
-    summary.innerHTML = '';
+    summary.innerHTML = usersHtml;
+    _pmBindBuyUsers(data.users);
     return;
   }
   const rawStatus = data.subscription_status || 'unknown';
@@ -11693,10 +11843,18 @@ function _pmRenderSummary(data) {
         ${noteHtml}
       </div>
       ${actionHtml}
-    </div>`;
+    </div>
+    ${usersHtml}`;
 
+  _pmBindBuyUsers(data.users);
   $('#pm-cancel-sub')?.addEventListener('click', () => _pmChangeCancellation(true, accessUntil));
   $('#pm-resume-sub')?.addEventListener('click', () => _pmChangeCancellation(false, accessUntil));
+}
+
+function _pmBindBuyUsers(users) {
+  $('#pm-buy-users')?.addEventListener('click', () => {
+    window.openUserLimitModal(users, { onPurchased: () => _pmRefresh() });
+  });
 }
 
 async function _pmChangeCancellation(cancel, accessUntil) {
@@ -11750,7 +11908,7 @@ function _pmRenderList() {
       <div class="pm-row" data-pm-id="${p.id}">
         <div class="pm-row-icon ${iconMeta.cls}" style="background:var(--surface2)"><i class="fa ${iconMeta.icon}"></i></div>
         <div class="pm-row-body">
-          <div class="pm-row-plan">${escHtml(p.plan || 'Subscription')}</div>
+          <div class="pm-row-plan">${escHtml(p.plan || 'Subscription')}${p.title ? ` <span class="pm-row-tag"><i class="fa fa-user-plus"></i> ${escHtml(p.title)}</span>` : ''}</div>
           <div class="pm-row-meta">${_pmDate(p.created_at)}${p.billing_cycle ? ' · ' + escHtml(p.billing_cycle) : ''}</div>
         </div>
         ${_pmBadgeHtml(p.payment_status)}
@@ -11820,12 +11978,26 @@ async function _pmShowDetail(id) {
 function _pmRenderDetail(p) {
   const rows = [
     ['Plan', escHtml(p.plan || 'Subscription')],
-    ['Status', _pmBadgeHtml(p.payment_status)],
-    ['Amount', escHtml(_pmMoney(p.amount, p.currency))],
+  ];
+  if (p.title) rows.push(['Type', escHtml(p.title)]);
+  rows.push(['Status', _pmBadgeHtml(p.payment_status)]);
+  // Breakdown when there's more than the plan (extra users, or a renewal incl. extra users)
+  const lines = p.line_items || [];
+  if (p.title || lines.length > 1) {
+    lines.forEach(l => rows.push([
+      escHtml(l.description),
+      escHtml(`${l.quantity} × ${_pmMoney(l.unit_price, p.currency)} = ${_pmMoney(l.amount, p.currency)}`),
+    ]));
+  }
+  rows.push(['Amount', escHtml(_pmMoney(p.amount, p.currency))]);
+  if (p.new_monthly_total != null) {
+    rows.push(['New monthly total', `<strong>${escHtml(_pmMoney(p.new_monthly_total, p.currency))}</strong> <span class="pm-detail-hint">from the next renewal</span>`]);
+  }
+  rows.push(
     ['Billing cycle', escHtml(p.billing_cycle ? p.billing_cycle[0].toUpperCase() + p.billing_cycle.slice(1) : '—')],
     ['Payment method', escHtml(p.gateway ? p.gateway[0].toUpperCase() + p.gateway.slice(1) : '—')],
     ['Paid on', escHtml(p.paid_at ? _pmDate(p.paid_at, true) : '—')],
-  ];
+  );
   if (p.current_period_end) rows.push(['Next renewal', escHtml(_pmDate(p.current_period_end))]);
   if (p.failure_reason) rows.push(['Failure reason', escHtml(p.failure_reason)]);
   rows.push(['Created', escHtml(_pmDate(p.created_at, true))]);
@@ -11907,6 +12079,176 @@ $('#pm-detail-back').addEventListener('click', () => {
   $('#pm-detail-panel').style.display = 'none';
   $('#pm-list-panel').style.display = '';
 });
+
+// ── User limit reached / buy extra users modal ──────────────────────────
+// Opened when Add User finds every seat taken (or from Billing → Add extra users).
+// Pays the first month for N extra users via Stripe Checkout; from the next
+// renewal the subscription is plan price + all extra users (server side:
+// ExtraUserPurchaseService). `seats` is the GET /users/seats payload.
+const _ul = { seats: null, qty: 1, paymentId: null, onPurchased: null };
+
+function openUserLimitModal(seats, { onPurchased } = {}) {
+  if (!seats) return;
+  _ul.seats = seats;
+  _ul.qty = 1;
+  _ul.paymentId = null;
+  _ul.onPurchased = onPurchased || null;
+
+  const full = seats.limited && seats.users_remaining <= 0;
+  $('#ul-title').textContent = full ? 'User limit reached' : 'Add extra users';
+  $('#ul-icon').className = `fa ${full ? 'fa-triangle-exclamation' : 'fa-user-plus'}`;
+  $('#ul-icon').style.color = full ? '#d97706' : 'var(--accent)';
+  $('#ul-msg').innerHTML = full
+    ? `Your <strong>${escHtml(seats.plan || 'current')}</strong> plan allows <strong>${seats.user_limit}</strong> users and all ${seats.user_limit} are in use (pending invitations count too). Add extra users to invite more people.`
+    : `Your <strong>${escHtml(seats.plan || 'current')}</strong> plan allows <strong>${seats.user_limit}</strong> users — ${seats.users_remaining} still free. Buy extra users ahead of time if you need more.`;
+
+  const pct = seats.user_limit ? Math.min(100, Math.round(seats.users_used / seats.user_limit * 100)) : 0;
+  $('#ul-usage-text').textContent = `${seats.users_used} of ${seats.user_limit} users`;
+  $('#ul-usage-sub').textContent = `${seats.included_users} included in plan${seats.extra_users ? ` + ${seats.extra_users} extra` : ''}`;
+  $('#ul-usage-fill').style.width = pct + '%';
+  $('#ul-usage-fill').classList.toggle('is-full', full);
+
+  $('#ul-alert').style.display = 'none';
+  $('#ul-waiting').style.display = 'none';
+  $('#ul-qty').max = seats.max_quantity || 50;
+  $('#ul-qty').value = 1;
+
+  const canBuy = !!seats.can_purchase;
+  $('#ul-buy').style.display = canBuy ? '' : 'none';
+  $('#ul-blocked').style.display = canBuy ? 'none' : '';
+  $('#ul-blocked').innerHTML = canBuy ? '' : `<i class="fa fa-circle-info"></i> ${escHtml(seats.purchase_blocked_reason || 'Extra users are not available on your plan.')}`;
+  $('#ul-pay').style.display = canBuy ? '' : 'none';
+  $('#ul-cancel').innerHTML = canBuy ? '<i class="fa fa-xmark"></i> Cancel' : 'Close';
+
+  _ulRender();
+  $('#ul-modal').style.display = 'flex';
+}
+window.openUserLimitModal = openUserLimitModal;
+
+function _ulRender() {
+  const s = _ul.seats;
+  if (!s || !s.can_purchase) return;
+  const cur = s.currency;
+  const unit = Number(s.extra_user_price) || 0;
+  const q = _ul.qty;
+  const payNow = q * unit;
+  // Every extra seat is billed at the current price from the next renewal.
+  const extraAfter = s.extra_users + q;
+  const newExtraMonthly = extraAfter * unit;
+  const newTotal = (Number(s.base_amount) || 0) + newExtraMonthly;
+  const renewal = s.next_renewal_at ? ` from ${_pmDate(s.next_renewal_at)}` : ' from the next renewal';
+
+  const row = (label, value, cls = '') =>
+    `<div class="ul-row ${cls}"><span>${label}</span><span>${value}</span></div>`;
+
+  $('#ul-breakdown').innerHTML = `
+    <div class="ul-section-title">Your monthly subscription</div>
+    ${row(`${escHtml(s.plan || 'Plan')} plan`, escHtml(_pmMoney(s.base_amount, cur)))}
+    ${s.extra_users ? row(`Extra users already added (${s.extra_users} × ${escHtml(_pmMoney(unit, cur))})`, escHtml(_pmMoney(s.extra_users * unit, cur))) : ''}
+    ${row(`<strong>New extra users (${q} × ${escHtml(_pmMoney(unit, cur))})</strong>`, `<strong>+ ${escHtml(_pmMoney(payNow, cur))}</strong>`, 'is-new')}
+    ${row(`Current monthly total`, `<s>${escHtml(_pmMoney(s.monthly_total, cur))}</s>`, 'is-muted')}
+    ${row(`<strong>New monthly total</strong><small>${escHtml(renewal)}</small>`, `<strong>${escHtml(_pmMoney(newTotal, cur))} / month</strong>`, 'is-total')}
+    <div class="ul-paynow">
+      <div><div class="ul-paynow-label">Pay today</div><div class="ul-paynow-sub">First month for ${q} new ${q === 1 ? 'user' : 'users'} — added to your plan right after payment</div></div>
+      <div class="ul-paynow-amount">${escHtml(_pmMoney(payNow, cur))}</div>
+    </div>
+    <div class="ul-note">You'll be able to have up to <strong>${s.user_limit + q}</strong> users. Removing users later doesn't lower the monthly charge automatically — contact Zeebroo to reduce extra users.</div>`;
+
+  $('#ul-qty-minus').disabled = q <= 1;
+  $('#ul-qty-plus').disabled = q >= (s.max_quantity || 50);
+  $('#ul-pay').innerHTML = `<i class="fa fa-credit-card"></i> Pay ${escHtml(_pmMoney(payNow, cur))} &amp; add ${q === 1 ? 'user' : q + ' users'}`;
+}
+
+function _ulSetQty(v) {
+  const max = _ul.seats?.max_quantity || 50;
+  _ul.qty = Math.max(1, Math.min(max, parseInt(v, 10) || 1));
+  $('#ul-qty').value = _ul.qty;
+  _ulRender();
+}
+
+function _ulClose() {
+  $('#ul-modal').style.display = 'none';
+  _ul.paymentId = null;
+}
+
+async function _ulPay() {
+  const btn = $('#ul-pay');
+  const alert = $('#ul-alert');
+  alert.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Starting checkout…';
+
+  const res = await API.usersSeatsCheckout(_ul.qty);
+  btn.disabled = false;
+  const url = res.body?.data?.checkout_url;
+  if (res.status !== 200 || !url) {
+    _ulRender();
+    const fieldErr = res.body?.errors && Object.values(res.body.errors)[0]?.[0];
+    showAlert(alert, fieldErr || res.body?.message || 'Could not start Stripe checkout. Please try again.');
+    return;
+  }
+
+  _ul.paymentId = res.body.data.payment_id;
+  window.electronAPI.openExternal(url);
+  $('#ul-buy').style.display = 'none';
+  $('#ul-pay').style.display = 'none';
+  $('#ul-waiting').style.display = '';
+}
+
+// Confirms with the server (never trusts the deep link alone), then hands back to the caller.
+async function _ulVerify() {
+  if (!_ul.paymentId) return;
+  const btn = $('#ul-check');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking…'; }
+  const res = await API.paymentStatus(_ul.paymentId);
+  if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa fa-arrows-rotate"></i> Check payment status'; }
+
+  if (res.status === 200 && res.body?.data?.payment_status === 'succeeded') {
+    const s = _ul.seats;
+    const newTotal = (Number(s.base_amount) || 0) + (s.extra_users + _ul.qty) * (Number(s.extra_user_price) || 0);
+    const cb = _ul.onPurchased;
+    _ulClose();
+    toast(`${_ul.qty === 1 ? 'Extra user' : _ul.qty + ' extra users'} added — your monthly total is now ${_pmMoney(newTotal, s.currency)}`, 'success');
+    if ($('#payment-modal-overlay')?.style.display === 'flex') _pmRefresh();
+    cb?.();
+    return;
+  }
+  showAlert($('#ul-alert'), 'Payment not confirmed yet — finish it in the browser window, then check again.');
+}
+
+function _ulBackToOptions() {
+  _ul.paymentId = null;
+  $('#ul-waiting').style.display = 'none';
+  $('#ul-buy').style.display = '';
+  $('#ul-pay').style.display = '';
+  _ulRender();
+}
+
+// Stripe Checkout return (socibiz://payment). Only acts while this modal is waiting.
+window.electronAPI.onPaymentDeepLink?.(({ status, paymentId }) => {
+  if ($('#ul-modal')?.style.display === 'none' || $('#ul-waiting')?.style.display === 'none') return;
+  if (paymentId && _ul.paymentId && Number(paymentId) !== Number(_ul.paymentId)) return;
+  if (status === 'success') {
+    _ulVerify();
+  } else {
+    _ulBackToOptions();
+    showAlert($('#ul-alert'), 'Payment was canceled — no users were added and you were not charged.');
+  }
+});
+
+$('#ul-close').addEventListener('click', _ulClose);
+$('#ul-cancel').addEventListener('click', _ulClose);
+$('#ul-modal').addEventListener('click', e => { if (e.target === e.currentTarget) _ulClose(); });
+$('#ul-pay').addEventListener('click', _ulPay);
+$('#ul-check').addEventListener('click', _ulVerify);
+$('#ul-retry').addEventListener('click', _ulBackToOptions);
+$('#ul-qty-minus').addEventListener('click', () => _ulSetQty(_ul.qty - 1));
+$('#ul-qty-plus').addEventListener('click', () => _ulSetQty(_ul.qty + 1));
+$('#ul-qty').addEventListener('input', e => {
+  const v = parseInt(e.target.value, 10);
+  if (v >= 1 && v <= (_ul.seats?.max_quantity || 50)) { _ul.qty = v; _ulRender(); }
+});
+$('#ul-qty').addEventListener('change', e => _ulSetQty(e.target.value));
 
 // ── My Profile modal ────────────────────────────────────────────────────
 function _mpShowAlert(el, msg, isError = true) {
@@ -29542,7 +29884,7 @@ function _bbwzUpdatePkgSummary() {
   if (!el) return;
   const pkg = _bbwz.selectedPackage;
   if (!pkg || _bbwz.step < 2) { el.style.display = 'none'; return; }
-  el.innerHTML = `<i class="fa fa-box-open"></i><span class="bbwz-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>`;
+  el.innerHTML = `<i class="fa fa-box-open"></i><span class="bbwz-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>${_obPkgUsersChipHtml(pkg)}`;
   el.style.display = 'flex';
 }
 
@@ -29613,6 +29955,7 @@ function _bbwzPopulatePaySummary() {
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
   $('#bbwz-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  _obFillPayUsers('bbwz', pkg);
   $('#bbwz-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#bbwz-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
   $('#bbwz-pay-gateway-note').style.display = isFree ? 'none'  : '';
@@ -48663,6 +49006,11 @@ function _renderEmployeeAccess(pane, empId, a, roles, canManage) {
     } else {
       toast(res.body?.message || res.body?.errors?.[Object.keys(res.body?.errors || {})[0]]?.[0] || 'Something went wrong.', 'error');
       loadEmployeeAccessTab(empId);
+      // Seat limit full → let the error toast register, then open Billing & Payments
+      // so the admin can buy extra users right away.
+      if (res.status === 409 && res.body?.code === 'user_limit_reached') {
+        setTimeout(() => openPaymentModal(), 1200);
+      }
     }
   };
 
@@ -57086,21 +57434,26 @@ async function submitDsCreate() {
   async function loadUsersView(listId) {
     _umSelected = null;
 
-    const res = await API.usersList();
+    const [res, seatsRes] = await Promise.all([API.usersList(), API.usersSeats()]);
     if (res.status !== 200) return;
 
     _umUsers = res.body.data || [];
     _umInvites = res.body.invitations || [];
+    _umSeats = seatsRes.status === 200 ? (seatsRes.body?.data || null) : null;
     if (res.body.permissions) _buildPermGroupsFromApi(res.body.permissions);
 
     _umUpdateCountBadges();
     renderUserList(listId || 'psm-users-list');
   }
 
+  let _umSeats = null;
+
   function _umUpdateCountBadges() {
     const count = _umUsers.length;
     let countLabel = `${count} user${count !== 1 ? 's' : ''}`;
     if (_umInvites.length) countLabel += ` · ${_umInvites.length} invited`;
+    // Package seat cap: owner + members + open invitations, out of max users + bought extras
+    if (_umSeats?.limited) countLabel += ` · ${_umSeats.users_used}/${_umSeats.user_limit} seats`;
     ['psm-users-count', 'bwz-sc-users-count'].forEach(id => {
       const badge = $(`#${id}`);
       if (badge) badge.textContent = countLabel;
@@ -57499,6 +57852,20 @@ async function submitDsCreate() {
   async function openAddModal() {
     const modal = $('#um-add-modal');
     if (!modal) return;
+
+    // Package user limit: when every seat is taken, offer extra users first
+    // and open this form only once they're paid for. Offline / API errors fall
+    // through — the server still enforces the limit on submit.
+    const seatsRes = await API.usersSeats();
+    if (seatsRes.status === 200) {
+      _umSeats = seatsRes.body?.data || null;
+      _umUpdateCountBadges();
+      if (_umSeats?.limited && _umSeats.users_remaining <= 0) {
+        window.openUserLimitModal(_umSeats, { onPurchased: () => openAddModal() });
+        return;
+      }
+    }
+
     if ($('#bwz-panel-sysconfig')?.style.display !== 'none' && $('#bwz-sc-panel-4')?.style.display !== 'none') {
       _bwz.billingActive = true; _bwz.billingNextStep = 'sc:4';
       _bwzGoBehind();
@@ -57559,6 +57926,17 @@ async function submitDsCreate() {
       closeAddModal();
       toast(res.body?.message || `Invitation sent to ${email}.`, res.body?.email_sent === false ? 'error' : 'success');
       await _reloadUsersKeepInvite(res.body?.data?.id);
+    } else if (res.status === 409 && res.body?.code === 'user_limit_reached') {
+      // Seats filled up while the form was open (e.g. another admin invited someone).
+      // Keep the form as typed; once paid the user can just press Send again.
+      const s = await API.usersSeats();
+      _showModalErr(errEl, res.body.message);
+      if (s.status === 200) {
+        _umSeats = s.body?.data || null;
+        window.openUserLimitModal(_umSeats, {
+          onPurchased: () => { errEl.style.display = 'none'; toast('Extra users added — you can send the invitation now.', 'success'); },
+        });
+      }
     } else {
       const fieldErr = res.body?.errors && Object.values(res.body.errors)[0]?.[0];
       _showModalErr(errEl, fieldErr || res.body?.message || 'Failed to send invitation.');

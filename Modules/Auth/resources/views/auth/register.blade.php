@@ -105,6 +105,8 @@
         .register-form__actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
         .auth-btn--secondary{background:transparent;color:var(--text);border-color:rgba(18,18,18,.22);}
         .auth-btn--secondary:hover{background:var(--card);color:var(--text);border-color:var(--ink);}
+        .register-form__actions .auth-btn[disabled]{opacity:.6;cursor:not-allowed;pointer-events:none;}
+        .register-form__submit{display:inline-flex;align-items:center;justify-content:center;gap:8px;}
     </style>
 @endpush
 
@@ -179,11 +181,37 @@
             if (email) email.focus();
         });
 
+        var submitBtn = form.querySelector('.register-form__submit');
+        var backBtn = document.getElementById('registerBackBtn');
+        var submitLabel = submitBtn ? submitBtn.innerHTML : '';
+
+        function setSubmitting(on) {
+            if (!submitBtn) return;
+            submitBtn.disabled = on;
+            if (backBtn) backBtn.disabled = on;
+            submitBtn.setAttribute('aria-busy', on ? 'true' : 'false');
+            submitBtn.innerHTML = on
+                ? '<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> ' + {!! json_encode(__('Creating account…')) !!}
+                : submitLabel;
+        }
+
         form.addEventListener('submit', function (e) {
             if (String(stepField.value) === '1') {
                 e.preventDefault();
                 document.getElementById('registerNextBtn').click();
+                return;
             }
+            // Block double-clicks: a second POST would hit the unique-email rule and show an error.
+            if (submitBtn && submitBtn.disabled) {
+                e.preventDefault();
+                return;
+            }
+            setSubmitting(true);
+        });
+
+        // Re-enable if the user comes back via the browser Back button (page restored from cache).
+        window.addEventListener('pageshow', function (e) {
+            if (e.persisted) setSubmitting(false);
         });
 
         setStep(initialStep);

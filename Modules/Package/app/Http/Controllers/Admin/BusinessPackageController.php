@@ -27,6 +27,8 @@ class BusinessPackageController extends Controller
             'features.*'            => ['string', 'in:' . implode(',', array_keys(config('features.list', [])))],
             // Blank = fall back to the platform default (config/subscription.php).
             'payment_grace_days'    => ['nullable', 'integer', 'min:0', 'max:' . (int) config('subscription.max_grace_period_days', 365)],
+            // Blank = use the package's Max Users. Bought extra users are added on top.
+            'max_users_override'    => ['nullable', 'integer', 'min:1', 'max:100000'],
         ]);
 
         DB::transaction(function () use ($business, $data, $request, $manual): void {
@@ -40,6 +42,10 @@ class BusinessPackageController extends Controller
 
             if ($request->has('payment_grace_days')) {
                 $this->businessPackages->setGraceDays($business, $data['payment_grace_days'] ?? null);
+            }
+
+            if ($request->has('max_users_override')) {
+                $this->businessPackages->setMaxUsersOverride($business, $data['max_users_override'] ?? null);
             }
         });
 

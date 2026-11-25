@@ -35,8 +35,11 @@ const API = (() => {
       publicRequest('POST', '/auth/password/forgot', { email }),
     resetPassword:  (email, otp, password) =>
       publicRequest('POST', '/auth/password/reset', { email, otp, password, password_confirmation: password }),
-    register:          (name, businessName, businessCategory, features, email, password, deviceName, packageId) =>
-      publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, package_id: packageId, email, password, password_confirmation: password, device_name: deviceName }),
+    // location = { multi_warehouse_branch, branch_name, branch_address, branch_phone, branch_email }
+    register:          (name, businessName, businessCategory, features, email, password, deviceName, packageId, location = {}) =>
+      publicRequest('POST', '/auth/register', { name, business_name: businessName, business_category: businessCategory, features, package_id: packageId, email, password, password_confirmation: password, device_name: deviceName, ...location }),
+    // Sign-up step 1: is this email still free? → { available, message }
+    checkEmail:        (email) => publicRequest('POST', '/auth/check-email', { email }),
     businessCategories: () => publicRequest('GET', '/auth/business-categories'),
     packages:           () => publicRequest('GET', '/auth/packages'),
     me:                 () => request('GET', '/auth/me'),
@@ -601,6 +604,9 @@ const API = (() => {
     memberMe:    ()                  => request('GET',    '/me'),
     usersList:   ()                  => request('GET',    '/users'),
     usersAdd:    (body)              => request('POST',   '/users', body),
+    // Package user limit — seat usage + extra-user pricing, and Stripe Checkout for N extra users
+    usersSeats:         ()           => request('GET',    '/users/seats'),
+    usersSeatsCheckout: (quantity)   => request('POST',   '/users/seats/checkout', { quantity }),
     usersUpdate: (memberId, body)    => request('PUT',    `/users/${memberId}`, body),
     usersRemove: (memberId)          => request('DELETE', `/users/${memberId}`),
     usersInviteResend: (inviteId)    => request('POST',   `/users/invitations/${inviteId}/resend`),

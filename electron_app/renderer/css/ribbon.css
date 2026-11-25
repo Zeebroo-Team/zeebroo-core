@@ -3781,10 +3781,63 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   background: var(--surface) !important;
   padding: 0 14px !important;
 }
-.ob-wide-field input:focus {
+.ob-wide-field input:focus,
+.ob-wide-field textarea:focus {
   border-color: var(--accent) !important;
   box-shadow: 0 0 0 3px rgba(78,142,247,.14) !important;
 }
+.ob-wide-field textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  font: inherit;
+  font-size: 15px !important;
+  border-radius: 8px !important;
+  border: 1.5px solid var(--border) !important;
+  background: var(--surface) !important;
+  color: var(--text);
+  padding: 12px 14px !important;
+  outline: none;
+}
+.ob-optional {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Location step (6) — two fields side by side */
+.ob-field-row { display: flex; gap: 12px; }
+.ob-field-row > .form-group { flex: 1; min-width: 0; }
+
+/* Location step — single / multiple locations switch */
+.ob-loc-toggle-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px 18px;
+  margin-bottom: 18px;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.ob-loc-toggle-lbl { font-size: 14px; font-weight: 700; color: var(--text); }
+.ob-loc-toggle-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.ob-switch {
+  position: relative; flex-shrink: 0;
+  width: 46px; height: 26px;
+  border: none; border-radius: 99px;
+  background: #cfc9bf;
+  cursor: pointer;
+  transition: background .2s;
+}
+.ob-switch-knob {
+  position: absolute; top: 3px; left: 3px;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+  transition: transform .2s;
+}
+.ob-switch.on { background: var(--ob-amber); }
+.ob-switch.on .ob-switch-knob { transform: translateX(20px); }
+.ob-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* password toggle in wide field */
 .ob-pw-wrap { position: relative; }
@@ -3810,17 +3863,22 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
   padding: 14px 64px;
   border-top: 1px solid var(--border-light);
   background: var(--surface);
+  container-type: inline-size;
+  container-name: ob-bottom-bar;
 }
 .ob-bottom-left {
   display: flex;
   align-items: center;
   gap: 16px;
+  flex-shrink: 0; /* never clip the Back link — the package chip gives way instead */
 }
 .ob-bottom-right {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
+.ob-back-link, .ob-secure-badge { white-space: nowrap; }
 .ob-back-link {
   background: none; border: none;
   font-size: 13px; font-weight: 600;
@@ -3853,9 +3911,34 @@ body.dark .alert-error { background: #3b1515; color: #fca5a5; border-color: #6b2
 .ob-pkg-summary .ob-pkg-price { font-size: 13px; }
 .ob-pkg-summary .ob-pkg-price-suffix { font-size: 10px; }
 .ob-pkg-summary .ob-pkg-price-strike { font-size: 10px; }
+/* User allowance line — used in both the onboarding and Add Business chips.
+   Always sits on its own line under name/price so the chip stays compact. */
+.ob-pkg-summary, .bbwz-pkg-summary {
+  flex-wrap: wrap; justify-content: center; row-gap: 3px;
+  flex: 0 1 auto; min-width: 0; /* the chip is the part that shrinks/wraps, never the buttons */
+}
+.bbwz-card .bwz-footer { gap: 12px; }
+.bbwz-card .bwz-footer #bbwz-cancel-btn,
+.bbwz-card .bwz-footer .bwz-footer-right { flex-shrink: 0; }
+.bbwz-card .bwz-footer .bwz-footer-right button { white-space: nowrap; }
+.ob-pkg-summary:has(.ob-pkg-summary-users),
+.bbwz-pkg-summary:has(.ob-pkg-summary-users) { border-radius: 12px; }
+.ob-pkg-summary-users {
+  flex-basis: 100%; display: flex; align-items: center; justify-content: center; gap: 5px;
+  padding-top: 3px; border-top: 1px dashed var(--border);
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  white-space: normal; text-align: center;
+}
+.ob-pkg-summary-users i { font-size: 10px; }
 @media (max-width: 900px) {
   .ob-bottom-bar { flex-wrap: wrap; row-gap: 8px; }
-  .ob-pkg-summary { order: 3; flex-basis: 100%; justify-content: center; }
+  .ob-pkg-summary { order: 3; flex-basis: 100%; }
+}
+/* Not enough room next to the package chip → shorten/drop secondary text rather than squash it.
+   Must stay AFTER the .ob-secure-badge base rule or its display:flex wins. */
+@container ob-bottom-bar (max-width: 1000px) {
+  .ob-secure-badge { display: none; }
+  .ob-back-extra { display: none; } /* "Back, choose another package" → "Back" */
 }
 
 /* ── Panel 6: payment summary & waiting-for-confirmation states ── */
@@ -9444,6 +9527,82 @@ body.dark .han-icon-amber  { color: #fbbf24; }
   font-size: 10px; font-weight: 700;
 }
 .pm-tab.active .pm-tab-count { background: var(--accent-light); color: var(--accent); }
+
+/* Billing: plan / users / monthly total block */
+.pm-plan { border: 1px solid var(--border); border-radius: 10px; margin: -6px 0 16px; overflow: hidden; }
+.pm-plan-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.pm-plan-cell { padding: 12px 16px; border-right: 1px solid var(--border); }
+.pm-plan-cell:last-child { border-right: none; }
+.pm-plan-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); }
+.pm-plan-value { font-size: 15px; font-weight: 700; margin-top: 4px; }
+.pm-plan-value.is-full { color: #d97706; }
+.pm-plan-total { color: var(--accent); }
+.pm-plan-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.pm-plan-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  padding: 10px 16px; border-top: 1px solid var(--border); background: var(--surface2);
+  font-size: 12px; color: var(--text-muted);
+}
+.pm-row-tag {
+  display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 8px;
+  border-radius: 999px; background: var(--accent-light); color: var(--accent); font-size: 10.5px; font-weight: 700;
+}
+.pm-detail-hint { font-size: 11px; font-weight: 500; color: var(--text-muted); }
+
+/* User limit reached / buy extra users — above the Add User (900) and Settings modals */
+#ul-modal { z-index: 950; }
+.ul-body { gap: 14px; }
+.ul-msg { margin: 0; font-size: 13px; line-height: 1.6; }
+.ul-usage { padding: 12px 14px; border-radius: 10px; background: var(--surface2); }
+.ul-usage-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; }
+.ul-usage-head .fa { color: var(--text-muted); margin-right: 4px; }
+.ul-usage-sub { font-size: 11.5px; color: var(--text-muted); }
+.ul-usage-bar { height: 8px; border-radius: 999px; background: var(--border); margin-top: 8px; overflow: hidden; }
+.ul-usage-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width .2s; }
+.ul-usage-fill.is-full { background: #d97706; }
+.ul-blocked {
+  padding: 12px 14px; border-radius: 10px; background: #fef3c7; color: #92400e; font-size: 13px; line-height: 1.5;
+}
+.ul-qty-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.ul-qty-row label { font-size: 13px; font-weight: 600; }
+.ul-qty { display: inline-flex; align-items: stretch; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.ul-qty button {
+  width: 34px; border: none; background: var(--surface2); color: var(--text); cursor: pointer; font-size: 12px;
+}
+.ul-qty button:disabled { opacity: .4; cursor: not-allowed; }
+.ul-qty input {
+  width: 56px; border: none; border-left: 1px solid var(--border); border-right: 1px solid var(--border);
+  text-align: center; font-size: 14px; font-weight: 700; background: var(--surface); color: var(--text);
+  -moz-appearance: textfield;
+}
+.ul-qty input::-webkit-outer-spin-button, .ul-qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.ul-breakdown { border: 1px solid var(--border); border-radius: 10px; padding: 4px 14px 14px; }
+.ul-section-title {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text-muted); padding: 10px 0 4px;
+}
+.ul-row {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 13px;
+}
+.ul-row > span:last-child { white-space: nowrap; text-align: right; }
+.ul-row small { display: block; font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 1px; }
+.ul-row.is-new { color: var(--accent); }
+.ul-row.is-muted { color: var(--text-muted); font-size: 12px; }
+.ul-row.is-total { border-bottom: none; font-size: 14px; padding-top: 10px; }
+.ul-paynow {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  margin-top: 10px; padding: 12px 14px; border-radius: 8px; background: var(--accent-light);
+}
+.ul-paynow-label { font-size: 13px; font-weight: 700; }
+.ul-paynow-sub { font-size: 11.5px; color: var(--text-muted); margin-top: 2px; }
+.ul-paynow-amount { font-size: 20px; font-weight: 800; color: var(--accent); white-space: nowrap; }
+.ul-note { font-size: 11.5px; color: var(--text-muted); margin-top: 10px; line-height: 1.5; }
+.ul-waiting { text-align: center; padding: 18px 10px; }
+.ul-waiting > .fa { font-size: 26px; color: var(--accent); }
+.ul-waiting-title { font-size: 14px; font-weight: 700; margin-top: 10px; }
+.ul-waiting-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 4px; line-height: 1.5; }
+.ul-waiting-actions { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
 .pm-row-pay-btn { flex-shrink: 0; }
 
 /* Subscription payment-due banner (shown above the Home panel) */

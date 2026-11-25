@@ -3,6 +3,7 @@
 namespace Modules\Pos\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -14,6 +15,8 @@ use Modules\Business\Models\BusinessRole;
 use Modules\Business\Services\BusinessInvitationService;
 use Modules\HRManagement\Services\EmployeeSystemAccessService;
 use Modules\HRManagement\Services\UserEmployeeLinkService;
+use Modules\Payment\Exceptions\SubscriptionActionException;
+use Modules\Payment\Services\ExtraUserPurchaseService;
 use Modules\Pos\Http\Controllers\Api\Concerns\ResolvesPosBusinessForApi;
 use Modules\Pos\Models\PosCashier;
 
@@ -204,6 +207,56 @@ class PosUserManagementApiController extends Controller
                 ? "Invitation sent to {$invitation->email}."
                 : 'Invitation saved, but the email could not be sent. Use "Resend" to try again.',
         ], 201);
+    }
+
+    /**
+     * Seat usage + extra-user pricing. The desktop app calls this before opening
+     * the Add User form and shows the "buy extra users" dialog when it's full.
+     */
+    public function seats(Request $request, ExtraUserPurchaseService $extraUsers): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $user     = $request->user();
+
+        return response()->json([
+            'data' => $extraUsers->summary($business, $user instanceof User ? $user : null),
+        ]);
+    }
+
+    /** Starts Stripe Checkout for N extra users (first month); seats are added once Stripe confirms. */
+    public function purchaseSeats(Request $request, ExtraUserPurchaseService $extraUsers): JsonResponse
+    {
+        $business = $this->businessOrAbort($request);
+        $user     = $request->user();
+
+        $validated = $request->validate([
+            'quantity' => ['required', 'integer', 'min:1', 'max:' . ExtraUserPurchaseService::MAX_QUANTITY],
+        ]);
+
+        if (! $user instanceof User) {
+            return response()->json(['message' => 'Only the business owner can buy extra users.'], 403);
+        }
+
+        try {
+            $result = $extraUsers->startCheckout(
+                $business,
+                $user,
+                (int) $validated['quantity'],
+                route('payment.desktop.checkout.success'),
+                route('payment.desktop.checkout.cancel'),
+            );
+        } catch (SubscriptionActionException $e) {
+            return response()->json(['message' => $e->getMessage()], $e->status);
+        }
+
+        return response()->json([
+            'data' => [
+                'payment_id'   => $result['payment']->id,
+                'checkout_url' => $result['checkout_url'],
+                'amount'       => (float) $result['payment']->amount,
+                'currency'     => strtoupper((string) $result['payment']->currency),
+            ],
+        ]);
     }
 
     public function resendInvitation(Request $request, int $invitationId, BusinessInvitationService $invitations): JsonResponse

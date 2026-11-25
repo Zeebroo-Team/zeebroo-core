@@ -280,6 +280,7 @@
                             <div style="display:flex;gap:6px;justify-content:flex-end;">
                                 @if($u->businesses->isNotEmpty())
                                     @php
+                                        $seatService ??= app(\Modules\Business\Services\UserSeatService::class);
                                         $businessOptions = $u->businesses->map(fn ($b) => [
                                             'id' => $b->id,
                                             'name' => $b->name,
@@ -288,6 +289,9 @@
                                             'manual' => (bool) $b->has_manual_features,
                                             'features' => $b->effectiveFeatureKeys(),
                                             'grace_days' => $b->payment_grace_days,
+                                            'max_users_override' => $b->max_users_override,
+                                            'users_used' => $seatService->used($b),
+                                            'extra_users' => $seatService->extraSeats($b),
                                         ])->values();
                                     @endphp
                                     <button type="button" class="adu-act-btn adu-package-btn"
@@ -417,7 +421,7 @@
                         <option value="">No package (unrestricted — all features)</option>
                         <option value="manual">Manual — choose features individually</option>
                         @foreach($packages as $package)
-                            <option value="{{ $package->id }}" data-features="{{ json_encode($package->features ?? []) }}">{{ $package->name }}</option>
+                            <option value="{{ $package->id }}" data-features="{{ json_encode($package->features ?? []) }}" data-max-users="{{ $package->max_users }}">{{ $package->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -433,6 +437,13 @@
                         placeholder="Default ({{ $defaultGraceDays }} {{ $defaultGraceDays === 1 ? 'day' : 'days' }})">
                     <p class="adu-field-hint">How long this business can use the app with an unpaid subscription before access is locked. Leave blank for the default of {{ $defaultGraceDays }} {{ $defaultGraceDays === 1 ? 'day' : 'days' }}. Changing it also moves the deadline of a bill that's already pending.</p>
                     @error('payment_grace_days')<p class="adu-field-err">{{ $message }}</p>@enderror
+                </div>
+                <div class="adu-field">
+                    <label for="adpMaxUsers">User limit (max users)</label>
+                    <input type="number" id="adpMaxUsers" name="max_users_override" min="1" max="100000" step="1" placeholder="Package default">
+                    <p class="adu-field-hint">How many users this business can have (owner, members and open invitations). Leave blank to use the package's Max Users. Extra users the business bought are added on top. Lowering it removes nobody — it only blocks new invitations.</p>
+                    <p class="adu-field-hint" id="adpMaxUsersUsage" style="font-weight:600;"></p>
+                    @error('max_users_override')<p class="adu-field-err">{{ $message }}</p>@enderror
                 </div>
                 <div class="adu-field">
                     <label>Features</label>
@@ -600,6 +611,9 @@
     var packageEl  = document.getElementById('adpPackage');
     var unlimitedEl= document.getElementById('adpUnlimited');
     var graceEl    = document.getElementById('adpGraceDays');
+    var maxUsersEl = document.getElementById('adpMaxUsers');
+    var maxUsageEl = document.getElementById('adpMaxUsersUsage');
+    var activeBusiness = null;
     var grid       = document.getElementById('adpFeatureGrid');
     var featureBoxes = document.querySelectorAll('.adp-f-feature');
     var currentBusinesses = [];
@@ -631,11 +645,43 @@
         packageEl.value = business.manual ? 'manual' : (business.package_id ? String(business.package_id) : '');
         unlimitedEl.checked = !!business.unlimited;
         graceEl.value = business.grace_days === null || business.grace_days === undefined ? '' : business.grace_days;
+        maxUsersEl.value = business.max_users_override === null || business.max_users_override === undefined ? '' : business.max_users_override;
+        activeBusiness = business;
+        updateMaxUsersHint();
         featureBoxes.forEach(function (cb) { cb.checked = business.features.indexOf(cb.value) !== -1; });
         applyUnlimitedState();
     }
 
     unlimitedEl.addEventListener('change', applyUnlimitedState);
+
+    // Placeholder shows the selected package's own limit; the usage line shows
+    // what the limit would be with the typed value + extra users already bought.
+    function packageMaxUsers() {
+        var opt = packageEl.options[packageEl.selectedIndex];
+        var v = opt ? opt.getAttribute('data-max-users') : '';
+        return v ? parseInt(v, 10) : null;
+    }
+    function updateMaxUsersHint() {
+        var pkgMax = packageMaxUsers();
+        maxUsersEl.placeholder = pkgMax ? 'Package default (' + pkgMax + ' users)' : 'Package default (unlimited)';
+        if (!activeBusiness) { maxUsageEl.textContent = ''; return; }
+        var typed = parseInt(maxUsersEl.value, 10);
+        var included = typed > 0 ? typed : pkgMax;
+        var extra = activeBusiness.extra_users || 0;
+        var used = activeBusiness.users_used || 0;
+        if (!included) {
+            maxUsageEl.textContent = 'Currently ' + used + ' users · no limit';
+            maxUsageEl.style.color = '';
+            return;
+        }
+        var limit = included + extra;
+        maxUsageEl.textContent = 'Currently ' + used + ' of ' + limit + ' users'
+            + (extra ? ' (' + included + ' + ' + extra + ' bought extra)' : '')
+            + (used > limit ? ' — over the limit, no new users can be invited' : used === limit ? ' — full' : '');
+        maxUsageEl.style.color = used >= limit ? '#d97706' : '';
+    }
+    maxUsersEl.addEventListener('input', updateMaxUsersHint);
+    packageEl.addEventListener('change', updateMaxUsersHint);
 
     packageEl.addEventListener('change', function () {
         // Manual keeps the current ticks so the admin can adjust them freely.

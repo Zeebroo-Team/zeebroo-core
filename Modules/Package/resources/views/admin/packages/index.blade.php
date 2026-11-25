@@ -193,6 +193,13 @@
             @endif
           </div>
 
+          <div class="pkg-feat-list">
+            <span class="pkg-feat-chip"><i class="fa fa-users" style="font-size:9px"></i> {{ $package->userLimitLabel() }}</span>
+            @if($package->extraUserPriceLabel())
+              <span class="pkg-feat-chip">{{ $package->extraUserPriceLabel() }}</span>
+            @endif
+          </div>
+
           @php $featLabels = $package->featureLabels(); @endphp
           @if(!empty($featLabels))
             <div class="pkg-feat-list">
@@ -213,6 +220,8 @@
                     data-price="{{ $package->price }}"
                     data-discounted-price="{{ $package->discounted_price }}"
                     data-currency="{{ $package->currency }}"
+                    data-max-users="{{ $package->max_users }}"
+                    data-extra-user-price="{{ $package->extra_user_price }}"
                     data-is-free="{{ $package->is_free ? '1' : '0' }}"
                     data-is-active="{{ $package->is_active ? '1' : '0' }}"
                     data-is-mobile-only="{{ $package->is_mobile_only ? '1' : '0' }}"
@@ -307,6 +316,21 @@
           </div>
         </div>
 
+        <div class="pkg-field-row">
+          <div class="pkg-field">
+            <label>Max Users</label>
+            <input type="number" step="1" min="1" name="max_users" id="pkg-f-max-users" value="{{ old('max_users') }}" placeholder="Unlimited">
+            <p class="pkg-field-hint">Optional. Leave empty for unlimited users.</p>
+            @error('max_users')<p class="pkg-field-err">{{ $message }}</p>@enderror
+          </div>
+          <div class="pkg-field" id="pkg-extra-user-field">
+            <label>Price per Extra User (<span id="pkg-price-symbol-3">Rs.</span>)</label>
+            <input type="number" step="0.01" min="0" name="extra_user_price" id="pkg-f-extra-user-price" value="{{ old('extra_user_price') }}" placeholder="e.g. 500">
+            <p class="pkg-field-hint">Optional. Charged for each user added beyond Max Users.</p>
+            @error('extra_user_price')<p class="pkg-field-err">{{ $message }}</p>@enderror
+          </div>
+        </div>
+
         <div class="pkg-field">
           <label>Sort Order</label>
           <input type="number" min="0" name="sort_order" id="pkg-f-sort-order" value="{{ old('sort_order', 0) }}">
@@ -386,6 +410,10 @@
   var currencyEl   = document.getElementById('pkg-f-currency');
   var currencySym1 = document.getElementById('pkg-price-symbol-1');
   var currencySym2 = document.getElementById('pkg-price-symbol-2');
+  var currencySym3 = document.getElementById('pkg-price-symbol-3');
+  var maxUsersEl   = document.getElementById('pkg-f-max-users');
+  var extraUserEl  = document.getElementById('pkg-f-extra-user-price');
+  var extraUserField = document.getElementById('pkg-extra-user-field');
   var CURRENCY_SYMBOLS = { LKR: 'Rs.', USD: '$' };
   var sortOrderEl  = document.getElementById('pkg-f-sort-order');
   var isActiveEl   = document.getElementById('pkg-f-is-active');
@@ -412,6 +440,14 @@
     var symbol = CURRENCY_SYMBOLS[currencyEl.value] || currencyEl.value;
     currencySym1.textContent = symbol;
     currencySym2.textContent = symbol;
+    currencySym3.textContent = symbol;
+  }
+
+  // Extra-user pricing only applies once a user cap is set.
+  function toggleExtraUserField() {
+    var hasCap = maxUsersEl.value.trim() !== '';
+    extraUserEl.disabled = !hasCap;
+    extraUserField.style.opacity = hasCap ? '' : '.5';
   }
 
   function setCreateMode() {
@@ -430,6 +466,8 @@
     priceEl.value = 0;
     discPriceEl.value = '';
     currencyEl.value = 'LKR';
+    maxUsersEl.value = '';
+    extraUserEl.value = '';
     sortOrderEl.value = 0;
     isActiveEl.checked = true;
     isMobileOnlyEl.checked = false;
@@ -437,9 +475,11 @@
     featureBoxes.forEach(function (cb) { cb.checked = false; });
     togglePriceFields();
     updateCurrencySymbol();
+    toggleExtraUserField();
   }
 
   isFreeEl.addEventListener('change', togglePriceFields);
+  maxUsersEl.addEventListener('input', toggleExtraUserField);
   currencyEl.addEventListener('change', updateCurrencySymbol);
   imageEl.addEventListener('change', function () {
     if (imageEl.files && imageEl.files[0]) {
@@ -474,12 +514,15 @@
       priceEl.value = btn.getAttribute('data-price');
       discPriceEl.value = btn.getAttribute('data-discounted-price') || '';
       currencyEl.value = btn.getAttribute('data-currency') || 'LKR';
+      maxUsersEl.value = btn.getAttribute('data-max-users') || '';
+      extraUserEl.value = btn.getAttribute('data-extra-user-price') || '';
       sortOrderEl.value = btn.getAttribute('data-sort-order') || 0;
       isActiveEl.checked = btn.getAttribute('data-is-active') === '1';
       isMobileOnlyEl.checked = btn.getAttribute('data-is-mobile-only') === '1';
       supportsPosLiteEl.checked = btn.getAttribute('data-supports-pos-lite') === '1';
       togglePriceFields();
       updateCurrencySymbol();
+      toggleExtraUserField();
 
       var selected = [];
       try { selected = JSON.parse(btn.getAttribute('data-features') || '[]'); } catch (e) {}

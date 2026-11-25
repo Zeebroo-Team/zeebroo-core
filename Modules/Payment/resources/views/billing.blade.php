@@ -167,7 +167,7 @@
             @forelse($paidItems as $item)
                 <div class="bill-row">
                     <div>
-                        <div class="bill-row-plan">{{ $item['plan'] ?? 'Subscription' }}</div>
+                        <div class="bill-row-plan">{{ $item['plan'] ?? 'Subscription' }}@if(!empty($item['title'])) — {{ $item['title'] }}@endif</div>
                         <div class="bill-row-date">{{ $item['paid_at'] ? \Illuminate\Support\Carbon::parse($item['paid_at'])->format('F j, Y') : '—' }} · {{ $item['billing_cycle'] ?? 'one-time' }}</div>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px;">
@@ -187,7 +187,7 @@
             @forelse($dueItems as $item)
                 <div class="bill-row">
                     <div>
-                        <div class="bill-row-plan">{{ $item['plan'] ?? 'Subscription' }}</div>
+                        <div class="bill-row-plan">{{ $item['plan'] ?? 'Subscription' }}@if(!empty($item['title'])) — {{ $item['title'] }}@endif</div>
                         <div class="bill-row-date">
                             {{ $item['due_at'] ? 'Due ' . \Illuminate\Support\Carbon::parse($item['due_at'])->format('F j, Y') : \Illuminate\Support\Carbon::parse($item['created_at'])->format('F j, Y') }}
                             @if($item['failure_reason']) · {{ $item['failure_reason'] }} @endif

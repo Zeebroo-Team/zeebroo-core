@@ -118,4 +118,27 @@ class AuthController extends Controller
 
         return redirect()->route('login');
     }
+
+    /**
+     * Cancel button on the business setup wizard: removes the just-created (still empty)
+     * account, then ends the session. Non-empty accounts are only signed out.
+     */
+    public function cancelSignup(Request $request, ImpersonationService $impersonation): RedirectResponse
+    {
+        // An impersonating admin must never delete the target account from here.
+        if ($impersonation->isImpersonating($request)) {
+            return $this->logout($request, $impersonation);
+        }
+
+        $deleted = $this->authService->cancelSignup($request->user());
+
+        $this->authService->logout();
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login')
+            ->with('status', $deleted
+                ? __('Sign-up cancelled. Your account details were removed.')
+                : __('You have been signed out.'));
+    }
 }
