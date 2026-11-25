@@ -3333,6 +3333,13 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <div class="ob-step-item">
             <div class="ob-step-row">
               <div class="ob-step-circle" data-ob-dot="6"><span>6</span></div>
+              <span class="ob-step-lbl">LOCATION</span>
+            </div>
+          </div>
+          <div class="ob-step-vline" data-ob-vline="6"></div>
+          <div class="ob-step-item">
+            <div class="ob-step-row">
+              <div class="ob-step-circle" data-ob-dot="7"><span>7</span></div>
               <span class="ob-step-lbl">PAYMENT</span>
             </div>
           </div>
@@ -3398,8 +3405,43 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <div class="ob-feature-list ob-feature-list-locked" id="ob-feature-list"></div>
           </div>
 
-          <!-- Panel 6: payment — review the monthly subscription, then pay (or finish, if free) -->
+          <!-- Panel 6: first location (branch) — same fields as the web onboarding wizard -->
           <div class="ob-panel ob-main-panel" id="ob-panel-6" style="display:none">
+            <h1 class="ob-main-title">Set up your first location</h1>
+            <p class="ob-main-subtitle">Tell us if you run multiple branches, then add your primary location</p>
+
+            <div class="ob-loc-toggle-row">
+              <div>
+                <div class="ob-loc-toggle-lbl" id="su-multi-lbl">Single location</div>
+                <div class="ob-loc-toggle-sub">Switch on if you operate multiple warehouses or branches</div>
+              </div>
+              <button type="button" class="ob-switch" id="su-multi-switch" role="switch" aria-checked="false">
+                <span class="ob-switch-knob"></span>
+              </button>
+            </div>
+
+            <div class="form-group ob-wide-field">
+              <label for="su-branch-name">LOCATION NAME</label>
+              <input type="text" id="su-branch-name" maxlength="255" placeholder="e.g. Colombo HQ">
+            </div>
+            <div class="form-group ob-wide-field">
+              <label for="su-branch-address">ADDRESS <span class="ob-optional">(optional)</span></label>
+              <textarea id="su-branch-address" maxlength="2000" rows="2" placeholder="Street, city, postal code"></textarea>
+            </div>
+            <div class="ob-field-row">
+              <div class="form-group ob-wide-field">
+                <label for="su-branch-phone">PHONE</label>
+                <input type="tel" id="su-branch-phone" maxlength="40" inputmode="tel" placeholder="+94 …">
+              </div>
+              <div class="form-group ob-wide-field">
+                <label for="su-branch-email">EMAIL <span class="ob-optional">(optional)</span></label>
+                <input type="email" id="su-branch-email" maxlength="255" placeholder="branch@example.com">
+              </div>
+            </div>
+          </div>
+
+          <!-- Panel 7: payment — review the monthly subscription, then pay (or finish, if free) -->
+          <div class="ob-panel ob-main-panel" id="ob-panel-7" style="display:none">
             <div id="ob-pay-review">
               <h1 class="ob-main-title">Confirm &amp; pay</h1>
               <p class="ob-main-subtitle">Review your plan below, then complete payment to activate your subscription</p>
@@ -3414,8 +3456,20 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
                   <span class="ob-pay-row-value" id="ob-pay-category">—</span>
                 </div>
                 <div class="ob-pay-row">
+                  <span class="ob-pay-row-label">Location</span>
+                  <span class="ob-pay-row-value" id="ob-pay-location">—</span>
+                </div>
+                <div class="ob-pay-row">
                   <span class="ob-pay-row-label">Package</span>
                   <span class="ob-pay-row-value" id="ob-pay-package">—</span>
+                </div>
+                <div class="ob-pay-row">
+                  <span class="ob-pay-row-label">Users included</span>
+                  <span class="ob-pay-row-value" id="ob-pay-users">—</span>
+                </div>
+                <div class="ob-pay-row" id="ob-pay-extra-user-row" style="display:none">
+                  <span class="ob-pay-row-label">Additional users</span>
+                  <span class="ob-pay-row-value" id="ob-pay-extra-user">—</span>
                 </div>
                 <div class="ob-pay-divider"></div>
                 <div class="ob-pay-row ob-pay-row--total">
@@ -3456,8 +3510,9 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <button class="ob-back-link" id="ob-back-2-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-3-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <button class="ob-back-link" id="ob-back-4-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
-            <button class="ob-back-link" id="ob-back-5-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back, choose another package</button>
+            <button class="ob-back-link" id="ob-back-5-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back<span class="ob-back-extra">, choose another package</span></button>
             <button class="ob-back-link" id="ob-back-6-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
+            <button class="ob-back-link" id="ob-back-7-btn" style="display:none"><i class="fa fa-arrow-left"></i> Back</button>
             <span class="ob-secure-badge"><i class="fa fa-lock"></i> Your data is secure and private.</span>
           </div>
           <div class="ob-pkg-summary" id="ob-pkg-summary" style="display:none"></div>
@@ -3467,6 +3522,7 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
             <button class="ob-continue-btn" id="ob-next-3-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="ob-next-4-btn" style="display:none" disabled>Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="ob-next-5-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
+            <button class="ob-continue-btn" id="ob-next-6-btn" style="display:none">Continue <i class="fa fa-arrow-right"></i></button>
             <button class="ob-continue-btn" id="signup-btn" style="display:none"><i class="fa fa-check"></i> Create Account</button>
           </div>
         </div>
@@ -23875,6 +23931,14 @@ body.dark .crm-rd-th{background:rgba(255,255,255,.03)}
           <div class="ob-pay-row">
             <span class="ob-pay-row-label">Package</span>
             <span class="ob-pay-row-value" id="bbwz-pay-package">—</span>
+          </div>
+          <div class="ob-pay-row">
+            <span class="ob-pay-row-label">Users included</span>
+            <span class="ob-pay-row-value" id="bbwz-pay-users">—</span>
+          </div>
+          <div class="ob-pay-row" id="bbwz-pay-extra-user-row" style="display:none">
+            <span class="ob-pay-row-label">Additional users</span>
+            <span class="ob-pay-row-value" id="bbwz-pay-extra-user">—</span>
           </div>
           <div class="ob-pay-divider"></div>
           <div class="ob-pay-row ob-pay-row--total">

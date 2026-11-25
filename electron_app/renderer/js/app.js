@@ -6512,7 +6512,32 @@ function showLogin() {
   $('#login-email').focus();
 }
 
+// Steps: 1 Account · 2 Profile · 3 Industry · 4 Package · 5 Features · 6 Location · 7 Payment
+const OB_LAST_STEP = 7;
 let _obStep = 1;
+let _obCheckedEmail = ''; // last email the server confirmed is free (skip re-checking on Back → Continue)
+let _obMultiLocation = false;
+
+function _obSetMultiLocation(on) {
+  _obMultiLocation = !!on;
+  const sw = $('#su-multi-switch');
+  if (sw) { sw.classList.toggle('on', _obMultiLocation); sw.setAttribute('aria-checked', String(_obMultiLocation)); }
+  const lbl = $('#su-multi-lbl');
+  if (lbl) lbl.textContent = _obMultiLocation ? 'Multiple locations' : 'Single location';
+}
+
+// Location fields sent with /auth/register (see PosAuthApiController::register)
+function _obLocationPayload() {
+  const v = sel => $(sel)?.value.trim() || '';
+  return {
+    multi_warehouse_branch: _obMultiLocation,
+    branch_name:    v('#su-branch-name'),
+    branch_address: v('#su-branch-address') || null,
+    branch_phone:   v('#su-branch-phone'),
+    branch_email:   v('#su-branch-email') || null,
+  };
+}
+
 let _obSelectedCat = '';
 let _obFeatureSet  = new Set(['point_of_sale', 'sales_management', 'product_management', 'stock_management']);
 let _obPackages = [];
@@ -6688,6 +6713,7 @@ function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
       <div class="ob-pkg-name">${escHtml(pkg.name)}</div>
       <div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>
       ${pkg.description ? `<div class="ob-pkg-desc">${escHtml(pkg.description)}</div>` : ''}
+      ${pkg.user_limit_label ? `<div class="ob-pkg-desc" style="font-weight:600"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}${pkg.extra_user_price_label ? ` · <span style="font-weight:500">${escHtml(pkg.extra_user_price_label)}</span>` : ''}</div>` : ''}
       <div class="ob-pkg-feat-tags">
         ${labels.map(l => `<span class="ob-pkg-tag">${escHtml(l)}</span>`).join('')}
         ${extra > 0 ? `<span class="ob-pkg-tag ob-pkg-tag-more">+${extra}</span>` : ''}
@@ -6740,6 +6766,24 @@ function _obBuildPkgGrid() {
   });
 }
 
+// "Up to 3 users · +$5.00 per extra user" segment for the footer package chip.
+function _obPkgUsersChipHtml(pkg) {
+  if (!pkg || !pkg.user_limit_label) return '';
+  const extra = pkg.extra_user_price_label ? ` · ${escHtml(pkg.extra_user_price_label)}` : '';
+  return `<span class="ob-pkg-summary-users"><i class="fa fa-users"></i>${escHtml(pkg.user_limit_label)}${extra}</span>`;
+}
+
+// Fills the "Users included" / "Additional users" rows of a Confirm & Pay summary.
+function _obFillPayUsers(prefix, pkg) {
+  const usersEl = $(`#${prefix}-pay-users`);
+  const extraRow = $(`#${prefix}-pay-extra-user-row`);
+  const extraEl = $(`#${prefix}-pay-extra-user`);
+  const extraText = pkg && pkg.extra_user_price_label ? pkg.extra_user_price_label : '';
+  if (usersEl) usersEl.textContent = pkg && pkg.user_limit_label ? pkg.user_limit_label : '—';
+  if (extraEl) extraEl.textContent = extraText;
+  if (extraRow) extraRow.style.display = extraText ? 'flex' : 'none';
+}
+
 // Keeps the bottom-bar chip in sync with the currently selected package —
 // visible on every step from Package onward, hidden before a pick is made.
 function _obUpdatePkgSummary() {
@@ -6747,7 +6791,7 @@ function _obUpdatePkgSummary() {
   if (!el) return;
   const pkg = _obSelectedPackage;
   if (!pkg || _obStep < 4) { el.style.display = 'none'; return; }
-  el.innerHTML = `<i class="fa fa-box-open"></i><span class="ob-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>`;
+  el.innerHTML = `<i class="fa fa-box-open"></i><span class="ob-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>${_obPkgUsersChipHtml(pkg)}`;
   el.style.display = 'flex';
 }
 
@@ -6773,24 +6817,24 @@ function _obSetStep(n) {
   });
 
   // Show/hide panels
-  ['1','2','3','4','5','6'].forEach(i => {
+  ['1','2','3','4','5','6','7'].forEach(i => {
     const p = $(`#ob-panel-${i}`);
     if (p) p.style.display = (String(n) === i) ? '' : 'none';
   });
 
   // Show/hide bottom-bar back buttons
-  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn', 6: 'ob-back-6-btn' };
+  const backIds = { 2: 'ob-back-2-btn', 3: 'ob-back-3-btn', 4: 'ob-back-4-btn', 5: 'ob-back-5-btn', 6: 'ob-back-6-btn', 7: 'ob-back-7-btn' };
   Object.values(backIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   if (backIds[n]) { const el = $(`#${backIds[n]}`); if (el) el.style.display = ''; }
 
   // Show/hide bottom-bar next/submit buttons
-  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'ob-next-5-btn', 6:'signup-btn' };
+  const nextIds = { 1:'ob-next-btn', 2:'ob-next-2-btn', 3:'ob-next-3-btn', 4:'ob-next-4-btn', 5:'ob-next-5-btn', 6:'ob-next-6-btn', 7:'signup-btn' };
   Object.values(nextIds).forEach(id => { const el = $(`#${id}`); if (el) el.style.display = 'none'; });
   { const el = $(`#${nextIds[n]}`); if (el) el.style.display = ''; }
 
   // Update progress bar (hidden but JS still sets it)
   const pb = $('#ob-progress-bar');
-  if (pb) pb.style.width = `${Math.round(n * 100 / 6)}%`;
+  if (pb) pb.style.width = `${Math.round(n * 100 / OB_LAST_STEP)}%`;
 
   if (n === 5) {
     const sub = $('#ob-panel-5-sub');
@@ -6800,12 +6844,19 @@ function _obSetStep(n) {
   }
 
   if (n === 6) {
+    // Pre-fill like the web wizard: location named after the business, contact email = sign-up email
+    const bn = $('#su-branch-name'), be = $('#su-branch-email');
+    if (bn && !bn.value.trim()) bn.value = $('#su-biz')?.value.trim() || '';
+    if (be && !be.value.trim()) be.value = $('#su-email')?.value.trim() || '';
+  }
+
+  if (n === OB_LAST_STEP) {
     _obShowPayWaiting(false);
     _obPopulatePaySummary();
   }
 
   $('#signup-alert').style.display = 'none';
-  const focusMap = { 1: '#su-email', 2: '#su-name' };
+  const focusMap = { 1: '#su-email', 2: '#su-name', 6: '#su-branch-phone' };
   const focusSel = focusMap[n];
   if (focusSel) setTimeout(() => $(focusSel)?.focus(), 50);
 
@@ -6822,6 +6873,11 @@ function _obPopulatePaySummary() {
   const catName = catCard?.querySelector('.ob-cat-name')?.textContent.trim() || '—';
   $('#ob-pay-category').textContent = catName;
 
+  const loc = _obLocationPayload();
+  $('#ob-pay-location').textContent = loc.branch_name
+    ? `${loc.branch_name}${loc.multi_warehouse_branch ? ' (multiple locations)' : ''}`
+    : '—';
+
   const pkg = _obSelectedPackage;
   const price = pkg ? Number(pkg.price || 0) : 0;
   const disc  = pkg && pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
@@ -6830,6 +6886,7 @@ function _obPopulatePaySummary() {
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
   $('#ob-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  _obFillPayUsers('ob', pkg);
   $('#ob-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#ob-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
   $('#ob-pay-gateway-note').style.display = isFree ? 'none'  : '';
@@ -6850,7 +6907,7 @@ function _obShowPayWaiting(show) {
   const bar     = $('#ob-bottom-bar');
   if (review)  review.style.display  = show ? 'none' : '';
   if (waiting) waiting.style.display = show ? '' : 'none';
-  if (bar)     bar.style.display     = (show && _obStep === 6) ? 'none' : '';
+  if (bar)     bar.style.display     = (show && _obStep === OB_LAST_STEP) ? 'none' : '';
   const err = $('#ob-pay-waiting-error');
   if (err) err.style.display = 'none';
 }
@@ -6867,6 +6924,10 @@ function showSignup() {
   $('#su-password').value = '';
   $('#su-name').value     = '';
   $('#su-biz').value      = '';
+  ['#su-branch-name', '#su-branch-address', '#su-branch-phone', '#su-branch-email']
+    .forEach(sel => { const el = $(sel); if (el) el.value = ''; });
+  _obSetMultiLocation(false);
+  _obCheckedEmail = '';
   _obSelectedCat = '';
   _obFeatureSet  = new Set();
   _obPackages = [];
@@ -9562,15 +9623,47 @@ $('#ctb-min-win')?.addEventListener('click',   () => window.electronAPI.minimize
 $('#ctb-close-win')?.addEventListener('click', () => window.electronAPI.close?.());
 
 // Onboarding wizard — step navigation
-$('#ob-next-btn').addEventListener('click', () => {
+$('#ob-next-btn').addEventListener('click', async () => {
   const email    = $('#su-email').value.trim();
   const password = $('#su-password').value;
   const alert    = $('#signup-alert');
+  const btn      = $('#ob-next-btn');
+  if (btn.disabled) return;
   if (!email)                       { showAlert(alert, 'Please enter your email'); return; }
-  if (!/\S+@\S+\.\S+/.test(email)) { showAlert(alert, 'Please enter a valid email'); return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { showAlert(alert, 'Please enter a valid email'); return; }
   if (password.length < 8)          { showAlert(alert, 'Password must be at least 8 characters'); return; }
+
+  // Ask the server now whether the email is valid and still free, instead of
+  // only finding out on the final Pay step.
+  if (_obCheckedEmail !== email.toLowerCase()) {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Checking…';
+    alert.style.display = 'none';
+    const res = await API.checkEmail(email);
+    btn.disabled = false;
+    btn.innerHTML = 'Continue <i class="fa fa-arrow-right"></i>';
+
+    if (res.status === 422) {
+      const errs = res.body?.errors || {};
+      showAlert(alert, (errs.email || []).join(' ') || res.body?.message || 'Please enter a valid email');
+      return;
+    }
+    if (res.status === 200 && res.body?.available === false) {
+      showAlert(alert, res.body?.message || 'This email is already registered. Sign in instead, or use a different email.');
+      $('#su-email').focus();
+      return;
+    }
+    if (res.status === 200) {
+      _obCheckedEmail = email.toLowerCase();
+    } else if (res.status === 429) {
+      showAlert(alert, 'Too many attempts. Please wait a minute and try again.');
+      return;
+    }
+    // Network/server error: let them continue — /auth/register re-validates the email at the end.
+  }
   _obSetStep(2);
 });
+$('#su-email').addEventListener('keydown', e => { if (e.key === 'Enter') $('#su-password').focus(); });
 $('#su-password').addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-btn').click(); });
 
 $('#ob-back-2-btn').addEventListener('click', () => _obSetStep(1));
@@ -9624,6 +9717,24 @@ $('#ob-back-5-btn').addEventListener('click', () => {
 
 $('#ob-next-5-btn').addEventListener('click', () => _obSetStep(6));
 $('#ob-back-6-btn').addEventListener('click', () => _obSetStep(5));
+
+// Step 6 — first location
+$('#su-multi-switch').addEventListener('click', () => _obSetMultiLocation(!_obMultiLocation));
+function _obValidateLocation() {
+  const loc   = _obLocationPayload();
+  const alert = $('#signup-alert');
+  if (!loc.branch_name)  { showAlert(alert, 'Please enter a location name'); $('#su-branch-name').focus(); return false; }
+  if (!loc.branch_phone) { showAlert(alert, 'Phone number is required'); $('#su-branch-phone').focus(); return false; }
+  if (!/^[+\d][\d\s()\-]{5,}$/.test(loc.branch_phone)) { showAlert(alert, 'Please enter a valid phone number'); $('#su-branch-phone').focus(); return false; }
+  if (loc.branch_email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(loc.branch_email)) {
+    showAlert(alert, 'Please enter a valid location email'); $('#su-branch-email').focus(); return false;
+  }
+  return true;
+}
+$('#ob-next-6-btn').addEventListener('click', () => { if (_obValidateLocation()) _obSetStep(7); });
+['#su-branch-name', '#su-branch-phone', '#su-branch-email'].forEach(sel =>
+  $(sel).addEventListener('keydown', e => { if (e.key === 'Enter') $('#ob-next-6-btn').click(); }));
+$('#ob-back-7-btn').addEventListener('click', () => _obSetStep(6));
 
 // Password visibility toggle
 $('#su-pw-toggle').addEventListener('click', () => {
@@ -9680,6 +9791,7 @@ async function doSignupOrPay() {
   if (!biz)       { _obSetStep(2); showAlert(alert, 'Please enter a business name'); return; }
   if (!category)  { _obSetStep(3); showAlert(alert, 'Please select your industry'); return; }
   if (!packageId) { _obSetStep(4); showAlert(alert, 'Please select a package'); return; }
+  if (!_obValidateLocation()) { _obSetStep(6); _obValidateLocation(); return; }
 
   const wasFree = !_obSelectedPackage || _obSelectedPackage.is_free;
   btn.disabled = true;
@@ -9689,7 +9801,7 @@ async function doSignupOrPay() {
   alert.style.display = 'none';
 
   const deviceName = state.config?.device_name || 'pos-desktop-1';
-  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId);
+  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId, _obLocationPayload());
 
   btn.disabled = false;
 
@@ -9701,7 +9813,8 @@ async function doSignupOrPay() {
     const msg  = Object.keys(errs).length
       ? Object.values(errs).flat().join(' ')
       : (res.body?.message || `Registration failed (${res.status})`);
-    if (errs.email || errs.password) _obSetStep(1);
+    if (errs.email || errs.password) { _obCheckedEmail = ''; _obSetStep(1); }
+    else if (Object.keys(errs).some(k => k.startsWith('branch_'))) _obSetStep(6);
     showAlert($('#signup-alert'), msg);
     return;
   }
@@ -29542,7 +29655,7 @@ function _bbwzUpdatePkgSummary() {
   if (!el) return;
   const pkg = _bbwz.selectedPackage;
   if (!pkg || _bbwz.step < 2) { el.style.display = 'none'; return; }
-  el.innerHTML = `<i class="fa fa-box-open"></i><span class="bbwz-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>`;
+  el.innerHTML = `<i class="fa fa-box-open"></i><span class="bbwz-pkg-summary-name">${escHtml(pkg.name)}</span><div class="ob-pkg-price-row">${_obPkgPriceHtml(pkg)}</div>${_obPkgUsersChipHtml(pkg)}`;
   el.style.display = 'flex';
 }
 
@@ -29613,6 +29726,7 @@ function _bbwzPopulatePaySummary() {
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
   $('#bbwz-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  _obFillPayUsers('bbwz', pkg);
   $('#bbwz-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#bbwz-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
   $('#bbwz-pay-gateway-note').style.display = isFree ? 'none'  : '';

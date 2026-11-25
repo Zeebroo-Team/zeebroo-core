@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\UserActivityLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
@@ -17,6 +18,7 @@ use Modules\Auth\Services\PasswordResetService;
 use Modules\Mail\Services\AutomatedEmailService;
 use Modules\Business\Models\Business;
 use Modules\Business\Models\BusinessCategory;
+use Modules\Business\Services\BranchService;
 use Modules\Package\Models\Package;
 use Modules\Payment\Models\Payment;
 use Modules\Payment\Services\PaymentProvisioningService;
@@ -28,6 +30,7 @@ class PosAuthApiController extends Controller
     public function __construct(
         private readonly AuthService $authService,
         private readonly PaymentProvisioningService $paymentProvisioningService,
+        private readonly BranchService $branchService,
     ) {}
 
     public function token(Request $request): JsonResponse
@@ -63,6 +66,24 @@ class PosAuthApiController extends Controller
         ]);
     }
 
+    /**
+     * Sign-up step 1 pre-check, so the wizard can stop on the Account step
+     * instead of failing at the final Pay step with "email already taken".
+     */
+    public function checkEmail(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email' => ['required', 'email', 'max:255'],
+        ]);
+
+        $available = $this->authService->isEmailAvailable($validated['email']);
+
+        return response()->json([
+            'available' => $available,
+            'message'   => $available ? null : 'This email is already registered. Sign in instead, or use a different email.',
+        ]);
+    }
+
     public function register(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -76,6 +97,14 @@ class PosAuthApiController extends Controller
             'password'          => ['required', 'confirmed', Password::min(8)],
             'device_name'       => ['nullable', 'string', 'max:120'],
             'platform'          => ['nullable', 'string', Rule::in(['desktop', 'mobile', 'pos_lite'])],
+            // First location (sign-up "Location" step). Optional so older clients
+            // that don't send it keep working; when a name is sent, phone is required
+            // (same rule as the web onboarding wizard).
+            'multi_warehouse_branch' => ['nullable', 'boolean'],
+            'branch_name'       => ['nullable', 'string', 'max:255'],
+            'branch_address'    => ['nullable', 'string', 'max:2000'],
+            'branch_phone'      => ['required_with:branch_name', 'nullable', 'string', 'max:40'],
+            'branch_email'      => ['nullable', 'email', 'max:255'],
         ]);
 
         $platform = $validated['platform'] ?? 'desktop';
@@ -118,6 +147,10 @@ class PosAuthApiController extends Controller
         $features['account_management'] = true; // always on
         $business->setSetting('business.features', $features);
 
+        if (! empty($validated['branch_name'])) {
+            $this->createFirstBranch($business, $validated);
+        }
+
         $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform);
 
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
@@ -142,6 +175,34 @@ class PosAuthApiController extends Controller
                 'currency' => $requiresPayment ? $payment->currency : null,
             ],
         ], 201);
+    }
+
+    /**
+     * Same as the web onboarding wizard (BusinessController): store the
+     * single/multi-location choice, mark the branch intro as done so it isn't
+     * shown again, and create the primary branch.
+     */
+    private function createFirstBranch(Business $business, array $validated): void
+    {
+        DB::transaction(function () use ($business, $validated): void {
+            $business->setSetting('business.multi_warehouse_branch', (bool) ($validated['multi_warehouse_branch'] ?? false));
+
+            Business::query()
+                ->whereKey($business->id)
+                ->whereNull('warehouse_branch_intro_acknowledged_at')
+                ->update([
+                    'warehouse_branch_intro_acknowledged_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            $this->branchService->create($business, [
+                'name'      => $validated['branch_name'],
+                'address'   => $validated['branch_address'] ?? null,
+                'phone'     => $validated['branch_phone'] ?? null,
+                'email'     => $validated['branch_email'] ?? null,
+                'is_active' => true,
+            ]);
+        });
     }
 
     public function businessCategories(): JsonResponse
@@ -172,7 +233,11 @@ class PosAuthApiController extends Controller
                 'discounted_price' => $package->discounted_price !== null ? (float) $package->discounted_price : null,
                 'currency'         => $package->currency,
                 'currency_symbol'  => $package->currencySymbol(),
-                'is_free'          => $package->is_free,
+                'max_users'        => $package->max_users,
+                'extra_user_price' => $package->extra_user_price !== null ? (float) $package->extra_user_price : null,
+                'user_limit_label' => $package->userLimitLabel(),
+                'extra_user_price_label' => $package->extraUserPriceLabel(),
+                'is_free'         => $package->is_free,
                 'is_mobile_only'   => $package->is_mobile_only,
                 'supports_pos_lite' => $package->supports_pos_lite,
                 'features'         => $package->features ?? [],

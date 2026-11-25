@@ -222,6 +222,11 @@
                         @elseif($blPrice !== null)
                             <div class="bl-plan-price"><strong>{{ $blMoney($blPrice, $package->currency ?: $blCurrency) }}</strong> / {{ $blCycle === 'yearly' ? 'year' : 'month' }}</div>
                         @endif
+                        @if($package)
+                            <div class="bl-plan-price" style="margin-top:4px;font-size:12.5px">
+                                <i class="fa fa-users" aria-hidden="true"></i> {{ $package->userLimitLabel() }}@if($package->extraUserPriceLabel()) · {{ $package->extraUserPriceLabel() }}@endif
+                            </div>
+                        @endif
                     </div>
                     <div class="bl-plan-foot">
                         <span>

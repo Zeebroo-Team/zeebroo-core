@@ -15,6 +15,8 @@ class Package extends Model
         'price',
         'discounted_price',
         'currency',
+        'max_users',
+        'extra_user_price',
         'is_free',
         'features',
         'is_active',
@@ -26,7 +28,9 @@ class Package extends Model
     protected $casts = [
         'price'             => 'decimal:2',
         'discounted_price'  => 'decimal:2',
-        'is_free'           => 'boolean',
+        'max_users'         => 'integer',
+        'extra_user_price'  => 'decimal:2',
+        'is_free'          => 'boolean',
         'features'          => 'array',
         'is_active'         => 'boolean',
         'is_mobile_only'    => 'boolean',
@@ -59,6 +63,26 @@ class Package extends Model
             ->map(fn ($key) => $catalog[$key] ?? $key)
             ->values()
             ->all();
+    }
+
+    /** e.g. "Up to 4 users" or "Unlimited users". */
+    public function userLimitLabel(): string
+    {
+        if ($this->max_users === null) {
+            return 'Unlimited users';
+        }
+
+        return 'Up to ' . $this->max_users . ' ' . ($this->max_users === 1 ? 'user' : 'users');
+    }
+
+    /** e.g. "+Rs.500.00 per extra user", or null when extra users are not charged. */
+    public function extraUserPriceLabel(): ?string
+    {
+        if ($this->max_users === null || $this->extra_user_price === null) {
+            return null;
+        }
+
+        return '+' . $this->currencySymbol() . number_format((float) $this->extra_user_price, 2) . ' per extra user';
     }
 
     public function currencySymbol(): string

@@ -444,6 +444,7 @@ function _obPackageCardHtml(pkg) {
     <p class="ob-package-name">${pkg.name}</p>
     ${price.html}
     ${pkg.description ? `<p class="ob-muted" style="margin:6px 0 0;text-align:left;">${pkg.description}</p>` : ''}
+    ${pkg.user_limit_label ? `<p class="ob-muted" style="margin:6px 0 0;text-align:left;font-weight:600;"><i class="fa-solid fa-users"></i> ${pkg.user_limit_label}${pkg.extra_user_price_label ? ` · ${pkg.extra_user_price_label}` : ''}</p>` : ''}
     ${features ? `<ul class="ob-feature-list">${features}</ul>` : ''}
   `;
 }

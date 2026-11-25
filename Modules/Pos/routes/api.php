@@ -79,6 +79,7 @@ Route::prefix('v1/pos')->group(function (): void {
     Route::post('auth/token',             [PosAuthApiController::class, 'token'])->name('auth.token');
     Route::post('auth/web-handoff',       [PosAuthApiController::class, 'webHandoff'])->middleware('throttle:20,1')->name('auth.web-handoff');
     Route::post('auth/register',          [PosAuthApiController::class, 'register'])->name('auth.register');
+    Route::post('auth/check-email',       [PosAuthApiController::class, 'checkEmail'])->middleware('throttle:30,1')->name('auth.check-email');
     Route::post('auth/password/forgot',   [PosAuthApiController::class, 'forgotPassword'])->middleware('throttle:5,1')->name('auth.password.forgot');
     Route::post('auth/password/reset',    [PosAuthApiController::class, 'resetPassword'])->middleware('throttle:10,1')->name('auth.password.reset');
     Route::get ('auth/business-categories',[PosAuthApiController::class, 'businessCategories'])->name('auth.business-categories');

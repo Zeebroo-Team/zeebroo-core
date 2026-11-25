@@ -59,7 +59,9 @@ class PackageController extends Controller
             'price'             => ['required', 'numeric', 'min:0'],
             'discounted_price'  => ['nullable', 'numeric', 'min:0', 'lte:price'],
             'currency'          => ['required', 'string', 'in:LKR,USD'],
-            'is_free'           => ['boolean'],
+            'max_users'         => ['nullable', 'integer', 'min:1'],
+            'extra_user_price'  => ['nullable', 'numeric', 'min:0'],
+            'is_free'          => ['boolean'],
             'is_active'         => ['boolean'],
             'is_mobile_only'    => ['boolean'],
             'supports_pos_lite' => [
@@ -91,6 +93,9 @@ class PackageController extends Controller
         $data['supports_pos_lite'] = $request->boolean('supports_pos_lite');
         $data['sort_order'] = $data['sort_order'] ?? 0;
         $data['features'] = $data['features'] ?? [];
+        $data['max_users'] = $data['max_users'] ?? null;
+        // An extra-user charge only makes sense once there is a user cap to exceed.
+        $data['extra_user_price'] = $data['max_users'] !== null ? ($data['extra_user_price'] ?? null) : null;
 
         if ($data['is_free']) {
             $data['price'] = 0;
