@@ -68,6 +68,14 @@
             'fullDesc'   => 'Run fast, reliable counter sales from any device. Process payments, print or email receipts, manage daily float, track cashier shifts, and keep a complete record of every transaction. Requires Product and Stock Management.',
             'highlights' => ['Counter sales and receipts', 'Multiple payment methods', 'Daily float and cashier shifts', 'Full sales history and void management'],
         ],
+        ['key' => 'sales_management',     'label' => 'Sales Management',      'icon' => 'fa-file-invoice',       'image' => 'sales-management.png',          'desc' => 'Invoices, quotations, sales orders and returns',
+            'fullDesc'   => 'Handle the full sales cycle beyond the counter. Create quotations, convert them into sales orders and invoices, track customer payments and outstanding balances, and process returns with a complete audit trail.',
+            'highlights' => ['Quotations and sales orders', 'Customer invoices and payments', 'Returns and credit notes', 'Sales history and reports'],
+        ],
+        ['key' => 'restaurant',           'label' => 'Restaurant',            'icon' => 'fa-utensils',           'image' => 'restaurant.jpeg',               'desc' => 'Restaurant POS, table orders, menu and kitchen display',
+            'fullDesc'   => 'Run your dining floor and kitchen in one place. Take table and takeaway orders, manage your menu, send tickets to the kitchen display, and settle bills quickly at the restaurant POS.',
+            'highlights' => ['Table and takeaway orders', 'Menu management', 'Kitchen display tickets', 'Restaurant POS billing'],
+        ],
         ['key' => 'service_management',   'label' => 'Service Management',    'icon' => 'fa-screwdriver-wrench', 'image' => 'service.png',                   'desc' => 'Service catalog, requests and service delivery management',
             'fullDesc'   => 'Deliver and track services alongside your products. Build a service catalogue with pricing, manage customer requests from intake to completion, assign staff to jobs, and sell services directly through the POS terminal.',
             'highlights' => ['Service catalogue and pricing', 'Customer request management', 'Staff assignment and job tracking', 'Sell services via POS'],
@@ -75,6 +83,22 @@
         ['key' => 'social_media_campaign','label' => 'Social Media Campaign', 'icon' => 'fa-bullhorn',           'image' => 'graphic-design.jpeg',           'desc' => 'Design, schedule and track marketing campaigns',
             'fullDesc'   => 'Plan and execute marketing campaigns without leaving SociBiz. Design campaign briefs, set targets and budgets, schedule content across platforms, and measure performance results to keep refining your strategy.',
             'highlights' => ['Campaign planning and briefs', 'Budget and target setting', 'Content scheduling', 'Performance tracking and analytics'],
+        ],
+        ['key' => 'crm',                  'label' => 'CRM',                   'icon' => 'fa-handshake',          'image' => 'crm.jpeg',                      'desc' => 'Leads pipeline, contacts and follow-up tasks',
+            'fullDesc'   => 'Never lose track of a deal. Capture leads, move them through custom pipeline stages, keep every contact and conversation in one place, and assign follow-up tasks so your team always knows the next step.',
+            'highlights' => ['Lead pipeline with custom stages', 'Contact management', 'Follow-up tasks and reminders', 'Lead capture forms'],
+        ],
+        ['key' => 'mail',                 'label' => 'Mail',                  'icon' => 'fa-envelope',           'image' => 'mail.png',                      'desc' => 'Business inbox, templates and scheduled sending',
+            'fullDesc'   => 'Bring your business email into your workspace. Connect mailboxes, read and reply from a shared inbox, reuse templates for common messages, and schedule emails to go out at the right time.',
+            'highlights' => ['Connected business mailboxes', 'Shared inbox', 'Reusable email templates', 'Scheduled sending'],
+        ],
+        ['key' => 'project_management',   'label' => 'Project Management',    'icon' => 'fa-diagram-project',    'image' => 'project-management.jpeg',       'desc' => 'Projects, tasks, milestones and kanban boards',
+            'fullDesc'   => 'Plan and deliver work on time. Break projects into tasks and milestones, organise them on kanban boards, assign team members, and track progress from kickoff to completion.',
+            'highlights' => ['Projects and milestones', 'Kanban task boards', 'Team assignments', 'Progress tracking'],
+        ],
+        ['key' => 'event_management',     'label' => 'Event Management',      'icon' => 'fa-calendar-days',      'image' => 'event-management.png',          'desc' => 'Brands, jobs, reporters, officers and salary sheets',
+            'fullDesc'   => 'Manage event advertising work end to end. Organise brands and jobs, assign reporters and officers, track event activity, and generate salary sheets for your field team.',
+            'highlights' => ['Brand and job management', 'Reporter and officer assignment', 'Event tracking', 'Salary sheets'],
         ],
         ['key' => 'automation_editor',    'label' => 'Automation Editor',    'icon' => 'fa-robot',              'image' => 'automation-flow.png',           'desc' => 'Build trigger-based workflows and automated email sequences',
             'fullDesc'   => 'Design powerful automations without writing code. Create trigger-based workflows that fire when customers act, deals move, or schedules run. Send automated emails, update records, and chain multi-step actions to save hours of manual work every week.',
@@ -891,7 +915,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-trial-modal__sub{margin:0;font-size:13px;line-height:1.5;color:rgba(255,255,255,.9);}
         .wiz-trial-modal .wiz-cat-modal__close{background:rgba(255,255,255,.75);border-color:transparent;color:#141414;}
         .wiz-trial-modal__body{overflow-y:auto;padding:20px 26px;flex:1;min-height:0;}
-        .wiz-trial-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;align-items:stretch;}
+        .wiz-trial-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;align-items:start;}
         .wiz-trial-opt{position:relative;display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:16px;border:1.5px solid var(--border);
             background:var(--card);cursor:pointer;text-align:left;font-family:inherit;color:var(--text);transition:border-color .18s,box-shadow .18s;}
         .wiz-trial-modal .wiz-trial-opt:hover,.wiz-trial-modal .wiz-trial-opt:focus{border-color:#16a34a;background:rgba(22,163,74,.06);color:var(--text);transform:none;}
@@ -904,11 +928,43 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-trial-opt--on .wiz-trial-opt__radio{background:#16a34a;border-color:#16a34a;}
         .wiz-trial-opt--on .wiz-trial-opt__radio i{opacity:1;}
         .wiz-trial-opt__name{font-size:17px;font-weight:800;letter-spacing:-.01em;padding-right:28px;}
+        .wiz-trial-opt__pricing{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;}
+        .wiz-trial-opt__free{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;background:#16a34a;color:#fff;
+            font-size:13px;font-weight:800;letter-spacing:-.01em;}
+        .wiz-trial-opt__free i{font-size:11px;}
+        .wiz-trial-opt__was{font-size:14px;font-weight:700;color:var(--muted);text-decoration:line-through;text-decoration-color:#dc2626;text-decoration-thickness:2px;}
         .wiz-trial-opt__price{font-size:12.5px;color:var(--muted);}
         .wiz-trial-opt__price strong{color:var(--text);font-weight:700;}
         .wiz-trial-opt__users{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);}
         .wiz-trial-opt__desc{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted);}
         .wiz-trial-opt .wiz-pkg-mods{gap:7px;}
+        .wiz-trial-feat-toggle{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;width:100%;margin-top:4px;padding:9px 12px;
+            border-radius:10px;border:1.5px solid rgba(22,163,74,.35);background:rgba(22,163,74,.06);color:#15803d;font-family:inherit;
+            font-size:12.5px;font-weight:700;cursor:pointer;transition:background .18s,border-color .18s;}
+        .wiz-trial-feat-toggle:hover{background:rgba(22,163,74,.12);border-color:#16a34a;}
+        .wiz-trial-feat-toggle:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(22,163,74,.3);}
+        .wiz-trial-feat-count{margin-right:auto;font-weight:600;opacity:.8;}
+        .wiz-trial-feat-toggle i{font-size:11px;transition:transform .45s cubic-bezier(.32,.72,0,1);}
+        .wiz-trial-feat-toggle[aria-expanded="true"] i{transform:rotate(180deg);}
+        /* macOS-style disclosure: height via grid rows, items fade/slide in with a light stagger */
+        .wiz-trial-feat{display:grid;grid-template-rows:0fr;margin-top:-10px;transition:grid-template-rows .45s cubic-bezier(.32,.72,0,1),margin-top .45s cubic-bezier(.32,.72,0,1);}
+        .wiz-trial-feat--open{grid-template-rows:1fr;margin-top:0;}
+        .wiz-trial-feat__inner{overflow:hidden;min-height:0;}
+        .wiz-trial-feat .wiz-pkg-mods li{opacity:0;transform:translateY(-6px);transition:opacity .2s ease,transform .2s ease;}
+        .wiz-trial-feat--open .wiz-pkg-mods li{opacity:1;transform:none;
+            transition:opacity .3s ease calc(.05s + var(--i,0) * .03s),transform .4s cubic-bezier(.32,.72,0,1) calc(.05s + var(--i,0) * .03s);}
+        /* macOS-style sheet: backdrop fades, box springs up from slightly smaller */
+        .wiz-trial-modal .wiz-cat-modal__backdrop{opacity:0;transition:opacity .3s ease;}
+        .wiz-trial-modal .wiz-cat-modal__box{opacity:0;transform:translateY(14px) scale(.94);
+            transition:opacity .22s ease,transform .32s cubic-bezier(.4,0,1,1);}
+        .wiz-trial-modal:not(.wiz-trial-modal--in){pointer-events:none;}
+        .wiz-trial-modal.wiz-trial-modal--in .wiz-cat-modal__backdrop{opacity:1;}
+        .wiz-trial-modal.wiz-trial-modal--in .wiz-cat-modal__box{opacity:1;transform:none;
+            transition:opacity .25s ease,transform .5s cubic-bezier(.32,1.25,.4,1);}
+        @media (prefers-reduced-motion: reduce){
+            .wiz-trial-modal .wiz-cat-modal__box,.wiz-trial-modal .wiz-cat-modal__backdrop,.wiz-trial-feat,
+            .wiz-trial-feat .wiz-pkg-mods li,.wiz-trial-feat-toggle i{transition:none !important;transform:none !important;}
+        }
         .wiz-trial-opt .wiz-pkg-mods li{font-size:12.5px;}
         .wiz-trial-opt .wiz-pkg-mods li::before{background:#16a34a;color:#fff;}
         .wiz-trial-modal__err{margin:0 0 12px;}
@@ -1223,6 +1279,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     'service_management'    => 'Services',
                                     'social_media_campaign' => 'Campaigns',
                                     'ecommerce'             => 'E-Commerce',
+                                    'sales_management'      => 'Sales',
+                                    'restaurant'            => 'Restaurant',
+                                    'crm'                   => 'CRM',
+                                    'mail'                  => 'Mail',
+                                    'project_management'    => 'Projects',
+                                    'event_management'      => 'Events',
+                                    'automation_editor'     => 'Automation',
+                                    'developers'            => 'Developers',
                                 ];
                             @endphp
                             <div class="wiz-cat-search-wrap">
@@ -3320,9 +3384,13 @@ function openWizStorageAgreementModal(type) {
         const trialModal = document.getElementById('wizTrialModal');
         let trialModalCard = null;
         let trialPick = '';
+        const trialFeatOpen = new Set();
+        let trialModalHideTimer = null;
         function renderTrialOptions() {
             const grid = document.getElementById('wizTrialGrid');
             const cards = wizardForm.querySelectorAll('.wiz-pkg-card:not(.wiz-pkg-card--trial)');
+            const trialSrc = trialModalCard || wizardForm.querySelector('.wiz-pkg-card--trial');
+            const trialDays = trialSrc ? (trialSrc.getAttribute('data-pkg-trial-days') || '') : '';
             grid.innerHTML = Array.prototype.map.call(cards, function (c) {
                 const id = c.getAttribute('data-pkg-id');
                 const desc = c.getAttribute('data-pkg-desc') || '';
@@ -3333,16 +3401,34 @@ function openWizStorageAgreementModal(type) {
                     ? 'Free'
                     : pkgPriceHtml(c).replace(/<span class="wiz-pkg-price-strike">.*?<\/span>/, '').replace(/<[^>]+>/g, '');
                 const on = id === trialPick;
-                return '<button type="button" class="wiz-trial-opt' + (on ? ' wiz-trial-opt--on' : '') + '" role="radio"'
+                const featOpen = trialFeatOpen.has(id);
+                const featId = 'wizTrialFeat-' + escPkg(id);
+                return '<div class="wiz-trial-opt' + (on ? ' wiz-trial-opt--on' : '') + '" role="radio" tabindex="0"'
                     + ' aria-checked="' + (on ? 'true' : 'false') + '" data-trial-opt="' + escPkg(id) + '">'
                     + '<span class="wiz-trial-opt__radio" aria-hidden="true"><i class="fa fa-check"></i></span>'
                     + '<span class="wiz-trial-opt__name">' + escPkg(c.getAttribute('data-pkg-name') || '') + '</span>'
-                    + '<span class="wiz-trial-opt__price">After the trial: <strong>' + escPkg(price) + '</strong></span>'
+                    + '<span class="wiz-trial-opt__pricing">'
+                        + '<span class="wiz-trial-opt__free"><i class="fa fa-gift" aria-hidden="true"></i> '
+                            + (trialDays ? 'Free for ' + escPkg(trialDays) + ' days' : 'Free trial') + '</span>'
+                        + '<s class="wiz-trial-opt__was" aria-label="Regular price ' + escPkg(price) + '">' + escPkg(price) + '</s>'
+                    + '</span>'
+                    + '<span class="wiz-trial-opt__price">' + (trialDays ? 'After ' + escPkg(trialDays) + ' days: ' : 'After the trial: ')
+                        + '<strong>' + escPkg(price) + '</strong></span>'
                     + (users ? '<span class="wiz-trial-opt__users"><i class="fa fa-users" aria-hidden="true"></i> ' + escPkg(users) + '</span>' : '')
                     + (desc ? '<p class="wiz-trial-opt__desc">' + escPkg(desc) + '</p>' : '')
-                    + '<span class="wiz-pkg-mod-title">' + labels.length + (labels.length === 1 ? ' module' : ' modules') + ' included</span>'
-                    + '<ul class="wiz-pkg-mods">' + labels.map(function (l) { return '<li>' + escPkg(l) + '</li>'; }).join('') + '</ul>'
-                    + '</button>';
+                    + (labels.length
+                        ? '<button type="button" class="wiz-trial-feat-toggle" data-trial-feat="' + escPkg(id) + '"'
+                            + ' aria-expanded="' + (featOpen ? 'true' : 'false') + '" aria-controls="' + featId + '">'
+                            + '<span data-trial-feat-lbl>' + (featOpen ? 'Hide features' : 'View features') + '</span>'
+                            + '<span class="wiz-trial-feat-count"> (' + labels.length + (labels.length === 1 ? ' module' : ' modules') + ')</span>'
+                            + '<i class="fa fa-chevron-down" aria-hidden="true"></i>'
+                            + '</button>'
+                            + '<div class="wiz-trial-feat' + (featOpen ? ' wiz-trial-feat--open' : '') + '" id="' + featId + '"' + (featOpen ? '' : ' aria-hidden="true"') + '>'
+                            + '<div class="wiz-trial-feat__inner"><ul class="wiz-pkg-mods">'
+                            + labels.map(function (l, i) { return '<li style="--i:' + i + '">' + escPkg(l) + '</li>'; }).join('')
+                            + '</ul></div></div>'
+                        : '')
+                    + '</div>';
             }).join('');
             const confirmBtn = document.getElementById('wizTrialModalConfirm');
             const picked = pkgCardById(trialPick);
@@ -3355,6 +3441,7 @@ function openWizStorageAgreementModal(type) {
             if (!trialModal) return;
             trialModalCard = card;
             trialPick = trialInput ? trialInput.value : '';
+            trialFeatOpen.clear();
             const days = card.getAttribute('data-pkg-trial-days') || '';
             if (days) {
                 document.getElementById('wizTrialModalSub').textContent =
@@ -3362,14 +3449,20 @@ function openWizStorageAgreementModal(type) {
             }
             document.getElementById('wizTrialModalErr').style.display = 'none';
             renderTrialOptions();
+            clearTimeout(trialModalHideTimer);
             trialModal.hidden = false;
+            void trialModal.offsetWidth; // commit the start state so the open transition runs
+            trialModal.classList.add('wiz-trial-modal--in');
             document.addEventListener('keydown', trialModalEsc);
             const first = trialModal.querySelector('.wiz-trial-opt--on') || trialModal.querySelector('.wiz-trial-opt');
             if (first) first.focus();
         }
         function closeTrialModal() {
-            if (!trialModal) return;
-            trialModal.hidden = true;
+            if (!trialModal || trialModal.hidden) return;
+            trialModal.classList.remove('wiz-trial-modal--in');
+            clearTimeout(trialModalHideTimer);
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            trialModalHideTimer = setTimeout(function () { trialModal.hidden = true; }, reduce ? 0 : 320);
             document.removeEventListener('keydown', trialModalEsc);
             if (trialModalCard) trialModalCard.focus();
             trialModalCard = null;
@@ -3379,13 +3472,38 @@ function openWizStorageAgreementModal(type) {
             trialModal.querySelectorAll('[data-trial-modal-close]').forEach(function (el) {
                 el.addEventListener('click', closeTrialModal);
             });
-            document.getElementById('wizTrialGrid').addEventListener('click', function (e) {
+            const trialGrid = document.getElementById('wizTrialGrid');
+            trialGrid.addEventListener('click', function (e) {
+                const toggle = e.target.closest('[data-trial-feat]');
+                if (toggle) {
+                    e.stopPropagation();
+                    const fid = toggle.getAttribute('data-trial-feat');
+                    const nowOpen = !trialFeatOpen.has(fid);
+                    if (nowOpen) trialFeatOpen.add(fid); else trialFeatOpen.delete(fid);
+                    // Toggle in place (no re-render) so the expand/collapse can animate.
+                    const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+                    toggle.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+                    const lbl = toggle.querySelector('[data-trial-feat-lbl]');
+                    if (lbl) lbl.textContent = nowOpen ? 'Hide features' : 'View features';
+                    if (panel) {
+                        panel.classList.toggle('wiz-trial-feat--open', nowOpen);
+                        if (nowOpen) panel.removeAttribute('aria-hidden'); else panel.setAttribute('aria-hidden', 'true');
+                    }
+                    return;
+                }
                 const opt = e.target.closest('[data-trial-opt]');
                 if (!opt) return;
                 trialPick = opt.getAttribute('data-trial-opt');
                 renderTrialOptions();
                 const again = trialModal.querySelector('[data-trial-opt="' + trialPick + '"]');
                 if (again) again.focus();
+            });
+            trialGrid.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                const opt = e.target.closest('[data-trial-opt]');
+                if (!opt || e.target !== opt) return;
+                e.preventDefault();
+                opt.click();
             });
             document.getElementById('wizTrialModalConfirm').addEventListener('click', function () {
                 if (!pkgCardById(trialPick)) {

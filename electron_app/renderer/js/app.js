@@ -213,8 +213,10 @@ document.addEventListener('click', (e) => {
 // ── Window controls ────────────────────────────────────────────────────────
 // Login screen window controls (Windows/Linux — non-macOS)
 const lMinEl   = document.getElementById('l-min-win');
+const lMaxEl   = document.getElementById('l-max-win');
 const lCloseEl = document.getElementById('l-close-win');
 if (lMinEl)   lMinEl.addEventListener('click',   () => window.electronAPI.minimize());
+if (lMaxEl)   lMaxEl.addEventListener('click',   () => window.electronAPI.maximize());
 if (lCloseEl) lCloseEl.addEventListener('click', () => window.electronAPI.close());
 $('#wc-min').addEventListener('click', () => window.electronAPI.minimize());
 $('#wc-close').addEventListener('click', () => window.electronAPI.close());
@@ -223,12 +225,15 @@ $('#wc-max').addEventListener('click', () => window.electronAPI.maximize());
 window.electronAPI.onWindowState((s) => {
   const icon = $('#wc-max-icon');
   const btn  = $('#wc-max');
+  const lIcon = document.getElementById('l-max-win-icon');
   if (s === 'maximized') {
     icon.className = 'fa fa-window-restore';
     btn.title = 'Restore Down';
+    if (lIcon) { lIcon.className = 'fa fa-window-restore'; lMaxEl.title = 'Restore Down'; }
   } else {
     icon.className = 'fa fa-square';
     btn.title = 'Maximize';
+    if (lIcon) { lIcon.className = 'fa fa-square'; lMaxEl.title = 'Maximize'; }
   }
 });
 
@@ -6542,6 +6547,7 @@ let _obSelectedCat = '';
 let _obFeatureSet  = new Set(['point_of_sale', 'sales_management', 'product_management', 'stock_management']);
 let _obPackages = [];
 let _obSelectedPackage = null;
+let _obTrialPkgId = null; // free trial only: the package whose features to try
 let _obPendingPaymentId = null;
 
 const _obCatIcons = {
@@ -6606,7 +6612,10 @@ const _obStepSubs = {
   5: 'Which features do you get?',
 };
 
+// Keep in sync with config/features.php 'list' (17 keys). `required` features are
+// always on server-side, so they show as included regardless of the package.
 const _obFeatureDefs = [
+  { key: 'account_management',    img: 'img/features/accounting.jpeg',                name: 'Account Management',   desc: 'Financial accounts & bank management', color: '#22c55e', required: true },
   { key: 'point_of_sale',         img: 'img/features/point-of-sale.png',              name: 'Point of Sale',        desc: 'Sell products at a physical counter',  color: '#f59e0b' },
   { key: 'sales_management',      img: 'img/features/sale_managemenet.png',           name: 'Sales Management',     desc: 'Invoices, quotations & sales orders',  color: '#f59e0b' },
   { key: 'product_management',    img: 'img/features/product_management.png',         name: 'Product Management',   desc: 'Manage products, variants & pricing',  color: '#3b82f6' },
@@ -6615,10 +6624,10 @@ const _obFeatureDefs = [
   { key: 'human_resources',       img: 'img/features/human-resource-management.png', name: 'Human Resources',      desc: 'Employees, payroll & departments',     color: '#8b5cf6' },
   { key: 'service_management',    img: 'img/features/service-management.svg',         name: 'Services',             desc: 'Manage appointments & service jobs',   color: '#10b981' },
   { key: 'social_media_campaign', img: 'img/features/social-media-campaign.png',      name: 'Social Campaigns',     desc: 'Create and schedule ad creatives',     color: '#ec4899' },
-  { key: 'restaurant',            img: 'img/features/service.png',                    name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
+  { key: 'restaurant',            img: 'img/features/returnt management.jpeg',        name: 'Restaurant',           desc: 'Restaurant POS, orders, menu & kitchen display', color: '#f97316' },
   { key: 'mail',                  img: 'img/features/mail.png',                       name: 'Mail',                 desc: 'Business inbox, templates & scheduled sending', color: '#06b6d4' },
-  { key: 'crm',                   img: 'img/features/social-media-campaign.png',       name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
-  { key: 'project_management',   img: 'img/features/account-management.png',          name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
+  { key: 'crm',                   img: 'img/features/CRM.jpeg',                        name: 'CRM',                  desc: 'Leads pipeline, contacts & follow-up tasks',    color: '#7c3aed' },
+  { key: 'project_management',   img: 'img/features/Project Management.jpeg',         name: 'Projects',             desc: 'Projects, tasks, milestones & kanban boards',  color: '#0284c7' },
   { key: 'automation_editor',    img: 'img/features/Automation_flow.png',              name: 'Automation Editor',    desc: 'Trigger-based workflows & automated sequences', color: '#f59e0b' },
   { key: 'event_management',     img: 'img/features/Marketer’s Campaign.png',          name: 'Event Advertising Agency', desc: 'Brands, jobs, reporters, officers & salary sheets', color: '#0ea5e9' },
   { key: 'developers',           img: 'img/features/Developer.png',                   name: 'Developers',           desc: 'API keys, webhooks & third-party integrations', color: '#0f766e' },
@@ -6687,7 +6696,7 @@ function _obPkgPriceHtml(pkg) {
 
 // Shared renderer — a clickable package-selection grid. Used by both the
 // signup onboarding wizard and the "Add Business" wizard.
-function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
+function _renderPkgGrid(containerSel, packages, selectedId, onSelect, opts = {}) {
   const grid = $(containerSel);
   if (!grid) return;
   if (!packages.length) {
@@ -6695,12 +6704,81 @@ function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
     return;
   }
   // Same card layout as the web onboarding wizard (dashboard.blade.php step 3):
-  // coloured header (name, badge, price, users chip) + module checklist + select button.
+  // coloured header (name, badge, price, users chip) + short description + module
+  // checklist + "Choose plan" / "Details" row pinned to the bottom of every card.
   const SHOW_MODS = 6;
+  const trialChoices = packages.filter(p => !p.is_trial).map(p => p.name);
   grid.innerHTML = packages.map(pkg => {
     const isOn   = selectedId === pkg.id;
     const labels = pkg.feature_labels || [];
     const extra  = labels.length - SHOW_MODS;
+
+    const body = pkg.is_trial
+      ? `<div class="ob-pkg-mod-title">Try any package free</div>
+        <ul class="ob-pkg-mods">${trialChoices.map(n => `<li>${escHtml(n)}</li>`).join('')}</ul>`
+      : `${pkg.description ? `<p class="ob-pkg-desc">${escHtml(pkg.description)}</p>` : ''}
+        <div class="ob-pkg-mod-title">${labels.length} ${labels.length === 1 ? 'module' : 'modules'} included</div>
+        <ul class="ob-pkg-mods">${labels.slice(0, SHOW_MODS).map(l => `<li>${escHtml(l)}</li>`).join('')}</ul>
+        ${extra > 0 ? `<button type="button" class="ob-pkg-more" data-pkg-details>+${extra} more modules</button>` : ''}`;
+
+    return `<div class="ob-pkg-card${isOn ? ' active' : ''}${pkg.is_trial ? ' ob-pkg-card--trial' : ''}" data-pkg-id="${pkg.id}"
+                 role="radio" aria-checked="${isOn ? 'true' : 'false'}" tabindex="0">
+      <div class="ob-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
+      ${_pkgHeadHtml(pkg)}
+      <div class="ob-pkg-body">
+        ${body}
+        <div class="ob-pkg-actions">
+          <span class="ob-pkg-select" aria-hidden="true">
+            <span class="ob-pkg-select-off">${pkg.is_trial ? 'Start free' : 'Choose plan'} <i class="fa fa-arrow-right"></i></span>
+            <span class="ob-pkg-select-on"><i class="fa fa-check"></i> Selected</span>
+          </span>
+          <button type="button" class="ob-pkg-details-btn" data-pkg-details>Details</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  const select = card => {
+    const id = Number(card.dataset.pkgId);
+    const pkg = packages.find(p => p.id === id) || null;
+    // Free trial card: ask which package to try first, select only once confirmed.
+    if (pkg && pkg.is_trial && typeof opts.onTrialCard === 'function') {
+      opts.onTrialCard(pkg, card, () => markSelected(card, pkg));
+      return;
+    }
+    markSelected(card, pkg);
+  };
+  const markSelected = (card, pkg) => {
+    grid.querySelectorAll('.ob-pkg-card').forEach(c => {
+      c.classList.remove('active');
+      c.setAttribute('aria-checked', 'false');
+    });
+    card.classList.add('active');
+    card.setAttribute('aria-checked', 'true');
+    onSelect(pkg);
+  };
+  grid.querySelectorAll('.ob-pkg-card').forEach(card => {
+    card.addEventListener('click', e => {
+      if (e.target.closest('[data-pkg-details]')) {
+        e.stopPropagation();
+        const pkg = packages.find(p => p.id === Number(card.dataset.pkgId));
+        if (!pkg) return;
+        // The trial's "Details" opens the trial picker (same as the web wizard).
+        if (pkg.is_trial) { select(card); return; }
+        _pkdOpen(pkg, e.target, () => select(card));
+        return;
+      }
+      select(card);
+    });
+    card.addEventListener('keydown', e => {
+      if (e.target !== card) return; // let the Details buttons handle their own keys
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(card); }
+    });
+  });
+}
+
+// Coloured card header: name, badge, price, strike/trial note, users chip.
+function _pkgHeadHtml(pkg) {
     const symbol = escHtml(_obCurrencySymbol(pkg));
     const price  = Number(pkg.price || 0);
     const disc   = pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
@@ -6722,13 +6800,10 @@ function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
     else if (pkg.is_trial) subNote = `<span class="ob-pkg-trial-note">No card needed · Recommended</span>`;
 
     const usersChip = pkg.user_limit_label
-      ? `<span class="ob-pkg-users-chip"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}${pkg.extra_user_price_label ? `<span class="ob-pkg-users-extra">&nbsp;· ${escHtml(pkg.extra_user_price_label)}</span>` : ''}</span>`
+      ? `<span class="ob-pkg-users-chip"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}${pkg.extra_user_price_label ? `<span class="ob-pkg-users-extra">${escHtml(pkg.extra_user_price_label)}</span>` : ''}</span>`
       : '';
 
-    return `<div class="ob-pkg-card${isOn ? ' active' : ''}${pkg.is_trial ? ' ob-pkg-card--trial' : ''}" data-pkg-id="${pkg.id}"
-                 role="radio" aria-checked="${isOn ? 'true' : 'false'}" tabindex="0">
-      <div class="ob-pkg-check" aria-hidden="true"><i class="fa fa-check"></i></div>
-      <div class="ob-pkg-head">
+    return `<div class="ob-pkg-head">
         <div class="ob-pkg-head-top">
           <div class="ob-pkg-name">${escHtml(pkg.name)}</div>
           ${badge}
@@ -6736,47 +6811,240 @@ function _renderPkgGrid(containerSel, packages, selectedId, onSelect) {
         <div class="ob-pkg-price-row">${priceRow}</div>
         ${subNote}
         ${usersChip}
-      </div>
-      <div class="ob-pkg-body">
-        ${pkg.description && !pkg.is_trial ? `<p class="ob-pkg-desc">${escHtml(pkg.description)}</p>` : ''}
-        <div class="ob-pkg-mod-title">${labels.length} ${labels.length === 1 ? 'module' : 'modules'} included</div>
-        <ul class="ob-pkg-mods">
-          ${labels.map((l, i) => `<li${i >= SHOW_MODS ? ' class="ob-pkg-mod--extra"' : ''}>${escHtml(l)}</li>`).join('')}
-        </ul>
-        ${extra > 0 ? `<button type="button" class="ob-pkg-more" data-more="+${extra} more modules">+${extra} more modules</button>` : ''}
-        <span class="ob-pkg-select" aria-hidden="true">
-          <span class="ob-pkg-select-off">${pkg.is_trial ? 'Start free' : 'Choose plan'} <i class="fa fa-arrow-right"></i></span>
-          <span class="ob-pkg-select-on"><i class="fa fa-check"></i> Selected</span>
-        </span>
+      </div>`;
+}
+
+// ── Package details popup (mirrors the web #wizPkgModal) ─────────────────
+// Full description + every module, with a "Choose plan" that selects the card.
+const _pkd = { el: null, onChoose: null, returnFocus: null, hideTimer: null };
+
+function _pkdEnsure() {
+  if (_pkd.el) return _pkd.el;
+  const el = document.createElement('div');
+  el.className = 'tpk-modal pkd-modal';
+  el.hidden = true;
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.innerHTML = `
+    <div class="tpk-backdrop" data-pkd-close></div>
+    <div class="tpk-box pkd-box">
+      <button type="button" class="tpk-close" data-pkd-close aria-label="Close"><i class="fa fa-xmark"></i></button>
+      <div class="pkd-card"></div>
+      <div class="tpk-footer">
+        <button type="button" class="tpk-btn-back" data-pkd-close>Close</button>
+        <button type="button" class="tpk-btn-primary pkd-choose" id="pkd-choose">Choose plan <i class="fa fa-arrow-right"></i></button>
       </div>
     </div>`;
-  }).join('');
+  document.body.appendChild(el);
+  el.querySelectorAll('[data-pkd-close]').forEach(b => b.addEventListener('click', _pkdClose));
+  el.querySelector('#pkd-choose').addEventListener('click', () => {
+    const cb = _pkd.onChoose;
+    _pkdClose();
+    if (cb) cb();
+  });
+  _pkd.el = el;
+  return el;
+}
 
-  grid.querySelectorAll('.ob-pkg-more').forEach(btn => {
-    btn.addEventListener('click', e => {
+function _pkdEsc(e) { if (e.key === 'Escape') _pkdClose(); }
+
+function _pkdOpen(pkg, returnFocus, onChoose) {
+  const el = _pkdEnsure();
+  const labels = pkg.feature_labels || [];
+  const card = el.querySelector('.pkd-card');
+  card.className = 'pkd-card ob-pkg-card';
+  card.innerHTML = `${_pkgHeadHtml(pkg)}
+    <div class="ob-pkg-body pkd-body">
+      ${pkg.description ? `<p class="ob-pkg-desc">${escHtml(pkg.description)}</p>` : ''}
+      <div class="ob-pkg-mod-title">${labels.length} ${labels.length === 1 ? 'module' : 'modules'} included</div>
+      <ul class="ob-pkg-mods">${labels.map(l => `<li>${escHtml(l)}</li>`).join('')}</ul>
+    </div>`;
+  el.setAttribute('aria-label', `${pkg.name} details`);
+  _pkd.onChoose = onChoose;
+  _pkd.returnFocus = returnFocus || null;
+  clearTimeout(_pkd.hideTimer);
+  el.hidden = false;
+  void el.offsetWidth; // commit the start state so the open transition runs
+  el.classList.add('tpk-modal--in');
+  document.addEventListener('keydown', _pkdEsc);
+  el.querySelector('#pkd-choose').focus();
+}
+
+function _pkdClose() {
+  const el = _pkd.el;
+  if (!el || el.hidden) return;
+  el.classList.remove('tpk-modal--in');
+  document.removeEventListener('keydown', _pkdEsc);
+  clearTimeout(_pkd.hideTimer);
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  _pkd.hideTimer = setTimeout(() => { el.hidden = true; }, reduce ? 0 : 320);
+  if (_pkd.returnFocus?.isConnected) _pkd.returnFocus.focus();
+  _pkd.returnFocus = null;
+}
+
+// ── Free trial picker ────────────────────────────────────────────────────
+// Mirrors the web wizard's "Which package do you want to try for free?" modal
+// (dashboard.blade.php #wizTrialModal). The chosen id is sent as
+// trial_package_id to /auth/register or /businesses.
+const _tpk = { el: null, packages: [], pick: null, open: new Set(), onConfirm: null, returnFocus: null, hideTimer: null, days: 0 };
+
+function _tpkPrice(pkg) {
+  if (pkg.is_free) return 'Free';
+  const symbol = _obCurrencySymbol(pkg);
+  const price = Number(pkg.price || 0);
+  const disc = pkg.discounted_price != null ? Number(pkg.discounted_price) : null;
+  const amount = (disc != null && disc < price) ? disc : price;
+  return amount <= 0 ? 'Free' : `${symbol}${amount.toFixed(2)}/mo`;
+}
+
+function _tpkEnsure() {
+  if (_tpk.el) return _tpk.el;
+  const el = document.createElement('div');
+  el.className = 'tpk-modal';
+  el.hidden = true;
+  el.setAttribute('role', 'dialog');
+  el.setAttribute('aria-modal', 'true');
+  el.setAttribute('aria-labelledby', 'tpk-title');
+  el.innerHTML = `
+    <div class="tpk-backdrop" data-tpk-close></div>
+    <div class="tpk-box">
+      <button type="button" class="tpk-close" data-tpk-close aria-label="Close"><i class="fa fa-xmark"></i></button>
+      <div class="tpk-head">
+        <span class="tpk-kicker"><i class="fa fa-gift"></i> Free trial</span>
+        <h3 class="tpk-title" id="tpk-title">Which package do you want to try for free?</h3>
+        <p class="tpk-sub" id="tpk-sub"></p>
+      </div>
+      <div class="tpk-body">
+        <div class="tpk-err" id="tpk-err" style="display:none">Please pick a package to try.</div>
+        <div class="tpk-grid" id="tpk-grid" role="radiogroup" aria-labelledby="tpk-title"></div>
+      </div>
+      <div class="tpk-footer">
+        <span class="tpk-note">You can switch to any plan before the trial ends.</span>
+        <button type="button" class="tpk-btn-back" data-tpk-close><i class="fa fa-arrow-left"></i> Back</button>
+        <button type="button" class="tpk-btn-primary" id="tpk-confirm" disabled><i class="fa fa-check"></i> <span id="tpk-confirm-lbl">Start free trial</span></button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+
+  el.querySelectorAll('[data-tpk-close]').forEach(b => b.addEventListener('click', _tpkClose));
+  const grid = el.querySelector('#tpk-grid');
+  grid.addEventListener('click', e => {
+    const toggle = e.target.closest('[data-tpk-feat]');
+    if (toggle) {
       e.stopPropagation();
-      const card = btn.closest('.ob-pkg-card');
-      const open = card.classList.toggle('ob-pkg-card--expanded');
-      btn.textContent = open ? 'Show less' : btn.dataset.more;
-    });
+      const fid = Number(toggle.dataset.tpkFeat);
+      const nowOpen = !_tpk.open.has(fid);
+      if (nowOpen) _tpk.open.add(fid); else _tpk.open.delete(fid);
+      // In place (no re-render) so the expand/collapse animates.
+      toggle.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
+      toggle.querySelector('[data-tpk-feat-lbl]').textContent = nowOpen ? 'Hide features' : 'View features';
+      const panel = document.getElementById(toggle.getAttribute('aria-controls'));
+      if (panel) {
+        panel.classList.toggle('tpk-feat--open', nowOpen);
+        if (nowOpen) panel.removeAttribute('aria-hidden'); else panel.setAttribute('aria-hidden', 'true');
+      }
+      return;
+    }
+    const opt = e.target.closest('[data-tpk-opt]');
+    if (!opt) return;
+    _tpk.pick = Number(opt.dataset.tpkOpt);
+    _tpkRender();
+    el.querySelector(`[data-tpk-opt="${_tpk.pick}"]`)?.focus();
   });
-  const select = card => {
-    const id = Number(card.dataset.pkgId);
-    const pkg = packages.find(p => p.id === id) || null;
-    grid.querySelectorAll('.ob-pkg-card').forEach(c => {
-      c.classList.remove('active');
-      c.setAttribute('aria-checked', 'false');
-    });
-    card.classList.add('active');
-    card.setAttribute('aria-checked', 'true');
-    onSelect(pkg);
-  };
-  grid.querySelectorAll('.ob-pkg-card').forEach(card => {
-    card.addEventListener('click', () => select(card));
-    card.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(card); }
-    });
+  grid.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const opt = e.target.closest('[data-tpk-opt]');
+    if (!opt || e.target !== opt) return;
+    e.preventDefault();
+    opt.click();
   });
+  el.querySelector('#tpk-confirm').addEventListener('click', () => {
+    const picked = _tpk.packages.find(p => p.id === _tpk.pick);
+    if (!picked) { el.querySelector('#tpk-err').style.display = ''; return; }
+    const cb = _tpk.onConfirm;
+    _tpkClose();
+    if (cb) cb(picked);
+  });
+  _tpk.el = el;
+  return el;
+}
+
+function _tpkRender() {
+  const el = _tpkEnsure();
+  const days = _tpk.days;
+  el.querySelector('#tpk-grid').innerHTML = _tpk.packages.map(pkg => {
+    const on = pkg.id === _tpk.pick;
+    const labels = pkg.feature_labels || [];
+    const featOpen = _tpk.open.has(pkg.id);
+    const price = escHtml(_tpkPrice(pkg));
+    const featId = `tpk-feat-${pkg.id}`;
+    return `<div class="tpk-opt${on ? ' tpk-opt--on' : ''}" role="radio" tabindex="0" aria-checked="${on}" data-tpk-opt="${pkg.id}">
+      <span class="tpk-opt__radio" aria-hidden="true"><i class="fa fa-check"></i></span>
+      <span class="tpk-opt__name">${escHtml(pkg.name)}</span>
+      <span class="tpk-opt__pricing">
+        <span class="tpk-opt__free"><i class="fa fa-gift"></i> ${days ? `Free for ${days} days` : 'Free trial'}</span>
+        <s class="tpk-opt__was" aria-label="Regular price ${price}">${price}</s>
+      </span>
+      <span class="tpk-opt__price">${days ? `After ${days} days: ` : 'After the trial: '}<strong>${price}</strong></span>
+      ${pkg.user_limit_label ? `<span class="tpk-opt__users"><i class="fa fa-users"></i> ${escHtml(pkg.user_limit_label)}</span>` : ''}
+      ${pkg.description ? `<p class="tpk-opt__desc">${escHtml(pkg.description)}</p>` : ''}
+      ${labels.length ? `
+        <button type="button" class="tpk-feat-toggle" data-tpk-feat="${pkg.id}" aria-expanded="${featOpen}" aria-controls="${featId}">
+          <span data-tpk-feat-lbl>${featOpen ? 'Hide features' : 'View features'}</span>
+          <span class="tpk-feat-count">(${labels.length} ${labels.length === 1 ? 'module' : 'modules'})</span>
+          <i class="fa fa-chevron-down"></i>
+        </button>
+        <div class="tpk-feat${featOpen ? ' tpk-feat--open' : ''}" id="${featId}"${featOpen ? '' : ' aria-hidden="true"'}>
+          <div class="tpk-feat__inner"><ul class="tpk-mods">
+            ${labels.map((l, i) => `<li style="--i:${i}">${escHtml(l)}</li>`).join('')}
+          </ul></div>
+        </div>` : ''}
+    </div>`;
+  }).join('');
+  const picked = _tpk.packages.find(p => p.id === _tpk.pick);
+  el.querySelector('#tpk-confirm').disabled = !picked;
+  el.querySelector('#tpk-confirm-lbl').textContent = picked ? `Try ${picked.name} free` : 'Start free trial';
+}
+
+function _tpkEsc(e) { if (e.key === 'Escape') _tpkClose(); }
+
+// packages: the full list (the trial package itself is filtered out here).
+function _openTrialPicker({ packages, trialPkg, currentId, onConfirm, returnFocus }) {
+  const el = _tpkEnsure();
+  _tpk.packages = (packages || []).filter(p => !p.is_trial);
+  _tpk.pick = currentId || null;
+  _tpk.open = new Set();
+  _tpk.onConfirm = onConfirm;
+  _tpk.returnFocus = returnFocus || null;
+  _tpk.days = Number(trialPkg?.trial_days || 7);
+  el.querySelector('#tpk-sub').textContent =
+    `Pick one package. Only its features are unlocked during your ${_tpk.days}-day free trial - no card needed.`;
+  el.querySelector('#tpk-err').style.display = 'none';
+  _tpkRender();
+  clearTimeout(_tpk.hideTimer);
+  el.hidden = false;
+  void el.offsetWidth; // commit the start state so the open transition runs
+  el.classList.add('tpk-modal--in');
+  document.addEventListener('keydown', _tpkEsc);
+  (el.querySelector('.tpk-opt--on') || el.querySelector('.tpk-opt'))?.focus();
+}
+
+function _tpkClose() {
+  const el = _tpk.el;
+  if (!el || el.hidden) return;
+  el.classList.remove('tpk-modal--in');
+  document.removeEventListener('keydown', _tpkEsc);
+  clearTimeout(_tpk.hideTimer);
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  _tpk.hideTimer = setTimeout(() => { el.hidden = true; }, reduce ? 0 : 320);
+  if (_tpk.returnFocus?.isConnected) _tpk.returnFocus.focus();
+  _tpk.returnFocus = null;
+}
+
+// The package whose features apply: the tried one on a free trial, else the selected one.
+function _featurePackageFor(selected, triedId, packages) {
+  if (selected?.is_trial && triedId) return (packages || []).find(p => p.id === triedId) || selected;
+  return selected;
 }
 
 // Shared renderer — a read-only feature grid locked to a package's feature list.
@@ -6785,7 +7053,7 @@ function _renderLockedFeatureGrid(containerSel, includedKeys) {
   const list = $(containerSel);
   if (!list) return;
   list.innerHTML = _obFeatureDefs.map(f => {
-    const included = includedKeys.has(f.key);
+    const included = f.required || includedKeys.has(f.key);
     const cls = included ? ' active' : ' locked-off';
     return `<div class="ob-feat-card ob-feat-card-locked${cls}" style="--feat-color:${f.color}">
       <div class="ob-feat-check"><i class="fa fa-check"></i></div>
@@ -6805,9 +7073,15 @@ function _renderLockedFeatureGrid(containerSel, includedKeys) {
 function _obBuildPkgGrid() {
   _renderPkgGrid('#ob-pkg-grid', _obPackages, _obSelectedPackage ? _obSelectedPackage.id : null, pkg => {
     _obSelectedPackage = pkg;
+    if (!pkg?.is_trial) _obTrialPkgId = null;
     const nextBtn = $('#ob-next-4-btn');
     if (nextBtn) nextBtn.disabled = !pkg;
     _obUpdatePkgSummary();
+  }, {
+    onTrialCard: (trialPkg, card, select) => _openTrialPicker({
+      packages: _obPackages, trialPkg, currentId: _obTrialPkgId, returnFocus: card,
+      onConfirm: tried => { _obTrialPkgId = tried.id; select(); },
+    }),
   });
 }
 
@@ -6841,9 +7115,10 @@ function _obUpdatePkgSummary() {
 }
 
 function _obBuildFeatureList() {
-  const includedKeys = new Set(_obSelectedPackage ? (_obSelectedPackage.features || []) : []);
+  const featPkg = _featurePackageFor(_obSelectedPackage, _obTrialPkgId, _obPackages);
+  const includedKeys = new Set(featPkg ? (featPkg.features || []) : []);
   _renderLockedFeatureGrid('#ob-feature-list', includedKeys);
-  _obFeatureSet = new Set(_obFeatureDefs.map(f => f.key).filter(k => includedKeys.has(k)));
+  _obFeatureSet = new Set(_obFeatureDefs.filter(f => f.required || includedKeys.has(f.key)).map(f => f.key));
 }
 
 function _obSetStep(n) {
@@ -6930,9 +7205,10 @@ function _obPopulatePaySummary() {
   const isFree = !pkg || pkg.is_free || amount <= 0;
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
+  const tried = pkg?.is_trial ? _obPackages.find(p => p.id === _obTrialPkgId) : null;
   $('#ob-pay-package').textContent = pkg
-    ? `${pkg.name}${pkg.is_trial ? ` (${Number(pkg.trial_days || 7)}-day free trial)` : (isFree ? ' (Free)' : '')}`
-    : '—';
+    ? `${pkg.name}${pkg.is_trial ? ` (${Number(pkg.trial_days || 7)}-day free trial${tried ? `, trying ${tried.name}` : ''})` : (isFree ? ' (Free)' : '')}`
+    : '-';
   _obFillPayUsers('ob', pkg);
   $('#ob-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#ob-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
@@ -6979,6 +7255,7 @@ function showSignup() {
   _obFeatureSet  = new Set();
   _obPackages = [];
   _obSelectedPackage = null;
+  _obTrialPkgId = null;
   _obPendingPaymentId = null;
   _obShowPayWaiting(false);
   const pkgNextBtn = $('#ob-next-4-btn');
@@ -9749,6 +10026,7 @@ $('#ob-next-3-btn').addEventListener('click', () => {
       if (_obSelectedPackage) {
         _obSelectedPackage = _obPackages.find(p => p.id === _obSelectedPackage.id) || null;
       }
+      if (_obTrialPkgId && !_obPackages.some(p => p.id === _obTrialPkgId && !p.is_trial)) _obTrialPkgId = null;
       _obBuildPkgGrid();
     }
   });
@@ -9758,6 +10036,13 @@ $('#ob-back-4-btn').addEventListener('click', () => _obSetStep(3));
 $('#ob-next-4-btn').addEventListener('click', () => {
   const alert = $('#signup-alert');
   if (!_obSelectedPackage) { showAlert(alert, 'Please select a package'); return; }
+  if (_obSelectedPackage.is_trial && !_obTrialPkgId) {
+    _openTrialPicker({
+      packages: _obPackages, trialPkg: _obSelectedPackage, currentId: null,
+      onConfirm: tried => { _obTrialPkgId = tried.id; _obBuildFeatureList(); _obSetStep(5); },
+    });
+    return;
+  }
   _obBuildFeatureList();
   _obSetStep(5);
 });
@@ -9853,7 +10138,16 @@ async function doSignupOrPay() {
   alert.style.display = 'none';
 
   const deviceName = state.config?.device_name || 'pos-desktop-1';
-  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId, _obLocationPayload());
+  const trialPackageId = _obSelectedPackage?.is_trial ? _obTrialPkgId : null;
+  if (_obSelectedPackage?.is_trial && !trialPackageId) {
+    btn.disabled = false;
+    _obPopulatePaySummary();
+    _obSetStep(4);
+    showAlert(alert, 'Choose which package you want to try for free.');
+    return;
+  }
+  const res = await API.register(name, biz, category, features, email, password, deviceName, packageId,
+    { ..._obLocationPayload(), ...(trialPackageId ? { trial_package_id: trialPackageId } : {}) });
 
   btn.disabled = false;
 
@@ -29923,7 +30217,7 @@ document.addEventListener('click', e => {
 // ── End business/branch switcher ──────────────────────────────────────────
 
 // ── Business onboarding wizard ─────────────────────────────────────────────
-const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [], packages: [], selectedPackage: null, pendingPaymentId: null, createdBusiness: null };
+const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [], packages: [], selectedPackage: null, trialPkgId: null, pendingPaymentId: null, createdBusiness: null };
 
 function _bbwzOpen() {
   _bizSwClose();
@@ -29931,6 +30225,7 @@ function _bbwzOpen() {
   _bbwz.selectedCat = null;
   _bbwz.selectedFeatures = new Set();
   _bbwz.selectedPackage = null;
+  _bbwz.trialPkgId = null;
   _bbwz.pendingPaymentId = null;
   _bbwz.createdBusiness = null;
   $('#bbwz-name').value = '';
@@ -30003,7 +30298,13 @@ function _bbwzBuildCatGrid() {
 function _bbwzBuildPkgGrid() {
   _renderPkgGrid('#bbwz-pkg-grid', _bbwz.packages, _bbwz.selectedPackage ? _bbwz.selectedPackage.id : null, pkg => {
     _bbwz.selectedPackage = pkg;
+    if (!pkg?.is_trial) _bbwz.trialPkgId = null;
     _bbwzUpdatePkgSummary();
+  }, {
+    onTrialCard: (trialPkg, card, select) => _openTrialPicker({
+      packages: _bbwz.packages, trialPkg, currentId: _bbwz.trialPkgId, returnFocus: card,
+      onConfirm: tried => { _bbwz.trialPkgId = tried.id; select(); },
+    }),
   });
 }
 
@@ -30019,9 +30320,10 @@ function _bbwzUpdatePkgSummary() {
 }
 
 function _bbwzBuildFeatList() {
-  const includedKeys = new Set(_bbwz.selectedPackage ? (_bbwz.selectedPackage.features || []) : []);
+  const featPkg = _featurePackageFor(_bbwz.selectedPackage, _bbwz.trialPkgId, _bbwz.packages);
+  const includedKeys = new Set(featPkg ? (featPkg.features || []) : []);
   _renderLockedFeatureGrid('#bbwz-feat-list', includedKeys);
-  _bbwz.selectedFeatures = new Set(_obFeatureDefs.map(f => f.key).filter(k => includedKeys.has(k)));
+  _bbwz.selectedFeatures = new Set(_obFeatureDefs.filter(f => f.required || includedKeys.has(f.key)).map(f => f.key));
 }
 
 function _bbwzBuildReview() {
@@ -30084,7 +30386,10 @@ function _bbwzPopulatePaySummary() {
   const isFree = !pkg || pkg.is_free || amount <= 0;
   const symbol = pkg ? _obCurrencySymbol(pkg) : '$';
 
-  $('#bbwz-pay-package').textContent = pkg ? `${pkg.name}${isFree ? ' (Free)' : ''}` : '—';
+  const tried = pkg?.is_trial ? _bbwz.packages.find(p => p.id === _bbwz.trialPkgId) : null;
+  $('#bbwz-pay-package').textContent = pkg
+    ? `${pkg.name}${pkg.is_trial ? ` (${Number(pkg.trial_days || 7)}-day free trial${tried ? `, trying ${tried.name}` : ''})` : (isFree ? ' (Free)' : '')}`
+    : '-';
   _obFillPayUsers('bbwz', pkg);
   $('#bbwz-pay-total').textContent   = isFree ? `${symbol}0.00` : `${symbol}${amount.toFixed(2)} / mo`;
   $('#bbwz-pay-cycle-badge').style.display  = isFree ? 'none'  : 'inline-flex';
@@ -30116,6 +30421,13 @@ $('#bbwz-next-btn').addEventListener('click', () => {
     _bbwzSetStep(2);
   } else if (_bbwz.step === 2) {
     if (!_bbwz.selectedPackage) { showAlert($('#bbwz-pkg-alert'), 'Please select a package'); return; }
+    if (_bbwz.selectedPackage.is_trial && !_bbwz.trialPkgId) {
+      _openTrialPicker({
+        packages: _bbwz.packages, trialPkg: _bbwz.selectedPackage, currentId: null,
+        onConfirm: tried => { _bbwz.trialPkgId = tried.id; $('#bbwz-next-btn').click(); },
+      });
+      return;
+    }
     $('#bbwz-pkg-alert').style.display = 'none';
     _bbwzBuildFeatList();
     _bbwzSetStep(3);
@@ -30181,6 +30493,7 @@ async function doCreateBusinessOrPay() {
       name,
       category: _bbwz.selectedCat || 'other',
       package_id: _bbwz.selectedPackage.id,
+      ...(_bbwz.selectedPackage.is_trial && _bbwz.trialPkgId ? { trial_package_id: _bbwz.trialPkgId } : {}),
       features: [..._bbwz.selectedFeatures],
     });
     if (res.status >= 400) throw new Error(res.body?.message || `Error ${res.status}`);
