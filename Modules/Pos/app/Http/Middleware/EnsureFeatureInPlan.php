@@ -51,7 +51,7 @@ class EnsureFeatureInPlan
         }
 
         $label = config('features.list.'.$feature, $feature);
-        $message = $label.' is not included in your current plan. Upgrade your plan to use it again — your data is kept safe.';
+        $message = $label.' is not included in your current plan. Upgrade your plan to use it again - your data is kept safe.';
 
         if ($request->expectsJson() || $request->is('api/*')) {
             return new JsonResponse([

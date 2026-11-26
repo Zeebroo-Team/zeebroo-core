@@ -192,6 +192,31 @@ class Business extends Model
         return $this->belongsTo(Package::class);
     }
 
+    /** The package whose features are unlocked during the free trial (chosen at sign-up). */
+    public function trialPackage(): BelongsTo
+    {
+        return $this->belongsTo(Package::class, 'trial_package_id');
+    }
+
+    /**
+     * The package that decides which features this business can use: the
+     * package picked to try while it runs on the free-trial package, otherwise
+     * its own package. Billing, user seats and expiry still follow package_id.
+     */
+    public function featurePackage(): ?Package
+    {
+        $package = $this->relationLoaded('package') ? $this->package : $this->package()->first();
+
+        if ($package?->is_trial && $this->trial_package_id !== null) {
+            $tried = $this->relationLoaded('trialPackage') ? $this->trialPackage : $this->trialPackage()->first();
+            if ($tried !== null) {
+                return $tried;
+            }
+        }
+
+        return $package;
+    }
+
     public function featureOverrides(): HasMany
     {
         return $this->hasMany(BusinessFeatureOverride::class);
@@ -276,7 +301,8 @@ class Business extends Model
 
     /**
      * The feature keys an admin allows this business to use: every key when
-     * unlimited access is granted, the assigned package's feature list with
+     * unlimited access is granted, the feature package's list (see
+     * featurePackage(): the tried package during a free trial) with
      * per-business overrides applied on top, or every key (unrestricted) when
      * no package has been assigned yet — preserving pre-package behavior.
      */
@@ -288,9 +314,7 @@ class Business extends Model
             return $catalog;
         }
 
-        $base = $this->relationLoaded('package')
-            ? $this->package
-            : $this->package()->first();
+        $base = $this->featurePackage();
 
         // Manual mode: no package, only the features an admin explicitly ticked.
         $allowed = $this->has_manual_features ? [] : ($base?->features ?? $catalog);

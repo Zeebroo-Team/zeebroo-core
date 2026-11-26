@@ -468,6 +468,7 @@ class BusinessController extends Controller
             ],
             'description' => ['nullable', 'string', 'max:2000'],
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
+            'trial_package_id' => ['nullable', 'integer'],
             'features' => ['nullable', 'array'],
             'features.*' => ['boolean'],
             'multi_warehouse_branch' => ['nullable', Rule::in(['0', '1'])],
@@ -495,6 +496,12 @@ class BusinessController extends Controller
             }
         }
 
+        // Free trial: the user picks which package's features to try.
+        $trialFeaturePackage = $this->paymentProvisioningService->resolveTrialFeaturePackage(
+            $package, $validated['trial_package_id'] ?? null, 'desktop', required: true,
+        );
+        $featurePackage = $trialFeaturePackage ?? $package;
+
         $slug = $validated['company_category_slug'];
         $label = BrandCompanyCategoryCatalog::labelsByValue()[$slug] ?? $slug;
 
@@ -512,8 +519,8 @@ class BusinessController extends Controller
         // prevent tampering.
         $allKeys = array_keys(config('features.list', self::FEATURE_KEYS));
         $features = [];
-        if ($package) {
-            $enabledKeys = array_fill_keys($package->features ?? [], true);
+        if ($featurePackage) {
+            $enabledKeys = array_fill_keys($featurePackage->features ?? [], true);
             foreach ($allKeys as $key) {
                 $features[$key] = isset($enabledKeys[$key]);
             }
@@ -577,7 +584,7 @@ class BusinessController extends Controller
         $bizId = $business->getKey();
         session()->put('warehouse_intro_ack.'.$bizId, true);
 
-        return $this->finalizeOnboardingPayment($business, $package, $request->user());
+        return $this->finalizeOnboardingPayment($business, $package, $request->user(), $trialFeaturePackage);
     }
 
     /**
@@ -587,9 +594,9 @@ class BusinessController extends Controller
      * Stripe Checkout — the row is only marked succeeded once Stripe
      * confirms the charge (see PaymentController::success/webhook).
      */
-    private function finalizeOnboardingPayment(Business $business, ?Package $package, User $user): RedirectResponse
+    private function finalizeOnboardingPayment(Business $business, ?Package $package, User $user, ?Package $trialFeaturePackage = null): RedirectResponse
     {
-        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user);
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, 'desktop', $trialFeaturePackage);
 
         if (! $payment || $payment->payment_type !== Payment::TYPE_SUBSCRIPTION) {
             return redirect()->route('business.platform-choice')->with('status', 'Business profile saved.');

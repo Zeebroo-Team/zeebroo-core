@@ -148,6 +148,10 @@ class PosPlanApiController extends Controller
             'expired' => $business->trialHasExpired(),
             'ends_at' => $business->trial_ends_at?->toIso8601String(),
             'days_left' => $business->trialDaysLeft(),
+            // The package whose features the trial unlocks (null = the trial package's own).
+            'package' => $business->isOnTrial() && $business->trialPackage
+                ? ['id' => $business->trialPackage->id, 'name' => $business->trialPackage->name]
+                : null,
         ];
     }
 

@@ -313,8 +313,13 @@
   });
 
   // A module outside the current package (403 feature_not_in_plan, api.js) — explain instead of failing silently.
+  // Only when the user is on that module's own tab: background loads from other screens
+  // (Home stats, badges, prefetch) just get no data - they shouldn't pop an error.
+  const FEATURE_TABS = { crm: 'crm', ecommerce: 'ecommerce', mail: 'mail', automation_editor: 'automations' };
   let lastFeatureToast = 0;
   window.addEventListener('api-feature-not-in-plan', (e) => {
+    const tab = FEATURE_TABS[e.detail?.feature];
+    if (tab && typeof _activeTab === 'function' && _activeTab() !== tab) return;
     if (Date.now() - lastFeatureToast < 4000 || typeof toast !== 'function') return;
     lastFeatureToast = Date.now();
     toast(e.detail?.message || 'This feature is not included in your current plan.', 'error');

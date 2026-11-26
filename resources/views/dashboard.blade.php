@@ -53,7 +53,7 @@
             'highlights' => ['Recurring bill tracking', 'Due date and overdue alerts', 'Bill category organisation', 'Cash flow visibility'],
         ],
         ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'hr-management.jpeg',            'desc' => 'Payroll, leave, attendance and employee management',
-            'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips — all in one place.',
+            'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips - all in one place.',
             'highlights' => ['Employee profiles and records', 'Attendance and leave tracking', 'Payroll processing and payslips', 'Department and role management'],
         ],
         ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.png',        'desc' => 'Product catalogue, pricing, variants and categories',
@@ -85,7 +85,7 @@
             'highlights' => ['REST API with scoped API keys', 'Webhook delivery for real-time events', 'Interactive API reference and sandbox', 'OAuth application management'],
         ],
         ['key' => 'ecommerce',            'label' => 'E-Commerce',           'icon' => 'fa-store',              'image' => 'ecommerce.webp',                'desc' => 'Online store website, web orders and delivery tracking',
-            'fullDesc'   => 'Sell online with your own store website. Publish products straight from your catalogue, set online prices and sale prices, configure shipping and payment options, and manage every web order from pending to delivered — all from the desktop E-Commerce tab.',
+            'fullDesc'   => 'Sell online with your own store website. Publish products straight from your catalogue, set online prices and sale prices, configure shipping and payment options, and manage every web order from pending to delivered - all from the desktop E-Commerce tab.',
             'highlights' => ['Ready-made online store website', 'Publish catalogue products with web prices', 'Cash on delivery and bank transfer checkout', 'Web order and delivery tracking'],
         ],
     ];
@@ -197,7 +197,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <div class="wh-intro-icon" aria-hidden="true"><i class="fa fa-warehouse"></i></div>
                         <p class="wh-intro-stepbadge">Step 1 of 2</p>
                         <h2 class="wh-intro-title" id="wh-intro-title">Multiple warehouses or branches?</h2>
-                        <p class="wh-intro-copy">Choose how many sites you operate. Next, you’ll add your primary location—we only show this onboarding once.</p>
+                        <p class="wh-intro-copy">Choose how many sites you operate. Next, you’ll add your primary location - we only show this onboarding once.</p>
                         <div class="wh-intro-switch-wrap">
                             <div class="wh-intro-labels">
                                 <span id="wh-intro-lbl-single" class="wh-intro-pill-strong">Single location</span>
@@ -542,11 +542,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         }
 
         /* Footer note */
+        /* "Secure" badge pinned to the bottom of the step sidebar */
         .wiz-footer-note{
-            position:relative;z-index:1;margin-top:22px;font-size:13px;
-            color:var(--muted);text-align:center;display:flex;align-items:center;
-            justify-content:center;gap:6px;flex-shrink:0;
+            position:absolute;left:28px;right:28px;bottom:28px;margin:0;
+            display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;
+            font-size:12px;font-weight:600;line-height:1.35;color:var(--muted);
+            background:color-mix(in srgb,var(--muted) 8%,transparent);
         }
+        .wiz-footer-note i{color:#16a34a;font-size:12px;flex-shrink:0;}
 
         /* Step slide animations */
         @keyframes wizSlideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
@@ -760,6 +763,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         }
         .wiz-pkg-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 10px 28px -14px color-mix(in srgb,var(--primary) 45%,transparent);}
         .wiz-pkg-card--on{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 22%,transparent),0 12px 30px -14px color-mix(in srgb,var(--primary) 50%,transparent);}
+        /* Line the cards up: each card spans two rows of the grid (header + body) and shares them with its neighbours,
+           so every coloured header in a row is the same height and the bodies start on one line. */
+        @supports (grid-template-rows:subgrid){
+            .wiz-pkg-card{display:grid;grid-row:span 2;grid-template-rows:subgrid;row-gap:0;}
+        }
         .wiz-pkg-card:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 35%,transparent);}
 
         /* Coloured header: name, save badge, price */
@@ -786,6 +794,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             border-radius:999px;background:rgba(255,255,255,.22);font-size:11.5px;font-weight:700;color:#fff;}
         .wiz-pkg-users-chip i{font-size:10.5px;}
         .wiz-pkg-users-extra{font-weight:500;color:rgba(255,255,255,.8);}
+        /* In the narrow cards put the extra-user price on its own line instead of squeezing it beside the limit */
+        .wiz-pkg-card .wiz-pkg-users-chip{flex-wrap:wrap;row-gap:2px;}
+        .wiz-pkg-card .wiz-pkg-users-extra{flex-basis:100%;padding-left:17px;}
 
         /* Selected check */
         .wiz-pkg-check{
@@ -799,6 +810,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         /* Body: module checklist + select button */
         .wiz-pkg-body{display:flex;flex-direction:column;flex:1;padding:18px 22px 20px;gap:12px;}
         .wiz-pkg-desc{font-size:12px;color:var(--muted);line-height:1.45;margin:0;}
+        /* In the card keep the description short so the module list stays in view; the full text is in the Details popup. */
+        .wiz-pkg-card .wiz-pkg-desc{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
         .wiz-pkg-mod-title{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
         .wiz-pkg-mods{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;}
         .wiz-pkg-mods li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);line-height:1.3;}
@@ -813,6 +826,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-card:not(.wiz-pkg-card--on):hover .wiz-pkg-select{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,#fff);}
         .wiz-pkg-card.wiz-pkg-card--on:hover .wiz-pkg-select{background:color-mix(in srgb,var(--primary) 88%,#000);border-color:color-mix(in srgb,var(--primary) 88%,#000);color:#fff;}
         .wiz-pkg-select .wiz-pkg-select-on{display:none;}
+        /* Keep "Choose plan ->" and "Details" on one line so the buttons don't grow into tall ovals */
+        .wiz-pkg-select,.wiz-pkg-details-btn{white-space:nowrap;}
+        .wiz-pkg-select .wiz-pkg-select-off{display:inline-flex;align-items:center;gap:8px;}
         .wiz-pkg-card--on .wiz-pkg-select{background:var(--primary);border-color:var(--primary);color:#fff;}
         .wiz-pkg-card--on .wiz-pkg-select i{color:#fff;}
         .wiz-pkg-card--on .wiz-pkg-select .wiz-pkg-select-off{display:none;}
@@ -821,7 +837,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         /* Actions row: select (whole card is clickable) + Details */
         .wiz-pkg-actions{margin-top:auto;display:flex;gap:8px;align-items:stretch;}
         .wiz-pkg-actions .wiz-pkg-select{flex:1;margin-top:0;}
-        .wiz-pkg-details-btn{flex-shrink:0;padding:10px 16px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);
+        .wiz-pkg-details-btn{flex-shrink:0;padding:10px 14px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);
             color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:border-color .18s ease;}
         .wiz-pkg-details-btn:hover{border-color:var(--text);}
         .wiz-pkg-more{background:none;border:0;border-bottom:2px solid var(--primary);border-radius:0;cursor:pointer;font-family:inherit;}
@@ -865,6 +881,78 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-primary{background:#16a34a;}
         .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-primary:hover{background:#15803d;box-shadow:0 6px 16px -8px rgba(22,163,74,.6);}
         .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-back:hover{border-color:#16a34a;background:rgba(22,163,74,.06);}
+
+        /* Free trial: "which package do you want to try?" picker */
+        .wiz-trial-modal .wiz-cat-modal__box{max-width:1080px;}
+        .wiz-trial-modal__head{flex-shrink:0;padding:24px 64px 18px 26px;color:#fff;background:linear-gradient(160deg,#4ade80,#15803d);}
+        .wiz-trial-modal__kicker{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#fff;color:#15803d;
+            font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+        .wiz-trial-modal__title{margin:10px 0 4px;font-size:22px;font-weight:800;letter-spacing:-.02em;color:#fff;}
+        .wiz-trial-modal__sub{margin:0;font-size:13px;line-height:1.5;color:rgba(255,255,255,.9);}
+        .wiz-trial-modal .wiz-cat-modal__close{background:rgba(255,255,255,.75);border-color:transparent;color:#141414;}
+        .wiz-trial-modal__body{overflow-y:auto;padding:20px 26px;flex:1;min-height:0;}
+        .wiz-trial-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;align-items:stretch;}
+        .wiz-trial-opt{position:relative;display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:16px;border:1.5px solid var(--border);
+            background:var(--card);cursor:pointer;text-align:left;font-family:inherit;color:var(--text);transition:border-color .18s,box-shadow .18s;}
+        .wiz-trial-modal .wiz-trial-opt:hover,.wiz-trial-modal .wiz-trial-opt:focus{border-color:#16a34a;background:rgba(22,163,74,.06);color:var(--text);transform:none;}
+        .wiz-trial-modal .wiz-trial-opt.wiz-trial-opt--on{background:rgba(22,163,74,.08);}
+        .wiz-trial-opt:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(22,163,74,.3);}
+        .wiz-trial-opt--on{border-color:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.22);}
+        .wiz-trial-opt__radio{position:absolute;top:16px;right:16px;width:20px;height:20px;border-radius:50%;border:2px solid var(--border);
+            display:grid;place-items:center;color:#fff;font-size:10px;}
+        .wiz-trial-opt__radio i{opacity:0;}
+        .wiz-trial-opt--on .wiz-trial-opt__radio{background:#16a34a;border-color:#16a34a;}
+        .wiz-trial-opt--on .wiz-trial-opt__radio i{opacity:1;}
+        .wiz-trial-opt__name{font-size:17px;font-weight:800;letter-spacing:-.01em;padding-right:28px;}
+        .wiz-trial-opt__price{font-size:12.5px;color:var(--muted);}
+        .wiz-trial-opt__price strong{color:var(--text);font-weight:700;}
+        .wiz-trial-opt__users{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);}
+        .wiz-trial-opt__desc{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted);}
+        .wiz-trial-opt .wiz-pkg-mods{gap:7px;}
+        .wiz-trial-opt .wiz-pkg-mods li{font-size:12.5px;}
+        .wiz-trial-opt .wiz-pkg-mods li::before{background:#16a34a;color:#fff;}
+        .wiz-trial-modal__err{margin:0 0 12px;}
+        .wiz-trial-modal .wiz-cat-modal__footer{align-items:center;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary{border-radius:999px;width:auto;background:#16a34a;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary:hover{background:#15803d;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-back{border-radius:999px;}
+        .wiz-trial-modal__note{margin-right:auto;font-size:12px;color:var(--muted);}
+        @media(max-width:600px){
+            .wiz-trial-modal.wiz-cat-modal{padding:10px;}
+            .wiz-trial-modal .wiz-cat-modal__box{max-height:calc(100vh - 20px);max-height:calc(100dvh - 20px);border-radius:16px;}
+            .wiz-trial-modal__head{padding:16px 52px 14px 18px;}
+            .wiz-trial-modal .wiz-cat-modal__close{top:12px;right:12px;}
+            .wiz-trial-modal__kicker{font-size:10px;}
+            .wiz-trial-modal__title{margin:8px 0 2px;font-size:17px;line-height:1.25;}
+            .wiz-trial-modal__sub{font-size:12px;line-height:1.4;}
+            .wiz-trial-modal__body{padding:14px;}
+            .wiz-trial-grid{grid-template-columns:1fr;gap:10px;}
+            .wiz-trial-opt{padding:14px;gap:8px;}
+            .wiz-trial-opt__name{font-size:15.5px;}
+            .wiz-trial-opt__desc{font-size:12px;}
+            .wiz-trial-opt .wiz-pkg-mods{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;}
+            .wiz-trial-opt .wiz-pkg-mods li{font-size:12px;gap:7px;}
+            .wiz-trial-modal .wiz-cat-modal__footer{flex-wrap:wrap;padding:12px 14px;}
+            .wiz-trial-modal__note{flex-basis:100%;margin:0 0 2px;text-align:center;font-size:11.5px;}
+            .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-back{flex:0 0 auto;}
+            .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary{flex:1 1 auto;justify-content:center;min-width:0;}
+        }
+        @media(max-width:360px){
+            .wiz-trial-opt .wiz-pkg-mods{grid-template-columns:1fr;}
+        }
+        /* Trial card: which package is being tried */
+        .wiz-pkg-trial-pick{display:none;align-items:center;flex-wrap:nowrap;gap:8px;padding:9px 12px;border-radius:12px;font-size:12.5px;
+            line-height:1.35;background:rgba(22,163,74,.08);color:#15803d;}
+        .wiz-pkg-trial-pick > i{flex-shrink:0;}
+        .wiz-pkg-trial-pick > span{flex:1 1 auto;min-width:0;}
+        .wiz-pkg-trial-pick strong{font-weight:800;}
+        .wiz-pkg-card .wiz-pkg-trial-pick button,
+        .wiz-pkg-card .wiz-pkg-trial-pick button:hover{flex-shrink:0;width:auto;margin:0;padding:3px 10px;border:1.5px solid rgba(22,163,74,.45);
+            border-radius:999px;background:#fff;box-shadow:none;transform:none;font:inherit;font-size:12px;font-weight:700;color:#15803d;
+            text-decoration:none;cursor:pointer;line-height:1.3;}
+        .wiz-pkg-card .wiz-pkg-trial-pick button:hover{border-color:#16a34a;background:#16a34a;color:#fff;}
+        .wiz-pkg-card--on .wiz-pkg-trial-pick.is-set{display:flex;}
 
         /* Category details modal */
         .wiz-cat-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
@@ -1048,6 +1136,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     <div class="wiz-step-dot" id="wizDot7">7</div>
                     <span class="wiz-step-lbl" id="wizLbl7">Payment</span>
                 </div>
+                <p class="wiz-footer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your data is secure and private.</p>
             </div>
 
             {{-- Card --}}
@@ -1076,7 +1165,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     {{-- Step 1: Business name --}}
                     <div id="wizardStep1" class="wiz-slide">
                         <h2 class="wiz-card-title">What's your business name?</h2>
-                        <p class="wiz-card-sub">Use your public brand name — you can update it any time.</p>
+                        <p class="wiz-card-sub">Use your public brand name - you can update it any time.</p>
                         <div class="wiz-field">
                             <label for="wiz-name-input">Business name</label>
                             <input
@@ -1110,19 +1199,19 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <label>Business category</label>
                             @php
                                 $wizCatMeta = [
-                                    'education'             => ['icon'=>'fa-graduation-cap',     'desc'=>'Schools, tutoring centres & online courses',       'users'=>'2.4k','fullDesc'=>'Perfect for schools, colleges, tutoring centres, online course creators and training providers. Manage student billing cycles, staff payroll and HR, fee collection tracking, and promotional campaigns — all from a single workspace.','highlights'=>['Billing cycles for tuition & fees','Staff payroll and leave management','Course & session scheduling support','Promotional campaign tracking']],
+                                    'education'             => ['icon'=>'fa-graduation-cap',     'desc'=>'Schools, tutoring centres & online courses',       'users'=>'2.4k','fullDesc'=>'Perfect for schools, colleges, tutoring centres, online course creators and training providers. Manage student billing cycles, staff payroll and HR, fee collection tracking, and promotional campaigns - all from a single workspace.','highlights'=>['Billing cycles for tuition & fees','Staff payroll and leave management','Course & session scheduling support','Promotional campaign tracking']],
                                     'software_industry'     => ['icon'=>'fa-laptop-code',        'desc'=>'SaaS, agencies & app development studios',        'users'=>'1.8k','fullDesc'=>'Built for software companies, digital agencies, IT consultancies and app development studios. Track subscription revenue, manage developer payroll, handle vendor bills, and run targeted outreach campaigns without switching tools.','highlights'=>['Subscription & retainer billing','Developer & contractor payroll','Vendor and SaaS expense tracking','Client campaign management']],
-                                    'local_retail'          => ['icon'=>'fa-store',              'desc'=>'Boutiques, supermarkets & specialty shops',        'users'=>'5.1k','fullDesc'=>'Designed for brick-and-mortar retailers of all sizes — from neighbourhood boutiques to supermarkets. Run a full point-of-sale, manage inventory levels, track supplier bills, and keep your team paid on time.','highlights'=>['Point-of-sale with receipt printing','Real-time stock & inventory tracking','Supplier bill management','Staff scheduling and payroll']],
+                                    'local_retail'          => ['icon'=>'fa-store',              'desc'=>'Boutiques, supermarkets & specialty shops',        'users'=>'5.1k','fullDesc'=>'Designed for brick-and-mortar retailers of all sizes - from neighbourhood boutiques to supermarkets. Run a full point-of-sale, manage inventory levels, track supplier bills, and keep your team paid on time.','highlights'=>['Point-of-sale with receipt printing','Real-time stock & inventory tracking','Supplier bill management','Staff scheduling and payroll']],
                                     'food_beverage'         => ['icon'=>'fa-utensils',           'desc'=>'Restaurants, cafés, bakeries & catering',          'users'=>'4.3k','fullDesc'=>'Ideal for restaurants, cafés, bakeries, catering businesses and cloud kitchens. Manage table-side or counter POS, ingredient stock levels, supplier invoices, and kitchen staff payroll efficiently.','highlights'=>['Table & counter point-of-sale','Ingredient & menu stock control','Supplier invoice tracking','Kitchen staff payroll & HR']],
                                     'healthcare'            => ['icon'=>'fa-heart-pulse',        'desc'=>'Clinics, pharmacies & wellness centres',           'users'=>'3.2k','fullDesc'=>'Tailored for clinics, pharmacies, diagnostic labs and wellness centres. Handle patient billing at the counter, manage medical inventory, track utility and supplier bills, and administer medical staff HR seamlessly.','highlights'=>['Counter billing & receipt management','Medical stock & consumables tracking','Utility and supplier bill management','Doctor & staff payroll']],
                                     'finance'               => ['icon'=>'fa-landmark',           'desc'=>'Insurance brokers & financial consultants',        'users'=>'1.5k','fullDesc'=>'Suited for insurance agencies, financial advisory firms, accounting practices and investment consultants. Keep precise account ledgers, manage recurring service bills, run HR for your team, and coordinate client outreach campaigns.','highlights'=>['Multi-account ledger management','Recurring service bill tracking','Client outreach & campaign tools','Consultant payroll & HR']],
-                                    'creative_media'        => ['icon'=>'fa-palette',            'desc'=>'Design studios, photography & content creators',   'users'=>'2.1k','fullDesc'=>'For creative agencies, design studios, photographers, videographers and content creators. Invoice clients, track project expenses, manage freelancer payments, and schedule social media campaigns — in one place.','highlights'=>['Client project invoicing','Freelancer & staff payment tracking','Creative project expense management','Social media campaign scheduling']],
+                                    'creative_media'        => ['icon'=>'fa-palette',            'desc'=>'Design studios, photography & content creators',   'users'=>'2.1k','fullDesc'=>'For creative agencies, design studios, photographers, videographers and content creators. Invoice clients, track project expenses, manage freelancer payments, and schedule social media campaigns - in one place.','highlights'=>['Client project invoicing','Freelancer & staff payment tracking','Creative project expense management','Social media campaign scheduling']],
                                     'ecommerce'             => ['icon'=>'fa-cart-shopping',      'desc'=>'Online stores, dropshipping & marketplaces',       'users'=>'3.7k','fullDesc'=>'Optimised for e-commerce businesses, online stores, dropshippers and marketplace sellers. Manage your product catalogue, track warehouse stock, process online orders at the POS, and run promotional campaigns across channels.','highlights'=>['Product catalogue management','Warehouse & fulfilment stock tracking','Online order processing at POS','Multi-channel campaign management']],
                                     'manufacturing'         => ['icon'=>'fa-industry',           'desc'=>'Factories, workshops & production lines',          'users'=>'1.2k','fullDesc'=>'Built for manufacturers, factories, workshops and assembly operations. Track raw material inventory, manage production staff HR and payroll, handle supplier bills, and monitor finished goods stock levels with ease.','highlights'=>['Raw material & finished goods stock','Production staff HR & payroll','Supplier and utility bill tracking','Output and quality record management']],
                                     'real_estate'           => ['icon'=>'fa-house-chimney',      'desc'=>'Agents, property management & rentals',            'users'=>'890', 'fullDesc'=>'Designed for real estate agencies, property management firms and rental businesses. Track rental income and expenses, manage property-related bills, handle agent and staff HR, and run lead generation campaigns effectively.','highlights'=>['Rental income & expense tracking','Property bill and maintenance costs','Agent commission and staff payroll','Lead generation campaign management']],
                                     'nonprofit'             => ['icon'=>'fa-hand-holding-heart','desc'=>'Charities, NGOs & community organisations',        'users'=>'640', 'fullDesc'=>'Purpose-built for non-profits, charities, NGOs and community organisations. Track donations and operational budgets, manage volunteer and staff HR, handle utility bills, and run awareness campaigns for maximum outreach.','highlights'=>['Donation and grant budget tracking','Volunteer and staff HR management','Operational and utility bill tracking','Awareness campaign coordination']],
                                     'professional_services' => ['icon'=>'fa-briefcase',          'desc'=>'Law firms, consultants & accounting practices',    'users'=>'2.9k','fullDesc'=>'Optimised for law firms, management consultants, accounting practices and professional service providers. Manage retainer billing and client accounts, track professional bills, handle staff payroll, and coordinate business development campaigns.','highlights'=>['Retainer & time-based billing','Client account management','Professional expense tracking','Business development campaigns']],
-                                    'other'                 => ['icon'=>'fa-ellipsis',           'desc'=>'Anything that doesn\'t fit the categories above', 'users'=>'1.1k','fullDesc'=>'A flexible workspace for any business type not listed above. All core modules are available and can be customised to match your unique operational needs — from billing and HR to stock management and campaigns.','highlights'=>['Full module access with no restrictions','Customisable billing and HR setup','Flexible stock and product tracking','General-purpose campaign management']],
+                                    'other'                 => ['icon'=>'fa-ellipsis',           'desc'=>'Anything that doesn\'t fit the categories above', 'users'=>'1.1k','fullDesc'=>'A flexible workspace for any business type not listed above. All core modules are available and can be customised to match your unique operational needs - from billing and HR to stock management and campaigns.','highlights'=>['Full module access with no restrictions','Customisable billing and HR setup','Flexible stock and product tracking','General-purpose campaign management']],
                                 ];
                                 $wizFeatShortLabels = [
                                     'account_management'    => 'Accounts',
@@ -1193,11 +1282,13 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     {{-- Step 3: Package selection --}}
                     <div id="wizardStep3" style="display:none;">
                         <h2 class="wiz-card-title">Choose your package</h2>
-                        <p class="wiz-card-sub">Pick the plan that fits your business — its features unlock automatically on the next step.</p>
+                        <p class="wiz-card-sub">Pick the plan that fits your business - its features unlock automatically on the next step.</p>
 
                         <input type="hidden" name="package_id" id="wizPackageIdInput" value="{{ old('package_id') }}">
+                        <input type="hidden" name="trial_package_id" id="wizTrialPackageIdInput" value="{{ old('trial_package_id') }}">
                         <div id="wizPkgNoSelErr" class="wiz-field-error" style="display:none;margin-bottom:12px;">Please select a package before continuing.</div>
                         @error('package_id')<div class="wiz-field-error" style="margin-bottom:12px;">{{ $message }}</div>@enderror
+                        @error('trial_package_id')<div class="wiz-field-error" style="margin-bottom:12px;">{{ $message }}</div>@enderror
 
                         <div class="wiz-pkg-grid">
                             @forelse(($packages ?? []) as $pkg)
@@ -1251,21 +1342,38 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                         @elseif($pkg->is_trial)
                                             <span class="wiz-pkg-trial-note">No card needed · Recommended</span>
                                         @endif
-                                        <span class="wiz-pkg-users-chip"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra">&nbsp;· {{ $pkg->extraUserPriceLabel() }}</span>@endif</span>
+                                        <span class="wiz-pkg-users-chip"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra">{{ $pkg->extraUserPriceLabel() }}</span>@endif</span>
                                     </div>
 
                                     <div class="wiz-pkg-body">
                                         @if($pkg->description && ! $pkg->is_trial)
                                             <p class="wiz-pkg-desc">{{ $pkg->description }}</p>
                                         @endif
+                                        @if($pkg->is_trial)
+                                            @php $trialChoiceNames = collect($packages ?? [])->reject(fn ($p) => $p->is_trial)->pluck('name')->all(); @endphp
+                                            <div class="wiz-pkg-mod-title">Try any package free</div>
+                                            <ul class="wiz-pkg-mods">
+                                                @foreach($trialChoiceNames as $choiceName)
+                                                    <li>{{ $choiceName }}</li>
+                                                @endforeach
+                                            </ul>
+                                        @else
                                         <div class="wiz-pkg-mod-title">{{ count($pkgLabels) }} {{ count($pkgLabels) === 1 ? 'module' : 'modules' }} included</div>
                                         <ul class="wiz-pkg-mods">
                                             @foreach(array_slice($pkgLabels, 0, $pkgShowMods) as $label)
                                                 <li>{{ $label }}</li>
                                             @endforeach
                                         </ul>
-                                        @if(count($pkgLabels) > $pkgShowMods)
+                                        @endif
+                                        @if(! $pkg->is_trial && count($pkgLabels) > $pkgShowMods)
                                             <button type="button" class="wiz-pkg-more" data-pkg-details>+{{ count($pkgLabels) - $pkgShowMods }} more modules</button>
+                                        @endif
+                                        @if($pkg->is_trial)
+                                            <div class="wiz-pkg-trial-pick" id="wizTrialPickNote">
+                                                <i class="fa fa-flask" aria-hidden="true"></i>
+                                                <span>Trying <strong id="wizTrialPickName"></strong> features</span>
+                                                <button type="button" data-trial-change>Change</button>
+                                            </div>
                                         @endif
                                         <div class="wiz-pkg-actions">
                                             <span class="wiz-pkg-select" aria-hidden="true">
@@ -1277,7 +1385,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     </div>
                                 </div>
                             @empty
-                                <p class="wiz-cat-noresults">No packages are available right now — contact support.</p>
+                                <p class="wiz-cat-noresults">No packages are available right now - contact support.</p>
                             @endforelse
                         </div>
                         <p class="wiz-pkg-foot-note">Prices are per business, billed monthly. Cancel or change package any time.</p>
@@ -1286,7 +1394,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     {{-- Step 4: Feature preview (read-only, locked to the selected package) --}}
                     <div id="wizardStep4" style="display:none;">
                         <h2 class="wiz-card-title">What do you get?</h2>
-                        <p class="wiz-card-sub">These features are included in your selected package — they can't be edited here, but you can change packages any time from your account menu.</p>
+                        <p class="wiz-card-sub">These features are included in your selected package - they can't be edited here, but you can change packages any time from your account menu.</p>
                         <div class="wiz-feat-shell">
                             {{-- Left: search + grid --}}
                             <div class="wiz-feat-main">
@@ -1528,27 +1636,27 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <div class="wiz-pay-summary" id="wizPaySummary">
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Business</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryBusiness">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryBusiness">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Category</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryCategory">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryCategory">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Package</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryPackage">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryPackage">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Users included</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryUsers">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryUsers">-</span>
                             </div>
                             <div class="wiz-pay-row" id="wizPaySummaryExtraUserRow" style="display:none;">
                                 <span class="wiz-pay-row-label">Additional users</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryExtraUser">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryExtraUser">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Data storage</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryStorage">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryStorage">-</span>
                             </div>
                             <div class="wiz-pay-divider"></div>
                             <div class="wiz-pay-row wiz-pay-row--total">
@@ -1556,7 +1664,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <span class="wiz-pay-row-value" id="wizPaySummaryTotal">$0.00</span>
                             </div>
                             <div class="wiz-pay-cycle-badge" id="wizPaySummaryCycle">
-                                <i class="fa fa-rotate" aria-hidden="true"></i> Billed monthly — recurring subscription
+                                <i class="fa fa-rotate" aria-hidden="true"></i> Billed monthly - recurring subscription
                             </div>
                         </div>
 
@@ -1569,7 +1677,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                         <div class="wiz-pay-gateway" id="wizPayFreeNote" style="display:none;">
                             <div class="wiz-pay-gateway-head"><i class="fa fa-gift" aria-hidden="true"></i><span>No payment required</span></div>
-                            <p class="wiz-pay-gateway-sub" id="wizPayFreeNoteText">Your selected package is free — click Finish setup below to activate your workspace right away.</p>
+                            <p class="wiz-pay-gateway-sub" id="wizPayFreeNoteText">Your selected package is free - click Finish setup below to activate your workspace right away.</p>
                         </div>
 
                         @error('payment')
@@ -1650,7 +1758,6 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 </form>
             </div>
 
-            <p class="wiz-footer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your data is secure and private.</p>
         </div>
     </div>
 
@@ -1715,14 +1822,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 <div class="wiz-storage-modal__head-ico"><i class="fa fa-file-contract" aria-hidden="true"></i></div>
                 <div style="flex:1;min-width:0;">
                     <h3 class="wiz-storage-modal__title" id="wizStorageAgreementTitle">Data Storage Agreement</h3>
-                    <p class="wiz-storage-modal__subtitle" id="wizStorageAgreementSubtitle">SociBiz Online Storage — Terms &amp; Conditions</p>
+                    <p class="wiz-storage-modal__subtitle" id="wizStorageAgreementSubtitle">SociBiz Online Storage - Terms &amp; Conditions</p>
                 </div>
                 <button type="button" class="wiz-storage-modal__close" id="wizStorageAgreementClose" aria-label="Close">
                     <i class="fa fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="wiz-storage-modal__body" id="wizStorageAgreementBody">
-                <p>By choosing SociBiz Online Storage, you agree that your business data — including transactions, employee records, customer information, and reports — will be stored securely on SociBiz servers.</p>
+                <p>By choosing SociBiz Online Storage, you agree that your business data - including transactions, employee records, customer information, and reports - will be stored securely on SociBiz servers.</p>
                 <p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p>
                 <p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p>
                 <p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p>
@@ -1765,6 +1872,34 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 </button>
                 <button type="button" class="wiz-btn-primary" id="wizPkgModalSelectBtn">
                     <i class="fa fa-check" aria-hidden="true"></i> <span id="wizPkgModalSelectLbl">Choose this plan</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Free trial: pick which package's features to try (filled from the non-trial cards) --}}
+    <div id="wizTrialModal" class="wiz-cat-modal wiz-trial-modal" hidden aria-modal="true" role="dialog" aria-labelledby="wizTrialModalTitle">
+        <div class="wiz-cat-modal__backdrop" data-trial-modal-close></div>
+        <div class="wiz-cat-modal__box">
+            <button type="button" class="wiz-cat-modal__close" data-trial-modal-close aria-label="Close">
+                <i class="fa fa-xmark" aria-hidden="true"></i>
+            </button>
+            <div class="wiz-trial-modal__head">
+                <span class="wiz-trial-modal__kicker"><i class="fa fa-gift" aria-hidden="true"></i> Free trial</span>
+                <h3 class="wiz-trial-modal__title" id="wizTrialModalTitle">Which package do you want to try for free?</h3>
+                <p class="wiz-trial-modal__sub" id="wizTrialModalSub">Pick one package. Only its features are unlocked during your free trial - no card needed.</p>
+            </div>
+            <div class="wiz-trial-modal__body">
+                <div id="wizTrialModalErr" class="wiz-field-error wiz-trial-modal__err" style="display:none;">Please pick a package to try.</div>
+                <div class="wiz-trial-grid" id="wizTrialGrid" role="radiogroup" aria-labelledby="wizTrialModalTitle"></div>
+            </div>
+            <div class="wiz-cat-modal__footer">
+                <span class="wiz-trial-modal__note">You can switch to any plan before the trial ends.</span>
+                <button type="button" class="wiz-btn-back" data-trial-modal-close>
+                    <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                </button>
+                <button type="button" class="wiz-btn-primary" id="wizTrialModalConfirm" disabled>
+                    <i class="fa fa-check" aria-hidden="true"></i> <span id="wizTrialModalConfirmLbl">Start free trial</span>
                 </button>
             </div>
         </div>
@@ -1963,7 +2098,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
     @if($errors->has('payment') || $pendingPayment)
         @include('partials.payment-attention-bar', [
             'title' => $errors->first('payment') ?: 'Your subscription payment needs attention.',
-            'message' => $pendingPayment ? 'Your business setup is saved — complete payment to activate your monthly subscription.' : null,
+            'message' => $pendingPayment ? 'Your business setup is saved - complete payment to activate your monthly subscription.' : null,
             'payment' => $pendingPayment,
         ])
     @endif
@@ -2774,13 +2909,13 @@ var _wizStoragePendingType = 'online';
 var _wizStorageContent = {
     online: {
         title:    'Data Storage Agreement',
-        subtitle: 'SociBiz Online Storage — Terms & Conditions',
-        body:     '<p>By choosing SociBiz Online Storage, you agree that your business data — including transactions, employee records, customer information, and reports — will be stored securely on SociBiz servers.</p><p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p><p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p><p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p><p><strong>Uptime commitment:</strong> We target 99.9% monthly uptime. Scheduled maintenance windows are announced at least 48 hours in advance.</p>',
+        subtitle: 'SociBiz Online Storage - Terms & Conditions',
+        body:     '<p>By choosing SociBiz Online Storage, you agree that your business data - including transactions, employee records, customer information, and reports - will be stored securely on SociBiz servers.</p><p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p><p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p><p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p><p><strong>Uptime commitment:</strong> We target 99.9% monthly uptime. Scheduled maintenance windows are announced at least 48 hours in advance.</p>',
         label:    'I have read and agree to the Data Storage Terms &amp; Conditions',
     },
     self_hosted: {
         title:    'Self-Hosted Data Agreement',
-        subtitle: 'SociBiz Self-Hosted — Data Responsibility Terms',
+        subtitle: 'SociBiz Self-Hosted - Data Responsibility Terms',
         body:     '<p>By choosing Self-Hosted Storage, you take full responsibility for the security, integrity, availability, and backup of all business data stored on your own server or private infrastructure.</p><p><strong>Your responsibilities:</strong> You must ensure your server is properly secured with firewall rules, authentication controls, and access restrictions. Regular backups and a disaster recovery plan are entirely your obligation.</p><p><strong>Data Vault connection:</strong> Enabling the Data Vault connects your SociBiz workspace to your self-hosted server using the API token you provide. All data transmitted between SociBiz and your vault is encrypted in transit (TLS 1.3).</p><p><strong>Software maintenance:</strong> You are responsible for keeping your server software, OS, and dependencies up to date to prevent security vulnerabilities.</p><p><strong>Liability:</strong> SociBiz is not liable for any data loss, breach, or service unavailability arising from your self-hosted configuration. Support is limited to configuration guidance; SociBiz cannot access or manage your infrastructure directly.</p>',
         label:    'I understand and accept responsibility for my self-hosted data',
     },
@@ -2909,11 +3044,11 @@ function openWizStorageAgreementModal(type) {
     }
     const guideMessages = {
         1: { step: 'Step 1 of 7', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
-        2: { step: 'Step 2 of 7', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
-        3: { step: 'Step 3 of 7', text: 'Pick a package — its features unlock automatically on the next step.' },
-        4: { step: 'Step 4 of 7', text: 'Here are the features included in your package. Required ones stay on — you can change plans any time later.' },
-        5: { step: 'Step 5 of 7', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
-        6: { step: 'Step 6 of 7', text: 'Choose how your data is stored — our secure cloud or your own server.' },
+        2: { step: 'Step 2 of 7', text: 'Pick the category that best describes what you do - it helps me set up the right modules for you!' },
+        3: { step: 'Step 3 of 7', text: 'Pick a package - its features unlock automatically on the next step.' },
+        4: { step: 'Step 4 of 7', text: 'Here are the features included in your package. Required ones stay on - you can change plans any time later.' },
+        5: { step: 'Step 5 of 7', text: 'Almost done! Tell me where you operate - single location or multiple branches?' },
+        6: { step: 'Step 6 of 7', text: 'Choose how your data is stored - our secure cloud or your own server.' },
         7: { step: 'Step 7 of 7', text: 'Last step! Review your total and complete payment to activate your monthly subscription.' },
     };
     function updateGuide(num) {
@@ -2971,6 +3106,13 @@ function openWizStorageAgreementModal(type) {
                     if (pkgErr) pkgErr.style.display = 'block';
                     const firstPkgCard = wizardForm.querySelector('.wiz-pkg-card');
                     if (firstPkgCard) firstPkgCard.focus();
+                    return;
+                }
+                // Free trial needs the package to try.
+                const trialPkgInput = document.getElementById('wizTrialPackageIdInput');
+                const selCard = wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgInput.value + '"]');
+                if (selCard && selCard.classList.contains('wiz-pkg-card--trial') && trialPkgInput && !trialPkgInput.value) {
+                    if (typeof window.wizOpenTrialPicker === 'function') window.wizOpenTrialPicker();
                     return;
                 }
                 if (pkgErr) pkgErr.style.display = 'none';
@@ -3112,12 +3254,14 @@ function openWizStorageAgreementModal(type) {
         }
         // Keeps the footer chip (shown on every step from Package onward) in
         // sync with whichever package is currently selected.
-        function updateWizPkgSummary(card) {
+        function updateWizPkgSummary(card, triedCard) {
             const summaries = document.querySelectorAll('.wiz-pkg-summary');
             if (!summaries.length) return;
+            const name = (card ? (card.getAttribute('data-pkg-name') || '') : '')
+                + (triedCard ? ' - ' + (triedCard.getAttribute('data-pkg-name') || '') + ' features' : '');
             const html = card
                 ? '<i class="fa fa-box-open" aria-hidden="true"></i>'
-                    + '<span class="wiz-pkg-summary-name">' + escPkg(card.getAttribute('data-pkg-name') || '') + '</span>'
+                    + '<span class="wiz-pkg-summary-name">' + escPkg(name) + '</span>'
                     + '<div class="wiz-pkg-price-row">' + pkgPriceHtml(card) + '</div>'
                     + pkgUsersHtml(card)
                 : '';
@@ -3139,19 +3283,124 @@ function openWizStorageAgreementModal(type) {
                 usersExtra.style.display = extraText ? 'flex' : 'none';
             }
         }
-        function selectPackage(card) {
+        const trialInput = document.getElementById('wizTrialPackageIdInput');
+        function isTrialCard(card) { return !!card && card.classList.contains('wiz-pkg-card--trial'); }
+        function pkgCardById(id) {
+            return id ? wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + id + '"]:not(.wiz-pkg-card--trial)') : null;
+        }
+
+        // Selecting the free trial first asks which package to try (see the
+        // trial picker below); its features are what the trial unlocks.
+        function selectPackage(card, triedId) {
+            const tried = isTrialCard(card) ? pkgCardById(triedId) : null;
+            if (isTrialCard(card) && !tried) { openTrialModal(card); return; }
+
             wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (c) {
                 c.classList.toggle('wiz-pkg-card--on', c === card);
                 c.setAttribute('aria-checked', c === card ? 'true' : 'false');
             });
             pkgInput.value = card.getAttribute('data-pkg-id');
+            if (trialInput) trialInput.value = tried ? tried.getAttribute('data-pkg-id') : '';
+
+            const pickNote = document.getElementById('wizTrialPickNote');
+            if (pickNote) {
+                pickNote.classList.toggle('is-set', !!tried);
+                document.getElementById('wizTrialPickName').textContent = tried ? (tried.getAttribute('data-pkg-name') || '') : '';
+            }
+
             const errEl = document.getElementById('wizPkgNoSelErr');
             if (errEl) errEl.style.display = 'none';
             let features = [];
-            try { features = JSON.parse(card.getAttribute('data-pkg-features') || '[]'); } catch (e) {}
+            try { features = JSON.parse((tried || card).getAttribute('data-pkg-features') || '[]'); } catch (e) {}
             applyPackageFeatures(features);
-            updateWizPkgSummary(card);
+            updateWizPkgSummary(card, tried);
         }
+
+        // Free trial picker: every other package, in full detail.
+        const trialModal = document.getElementById('wizTrialModal');
+        let trialModalCard = null;
+        let trialPick = '';
+        function renderTrialOptions() {
+            const grid = document.getElementById('wizTrialGrid');
+            const cards = wizardForm.querySelectorAll('.wiz-pkg-card:not(.wiz-pkg-card--trial)');
+            grid.innerHTML = Array.prototype.map.call(cards, function (c) {
+                const id = c.getAttribute('data-pkg-id');
+                const desc = c.getAttribute('data-pkg-desc') || '';
+                const users = c.getAttribute('data-pkg-users-label') || '';
+                let labels = [];
+                try { labels = JSON.parse(c.getAttribute('data-pkg-labels') || '[]'); } catch (e) {}
+                const price = c.getAttribute('data-pkg-free') === '1'
+                    ? 'Free'
+                    : pkgPriceHtml(c).replace(/<span class="wiz-pkg-price-strike">.*?<\/span>/, '').replace(/<[^>]+>/g, '');
+                const on = id === trialPick;
+                return '<button type="button" class="wiz-trial-opt' + (on ? ' wiz-trial-opt--on' : '') + '" role="radio"'
+                    + ' aria-checked="' + (on ? 'true' : 'false') + '" data-trial-opt="' + escPkg(id) + '">'
+                    + '<span class="wiz-trial-opt__radio" aria-hidden="true"><i class="fa fa-check"></i></span>'
+                    + '<span class="wiz-trial-opt__name">' + escPkg(c.getAttribute('data-pkg-name') || '') + '</span>'
+                    + '<span class="wiz-trial-opt__price">After the trial: <strong>' + escPkg(price) + '</strong></span>'
+                    + (users ? '<span class="wiz-trial-opt__users"><i class="fa fa-users" aria-hidden="true"></i> ' + escPkg(users) + '</span>' : '')
+                    + (desc ? '<p class="wiz-trial-opt__desc">' + escPkg(desc) + '</p>' : '')
+                    + '<span class="wiz-pkg-mod-title">' + labels.length + (labels.length === 1 ? ' module' : ' modules') + ' included</span>'
+                    + '<ul class="wiz-pkg-mods">' + labels.map(function (l) { return '<li>' + escPkg(l) + '</li>'; }).join('') + '</ul>'
+                    + '</button>';
+            }).join('');
+            const confirmBtn = document.getElementById('wizTrialModalConfirm');
+            const picked = pkgCardById(trialPick);
+            confirmBtn.disabled = !picked;
+            document.getElementById('wizTrialModalConfirmLbl').textContent = picked
+                ? 'Try ' + (picked.getAttribute('data-pkg-name') || '') + ' free'
+                : 'Start free trial';
+        }
+        function openTrialModal(card) {
+            if (!trialModal) return;
+            trialModalCard = card;
+            trialPick = trialInput ? trialInput.value : '';
+            const days = card.getAttribute('data-pkg-trial-days') || '';
+            if (days) {
+                document.getElementById('wizTrialModalSub').textContent =
+                    'Pick one package. Only its features are unlocked during your ' + days + '-day free trial - no card needed.';
+            }
+            document.getElementById('wizTrialModalErr').style.display = 'none';
+            renderTrialOptions();
+            trialModal.hidden = false;
+            document.addEventListener('keydown', trialModalEsc);
+            const first = trialModal.querySelector('.wiz-trial-opt--on') || trialModal.querySelector('.wiz-trial-opt');
+            if (first) first.focus();
+        }
+        function closeTrialModal() {
+            if (!trialModal) return;
+            trialModal.hidden = true;
+            document.removeEventListener('keydown', trialModalEsc);
+            if (trialModalCard) trialModalCard.focus();
+            trialModalCard = null;
+        }
+        function trialModalEsc(e) { if (e.key === 'Escape') closeTrialModal(); }
+        if (trialModal) {
+            trialModal.querySelectorAll('[data-trial-modal-close]').forEach(function (el) {
+                el.addEventListener('click', closeTrialModal);
+            });
+            document.getElementById('wizTrialGrid').addEventListener('click', function (e) {
+                const opt = e.target.closest('[data-trial-opt]');
+                if (!opt) return;
+                trialPick = opt.getAttribute('data-trial-opt');
+                renderTrialOptions();
+                const again = trialModal.querySelector('[data-trial-opt="' + trialPick + '"]');
+                if (again) again.focus();
+            });
+            document.getElementById('wizTrialModalConfirm').addEventListener('click', function () {
+                if (!pkgCardById(trialPick)) {
+                    document.getElementById('wizTrialModalErr').style.display = 'block';
+                    return;
+                }
+                const card = trialModalCard;
+                closeTrialModal();
+                if (card) selectPackage(card, trialPick);
+            });
+        }
+        window.wizOpenTrialPicker = function () {
+            const card = wizardForm.querySelector('.wiz-pkg-card--trial');
+            if (card) openTrialModal(card);
+        };
         // Package details popup
         const pkgModal = document.getElementById('wizPkgModal');
         let pkgModalCard = null;
@@ -3179,7 +3428,7 @@ function openWizStorageAgreementModal(type) {
                 labels.map(function (l) { return '<li>' + escPkg(l) + '</li>'; }).join('');
 
             document.getElementById('wizPkgModalSelectLbl').textContent =
-                card.classList.contains('wiz-pkg-card--on') ? 'Selected — continue' : (isTrial ? 'Start free trial' : 'Choose this plan');
+                card.classList.contains('wiz-pkg-card--on') ? 'Selected - continue' : (isTrial ? 'Start free trial' : 'Choose this plan');
             pkgModal.hidden = false;
             document.addEventListener('keydown', pkgModalEsc);
         }
@@ -3196,26 +3445,46 @@ function openWizStorageAgreementModal(type) {
                 el.addEventListener('click', closePkgModal);
             });
             document.getElementById('wizPkgModalSelectBtn').addEventListener('click', function () {
-                if (pkgModalCard) selectPackage(pkgModalCard);
+                const card = pkgModalCard;
                 closePkgModal();
+                // An already-selected trial keeps its pick; otherwise the trial opens its picker.
+                if (card) selectPackage(card, isTrialCard(card) && card.classList.contains('wiz-pkg-card--on') && trialInput ? trialInput.value : undefined);
             });
         }
 
         wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (card) {
             card.addEventListener('click', function (e) {
-                if (e.target.closest('[data-pkg-details]')) { e.stopPropagation(); openPkgModal(card); return; }
-                selectPackage(card);
+                if (e.target.closest('[data-pkg-details]')) {
+                    e.stopPropagation();
+                    // The trial's "Details" shows the packages it can unlock.
+                    if (isTrialCard(card)) openTrialModal(card); else openPkgModal(card);
+                    return;
+                }
+                if (e.target.closest('[data-trial-change]')) { e.stopPropagation(); openTrialModal(card); return; }
+                // Clicking the selected trial again keeps its pick (use "Change" to switch).
+                selectPackage(card, isTrialCard(card) && card.classList.contains('wiz-pkg-card--on') && trialInput ? trialInput.value : undefined);
             });
             card.addEventListener('keydown', function (e) {
                 if (e.target !== card) return; // let the Details buttons handle their own keys
-                if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); selectPackage(card); }
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    selectPackage(card, isTrialCard(card) && card.classList.contains('wiz-pkg-card--on') && trialInput ? trialInput.value : undefined);
+                }
             });
         });
         // Re-apply the previously selected package's features on page reload
-        // (e.g. after a validation error further down the wizard).
+        // (e.g. after a validation error further down the wizard). A trial
+        // without a valid tried package is left unselected so it gets picked again.
         if (pkgInput.value) {
             const preselected = wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgInput.value + '"]');
-            if (preselected) selectPackage(preselected);
+            if (preselected && isTrialCard(preselected) && !pkgCardById(trialInput ? trialInput.value : '')) {
+                preselected.classList.remove('wiz-pkg-card--on');
+                preselected.setAttribute('aria-checked', 'false');
+                pkgInput.value = '';
+                if (trialInput) trialInput.value = '';
+            } else if (preselected) {
+                selectPackage(preselected, trialInput ? trialInput.value : undefined);
+            }
         }
     }
 
@@ -3223,13 +3492,13 @@ function openWizStorageAgreementModal(type) {
     function populateWizPaymentSummary() {
         const bizNameInput = wizardForm.querySelector('input[name="name"]');
         const bizNameEl = document.getElementById('wizPaySummaryBusiness');
-        if (bizNameEl) bizNameEl.textContent = (bizNameInput && bizNameInput.value.trim()) || '—';
+        if (bizNameEl) bizNameEl.textContent = (bizNameInput && bizNameInput.value.trim()) || '-';
 
         const catCard = wizardForm.querySelector('.wiz-cat-card--on');
         const catNameEl = document.getElementById('wizPaySummaryCategory');
         if (catNameEl) {
             const catNameNode = catCard ? catCard.querySelector('.wiz-cat-name') : null;
-            catNameEl.textContent = catNameNode ? catNameNode.textContent.trim() : '—';
+            catNameEl.textContent = catNameNode ? catNameNode.textContent.trim() : '-';
         }
 
         const pkgIdInput = document.getElementById('wizPackageIdInput');
@@ -3247,11 +3516,11 @@ function openWizStorageAgreementModal(type) {
 
         let isFree = true;
         let amount = 0;
-        let pkgName = '—';
+        let pkgName = '-';
         let symbol = '$';
 
         if (pkgCard) {
-            pkgName = pkgCard.getAttribute('data-pkg-name') || '—';
+            pkgName = pkgCard.getAttribute('data-pkg-name') || '-';
             isFree = pkgCard.getAttribute('data-pkg-free') === '1';
             symbol = pkgCard.getAttribute('data-pkg-currency-symbol') || '$';
             const price    = parseFloat(pkgCard.getAttribute('data-pkg-price') || '0');
@@ -3266,15 +3535,26 @@ function openWizStorageAgreementModal(type) {
         if (freeNoteText) {
             freeNoteText.textContent = trialDays
                 ? 'Your free trial runs for ' + trialDays + ' days with no card needed. Before it ends, choose a plan to keep going.'
-                : 'Your selected package is free — click Finish setup below to activate your workspace right away.';
+                : 'Your selected package is free - click Finish setup below to activate your workspace right away.';
         }
-        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial)' : (isFree ? ' (Free)' : ''))) : '—';
+        const trialPkgInput = document.getElementById('wizTrialPackageIdInput');
+        const triedCard = trialDays && trialPkgInput && trialPkgInput.value
+            ? wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + trialPkgInput.value + '"]:not(.wiz-pkg-card--trial)')
+            : null;
+        const triedName = triedCard ? (triedCard.getAttribute('data-pkg-name') || '') : '';
+        if (pkgNameEl) pkgNameEl.textContent = pkgCard
+            ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial' + (triedName ? ', trying ' + triedName + ' features' : '') + ')' : (isFree ? ' (Free)' : '')))
+            : '-';
+        if (freeNoteText && triedName) {
+            freeNoteText.textContent = 'Your free trial unlocks the ' + triedName + ' features for ' + trialDays
+                + ' days with no card needed. Before it ends, choose a plan to keep going.';
+        }
 
         const usersEl       = document.getElementById('wizPaySummaryUsers');
         const extraUserRow  = document.getElementById('wizPaySummaryExtraUserRow');
         const extraUserEl   = document.getElementById('wizPaySummaryExtraUser');
         const extraUserText = pkgCard ? (pkgCard.getAttribute('data-pkg-extra-user-label') || '') : '';
-        if (usersEl) usersEl.textContent = pkgCard ? (pkgCard.getAttribute('data-pkg-users-label') || '—') : '—';
+        if (usersEl) usersEl.textContent = pkgCard ? (pkgCard.getAttribute('data-pkg-users-label') || '-') : '-';
         if (extraUserEl) extraUserEl.textContent = extraUserText;
         if (extraUserRow) extraUserRow.style.display = extraUserText ? 'flex' : 'none';
         if (totalEl)   totalEl.textContent   = isFree ? (symbol + '0.00') : (symbol + amount.toFixed(2) + ' / mo');
