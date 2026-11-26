@@ -10582,14 +10582,6 @@ $('#tpm-feature-mgmt').addEventListener('click', () => {
   closeProfileMenu();
   openFeatureMgmtModal();
 });
-$('#tpm-user-mgmt').addEventListener('click', () => {
-  closeProfileMenu();
-  toast('User Management coming soon', 'info');
-});
-$('#tpm-integrations').addEventListener('click', () => {
-  closeProfileMenu();
-  toast('Integrations coming soon', 'info');
-});
 $('#tpm-keyboard-shortcuts').addEventListener('click', () => {
   closeProfileMenu();
   showShortcutsModal();
