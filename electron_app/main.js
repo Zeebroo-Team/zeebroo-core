@@ -40,6 +40,7 @@ let config;
 
 function createWindow() {
   const alreadyLoggedIn = !!(config.token && config.business_id);
+  authNarrow = !alreadyLoggedIn;
 
   mainWindow = new BrowserWindow({
     width:     alreadyLoggedIn ? 1280 : 440,
@@ -186,12 +187,32 @@ ipcMain.handle('app-version', () => app.getVersion());
 
 // ── Window controls ───────────────────────────────────────────────────────
 ipcMain.on('window-minimize',  () => mainWindow?.minimize());
-ipcMain.on('window-maximize',  () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize());
+// True while the auth window is in its fixed 440x720 sign-in size.
+let authNarrow = false; // set in createWindow()
+
+ipcMain.on('window-maximize',  () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) {
+    mainWindow.unmaximize();
+    if (authNarrow) mainWindow.setResizable(false);
+  } else {
+    // The narrow sign-in window is non-resizable, which blocks maximize on Windows.
+    mainWindow.setResizable(true);
+    mainWindow.maximize();
+  }
+});
 ipcMain.on('window-close',     () => mainWindow?.close());
 ipcMain.on('window-fullscreen',(_e, flag) => mainWindow?.setFullScreen(flag));
 
+// setSize is ignored while maximized, so leave maximized state before resizing.
+function leaveMaximized() {
+  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+}
+
 ipcMain.on('window-expand', () => {
   if (!mainWindow) return;
+  authNarrow = false;
+  leaveMaximized();
   mainWindow.setResizable(true);
   mainWindow.setMinimumSize(960, 600);
   mainWindow.setSize(1280, 820, true);
@@ -200,6 +221,8 @@ ipcMain.on('window-expand', () => {
 
 ipcMain.on('window-wide-auth', () => {
   if (!mainWindow) return;
+  authNarrow = false;
+  leaveMaximized();
   mainWindow.setResizable(true);
   mainWindow.setMinimumSize(900, 680);
   mainWindow.setSize(1000, 740, true);
@@ -208,6 +231,8 @@ ipcMain.on('window-wide-auth', () => {
 
 ipcMain.on('window-narrow-auth', () => {
   if (!mainWindow) return;
+  authNarrow = true;
+  leaveMaximized();
   mainWindow.setMinimumSize(440, 720);
   mainWindow.setSize(440, 720, true);
   mainWindow.setResizable(false);
