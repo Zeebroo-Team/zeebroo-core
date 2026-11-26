@@ -66,6 +66,7 @@
         {
           "label": "Tools",
           "items": [
+            { "type": "lg", "id": "rb-home-refresh",      "icon": "fa-arrows-rotate",      "label": "Refresh", "title": "Refresh dashboard data" },
             { "type": "lg", "id": "rb-home-settings",     "icon": "fa-gear",               "label": "Settings" },
             { "type": "lg", "id": "rb-home-help",         "icon": "fa-circle-question",    "label": "Help" }
           ]

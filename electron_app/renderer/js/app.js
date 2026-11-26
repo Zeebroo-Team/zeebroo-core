@@ -250,7 +250,7 @@ function applyDarkMode(dark) {
   }
   // Redraw the Business Flow chart if visible (its node colors are baked in at render time)
   if ($('#home-view-flow')?.style.display !== 'none' && document.getElementById('home-chart')) {
-    const storedBiz = state._bizName || $('#app-title').textContent.replace('Zeebroo POS — ', '').replace('Zeebroo POS', '').trim();
+    const storedBiz = state._bizName || $('#app-title').textContent.replace('Zeebroo POS - ', '').replace('Zeebroo POS', '').trim();
     renderBusinessChart(storedBiz || 'Your Business');
   }
 }
@@ -7310,7 +7310,7 @@ function applyFeatureVisibility() {
     const _hgF = $('#rb-home-expenses')?.closest('.ribbon-group');
     if (_hgF) _hgF.style.display = (mp('home_btn_expenses') || mp('home_btn_profit') || (bf('human_resources') && mp('home_btn_payroll'))) ? '' : 'none';
     const _hgT = $('#rb-home-settings')?.closest('.ribbon-group');
-    if (_hgT) _hgT.style.display = (mp('home_btn_settings') || mp('home_btn_help')) ? '' : 'none';
+    if (_hgT) _hgT.style.display = ''; // Refresh is always available, so the Tools group never hides
   }
 
   // ── Home KPI pills ──────────────────────────────────────────────────────────
@@ -7815,7 +7815,7 @@ function _applyFeatureResponsesInner(featRes, meRes) {
   // resolves, so its first render used hasFeature()'s permissive "not loaded
   // yet" default. Re-render now that the real feature set is known.
   if (!state.cashierMode && document.getElementById('home-chart')) {
-    const storedBiz = state._bizName || $('#app-title')?.textContent.replace('Zeebroo POS — ', '').replace('Zeebroo POS', '').trim();
+    const storedBiz = state._bizName || $('#app-title')?.textContent.replace('Zeebroo POS - ', '').replace('Zeebroo POS', '').trim();
     renderBusinessChart(storedBiz || 'Your Business');
   }
 }
@@ -9429,7 +9429,7 @@ function updateProfileUI(bizName, email, userName) {
   const displayName = userName || state._userName || bizName || 'Account';
   renderUserAvatar(document.getElementById('tpm-avatar'), state._userAvatar, displayName);
   document.getElementById('tpm-name').textContent   = displayName;
-  document.getElementById('tpm-email').textContent  = email || state._userEmail || '—';
+  document.getElementById('tpm-email').textContent  = email || state._userEmail || '-';
 }
 
 // Toggle between sign-in / sign-up / cashier
@@ -9603,7 +9603,7 @@ async function doCashierLogin() {
   state._userName  = d.cashier_name;
   state._userEmail = '';
   state._userAvatar = null;
-  $('#app-title').textContent = bizName ? `Zeebroo POS — ${bizName}` : 'Zeebroo POS';
+  $('#app-title').textContent = bizName ? `Zeebroo POS - ${bizName}` : 'Zeebroo POS';
   updateProfileUI(bizName, '', d.cashier_name);
   $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${escHtml(bizName)}`;
 
@@ -9937,7 +9937,7 @@ async function _obVerifyPaymentAndProceed(paymentId) {
 function _obFinishSignupAndEnterApp() {
   const b = state._bizName;
   if (b) {
-    $('#app-title').textContent = `Zeebroo POS — ${b}`;
+    $('#app-title').textContent = `Zeebroo POS - ${b}`;
     updateProfileUI(b, state._userEmail, state._userName);
     $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${b}`;
   }
@@ -10023,7 +10023,7 @@ $('#select-biz-btn').addEventListener('click', async () => {
   const bizName = $('#sel-business').selectedOptions[0]?.text || '';
   const email   = $('#login-email').value.trim();
   state._bizName = bizName;
-  $('#app-title').textContent = bizName ? `Zeebroo POS — ${bizName}` : 'Zeebroo POS';
+  $('#app-title').textContent = bizName ? `Zeebroo POS - ${bizName}` : 'Zeebroo POS';
   updateProfileUI(bizName, state._userEmail || email, state._userName);
   $('#status-branch').innerHTML = branchId
     ? `<i class="fa fa-code-branch"></i> Branch #${branchId}`
@@ -13355,7 +13355,7 @@ function loadHomeDashboard() {
   const hr  = new Date().getHours();
   const greet = hr < 12 ? 'Good morning' : hr < 17 ? 'Good afternoon' : 'Good evening';
   // Derive biz name from config (more reliable than title bar at this point)
-  const storedBiz = state._bizName || $('#app-title').textContent.replace('Zeebroo POS — ', '').replace('Zeebroo POS', '').trim();
+  const storedBiz = state._bizName || $('#app-title').textContent.replace('Zeebroo POS - ', '').replace('Zeebroo POS', '').trim();
   const bizName = storedBiz || '';
   $('#home-greeting').textContent = bizName ? `${greet}, ${bizName}` : greet;
   $('#home-date').textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -15274,6 +15274,13 @@ $('#rb-home-suppliers').addEventListener('click', () => openSuppliersModal());
 $('#rb-home-expenses').addEventListener('click',      () => { activateTab('home'); switchHomeView('expenses'); });
 $('#rb-home-profit').addEventListener('click',        () => { activateTab('home'); switchHomeView('profit'); });
 $('#rb-home-payroll').addEventListener('click',       () => { activateTab('home'); switchHomeView('payroll'); });
+$('#rb-home-refresh')?.addEventListener('click', () => {
+  activateTab('home');
+  loadHomeDashboard();
+  // Also reload whichever Home sub-view is currently open (Today, Analytics, Expenses, etc.)
+  const activeView = Array.from(document.querySelectorAll('.home-view')).find(v => v.style.display !== 'none');
+  activeView?.querySelector('.home-act-refresh')?.click();
+});
 $('#rb-home-settings').addEventListener('click',      () => openPosSettings());
 $('#rb-home-help').addEventListener('click',          () => showShortcutsModal());
 
@@ -29695,7 +29702,11 @@ async function _bizSwInit() {
 
   const curBiz = _bizSw.businesses.find(b => b.id === state.config.business_id)
                  || _bizSw.businesses[0];
-  $('#tb-biz-name').textContent = curBiz?.name || state._bizName || 'Business';
+  const curBizName = curBiz?.name || state._bizName || '';
+  if (curBizName) state._bizName = curBizName;
+  $('#tb-biz-name').textContent = curBizName || 'Business';
+  $('#app-title').textContent   = curBizName ? `Zeebroo POS - ${curBizName}` : 'Zeebroo POS';
+  if (curBizName) updateProfileUI(curBizName, state._userEmail, state._userName);
   $('#tb-biz-wrap').style.display = '';
   _bizSwRenderBizList();
 
@@ -29742,7 +29753,7 @@ async function _bizSwApplyBiz(biz, bizId) {
   await window.electronAPI.setConfig({ business_id: bizId, branch_id: null });
   state.config   = await window.electronAPI.getConfig();
   state._bizName = biz.name;
-  $('#app-title').textContent   = `Zeebroo POS — ${biz.name}`;
+  $('#app-title').textContent   = `Zeebroo POS - ${biz.name}`;
   $('#tb-biz-name').textContent = biz.name;
   updateProfileUI(biz.name, state._userEmail, state._userName);
   $('#status-branch').innerHTML = `<i class="fa fa-building"></i> ${biz.name}`;
