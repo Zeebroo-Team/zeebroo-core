@@ -760,6 +760,11 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         }
         .wiz-pkg-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--primary) 55%,var(--border));box-shadow:0 10px 28px -14px color-mix(in srgb,var(--primary) 45%,transparent);}
         .wiz-pkg-card--on{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 22%,transparent),0 12px 30px -14px color-mix(in srgb,var(--primary) 50%,transparent);}
+        /* Line the cards up: each card spans two rows of the grid (header + body) and shares them with its neighbours,
+           so every coloured header in a row is the same height and the bodies start on one line. */
+        @supports (grid-template-rows:subgrid){
+            .wiz-pkg-card{display:grid;grid-row:span 2;grid-template-rows:subgrid;row-gap:0;}
+        }
         .wiz-pkg-card:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 35%,transparent);}
 
         /* Coloured header: name, save badge, price */
@@ -786,6 +791,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
             border-radius:999px;background:rgba(255,255,255,.22);font-size:11.5px;font-weight:700;color:#fff;}
         .wiz-pkg-users-chip i{font-size:10.5px;}
         .wiz-pkg-users-extra{font-weight:500;color:rgba(255,255,255,.8);}
+        /* In the narrow cards put the extra-user price on its own line instead of squeezing it beside the limit */
+        .wiz-pkg-card .wiz-pkg-users-chip{flex-wrap:wrap;row-gap:2px;}
+        .wiz-pkg-card .wiz-pkg-users-extra{flex-basis:100%;padding-left:17px;}
 
         /* Selected check */
         .wiz-pkg-check{
@@ -799,6 +807,8 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         /* Body: module checklist + select button */
         .wiz-pkg-body{display:flex;flex-direction:column;flex:1;padding:18px 22px 20px;gap:12px;}
         .wiz-pkg-desc{font-size:12px;color:var(--muted);line-height:1.45;margin:0;}
+        /* In the card keep the description short so the module list stays in view; the full text is in the Details popup. */
+        .wiz-pkg-card .wiz-pkg-desc{display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;}
         .wiz-pkg-mod-title{font-size:10.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);}
         .wiz-pkg-mods{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px;}
         .wiz-pkg-mods li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text);line-height:1.3;}
@@ -813,6 +823,9 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-card:not(.wiz-pkg-card--on):hover .wiz-pkg-select{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 8%,#fff);}
         .wiz-pkg-card.wiz-pkg-card--on:hover .wiz-pkg-select{background:color-mix(in srgb,var(--primary) 88%,#000);border-color:color-mix(in srgb,var(--primary) 88%,#000);color:#fff;}
         .wiz-pkg-select .wiz-pkg-select-on{display:none;}
+        /* Keep "Choose plan ->" and "Details" on one line so the buttons don't grow into tall ovals */
+        .wiz-pkg-select,.wiz-pkg-details-btn{white-space:nowrap;}
+        .wiz-pkg-select .wiz-pkg-select-off{display:inline-flex;align-items:center;gap:8px;}
         .wiz-pkg-card--on .wiz-pkg-select{background:var(--primary);border-color:var(--primary);color:#fff;}
         .wiz-pkg-card--on .wiz-pkg-select i{color:#fff;}
         .wiz-pkg-card--on .wiz-pkg-select .wiz-pkg-select-off{display:none;}
@@ -821,7 +834,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         /* Actions row: select (whole card is clickable) + Details */
         .wiz-pkg-actions{margin-top:auto;display:flex;gap:8px;align-items:stretch;}
         .wiz-pkg-actions .wiz-pkg-select{flex:1;margin-top:0;}
-        .wiz-pkg-details-btn{flex-shrink:0;padding:10px 16px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);
+        .wiz-pkg-details-btn{flex-shrink:0;padding:10px 14px;border-radius:999px;border:1.5px solid var(--border);background:var(--card);
             color:var(--text);font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:border-color .18s ease;}
         .wiz-pkg-details-btn:hover{border-color:var(--text);}
         .wiz-pkg-more{background:none;border:0;border-bottom:2px solid var(--primary);border-radius:0;cursor:pointer;font-family:inherit;}
@@ -1251,7 +1264,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                         @elseif($pkg->is_trial)
                                             <span class="wiz-pkg-trial-note">No card needed · Recommended</span>
                                         @endif
-                                        <span class="wiz-pkg-users-chip"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra">&nbsp;· {{ $pkg->extraUserPriceLabel() }}</span>@endif</span>
+                                        <span class="wiz-pkg-users-chip"><i class="fa fa-users" aria-hidden="true"></i> {{ $pkg->userLimitLabel() }}@if($pkg->extraUserPriceLabel())<span class="wiz-pkg-users-extra">{{ $pkg->extraUserPriceLabel() }}</span>@endif</span>
                                     </div>
 
                                     <div class="wiz-pkg-body">
