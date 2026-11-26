@@ -19,7 +19,7 @@ Route::get('/', function () {
         return app(DashboardController::class)->dashboard(request());
     }
 
-    return view('auth::auth.login');
+    return redirect()->route('login');
 })->name('home');
 
 Route::middleware('auth')->group(function (): void {
