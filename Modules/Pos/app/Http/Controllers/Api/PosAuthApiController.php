@@ -13,6 +13,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 use Modules\Auth\Services\AuthService;
+use Modules\Auth\Services\DesktopGoogleHandoffService;
 use Modules\Auth\Services\EmailVerificationService;
 use Modules\Auth\Services\PasswordResetService;
 use Modules\Mail\Services\AutomatedEmailService;
@@ -470,6 +471,40 @@ class PosAuthApiController extends Controller
             'access_token' => $result['token'],
             'user' => $this->userPayload($result['user']),
             'business_id' => $result['business_id'],
+        ]);
+    }
+
+    /**
+     * POST /api/v1/pos/auth/google/exchange - swap the one-time code the
+     * browser handed to the desktop app (socibiz://oauth?code=…&state=…) after
+     * "Continue with Google" for a Bearer token. Same response shape as
+     * auth/token, plus `is_new_user` for accounts the Google sign-in just created.
+     */
+    public function googleExchange(Request $request, DesktopGoogleHandoffService $handoff): JsonResponse
+    {
+        $validated = $request->validate([
+            'code' => ['required', 'string', 'max:128'],
+            'state' => ['required', 'string', 'max:128'],
+            'device_name' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $result = $handoff->redeem($validated['code'], $validated['state']);
+
+        if ($result === null) {
+            return response()->json([
+                'message' => 'This Google sign-in has expired. Please try again.',
+            ], 401);
+        }
+
+        $user = $result['user'];
+        $deviceName = $validated['device_name'] ?? 'pos-api-client';
+        $token = $user->createToken($deviceName);
+
+        return response()->json([
+            'token_type' => 'Bearer',
+            'access_token' => $token->plainTextToken,
+            'user' => $this->userPayload($user),
+            'is_new_user' => $result['is_new_user'],
         ]);
     }
 

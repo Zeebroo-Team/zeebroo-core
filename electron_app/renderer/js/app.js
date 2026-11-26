@@ -10274,6 +10274,108 @@ async function doLogin() {
   await showBusinessStep();
 }
 
+// ── Google sign-in / sign-up ───────────────────────────────────────────────
+// main.js opens {web}/auth/google/desktop in the default browser. After Google,
+// the browser opens socibiz://oauth?code=…&state=…, main.js checks the state and
+// sends { code, state } (or { error }) here, and the code is swapped for a token.
+// A Google account with no Zeebroo account yet is created on the way (sign-up).
+let _googleWaitTimer = null;
+
+function _googleAlertEl() {
+  return $('#signup-card')?.style.display !== 'none' ? $('#signup-alert') : $('#login-alert');
+}
+
+function _googleSetWaiting(waiting) {
+  clearTimeout(_googleWaitTimer);
+  $$('.js-google-signin').forEach(btn => {
+    const lbl = btn.querySelector('.js-google-label');
+    if (!lbl) return;
+    if (!btn.dataset.label) btn.dataset.label = lbl.textContent;
+    lbl.textContent = waiting ? 'Continue in your browser…' : btn.dataset.label;
+  });
+  // Stays clickable so the user can start over if they closed the browser tab.
+  if (waiting) _googleWaitTimer = setTimeout(() => _googleSetWaiting(false), 5 * 60 * 1000);
+}
+
+async function startGoogleSignIn() {
+  const alert = _googleAlertEl();
+  if (!window.electronAPI.startGoogleSignIn) return;
+  const res = await window.electronAPI.startGoogleSignIn();
+  if (!res?.ok) {
+    alert.className = 'alert alert-error';
+    showAlert(alert, res?.message || 'Could not open your browser for Google sign-in.');
+    return;
+  }
+  alert.className = 'alert alert-success';
+  showAlert(alert, 'Finish signing in with Google in your browser, then come back here.');
+  _googleSetWaiting(true);
+}
+
+// The POS web app (/pos-app, browser-shim.js) has no deep-link bridge: hide Google there.
+if (!window.electronAPI?.startGoogleSignIn) {
+  $$('.js-google-signin, .js-google-only').forEach(el => { el.style.display = 'none'; });
+} else {
+  $$('.js-google-signin').forEach(btn => btn.addEventListener('click', e => { e.preventDefault(); startGoogleSignIn(); }));
+}
+
+window.electronAPI.onGoogleAuthResult?.(async ({ code, state: oauthState, error } = {}) => {
+  _googleSetWaiting(false);
+  // Already inside the app (e.g. a stale browser tab re-opened the link) - ignore.
+  if ($('#app-shell')?.style.display !== 'none' && state.config?.token) return;
+
+  const alert = _googleAlertEl();
+  alert.className = 'alert alert-error';
+  if (error || !code) { showAlert(alert, error || 'Google sign-in did not complete. Please try again.'); return; }
+
+  alert.className = 'alert alert-success';
+  showAlert(alert, 'Signing you in…');
+
+  const deviceName = state.config?.device_name || 'pos-desktop-1';
+  const res = await API.googleExchange(code, oauthState, deviceName);
+  const token = res.body?.access_token || res.body?.token;
+  if (res.status !== 200 || !token) {
+    alert.className = 'alert alert-error';
+    showAlert(alert, res.body?.message || `Google sign-in failed (${res.status})`);
+    return;
+  }
+
+  state._userName   = res.body?.user?.name  || null;
+  state._userEmail  = res.body?.user?.email || null;
+  state._userAvatar = res.body?.user?.avatar_url || null;
+  await window.electronAPI.setConfig({ token, business_id: null, branch_id: null });
+  state.config = await window.electronAPI.getConfig();
+
+  // Coming from the sign-up wizard: switch back to the sign-in card for the business step.
+  if ($('#signup-card')?.style.display !== 'none') showLogin();
+  $('#login-alert').style.display = 'none';
+  await showBusinessStep();
+});
+
+// A new account (Google sign-up, or one made on the website) has no business yet:
+// run the Add Business wizard from the sign-in screen before entering the app.
+function _openFirstBusinessWizard() {
+  window.electronAPI.wideAuth?.();
+  _bbwzOpen({ firstBusiness: true });
+}
+
+async function _firstBusinessCreated(biz) {
+  await window.electronAPI.setConfig({ business_id: Number(biz.id), branch_id: null });
+  state.config   = await window.electronAPI.getConfig();
+  state._bizName = biz.name;
+  _obFinishSignupAndEnterApp();
+}
+
+// Closed the first-business wizard without creating one: sign out again.
+async function _firstBusinessCancelled() {
+  await API.revokeToken().catch(() => {});
+  await window.electronAPI.setConfig({ token: null, business_id: null, branch_id: null });
+  state.config = await window.electronAPI.getConfig();
+  showLogin();
+  const alert = $('#login-alert');
+  alert.className = 'alert alert-error';
+  showAlert(alert, 'Create your first business to start using Zeebroo POS. Sign in again when you are ready.');
+}
+
 async function showBusinessStep() {
   const res = await API.businesses();
   console.log('[businesses] response', res.status, JSON.stringify(res.body).slice(0, 200));
@@ -10282,6 +10384,7 @@ async function showBusinessStep() {
     return;
   }
   const businesses = res.body?.data || [];
+  if (!businesses.length) { _openFirstBusinessWizard(); return; }
   const sel = $('#sel-business');
   sel.innerHTML = businesses.map(b => `<option value="${b.id}">${b.name}</option>`).join('');
 
@@ -30219,7 +30322,10 @@ document.addEventListener('click', e => {
 // ── Business onboarding wizard ─────────────────────────────────────────────
 const _bbwz = { step: 1, selectedCat: null, selectedFeatures: new Set(), cats: [], packages: [], selectedPackage: null, trialPkgId: null, pendingPaymentId: null, createdBusiness: null };
 
-function _bbwzOpen() {
+// opts.firstBusiness - opened from the sign-in screen for an account with no business
+// yet (see _openFirstBusinessWizard): creating one enters the app, closing signs out.
+function _bbwzOpen(opts = {}) {
+  _bbwz.firstBusiness = !!opts.firstBusiness;
   _bizSwClose();
   _bbwz.step = 1;
   _bbwz.selectedCat = null;
@@ -30259,6 +30365,10 @@ function _bbwzOpen() {
 
 function _bbwzClose() {
   $('#bbwz-overlay').style.display = 'none';
+  if (_bbwz.firstBusiness) {
+    _bbwz.firstBusiness = false;
+    _firstBusinessCancelled();
+  }
 }
 
 function _bbwzBuildCatGrid() {
@@ -30552,6 +30662,13 @@ async function _bbwzVerifyPaymentAndProceed(paymentId) {
 
 async function _bbwzFinishCreateAndClose() {
   const newBiz = _bbwz.createdBusiness;
+  if (_bbwz.firstBusiness) {
+    _bbwz.firstBusiness = false;
+    _bbwzClose();
+    if (newBiz) await _firstBusinessCreated(newBiz);
+    else await showBusinessStep();
+    return;
+  }
   if (newBiz) {
     _bizSw.businesses.push(newBiz);
     await _bizSwSwitchBiz(newBiz.id);
@@ -30560,7 +30677,8 @@ async function _bbwzFinishCreateAndClose() {
 }
 
 $('#bbwz-overlay').addEventListener('click', e => {
-  if (e.target === e.currentTarget) _bbwzClose();
+  // First-business mode: closing signs out, so only the Cancel button does it.
+  if (e.target === e.currentTarget && !_bbwz.firstBusiness) _bbwzClose();
 });
 
 $('#tb-biz-add-btn').addEventListener('click', () => _bbwzOpen());
