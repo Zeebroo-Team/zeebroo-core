@@ -53,7 +53,7 @@
             'highlights' => ['Recurring bill tracking', 'Due date and overdue alerts', 'Bill category organisation', 'Cash flow visibility'],
         ],
         ['key' => 'human_resources',      'label' => 'Human Resources',       'icon' => 'fa-users-gear',         'image' => 'hr-management.jpeg',            'desc' => 'Payroll, leave, attendance and employee management',
-            'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips — all in one place.',
+            'fullDesc'   => 'Manage your entire workforce from hire to payroll. Maintain employee records, configure job titles and departments, track attendance and leave balances, run payroll cycles, and issue payslips - all in one place.',
             'highlights' => ['Employee profiles and records', 'Attendance and leave tracking', 'Payroll processing and payslips', 'Department and role management'],
         ],
         ['key' => 'product_management',   'label' => 'Product Management',    'icon' => 'fa-boxes-stacked',      'image' => 'product-management.png',        'desc' => 'Product catalogue, pricing, variants and categories',
@@ -85,7 +85,7 @@
             'highlights' => ['REST API with scoped API keys', 'Webhook delivery for real-time events', 'Interactive API reference and sandbox', 'OAuth application management'],
         ],
         ['key' => 'ecommerce',            'label' => 'E-Commerce',           'icon' => 'fa-store',              'image' => 'ecommerce.webp',                'desc' => 'Online store website, web orders and delivery tracking',
-            'fullDesc'   => 'Sell online with your own store website. Publish products straight from your catalogue, set online prices and sale prices, configure shipping and payment options, and manage every web order from pending to delivered — all from the desktop E-Commerce tab.',
+            'fullDesc'   => 'Sell online with your own store website. Publish products straight from your catalogue, set online prices and sale prices, configure shipping and payment options, and manage every web order from pending to delivered - all from the desktop E-Commerce tab.',
             'highlights' => ['Ready-made online store website', 'Publish catalogue products with web prices', 'Cash on delivery and bank transfer checkout', 'Web order and delivery tracking'],
         ],
     ];
@@ -197,7 +197,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <div class="wh-intro-icon" aria-hidden="true"><i class="fa fa-warehouse"></i></div>
                         <p class="wh-intro-stepbadge">Step 1 of 2</p>
                         <h2 class="wh-intro-title" id="wh-intro-title">Multiple warehouses or branches?</h2>
-                        <p class="wh-intro-copy">Choose how many sites you operate. Next, you’ll add your primary location—we only show this onboarding once.</p>
+                        <p class="wh-intro-copy">Choose how many sites you operate. Next, you’ll add your primary location - we only show this onboarding once.</p>
                         <div class="wh-intro-switch-wrap">
                             <div class="wh-intro-labels">
                                 <span id="wh-intro-lbl-single" class="wh-intro-pill-strong">Single location</span>
@@ -1076,7 +1076,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     {{-- Step 1: Business name --}}
                     <div id="wizardStep1" class="wiz-slide">
                         <h2 class="wiz-card-title">What's your business name?</h2>
-                        <p class="wiz-card-sub">Use your public brand name — you can update it any time.</p>
+                        <p class="wiz-card-sub">Use your public brand name - you can update it any time.</p>
                         <div class="wiz-field">
                             <label for="wiz-name-input">Business name</label>
                             <input
@@ -1110,19 +1110,19 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                             <label>Business category</label>
                             @php
                                 $wizCatMeta = [
-                                    'education'             => ['icon'=>'fa-graduation-cap',     'desc'=>'Schools, tutoring centres & online courses',       'users'=>'2.4k','fullDesc'=>'Perfect for schools, colleges, tutoring centres, online course creators and training providers. Manage student billing cycles, staff payroll and HR, fee collection tracking, and promotional campaigns — all from a single workspace.','highlights'=>['Billing cycles for tuition & fees','Staff payroll and leave management','Course & session scheduling support','Promotional campaign tracking']],
+                                    'education'             => ['icon'=>'fa-graduation-cap',     'desc'=>'Schools, tutoring centres & online courses',       'users'=>'2.4k','fullDesc'=>'Perfect for schools, colleges, tutoring centres, online course creators and training providers. Manage student billing cycles, staff payroll and HR, fee collection tracking, and promotional campaigns - all from a single workspace.','highlights'=>['Billing cycles for tuition & fees','Staff payroll and leave management','Course & session scheduling support','Promotional campaign tracking']],
                                     'software_industry'     => ['icon'=>'fa-laptop-code',        'desc'=>'SaaS, agencies & app development studios',        'users'=>'1.8k','fullDesc'=>'Built for software companies, digital agencies, IT consultancies and app development studios. Track subscription revenue, manage developer payroll, handle vendor bills, and run targeted outreach campaigns without switching tools.','highlights'=>['Subscription & retainer billing','Developer & contractor payroll','Vendor and SaaS expense tracking','Client campaign management']],
-                                    'local_retail'          => ['icon'=>'fa-store',              'desc'=>'Boutiques, supermarkets & specialty shops',        'users'=>'5.1k','fullDesc'=>'Designed for brick-and-mortar retailers of all sizes — from neighbourhood boutiques to supermarkets. Run a full point-of-sale, manage inventory levels, track supplier bills, and keep your team paid on time.','highlights'=>['Point-of-sale with receipt printing','Real-time stock & inventory tracking','Supplier bill management','Staff scheduling and payroll']],
+                                    'local_retail'          => ['icon'=>'fa-store',              'desc'=>'Boutiques, supermarkets & specialty shops',        'users'=>'5.1k','fullDesc'=>'Designed for brick-and-mortar retailers of all sizes - from neighbourhood boutiques to supermarkets. Run a full point-of-sale, manage inventory levels, track supplier bills, and keep your team paid on time.','highlights'=>['Point-of-sale with receipt printing','Real-time stock & inventory tracking','Supplier bill management','Staff scheduling and payroll']],
                                     'food_beverage'         => ['icon'=>'fa-utensils',           'desc'=>'Restaurants, cafés, bakeries & catering',          'users'=>'4.3k','fullDesc'=>'Ideal for restaurants, cafés, bakeries, catering businesses and cloud kitchens. Manage table-side or counter POS, ingredient stock levels, supplier invoices, and kitchen staff payroll efficiently.','highlights'=>['Table & counter point-of-sale','Ingredient & menu stock control','Supplier invoice tracking','Kitchen staff payroll & HR']],
                                     'healthcare'            => ['icon'=>'fa-heart-pulse',        'desc'=>'Clinics, pharmacies & wellness centres',           'users'=>'3.2k','fullDesc'=>'Tailored for clinics, pharmacies, diagnostic labs and wellness centres. Handle patient billing at the counter, manage medical inventory, track utility and supplier bills, and administer medical staff HR seamlessly.','highlights'=>['Counter billing & receipt management','Medical stock & consumables tracking','Utility and supplier bill management','Doctor & staff payroll']],
                                     'finance'               => ['icon'=>'fa-landmark',           'desc'=>'Insurance brokers & financial consultants',        'users'=>'1.5k','fullDesc'=>'Suited for insurance agencies, financial advisory firms, accounting practices and investment consultants. Keep precise account ledgers, manage recurring service bills, run HR for your team, and coordinate client outreach campaigns.','highlights'=>['Multi-account ledger management','Recurring service bill tracking','Client outreach & campaign tools','Consultant payroll & HR']],
-                                    'creative_media'        => ['icon'=>'fa-palette',            'desc'=>'Design studios, photography & content creators',   'users'=>'2.1k','fullDesc'=>'For creative agencies, design studios, photographers, videographers and content creators. Invoice clients, track project expenses, manage freelancer payments, and schedule social media campaigns — in one place.','highlights'=>['Client project invoicing','Freelancer & staff payment tracking','Creative project expense management','Social media campaign scheduling']],
+                                    'creative_media'        => ['icon'=>'fa-palette',            'desc'=>'Design studios, photography & content creators',   'users'=>'2.1k','fullDesc'=>'For creative agencies, design studios, photographers, videographers and content creators. Invoice clients, track project expenses, manage freelancer payments, and schedule social media campaigns - in one place.','highlights'=>['Client project invoicing','Freelancer & staff payment tracking','Creative project expense management','Social media campaign scheduling']],
                                     'ecommerce'             => ['icon'=>'fa-cart-shopping',      'desc'=>'Online stores, dropshipping & marketplaces',       'users'=>'3.7k','fullDesc'=>'Optimised for e-commerce businesses, online stores, dropshippers and marketplace sellers. Manage your product catalogue, track warehouse stock, process online orders at the POS, and run promotional campaigns across channels.','highlights'=>['Product catalogue management','Warehouse & fulfilment stock tracking','Online order processing at POS','Multi-channel campaign management']],
                                     'manufacturing'         => ['icon'=>'fa-industry',           'desc'=>'Factories, workshops & production lines',          'users'=>'1.2k','fullDesc'=>'Built for manufacturers, factories, workshops and assembly operations. Track raw material inventory, manage production staff HR and payroll, handle supplier bills, and monitor finished goods stock levels with ease.','highlights'=>['Raw material & finished goods stock','Production staff HR & payroll','Supplier and utility bill tracking','Output and quality record management']],
                                     'real_estate'           => ['icon'=>'fa-house-chimney',      'desc'=>'Agents, property management & rentals',            'users'=>'890', 'fullDesc'=>'Designed for real estate agencies, property management firms and rental businesses. Track rental income and expenses, manage property-related bills, handle agent and staff HR, and run lead generation campaigns effectively.','highlights'=>['Rental income & expense tracking','Property bill and maintenance costs','Agent commission and staff payroll','Lead generation campaign management']],
                                     'nonprofit'             => ['icon'=>'fa-hand-holding-heart','desc'=>'Charities, NGOs & community organisations',        'users'=>'640', 'fullDesc'=>'Purpose-built for non-profits, charities, NGOs and community organisations. Track donations and operational budgets, manage volunteer and staff HR, handle utility bills, and run awareness campaigns for maximum outreach.','highlights'=>['Donation and grant budget tracking','Volunteer and staff HR management','Operational and utility bill tracking','Awareness campaign coordination']],
                                     'professional_services' => ['icon'=>'fa-briefcase',          'desc'=>'Law firms, consultants & accounting practices',    'users'=>'2.9k','fullDesc'=>'Optimised for law firms, management consultants, accounting practices and professional service providers. Manage retainer billing and client accounts, track professional bills, handle staff payroll, and coordinate business development campaigns.','highlights'=>['Retainer & time-based billing','Client account management','Professional expense tracking','Business development campaigns']],
-                                    'other'                 => ['icon'=>'fa-ellipsis',           'desc'=>'Anything that doesn\'t fit the categories above', 'users'=>'1.1k','fullDesc'=>'A flexible workspace for any business type not listed above. All core modules are available and can be customised to match your unique operational needs — from billing and HR to stock management and campaigns.','highlights'=>['Full module access with no restrictions','Customisable billing and HR setup','Flexible stock and product tracking','General-purpose campaign management']],
+                                    'other'                 => ['icon'=>'fa-ellipsis',           'desc'=>'Anything that doesn\'t fit the categories above', 'users'=>'1.1k','fullDesc'=>'A flexible workspace for any business type not listed above. All core modules are available and can be customised to match your unique operational needs - from billing and HR to stock management and campaigns.','highlights'=>['Full module access with no restrictions','Customisable billing and HR setup','Flexible stock and product tracking','General-purpose campaign management']],
                                 ];
                                 $wizFeatShortLabels = [
                                     'account_management'    => 'Accounts',
@@ -1193,7 +1193,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     {{-- Step 3: Package selection --}}
                     <div id="wizardStep3" style="display:none;">
                         <h2 class="wiz-card-title">Choose your package</h2>
-                        <p class="wiz-card-sub">Pick the plan that fits your business — its features unlock automatically on the next step.</p>
+                        <p class="wiz-card-sub">Pick the plan that fits your business - its features unlock automatically on the next step.</p>
 
                         <input type="hidden" name="package_id" id="wizPackageIdInput" value="{{ old('package_id') }}">
                         <div id="wizPkgNoSelErr" class="wiz-field-error" style="display:none;margin-bottom:12px;">Please select a package before continuing.</div>
@@ -1277,7 +1277,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                     </div>
                                 </div>
                             @empty
-                                <p class="wiz-cat-noresults">No packages are available right now — contact support.</p>
+                                <p class="wiz-cat-noresults">No packages are available right now - contact support.</p>
                             @endforelse
                         </div>
                         <p class="wiz-pkg-foot-note">Prices are per business, billed monthly. Cancel or change package any time.</p>
@@ -1286,7 +1286,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     {{-- Step 4: Feature preview (read-only, locked to the selected package) --}}
                     <div id="wizardStep4" style="display:none;">
                         <h2 class="wiz-card-title">What do you get?</h2>
-                        <p class="wiz-card-sub">These features are included in your selected package — they can't be edited here, but you can change packages any time from your account menu.</p>
+                        <p class="wiz-card-sub">These features are included in your selected package - they can't be edited here, but you can change packages any time from your account menu.</p>
                         <div class="wiz-feat-shell">
                             {{-- Left: search + grid --}}
                             <div class="wiz-feat-main">
@@ -1528,27 +1528,27 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <div class="wiz-pay-summary" id="wizPaySummary">
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Business</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryBusiness">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryBusiness">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Category</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryCategory">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryCategory">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Package</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryPackage">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryPackage">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Users included</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryUsers">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryUsers">-</span>
                             </div>
                             <div class="wiz-pay-row" id="wizPaySummaryExtraUserRow" style="display:none;">
                                 <span class="wiz-pay-row-label">Additional users</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryExtraUser">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryExtraUser">-</span>
                             </div>
                             <div class="wiz-pay-row">
                                 <span class="wiz-pay-row-label">Data storage</span>
-                                <span class="wiz-pay-row-value" id="wizPaySummaryStorage">—</span>
+                                <span class="wiz-pay-row-value" id="wizPaySummaryStorage">-</span>
                             </div>
                             <div class="wiz-pay-divider"></div>
                             <div class="wiz-pay-row wiz-pay-row--total">
@@ -1556,7 +1556,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                 <span class="wiz-pay-row-value" id="wizPaySummaryTotal">$0.00</span>
                             </div>
                             <div class="wiz-pay-cycle-badge" id="wizPaySummaryCycle">
-                                <i class="fa fa-rotate" aria-hidden="true"></i> Billed monthly — recurring subscription
+                                <i class="fa fa-rotate" aria-hidden="true"></i> Billed monthly - recurring subscription
                             </div>
                         </div>
 
@@ -1569,7 +1569,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         </div>
                         <div class="wiz-pay-gateway" id="wizPayFreeNote" style="display:none;">
                             <div class="wiz-pay-gateway-head"><i class="fa fa-gift" aria-hidden="true"></i><span>No payment required</span></div>
-                            <p class="wiz-pay-gateway-sub" id="wizPayFreeNoteText">Your selected package is free — click Finish setup below to activate your workspace right away.</p>
+                            <p class="wiz-pay-gateway-sub" id="wizPayFreeNoteText">Your selected package is free - click Finish setup below to activate your workspace right away.</p>
                         </div>
 
                         @error('payment')
@@ -1715,14 +1715,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 <div class="wiz-storage-modal__head-ico"><i class="fa fa-file-contract" aria-hidden="true"></i></div>
                 <div style="flex:1;min-width:0;">
                     <h3 class="wiz-storage-modal__title" id="wizStorageAgreementTitle">Data Storage Agreement</h3>
-                    <p class="wiz-storage-modal__subtitle" id="wizStorageAgreementSubtitle">SociBiz Online Storage — Terms &amp; Conditions</p>
+                    <p class="wiz-storage-modal__subtitle" id="wizStorageAgreementSubtitle">SociBiz Online Storage - Terms &amp; Conditions</p>
                 </div>
                 <button type="button" class="wiz-storage-modal__close" id="wizStorageAgreementClose" aria-label="Close">
                     <i class="fa fa-xmark" aria-hidden="true"></i>
                 </button>
             </div>
             <div class="wiz-storage-modal__body" id="wizStorageAgreementBody">
-                <p>By choosing SociBiz Online Storage, you agree that your business data — including transactions, employee records, customer information, and reports — will be stored securely on SociBiz servers.</p>
+                <p>By choosing SociBiz Online Storage, you agree that your business data - including transactions, employee records, customer information, and reports - will be stored securely on SociBiz servers.</p>
                 <p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p>
                 <p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p>
                 <p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p>
@@ -1963,7 +1963,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
     @if($errors->has('payment') || $pendingPayment)
         @include('partials.payment-attention-bar', [
             'title' => $errors->first('payment') ?: 'Your subscription payment needs attention.',
-            'message' => $pendingPayment ? 'Your business setup is saved — complete payment to activate your monthly subscription.' : null,
+            'message' => $pendingPayment ? 'Your business setup is saved - complete payment to activate your monthly subscription.' : null,
             'payment' => $pendingPayment,
         ])
     @endif
@@ -2774,13 +2774,13 @@ var _wizStoragePendingType = 'online';
 var _wizStorageContent = {
     online: {
         title:    'Data Storage Agreement',
-        subtitle: 'SociBiz Online Storage — Terms & Conditions',
-        body:     '<p>By choosing SociBiz Online Storage, you agree that your business data — including transactions, employee records, customer information, and reports — will be stored securely on SociBiz servers.</p><p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p><p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p><p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p><p><strong>Uptime commitment:</strong> We target 99.9% monthly uptime. Scheduled maintenance windows are announced at least 48 hours in advance.</p>',
+        subtitle: 'SociBiz Online Storage - Terms & Conditions',
+        body:     '<p>By choosing SociBiz Online Storage, you agree that your business data - including transactions, employee records, customer information, and reports - will be stored securely on SociBiz servers.</p><p><strong>What we store:</strong> Business profiles, financial transactions, payroll data, customer records, product catalogues, sales history, and operational reports.</p><p><strong>How we protect it:</strong> All data is encrypted at rest (AES-256) and in transit (TLS 1.3). Daily automated backups are retained for 30 days. Access is restricted to your authenticated team members only.</p><p><strong>Your rights:</strong> You may request a full export or deletion of your data at any time. We will never sell or share your data with third parties without your explicit consent.</p><p><strong>Uptime commitment:</strong> We target 99.9% monthly uptime. Scheduled maintenance windows are announced at least 48 hours in advance.</p>',
         label:    'I have read and agree to the Data Storage Terms &amp; Conditions',
     },
     self_hosted: {
         title:    'Self-Hosted Data Agreement',
-        subtitle: 'SociBiz Self-Hosted — Data Responsibility Terms',
+        subtitle: 'SociBiz Self-Hosted - Data Responsibility Terms',
         body:     '<p>By choosing Self-Hosted Storage, you take full responsibility for the security, integrity, availability, and backup of all business data stored on your own server or private infrastructure.</p><p><strong>Your responsibilities:</strong> You must ensure your server is properly secured with firewall rules, authentication controls, and access restrictions. Regular backups and a disaster recovery plan are entirely your obligation.</p><p><strong>Data Vault connection:</strong> Enabling the Data Vault connects your SociBiz workspace to your self-hosted server using the API token you provide. All data transmitted between SociBiz and your vault is encrypted in transit (TLS 1.3).</p><p><strong>Software maintenance:</strong> You are responsible for keeping your server software, OS, and dependencies up to date to prevent security vulnerabilities.</p><p><strong>Liability:</strong> SociBiz is not liable for any data loss, breach, or service unavailability arising from your self-hosted configuration. Support is limited to configuration guidance; SociBiz cannot access or manage your infrastructure directly.</p>',
         label:    'I understand and accept responsibility for my self-hosted data',
     },
@@ -2909,11 +2909,11 @@ function openWizStorageAgreementModal(type) {
     }
     const guideMessages = {
         1: { step: 'Step 1 of 7', text: 'Hi there! What do you call your business? Use the name your customers already know.' },
-        2: { step: 'Step 2 of 7', text: 'Pick the category that best describes what you do — it helps me set up the right modules for you!' },
-        3: { step: 'Step 3 of 7', text: 'Pick a package — its features unlock automatically on the next step.' },
-        4: { step: 'Step 4 of 7', text: 'Here are the features included in your package. Required ones stay on — you can change plans any time later.' },
-        5: { step: 'Step 5 of 7', text: 'Almost done! Tell me where you operate — single location or multiple branches?' },
-        6: { step: 'Step 6 of 7', text: 'Choose how your data is stored — our secure cloud or your own server.' },
+        2: { step: 'Step 2 of 7', text: 'Pick the category that best describes what you do - it helps me set up the right modules for you!' },
+        3: { step: 'Step 3 of 7', text: 'Pick a package - its features unlock automatically on the next step.' },
+        4: { step: 'Step 4 of 7', text: 'Here are the features included in your package. Required ones stay on - you can change plans any time later.' },
+        5: { step: 'Step 5 of 7', text: 'Almost done! Tell me where you operate - single location or multiple branches?' },
+        6: { step: 'Step 6 of 7', text: 'Choose how your data is stored - our secure cloud or your own server.' },
         7: { step: 'Step 7 of 7', text: 'Last step! Review your total and complete payment to activate your monthly subscription.' },
     };
     function updateGuide(num) {
@@ -3179,7 +3179,7 @@ function openWizStorageAgreementModal(type) {
                 labels.map(function (l) { return '<li>' + escPkg(l) + '</li>'; }).join('');
 
             document.getElementById('wizPkgModalSelectLbl').textContent =
-                card.classList.contains('wiz-pkg-card--on') ? 'Selected — continue' : (isTrial ? 'Start free trial' : 'Choose this plan');
+                card.classList.contains('wiz-pkg-card--on') ? 'Selected - continue' : (isTrial ? 'Start free trial' : 'Choose this plan');
             pkgModal.hidden = false;
             document.addEventListener('keydown', pkgModalEsc);
         }
@@ -3223,13 +3223,13 @@ function openWizStorageAgreementModal(type) {
     function populateWizPaymentSummary() {
         const bizNameInput = wizardForm.querySelector('input[name="name"]');
         const bizNameEl = document.getElementById('wizPaySummaryBusiness');
-        if (bizNameEl) bizNameEl.textContent = (bizNameInput && bizNameInput.value.trim()) || '—';
+        if (bizNameEl) bizNameEl.textContent = (bizNameInput && bizNameInput.value.trim()) || '-';
 
         const catCard = wizardForm.querySelector('.wiz-cat-card--on');
         const catNameEl = document.getElementById('wizPaySummaryCategory');
         if (catNameEl) {
             const catNameNode = catCard ? catCard.querySelector('.wiz-cat-name') : null;
-            catNameEl.textContent = catNameNode ? catNameNode.textContent.trim() : '—';
+            catNameEl.textContent = catNameNode ? catNameNode.textContent.trim() : '-';
         }
 
         const pkgIdInput = document.getElementById('wizPackageIdInput');
@@ -3247,11 +3247,11 @@ function openWizStorageAgreementModal(type) {
 
         let isFree = true;
         let amount = 0;
-        let pkgName = '—';
+        let pkgName = '-';
         let symbol = '$';
 
         if (pkgCard) {
-            pkgName = pkgCard.getAttribute('data-pkg-name') || '—';
+            pkgName = pkgCard.getAttribute('data-pkg-name') || '-';
             isFree = pkgCard.getAttribute('data-pkg-free') === '1';
             symbol = pkgCard.getAttribute('data-pkg-currency-symbol') || '$';
             const price    = parseFloat(pkgCard.getAttribute('data-pkg-price') || '0');
@@ -3266,15 +3266,15 @@ function openWizStorageAgreementModal(type) {
         if (freeNoteText) {
             freeNoteText.textContent = trialDays
                 ? 'Your free trial runs for ' + trialDays + ' days with no card needed. Before it ends, choose a plan to keep going.'
-                : 'Your selected package is free — click Finish setup below to activate your workspace right away.';
+                : 'Your selected package is free - click Finish setup below to activate your workspace right away.';
         }
-        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial)' : (isFree ? ' (Free)' : ''))) : '—';
+        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial)' : (isFree ? ' (Free)' : ''))) : '-';
 
         const usersEl       = document.getElementById('wizPaySummaryUsers');
         const extraUserRow  = document.getElementById('wizPaySummaryExtraUserRow');
         const extraUserEl   = document.getElementById('wizPaySummaryExtraUser');
         const extraUserText = pkgCard ? (pkgCard.getAttribute('data-pkg-extra-user-label') || '') : '';
-        if (usersEl) usersEl.textContent = pkgCard ? (pkgCard.getAttribute('data-pkg-users-label') || '—') : '—';
+        if (usersEl) usersEl.textContent = pkgCard ? (pkgCard.getAttribute('data-pkg-users-label') || '-') : '-';
         if (extraUserEl) extraUserEl.textContent = extraUserText;
         if (extraUserRow) extraUserRow.style.display = extraUserText ? 'flex' : 'none';
         if (totalEl)   totalEl.textContent   = isFree ? (symbol + '0.00') : (symbol + amount.toFixed(2) + ' / mo');

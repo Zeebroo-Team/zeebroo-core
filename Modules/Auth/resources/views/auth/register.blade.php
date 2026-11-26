@@ -65,8 +65,9 @@
                 </div>
                 <div class="register-form__actions">
                     <button type="button" class="auth-btn auth-btn--secondary register-form__back" id="registerBackBtn">{{ __('Back') }}</button>
-                    <button type="submit" class="auth-btn register-form__submit">{{ __('Create account') }}</button>
+                    <button type="submit" class="auth-btn register-form__submit"><span class="register-form__submit-label">{{ __('Create account') }}</span></button>
                 </div>
+                <p class="register-form__status" id="registerStatus" role="status" aria-live="polite" hidden></p>
             </div>
         </form>
         @if(! empty($googleAuthConfigured))
@@ -106,7 +107,16 @@
         .auth-btn--secondary{background:transparent;color:var(--text);border-color:rgba(18,18,18,.22);}
         .auth-btn--secondary:hover{background:var(--card);color:var(--text);border-color:var(--ink);}
         .register-form__actions .auth-btn[disabled]{opacity:.6;cursor:not-allowed;pointer-events:none;}
-        .register-form__submit{display:inline-flex;align-items:center;justify-content:center;gap:8px;}
+        .register-form__submit{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-width:0;white-space:nowrap;}
+        .register-form__submit-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+        .register-form__submit .fa-spinner{flex:0 0 auto;}
+        /* Keep the primary button looking primary while busy; only the Back button dims. */
+        .register-form__actions .register-form__submit[aria-busy="true"]{opacity:1;cursor:progress;}
+        .register-form__status{display:flex;align-items:center;justify-content:center;gap:8px;margin:12px 0 0;font-size:13px;color:var(--muted);text-align:center;}
+        .register-form__status[hidden]{display:none;}
+        .register-form__status::before{content:"";width:6px;height:6px;border-radius:999px;background:var(--zee);animation:registerPulse 1.2s ease-in-out infinite;}
+        @keyframes registerPulse{0%,100%{opacity:.35;transform:scale(.8);}50%{opacity:1;transform:scale(1.15);}}
+        @media (prefers-reduced-motion:reduce){.register-form__status::before{animation:none;}}
     </style>
 @endpush
 
@@ -184,6 +194,14 @@
         var submitBtn = form.querySelector('.register-form__submit');
         var backBtn = document.getElementById('registerBackBtn');
         var submitLabel = submitBtn ? submitBtn.innerHTML : '';
+        var statusEl = document.getElementById('registerStatus');
+        var statusMessages = {!! json_encode([
+            __('Creating your account…'),
+            __('Setting up your workspace…'),
+            __('Securing your account…'),
+            __('Almost there…'),
+        ]) !!};
+        var statusTimer = null;
 
         function setSubmitting(on) {
             if (!submitBtn) return;
@@ -191,8 +209,25 @@
             if (backBtn) backBtn.disabled = on;
             submitBtn.setAttribute('aria-busy', on ? 'true' : 'false');
             submitBtn.innerHTML = on
-                ? '<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> ' + {!! json_encode(__('Creating account…')) !!}
+                ? '<i class="fa fa-spinner fa-spin" aria-hidden="true"></i><span class="register-form__submit-label">' + {!! json_encode(__('Creating…')) !!} + '</span>'
                 : submitLabel;
+
+            if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
+            if (!statusEl) return;
+            if (on) {
+                var i = 0;
+                statusEl.textContent = statusMessages[0];
+                statusEl.hidden = false;
+                statusTimer = setInterval(function () {
+                    if (i < statusMessages.length - 1) {
+                        i++;
+                        statusEl.textContent = statusMessages[i];
+                    }
+                }, 1800);
+            } else {
+                statusEl.hidden = true;
+                statusEl.textContent = '';
+            }
         }
 
         form.addEventListener('submit', function (e) {
