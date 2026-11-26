@@ -542,11 +542,14 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         }
 
         /* Footer note */
+        /* "Secure" badge pinned to the bottom of the step sidebar */
         .wiz-footer-note{
-            position:relative;z-index:1;margin-top:22px;font-size:13px;
-            color:var(--muted);text-align:center;display:flex;align-items:center;
-            justify-content:center;gap:6px;flex-shrink:0;
+            position:absolute;left:28px;right:28px;bottom:28px;margin:0;
+            display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:12px;
+            font-size:12px;font-weight:600;line-height:1.35;color:var(--muted);
+            background:color-mix(in srgb,var(--muted) 8%,transparent);
         }
+        .wiz-footer-note i{color:#16a34a;font-size:12px;flex-shrink:0;}
 
         /* Step slide animations */
         @keyframes wizSlideIn{from{opacity:0;transform:translateX(20px);}to{opacity:1;transform:translateX(0);}}
@@ -879,6 +882,78 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
         .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-primary:hover{background:#15803d;box-shadow:0 6px 16px -8px rgba(22,163,74,.6);}
         .wiz-pkg-modal .wiz-pkg-theme--trial .wiz-cat-modal__footer .wiz-btn-back:hover{border-color:#16a34a;background:rgba(22,163,74,.06);}
 
+        /* Free trial: "which package do you want to try?" picker */
+        .wiz-trial-modal .wiz-cat-modal__box{max-width:1080px;}
+        .wiz-trial-modal__head{flex-shrink:0;padding:24px 64px 18px 26px;color:#fff;background:linear-gradient(160deg,#4ade80,#15803d);}
+        .wiz-trial-modal__kicker{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;background:#fff;color:#15803d;
+            font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}
+        .wiz-trial-modal__title{margin:10px 0 4px;font-size:22px;font-weight:800;letter-spacing:-.02em;color:#fff;}
+        .wiz-trial-modal__sub{margin:0;font-size:13px;line-height:1.5;color:rgba(255,255,255,.9);}
+        .wiz-trial-modal .wiz-cat-modal__close{background:rgba(255,255,255,.75);border-color:transparent;color:#141414;}
+        .wiz-trial-modal__body{overflow-y:auto;padding:20px 26px;flex:1;min-height:0;}
+        .wiz-trial-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;align-items:stretch;}
+        .wiz-trial-opt{position:relative;display:flex;flex-direction:column;gap:10px;padding:18px;border-radius:16px;border:1.5px solid var(--border);
+            background:var(--card);cursor:pointer;text-align:left;font-family:inherit;color:var(--text);transition:border-color .18s,box-shadow .18s;}
+        .wiz-trial-modal .wiz-trial-opt:hover,.wiz-trial-modal .wiz-trial-opt:focus{border-color:#16a34a;background:rgba(22,163,74,.06);color:var(--text);transform:none;}
+        .wiz-trial-modal .wiz-trial-opt.wiz-trial-opt--on{background:rgba(22,163,74,.08);}
+        .wiz-trial-opt:focus-visible{outline:none;box-shadow:0 0 0 3px rgba(22,163,74,.3);}
+        .wiz-trial-opt--on{border-color:#16a34a;box-shadow:0 0 0 3px rgba(22,163,74,.22);}
+        .wiz-trial-opt__radio{position:absolute;top:16px;right:16px;width:20px;height:20px;border-radius:50%;border:2px solid var(--border);
+            display:grid;place-items:center;color:#fff;font-size:10px;}
+        .wiz-trial-opt__radio i{opacity:0;}
+        .wiz-trial-opt--on .wiz-trial-opt__radio{background:#16a34a;border-color:#16a34a;}
+        .wiz-trial-opt--on .wiz-trial-opt__radio i{opacity:1;}
+        .wiz-trial-opt__name{font-size:17px;font-weight:800;letter-spacing:-.01em;padding-right:28px;}
+        .wiz-trial-opt__price{font-size:12.5px;color:var(--muted);}
+        .wiz-trial-opt__price strong{color:var(--text);font-weight:700;}
+        .wiz-trial-opt__users{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);}
+        .wiz-trial-opt__desc{margin:0;font-size:12.5px;line-height:1.5;color:var(--muted);}
+        .wiz-trial-opt .wiz-pkg-mods{gap:7px;}
+        .wiz-trial-opt .wiz-pkg-mods li{font-size:12.5px;}
+        .wiz-trial-opt .wiz-pkg-mods li::before{background:#16a34a;color:#fff;}
+        .wiz-trial-modal__err{margin:0 0 12px;}
+        .wiz-trial-modal .wiz-cat-modal__footer{align-items:center;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary{border-radius:999px;width:auto;background:#16a34a;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary:hover{background:#15803d;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary:disabled{opacity:.5;cursor:not-allowed;}
+        .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-back{border-radius:999px;}
+        .wiz-trial-modal__note{margin-right:auto;font-size:12px;color:var(--muted);}
+        @media(max-width:600px){
+            .wiz-trial-modal.wiz-cat-modal{padding:10px;}
+            .wiz-trial-modal .wiz-cat-modal__box{max-height:calc(100vh - 20px);max-height:calc(100dvh - 20px);border-radius:16px;}
+            .wiz-trial-modal__head{padding:16px 52px 14px 18px;}
+            .wiz-trial-modal .wiz-cat-modal__close{top:12px;right:12px;}
+            .wiz-trial-modal__kicker{font-size:10px;}
+            .wiz-trial-modal__title{margin:8px 0 2px;font-size:17px;line-height:1.25;}
+            .wiz-trial-modal__sub{font-size:12px;line-height:1.4;}
+            .wiz-trial-modal__body{padding:14px;}
+            .wiz-trial-grid{grid-template-columns:1fr;gap:10px;}
+            .wiz-trial-opt{padding:14px;gap:8px;}
+            .wiz-trial-opt__name{font-size:15.5px;}
+            .wiz-trial-opt__desc{font-size:12px;}
+            .wiz-trial-opt .wiz-pkg-mods{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;}
+            .wiz-trial-opt .wiz-pkg-mods li{font-size:12px;gap:7px;}
+            .wiz-trial-modal .wiz-cat-modal__footer{flex-wrap:wrap;padding:12px 14px;}
+            .wiz-trial-modal__note{flex-basis:100%;margin:0 0 2px;text-align:center;font-size:11.5px;}
+            .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-back{flex:0 0 auto;}
+            .wiz-trial-modal .wiz-cat-modal__footer .wiz-btn-primary{flex:1 1 auto;justify-content:center;min-width:0;}
+        }
+        @media(max-width:360px){
+            .wiz-trial-opt .wiz-pkg-mods{grid-template-columns:1fr;}
+        }
+        /* Trial card: which package is being tried */
+        .wiz-pkg-trial-pick{display:none;align-items:center;flex-wrap:nowrap;gap:8px;padding:9px 12px;border-radius:12px;font-size:12.5px;
+            line-height:1.35;background:rgba(22,163,74,.08);color:#15803d;}
+        .wiz-pkg-trial-pick > i{flex-shrink:0;}
+        .wiz-pkg-trial-pick > span{flex:1 1 auto;min-width:0;}
+        .wiz-pkg-trial-pick strong{font-weight:800;}
+        .wiz-pkg-card .wiz-pkg-trial-pick button,
+        .wiz-pkg-card .wiz-pkg-trial-pick button:hover{flex-shrink:0;width:auto;margin:0;padding:3px 10px;border:1.5px solid rgba(22,163,74,.45);
+            border-radius:999px;background:#fff;box-shadow:none;transform:none;font:inherit;font-size:12px;font-weight:700;color:#15803d;
+            text-decoration:none;cursor:pointer;line-height:1.3;}
+        .wiz-pkg-card .wiz-pkg-trial-pick button:hover{border-color:#16a34a;background:#16a34a;color:#fff;}
+        .wiz-pkg-card--on .wiz-pkg-trial-pick.is-set{display:flex;}
+
         /* Category details modal */
         .wiz-cat-modal{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}
         .wiz-cat-modal[hidden]{display:none;}
@@ -1061,6 +1136,7 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                     <div class="wiz-step-dot" id="wizDot7">7</div>
                     <span class="wiz-step-lbl" id="wizLbl7">Payment</span>
                 </div>
+                <p class="wiz-footer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your data is secure and private.</p>
             </div>
 
             {{-- Card --}}
@@ -1209,8 +1285,10 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                         <p class="wiz-card-sub">Pick the plan that fits your business - its features unlock automatically on the next step.</p>
 
                         <input type="hidden" name="package_id" id="wizPackageIdInput" value="{{ old('package_id') }}">
+                        <input type="hidden" name="trial_package_id" id="wizTrialPackageIdInput" value="{{ old('trial_package_id') }}">
                         <div id="wizPkgNoSelErr" class="wiz-field-error" style="display:none;margin-bottom:12px;">Please select a package before continuing.</div>
                         @error('package_id')<div class="wiz-field-error" style="margin-bottom:12px;">{{ $message }}</div>@enderror
+                        @error('trial_package_id')<div class="wiz-field-error" style="margin-bottom:12px;">{{ $message }}</div>@enderror
 
                         <div class="wiz-pkg-grid">
                             @forelse(($packages ?? []) as $pkg)
@@ -1271,14 +1349,31 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                                         @if($pkg->description && ! $pkg->is_trial)
                                             <p class="wiz-pkg-desc">{{ $pkg->description }}</p>
                                         @endif
+                                        @if($pkg->is_trial)
+                                            @php $trialChoiceNames = collect($packages ?? [])->reject(fn ($p) => $p->is_trial)->pluck('name')->all(); @endphp
+                                            <div class="wiz-pkg-mod-title">Try any package free</div>
+                                            <ul class="wiz-pkg-mods">
+                                                @foreach($trialChoiceNames as $choiceName)
+                                                    <li>{{ $choiceName }}</li>
+                                                @endforeach
+                                            </ul>
+                                        @else
                                         <div class="wiz-pkg-mod-title">{{ count($pkgLabels) }} {{ count($pkgLabels) === 1 ? 'module' : 'modules' }} included</div>
                                         <ul class="wiz-pkg-mods">
                                             @foreach(array_slice($pkgLabels, 0, $pkgShowMods) as $label)
                                                 <li>{{ $label }}</li>
                                             @endforeach
                                         </ul>
-                                        @if(count($pkgLabels) > $pkgShowMods)
+                                        @endif
+                                        @if(! $pkg->is_trial && count($pkgLabels) > $pkgShowMods)
                                             <button type="button" class="wiz-pkg-more" data-pkg-details>+{{ count($pkgLabels) - $pkgShowMods }} more modules</button>
+                                        @endif
+                                        @if($pkg->is_trial)
+                                            <div class="wiz-pkg-trial-pick" id="wizTrialPickNote">
+                                                <i class="fa fa-flask" aria-hidden="true"></i>
+                                                <span>Trying <strong id="wizTrialPickName"></strong> features</span>
+                                                <button type="button" data-trial-change>Change</button>
+                                            </div>
                                         @endif
                                         <div class="wiz-pkg-actions">
                                             <span class="wiz-pkg-select" aria-hidden="true">
@@ -1663,7 +1758,6 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 </form>
             </div>
 
-            <p class="wiz-footer-note"><i class="fa fa-lock" aria-hidden="true"></i> Your data is secure and private.</p>
         </div>
     </div>
 
@@ -1778,6 +1872,34 @@ html.wh-intro-html-noscroll,html.wh-intro-html-noscroll body{overflow:hidden;hei
                 </button>
                 <button type="button" class="wiz-btn-primary" id="wizPkgModalSelectBtn">
                     <i class="fa fa-check" aria-hidden="true"></i> <span id="wizPkgModalSelectLbl">Choose this plan</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    {{-- Free trial: pick which package's features to try (filled from the non-trial cards) --}}
+    <div id="wizTrialModal" class="wiz-cat-modal wiz-trial-modal" hidden aria-modal="true" role="dialog" aria-labelledby="wizTrialModalTitle">
+        <div class="wiz-cat-modal__backdrop" data-trial-modal-close></div>
+        <div class="wiz-cat-modal__box">
+            <button type="button" class="wiz-cat-modal__close" data-trial-modal-close aria-label="Close">
+                <i class="fa fa-xmark" aria-hidden="true"></i>
+            </button>
+            <div class="wiz-trial-modal__head">
+                <span class="wiz-trial-modal__kicker"><i class="fa fa-gift" aria-hidden="true"></i> Free trial</span>
+                <h3 class="wiz-trial-modal__title" id="wizTrialModalTitle">Which package do you want to try for free?</h3>
+                <p class="wiz-trial-modal__sub" id="wizTrialModalSub">Pick one package. Only its features are unlocked during your free trial - no card needed.</p>
+            </div>
+            <div class="wiz-trial-modal__body">
+                <div id="wizTrialModalErr" class="wiz-field-error wiz-trial-modal__err" style="display:none;">Please pick a package to try.</div>
+                <div class="wiz-trial-grid" id="wizTrialGrid" role="radiogroup" aria-labelledby="wizTrialModalTitle"></div>
+            </div>
+            <div class="wiz-cat-modal__footer">
+                <span class="wiz-trial-modal__note">You can switch to any plan before the trial ends.</span>
+                <button type="button" class="wiz-btn-back" data-trial-modal-close>
+                    <i class="fa fa-arrow-left" aria-hidden="true"></i> Back
+                </button>
+                <button type="button" class="wiz-btn-primary" id="wizTrialModalConfirm" disabled>
+                    <i class="fa fa-check" aria-hidden="true"></i> <span id="wizTrialModalConfirmLbl">Start free trial</span>
                 </button>
             </div>
         </div>
@@ -2986,6 +3108,13 @@ function openWizStorageAgreementModal(type) {
                     if (firstPkgCard) firstPkgCard.focus();
                     return;
                 }
+                // Free trial needs the package to try.
+                const trialPkgInput = document.getElementById('wizTrialPackageIdInput');
+                const selCard = wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgInput.value + '"]');
+                if (selCard && selCard.classList.contains('wiz-pkg-card--trial') && trialPkgInput && !trialPkgInput.value) {
+                    if (typeof window.wizOpenTrialPicker === 'function') window.wizOpenTrialPicker();
+                    return;
+                }
                 if (pkgErr) pkgErr.style.display = 'none';
             }
             if (target === 5) {
@@ -3125,12 +3254,14 @@ function openWizStorageAgreementModal(type) {
         }
         // Keeps the footer chip (shown on every step from Package onward) in
         // sync with whichever package is currently selected.
-        function updateWizPkgSummary(card) {
+        function updateWizPkgSummary(card, triedCard) {
             const summaries = document.querySelectorAll('.wiz-pkg-summary');
             if (!summaries.length) return;
+            const name = (card ? (card.getAttribute('data-pkg-name') || '') : '')
+                + (triedCard ? ' - ' + (triedCard.getAttribute('data-pkg-name') || '') + ' features' : '');
             const html = card
                 ? '<i class="fa fa-box-open" aria-hidden="true"></i>'
-                    + '<span class="wiz-pkg-summary-name">' + escPkg(card.getAttribute('data-pkg-name') || '') + '</span>'
+                    + '<span class="wiz-pkg-summary-name">' + escPkg(name) + '</span>'
                     + '<div class="wiz-pkg-price-row">' + pkgPriceHtml(card) + '</div>'
                     + pkgUsersHtml(card)
                 : '';
@@ -3152,19 +3283,124 @@ function openWizStorageAgreementModal(type) {
                 usersExtra.style.display = extraText ? 'flex' : 'none';
             }
         }
-        function selectPackage(card) {
+        const trialInput = document.getElementById('wizTrialPackageIdInput');
+        function isTrialCard(card) { return !!card && card.classList.contains('wiz-pkg-card--trial'); }
+        function pkgCardById(id) {
+            return id ? wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + id + '"]:not(.wiz-pkg-card--trial)') : null;
+        }
+
+        // Selecting the free trial first asks which package to try (see the
+        // trial picker below); its features are what the trial unlocks.
+        function selectPackage(card, triedId) {
+            const tried = isTrialCard(card) ? pkgCardById(triedId) : null;
+            if (isTrialCard(card) && !tried) { openTrialModal(card); return; }
+
             wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (c) {
                 c.classList.toggle('wiz-pkg-card--on', c === card);
                 c.setAttribute('aria-checked', c === card ? 'true' : 'false');
             });
             pkgInput.value = card.getAttribute('data-pkg-id');
+            if (trialInput) trialInput.value = tried ? tried.getAttribute('data-pkg-id') : '';
+
+            const pickNote = document.getElementById('wizTrialPickNote');
+            if (pickNote) {
+                pickNote.classList.toggle('is-set', !!tried);
+                document.getElementById('wizTrialPickName').textContent = tried ? (tried.getAttribute('data-pkg-name') || '') : '';
+            }
+
             const errEl = document.getElementById('wizPkgNoSelErr');
             if (errEl) errEl.style.display = 'none';
             let features = [];
-            try { features = JSON.parse(card.getAttribute('data-pkg-features') || '[]'); } catch (e) {}
+            try { features = JSON.parse((tried || card).getAttribute('data-pkg-features') || '[]'); } catch (e) {}
             applyPackageFeatures(features);
-            updateWizPkgSummary(card);
+            updateWizPkgSummary(card, tried);
         }
+
+        // Free trial picker: every other package, in full detail.
+        const trialModal = document.getElementById('wizTrialModal');
+        let trialModalCard = null;
+        let trialPick = '';
+        function renderTrialOptions() {
+            const grid = document.getElementById('wizTrialGrid');
+            const cards = wizardForm.querySelectorAll('.wiz-pkg-card:not(.wiz-pkg-card--trial)');
+            grid.innerHTML = Array.prototype.map.call(cards, function (c) {
+                const id = c.getAttribute('data-pkg-id');
+                const desc = c.getAttribute('data-pkg-desc') || '';
+                const users = c.getAttribute('data-pkg-users-label') || '';
+                let labels = [];
+                try { labels = JSON.parse(c.getAttribute('data-pkg-labels') || '[]'); } catch (e) {}
+                const price = c.getAttribute('data-pkg-free') === '1'
+                    ? 'Free'
+                    : pkgPriceHtml(c).replace(/<span class="wiz-pkg-price-strike">.*?<\/span>/, '').replace(/<[^>]+>/g, '');
+                const on = id === trialPick;
+                return '<button type="button" class="wiz-trial-opt' + (on ? ' wiz-trial-opt--on' : '') + '" role="radio"'
+                    + ' aria-checked="' + (on ? 'true' : 'false') + '" data-trial-opt="' + escPkg(id) + '">'
+                    + '<span class="wiz-trial-opt__radio" aria-hidden="true"><i class="fa fa-check"></i></span>'
+                    + '<span class="wiz-trial-opt__name">' + escPkg(c.getAttribute('data-pkg-name') || '') + '</span>'
+                    + '<span class="wiz-trial-opt__price">After the trial: <strong>' + escPkg(price) + '</strong></span>'
+                    + (users ? '<span class="wiz-trial-opt__users"><i class="fa fa-users" aria-hidden="true"></i> ' + escPkg(users) + '</span>' : '')
+                    + (desc ? '<p class="wiz-trial-opt__desc">' + escPkg(desc) + '</p>' : '')
+                    + '<span class="wiz-pkg-mod-title">' + labels.length + (labels.length === 1 ? ' module' : ' modules') + ' included</span>'
+                    + '<ul class="wiz-pkg-mods">' + labels.map(function (l) { return '<li>' + escPkg(l) + '</li>'; }).join('') + '</ul>'
+                    + '</button>';
+            }).join('');
+            const confirmBtn = document.getElementById('wizTrialModalConfirm');
+            const picked = pkgCardById(trialPick);
+            confirmBtn.disabled = !picked;
+            document.getElementById('wizTrialModalConfirmLbl').textContent = picked
+                ? 'Try ' + (picked.getAttribute('data-pkg-name') || '') + ' free'
+                : 'Start free trial';
+        }
+        function openTrialModal(card) {
+            if (!trialModal) return;
+            trialModalCard = card;
+            trialPick = trialInput ? trialInput.value : '';
+            const days = card.getAttribute('data-pkg-trial-days') || '';
+            if (days) {
+                document.getElementById('wizTrialModalSub').textContent =
+                    'Pick one package. Only its features are unlocked during your ' + days + '-day free trial - no card needed.';
+            }
+            document.getElementById('wizTrialModalErr').style.display = 'none';
+            renderTrialOptions();
+            trialModal.hidden = false;
+            document.addEventListener('keydown', trialModalEsc);
+            const first = trialModal.querySelector('.wiz-trial-opt--on') || trialModal.querySelector('.wiz-trial-opt');
+            if (first) first.focus();
+        }
+        function closeTrialModal() {
+            if (!trialModal) return;
+            trialModal.hidden = true;
+            document.removeEventListener('keydown', trialModalEsc);
+            if (trialModalCard) trialModalCard.focus();
+            trialModalCard = null;
+        }
+        function trialModalEsc(e) { if (e.key === 'Escape') closeTrialModal(); }
+        if (trialModal) {
+            trialModal.querySelectorAll('[data-trial-modal-close]').forEach(function (el) {
+                el.addEventListener('click', closeTrialModal);
+            });
+            document.getElementById('wizTrialGrid').addEventListener('click', function (e) {
+                const opt = e.target.closest('[data-trial-opt]');
+                if (!opt) return;
+                trialPick = opt.getAttribute('data-trial-opt');
+                renderTrialOptions();
+                const again = trialModal.querySelector('[data-trial-opt="' + trialPick + '"]');
+                if (again) again.focus();
+            });
+            document.getElementById('wizTrialModalConfirm').addEventListener('click', function () {
+                if (!pkgCardById(trialPick)) {
+                    document.getElementById('wizTrialModalErr').style.display = 'block';
+                    return;
+                }
+                const card = trialModalCard;
+                closeTrialModal();
+                if (card) selectPackage(card, trialPick);
+            });
+        }
+        window.wizOpenTrialPicker = function () {
+            const card = wizardForm.querySelector('.wiz-pkg-card--trial');
+            if (card) openTrialModal(card);
+        };
         // Package details popup
         const pkgModal = document.getElementById('wizPkgModal');
         let pkgModalCard = null;
@@ -3209,26 +3445,46 @@ function openWizStorageAgreementModal(type) {
                 el.addEventListener('click', closePkgModal);
             });
             document.getElementById('wizPkgModalSelectBtn').addEventListener('click', function () {
-                if (pkgModalCard) selectPackage(pkgModalCard);
+                const card = pkgModalCard;
                 closePkgModal();
+                // An already-selected trial keeps its pick; otherwise the trial opens its picker.
+                if (card) selectPackage(card, isTrialCard(card) && card.classList.contains('wiz-pkg-card--on') && trialInput ? trialInput.value : undefined);
             });
         }
 
         wizardForm.querySelectorAll('.wiz-pkg-card').forEach(function (card) {
             card.addEventListener('click', function (e) {
-                if (e.target.closest('[data-pkg-details]')) { e.stopPropagation(); openPkgModal(card); return; }
-                selectPackage(card);
+                if (e.target.closest('[data-pkg-details]')) {
+                    e.stopPropagation();
+                    // The trial's "Details" shows the packages it can unlock.
+                    if (isTrialCard(card)) openTrialModal(card); else openPkgModal(card);
+                    return;
+                }
+                if (e.target.closest('[data-trial-change]')) { e.stopPropagation(); openTrialModal(card); return; }
+                // Clicking the selected trial again keeps its pick (use "Change" to switch).
+                selectPackage(card, isTrialCard(card) && card.classList.contains('wiz-pkg-card--on') && trialInput ? trialInput.value : undefined);
             });
             card.addEventListener('keydown', function (e) {
                 if (e.target !== card) return; // let the Details buttons handle their own keys
-                if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); selectPackage(card); }
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    selectPackage(card, isTrialCard(card) && card.classList.contains('wiz-pkg-card--on') && trialInput ? trialInput.value : undefined);
+                }
             });
         });
         // Re-apply the previously selected package's features on page reload
-        // (e.g. after a validation error further down the wizard).
+        // (e.g. after a validation error further down the wizard). A trial
+        // without a valid tried package is left unselected so it gets picked again.
         if (pkgInput.value) {
             const preselected = wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + pkgInput.value + '"]');
-            if (preselected) selectPackage(preselected);
+            if (preselected && isTrialCard(preselected) && !pkgCardById(trialInput ? trialInput.value : '')) {
+                preselected.classList.remove('wiz-pkg-card--on');
+                preselected.setAttribute('aria-checked', 'false');
+                pkgInput.value = '';
+                if (trialInput) trialInput.value = '';
+            } else if (preselected) {
+                selectPackage(preselected, trialInput ? trialInput.value : undefined);
+            }
         }
     }
 
@@ -3281,7 +3537,18 @@ function openWizStorageAgreementModal(type) {
                 ? 'Your free trial runs for ' + trialDays + ' days with no card needed. Before it ends, choose a plan to keep going.'
                 : 'Your selected package is free - click Finish setup below to activate your workspace right away.';
         }
-        if (pkgNameEl) pkgNameEl.textContent = pkgCard ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial)' : (isFree ? ' (Free)' : ''))) : '-';
+        const trialPkgInput = document.getElementById('wizTrialPackageIdInput');
+        const triedCard = trialDays && trialPkgInput && trialPkgInput.value
+            ? wizardForm.querySelector('.wiz-pkg-card[data-pkg-id="' + trialPkgInput.value + '"]:not(.wiz-pkg-card--trial)')
+            : null;
+        const triedName = triedCard ? (triedCard.getAttribute('data-pkg-name') || '') : '';
+        if (pkgNameEl) pkgNameEl.textContent = pkgCard
+            ? (pkgName + (trialDays ? ' (' + trialDays + '-day free trial' + (triedName ? ', trying ' + triedName + ' features' : '') + ')' : (isFree ? ' (Free)' : '')))
+            : '-';
+        if (freeNoteText && triedName) {
+            freeNoteText.textContent = 'Your free trial unlocks the ' + triedName + ' features for ' + trialDays
+                + ' days with no card needed. Before it ends, choose a plan to keep going.';
+        }
 
         const usersEl       = document.getElementById('wizPaySummaryUsers');
         const extraUserRow  = document.getElementById('wizPaySummaryExtraUserRow');

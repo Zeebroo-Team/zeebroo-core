@@ -91,6 +91,8 @@ class PosAuthApiController extends Controller
             'business_name'     => ['required', 'string', 'max:255'],
             'business_category' => ['required', 'string', 'max:120'],
             'package_id'        => ['nullable', 'integer', 'exists:packages,id'],
+            // Free trial only: the package whose features to try.
+            'trial_package_id'  => ['nullable', 'integer'],
             'features'          => ['nullable', 'array'],
             'features.*'        => ['string'],
             'email'             => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -119,6 +121,11 @@ class PosAuthApiController extends Controller
             }
         }
 
+        $trialFeaturePackage = $this->paymentProvisioningService->resolveTrialFeaturePackage(
+            $package, $validated['trial_package_id'] ?? null, $platform,
+        );
+        $featurePackage = $trialFeaturePackage ?? $package;
+
         $user = $this->authService->register([
             'name'     => $validated['name'],
             'email'    => $validated['email'],
@@ -140,7 +147,7 @@ class PosAuthApiController extends Controller
         // authoritative — the client only shows those toggles as a locked preview,
         // so the submitted `features` array is ignored to prevent tampering.
         $allKeys     = array_keys(config('features.list', []));
-        $sourceKeys  = $package ? ($package->features ?? []) : ($validated['features'] ?? []);
+        $sourceKeys  = $featurePackage ? ($featurePackage->features ?? []) : ($validated['features'] ?? []);
         $enabledKeys = array_fill_keys($sourceKeys, true);
         $features    = [];
         foreach ($allKeys as $k) { $features[$k] = isset($enabledKeys[$k]); }
@@ -151,7 +158,7 @@ class PosAuthApiController extends Controller
             $this->createFirstBranch($business, $validated);
         }
 
-        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform);
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform, $trialFeaturePackage);
 
         $deviceName = $validated['device_name'] ?? 'pos-api-client';
         $token = $user->createToken($deviceName);
@@ -177,6 +184,7 @@ class PosAuthApiController extends Controller
             'trial' => [
                 'active'  => $business->fresh()->isOnTrial(),
                 'ends_at' => $business->fresh()->trial_ends_at?->toIso8601String(),
+                'package' => $trialFeaturePackage ? ['id' => $trialFeaturePackage->id, 'name' => $trialFeaturePackage->name] : null,
             ],
         ], 201);
     }

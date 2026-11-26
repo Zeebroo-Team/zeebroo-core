@@ -16,7 +16,8 @@ const API = (() => {
       window.dispatchEvent(new CustomEvent('api-trial-expired', { detail: res.body }));
     }
     if (res.status === 403 && res.body?.code === 'feature_not_in_plan') {
-      window.dispatchEvent(new CustomEvent('api-feature-not-in-plan', { detail: res.body }));
+      console.warn(`[plan] ${method} ${path} blocked: "${res.body.feature}" is not in this business's plan`);
+      window.dispatchEvent(new CustomEvent('api-feature-not-in-plan', { detail: { ...res.body, method, path } }));
     }
     // Offline mode kept a change on this PC (checkout shows its own message)
     if (res.offline && method !== 'GET' && res.status >= 200 && res.status < 300 && path !== '/online/checkout') {

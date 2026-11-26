@@ -7773,6 +7773,9 @@ function _applyFeatureResponses(featRes, meRes) {
   } finally {
     setFeaturesLoading(false);
   }
+  // Home overview skipped its feature-gated stats while features were loading - fill them in now
+  const overview = document.getElementById('home-view-overview');
+  if (overview && overview.style.display !== 'none') loadHomeOverviewStats();
 }
 
 function _applyFeatureResponsesInner(featRes, meRes) {
@@ -13444,6 +13447,11 @@ const _hogFmt = n => (n ?? 0).toLocaleString();
 // Fetches a live count/summary for each Overview shortcut card. Each source
 // is independent so one failing endpoint doesn't block the others.
 async function loadHomeOverviewStats() {
+  // Home opens before the plan's features arrive, and hasFeature() allows everything
+  // until then - so calls for modules outside the plan (e.g. CRM on the free trial)
+  // would hit 403 feature_not_in_plan. _applyFeatureResponses() re-runs this once ready.
+  if (!_feat.applied) return;
+
   const productMgmt = hasFeature('product_management');
   const stockMgmt   = hasFeature('stock_management');
 

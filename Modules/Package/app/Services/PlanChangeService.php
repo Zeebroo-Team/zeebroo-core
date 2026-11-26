@@ -205,8 +205,10 @@ class PlanChangeService
                 'package_id' => $target->id,
                 'trial_ends_at' => null,
                 'trial_reminder_sent_at' => null,
+                'trial_package_id' => null,
             ])->save();
             $business->unsetRelation('package');
+            $business->unsetRelation('trialPackage');
 
             $enabled = array_fill_keys($target->features ?? [], true);
             $features = [];

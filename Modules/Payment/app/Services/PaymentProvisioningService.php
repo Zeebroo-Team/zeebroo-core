@@ -20,7 +20,7 @@ class PaymentProvisioningService
      * behavior where no package means nothing to record, just an active
      * business.
      */
-    public function createInitialPayment(Business $business, ?Package $package, User $user, string $platform = 'desktop'): ?Payment
+    public function createInitialPayment(Business $business, ?Package $package, User $user, string $platform = 'desktop', ?Package $trialFeaturePackage = null): ?Payment
     {
         if (! $package) {
             $business->setSetting('business.subscription_status', 'active');
@@ -29,7 +29,7 @@ class PaymentProvisioningService
         }
 
         if ($package->is_trial) {
-            return $this->recordTrial($business, $package, $user, $platform);
+            return $this->recordTrial($business, $package, $user, $platform, $trialFeaturePackage);
         }
 
         if ($package->is_free) {
@@ -65,7 +65,56 @@ class PaymentProvisioningService
      * user; a user who already had one is refused (the package list hides it
      * from them too, see Package::scopeOfferedTo).
      */
-    private function recordTrial(Business $business, Package $package, User $user, string $platform): Payment
+    /**
+     * Packages a trial user may pick to try: every active, non-trial package
+     * shown on that platform. Their features are what the trial unlocks.
+     *
+     * @return \Illuminate\Database\Eloquent\Collection<int, Package>
+     */
+    public function trialChoices(string $platform = 'desktop')
+    {
+        return Package::query()
+            ->where('is_active', true)
+            ->where('is_trial', false)
+            ->visibleForPlatform($platform)
+            ->orderBy('sort_order')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * The package to try during the trial, validated against trialChoices().
+     * Null when $package is not the trial package, or when none was sent and
+     * it isn't required (older desktop clients - the trial package's own
+     * features then apply, as before).
+     */
+    public function resolveTrialFeaturePackage(?Package $package, mixed $trialPackageId, string $platform = 'desktop', bool $required = false): ?Package
+    {
+        if (! $package?->is_trial) {
+            return null;
+        }
+
+        if ($trialPackageId === null || $trialPackageId === '') {
+            if ($required) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'trial_package_id' => ['Choose which package you want to try for free.'],
+                ]);
+            }
+
+            return null;
+        }
+
+        $tried = $this->trialChoices($platform)->firstWhere('id', (int) $trialPackageId);
+        if (! $tried) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'trial_package_id' => ['The package you chose to try is no longer available.'],
+            ]);
+        }
+
+        return $tried;
+    }
+
+    private function recordTrial(Business $business, Package $package, User $user, string $platform, ?Package $trialFeaturePackage = null): Payment
     {
         if ($user->trial_used_at !== null) {
             throw \Illuminate\Validation\ValidationException::withMessages([
@@ -75,7 +124,12 @@ class PaymentProvisioningService
 
         $endsAt = now()->addDays($package->trialDays());
 
-        $business->forceFill(['trial_ends_at' => $endsAt, 'trial_reminder_sent_at' => null])->save();
+        $business->forceFill([
+            'trial_ends_at' => $endsAt,
+            'trial_reminder_sent_at' => null,
+            'trial_package_id' => $trialFeaturePackage?->id,
+        ])->save();
+        $business->unsetRelation('trialPackage');
         $user->forceFill(['trial_used_at' => now()])->save();
 
         $payment = Payment::create([

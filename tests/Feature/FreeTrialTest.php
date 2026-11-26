@@ -58,6 +58,7 @@ beforeEach(function () {
         $t->unsignedInteger('payment_grace_days')->nullable();
         $t->timestamp('trial_ends_at')->nullable();
         $t->timestamp('trial_reminder_sent_at')->nullable();
+        $t->unsignedBigInteger('trial_package_id')->nullable();
         $t->string('name');
         $t->timestamps();
     });
@@ -295,6 +296,48 @@ test('a paid plan switches only after Stripe confirms, keeping the chosen member
         ->and($business->isOnTrial())->toBeFalse()
         ->and(BusinessMember::find(12)->deactivated_at)->toBeNull()
         ->and(BusinessMember::find(11)->deactivated_at)->not->toBeNull();
+});
+
+test('the trial unlocks only the features of the package picked to try', function () {
+    $provisioning = app(PaymentProvisioningService::class);
+    $silver = $provisioning->resolveTrialFeaturePackage($this->trialPkg, 2);
+
+    $provisioning->createInitialPayment($this->business, $this->trialPkg, $this->owner, 'desktop', $silver);
+
+    $business = $this->business->fresh();
+    expect($business->package_id)->toBe(1) // still billed / seated as the trial
+        ->and($business->trial_package_id)->toBe(2)
+        ->and($business->effectiveFeatureKeys())->toEqualCanonicalizing(['point_of_sale', 'product_management', 'account_management'])
+        ->and($business->hasFeature('crm'))->toBeFalse();
+});
+
+test('without a picked package the trial keeps its own features', function () {
+    trialStart($this);
+
+    expect($this->business->fresh()->hasFeature('crm'))->toBeTrue();
+});
+
+test('the package to try must be an active non-trial package, and is required when asked', function () {
+    $provisioning = app(PaymentProvisioningService::class);
+
+    expect(fn () => $provisioning->resolveTrialFeaturePackage($this->trialPkg, 1))->toThrow(ValidationException::class)
+        ->and(fn () => $provisioning->resolveTrialFeaturePackage($this->trialPkg, 999))->toThrow(ValidationException::class)
+        ->and(fn () => $provisioning->resolveTrialFeaturePackage($this->trialPkg, null, 'desktop', true))->toThrow(ValidationException::class)
+        ->and($provisioning->resolveTrialFeaturePackage($this->trialPkg, null))->toBeNull()
+        ->and($provisioning->resolveTrialFeaturePackage(Package::find(2), 3))->toBeNull(); // not a trial: ignored
+});
+
+test('moving to a real plan forgets the tried package', function () {
+    $provisioning = app(PaymentProvisioningService::class);
+    $provisioning->createInitialPayment($this->business, $this->trialPkg, $this->owner, 'desktop', Package::find(3));
+
+    app(PlanChangeService::class)->start(
+        $this->business->fresh(), Package::find(4), $this->owner->fresh(), [], 'web', 'https://ok', 'https://cancel',
+    );
+
+    $business = $this->business->fresh();
+    expect($business->trial_package_id)->toBeNull()
+        ->and($business->effectiveFeatureKeys())->toBe(['account_management']);
 });
 
 test('only the owner of a trial business may change its plan', function () {

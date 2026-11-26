@@ -70,6 +70,8 @@ class PosBusinessesApiController extends Controller
             'name'       => ['required', 'string', 'max:255'],
             'category'   => ['required', 'string', 'max:120'],
             'package_id' => ['nullable', 'integer', 'exists:packages,id'],
+            // Free trial only: the package whose features to try.
+            'trial_package_id' => ['nullable', 'integer'],
             'features'   => ['nullable', 'array'],
             'features.*' => ['string'],
             'platform'   => ['nullable', 'string', Rule::in(['desktop', 'mobile', 'pos_lite'])],
@@ -88,6 +90,11 @@ class PosBusinessesApiController extends Controller
             }
         }
 
+        $trialFeaturePackage = $this->paymentProvisioningService->resolveTrialFeaturePackage(
+            $package, $validated['trial_package_id'] ?? null, $platform,
+        );
+        $featurePackage = $trialFeaturePackage ?? $package;
+
         $categorySlug  = $validated['category'];
         $categoryLabel = BusinessCategory::labelForSlug($categorySlug) ?? $categorySlug;
 
@@ -103,7 +110,7 @@ class PosBusinessesApiController extends Controller
         // authoritative — the client only shows those toggles as a locked preview,
         // so the submitted `features` array is ignored to prevent tampering.
         $allKeys     = array_keys(config('features.list', []));
-        $sourceKeys  = $package ? ($package->features ?? []) : ($validated['features'] ?? []);
+        $sourceKeys  = $featurePackage ? ($featurePackage->features ?? []) : ($validated['features'] ?? []);
         $enabledKeys = array_fill_keys($sourceKeys, true);
         $features    = [];
         foreach ($allKeys as $k) {
@@ -112,7 +119,7 @@ class PosBusinessesApiController extends Controller
         $features['account_management'] = true;
         $business->setSetting('business.features', $features);
 
-        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform);
+        $payment = $this->paymentProvisioningService->createInitialPayment($business, $package, $user, $platform, $trialFeaturePackage);
         $requiresPayment = $payment !== null && $payment->payment_type === Payment::TYPE_SUBSCRIPTION;
 
         return response()->json([
