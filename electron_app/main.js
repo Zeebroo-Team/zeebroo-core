@@ -66,6 +66,15 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // A Google sign-in link that arrived while the window was (re)loading.
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!queuedGoogleResult) return;
+    const payload = queuedGoogleResult;
+    queuedGoogleResult = null;
+    // Give app.js a moment to register its listener after the DOM loads.
+    setTimeout(() => mainWindow?.webContents.send('google-auth-result', payload), 500);
+  });
+
   // Grant microphone permission for the Voice Listening Worker (Web Speech API).
   // Without this handler Electron denies 'media' by default, causing SpeechRecognition
   // to fire onerror:'not-allowed' and stop immediately.
@@ -102,10 +111,94 @@ if (process.defaultApp) {
   app.setAsDefaultProtocolClient('socibiz');
 }
 
+// ── Google sign-in (system browser → socibiz://oauth?code=…&state=…) ─────
+// The renderer asks main to start; main makes a random `state`, opens
+// {web}/auth/google/desktop?state=… in the default browser, and remembers the
+// state. When the browser hands back socibiz://oauth, only a link carrying that
+// same state is forwarded to the renderer, which swaps code + state for a token
+// at POST /auth/google/exchange. The token itself never travels in a URL.
+const crypto = require('crypto');
+const GOOGLE_STATE_TTL_MS = 10 * 60 * 1000;
+let pendingGoogleState = null;   // { state, at }
+let queuedGoogleResult = null;   // deep link that arrived before the renderer was ready
+
+function webBaseUrl() {
+  return API_BASE_URL.replace(/\/+$/, '').replace(/\/api\/v1\/pos$/, '');
+}
+
+function rememberGoogleState(state) {
+  pendingGoogleState = { state, at: Date.now() };
+  // Also on disk, so a link that cold-launches the app (app was closed) still matches.
+  try {
+    const c = loadConfig();
+    c.google_oauth_state = pendingGoogleState;
+    saveConfig(c);
+    if (config) config.google_oauth_state = pendingGoogleState;
+  } catch (_) {}
+}
+
+function takeGoogleState() {
+  let pending = pendingGoogleState;
+  if (!pending) {
+    try { pending = loadConfig().google_oauth_state || null; } catch (_) {}
+  }
+  pendingGoogleState = null;
+  try {
+    const c = loadConfig();
+    if (c.google_oauth_state) { delete c.google_oauth_state; saveConfig(c); }
+    if (config) delete config.google_oauth_state;
+  } catch (_) {}
+  if (!pending || Date.now() - pending.at > GOOGLE_STATE_TTL_MS) return null;
+  return pending.state;
+}
+
+function sendGoogleResult(payload) {
+  if (mainWindow && !mainWindow.webContents.isLoading()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.webContents.send('google-auth-result', payload);
+  } else {
+    queuedGoogleResult = payload;
+    if (!mainWindow && app.isReady()) createWindow();
+  }
+}
+
+function handleGoogleDeepLink(parsed) {
+  const state = parsed.searchParams.get('state') || '';
+  const code  = parsed.searchParams.get('code');
+  const error = parsed.searchParams.get('error');
+  const expected = takeGoogleState();
+  const matches = !!expected && state.length === expected.length
+    && crypto.timingSafeEqual(Buffer.from(state), Buffer.from(expected));
+
+  if (!matches) {
+    sendGoogleResult({ error: 'This Google sign-in was not started from this app or has expired. Please try again.' });
+    return;
+  }
+  if (error || !code) {
+    sendGoogleResult({ error: error || 'Google sign-in did not complete. Please try again.' });
+    return;
+  }
+  sendGoogleResult({ code, state });
+}
+
+ipcMain.handle('google-sign-in-start', async () => {
+  const state = crypto.randomBytes(32).toString('hex');
+  rememberGoogleState(state);
+  const url = `${webBaseUrl()}/auth/google/desktop?state=${encodeURIComponent(state)}`;
+  try {
+    await shell.openExternal(url);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, message: e.message };
+  }
+});
+
 function handleDeepLink(url) {
   try {
     const parsed = new URL(url);
     if (parsed.host === 'payment') { handlePaymentDeepLink(parsed); return; }
+    if (parsed.host === 'oauth')   { handleGoogleDeepLink(parsed); return; }
     if (parsed.host !== 'auth') return;
     const token      = parsed.searchParams.get('token');
     const businessId = parsed.searchParams.get('business_id');
@@ -168,6 +261,12 @@ app.whenReady().then(() => {
     if (deepUrl) {
       try {
         const p = new URL(deepUrl);
+        if (p.host === 'oauth') {
+          // Queued; delivered once the window has loaded (see createWindow).
+          handleGoogleDeepLink(p);
+          if (!mainWindow) createWindow();
+          return;
+        }
         const token = p.searchParams.get('token');
         if (token) {
           config.token       = token;

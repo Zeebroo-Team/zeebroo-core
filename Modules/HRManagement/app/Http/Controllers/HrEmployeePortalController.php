@@ -77,6 +77,7 @@ class HrEmployeePortalController extends Controller
 
         $request->session()->put('oauth_auth_fail_route', 'hr.portal.login');
         $request->session()->put('oauth_origin_portal', true);
+        $request->session()->forget('oauth_desktop_state');
 
         return $this->googleAuthService->redirectToGoogle();
     }

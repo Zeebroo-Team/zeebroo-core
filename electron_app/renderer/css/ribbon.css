@@ -4984,6 +4984,22 @@ body.dark .ob-pkg-card--trial .ob-pkg-mods li::before { background: #16a34a; }
   color: var(--accent);
 }
 
+/* Google sign-in / sign-up button (login card + sign-up Account step) */
+.btn-google-login {
+  width: 100%; padding: 10px 16px; margin-bottom: 10px;
+  border: 1.5px solid var(--border); border-radius: 8px;
+  background: var(--surface, #fff); color: var(--text);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-google-login:hover:not(:disabled) {
+  background: rgba(var(--accent-rgb, 74,108,247), 0.07);
+  border-color: var(--accent);
+}
+.btn-google-login:disabled { opacity: .7; cursor: progress; }
+.btn-google-login .g-logo { flex-shrink: 0; }
+
 /* Cashier login card header */
 .cashier-login-icon {
   width: 56px; height: 56px; border-radius: 16px;

@@ -13,6 +13,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   narrowAuth:   () => ipcRenderer.send('window-narrow-auth'),
   onWindowState: (cb) => ipcRenderer.on('window-state', (_e, state) => cb(state)),
   onPaymentDeepLink: (cb) => ipcRenderer.on('payment-deep-link', (_e, payload) => cb(payload)),
+  // Google sign-in: opens the system browser; the result comes back via onGoogleAuthResult
+  // as { code, state } or { error }.
+  startGoogleSignIn:  ()   => ipcRenderer.invoke('google-sign-in-start'),
+  onGoogleAuthResult: (cb) => ipcRenderer.on('google-auth-result', (_e, payload) => cb(payload)),
 
   // Platform
   platform: process.platform,

@@ -35,6 +35,10 @@ const API = (() => {
     // Auth
     login:        (email, password, deviceName) =>
       publicRequest('POST', '/auth/token', { email, password, device_name: deviceName }),
+    // Google sign-in: swap the one-time code from socibiz://oauth for a token
+    googleExchange: (code, state, deviceName) =>
+      publicRequest('POST', '/auth/google/exchange', { code, state, device_name: deviceName }),
+    revokeToken:  () => publicRequest('POST', '/auth/revoke'),
     cashierLogin: (slug, username, password) =>
       publicRequest('POST', '/cashier/login', { slug, username, password }),
     // Forgot password: emails a 6-digit code, then the code + new password resets it

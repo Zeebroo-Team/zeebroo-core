@@ -14,13 +14,19 @@ use Modules\Business\Http\Controllers\Admin\IndustryController;
 use Modules\Package\Http\Controllers\Admin\BusinessPackageController;
 use Modules\Package\Http\Controllers\Admin\PackageController;
 
+// Outside `guest`: the desktop app's Google sign-in runs in the system browser,
+// which may already be signed in to the website. The web flow's start route
+// (/auth/google) stays guest-only, so a signed-in browser never reaches the
+// callback through it. Same callback URL, so nothing changes in Google Cloud.
+Route::get('/auth/google/desktop', [GoogleAuthController::class, 'desktopRedirect'])->middleware('throttle:20,1')->name('auth.google.desktop');
+Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
+
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
     Route::post('/login', [AuthController::class, 'login'])->name('login.submit');
     Route::post('/register', [AuthController::class, 'register'])->name('register.submit');
     Route::get('/auth/google', [GoogleAuthController::class, 'redirect'])->name('auth.google.redirect');
-    Route::get('/auth/google/callback', [GoogleAuthController::class, 'callback'])->name('auth.google.callback');
 
     Route::get('/forgot-password', [PasswordResetController::class, 'showRequest'])->name('password.request');
     Route::post('/forgot-password', [PasswordResetController::class, 'sendCode'])->middleware('throttle:5,1')->name('password.email');
