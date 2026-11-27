@@ -1,6 +1,6 @@
 <h4 class="apss-section">{{ $title }}</h4>
-<div class="ads-card apss-card">
-    <table class="ads-table">
+<div class="uds-card apss-card">
+    <table class="uds-table">
         <thead>
             <tr>
                 <th class="apss-col-setting">Setting</th>

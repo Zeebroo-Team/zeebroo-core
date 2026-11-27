@@ -13,8 +13,8 @@
 .apss-section{margin:16px 0 7px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
 .apss-group .apss-section:first-child{margin-top:0;}
 .apss-card{overflow-x:auto;}
-.apss-card .ads-table{table-layout:fixed;}
-.apss-card .ads-table tr,.apss-card .ads-table th{box-sizing:border-box;}
+.apss-card .uds-table{table-layout:fixed;}
+.apss-card .uds-table tr,.apss-card .uds-table th{box-sizing:border-box;}
 .apss-col-setting{width:25%;}
 .apss-col-value{width:25%;}
 .apss-col-status{width:96px;}
@@ -76,14 +76,14 @@ textarea.apss-input--code{min-height:170px;font-family:ui-monospace,SFMono-Regul
 @media(max-width:480px){.apss-tax-row{grid-template-columns:1fr 1fr;}}
 </style>
 
-<div class="ads-modal-overlay" id="apss-modal">
-    <form class="ads-modal apss-modal" id="apss-form" role="dialog" aria-modal="true" aria-labelledby="apss-title" novalidate>
-        <div class="ads-modal-header">
-            <button type="button" class="ads-modal-close" data-apss-close aria-label="Close"><i class="fa fa-xmark"></i></button>
-            <h3 class="ads-modal-title" id="apss-title"></h3>
-            <p class="ads-modal-sub" id="apss-sub"></p>
+<div class="uds-modal-overlay" id="apss-modal">
+    <form class="uds-modal apss-modal" id="apss-form" role="dialog" aria-modal="true" aria-labelledby="apss-title" novalidate>
+        <div class="uds-modal-header">
+            <button type="button" class="uds-modal-close" data-apss-close aria-label="Close"><i class="fa fa-xmark"></i></button>
+            <h3 class="uds-modal-title" id="apss-title"></h3>
+            <p class="uds-modal-sub" id="apss-sub"></p>
         </div>
-        <div class="ads-modal-body" id="apss-body"></div>
+        <div class="uds-modal-body" id="apss-body"></div>
         <div class="apss-modal-foot">
             <button type="button" class="apss-btn" data-apss-close>Cancel</button>
             <button type="submit" class="apss-btn" id="apss-submit"></button>
@@ -345,9 +345,9 @@ textarea.apss-input--code{min-height:170px;font-family:ui-monospace,SFMono-Regul
 
     document.addEventListener('click', function (e) {
         var target = e.target.closest ? e.target : e.target.parentElement;
-        var tab = target.closest('.ads-biz-tab[data-tab="pos-settings"]');
+        var tab = target.closest('.uds-biz-tab[data-tab="pos-settings"]');
         if (tab) {
-            var tabPanel = tab.closest('.ads-biz').querySelector('[data-panel="pos-settings"]');
+            var tabPanel = tab.closest('.uds-biz').querySelector('[data-panel="pos-settings"]');
             if (!tabPanel.getAttribute('data-loaded')) { load(tabPanel); }
             return;
         }

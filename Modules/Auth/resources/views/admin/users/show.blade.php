@@ -2,129 +2,129 @@
 
 @section('content')
 <style>
-.ads-wrap{max-width:1280px;margin:0 auto;}
-.ads-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-decoration:none;margin-bottom:10px;}
-.ads-back:hover{color:var(--primary);}
-.ads-header{display:flex;align-items:center;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
-.ads-avatar{width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--primary) 14%,transparent);
+.uds-wrap{max-width:1280px;margin:0 auto;}
+.uds-back{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);text-decoration:none;margin-bottom:10px;}
+.uds-back:hover{color:var(--primary);}
+.uds-header{display:flex;align-items:center;gap:16px;margin-bottom:22px;flex-wrap:wrap;}
+.uds-avatar{width:56px;height:56px;border-radius:50%;background:color-mix(in srgb,var(--primary) 14%,transparent);
     display:grid;place-items:center;font-size:22px;font-weight:700;color:var(--primary);flex-shrink:0;}
-.ads-name{margin:0;font-size:21px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px;}
-.ads-email{margin:3px 0 0;font-size:13px;color:var(--muted);}
-.ads-meta{margin:6px 0 0;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;}
-.ads-users-chip{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);}
-.ads-role{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
-.ads-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
-.ads-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
-.ads-protected{font-size:11px;color:var(--muted);font-style:italic;}
-.ads-impersonate{margin:0 0 0 auto;}
-.ads-impersonate-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;border:1px solid var(--primary);
+.uds-name{margin:0;font-size:21px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:8px;}
+.uds-email{margin:3px 0 0;font-size:13px;color:var(--muted);}
+.uds-meta{margin:6px 0 0;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:10px;}
+.uds-users-chip{display:inline-flex;align-items:center;gap:5px;margin-left:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;vertical-align:middle;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary);}
+.uds-role{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
+.uds-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
+.uds-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
+.uds-protected{font-size:11px;color:var(--muted);font-style:italic;}
+.uds-impersonate{margin:0 0 0 auto;}
+.uds-impersonate-btn{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;border:1px solid var(--primary);
     background:var(--primary);color:#fff;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
-.ads-impersonate-btn:hover{filter:brightness(.95);}
-.ads-impersonate-btn:disabled{opacity:.5;cursor:not-allowed;}
-.ads-msg{display:flex;align-items:center;gap:8px;margin:-8px 0 18px;padding:10px 14px;border-radius:10px;font-size:13px;
+.uds-impersonate-btn:hover{filter:brightness(.95);}
+.uds-impersonate-btn:disabled{opacity:.5;cursor:not-allowed;}
+.uds-msg{display:flex;align-items:center;gap:8px;margin:-8px 0 18px;padding:10px 14px;border-radius:10px;font-size:13px;
     background:color-mix(in srgb,#22c55e 8%,var(--card));border:1px solid color-mix(in srgb,#22c55e 30%,var(--border));}
-.ads-msg--err{background:color-mix(in srgb,#ef4444 8%,var(--card));border-color:color-mix(in srgb,#ef4444 35%,var(--border));color:#dc2626;}
-.ads-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:22px;}
-@media(max-width:760px){.ads-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
-.ads-stat{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);}
-.ads-stat-label{margin:0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
-.ads-stat-value{margin:5px 0 0;font-size:20px;font-weight:800;color:var(--text);}
-.ads-section{margin-bottom:22px;}
-.ads-section-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:0 0 10px;}
-.ads-section-title .count{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--muted);}
-.ads-card{border:1px solid var(--border);border-radius:14px;background:var(--card);overflow:hidden;}
-.ads-biz{padding:16px 18px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
-.ads-biz:last-child{border-bottom:none;}
-.ads-biz-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;}
-.ads-biz-name{margin:0;font-size:15px;font-weight:750;}
-.ads-biz-cat{font-size:11px;color:var(--muted);text-transform:capitalize;}
-.ads-biz-date{font-size:11.5px;color:var(--muted);white-space:nowrap;}
-.ads-branch-list{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px;}
-.ads-branch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);flex-wrap:wrap;}
-.ads-branch-name{font-size:13px;font-weight:650;}
-.ads-branch-meta{font-size:11.5px;color:var(--muted);}
-.ads-branch-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;}
-.ads-branch-badge--active{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
-.ads-branch-badge--inactive{background:color-mix(in srgb,#94a3b8 16%,transparent);color:#64748b;}
-.ads-empty-inline{font-size:12.5px;color:var(--muted);margin:10px 0 0;}
-.ads-biz-tabs{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0 12px;border-bottom:1px solid color-mix(in srgb,var(--border) 75%,transparent);}
-.ads-biz-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 12px 9px;margin:0 0 -1px;font-size:12px;font-weight:700;color:var(--muted);
+.uds-msg--err{background:color-mix(in srgb,#ef4444 8%,var(--card));border-color:color-mix(in srgb,#ef4444 35%,var(--border));color:#dc2626;}
+.uds-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:22px;}
+@media(max-width:760px){.uds-summary{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.uds-stat{padding:12px 14px;border:1px solid var(--border);border-radius:12px;background:var(--card);}
+.uds-stat-label{margin:0;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.uds-stat-value{margin:5px 0 0;font-size:20px;font-weight:800;color:var(--text);}
+.uds-section{margin-bottom:22px;}
+.uds-section-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:800;margin:0 0 10px;}
+.uds-section-title .count{font-size:11px;font-weight:700;padding:1px 8px;border-radius:999px;background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--muted);}
+.uds-card{border:1px solid var(--border);border-radius:14px;background:var(--card);overflow:hidden;}
+.uds-biz{padding:16px 18px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.uds-biz:last-child{border-bottom:none;}
+.uds-biz-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.uds-biz-name{margin:0;font-size:15px;font-weight:750;}
+.uds-biz-cat{font-size:11px;color:var(--muted);text-transform:capitalize;}
+.uds-biz-date{font-size:11.5px;color:var(--muted);white-space:nowrap;}
+.uds-branch-list{margin:12px 0 0;padding:0;list-style:none;display:grid;gap:8px;}
+.uds-branch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);flex-wrap:wrap;}
+.uds-branch-name{font-size:13px;font-weight:650;}
+.uds-branch-meta{font-size:11.5px;color:var(--muted);}
+.uds-branch-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;}
+.uds-branch-badge--active{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
+.uds-branch-badge--inactive{background:color-mix(in srgb,#94a3b8 16%,transparent);color:#64748b;}
+.uds-empty-inline{font-size:12.5px;color:var(--muted);margin:10px 0 0;}
+.uds-biz-tabs{display:flex;flex-wrap:wrap;gap:5px;margin:14px 0 12px;border-bottom:1px solid color-mix(in srgb,var(--border) 75%,transparent);}
+.uds-biz-tab{display:inline-flex;align-items:center;gap:6px;padding:7px 12px 9px;margin:0 0 -1px;font-size:12px;font-weight:700;color:var(--muted);
     border:1px solid transparent;border-bottom:none;border-radius:8px 8px 0 0;background:transparent;cursor:pointer;font-family:inherit;}
-.ads-biz-tab:hover{color:var(--text);background:color-mix(in srgb,var(--card) 90%,transparent);}
-.ads-biz-tab.is-active{color:var(--text);border-color:color-mix(in srgb,var(--primary) 30%,var(--border));background:color-mix(in srgb,var(--primary) 8%,var(--card));}
-.ads-biz-panel[hidden]{display:none !important;}
-.ads-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
-@media(max-width:640px){.ads-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
-.ads-mini-stat{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
-.ads-mini-stat-label{margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
-.ads-mini-stat-value{margin:4px 0 0;font-size:16px;font-weight:800;color:var(--text);}
-.ads-table{width:100%;border-collapse:collapse;}
-.ads-table th{padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:color-mix(in srgb,var(--card) 88%,var(--border));text-align:left;border-bottom:1px solid var(--border);}
-.ads-table td{padding:12px 16px;font-size:13px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);vertical-align:middle;}
-.ads-table tr:last-child td{border-bottom:none;}
-.ads-empty{padding:36px 20px;text-align:center;color:var(--muted);font-size:13px;}
-.ads-activity-list{margin:0;padding:0;list-style:none;}
-.ads-activity-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
-.ads-activity-item:last-child{border-bottom:none;}
-.ads-activity-icon{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;font-size:13px;}
-.ads-activity-icon--sale{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
-.ads-activity-icon--purchase{background:color-mix(in srgb,#3b82f6 14%,transparent);color:#3b82f6;}
-.ads-activity-body{flex:1;min-width:0;}
-.ads-activity-label{font-size:13px;font-weight:650;}
-.ads-activity-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
-.ads-activity-amount{font-size:13px;font-weight:700;white-space:nowrap;}
-.ads-conn-lastseen{margin:0;font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:8px;}
-.ads-conn-list{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:8px;}
-.ads-conn-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);flex-wrap:wrap;}
-.ads-conn-provider{font-size:13px;font-weight:650;}
-.ads-conn-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
-.ads-pay-row{cursor:pointer;}
-.ads-pay-row:hover{background:color-mix(in srgb,var(--primary) 5%,transparent);}
-.ads-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:capitalize;}
-.ads-badge--succeeded{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
-.ads-badge--pending,.ads-badge--processing{background:color-mix(in srgb,#f59e0b 15%,transparent);color:#b45309;}
-.ads-badge--failed,.ads-badge--canceled{background:color-mix(in srgb,#ef4444 14%,transparent);color:#dc2626;}
-.ads-badge--refunded{background:color-mix(in srgb,#64748b 15%,transparent);color:#64748b;}
-.ads-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:1000;}
-.ads-modal-overlay.is-open{display:flex;}
-.ads-modal{width:100%;max-width:520px;max-height:85vh;background:var(--card);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;}
-.ads-modal-header{padding:22px 24px 0;flex-shrink:0;position:relative;}
-.ads-modal-body{padding:0 24px 22px;overflow-y:auto;}
-.ads-modal-close{position:absolute;top:20px;right:22px;width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;display:grid;place-items:center;z-index:1;}
-.ads-modal-close:hover{color:var(--text);background:color-mix(in srgb,var(--primary) 6%,transparent);}
-.ads-modal-title{margin:0 0 4px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;padding-right:36px;}
-.ads-modal-sub{margin:0 0 16px;font-size:12px;color:var(--muted);}
-.ads-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
-@media(max-width:480px){.ads-modal-grid{grid-template-columns:1fr;}}
-.ads-modal-field{min-width:0;}
-.ads-modal-field.full{grid-column:1/-1;}
-.ads-modal-label{margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
-.ads-modal-value{margin:3px 0 0;font-size:13px;font-weight:600;word-break:break-all;}
-.ads-modal-value.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:500;}
-.ads-modal-divider{border:none;border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent);margin:16px 0;}
+.uds-biz-tab:hover{color:var(--text);background:color-mix(in srgb,var(--card) 90%,transparent);}
+.uds-biz-tab.is-active{color:var(--text);border-color:color-mix(in srgb,var(--primary) 30%,var(--border));background:color-mix(in srgb,var(--primary) 8%,var(--card));}
+.uds-biz-panel[hidden]{display:none !important;}
+.uds-stat-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;}
+@media(max-width:640px){.uds-stat-grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
+.uds-mini-stat{padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.uds-mini-stat-label{margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);}
+.uds-mini-stat-value{margin:4px 0 0;font-size:16px;font-weight:800;color:var(--text);}
+.uds-table{width:100%;border-collapse:collapse;}
+.uds-table th{padding:10px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);background:color-mix(in srgb,var(--card) 88%,var(--border));text-align:left;border-bottom:1px solid var(--border);}
+.uds-table td{padding:12px 16px;font-size:13px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);vertical-align:middle;}
+.uds-table tr:last-child td{border-bottom:none;}
+.uds-empty{padding:36px 20px;text-align:center;color:var(--muted);font-size:13px;}
+.uds-activity-list{margin:0;padding:0;list-style:none;}
+.uds-activity-item{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+.uds-activity-item:last-child{border-bottom:none;}
+.uds-activity-icon{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;flex-shrink:0;font-size:13px;}
+.uds-activity-icon--sale{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
+.uds-activity-icon--purchase{background:color-mix(in srgb,#3b82f6 14%,transparent);color:#3b82f6;}
+.uds-activity-body{flex:1;min-width:0;}
+.uds-activity-label{font-size:13px;font-weight:650;}
+.uds-activity-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.uds-activity-amount{font-size:13px;font-weight:700;white-space:nowrap;}
+.uds-conn-lastseen{margin:0;font-size:12.5px;color:var(--text);display:flex;align-items:center;gap:8px;}
+.uds-conn-list{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:8px;}
+.uds-conn-item{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:10px;background:color-mix(in srgb,var(--primary) 4%,transparent);border:1px solid color-mix(in srgb,var(--border) 60%,transparent);flex-wrap:wrap;}
+.uds-conn-provider{font-size:13px;font-weight:650;}
+.uds-conn-meta{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.uds-pay-row{cursor:pointer;}
+.uds-pay-row:hover{background:color-mix(in srgb,var(--primary) 5%,transparent);}
+.uds-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:700;text-transform:capitalize;}
+.uds-badge--succeeded{background:color-mix(in srgb,#22c55e 14%,transparent);color:#16a34a;}
+.uds-badge--pending,.uds-badge--processing{background:color-mix(in srgb,#f59e0b 15%,transparent);color:#b45309;}
+.uds-badge--failed,.uds-badge--canceled{background:color-mix(in srgb,#ef4444 14%,transparent);color:#dc2626;}
+.uds-badge--refunded{background:color-mix(in srgb,#64748b 15%,transparent);color:#64748b;}
+.uds-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;padding:20px;z-index:1000;}
+.uds-modal-overlay.is-open{display:flex;}
+.uds-modal{width:100%;max-width:520px;max-height:85vh;background:var(--card);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;}
+.uds-modal-header{padding:22px 24px 0;flex-shrink:0;position:relative;}
+.uds-modal-body{padding:0 24px 22px;overflow-y:auto;}
+.uds-modal-close{position:absolute;top:20px;right:22px;width:28px;height:28px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;display:grid;place-items:center;z-index:1;}
+.uds-modal-close:hover{color:var(--text);background:color-mix(in srgb,var(--primary) 6%,transparent);}
+.uds-modal-title{margin:0 0 4px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px;padding-right:36px;}
+.uds-modal-sub{margin:0 0 16px;font-size:12px;color:var(--muted);}
+.uds-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;}
+@media(max-width:480px){.uds-modal-grid{grid-template-columns:1fr;}}
+.uds-modal-field{min-width:0;}
+.uds-modal-field.full{grid-column:1/-1;}
+.uds-modal-label{margin:0;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+.uds-modal-value{margin:3px 0 0;font-size:13px;font-weight:600;word-break:break-all;}
+.uds-modal-value.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:500;}
+.uds-modal-divider{border:none;border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent);margin:16px 0;}
 @media(max-width:640px){
-    .ads-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
-    .ads-table, .ads-table tbody, .ads-table tr, .ads-table td{display:block;width:100%;}
-    .ads-table tr{padding:12px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
-    .ads-table tr:last-child{border-bottom:none;}
-    .ads-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:none;text-align:right;}
-    .ads-table td::before{content:attr(data-label);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;flex-shrink:0;}
+    .uds-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;}
+    .uds-table, .uds-table tbody, .uds-table tr, .uds-table td{display:block;width:100%;}
+    .uds-table tr{padding:12px 16px;border-bottom:1px solid color-mix(in srgb,var(--border) 60%,transparent);}
+    .uds-table tr:last-child{border-bottom:none;}
+    .uds-table td{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:none;text-align:right;}
+    .uds-table td::before{content:attr(data-label);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;flex-shrink:0;}
 }
 </style>
 
-<div class="ads-wrap">
-    <a href="{{ route('admin.users.index') }}" class="ads-back"><i class="fa fa-arrow-left"></i> User Accounts</a>
+<div class="uds-wrap">
+    <a href="{{ route('admin.users.index') }}" class="uds-back"><i class="fa fa-arrow-left"></i> User Accounts</a>
 
-    <div class="ads-header">
-        <div class="ads-avatar">{{ strtoupper(substr($user->name ?: '?', 0, 1)) }}</div>
+    <div class="uds-header">
+        <div class="uds-avatar">{{ strtoupper(substr($user->name ?: '?', 0, 1)) }}</div>
         <div>
             @php $roleName = $user->roles->first()->name ?? 'user'; @endphp
-            <h1 class="ads-name">
+            <h1 class="uds-name">
                 {{ $user->name }}
-                @if((int) $user->id === (int) auth()->id())<span class="ads-protected">(you)</span>@endif
-                <span class="ads-role ads-role--{{ $roleName }}">{{ ucfirst($roleName) }}</span>
+                @if((int) $user->id === (int) auth()->id())<span class="uds-protected">(you)</span>@endif
+                <span class="uds-role uds-role--{{ $roleName }}">{{ ucfirst($roleName) }}</span>
             </h1>
-            <p class="ads-email">{{ $user->email }}</p>
+            <p class="uds-email">{{ $user->email }}</p>
             @php
                 // Contact details entered at sign-up live on the first branch
                 // (onboarding "Location" step), not on the user record.
@@ -134,13 +134,13 @@
                 $contactAddress = $contactBranches->pluck('address')->filter()->first();
             @endphp
             @if($contactPhone || $contactEmail || $contactAddress)
-                <p class="ads-meta">
+                <p class="uds-meta">
                     @if($contactPhone)<span><i class="fa fa-phone"></i> <a href="tel:{{ preg_replace('/[^\d+]/', '', $contactPhone) }}" style="color:inherit;">{{ $contactPhone }}</a></span>@endif
                     @if($contactEmail)<span><i class="fa fa-envelope"></i> {{ $contactEmail }}</span>@endif
                     @if($contactAddress)<span><i class="fa fa-location-dot"></i> {{ $contactAddress }}</span>@endif
                 </p>
             @endif
-            <p class="ads-meta">
+            <p class="uds-meta">
                 <span><i class="fa fa-calendar"></i> Joined {{ $user->created_at?->format('d M Y') }} ({{ $user->created_at?->diffForHumans() }})</span>
                 @if($user->email_verified_at)
                     <span><i class="fa fa-circle-check" style="color:#22c55e;"></i> Email verified</span>
@@ -153,10 +153,10 @@
             </p>
         </div>
         @if((int) $user->id !== (int) auth()->id() && $roleName !== 'admin')
-            <form method="POST" action="{{ route('admin.users.impersonate', $user) }}" class="ads-impersonate"
+            <form method="POST" action="{{ route('admin.users.impersonate', $user) }}" class="uds-impersonate"
                   onsubmit="return confirm(@js(__('Log in as :name? You will see their dashboard exactly as they do. Use “Return to admin” to come back.', ['name' => $user->name])));">
                 @csrf
-                <button type="submit" class="ads-impersonate-btn" @disabled(! $user->is_active)
+                <button type="submit" class="uds-impersonate-btn" @disabled(! $user->is_active)
                         title="{{ $user->is_active ? __('Open this user\'s dashboard to check for errors') : __('Account is disabled') }}">
                     <i class="fa fa-user-secret"></i> Login as user
                 </button>
@@ -165,10 +165,10 @@
     </div>
 
     @if(session('status'))
-        <div class="ads-msg"><i class="fa fa-circle-check" style="color:#22c55e;"></i> {{ session('status') }}</div>
+        <div class="uds-msg"><i class="fa fa-circle-check" style="color:#22c55e;"></i> {{ session('status') }}</div>
     @endif
     @if($errors->any())
-        <div class="ads-msg ads-msg--err"><i class="fa fa-circle-exclamation"></i> {{ $errors->first() }}</div>
+        <div class="uds-msg uds-msg--err"><i class="fa fa-circle-exclamation"></i> {{ $errors->first() }}</div>
     @endif
 
     @php
@@ -177,36 +177,36 @@
         $teamUserCount = $user->businesses->flatMap(fn ($b) => $b->members->pluck('user_id'))->unique()->count();
         $pendingInviteCount = $pendingInvites->flatten()->count();
     @endphp
-    <div class="ads-summary">
-        <div class="ads-stat">
-            <p class="ads-stat-label">Businesses</p>
-            <p class="ads-stat-value">{{ $user->businesses->count() }}</p>
+    <div class="uds-summary">
+        <div class="uds-stat">
+            <p class="uds-stat-label">Businesses</p>
+            <p class="uds-stat-value">{{ $user->businesses->count() }}</p>
         </div>
-        <div class="ads-stat">
-            <p class="ads-stat-label">Branches</p>
-            <p class="ads-stat-value">{{ $branchCount }}</p>
+        <div class="uds-stat">
+            <p class="uds-stat-label">Branches</p>
+            <p class="uds-stat-value">{{ $branchCount }}</p>
         </div>
-        <div class="ads-stat">
-            <p class="ads-stat-label">Team users</p>
-            <p class="ads-stat-value">{{ $teamUserCount }}@if($pendingInviteCount) <span style="font-size:12px;font-weight:600;color:var(--muted);">+ {{ $pendingInviteCount }} invited</span>@endif</p>
+        <div class="uds-stat">
+            <p class="uds-stat-label">Team users</p>
+            <p class="uds-stat-value">{{ $teamUserCount }}@if($pendingInviteCount) <span style="font-size:12px;font-weight:600;color:var(--muted);">+ {{ $pendingInviteCount }} invited</span>@endif</p>
         </div>
-        <div class="ads-stat">
-            <p class="ads-stat-label">Accounts</p>
-            <p class="ads-stat-value">{{ $user->accounts->count() }}</p>
+        <div class="uds-stat">
+            <p class="uds-stat-label">Accounts</p>
+            <p class="uds-stat-value">{{ $user->accounts->count() }}</p>
         </div>
-        <div class="ads-stat">
-            <p class="ads-stat-label">HR employee records</p>
-            <p class="ads-stat-value">{{ $user->hrEmployees->count() }}</p>
+        <div class="uds-stat">
+            <p class="uds-stat-label">HR employee records</p>
+            <p class="uds-stat-value">{{ $user->hrEmployees->count() }}</p>
         </div>
     </div>
 
-    <div class="ads-section">
-        <h2 class="ads-section-title"><i class="fa fa-building" style="color:var(--primary);"></i> Registered businesses <span class="count">{{ $user->businesses->count() }}</span></h2>
+    <div class="uds-section">
+        <h2 class="uds-section-title"><i class="fa fa-building" style="color:var(--primary);"></i> Registered businesses <span class="count">{{ $user->businesses->count() }}</span></h2>
 
         @if($user->businesses->isEmpty())
-            <div class="ads-card"><div class="ads-empty">No businesses registered by this user.</div></div>
+            <div class="uds-card"><div class="uds-empty">No businesses registered by this user.</div></div>
         @else
-            <div class="ads-card">
+            <div class="uds-card">
                 @foreach($user->businesses as $business)
                     @php
                         $stats = $businessStats[$business->id];
@@ -214,119 +214,119 @@
                         $bizInvites = $pendingInvites->get($business->id, collect());
                         $bizRoles = $roleNames->get($business->id, collect());
                     @endphp
-                    <div class="ads-biz">
-                        <div class="ads-biz-head">
+                    <div class="uds-biz">
+                        <div class="uds-biz-head">
                             <div>
-                                <p class="ads-biz-name">{{ $business->name }}
-                                    <span class="ads-users-chip" title="Owner + team members using this business"><i class="fa fa-users"></i> {{ $bizMembers->count() + 1 }} {{ \Illuminate\Support\Str::plural('user', $bizMembers->count() + 1) }}</span>
+                                <p class="uds-biz-name">{{ $business->name }}
+                                    <span class="uds-users-chip" title="Owner + team members using this business"><i class="fa fa-users"></i> {{ $bizMembers->count() + 1 }} {{ \Illuminate\Support\Str::plural('user', $bizMembers->count() + 1) }}</span>
                                 </p>
-                                @if($business->category)<p class="ads-biz-cat">{{ str_replace('_', ' ', $business->category) }}</p>@endif
+                                @if($business->category)<p class="uds-biz-cat">{{ str_replace('_', ' ', $business->category) }}</p>@endif
                             </div>
-                            <span class="ads-biz-date" title="{{ $business->created_at?->format('d M Y, H:i:s') }}">Registered {{ $business->created_at?->format('d M Y') }}</span>
+                            <span class="uds-biz-date" title="{{ $business->created_at?->format('d M Y, H:i:s') }}">Registered {{ $business->created_at?->format('d M Y') }}</span>
                         </div>
 
                         @if($business->branches->isEmpty())
-                            <p class="ads-empty-inline">No branches added for this business.</p>
+                            <p class="uds-empty-inline">No branches added for this business.</p>
                         @else
-                            <ul class="ads-branch-list">
+                            <ul class="uds-branch-list">
                                 @foreach($business->branches as $branch)
-                                    <li class="ads-branch">
+                                    <li class="uds-branch">
                                         <div>
-                                            <div class="ads-branch-name">{{ $branch->name }}</div>
-                                            <div class="ads-branch-meta">
+                                            <div class="uds-branch-name">{{ $branch->name }}</div>
+                                            <div class="uds-branch-meta">
                                                 @if($branch->address){{ $branch->address }}@endif
                                                 @php $branchContact = collect([$branch->address, $branch->phone, $branch->email])->filter()->implode(' · '); @endphp
                                                 {{ $branchContact !== '' ? $branchContact : 'No address, phone or email on file' }}
                                             </div>
                                         </div>
-                                        <span class="ads-branch-badge {{ $branch->is_active ? 'ads-branch-badge--active' : 'ads-branch-badge--inactive' }}">{{ $branch->is_active ? 'Active' : 'Inactive' }}</span>
+                                        <span class="uds-branch-badge {{ $branch->is_active ? 'uds-branch-badge--active' : 'uds-branch-badge--inactive' }}">{{ $branch->is_active ? 'Active' : 'Inactive' }}</span>
                                     </li>
                                 @endforeach
                             </ul>
                         @endif
 
-                        <div class="ads-biz-tabs" role="tablist" aria-label="{{ $business->name }} analysis">
-                            <button type="button" class="ads-biz-tab is-active" data-tab="overview"><i class="fa fa-chart-simple"></i> Overview</button>
-                            <button type="button" class="ads-biz-tab" data-tab="users"><i class="fa fa-users"></i> Users ({{ $bizMembers->count() + 1 }})</button>
-                            <button type="button" class="ads-biz-tab" data-tab="sales"><i class="fa fa-cart-shopping"></i> Sales &amp; Purchases</button>
-                            <button type="button" class="ads-biz-tab" data-tab="hr"><i class="fa fa-people-group"></i> HR</button>
-                            <button type="button" class="ads-biz-tab" data-tab="crm"><i class="fa fa-bullseye"></i> CRM</button>
-                            <button type="button" class="ads-biz-tab" data-tab="docs"><i class="fa fa-file-invoice-dollar"></i> Quotes &amp; Invoices</button>
-                            <button type="button" class="ads-biz-tab" data-tab="payments"><i class="fa fa-credit-card"></i> Payment</button>
-                            <button type="button" class="ads-biz-tab" data-tab="pos-settings"><i class="fa fa-sliders"></i> POS Settings</button>
+                        <div class="uds-biz-tabs" role="tablist" aria-label="{{ $business->name }} analysis">
+                            <button type="button" class="uds-biz-tab is-active" data-tab="overview"><i class="fa fa-chart-simple"></i> Overview</button>
+                            <button type="button" class="uds-biz-tab" data-tab="users"><i class="fa fa-users"></i> Users ({{ $bizMembers->count() + 1 }})</button>
+                            <button type="button" class="uds-biz-tab" data-tab="sales"><i class="fa fa-cart-shopping"></i> Sales &amp; Purchases</button>
+                            <button type="button" class="uds-biz-tab" data-tab="hr"><i class="fa fa-people-group"></i> HR</button>
+                            <button type="button" class="uds-biz-tab" data-tab="crm"><i class="fa fa-bullseye"></i> CRM</button>
+                            <button type="button" class="uds-biz-tab" data-tab="docs"><i class="fa fa-file-invoice-dollar"></i> Quotes &amp; Invoices</button>
+                            <button type="button" class="uds-biz-tab" data-tab="payments"><i class="fa fa-credit-card"></i> Payment</button>
+                            <button type="button" class="uds-biz-tab" data-tab="pos-settings"><i class="fa fa-sliders"></i> POS Settings</button>
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="overview">
-                            <div class="ads-stat-grid">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Products</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['overview']['products_active'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">/ {{ $stats['overview']['products_total'] }}</span></p>
+                        <div class="uds-biz-panel" data-panel="overview">
+                            <div class="uds-stat-grid">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Products</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['overview']['products_active'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">/ {{ $stats['overview']['products_total'] }}</span></p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Stock value (cost)</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['overview']['stock_value'], 2) }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Stock value (cost)</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['overview']['stock_value'], 2) }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Suppliers</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['overview']['suppliers_count'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Suppliers</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['overview']['suppliers_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Customers</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['overview']['customers_count'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Customers</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['overview']['customers_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Branches</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['overview']['branches_count'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Branches</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['overview']['branches_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Storage used</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['overview']['storage_human'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Storage used</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['overview']['storage_human'] }}</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="users" hidden>
-                            <div class="ads-stat-grid" style="margin-bottom:12px;">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Total users</p>
-                                    <p class="ads-mini-stat-value">{{ $bizMembers->count() + 1 }} <span style="font-size:11px;font-weight:600;color:var(--muted);">incl. owner</span></p>
+                        <div class="uds-biz-panel" data-panel="users" hidden>
+                            <div class="uds-stat-grid" style="margin-bottom:12px;">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Total users</p>
+                                    <p class="uds-mini-stat-value">{{ $bizMembers->count() + 1 }} <span style="font-size:11px;font-weight:600;color:var(--muted);">incl. owner</span></p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Active members</p>
-                                    <p class="ads-mini-stat-value">{{ $bizMembers->where('status', 'active')->count() }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Active members</p>
+                                    <p class="uds-mini-stat-value">{{ $bizMembers->where('status', 'active')->count() }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Invitations not accepted</p>
-                                    <p class="ads-mini-stat-value">{{ $bizInvites->count() }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Invitations not accepted</p>
+                                    <p class="uds-mini-stat-value">{{ $bizInvites->count() }}</p>
                                 </div>
                             </div>
 
                             @php $seats = $stats['seats']; @endphp
-                            <div class="ads-stat-grid" style="margin-bottom:12px;">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">User seats ({{ $seats['plan'] ?? 'no package' }})</p>
+                            <div class="uds-stat-grid" style="margin-bottom:12px;">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">User seats ({{ $seats['plan'] ?? 'no package' }})</p>
                                     @if($seats['limited'])
-                                        <p class="ads-mini-stat-value" style="{{ $seats['users_remaining'] === 0 ? 'color:#d97706;' : '' }}">{{ $seats['users_used'] }} / {{ $seats['user_limit'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">{{ $seats['users_remaining'] === 0 ? 'full' : $seats['users_remaining'].' free' }}</span></p>
+                                        <p class="uds-mini-stat-value" style="{{ $seats['users_remaining'] === 0 ? 'color:#d97706;' : '' }}">{{ $seats['users_used'] }} / {{ $seats['user_limit'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">{{ $seats['users_remaining'] === 0 ? 'full' : $seats['users_remaining'].' free' }}</span></p>
                                     @else
-                                        <p class="ads-mini-stat-value">{{ $seats['users_used'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">unlimited</span></p>
+                                        <p class="uds-mini-stat-value">{{ $seats['users_used'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">unlimited</span></p>
                                     @endif
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">{{ $seats['custom_limit'] ? 'Custom limit (admin)' : 'Included' }} / extra users</p>
-                                    <p class="ads-mini-stat-value">{{ $seats['included_users'] ?? '∞' }} <span style="font-size:11px;font-weight:600;color:var(--muted);">+ {{ $seats['extra_users'] }} extra</span></p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">{{ $seats['custom_limit'] ? 'Custom limit (admin)' : 'Included' }} / extra users</p>
+                                    <p class="uds-mini-stat-value">{{ $seats['included_users'] ?? '∞' }} <span style="font-size:11px;font-weight:600;color:var(--muted);">+ {{ $seats['extra_users'] }} extra</span></p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Price per extra user</p>
-                                    <p class="ads-mini-stat-value">{{ $seats['extra_user_price'] !== null ? $seats['currency'].' '.number_format($seats['extra_user_price'], 2) : '—' }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Price per extra user</p>
+                                    <p class="uds-mini-stat-value">{{ $seats['extra_user_price'] !== null ? $seats['currency'].' '.number_format($seats['extra_user_price'], 2) : '—' }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Monthly total</p>
-                                    <p class="ads-mini-stat-value">{{ $seats['currency'] }} {{ number_format($seats['monthly_total'], 2) }} <span style="font-size:11px;font-weight:600;color:var(--muted);">plan {{ number_format($seats['base_amount'], 2) }} + extra {{ number_format($seats['extra_monthly'], 2) }}</span></p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Monthly total</p>
+                                    <p class="uds-mini-stat-value">{{ $seats['currency'] }} {{ number_format($seats['monthly_total'], 2) }} <span style="font-size:11px;font-weight:600;color:var(--muted);">plan {{ number_format($seats['base_amount'], 2) }} + extra {{ number_format($seats['extra_monthly'], 2) }}</span></p>
                                 </div>
                             </div>
 
                             <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">
-                                <table class="ads-table">
+                                <table class="uds-table">
                                     <thead>
                                         <tr>
                                             <th>Name</th>
@@ -340,7 +340,7 @@
                                         <tr>
                                             <td data-label="Name">{{ $user->name }}</td>
                                             <td data-label="Email">{{ $user->email }}</td>
-                                            <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,#6d28d9 13%,transparent);color:#6d28d9;">Owner</span></td>
+                                            <td data-label="Role"><span class="uds-role" style="background:color-mix(in srgb,#6d28d9 13%,transparent);color:#6d28d9;">Owner</span></td>
                                             <td data-label="Status">Active</td>
                                             <td data-label="Since">{{ $business->created_at?->format('d M Y') }}</td>
                                         </tr>
@@ -348,7 +348,7 @@
                                             <tr>
                                                 <td data-label="Name"><a href="{{ route('admin.users.show', $member->user) }}" style="color:inherit;font-weight:600;">{{ $member->user->name }}</a></td>
                                                 <td data-label="Email">{{ $member->user->email }}</td>
-                                                <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,{{ $member->roleBadgeColor() }} 15%,transparent);color:{{ $member->roleBadgeColor() }};">{{ $bizRoles->get($member->role) ?? $member->roleLabel() }}</span></td>
+                                                <td data-label="Role"><span class="uds-role" style="background:color-mix(in srgb,{{ $member->roleBadgeColor() }} 15%,transparent);color:{{ $member->roleBadgeColor() }};">{{ $bizRoles->get($member->role) ?? $member->roleLabel() }}</span></td>
                                                 <td data-label="Status" style="text-transform:capitalize;">{{ $member->status }}</td>
                                                 <td data-label="Since">{{ $member->created_at?->format('d M Y') }}</td>
                                             </tr>
@@ -357,12 +357,12 @@
                                             <tr style="opacity:.8;">
                                                 <td data-label="Name" style="color:var(--muted);font-style:italic;">Invited</td>
                                                 <td data-label="Email">{{ $invite->email }}</td>
-                                                <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;">{{ $bizRoles->get($invite->role) ?? ucfirst($invite->role) }}</span></td>
+                                                <td data-label="Role"><span class="uds-role" style="background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;">{{ $bizRoles->get($invite->role) ?? ucfirst($invite->role) }}</span></td>
                                                 <td data-label="Status">
                                                     @if($invite->isExpired())
-                                                        <span class="ads-badge ads-badge--failed">Invite expired</span>
+                                                        <span class="uds-badge uds-badge--failed">Invite expired</span>
                                                     @else
-                                                        <span class="ads-badge ads-badge--pending">Invite pending</span>
+                                                        <span class="uds-badge uds-badge--pending">Invite pending</span>
                                                     @endif
                                                 </td>
                                                 <td data-label="Since" title="Last sent {{ $invite->last_sent_at?->format('d M Y, H:i') }}">{{ $invite->created_at?->format('d M Y') }}</td>
@@ -373,91 +373,91 @@
                             </div>
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="sales" hidden>
-                            <div class="ads-stat-grid">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Completed sales</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['sales_purchases']['sales_count'] }}</p>
+                        <div class="uds-biz-panel" data-panel="sales" hidden>
+                            <div class="uds-stat-grid">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Completed sales</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['sales_purchases']['sales_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Sales revenue</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['sales_purchases']['sales_total'], 2) }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Sales revenue</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['sales_purchases']['sales_total'], 2) }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Received purchases</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['sales_purchases']['purchases_count'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Received purchases</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['sales_purchases']['purchases_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Purchase spend</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['sales_purchases']['purchases_total'], 2) }}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="ads-biz-panel" data-panel="hr" hidden>
-                            <div class="ads-stat-grid">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Employees</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['hr']['employees_count'] }}</p>
-                                </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Departments</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['hr']['departments_count'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Purchase spend</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['sales_purchases']['purchases_total'], 2) }}</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="crm" hidden>
-                            <div class="ads-stat-grid">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Leads</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['crm']['leads_count'] }}</p>
+                        <div class="uds-biz-panel" data-panel="hr" hidden>
+                            <div class="uds-stat-grid">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Employees</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['hr']['employees_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Won / Lost</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['crm']['leads_won'] }} / {{ $stats['crm']['leads_lost'] }}</p>
-                                </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Pipeline value</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['crm']['leads_value'], 2) }}</p>
-                                </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Projects</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['crm']['projects_active'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">/ {{ $stats['crm']['projects_count'] }}</span></p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Departments</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['hr']['departments_count'] }}</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="docs" hidden>
-                            <div class="ads-stat-grid">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Quotations</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['quotes_invoices']['quotations_accepted'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">/ {{ $stats['quotes_invoices']['quotations_count'] }} accepted</span></p>
+                        <div class="uds-biz-panel" data-panel="crm" hidden>
+                            <div class="uds-stat-grid">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Leads</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['crm']['leads_count'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Invoices</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['quotes_invoices']['invoices_count'] }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Won / Lost</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['crm']['leads_won'] }} / {{ $stats['crm']['leads_lost'] }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Invoiced &amp; paid</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['quotes_invoices']['invoices_paid_total'], 2) }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Pipeline value</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['crm']['leads_value'], 2) }}</p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Outstanding</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['quotes_invoices']['invoices_outstanding_total'], 2) }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Projects</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['crm']['projects_active'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">/ {{ $stats['crm']['projects_count'] }}</span></p>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="payments" hidden>
-                            <div class="ads-stat-grid" style="margin-bottom:12px;">
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Total payments</p>
-                                    <p class="ads-mini-stat-value">{{ $stats['payments']['count'] }}</p>
+                        <div class="uds-biz-panel" data-panel="docs" hidden>
+                            <div class="uds-stat-grid">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Quotations</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['quotes_invoices']['quotations_accepted'] }} <span style="font-size:11px;font-weight:600;color:var(--muted);">/ {{ $stats['quotes_invoices']['quotations_count'] }} accepted</span></p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Paid (succeeded)</p>
-                                    <p class="ads-mini-stat-value">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Invoices</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['quotes_invoices']['invoices_count'] }}</p>
+                                </div>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Invoiced &amp; paid</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['quotes_invoices']['invoices_paid_total'], 2) }}</p>
+                                </div>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Outstanding</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['currency'] }} {{ number_format($stats['quotes_invoices']['invoices_outstanding_total'], 2) }}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="uds-biz-panel" data-panel="payments" hidden>
+                            <div class="uds-stat-grid" style="margin-bottom:12px;">
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Total payments</p>
+                                    <p class="uds-mini-stat-value">{{ $stats['payments']['count'] }}</p>
+                                </div>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Paid (succeeded)</p>
+                                    <p class="uds-mini-stat-value">
                                         @forelse($stats['payments']['succeeded_totals'] as $currency => $total)
                                             {{ $currency }} {{ number_format($total, 2) }}@if(! $loop->last)<br>@endif
                                         @empty
@@ -465,17 +465,17 @@
                                         @endforelse
                                     </p>
                                 </div>
-                                <div class="ads-mini-stat">
-                                    <p class="ads-mini-stat-label">Subscription</p>
-                                    <p class="ads-mini-stat-value" style="font-size:14px;">{{ $stats['payments']['active_subscription'] ? 'Active' : 'Inactive' }}</p>
+                                <div class="uds-mini-stat">
+                                    <p class="uds-mini-stat-label">Subscription</p>
+                                    <p class="uds-mini-stat-value" style="font-size:14px;">{{ $stats['payments']['active_subscription'] ? 'Active' : 'Inactive' }}</p>
                                 </div>
                             </div>
 
                             @if($stats['payments']['items']->isEmpty())
-                                <p class="ads-empty-inline">No payments recorded for this business.</p>
+                                <p class="uds-empty-inline">No payments recorded for this business.</p>
                             @else
                                 <div style="overflow-x:auto;border:1px solid var(--border);border-radius:10px;">
-                                    <table class="ads-table">
+                                    <table class="uds-table">
                                         <thead>
                                             <tr>
                                                 <th>Package</th>
@@ -487,10 +487,10 @@
                                         </thead>
                                         <tbody>
                                             @foreach($stats['payments']['items'] as $payment)
-                                                <tr class="ads-pay-row" data-payment="{{ json_encode($payment) }}" title="Click to view full payment details">
+                                                <tr class="uds-pay-row" data-payment="{{ json_encode($payment) }}" title="Click to view full payment details">
                                                     <td data-label="Package">{{ $payment['package'] }}</td>
                                                     <td data-label="Amount">{{ $payment['currency'] }} {{ number_format($payment['amount'], 2) }}</td>
-                                                    <td data-label="Status"><span class="ads-badge ads-badge--{{ $payment['payment_status'] }}">{{ $payment['payment_status'] }}</span></td>
+                                                    <td data-label="Status"><span class="uds-badge uds-badge--{{ $payment['payment_status'] }}">{{ $payment['payment_status'] }}</span></td>
                                                     <td data-label="Gateway" style="text-transform:capitalize;">{{ $payment['gateway'] }}</td>
                                                     <td data-label="Date">{{ $payment['paid_at'] ?: $payment['created_at'] }}</td>
                                                 </tr>
@@ -501,21 +501,21 @@
                             @endif
                         </div>
 
-                        <div class="ads-biz-panel" data-panel="pos-settings" data-url="{{ route('admin.businesses.pos-settings.index', $business) }}" hidden></div>
+                        <div class="uds-biz-panel" data-panel="pos-settings" data-url="{{ route('admin.businesses.pos-settings.index', $business) }}" hidden></div>
                     </div>
                 @endforeach
             </div>
         @endif
     </div>
 
-    <div class="ads-section">
-        <h2 class="ads-section-title"><i class="fa fa-user-tag" style="color:var(--primary);"></i> Staff access at other businesses <span class="count">{{ $memberships->count() }}</span></h2>
+    <div class="uds-section">
+        <h2 class="uds-section-title"><i class="fa fa-user-tag" style="color:var(--primary);"></i> Staff access at other businesses <span class="count">{{ $memberships->count() }}</span></h2>
 
         @if($memberships->isEmpty())
-            <div class="ads-card"><div class="ads-empty">Not a staff member of any other business.</div></div>
+            <div class="uds-card"><div class="uds-empty">Not a staff member of any other business.</div></div>
         @else
-            <div class="ads-card" style="overflow-x:auto;">
-                <table class="ads-table">
+            <div class="uds-card" style="overflow-x:auto;">
+                <table class="uds-table">
                     <thead>
                         <tr>
                             <th>Business</th>
@@ -528,7 +528,7 @@
                         @foreach($memberships as $membership)
                             <tr>
                                 <td data-label="Business">{{ $membership->business?->name ?: '—' }}</td>
-                                <td data-label="Role"><span class="ads-role" style="background:color-mix(in srgb,{{ $membership->roleBadgeColor() }} 15%,transparent);color:{{ $membership->roleBadgeColor() }};">{{ $membership->roleLabel() }}</span></td>
+                                <td data-label="Role"><span class="uds-role" style="background:color-mix(in srgb,{{ $membership->roleBadgeColor() }} 15%,transparent);color:{{ $membership->roleBadgeColor() }};">{{ $membership->roleLabel() }}</span></td>
                                 <td data-label="Status" style="text-transform:capitalize;">{{ $membership->status }}</td>
                                 <td data-label="Since">{{ $membership->created_at?->format('d M Y') }}</td>
                             </tr>
@@ -539,24 +539,24 @@
         @endif
     </div>
 
-    <div class="ads-section">
-        <h2 class="ads-section-title"><i class="fa fa-clock-rotate-left" style="color:var(--primary);"></i> Recent activity</h2>
+    <div class="uds-section">
+        <h2 class="uds-section-title"><i class="fa fa-clock-rotate-left" style="color:var(--primary);"></i> Recent activity</h2>
 
         @if($recentActivity->isEmpty())
-            <div class="ads-card"><div class="ads-empty">No completed sales or received purchases yet.</div></div>
+            <div class="uds-card"><div class="uds-empty">No completed sales or received purchases yet.</div></div>
         @else
-            <div class="ads-card">
-                <ul class="ads-activity-list">
+            <div class="uds-card">
+                <ul class="uds-activity-list">
                     @foreach($recentActivity as $item)
-                        <li class="ads-activity-item">
-                            <span class="ads-activity-icon ads-activity-icon--{{ $item['type'] }}">
+                        <li class="uds-activity-item">
+                            <span class="uds-activity-icon uds-activity-icon--{{ $item['type'] }}">
                                 <i class="fa fa-{{ $item['type'] === 'sale' ? 'cart-shopping' : 'truck-ramp-box' }}"></i>
                             </span>
-                            <div class="ads-activity-body">
-                                <div class="ads-activity-label">{{ $item['label'] }}</div>
-                                <div class="ads-activity-meta">{{ $item['business'] }} · {{ $item['date']?->format('d M Y, H:i') }}</div>
+                            <div class="uds-activity-body">
+                                <div class="uds-activity-label">{{ $item['label'] }}</div>
+                                <div class="uds-activity-meta">{{ $item['business'] }} · {{ $item['date']?->format('d M Y, H:i') }}</div>
                             </div>
-                            <div class="ads-activity-amount">{{ $item['currency'] }} {{ number_format($item['amount'], 2) }}</div>
+                            <div class="uds-activity-amount">{{ $item['currency'] }} {{ number_format($item['amount'], 2) }}</div>
                         </li>
                     @endforeach
                 </ul>
@@ -564,14 +564,14 @@
         @endif
     </div>
 
-    <div class="ads-section">
-        <h2 class="ads-section-title"><i class="fa fa-wallet" style="color:var(--primary);"></i> Financial accounts <span class="count">{{ $user->accounts->count() }}</span></h2>
+    <div class="uds-section">
+        <h2 class="uds-section-title"><i class="fa fa-wallet" style="color:var(--primary);"></i> Financial accounts <span class="count">{{ $user->accounts->count() }}</span></h2>
 
         @if($user->accounts->isEmpty())
-            <div class="ads-card"><div class="ads-empty">No financial accounts registered by this user.</div></div>
+            <div class="uds-card"><div class="uds-empty">No financial accounts registered by this user.</div></div>
         @else
-            <div class="ads-card" style="overflow-x:auto;">
-                <table class="ads-table">
+            <div class="uds-card" style="overflow-x:auto;">
+                <table class="uds-table">
                     <thead>
                         <tr>
                             <th>Account</th>
@@ -605,10 +605,10 @@
         @endif
     </div>
 
-    <div class="ads-section">
-        <h2 class="ads-section-title"><i class="fa fa-display" style="color:var(--primary);"></i> Platform activity</h2>
-        <div class="ads-card" style="padding:16px 18px;">
-            <p class="ads-conn-lastseen">
+    <div class="uds-section">
+        <h2 class="uds-section-title"><i class="fa fa-display" style="color:var(--primary);"></i> Platform activity</h2>
+        <div class="uds-card" style="padding:16px 18px;">
+            <p class="uds-conn-lastseen">
                 <i class="fa fa-flag"></i>
                 Registered via
                 @if($registeredPlatform === \App\Models\UserActivityLog::PLATFORM_DESKTOP)
@@ -619,10 +619,10 @@
                     <strong>online platform</strong> <span style="color:var(--muted);">(assumed — before activity tracking)</span>
                 @endif
             </p>
-            <div class="ads-stat-grid" style="margin-top:10px;">
-                <div class="ads-mini-stat">
-                    <p class="ads-mini-stat-label"><i class="fa fa-globe"></i> Online platform</p>
-                    <p class="ads-stat-value" style="font-size:14px;">
+            <div class="uds-stat-grid" style="margin-top:10px;">
+                <div class="uds-mini-stat">
+                    <p class="uds-mini-stat-label"><i class="fa fa-globe"></i> Online platform</p>
+                    <p class="uds-stat-value" style="font-size:14px;">
                         @if($lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_WEB] ?? null)
                             {{ $lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_WEB]->diffForHumans() }}
                         @else
@@ -630,9 +630,9 @@
                         @endif
                     </p>
                 </div>
-                <div class="ads-mini-stat">
-                    <p class="ads-mini-stat-label"><i class="fa fa-desktop"></i> Desktop software</p>
-                    <p class="ads-stat-value" style="font-size:14px;">
+                <div class="uds-mini-stat">
+                    <p class="uds-mini-stat-label"><i class="fa fa-desktop"></i> Desktop software</p>
+                    <p class="uds-stat-value" style="font-size:14px;">
                         @if($lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_DESKTOP] ?? null)
                             {{ $lastActiveByPlatform[\App\Models\UserActivityLog::PLATFORM_DESKTOP]->diffForHumans() }}
                         @else
@@ -644,7 +644,7 @@
 
             @if($platformActivity->isNotEmpty())
                 <div style="overflow-x:auto;margin-top:14px;">
-                    <table class="ads-table">
+                    <table class="uds-table">
                         <thead>
                             <tr>
                                 <th>Platform</th>
@@ -673,7 +673,7 @@
                 <div style="margin-top:12px;">{{ $platformActivity->links() }}</div>
             @endif
 
-            <p class="ads-conn-lastseen" style="margin-top:14px;">
+            <p class="uds-conn-lastseen" style="margin-top:14px;">
                 <i class="fa fa-signal"></i>
                 @if($lastSeenAt)
                     Last web session seen {{ $lastSeenAt->diffForHumans() }} <span style="color:var(--muted);">({{ $lastSeenAt->format('d M Y, H:i') }})</span>
@@ -683,16 +683,16 @@
             </p>
 
             @if($user->appConnections->isEmpty())
-                <p class="ads-empty-inline" style="margin-top:12px;">No linked third-party app connections.</p>
+                <p class="uds-empty-inline" style="margin-top:12px;">No linked third-party app connections.</p>
             @else
-                <ul class="ads-conn-list">
+                <ul class="uds-conn-list">
                     @foreach($user->appConnections as $connection)
-                        <li class="ads-conn-item">
+                        <li class="uds-conn-item">
                             <div>
-                                <div class="ads-conn-provider">{{ ucfirst($connection->provider) }}</div>
-                                <div class="ads-conn-meta">{{ $connection->email ?: $connection->name ?: $connection->provider_user_id }}</div>
+                                <div class="uds-conn-provider">{{ ucfirst($connection->provider) }}</div>
+                                <div class="uds-conn-meta">{{ $connection->email ?: $connection->name ?: $connection->provider_user_id }}</div>
                             </div>
-                            <div class="ads-conn-meta" style="text-align:right;">
+                            <div class="uds-conn-meta" style="text-align:right;">
                                 Linked {{ $connection->created_at?->format('d M Y') }}
                                 @if($connection->token_expires_at)
                                     <div>Token expires {{ $connection->token_expires_at->format('d M Y') }}</div>
@@ -706,10 +706,10 @@
     </div>
 
     @if($user->hrEmployees->isNotEmpty())
-        <div class="ads-section">
-            <h2 class="ads-section-title"><i class="fa fa-id-badge" style="color:var(--primary);"></i> HR employee records <span class="count">{{ $user->hrEmployees->count() }}</span></h2>
-            <div class="ads-card" style="overflow-x:auto;">
-                <table class="ads-table">
+        <div class="uds-section">
+            <h2 class="uds-section-title"><i class="fa fa-id-badge" style="color:var(--primary);"></i> HR employee records <span class="count">{{ $user->hrEmployees->count() }}</span></h2>
+            <div class="uds-card" style="overflow-x:auto;">
+                <table class="uds-table">
                     <thead>
                         <tr>
                             <th>Business</th>
@@ -732,71 +732,71 @@
 
 @include('pos::admin.settings.assets')
 
-<div class="ads-modal-overlay" id="ads-payment-modal">
-    <div class="ads-modal" role="dialog" aria-modal="true" aria-labelledby="ads-payment-modal-title">
-        <div class="ads-modal-header">
-            <button type="button" class="ads-modal-close" id="ads-payment-modal-close" aria-label="Close"><i class="fa fa-xmark"></i></button>
-            <h3 class="ads-modal-title" id="ads-payment-modal-title"><i class="fa fa-credit-card" style="color:var(--primary);"></i> Payment details</h3>
-            <p class="ads-modal-sub">Payment #<span data-field="id"></span></p>
+<div class="uds-modal-overlay" id="uds-payment-modal">
+    <div class="uds-modal" role="dialog" aria-modal="true" aria-labelledby="uds-payment-modal-title">
+        <div class="uds-modal-header">
+            <button type="button" class="uds-modal-close" id="uds-payment-modal-close" aria-label="Close"><i class="fa fa-xmark"></i></button>
+            <h3 class="uds-modal-title" id="uds-payment-modal-title"><i class="fa fa-credit-card" style="color:var(--primary);"></i> Payment details</h3>
+            <p class="uds-modal-sub">Payment #<span data-field="id"></span></p>
         </div>
-        <div class="ads-modal-body">
-            <div class="ads-modal-grid">
-                <div class="ads-modal-field"><p class="ads-modal-label">Package</p><p class="ads-modal-value" data-field="package"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Amount</p><p class="ads-modal-value" data-field="amount"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Status</p><p class="ads-modal-value" data-field="payment_status" style="text-transform:capitalize;"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Type</p><p class="ads-modal-value" data-field="payment_type" style="text-transform:capitalize;"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Billing cycle</p><p class="ads-modal-value" data-field="billing_cycle" style="text-transform:capitalize;"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Gateway</p><p class="ads-modal-value" data-field="gateway" style="text-transform:capitalize;"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Paid at</p><p class="ads-modal-value" data-field="paid_at"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Created</p><p class="ads-modal-value" data-field="created_at"></p></div>
+        <div class="uds-modal-body">
+            <div class="uds-modal-grid">
+                <div class="uds-modal-field"><p class="uds-modal-label">Package</p><p class="uds-modal-value" data-field="package"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Amount</p><p class="uds-modal-value" data-field="amount"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Status</p><p class="uds-modal-value" data-field="payment_status" style="text-transform:capitalize;"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Type</p><p class="uds-modal-value" data-field="payment_type" style="text-transform:capitalize;"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Billing cycle</p><p class="uds-modal-value" data-field="billing_cycle" style="text-transform:capitalize;"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Gateway</p><p class="uds-modal-value" data-field="gateway" style="text-transform:capitalize;"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Paid at</p><p class="uds-modal-value" data-field="paid_at"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Created</p><p class="uds-modal-value" data-field="created_at"></p></div>
             </div>
 
-            <hr class="ads-modal-divider">
+            <hr class="uds-modal-divider">
 
-            <div class="ads-modal-grid">
-                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe customer ID</p><p class="ads-modal-value mono" data-field="stripe_customer_id"></p></div>
-                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe checkout session ID</p><p class="ads-modal-value mono" data-field="stripe_checkout_session_id"></p></div>
-                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe subscription ID</p><p class="ads-modal-value mono" data-field="stripe_subscription_id"></p></div>
-                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe payment intent ID</p><p class="ads-modal-value mono" data-field="stripe_payment_intent_id"></p></div>
-                <div class="ads-modal-field full"><p class="ads-modal-label">Stripe invoice ID</p><p class="ads-modal-value mono" data-field="stripe_invoice_id"></p></div>
-                <div class="ads-modal-field"><p class="ads-modal-label">Subscription status</p><p class="ads-modal-value" data-field="stripe_subscription_status" style="text-transform:capitalize;"></p></div>
+            <div class="uds-modal-grid">
+                <div class="uds-modal-field full"><p class="uds-modal-label">Stripe customer ID</p><p class="uds-modal-value mono" data-field="stripe_customer_id"></p></div>
+                <div class="uds-modal-field full"><p class="uds-modal-label">Stripe checkout session ID</p><p class="uds-modal-value mono" data-field="stripe_checkout_session_id"></p></div>
+                <div class="uds-modal-field full"><p class="uds-modal-label">Stripe subscription ID</p><p class="uds-modal-value mono" data-field="stripe_subscription_id"></p></div>
+                <div class="uds-modal-field full"><p class="uds-modal-label">Stripe payment intent ID</p><p class="uds-modal-value mono" data-field="stripe_payment_intent_id"></p></div>
+                <div class="uds-modal-field full"><p class="uds-modal-label">Stripe invoice ID</p><p class="uds-modal-value mono" data-field="stripe_invoice_id"></p></div>
+                <div class="uds-modal-field"><p class="uds-modal-label">Subscription status</p><p class="uds-modal-value" data-field="stripe_subscription_status" style="text-transform:capitalize;"></p></div>
             </div>
 
-            <div id="ads-payment-modal-failure" style="margin-top:14px;" hidden>
-                <hr class="ads-modal-divider">
-                <p class="ads-modal-label">Failure reason</p>
-                <p class="ads-modal-value" data-field="failure_reason"></p>
+            <div id="uds-payment-modal-failure" style="margin-top:14px;" hidden>
+                <hr class="uds-modal-divider">
+                <p class="uds-modal-label">Failure reason</p>
+                <p class="uds-modal-value" data-field="failure_reason"></p>
             </div>
 
-            <div id="ads-payment-modal-metadata" style="margin-top:14px;" hidden>
-                <hr class="ads-modal-divider">
-                <p class="ads-modal-label">Metadata</p>
-                <pre class="ads-modal-value mono" data-field="metadata" style="white-space:pre-wrap;margin-top:6px;"></pre>
+            <div id="uds-payment-modal-metadata" style="margin-top:14px;" hidden>
+                <hr class="uds-modal-divider">
+                <p class="uds-modal-label">Metadata</p>
+                <pre class="uds-modal-value mono" data-field="metadata" style="white-space:pre-wrap;margin-top:6px;"></pre>
             </div>
         </div>
     </div>
 </div>
 
 <script>
-document.querySelectorAll('.ads-biz-tab').forEach(function (tab) {
+document.querySelectorAll('.uds-biz-tab').forEach(function (tab) {
     tab.addEventListener('click', function () {
-        var biz = tab.closest('.ads-biz');
+        var biz = tab.closest('.uds-biz');
         var target = tab.getAttribute('data-tab');
 
-        biz.querySelectorAll('.ads-biz-tab').forEach(function (t) { t.classList.toggle('is-active', t === tab); });
-        biz.querySelectorAll('.ads-biz-panel').forEach(function (panel) {
+        biz.querySelectorAll('.uds-biz-tab').forEach(function (t) { t.classList.toggle('is-active', t === tab); });
+        biz.querySelectorAll('.uds-biz-panel').forEach(function (panel) {
             panel.hidden = panel.getAttribute('data-panel') !== target;
         });
     });
 });
 
 (function () {
-    var modal = document.getElementById('ads-payment-modal');
+    var modal = document.getElementById('uds-payment-modal');
     if (! modal) return;
 
-    var closeBtn = document.getElementById('ads-payment-modal-close');
-    var failureBox = document.getElementById('ads-payment-modal-failure');
-    var metadataBox = document.getElementById('ads-payment-modal-metadata');
+    var closeBtn = document.getElementById('uds-payment-modal-close');
+    var failureBox = document.getElementById('uds-payment-modal-failure');
+    var metadataBox = document.getElementById('uds-payment-modal-metadata');
 
     function fill(field, value) {
         var el = modal.querySelector('[data-field="' + field + '"]');
@@ -842,7 +842,7 @@ document.querySelectorAll('.ads-biz-tab').forEach(function (tab) {
     }
 
     document.addEventListener('click', function (e) {
-        var row = e.target.closest('.ads-pay-row');
+        var row = e.target.closest('.uds-pay-row');
         if (row) {
             try {
                 openModal(JSON.parse(row.getAttribute('data-payment')));
