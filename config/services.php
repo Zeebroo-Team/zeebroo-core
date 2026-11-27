@@ -68,4 +68,22 @@ return [
         'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
     ],
 
+    // Google Tag Manager on every web page (see App\Services\TagManagerService).
+    // Set GOOGLE_TAG_MANAGER_ID to an empty value to turn it off (e.g. on a dev machine).
+    'google_tag_manager' => [
+        'id' => env('GOOGLE_TAG_MANAGER_ID', 'GTM-W6SQLDRK'),
+
+        // Pages whose URL carries a secret (one-time or signed link). Tag Manager
+        // sends the full page URL to Google, so these pages never load it.
+        'except_routes' => [
+            'business.invitations.*',
+            'crm.contacts.import.*',
+            'crm.public-forms.*',
+            'crm.quotation-approval.*',
+            'marketing.unsubscribe*',
+            'sales.invoices.public',
+            'auth.google.*',
+        ],
+    ],
+
 ];

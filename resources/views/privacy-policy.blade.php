@@ -2,6 +2,7 @@
 <html lang="en" data-theme="">
 <head>
 <meta charset="UTF-8">
+@include('partials.tag-manager-head')
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy — {{ config('app.name') }}</title>
 <meta name="description" content="Privacy Policy for {{ config('app.name') }} — how we collect, use, and protect your information.">
@@ -554,6 +555,7 @@ body {
 </style>
 </head>
 <body>
+@include('partials.tag-manager-body')
 
 <!-- ── Sidebar ── -->
 <nav id="sidebar">

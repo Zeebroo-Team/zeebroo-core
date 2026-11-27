@@ -2,6 +2,8 @@
 
 namespace Modules\Pos\Services;
 
+use App\Services\TagManagerService;
+
 /**
  * Serves the desktop POS renderer (electron_app/renderer) to web browsers.
  *
@@ -89,14 +91,26 @@ class PosWebAppService
             $logoutAttrs .= ' data-web-login-url="'.e($loginUrl).'"';
         }
 
+        // Google Tag Manager goes after the shim: the shim removes the one-time
+        // ?handoff= code from the address bar first, so it is never sent to Google.
+        $tagManager = app(TagManagerService::class);
+
         $inject = "\n".'<base href="'.e(rtrim($baseUrl, '/').'/').'">'
             ."\n".'<script src="'.e($shimUrl).'" data-api-base="'.e(rtrim($apiBaseUrl, '/')).'"'
-            .' data-app-version="'.e($this->appVersion()).'"'.$logoutAttrs.'></script>'."\n";
+            .' data-app-version="'.e($this->appVersion()).'"'.$logoutAttrs.'></script>'."\n"
+            .$tagManager->headHtml();
 
         $count = 0;
         $out = preg_replace('/<head\b[^>]*>/i', '$0'.str_replace(['\\', '$'], ['\\\\', '\\$'], $inject), $html, 1, $count);
+        $out = $count > 0 && is_string($out) ? $out : $inject.$html;
 
-        return $count > 0 && is_string($out) ? $out : $inject.$html;
+        $noscript = $tagManager->bodyHtml();
+        if (trim($noscript) !== '') {
+            $withBody = preg_replace('/<body\b[^>]*>/i', '$0'.str_replace(['\\', '$'], ['\\\\', '\\$'], "\n".$noscript), $out, 1);
+            $out = is_string($withBody) ? $withBody : $out;
+        }
+
+        return $out;
     }
 
     /** Version of the desktop app these files belong to (electron_app/package.json). */

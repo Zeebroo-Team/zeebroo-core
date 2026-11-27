@@ -23,6 +23,8 @@
              0.7 MB per test, ~540 MB by the CRM export tests at 750 tests), so 512M ran out -->
         <ini name="memory_limit" value="1G"/>
         <env name="APP_ENV" value="testing"/>
+        <!-- No Google Tag Manager in tests; a test turns it on with config() when it needs it -->
+        <env name="GOOGLE_TAG_MANAGER_ID" value=""/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

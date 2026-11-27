@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    @include('partials.tag-manager-head')
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy — {{ config('app.name') }}</title>
     <meta name="description" content="Privacy Policy for {{ config('app.name') }}">
@@ -459,6 +460,7 @@
     </style>
 </head>
 <body>
+@include('partials.tag-manager-body')
 
 {{-- Top bar --}}
 <nav class="pp-topbar">

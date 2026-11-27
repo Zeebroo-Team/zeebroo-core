@@ -2,6 +2,7 @@
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
 <head>
     <meta charset="utf-8">
+    @include('partials.tag-manager-head')
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? __('Sign in') }} · {{ config('app.name') }}</title>
@@ -303,6 +304,7 @@
     @stack('auth-styles')
 </head>
 <body>
+@include('partials.tag-manager-body')
     <div class="auth-page">
     <div class="auth-split">
         <aside class="auth-split__visual" role="complementary" aria-labelledby="auth-visual-heading">

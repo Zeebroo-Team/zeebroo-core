@@ -9,6 +9,7 @@
 <html lang="en" data-theme="{{ $__ui_theme }}">
 <head>
     <meta charset="utf-8">
+    @include('partials.tag-manager-head')
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>{{ $title ?? 'Overview' }}</title>
@@ -394,6 +395,7 @@
         || request()->routeIs('hr.portal.pos-online', 'hr.portal.pos-online.checkout');
 @endphp
 <body @class(['pos-walking-active' => $posOnlyShell])>
+@include('partials.tag-manager-body')
 <div class="layout">
     @php
         $minimalAppShell = filter_var($minimalAppShell ?? false, FILTER_VALIDATE_BOOLEAN);

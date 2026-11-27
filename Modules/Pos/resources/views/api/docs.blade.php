@@ -2,6 +2,7 @@
 <html lang="en" data-docs-theme="dark">
 <head>
     <meta charset="utf-8">
+    @include('partials.tag-manager-head')
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Zeebroo POS Online API — catalog, checkout, sales, and authentication for mobile and integrations.">
     <title>{{ $appName }} · POS Online API</title>
@@ -462,6 +463,7 @@
     </style>
 </head>
 <body>
+@include('partials.tag-manager-body')
     <header class="docs-topbar">
         <div class="docs-topbar__brand">
             <div class="docs-topbar__logo" aria-hidden="true">

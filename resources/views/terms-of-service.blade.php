@@ -2,6 +2,7 @@
 <html lang="en" data-theme="">
 <head>
 <meta charset="UTF-8">
+@include('partials.tag-manager-head')
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Terms of Service — {{ config('app.name') }}</title>
 <meta name="description" content="Terms of Service for {{ config('app.name') }} — the rules and conditions for using the platform.">
@@ -540,6 +541,7 @@ body {
 </style>
 </head>
 <body>
+@include('partials.tag-manager-body')
 
 <div id="progress-bar"></div>
 
