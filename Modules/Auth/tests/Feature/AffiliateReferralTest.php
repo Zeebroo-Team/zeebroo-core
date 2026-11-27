@@ -15,6 +15,24 @@ use Spatie\Permission\PermissionRegistrar;
 // Affiliate marketers: admin-created logins with role "affiliate" that generate
 // referral codes; accounts created with a code are credited to that affiliate.
 
+/**
+ * The affiliate migrations, loaded once for the whole file. Requiring a
+ * migration file in every test compiles it (and its anonymous class) again
+ * each time, and that memory is never given back during the suite run.
+ *
+ * @return array<int, \Illuminate\Database\Migrations\Migration>
+ */
+function affiliateMigrations(): array
+{
+    static $migrations = null;
+
+    return $migrations ??= [
+        require base_path('database/migrations/2026_11_26_200000_create_affiliate_tables.php'),
+        require base_path('database/migrations/2026_11_27_100000_create_affiliate_profiles_table.php'),
+        require base_path('database/migrations/2026_11_27_200000_create_affiliate_withdrawals_table.php'),
+    ];
+}
+
 beforeEach(function () {
     Schema::create('users', function (Blueprint $t) {
         $t->id();
@@ -113,10 +131,10 @@ beforeEach(function () {
         $t->timestamps();
     });
 
-    // The real migration: both tables plus the "affiliate" role.
-    (require base_path('database/migrations/2026_11_26_200000_create_affiliate_tables.php'))->up();
-    (require base_path('database/migrations/2026_11_27_100000_create_affiliate_profiles_table.php'))->up();
-    (require base_path('database/migrations/2026_11_27_200000_create_affiliate_withdrawals_table.php'))->up();
+    // The real migrations: affiliate tables plus the "affiliate" role.
+    foreach (affiliateMigrations() as $migration) {
+        $migration->up();
+    }
     Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
     Role::firstOrCreate(['name' => 'user', 'guard_name' => 'web']);
     app(PermissionRegistrar::class)->forgetCachedPermissions();
