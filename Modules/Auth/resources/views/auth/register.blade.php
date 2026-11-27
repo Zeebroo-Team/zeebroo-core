@@ -63,6 +63,11 @@
                     <input id="email_confirmation" name="email_confirmation" type="email" value="{{ old('email_confirmation') }}" autocomplete="email" placeholder="{{ __('Re-enter your email') }}" @if($initialStep === 2) required @endif>
                     <div class="error">@error('email_confirmation'){{ $message }}@enderror</div>
                 </div>
+                <div class="field">
+                    <label for="referral_code">{{ __('Referral code') }} <span class="register-form__optional">{{ __('(optional)') }}</span></label>
+                    <input id="referral_code" name="referral_code" type="text" value="{{ old('referral_code', $referralCode ?? '') }}" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="32" placeholder="{{ __('e.g. ZB4K7QX2') }}">
+                    <div class="error">@error('referral_code'){{ $message }}@enderror</div>
+                </div>
                 <div class="register-form__actions">
                     <button type="button" class="auth-btn auth-btn--secondary register-form__back" id="registerBackBtn">{{ __('Back') }}</button>
                     <button type="submit" class="auth-btn register-form__submit"><span class="register-form__submit-label">{{ __('Create account') }}</span></button>
@@ -104,6 +109,9 @@
         .register-steps__dot{width:8px;height:8px;border-radius:999px;background:var(--paper-2);transition:width .4s var(--ease),background .3s;}
         .register-steps__dot.is-active{width:24px;background:var(--zee);}
         .register-form__actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px;}
+        .register-form__optional{font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);}
+        #referral_code{text-transform:uppercase;}
+        #referral_code::placeholder{text-transform:none;}
         .auth-btn--secondary{background:transparent;color:var(--text);border-color:rgba(18,18,18,.22);}
         .auth-btn--secondary:hover{background:var(--card);color:var(--text);border-color:var(--ink);}
         .register-form__actions .auth-btn[disabled]{opacity:.6;cursor:not-allowed;pointer-events:none;}

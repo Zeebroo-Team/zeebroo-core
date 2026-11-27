@@ -8,6 +8,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\View\View;
+use Modules\Auth\Models\AffiliateReferral;
+use Modules\Auth\Services\AffiliateService;
 use Modules\Auth\Services\AuthService;
 use Modules\Auth\Services\ImpersonationService;
 use Modules\HRManagement\Models\Employee;
@@ -21,9 +23,16 @@ class AuthController extends Controller
         return view('auth::auth.login', ['googleAuthConfigured' => $this->googleOAuthConfigured()]);
     }
 
-    public function showRegister(): View
+    public function showRegister(Request $request, AffiliateService $affiliates): View
     {
-        return view('auth::auth.register', ['googleAuthConfigured' => $this->googleOAuthConfigured()]);
+        // Opened from an affiliate's shared link (/register?ref=CODE): remember the code
+        // so it also applies to "Sign up with Google" and to a sign-up later on.
+        $affiliates->rememberFromRequest($request);
+
+        return view('auth::auth.register', [
+            'googleAuthConfigured' => $this->googleOAuthConfigured(),
+            'referralCode' => $affiliates->pendingCode($request),
+        ]);
     }
 
     private function googleOAuthConfigured(): bool
@@ -76,10 +85,14 @@ class AuthController extends Controller
             return redirect()->intended(route('admin.panel'));
         }
 
+        if ($user !== null && $user->hasRole(AffiliateService::ROLE)) {
+            return redirect()->intended(route('affiliate.dashboard'));
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 
-    public function register(Request $request): RedirectResponse
+    public function register(Request $request, AffiliateService $affiliates): RedirectResponse
     {
         // Check employee email before running unique validation so provisioned accounts don't get blocked.
         $rawEmail = $request->input('email', '');
@@ -93,9 +106,12 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email', 'confirmed'],
             'password' => ['required', Password::defaults()],
+            'referral_code' => $affiliates->signupCodeRule(),
         ]);
 
         $user = $this->authService->register($data);
+        $affiliates->recordReferral($user, $data['referral_code'] ?? null, AffiliateReferral::PLATFORM_WEB);
+        $affiliates->forgetPending($request);
         UserActivityLog::record($user, UserActivityLog::PLATFORM_WEB, UserActivityLog::EVENT_REGISTER, $request);
         $this->authService->loginUser($user);
         $request->session()->regenerate();

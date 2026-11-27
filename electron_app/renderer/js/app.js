@@ -7247,7 +7247,7 @@ function showSignup() {
   $('#su-password').value = '';
   $('#su-name').value     = '';
   $('#su-biz').value      = '';
-  ['#su-branch-name', '#su-branch-address', '#su-branch-phone', '#su-branch-email']
+  ['#su-ref', '#su-branch-name', '#su-branch-address', '#su-branch-phone', '#su-branch-email']
     .forEach(sel => { const el = $(sel); if (el) el.value = ''; });
   _obSetMultiLocation(false);
   _obCheckedEmail = '';
@@ -10146,8 +10146,10 @@ async function doSignupOrPay() {
     showAlert(alert, 'Choose which package you want to try for free.');
     return;
   }
+  // Optional affiliate referral code (PosAuthApiController::register credits that affiliate)
+  const referralCode = ($('#su-ref')?.value || '').trim();
   const res = await API.register(name, biz, category, features, email, password, deviceName, packageId,
-    { ..._obLocationPayload(), ...(trialPackageId ? { trial_package_id: trialPackageId } : {}) });
+    { ..._obLocationPayload(), ...(trialPackageId ? { trial_package_id: trialPackageId } : {}), ...(referralCode ? { referral_code: referralCode } : {}) });
 
   btn.disabled = false;
 
@@ -10160,6 +10162,7 @@ async function doSignupOrPay() {
       ? Object.values(errs).flat().join(' ')
       : (res.body?.message || `Registration failed (${res.status})`);
     if (errs.email || errs.password) { _obCheckedEmail = ''; _obSetStep(1); }
+    else if (errs.referral_code) _obSetStep(2);
     else if (Object.keys(errs).some(k => k.startsWith('branch_'))) _obSetStep(6);
     showAlert($('#signup-alert'), msg);
     return;

@@ -34,6 +34,7 @@
 .adash-recent-role{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;margin-left:auto;flex-shrink:0;}
 .adash-recent-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
 .adash-recent-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
+.adash-recent-role--affiliate{background:color-mix(in srgb,#d97706 14%,transparent);color:#b45309;}
 .adash-recent-time{font-size:11px;color:var(--muted);flex-shrink:0;}
 /* ── recent payments ── */
 .adash-recent-head-meta{font-size:12px;color:var(--muted);font-weight:500;margin-left:10px;}

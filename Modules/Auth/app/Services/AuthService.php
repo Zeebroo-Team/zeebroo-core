@@ -75,7 +75,9 @@ class AuthService
 
     private function isAbandonedSignup(User $user): bool
     {
-        if ($user->hasRole('admin')) {
+        // Admin-created logins (admins, affiliate marketers) never own a business, so they
+        // must never look like an abandoned sign-up.
+        if ($user->hasAnyRole(['admin', AffiliateService::ROLE])) {
             return false;
         }
 

@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as SocialiteUser;
+use Modules\Auth\Models\AffiliateReferral;
 use Modules\Mail\Services\AutomatedEmailService;
 use Spatie\Permission\Models\Role;
 use Symfony\Component\HttpFoundation\Response;
@@ -81,6 +82,13 @@ final class GoogleAuthService
 
         [$user, $isNewUser] = $resolved;
 
+        // Google sign-up after opening an affiliate's shared link: credit that affiliate.
+        if ($isNewUser) {
+            $affiliates = app(AffiliateService::class);
+            $affiliates->recordReferral($user, $affiliates->pendingCode($request), AffiliateReferral::PLATFORM_GOOGLE);
+            $affiliates->forgetPending($request);
+        }
+
         // ── Desktop app: hand a one-time code back to the app, don't sign the browser in ─
         if ($desktopState !== null) {
             if (! $user->is_active) {
@@ -115,6 +123,10 @@ final class GoogleAuthService
 
         if ($user->hasRole('admin')) {
             return redirect()->intended(route('admin.panel'));
+        }
+
+        if ($user->hasRole(AffiliateService::ROLE)) {
+            return redirect()->intended(route('affiliate.dashboard'));
         }
 
         return redirect()->intended(route('dashboard'));

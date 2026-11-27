@@ -656,6 +656,8 @@
                 <div class="menu-section">Administration</div>
                 <a href="{{ route('admin.panel') }}" class="{{ request()->routeIs('admin.panel') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Dashboard</span></a>
                 <a href="{{ route('admin.users.index') }}" class="{{ request()->routeIs('admin.users.*') ? 'active' : '' }}"><i class="fa fa-users-gear"></i><span>User Management</span></a>
+                <a href="{{ route('admin.affiliates.index') }}" class="{{ request()->routeIs('admin.affiliates.*') ? 'active' : '' }}"><i class="fa fa-handshake"></i><span>Affiliates</span></a>
+                <a href="{{ route('admin.affiliate-withdrawals.index') }}" class="{{ request()->routeIs('admin.affiliate-withdrawals.*') ? 'active' : '' }}"><i class="fa fa-money-bill-transfer"></i><span>Affiliate Withdrawals</span></a>
                 <a href="{{ route('admin.user-seats.index') }}" class="{{ request()->routeIs('admin.user-seats.*') ? 'active' : '' }}"><i class="fa fa-user-plus"></i><span>User Seats &amp; Extra Users</span></a>
                 <a href="{{ route('admin.payments.index') }}" class="{{ request()->routeIs('admin.payments.*') && ! request()->routeIs('admin.payments.checks.*') ? 'active' : '' }}"><i class="fa fa-credit-card"></i><span>Payment History</span></a>
                 <a href="{{ route('admin.payments.checks.index') }}" class="{{ request()->routeIs('admin.payments.checks.*') ? 'active' : '' }}"><i class="fa fa-shield-halved"></i><span>Payment Checks</span></a>
@@ -665,6 +667,12 @@
                 <a href="{{ route('admin.packages.index') }}" class="{{ request()->routeIs('admin.packages.*') ? 'active' : '' }}"><i class="fa fa-box-open"></i><span>Package Management</span></a>
                 <a href="{{ route('admin.industries.index') }}" class="{{ request()->routeIs('admin.industries.*') ? 'active' : '' }}"><i class="fa fa-industry"></i><span>Industry Management</span></a>
                 <a href="{{ route('admin.logs.index') }}" class="{{ request()->routeIs('admin.logs.*') ? 'active' : '' }}"><i class="fa fa-bug"></i><span>Error Logs</span></a>
+            @elseif(auth()->user()?->hasRole('affiliate'))
+                <div class="menu-section">Affiliate</div>
+                <a href="{{ route('affiliate.dashboard') }}" class="{{ request()->routeIs('affiliate.dashboard', 'affiliate.codes.*') ? 'active' : '' }}"><i class="fa fa-handshake"></i><span>Referrals &amp; Codes</span></a>
+                <a href="{{ route('affiliate.payments') }}" class="{{ request()->routeIs('affiliate.payments') ? 'active' : '' }}"><i class="fa fa-sack-dollar"></i><span>Payments &amp; Commission</span></a>
+                <a href="{{ route('affiliate.withdrawals') }}" class="{{ request()->routeIs('affiliate.withdrawals*') ? 'active' : '' }}"><i class="fa fa-money-bill-transfer"></i><span>Withdrawals</span></a>
+                <a href="{{ route('affiliate.settings') }}" class="{{ request()->routeIs('affiliate.settings*') ? 'active' : '' }}"><i class="fa fa-gear"></i><span>Settings</span></a>
             @else
             <div class="menu-section">Main</div>
                 <a href="{{ route('dashboard') }}" class="{{ request()->routeIs('dashboard') ? 'active' : '' }}"><i class="fa fa-gauge-high"></i><span>Overview</span></a>
@@ -1214,7 +1222,7 @@
                         <span>Business profile</span>
                     </a>
                 @endif
-                @unless(auth()->user()?->hasRole('admin'))
+                @unless(auth()->user()?->hasAnyRole(['admin', 'affiliate']))
                 <div class="user-dropdown">
                     <button type="button" class="user-trigger" id="businessDropdownBtn">
                         <i class="fa fa-briefcase"></i>
@@ -1387,7 +1395,7 @@
                 </div>
                 @endif
                 @endunless
-                @if(auth()->user()?->hasRole('admin'))
+                @if(auth()->user()?->hasAnyRole(['admin', 'affiliate']))
                     <form method="post" action="{{ route('logout') }}">
                         @csrf
                         <button type="submit" class="user-trigger" style="gap:8px;">

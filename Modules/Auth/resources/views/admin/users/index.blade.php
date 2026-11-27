@@ -33,6 +33,7 @@
 .adu-role{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;}
 .adu-role--admin{background:color-mix(in srgb,#6366f1 13%,transparent);color:#6366f1;}
 .adu-role--user{background:color-mix(in srgb,#64748b 13%,transparent);color:#64748b;}
+.adu-role--affiliate{background:color-mix(in srgb,#d97706 14%,transparent);color:#b45309;}
 .adu-owns{font-size:12px;color:var(--muted);}
 .adu-pkg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;}
 .adu-pkg:last-child{margin-bottom:0;}

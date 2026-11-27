@@ -24,6 +24,11 @@ class DashboardController extends Controller
             return redirect()->route('admin.panel');
         }
 
+        // Affiliate marketers have no business workspace; their home is the referral panel.
+        if ($request->user()?->hasRole('affiliate')) {
+            return redirect()->route('affiliate.dashboard');
+        }
+
         $redirect = $this->redirectIfNeedsPlatformChoice($request);
         if ($redirect instanceof RedirectResponse) {
             return $redirect;

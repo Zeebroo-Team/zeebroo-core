@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
+use Modules\Auth\Services\AffiliateService;
 use Modules\Auth\Services\AuthService;
 use Modules\Auth\Services\DesktopGoogleHandoffService;
 use Modules\Auth\Services\EmailVerificationService;
@@ -85,9 +86,11 @@ class PosAuthApiController extends Controller
         ]);
     }
 
-    public function register(Request $request): JsonResponse
+    public function register(Request $request, AffiliateService $affiliates): JsonResponse
     {
         $validated = $request->validate([
+            // Optional affiliate referral code; the new account is credited to that affiliate.
+            'referral_code'     => $affiliates->signupCodeRule(),
             'name'              => ['required', 'string', 'max:255'],
             'business_name'     => ['required', 'string', 'max:255'],
             'business_category' => ['required', 'string', 'max:120'],
@@ -132,6 +135,7 @@ class PosAuthApiController extends Controller
             'email'    => $validated['email'],
             'password' => $validated['password'],
         ]);
+        $affiliates->recordReferral($user, $validated['referral_code'] ?? null, $platform);
 
         $categorySlug  = $validated['business_category'];
         $categoryLabel = BusinessCategory::labelForSlug($categorySlug) ?? $categorySlug;

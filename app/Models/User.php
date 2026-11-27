@@ -13,6 +13,8 @@ use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Modules\Account\Models\Account;
 use Modules\AppConnection\Models\UserAppConnection;
+use Modules\Auth\Models\AffiliateCode;
+use Modules\Auth\Models\AffiliateReferral;
 use Modules\Business\Models\Business;
 use Modules\HRManagement\Models\Employee;
 use Modules\Settings\Concerns\HasSettings;
@@ -78,6 +80,18 @@ class User extends Authenticatable
     public function hrEmployees(): HasMany
     {
         return $this->hasMany(Employee::class);
+    }
+
+    /** Referral codes this user generated (affiliate marketers only). */
+    public function affiliateCodes(): HasMany
+    {
+        return $this->hasMany(AffiliateCode::class);
+    }
+
+    /** Accounts that signed up with one of this affiliate's codes. */
+    public function affiliateReferrals(): HasMany
+    {
+        return $this->hasMany(AffiliateReferral::class, 'affiliate_user_id');
     }
 
     /** Register/login history across the web platform and the pos-desktop software. */

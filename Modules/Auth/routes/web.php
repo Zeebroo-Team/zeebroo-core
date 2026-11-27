@@ -2,7 +2,13 @@
 
 use Illuminate\Support\Facades\Route;
 use Modules\AppConnection\Http\Controllers\Admin\AppReleaseController;
+use Modules\Auth\Http\Controllers\AdminAffiliateController;
 use Modules\Auth\Http\Controllers\AdminLogController;
+use Modules\Auth\Http\Controllers\AffiliateController;
+use Modules\Auth\Http\Controllers\AdminAffiliateWithdrawalController;
+use Modules\Auth\Http\Controllers\AffiliateSettingsController;
+use Modules\Auth\Http\Controllers\AffiliateWithdrawalController;
+use Modules\Auth\Models\AffiliateDocument;
 use Modules\Auth\Http\Controllers\AdminUserController;
 use Modules\Auth\Http\Controllers\AuthController;
 use Modules\Auth\Http\Controllers\EmailVerificationController;
@@ -54,7 +60,47 @@ Route::middleware('auth')->group(function (): void {
     Route::post('/verify-email/resend', [EmailVerificationController::class, 'resend'])->middleware('throttle:5,1')->name('verification.resend');
 });
 
+// Affiliate marketer panel: their referral codes and the accounts that signed up with them.
+Route::middleware(['auth', 'role:affiliate'])->prefix('affiliate')->name('affiliate.')->group(function (): void {
+    Route::get('/', [AffiliateController::class, 'index'])->name('dashboard');
+    Route::get('/payments', [AffiliateController::class, 'payments'])->name('payments');
+
+    // Commission withdrawals
+    Route::get('/withdrawals', [AffiliateWithdrawalController::class, 'index'])->name('withdrawals');
+    Route::post('/withdrawals', [AffiliateWithdrawalController::class, 'store'])->middleware('throttle:10,1')->name('withdrawals.store');
+    Route::patch('/withdrawals/{withdrawal}/cancel', [AffiliateWithdrawalController::class, 'cancel'])->name('withdrawals.cancel');
+
+    // Settings: profile, contact & address, payout bank, ID card / passport copies
+    Route::get('/settings', [AffiliateSettingsController::class, 'show'])->name('settings');
+    Route::put('/settings/profile', [AffiliateSettingsController::class, 'updateProfile'])->name('settings.profile');
+    Route::put('/settings/contact', [AffiliateSettingsController::class, 'updateContact'])->name('settings.contact');
+    Route::put('/settings/payout', [AffiliateSettingsController::class, 'updatePayout'])->name('settings.payout');
+    Route::post('/settings/identity', [AffiliateSettingsController::class, 'updateIdentity'])->name('settings.identity');
+    Route::get('/settings/documents/{type}', [AffiliateSettingsController::class, 'showDocument'])
+        ->whereIn('type', AffiliateDocument::types())->name('settings.documents.show');
+    Route::delete('/settings/documents/{type}', [AffiliateSettingsController::class, 'destroyDocument'])
+        ->whereIn('type', AffiliateDocument::types())->name('settings.documents.destroy');
+    Route::post('/codes', [AffiliateController::class, 'storeCode'])->name('codes.store');
+    Route::patch('/codes/{affiliateCode}/toggle', [AffiliateController::class, 'toggleCode'])->name('codes.toggle');
+});
+
 Route::middleware(['auth', 'role:admin'])->prefix('admin')->name('admin.')->group(function (): void {
+    // Affiliate marketers (role "affiliate")
+    Route::get('/affiliates', [AdminAffiliateController::class, 'index'])->name('affiliates.index');
+    Route::post('/affiliates', [AdminAffiliateController::class, 'store'])->name('affiliates.store');
+    Route::get('/affiliates/{user}', [AdminAffiliateController::class, 'show'])->name('affiliates.show');
+    Route::get('/affiliates/{user}/payments', [AdminAffiliateController::class, 'payments'])->name('affiliates.payments');
+    Route::get('/affiliates/{user}/documents/{type}', [AdminAffiliateController::class, 'document'])
+        ->whereIn('type', AffiliateDocument::types())->name('affiliates.documents.show');
+    Route::post('/affiliates/{user}/codes', [AdminAffiliateController::class, 'storeCode'])->name('affiliates.codes.store');
+    Route::patch('/affiliate-codes/{affiliateCode}/toggle', [AdminAffiliateController::class, 'toggleCode'])->name('affiliates.codes.toggle');
+
+    // Affiliate commission withdrawal requests
+    Route::get('/affiliate-withdrawals', [AdminAffiliateWithdrawalController::class, 'index'])->name('affiliate-withdrawals.index');
+    Route::patch('/affiliate-withdrawals/{withdrawal}/approve', [AdminAffiliateWithdrawalController::class, 'approve'])->name('affiliate-withdrawals.approve');
+    Route::patch('/affiliate-withdrawals/{withdrawal}/reject', [AdminAffiliateWithdrawalController::class, 'reject'])->name('affiliate-withdrawals.reject');
+    Route::patch('/affiliate-withdrawals/{withdrawal}/paid', [AdminAffiliateWithdrawalController::class, 'markPaid'])->name('affiliate-withdrawals.paid');
+
     Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
     Route::get('/users/{user}', [AdminUserController::class, 'show'])->name('users.show');
     Route::post('/users', [AdminUserController::class, 'store'])->name('users.store');
